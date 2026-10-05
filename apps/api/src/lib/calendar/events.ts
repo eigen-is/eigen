@@ -366,7 +366,7 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
             );
         }
     } else if (!invitation && existing.status !== 'cancelled') {
-        // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels; deleting a cancelled row puts the occurrence back, which cancels nothing.
+        // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels; deleting a cancelled row cancels nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
         // An override's cancellation names its series, as propagateWrite's does: only the series knows the original instant.
         const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
         const held = heldAttendees(existing, series);

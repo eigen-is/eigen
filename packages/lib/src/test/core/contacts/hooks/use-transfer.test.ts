@@ -3,15 +3,8 @@
 // pinned here rather than in each caller.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import {
-    fetchCalls,
-    installTransferHarness,
-    OWNER,
-    renderHook,
-    served,
-    toasts,
-    trackingClient,
-} from '../../../transfer-harness';
+import { renderHook } from '../../../render-hook';
+import { fetchCalls, installTransferHarness, OWNER, served, toasts, trackingClient } from '../../../transfer-harness';
 
 installTransferHarness();
 
@@ -41,7 +34,7 @@ async function importFile(result: ImportCountsResult): Promise<string> {
     await act(async () => {
         await latest.mutateAsync(new File(['BEGIN:VCARD\r\nEND:VCARD\r\n'], 'contacts.vcf'));
     });
-    await act(() => unmount());
+    await unmount();
     return toasts.at(-1) ?? '';
 }
 
@@ -92,7 +85,7 @@ describe('useImportContactsFile', () => {
         await act(async () => {
             await latest.mutateAsync({ drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' } });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(toasts.at(-1)).toBe('success: Imported 1 contact, skipped 1 duplicate, 1 unreadable');
     });
@@ -107,7 +100,7 @@ describe('useImportContactsFile', () => {
         await act(async () => {
             await latest.mutateAsync({ url: '/mail/owner/message/m1/attachment/0' });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(fetchCalls[0]!.url).toBe('/mail/owner/message/m1/attachment/0');
         expect(fetchCalls[1]!.body).toBeInstanceOf(Blob);

@@ -5,12 +5,12 @@ import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { ImportMailResult } from '@workspace/lib/types/mail';
 import { emailKeys, mailboxKeys } from '../../../../core/mail/hooks/keys';
+import { renderHook } from '../../../render-hook';
 import {
     fetchCalls,
     hasKey,
     installTransferHarness,
     OWNER,
-    renderHook,
     served,
     toasts,
     trackingClient,
@@ -50,7 +50,7 @@ describe('useImportMail', () => {
         await act(async () => {
             await latest.mutateAsync({ drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' } });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(toasts.at(-1)).toBe('success: Imported to your inbox');
         expect(hasKey(invalidated, emailKeys.list(OWNER, MAILBOX_INBOX))).toBe(true);
@@ -66,7 +66,7 @@ describe('useImportMail', () => {
         await act(async () => {
             await latest.mutateAsync({ url: '/mail/owner/message/m1/attachment/0' });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(fetchCalls[0]!.url).toBe('/mail/owner/message/m1/attachment/0');
         expect(fetchCalls[1]!.body).toBeInstanceOf(Blob);

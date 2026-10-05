@@ -108,7 +108,8 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     return JSON.stringify(snapshot);
 }
 
-// The encoder writes the format key first, so the probe reads the prefix and decodes nothing.
+// `{"f":"<FORMAT>"` is the v2 snapshot's header: the encoder writes the format key first on purpose, and
+// snapshot-codec.test holds it there, so the probe reads the header and decodes nothing.
 export function isCurrentSheetsSnapshot(snapshot: string): boolean {
     return snapshot.startsWith(`{"f":"${FORMAT}"`);
 }

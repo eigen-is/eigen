@@ -2,6 +2,7 @@ import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { CommandContext, PaletteScope } from '../../../../types/command-palette';
 import { installHappyDom } from '../../../happy-dom';
+import { renderHook } from '../../../render-hook';
 
 installHappyDom();
 
@@ -39,23 +40,15 @@ const ctx: CommandContext = {
 
 // Renders both sources for one typed query under a scope and returns the sources they asked the server for.
 async function sourcesRequested(scope: PaletteScope | undefined): Promise<string[]> {
-    const { act, createElement } = await import('react');
-    const { createRoot } = await import('react-dom/client');
-    const { QueryClientProvider } = await import('@tanstack/react-query');
     const { useFileSearchResults } = await import('../../../../core/command-palette/providers/file-search');
     const { useMailSearchResults } = await import('../../../../core/command-palette/providers/mail-search');
 
     requested.length = 0;
-    function Harness() {
+    const { unmount } = await renderHook(() => {
         useFileSearchResults(ctx, 'budget', scope);
         useMailSearchResults(ctx, 'budget', scope);
-        return null;
-    }
-    const root = createRoot(document.createElement('div'));
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(Harness, null)));
-    });
-    await act(() => root.unmount());
+    }, new QueryClient());
+    await unmount();
     return requested.sort();
 }
 

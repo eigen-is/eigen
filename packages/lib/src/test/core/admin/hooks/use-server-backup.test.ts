@@ -7,6 +7,7 @@ import { backupKeys, invalidateServerBackup, serverBackupKeys } from '../../../.
 import { handleAdminSSEvent } from '../../../../core/admin/sse-handlers';
 import { publicKeys } from '../../../../core/public/hooks/keys';
 import { installHappyDom } from '../../../happy-dom';
+import { renderHook } from '../../../render-hook';
 
 installHappyDom();
 
@@ -50,23 +51,6 @@ function trackingClient(): { queryClient: QueryClient; invalidated: readonly unk
     // The org id the server jobs are listed under comes from the public config, seeded so nothing fetches it.
     queryClient.setQueryData(publicKeys.config, { orgId: ORG_ID });
     return { queryClient, invalidated };
-}
-
-async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ latest: T; unmount: () => void }> {
-    const { act, createElement } = await import('react');
-    const { createRoot } = await import('react-dom/client');
-    const { QueryClientProvider } = await import('@tanstack/react-query');
-
-    const seen: { latest: T | null } = { latest: null };
-    function Harness() {
-        seen.latest = use();
-        return null;
-    }
-    const root = createRoot(document.createElement('div'));
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
-    });
-    return { latest: seen.latest as T, unmount: () => root.unmount() };
 }
 
 describe('invalidateServerBackup', () => {
@@ -130,7 +114,7 @@ describe('useServerBackupJobs', () => {
         });
 
         expect(invalidated).toEqual([[...serverBackupKeys.archives()]]);
-        await act(() => unmount());
+        await unmount();
     });
 });
 
@@ -147,6 +131,6 @@ describe('useStartServerBackup', () => {
 
         expect(startCalls).toEqual([{ level: 'light' }]);
         expect(invalidated).toEqual([[...serverBackupKeys.archives()], [...backupKeys.jobs(SERVER_OWNER)]]);
-        await act(() => unmount());
+        await unmount();
     });
 });

@@ -69,25 +69,3 @@ export function trackingClient(): { queryClient: QueryClient; invalidated: reado
 export function hasKey(keys: readonly unknown[][], expected: readonly unknown[]): boolean {
     return keys.some((key) => JSON.stringify(key) === JSON.stringify(expected));
 }
-
-// One React root for every hook that has to be rendered to be observed.
-export async function renderHook<T>(
-    use: () => T,
-    queryClient: QueryClient,
-): Promise<{ latest: T; unmount: () => void }> {
-    const { act, createElement } = await import('react');
-    const { createRoot } = await import('react-dom/client');
-    const { QueryClientProvider } = await import('@tanstack/react-query');
-
-    const seen: { latest: T | null } = { latest: null };
-    function Harness() {
-        seen.latest = use();
-        return null;
-    }
-    const container = document.createElement('div');
-    const root = createRoot(container);
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
-    });
-    return { latest: seen.latest as T, unmount: () => root.unmount() };
-}
