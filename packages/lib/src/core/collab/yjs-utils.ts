@@ -161,7 +161,9 @@ export function getIdArrayRoot(doc: Y.Doc, name: string): Y.Array<string> {
     return doc.getArray<string>(name);
 }
 
-export function getIdArray(map: Y.Map<unknown>, field: string): Y.Array<string> | undefined {
+// Takes any entry: a peer can write a scalar where a map belongs.
+export function getIdArray(map: unknown, field: string): Y.Array<string> | undefined {
+    if (!(map instanceof Y.Map)) return undefined;
     const value = map.get(field);
     return value instanceof Y.Array ? value : undefined;
 }
