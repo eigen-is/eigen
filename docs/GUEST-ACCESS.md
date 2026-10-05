@@ -92,7 +92,7 @@ A guest sees the same screen without the request form, told to ask the owner to 
 
 `POST /drive/:ownerId/:mountId/path/:pathId/request-access` calls `propagateAccessRequest` (`apps/api/src/lib/drive/access-request-propagation.ts`), which reads the path through the home relay and pushes an `access-request` notification into the owner's home. The route skips the SharedDrive facade by design: the caller has no permission yet, which is the point. It returns 200 whether or not the path exists or is trashed, so it never reveals a path. An unknown owner or mount still answers 404.
 
-The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default). A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only ([ROADMAP.md](ROADMAP.md) § Cheap wins).
+The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default), at most once an hour per requester and path. The notification folds a repeat on its tag, but a mail cannot be taken back, so without the window one user could mail an owner on every click. The window lives in the API process, as the OTP limiter's does. A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only ([ROADMAP.md](ROADMAP.md) § Cheap wins).
 
 The "Access requested" state on the button is client-side only and resets on a refresh.
 

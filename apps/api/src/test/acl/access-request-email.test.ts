@@ -71,6 +71,29 @@ describe('Access-request email', () => {
         expect(req?.details).toEqual({ message: 'Please', pathType: 'doc' });
     });
 
+    // The notification folds a repeat on its tag; the mail must not go out once per click either.
+    test('a repeated request mails the owner once, while a request for another file still mails', async () => {
+        const mailer = await import('../../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+
+        const request = (pathId: string) =>
+            authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${pathId}/request-access`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) },
+            );
+        const doc = await createDoc('access-request-repeat');
+        const other = await createDoc('access-request-repeat-other');
+        for (let i = 0; i < 5; i++) await request(doc.id);
+        await request(other.id);
+        await new Promise((r) => setTimeout(r, 100));
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.alice.user.email));
+        expect(calls.length).toBe(2);
+        spy.mockRestore();
+    });
+
     test('does not email when toggle off', async () => {
         await setToggle(false);
         const mailer = await import('../../lib/core/mailer');

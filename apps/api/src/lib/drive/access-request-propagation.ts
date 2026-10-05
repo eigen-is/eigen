@@ -6,6 +6,11 @@ import { sendMail } from '../core/mailer';
 import { pullDrivePath, sendToHome } from '../home/home-relay';
 import { getUserById } from '../user';
 
+// One mail per requester and path an hour: the owner's notification folds a repeat on its tag, a mail
+// cannot. Process-local, as the OTP limiter is.
+const MAIL_WINDOW_MS = 60 * 60 * 1000;
+const lastMailedAt = new Map<string, number>();
+
 export async function propagateAccessRequest(
     ownerId: string,
     mountId: string,
@@ -18,11 +23,12 @@ export async function propagateAccessRequest(
     if (!path || path.trashedAt) return;
 
     const requesterName = requester.name || requester.email;
+    const tag = `access-request:${ownerId}:${mountId}:${pathId}:${requester.email}`;
     await sendToHome(ownerId, {
         type: 'notification',
         notification: {
             type: 'access-request',
-            tag: `access-request:${ownerId}:${mountId}:${pathId}:${requester.email}`,
+            tag,
             title: `${requesterName} requested access`,
             body: stripEigenExtension(path.name),
             actorEmail: requester.email,
@@ -31,6 +37,10 @@ export async function propagateAccessRequest(
     });
 
     if (parseOwnerId(ownerId).type === 'user' && getServerSettings().notifications.email.ownerOnAccessRequest) {
+        const now = Date.now();
+        if (now - (lastMailedAt.get(tag) ?? 0) < MAIL_WINDOW_MS) return;
+        for (const [key, at] of lastMailedAt) if (now - at >= MAIL_WINDOW_MS) lastMailedAt.delete(key);
+        lastMailedAt.set(tag, now);
         const owner = await getUserById(ownerId);
         if (!owner) return;
         const mail = composeAccessRequestEmail(
