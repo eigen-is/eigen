@@ -100,7 +100,7 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
         build.push({
             level: 'warn',
             label: 'Update',
-            value: `files of ${files}, running ${VERSION}${commit ? ` (${commit})` : ''}: run ./eigen update`,
+            value: `files of ${files}, running ${VERSION}${commit ? ` (${commit})` : ''}: run ./eigen restart`,
         });
     } else if (
         latest === '' ||
