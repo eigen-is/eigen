@@ -259,6 +259,47 @@ describe('Chat', () => {
         });
     });
 
+    // createdAt is whole seconds, so messages posted back to back share it: paging back must not skip them.
+    test('paging back walks every message sent in the same second, in order', async () => {
+        const chat = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            aliceMountId,
+            `folder/${aliceRootId}/create/chat`,
+            { fileName: 'Paging Test Chat' },
+        );
+        const sent = ['one', 'two', 'three', 'four', 'five'];
+        for (const content of sent) {
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chat.id}/messages`,
+                {
+                    content,
+                },
+            );
+        }
+
+        let seen: string[] = [];
+        let page = await chatGet<ChatMessage[]>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            aliceMountId,
+            `${chat.id}/messages?limit=2`,
+        );
+        while (page.length > 0) {
+            seen = [...page.map((m) => m.content), ...seen];
+            page = await chatGet<ChatMessage[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chat.id}/messages?limit=2&before=${page[0].id}`,
+            );
+        }
+        expect(seen).toEqual(sent);
+    });
+
     describe('Whisper Visibility', () => {
         let chatId: string;
 

@@ -4,7 +4,7 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { and, desc, eq, isNull, lt, ne } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -312,9 +312,10 @@ export class ChatRoom {
 
     private async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
         let rows: ChatMessage[];
+        // createdAt is whole seconds: rowid breaks the tie, so a page edge inside a second skips nothing.
         if (beforeId) {
             const beforeMsg = await this.db
-                .select()
+                .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
                 .from(schema.messages)
                 .where(eq(schema.messages.id, beforeId))
                 .get();
@@ -322,15 +323,20 @@ export class ChatRoom {
             rows = await this.db
                 .select()
                 .from(schema.messages)
-                .where(lt(schema.messages.createdAt, beforeMsg.createdAt))
-                .orderBy(desc(schema.messages.createdAt))
+                .where(
+                    or(
+                        lt(schema.messages.createdAt, beforeMsg.createdAt),
+                        and(eq(schema.messages.createdAt, beforeMsg.createdAt), lt(sql`rowid`, beforeMsg.rowid)),
+                    ),
+                )
+                .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
                 .limit(limit)
                 .all();
         } else {
             rows = await this.db
                 .select()
                 .from(schema.messages)
-                .orderBy(desc(schema.messages.createdAt))
+                .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
                 .limit(limit)
                 .all();
         }
@@ -471,7 +477,7 @@ export class ChatRoom {
                     ne(schema.messages.content, ''),
                 ),
             )
-            .orderBy(desc(schema.messages.createdAt))
+            .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
             // Empty messages are filtered out above, so every row adds at least one char and
             // RECENT_TEXT_CAP rows always fill the byte cap — bound the fetch instead of scanning the thread.
             .limit(RECENT_TEXT_CAP)
