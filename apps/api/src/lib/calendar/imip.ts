@@ -108,7 +108,11 @@ export function composeCancelEmail(
         text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
         html: buildEventHtml(event, footer, 'This event has been canceled'),
         // RFC 5546 § 3.2.5: a CANCEL lists the attendees it cancels, and neither a cancelled occurrence nor a removal holds them.
-        icalEvent: icalEvent({ ...event, data: { ...event.data, organizer, attendees } }, 'CANCEL', series),
+        icalEvent: icalEvent(
+            { ...event, status: 'cancelled', data: { ...event.data, organizer, attendees } },
+            'CANCEL',
+            series,
+        ),
     };
 }
 
