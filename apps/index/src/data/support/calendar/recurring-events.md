@@ -55,6 +55,8 @@ given date, or the whole series.
 
 That occurrence is now separate from the rest of the series. All other occurrences are unchanged.
 
+If you remove every guest from that one occurrence, it keeps the series' guests. To leave the guests out of one occurrence, remove that occurrence instead.
+
 ## Remove an occurrence or cancel the whole series
 
 1. Click the occurrence you want to delete.
