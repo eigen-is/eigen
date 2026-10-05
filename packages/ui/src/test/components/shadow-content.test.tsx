@@ -105,3 +105,10 @@ test('a forced-light canvas drops the dark rules whatever the app theme, nested 
     cleanup();
     document.documentElement.classList.remove('dark');
 });
+
+test('a heading in mail takes its weight from the type scale', () => {
+    const { rules, cleanup } = render('<h2>Heading</h2>');
+    const heading = rules.find((text) => text.startsWith('h1, h2'));
+    expect(heading).toContain('font-weight: var(--font-weight-medium)');
+    cleanup();
+});
