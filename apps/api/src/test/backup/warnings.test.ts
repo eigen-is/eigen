@@ -35,6 +35,7 @@ import { MARKER_DB_CONFIG, MARKER_SCHEMA, snapshotInto, waitForJob } from './bac
 // of a store that holds no object at all fails the home: an empty store is an outage, not a store with holes.
 
 const ORPHAN_WARNING = "entries that do not reach the drive's root, left out:";
+const UNUSABLE_WARNING = 'entries with a name no path can hold, left out';
 const LOST_WARNING = 'files with no object in storage, archived without their bytes:';
 
 // Every home here is broken on purpose, and a whole-server backup in a later file would fail or warn on it.
@@ -221,9 +222,11 @@ describe('Backup of a home whose drive holds a name no path can hold', () => {
         test(`a ${level} archive leaves them out with what is inside them, names them and verifies`, async () => {
             const { manifest, folder } = await snapshotInto(home, level);
             expect((await verifyFolder(folder)).failures).toEqual([]);
-            const warning = warningOf(manifest, mountId, ORPHAN_WARNING);
+            const warning = warningOf(manifest, mountId, UNUSABLE_WARNING);
+            expect(warning).toStartWith(`mount ${mountId}: ${UNUSABLE_WARNING} with 1 more inside them:`);
             expect(warning).toContain('control\x01.txt');
             expect(warning).toContain('Sepa/rated');
+            expect(manifest.warnings?.some((line) => line.includes(ORPHAN_WARNING))).toBe(false);
             const archived = rowIds(join(folder, 'home', PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB));
             const live = rowIds(metadataPath(home.homeDir, mountId));
             for (const id of [...unusable, insideId]) {
