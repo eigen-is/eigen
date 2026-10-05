@@ -94,6 +94,26 @@ describe('Access-request email', () => {
         spy.mockRestore();
     });
 
+    test('a failed send leaves the next request free to mail again', async () => {
+        const mailer = await import('../../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValueOnce(false).mockResolvedValue(true);
+        spy.mockClear();
+
+        const doc = await createDoc('access-request-failed-send');
+        for (let i = 0; i < 3; i++) {
+            await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) },
+            );
+            await new Promise((r) => setTimeout(r, 50));
+        }
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.alice.user.email));
+        expect(calls.length).toBe(2);
+        spy.mockRestore();
+    });
+
     test('does not email when toggle off', async () => {
         await setToggle(false);
         const mailer = await import('../../lib/core/mailer');

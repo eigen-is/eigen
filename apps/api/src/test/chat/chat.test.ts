@@ -7,7 +7,9 @@ import { DRIVE_MIME_CHAT } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
 import { sql } from 'drizzle-orm';
 import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
+import { messages } from '../../lib/chat/schema';
 import { ManagedDatabase } from '../../lib/core';
+import { getHome } from '../../lib/home';
 import { authedRequest, chatGet, chatPost, driveGet, drivePost, findOrFail, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -280,6 +282,15 @@ describe('Chat', () => {
                 },
             );
         }
+        // Pinned, so the posts share one second however slowly they land.
+        const { mount, path } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(aliceMountId, chat.id);
+        const dataDb = await mount.getChildByName(path.id, 'data.db');
+        if (!dataDb) throw new Error('chat has no data.db');
+        const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id);
+        managedDb.db
+            .update(messages)
+            .set({ createdAt: new Date('2026-10-05T12:00:00Z') })
+            .run();
 
         let seen: string[] = [];
         let page = await chatGet<ChatMessage[]>(

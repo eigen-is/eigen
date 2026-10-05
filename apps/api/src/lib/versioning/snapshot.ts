@@ -62,6 +62,8 @@ async function takeSnapshot(
     // Flush the cached db so its pending writes are synced. The blocking path (manual save, pre-restore)
     // waits out an in-flight open or close of it, and its copy below reads through the slot too, so a
     // closed db's crash temp counts; the tick/close path must not wait, as it runs inside that very close.
+    // That copy reads the live handle itself; the blocking flush is what brings data.db's stored object,
+    // its row and the search index up to the version now rather than at the next tick.
     if (order === 'open-handle-first') {
         await withDocumentDb(mount, dataDb.id, async (slot) => {
             await slot.db?.flush();

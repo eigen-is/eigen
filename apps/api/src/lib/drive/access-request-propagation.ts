@@ -49,6 +49,11 @@ export async function propagateAccessRequest(
             { name: requesterName, email: requester.email },
             message,
         );
-        sendMail(mail).catch((err) => console.error('Failed to send access-request email:', err));
+        // The stamp holds back clicks while the mail is in flight; a failed send lifts it so the next one retries.
+        sendMail(mail)
+            .then((sent) => {
+                if (!sent) lastMailedAt.delete(tag);
+            })
+            .catch((err) => console.error('Failed to send access-request email:', err));
     }
 }

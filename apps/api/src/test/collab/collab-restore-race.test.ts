@@ -1,10 +1,7 @@
 // Regression net for the collab/Yjs audit's chat-restore-wipe P1 (deep-dive doc removed — see git history):
-// restoreContainer's replaceContainerDataDb deletes + recreates a chat's data.db under the
-// container lock, while ChatRoom.init (built fresh per request by Drive.getChat) lazily
-// auto-creates a missing data.db. Before the fix, a message posted in the delete→recreate
-// window provisioned a second empty data.db; the restore's createFileFromTemp then threw on the
-// duplicate name and the chat was left on the empty db with its earlier messages gone.
-// ChatRoom.init now takes the same container lock and re-checks existence under it.
+// restoreContainer's replaceContainerDataDb rewrites a chat's data.db in place under the container
+// lock, while ChatRoom.init (built fresh per request by Drive.getChat) provisions a missing data.db
+// under that same lock. Posts racing a restore must leave one data.db and a coherent message set.
 // (The broader collab restore/close/snapshot race matrix that verified the sound Yjs core lives
 // in docs/superpowers/api-audit-deepdive-tests/collab-restore-race.test.ts.)
 import { beforeAll, describe, expect, test } from 'bun:test';

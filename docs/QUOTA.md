@@ -38,7 +38,7 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 ## 507 is a full budget, 413 a file too large
 
-`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/backup.ts`): the API's `maxRequestBodySize` is 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it.
+`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/backup.ts`): the API's `maxRequestBodySize` is 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it. `getMaxUploadSize` caps a value saved above it too.
 
 The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
