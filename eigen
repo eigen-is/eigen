@@ -1170,7 +1170,8 @@ update_get() {
 update_apply() {
     # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
-        die "This update was started by a launcher older than 0.3.1." "Run ./eigen update 0.3.1 --no-backup first, then ./eigen update."
+        die "This update was started by a launcher older than 0.3.1." \
+            "Copy data/ and .env.production somewhere safe, then run ./eigen update 0.3.1 --no-backup, then ./eigen update."
     fi
     domain=$(env_value DOMAIN)
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
