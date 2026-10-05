@@ -19,7 +19,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | `./eigen status` | Shows the version, a waiting update, the services, disk space, the newest backup, the certificate, and the mail queue |
 | `./eigen logs [service]` | Follows the logs of every service, or of one. Ctrl-C stops it. |
 | `./eigen restart` | Starts Eigen, and any part of it that stopped |
-| `./eigen stop` | Stops Eigen. When a backup is running, it waits for that one to end first. `./eigen restart` starts it again. |
+| `./eigen stop` | Stops Eigen. When a backup or its upload to your backup bucket is running, it waits for that to end first. `./eigen restart` starts it again. |
 | `./eigen update` | Installs a new release. See [Update Eigen](/support/self-hosting/update). |
 | `./eigen rollback` | Goes back to the version before the last update |
 | `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. Its exit code tells a script whether the backup verified and reached the bucket. Eigen keeps these backups until you delete them; for a backup every night, turn on the nightly backup instead. See [Back up now](/support/self-hosting/back-up-and-restore#back-up-now). |
