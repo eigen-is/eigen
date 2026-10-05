@@ -98,7 +98,7 @@ function adminUserRows(where: SQL | undefined): AdminUserRow[] {
             name: u.name,
             email: u.email,
             memberId: m?.id ?? null,
-            role: (m?.role as AdminUserRow['role']) ?? null,
+            role: m?.role ?? null,
             createdAt: u.createdAt,
             lastActiveAt,
             teams: teamsByUser.get(u.id) ?? [],
