@@ -1,3 +1,4 @@
+import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings } from '../config/server-settings';
@@ -24,7 +25,7 @@ async function sendSeriesExceptions(
     organizerHome: Home,
     organizerEventId: string,
     exceptions: CalendarEvent[],
-    seriesAttendees: Attendee[],
+    series: CalendarEvent,
 ): Promise<void> {
     for (const exception of exceptions) {
         if (!exception.recurrenceDate) continue;
@@ -56,7 +57,7 @@ async function sendSeriesExceptions(
                 sequence: exception.sequence,
                 dtstamp: exception.updatedAt,
                 // The organizer's list for that occurrence, so an answer the guest already gave to it stands.
-                attendees: exception.data?.attendees ?? seriesAttendees,
+                attendees: heldAttendees(exception, series),
             },
         });
     }
@@ -123,7 +124,7 @@ export async function propagateInvitation(
                     organizerUserId: organizerHome.user.id,
                 },
             });
-            await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, newAttendees);
+            await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, event);
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series);
