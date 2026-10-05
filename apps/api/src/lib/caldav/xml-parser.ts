@@ -96,7 +96,7 @@ export type ReportRequest =
           type: 'calendar-query';
           matchesEvents: boolean;
           timeRange?: { start: Date; end: Date };
-          matchesUid?: (uid: string) => boolean;
+          matchesUid: (uid: string) => boolean;
           wantsData: boolean;
       }
     | { type: 'calendar-multiget'; hrefs: string[]; wantsData: boolean }
@@ -127,5 +127,6 @@ export function parseReport(xml: string): ReportRequest {
         return { type, syncToken: syncToken ? String(syncToken) : undefined, wantsData };
     }
 
-    return { type, ...readFilter(root['filter']), wantsData };
+    // A filter that names no UID matches every one.
+    return { type, matchesUid: () => true, ...readFilter(root['filter']), wantsData };
 }

@@ -81,7 +81,7 @@ async function handleCalendarQuery(
         report.timeRange
             ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
             : await calendar.listResources(calendarId)
-    ).filter((resource) => report.matchesUid?.(resource.uid) ?? true);
+    ).filter((resource) => report.matchesUid(resource.uid));
 
     const responses: string[] = [];
     for (const resource of resources) {
