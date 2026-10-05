@@ -136,7 +136,7 @@ EOF
             cat <<EOF
 Usage: ./eigen stop
 
-Stops Eigen. ./eigen restart starts it again.
+Stops Eigen, once a server backup that runs has ended. ./eigen restart starts it again.
 EOF
             ;;
     esac
@@ -564,6 +564,7 @@ stop_containers() {
 
 # From the stop on, a hangup must not end the command halfway: dash runs no EXIT trap on one.
 stop() {
+    before_stop
     trap '' HUP
     project
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
@@ -585,8 +586,9 @@ running_backup() { running_records ! -mmin +"$BACKUP_STALE_MINUTES" | head -n 1;
 
 wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
 
-# before_stop: a restore, an update or a restart that stops eigen-api waits for the server backup that runs, which the stop would kill, and the night it
-# was would have no backup. A stale record is named and passed. An interrupt here leaves Eigen running as it was.
+# before_stop: a stop, and a restart that stops eigen-api, waits for the server backup that runs, which the stop would
+# kill, and the night it was would have no backup. A restore and an update wait before they arm the restart, and stop
+# looks again. A stale record is named and passed. An interrupt here leaves Eigen running as it was.
 before_stop() {
     if ! api_running; then return 0; fi
     record=$(running_backup)
