@@ -3,13 +3,13 @@ import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { composeAccessRequestEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
+import { WindowLimiter } from '../core/window-limiter';
 import { pullDrivePath, sendToHome } from '../home/home-relay';
 import { getUserById } from '../user';
 
 // One mail per requester and path an hour: the owner's notification folds a repeat on its tag, a mail
-// cannot. Process-local, as the OTP limiter is.
-const MAIL_WINDOW_MS = 60 * 60 * 1000;
-const lastMailedAt = new Map<string, number>();
+// cannot.
+const mailWindow = new WindowLimiter(60 * 60 * 1000, 1);
 
 export async function propagateAccessRequest(
     ownerId: string,
@@ -37,10 +37,7 @@ export async function propagateAccessRequest(
     });
 
     if (parseOwnerId(ownerId).type === 'user' && getServerSettings().notifications.email.ownerOnAccessRequest) {
-        const now = Date.now();
-        if (now - (lastMailedAt.get(tag) ?? 0) < MAIL_WINDOW_MS) return;
-        for (const [key, at] of lastMailedAt) if (now - at >= MAIL_WINDOW_MS) lastMailedAt.delete(key);
-        lastMailedAt.set(tag, now);
+        if (!mailWindow.take(tag)) return;
         const owner = await getUserById(ownerId);
         if (!owner) return;
         const mail = composeAccessRequestEmail(
@@ -49,10 +46,10 @@ export async function propagateAccessRequest(
             { name: requesterName, email: requester.email },
             message,
         );
-        // The stamp holds back clicks while the mail is in flight; a failed send lifts it so the next one retries.
+        // The hit holds back clicks while the mail is in flight; a failed send releases it so the next one retries.
         sendMail(mail)
             .then((sent) => {
-                if (!sent) lastMailedAt.delete(tag);
+                if (!sent) mailWindow.release(tag);
             })
             .catch((err) => console.error('Failed to send access-request email:', err));
     }
