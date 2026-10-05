@@ -12,6 +12,7 @@ import {
     parseOwnerId,
 } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { CONTROL_CHARS } from '@workspace/lib/validation';
 import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -43,7 +44,7 @@ import {
     docContainerDescendantIds,
     rethrowDuplicateActiveName,
 } from './helpers';
-import { buildStorageKey, CONTROL_CHARS, isReservedName, validateName } from './names';
+import { buildStorageKey, isReservedName, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
