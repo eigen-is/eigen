@@ -30,8 +30,8 @@ import {
 } from '@workspace/sheet/engine';
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
-import { MAX_PDF_PAGE_PX } from '../pdf-page';
 import { sanitizeExportHtml } from '../sanitize';
+import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
 

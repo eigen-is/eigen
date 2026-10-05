@@ -13,8 +13,8 @@ import {
 } from '../../document/transform/protocol';
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
-import { MAX_PDF_PAGE_PX } from '../pdf-page';
 import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
+import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
