@@ -799,24 +799,12 @@ export class Mount {
             await this.withTreeShared(async () => {
                 const storageKey = await this.getStorageKey(pathId);
                 await this.db.delete(paths).where(eq(paths.id, pathId));
-                await deleteThumbnail(this.thumbsDir, pathId);
-                // Cancel any queued upload + staged copy first, so an in-flight/queued PUT can't
-                // resurrect the object we're about to delete (invariant 7). Covers container
-                // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
-                // replace, which all route data.db deletion through here.
-                if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
-                if (!(await this.storage.delete(storageKey))) {
-                    console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
-                }
+                await this.removeObject(pathId, storageKey);
             });
         } else if (this.isPathBased && deleteDir) {
             await this.withTreeExclusive(async () => {
                 const storageKey = await this.getStorageKey(pathId);
-                const files = this.db.transaction((tx) => {
-                    const files = this.deleteDescendantsInTx(tx, pathId);
-                    tx.delete(paths).where(eq(paths.id, pathId)).run();
-                    return files;
-                });
+                const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
                 for (const { id } of files) {
                     await deleteThumbnail(this.thumbsDir, id);
                 }
@@ -827,22 +815,22 @@ export class Mount {
         } else {
             // One walk for the whole subtree: an id key does not depend on its folder, so every object
             // goes after all the rows, as for a single file.
-            const files = this.db.transaction((tx) => {
-                const files = this.deleteDescendantsInTx(tx, pathId);
-                tx.delete(paths).where(eq(paths.id, pathId)).run();
-                return files;
-            });
-            for (const { id, file } of files) {
-                const storageKey = file || id;
-                await deleteThumbnail(this.thumbsDir, id);
-                if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
-                if (!(await this.storage.delete(storageKey))) {
-                    console.warn(`[Mount] deleted ${id}, but its object ${storageKey} stays behind`);
-                }
-            }
+            const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
+            for (const { id, file } of files) await this.removeObject(id, file || id);
         }
 
         await this.invalidateSizesFrom(pathEntry.parentId);
+    }
+
+    // Cancels any queued upload + staged copy first, so an in-flight/queued PUT can't resurrect the
+    // object we're about to delete (invariant 7). Covers container deletes, provisionManagedDbs
+    // rollback, and the chat-restore replace, which all route data.db deletion through here.
+    private async removeObject(pathId: string, storageKey: string): Promise<void> {
+        await deleteThumbnail(this.thumbsDir, pathId);
+        if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
+        if (!(await this.storage.delete(storageKey))) {
+            console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
+        }
     }
 
     // `seen` bounds the walk, so a tree that already holds a cycle fails instead of spinning.
@@ -864,22 +852,27 @@ export class Mount {
         }
     }
 
-    // Returns the deleted files: only they own a thumbnail and an object, which go after the rows.
-    private deleteDescendantsInTx(
+    // Deletes the folder and everything under it. Returns the deleted files: only they own a
+    // thumbnail and an object, which go after the rows.
+    private deleteSubtreeInTx(
         tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        parentId: string,
+        folderId: string,
     ): { id: string; file: string }[] {
         const children = tx
             .select({ id: paths.id, type: paths.type, file: paths.file })
             .from(paths)
-            .where(eq(paths.parentId, parentId))
+            .where(eq(paths.parentId, folderId))
             .all();
         const files: { id: string; file: string }[] = [];
         for (const child of children) {
-            if (child.type === 'file') files.push({ id: child.id, file: child.file });
-            else files.push(...this.deleteDescendantsInTx(tx, child.id));
+            if (child.type !== 'file') {
+                files.push(...this.deleteSubtreeInTx(tx, child.id));
+                continue;
+            }
+            files.push({ id: child.id, file: child.file });
             tx.delete(paths).where(eq(paths.id, child.id)).run();
         }
+        tx.delete(paths).where(eq(paths.id, folderId)).run();
         return files;
     }
 
