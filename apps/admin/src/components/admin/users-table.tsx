@@ -23,38 +23,37 @@ const roleBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
 type AdminUsersToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    showCreateDialog: boolean;
-    onShowCreateDialog: (show: boolean) => void;
     organizationId?: string;
+    // A guest account comes from its own code sign-in, so the guests page has nothing to create.
+    guests?: boolean;
 };
 
-export function AdminUsersToolbar({
-    searchQuery,
-    onSearchChange,
-    showCreateDialog,
-    onShowCreateDialog,
-    organizationId,
-}: AdminUsersToolbarProps) {
+export function AdminUsersToolbar({ searchQuery, onSearchChange, organizationId, guests }: AdminUsersToolbarProps) {
+    const [showCreateDialog, setShowCreateDialog] = useState(false);
     return (
         <div className="flex items-center justify-between w-full gap-2">
             <SearchBar
-                placeholder="Search users..."
+                placeholder={guests ? 'Search guests...' : 'Search users...'}
                 value={searchQuery}
                 onChange={onSearchChange}
                 maxWidth="full"
                 inputClassName="h-8 bg-background"
             />
-            <TooltipButton
-                icon={Plus}
-                tooltipText="Create User"
-                className="shrink-0"
-                onClick={() => onShowCreateDialog(true)}
-            />
-            <CreateUserDialog
-                open={showCreateDialog}
-                onOpenChange={onShowCreateDialog}
-                organizationId={organizationId}
-            />
+            {!guests && (
+                <>
+                    <TooltipButton
+                        icon={Plus}
+                        tooltipText="Create User"
+                        className="shrink-0"
+                        onClick={() => setShowCreateDialog(true)}
+                    />
+                    <CreateUserDialog
+                        open={showCreateDialog}
+                        onOpenChange={setShowCreateDialog}
+                        organizationId={organizationId}
+                    />
+                </>
+            )}
         </div>
     );
 }
