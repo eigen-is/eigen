@@ -453,6 +453,10 @@ describe('versions HTTP routes', () => {
 
         const { mount } = await drive.resolveFile(aliceMountId, docPath.id);
         const dataDb = await mount.getChildByName(docPath.id, 'data.db');
+        // The reindex saveVersion kicked can capture after the close and leave data.db cached, and a
+        // cached db reopens without looking at storage.
+        await mount.flushContentReindex();
+        await mount.closeDatabase(dataDb!.id);
         await mount.storage.delete(await mount.getStorageKey(dataDb!.id));
         await expect(drive.getCollabDocument(aliceMountId, docPath.id)).rejects.toMatchObject({ status: 410 });
 
