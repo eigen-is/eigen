@@ -130,6 +130,13 @@ describe('Occurrence edits of an invited series', () => {
         return { series, target: reached[1].occurrenceDate };
     }
 
+    const putEvent = (id: string, body: Record<string, unknown>) =>
+        authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${id}`,
+            { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        );
+
     // Bob plus an external guest, who has no relay and hears of every change by mail.
     async function seededWithExternal(title: string, external: string) {
         const attendees = [
@@ -137,37 +144,53 @@ describe('Occurrence edits of an invited series', () => {
             { email: external, name: 'Carol', status: 'pending' as const, role: 'required' },
         ];
         const series = await createSeries(title);
-        const put = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ data: { attendees } }),
-            },
-        );
-        expect(put.status).toBe(200);
+        expect((await putEvent(series.id, { data: { attendees } })).status).toBe(200);
         const target = (await untilBob(series.uid, (occ) => occ.length === 4))[1].occurrenceDate;
         return { series, target, attendees };
     }
 
-    // The CANCEL that `act` mails to `address`, its iCalendar body unfolded.
-    async function cancelMailTo(address: string, act: () => Promise<Response>) {
+    // `target` moved an hour later under `title`, once Bob's copy has it.
+    async function moveOccurrence(series: CalendarEvent, target: string, title: string, data?: object) {
+        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
+        const override = await editOccurrence(series.id, target, {
+            title,
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+            ...(data && { data }),
+        });
+        await untilBob(series.uid, (occ) => occ.some((e) => e.title === title));
+        return override;
+    }
+
+    // Holds what Eigen mails; `to` waits for the mail to `address` whose subject starts with `subject`.
+    async function catchMail() {
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
         spy.mockClear();
+        return {
+            to: (address: string, subject: string) =>
+                eventually(
+                    async () =>
+                        spy.mock.calls
+                            .map((call) => call[0])
+                            .find((m) => m.subject.startsWith(subject) && m.to.some((t) => t.address === address)),
+                    `the ${subject} to reach ${address}`,
+                ),
+            restore: () => spy.mockRestore(),
+        };
+    }
+
+    const unfolded = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
+
+    // The CANCEL that `act` mails to `address`.
+    async function cancelMailTo(address: string, act: () => Promise<Response>) {
+        const mail = await catchMail();
         try {
             expect((await act()).status).toBe(200);
-            const cancel = await eventually(
-                async () =>
-                    spy.mock.calls
-                        .map((call) => call[0])
-                        .find((m) => m.subject.startsWith('Canceled') && m.to.some((t) => t.address === address)),
-                `the CANCEL to reach ${address}`,
-            );
-            return { text: cancel.text, ics: cancel.icalEvent!.content.replace(/\r\n[ \t]/g, '') };
+            const cancel = await mail.to(address, 'Canceled');
+            return { text: cancel.text, ics: unfolded(cancel) };
         } finally {
-            spy.mockRestore();
+            mail.restore();
         }
     }
 
@@ -250,27 +273,19 @@ describe('Occurrence edits of an invited series', () => {
         expect(master.startTime.toISOString()).toBe(new Date(SERIES_START).toISOString());
     });
 
-    // The web app's "Delete this" on a moved occurrence: the organizer stores an EXDATE in its place, and the guest drops it too.
-    test('cancelling a moved occurrence drops it for the guest', async () => {
-        const { series, target } = await seeded('Weekly Occurrence Cancel Moved');
-        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
-        const override = await editOccurrence(series.id, target, {
-            title: 'Moved Then Cancelled',
-            startTime: movedStart,
-            endTime: new Date(movedStart.getTime() + HOUR),
-        });
-        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Moved Then Cancelled'));
+    // The web app's "Delete this" on a moved occurrence: the organizer stores an EXDATE in its place, and the guest
+    // drops it too. The mail names the slot the guest last saw, the RECURRENCE-ID the original one.
+    test('cancelling a moved occurrence drops it for the guest and mails its moved time', async () => {
+        const CAROL = 'carol.cancel-moved@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Occurrence Cancel Moved', CAROL);
+        const override = await moveOccurrence(series, target, 'Moved Then Cancelled', { attendees });
 
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'cancelled' }),
-            },
-        );
-        expect(res.status).toBe(200);
+        const { text, ics } = await cancelMailTo(CAROL, () => putEvent(override.id, { status: 'cancelled' }));
+        const day = target.replaceAll('-', '');
+        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${day}T100000`);
+        expect(ics).toContain(`DTSTART;TZID=${TZ}:${day}T110000`);
+        expect(ics).toContain(`DTEND;TZID=${TZ}:${day}T120000`);
+        expect(text).toContain('11:00');
 
         const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
         expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
@@ -278,88 +293,30 @@ describe('Occurrence edits of an invited series', () => {
     });
 
     // A DELETE of the override row is the API's "delete this": the cancellation names the series plus the
-    // ORIGINAL occurrence, which is what the guest's copy holds, not the override's own id or moved start.
-    test('deleting a moved occurrence over REST cancels that occurrence for every guest', async () => {
-        const CAROL = 'carol.delete@example.org';
-        const { series, target, attendees } = await seededWithExternal('Weekly Occurrence Delete', CAROL);
-        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
-        const override = await editOccurrence(series.id, target, {
-            title: 'Moved Then Deleted',
-            startTime: movedStart,
-            endTime: new Date(movedStart.getTime() + HOUR),
-            data: { attendees },
+    // ORIGINAL occurrence, which is what the guest's copy holds, not the override's own id or moved start. An
+    // override that names no guests holds the series' list, so deleting it owes those guests the CANCEL too.
+    for (const named of [true, false]) {
+        test(`deleting a moved occurrence that names ${named ? 'its' : 'no'} guests over REST cancels it for every guest`, async () => {
+            const CAROL = `carol.delete-${named}@example.org`;
+            const { series, target, attendees } = await seededWithExternal(`Weekly Occurrence Delete ${named}`, CAROL);
+            const override = await moveOccurrence(series, target, `Moved Then Deleted ${named}`, {
+                attendees: named ? attendees : [],
+            });
+
+            const { ics } = await cancelMailTo(CAROL, () =>
+                authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
+                    { method: 'DELETE' },
+                ),
+            );
+            expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
+            expect(ics).toContain('STATUS:CANCELLED');
+
+            const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
+            expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
         });
-        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Moved Then Deleted'));
-
-        const { ics } = await cancelMailTo(CAROL, () =>
-            authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
-                { method: 'DELETE' },
-            ),
-        );
-
-        const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
-        expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
-        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
-        expect(ics).toContain('STATUS:CANCELLED');
-    });
-
-    // An override that names no guests holds the series' list, so deleting it owes those guests the CANCEL.
-    test('deleting a moved occurrence that names no guests cancels it for the series guests', async () => {
-        const CAROL = 'carol.delete-guestless@example.org';
-        const { series, target } = await seededWithExternal('Weekly Occurrence Delete Guestless', CAROL);
-        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
-        const override = await editOccurrence(series.id, target, {
-            title: 'Guestless Then Deleted',
-            startTime: movedStart,
-            endTime: new Date(movedStart.getTime() + HOUR),
-            data: { attendees: [] },
-        });
-        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Guestless Then Deleted'));
-
-        const { ics } = await cancelMailTo(CAROL, () =>
-            authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
-                { method: 'DELETE' },
-            ),
-        );
-        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
-        const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
-        expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
-    });
-
-    // "Delete this" on a moved occurrence: the mail names the slot the guest last saw, the RECURRENCE-ID the original one.
-    test('cancelling a moved occurrence mails its moved time', async () => {
-        const CAROL = 'carol.cancel-moved@example.org';
-        const { series, target, attendees } = await seededWithExternal('Weekly Occurrence Cancel Mail', CAROL);
-        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
-        const override = await editOccurrence(series.id, target, {
-            title: 'Moved Then Cancelled By Mail',
-            startTime: movedStart,
-            endTime: new Date(movedStart.getTime() + HOUR),
-            data: { attendees },
-        });
-        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Moved Then Cancelled By Mail'));
-
-        const { text, ics } = await cancelMailTo(CAROL, () =>
-            authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'cancelled' }),
-                },
-            ),
-        );
-        const day = target.replaceAll('-', '');
-        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${day}T100000`);
-        expect(ics).toContain(`DTSTART;TZID=${TZ}:${day}T110000`);
-        expect(ics).toContain(`DTEND;TZID=${TZ}:${day}T120000`);
-        expect(text).toContain('11:00');
-    });
+    }
 
     test('a series-wide edit after an occurrence edit keeps the override and moves the master', async () => {
         const { series, target } = await seeded('Weekly Occurrence Then Series');
@@ -402,15 +359,7 @@ describe('Occurrence edits of an invited series', () => {
         });
         await untilBob(series.uid, (occ) => occ.some((e) => new Date(e.startTime).getTime() === movedStart.getTime()));
 
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
-            {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: 'All Events', data: { attendees: guests() } }),
-            },
-        );
+        const res = await putEvent(series.id, { title: 'All Events', data: { attendees: guests() } });
         expect(res.status).toBe(200);
 
         const mine = await aliceOccurrences(series.uid);
@@ -503,22 +452,12 @@ describe('Occurrence edits of an invited series', () => {
         const { series, target } = await seededWithExternal('Weekly Occurrence Reinherit', CAROL);
         await editOccurrence(series.id, target, { title: 'Bob Only' });
 
-        const mailer = await import('../../lib/core/mailer');
-        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        spy.mockClear();
+        const mail = await catchMail();
         try {
             await editOccurrence(series.id, target, { title: 'Everyone Again', data: { attendees: [] } });
-            await eventually(
-                async () =>
-                    spy.mock.calls
-                        .map((call) => call[0])
-                        .find(
-                            (m) => m.subject === 'Invitation: Everyone Again' && m.to.some((t) => t.address === CAROL),
-                        ),
-                'the invitation to reach Carol',
-            );
+            await mail.to(CAROL, 'Invitation: Everyone Again');
         } finally {
-            spy.mockRestore();
+            mail.restore();
         }
     });
 
@@ -526,40 +465,20 @@ describe('Occurrence edits of an invited series', () => {
     // an override with only the organizer on it reads as an occurrence the guest is not invited to.
     test("an override naming no guests travels with the series' guests", async () => {
         const CAROL = 'carol.guestless@example.org';
-        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
-        const series = await createSeries('Weekly Occurrence Guestless Mail');
-        const put = (body: Record<string, unknown>) =>
-            authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
-                { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-            );
-        expect((await put({ data: { attendees } })).status).toBe(200);
-        const target = (await untilBob(series.uid, (occ) => occ.length === 4))[1].occurrenceDate;
+        const { series, target, attendees } = await seededWithExternal('Weekly Occurrence Guestless Mail', CAROL);
 
-        const mailer = await import('../../lib/core/mailer');
-        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        spy.mockClear();
-        const mailTo = (subject: string) =>
-            eventually(
-                async () =>
-                    spy.mock.calls
-                        .map((call) => call[0])
-                        .find((m) => m.subject === subject && m.to.some((t) => t.address === CAROL)),
-                `the ${subject} to reach Carol`,
-            );
+        const mail = await catchMail();
         await editOccurrence(series.id, target, { title: 'Guestless Override', data: { attendees: [] } });
-        const occurrence = await mailTo('Updated invitation: Guestless Override');
-        expect((await put({ title: 'Guestless Series Renamed', data: { attendees } })).status).toBe(200);
-        const whole = await mailTo('Updated invitation: Guestless Series Renamed');
-        spy.mockRestore();
+        const occurrence = await mail.to(CAROL, 'Updated invitation: Guestless Override');
+        expect((await putEvent(series.id, { title: 'Guestless Series Renamed', data: { attendees } })).status).toBe(
+            200,
+        );
+        const whole = await mail.to(CAROL, 'Updated invitation: Guestless Series Renamed');
+        mail.restore();
 
-        for (const mail of [occurrence, whole]) {
-            const vevents = mail
-                .icalEvent!.content.replace(/\r\n[ \t]/g, '')
-                .split('BEGIN:VEVENT')
-                .slice(1);
-            expect(vevents).toHaveLength(mail === whole ? 2 : 1);
+        for (const sent of [occurrence, whole]) {
+            const vevents = unfolded(sent).split('BEGIN:VEVENT').slice(1);
+            expect(vevents).toHaveLength(sent === whole ? 2 : 1);
             for (const vevent of vevents) {
                 expect(vevent).toContain(`:mailto:${CAROL}\r\n`);
                 expect(vevent).toContain(`:mailto:${ctx.bob.user.email}\r\n`);
@@ -581,34 +500,18 @@ describe('Occurrence edits of an invited series', () => {
         await editOccurrence(series.id, deleted, { title: 'Weekly Occurrence External', status: 'cancelled' });
         await untilBob(series.uid, (occ) => occ.length === 3 && occ.some((e) => e.title === 'Moved For Carol'));
 
-        const mailer = await import('../../lib/core/mailer');
-        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        spy.mockClear();
-        const mailTo = (subject: string) =>
-            eventually(
-                async () =>
-                    spy.mock.calls
-                        .map((call) => call[0])
-                        .find((m) => m.subject.startsWith(subject) && m.to.some((t) => t.address === CAROL)),
-                `the ${subject} to reach Carol`,
-            );
-        const put = (body: Record<string, unknown>) =>
-            authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
-                { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-            );
+        const mail = await catchMail();
         const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
 
-        expect((await put({ data: { attendees } })).status).toBe(200);
-        const invite = await mailTo('Invitation');
-        expect((await put({ title: 'Weekly External Renamed', data: { attendees } })).status).toBe(200);
-        const update = await mailTo('Updated invitation');
-        spy.mockRestore();
+        expect((await putEvent(series.id, { data: { attendees } })).status).toBe(200);
+        const invite = await mail.to(CAROL, 'Invitation');
+        expect((await putEvent(series.id, { title: 'Weekly External Renamed', data: { attendees } })).status).toBe(200);
+        const update = await mail.to(CAROL, 'Updated invitation');
+        mail.restore();
 
         const compact = (key: string) => `${key.replaceAll('-', '')}T100000`;
-        for (const mail of [invite, update]) {
-            const ics = mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
+        for (const sent of [invite, update]) {
+            const ics = unfolded(sent);
             const lines = ics.split('\r\n');
             const count = (pattern: RegExp) => lines.filter((line) => pattern.test(line)).length;
             expect(count(/^BEGIN:VCALENDAR$/)).toBe(1);

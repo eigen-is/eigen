@@ -5,9 +5,11 @@ import { expect } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
 import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
 import type { EmailDraft } from '@workspace/lib/types/mail';
+import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { app } from '../app';
 import { auth } from '../lib/auth/auth';
+import { getStorageType, updateServerSettings } from '../lib/config/server-settings';
 import { drainACLFanOuts } from '../lib/drive/acl-propagation';
 import { getHome } from '../lib/home';
 import { createSetupToken } from '../lib/setup/setup-token';
@@ -124,6 +126,21 @@ export async function createTestUser(email: string, password: string, name: stri
         name: userName,
         sessionToken,
     };
+}
+
+// A fresh user whose Home opened while the server's default mount storage was `storageType`.
+export async function createTestUserOnStorage(storageType: ServerStorageType, name: string): Promise<TestUser> {
+    await ensureServer();
+    const before = getStorageType();
+    await updateServerSettings({ defaults: { mount: { storageType } } });
+    try {
+        const slug = name.toLowerCase().replaceAll(' ', '-');
+        const user = await createTestUser(`${slug}-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', name);
+        await getHome(user.id);
+        return user;
+    } finally {
+        await updateServerSettings({ defaults: { mount: { storageType: before } } });
+    }
 }
 
 export async function signsIn(email: string, password: string): Promise<boolean> {

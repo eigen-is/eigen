@@ -54,13 +54,14 @@ describe('Removing one occurrence of a series', () => {
         expect(res.status).toBe(200);
     }
 
-    async function series(title: string): Promise<CalendarEvent> {
+    async function series(title: string, data?: object): Promise<CalendarEvent> {
         return post({
             title,
             startTime: SERIES_START,
             endTime: '2030-01-07T10:00:00Z',
             allDay: false,
             rrule: 'FREQ=WEEKLY;COUNT=4',
+            data,
         });
     }
 
@@ -145,15 +146,8 @@ describe('Removing one occurrence of a series', () => {
 
     // Putting an occurrence back cancels nothing, so the series' guests get no CANCEL for it.
     test('putting a dropped occurrence back sends its guests no cancellation', async () => {
-        const parent = await post({
-            title: 'Occurrence Restore Guests',
-            startTime: SERIES_START,
-            endTime: '2030-01-07T10:00:00Z',
-            allDay: false,
-            rrule: 'FREQ=WEEKLY;COUNT=4',
-            data: {
-                attendees: [{ email: 'carol.restore@example.org', name: 'Carol', status: 'pending', role: 'required' }],
-            },
+        const parent = await series('Occurrence Restore Guests', {
+            attendees: [{ email: 'carol.restore@example.org', name: 'Carol', status: 'pending', role: 'required' }],
         });
         await post({
             title: 'Occurrence Restore Guests',
