@@ -1,3 +1,4 @@
+import { CONTROL_CHAR_PATTERN } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
 
 // The rules a name in a mount's paths table keeps, and the storage key a flat-key backend derives from one. No
@@ -11,10 +12,10 @@ export function isReservedName(name: string): boolean {
     return name.normalize('NFKC').toLowerCase() === '.trash';
 }
 
-// Control bytes (incl. NUL) are rejected in both names and WebDAV path segments — a name creatable
-// via the API must stay reachable over WebDAV, which rejects this range per RFC 4918.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control chars is the point
-export const CONTROL_CHARS = /[\x00-\x1f]/;
+// Control bytes (incl. NUL and DEL) are rejected in both names and WebDAV path segments — a name creatable
+// via the API must stay reachable over WebDAV, which rejects this range per RFC 4918, and archivable by a
+// backup, whose path check refuses the same range.
+export const CONTROL_CHARS = new RegExp(CONTROL_CHAR_PATTERN);
 
 // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
 export const MAX_NAME_BYTES = 255;
