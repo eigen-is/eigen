@@ -9,7 +9,7 @@ import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
-import { isMissingObjectCause, storageGone, writeTempWithHash } from '../storage';
+import { hashFile, isMissingObjectCause, storageGone, writeTempWithHash } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
@@ -31,7 +31,7 @@ export async function snapshotContainerDataDb(
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<DrivePath> {
-    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy, { awaitSlot: true }));
+    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy, 'open-handle-first'));
 }
 
 // The tick/close (ManagedDatabase onSnapshot) twin: it runs inside a close that holds the doc's
@@ -44,7 +44,9 @@ export async function trySnapshotContainerDataDb(
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<'taken' | 'skipped'> {
-    const taken = await mount.tryWithPathLock(containerId, () => takeSnapshot(mount, containerId, policy));
+    const taken = await mount.tryWithPathLock(containerId, () =>
+        takeSnapshot(mount, containerId, policy, 'staged-first'),
+    );
     return taken === null ? 'skipped' : 'taken';
 }
 
@@ -52,15 +54,15 @@ async function takeSnapshot(
     mount: Mount,
     containerId: string,
     policy: RetentionPolicy,
-    opts?: { awaitSlot?: boolean },
+    order: 'staged-first' | 'open-handle-first',
 ): Promise<DrivePath> {
     const dataDb = await mount.getChildByName(containerId, 'data.db');
     if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
-    // Flush the cached db so the copy below reads its pending writes. The blocking path (manual
-    // save, pre-restore) waits out an in-flight open or close of it; the tick/close path must not
-    // wait, as it runs inside that very close, and mid-close the slot holds no db.
-    if (opts?.awaitSlot) {
+    // Flush the cached db so its pending writes are synced. The blocking path (manual save, pre-restore)
+    // waits out an in-flight open or close of it, and its copy below reads through the slot too, so a
+    // closed db's crash temp counts; the tick/close path must not wait, as it runs inside that very close.
+    if (order === 'open-handle-first') {
         await withDocumentDb(mount, dataDb.id, async (slot) => {
             await slot.db?.flush();
         });
@@ -81,13 +83,11 @@ async function takeSnapshot(
     // the existing one rather than failing on the duplicate name.
     const existing = await mount.getChildByName(versions.id, snapshotName);
     if (existing) return existing;
-    // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload,
-    // so a close-time snapshot never blocks on the backend — copyPath would instead
-    // write the new version to storage synchronously. Local backends are synchronously
-    // current, so they keep the direct copyPath.
+    // isRemote ENQUEUES the version's upload, so a close-time snapshot never blocks on the
+    // backend. Local backends write it synchronously.
     const copy = mount.isRemote
-        ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName)
-        : await mount.copyPath(dataDb.id, versions.id, snapshotName);
+        ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName, order)
+        : await snapshotDataDbToVersionLocal(mount, dataDb, versions.id, snapshotName, order);
 
     // Process shutdown skips the prune: a stalled DELETE would eat the drain budget, and the next snapshot prunes.
     if (getShutdownDrainDeadline() !== null) return copy;
@@ -112,16 +112,15 @@ async function snapshotDataDbToVersionStaged(
     dataDb: DrivePath,
     versionsId: string,
     snapshotName: string,
+    order: 'staged-first' | 'open-handle-first',
 ): Promise<DrivePath> {
     const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
-    const staged = await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first').catch(
-        (error: unknown) => {
-            // A failed read leaves a half-written copy no pending upload references.
-            fs.rmSync(versionStaging, { force: true });
-            throw error;
-        },
-    );
+    const staged = await stageManagedDbCopy(mount, dataDb.id, versionStaging, order).catch((error: unknown) => {
+        // A failed read leaves a half-written copy no pending upload references.
+        fs.rmSync(versionStaging, { force: true });
+        throw error;
+    });
     if (!staged) throw storageGone();
     const versionPathId = await mount.touchFile(versionsId, snapshotName, dataDb.mimeType);
     const versionKey = await mount.getStorageKey(versionPathId);
@@ -134,16 +133,46 @@ async function snapshotDataDbToVersionStaged(
     return created;
 }
 
+// The local twin: the same freshest copy, staged in tmp/ and written to storage before this returns.
+async function snapshotDataDbToVersionLocal(
+    mount: Mount,
+    dataDb: DrivePath,
+    versionsId: string,
+    snapshotName: string,
+    order: 'staged-first' | 'open-handle-first',
+): Promise<DrivePath> {
+    const tempId = randomUUID();
+    try {
+        const tempPath = mount.getTempPath(tempId);
+        if (!(await stageManagedDbCopy(mount, dataDb.id, tempPath, order))) throw storageGone();
+        const { size, hash } = await hashFile(tempPath);
+        const versionPathId = await mount.createFileFromTemp(
+            versionsId,
+            snapshotName,
+            dataDb.mimeType,
+            size,
+            hash,
+            tempId,
+        );
+        const created = await mount.getPath(versionPathId);
+        if (!created) throw new ApiError(500, 'Failed to create version snapshot');
+        return created;
+    } finally {
+        await mount.cleanupTemp(tempId);
+    }
+}
+
 // Produce a local copy of a managed container db's current bytes at destPath, freshest source first,
 // and say where it came from: only a copy of the stored object shows the store answers.
-// Null when there is nothing left to copy: no live handle, no viable crash temp (backup order only),
-// nothing staged, and a GET that answers the object missing. The container was deleted or a versions/
-// snapshot pruned since the caller read the paths table, or the data.db object is gone, which the
-// version snapshot answers with a 410.
-// 'staged-first' is the version-snapshot order: its caller flushed the cached db into the pending
+// Null when there is nothing left to copy: no live handle, no viable crash temp ('open-handle-first'
+// only), nothing staged, and a GET that answers the object missing. The container was deleted or a
+// versions/ snapshot pruned since the caller read the paths table, or the data.db object is gone, which
+// the version snapshot answers with a 410.
+// 'staged-first' is the tick/close snapshot order: its caller flushed the cached db into the pending
 // staged copy already, so reusing that copy beats a second VACUUM INTO. 'open-handle-first' is the
-// backup order: nothing flushed, so a live handle, or else the crash temp an unclean shutdown left,
-// holds the writes made since the last stage; it waits out an in-flight open or close of that handle first.
+// order of a backup and of a manual or pre-restore snapshot: nothing flushed, so a live handle, or else
+// the crash temp an unclean shutdown left, holds the writes made since the last stage; it waits out an
+// in-flight open or close of that handle first.
 export async function stageManagedDbCopy(
     mount: Mount,
     pathId: string,
