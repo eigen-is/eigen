@@ -13,19 +13,27 @@ describe('WebDAV LOCK/UNLOCK', () => {
         baseHref = `/webdav/${ctx.alice.user.id}/${mountId}`;
     });
 
+    // A LOCK on `url` in `scope`, naming `owner` if given.
+    function lockRequest(
+        url: string,
+        {
+            scope = 'exclusive',
+            owner,
+            timeout,
+        }: { scope?: 'exclusive' | 'shared'; owner?: string; timeout?: string } = {},
+    ): Promise<Response> {
+        const ownerXml = owner ? `<D:owner><D:href>mailto:${owner}@example.com</D:href></D:owner>` : '';
+        return webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+            body: `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:${scope}/></D:lockscope><D:locktype><D:write/></D:locktype>${ownerXml}</D:lockinfo>`,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8', ...(timeout && { Timeout: timeout }) },
+        });
+    }
+
     async function lockFile(name: string, ownerName = 'Alice'): Promise<{ token: string; url: string }> {
         const url = `${baseHref}/${name}`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'lockable' });
-        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:">
-  <D:lockscope><D:exclusive/></D:lockscope>
-  <D:locktype><D:write/></D:locktype>
-  <D:owner><D:href>mailto:${ownerName}@example.com</D:href></D:owner>
-</D:lockinfo>`;
-        const lock = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            body: lockBody,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8', Timeout: 'Second-60' },
-        });
+        const lock = await lockRequest(url, { owner: ownerName, timeout: 'Second-60' });
         expect(lock.status).toBe(200);
         const token = lock.headers.get('Lock-Token')!.replace(/^</, '').replace(/>$/, '');
         return { token, url };
@@ -107,12 +115,7 @@ describe('WebDAV LOCK/UNLOCK', () => {
 
     test('LOCK on a missing name → 404, and nothing is created', async () => {
         const url = `${baseHref}/lock-new-name.docx`;
-        const lock = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            body: `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
-        expect(lock.status).toBe(404);
+        expect((await lockRequest(url)).status).toBe(404);
         expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
     });
 
@@ -120,45 +123,20 @@ describe('WebDAV LOCK/UNLOCK', () => {
     test('a 33rd shared lock on one path → 423', async () => {
         const url = `${baseHref}/lock-shared-cap.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
-        const lockShared = () =>
-            webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-                body: `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
-                headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-            });
-        for (let i = 0; i < 32; i++) expect((await lockShared()).status).toBe(200);
-        expect((await lockShared()).status).toBe(423);
+        for (let i = 0; i < 32; i++) expect((await lockRequest(url, { scope: 'shared' })).status).toBe(200);
+        expect((await lockRequest(url, { scope: 'shared' })).status).toBe(423);
     }, 10_000);
 
     test('LOCK body over 64KB → 413', async () => {
         const url = `${baseHref}/lock-big-body.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
-        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:">
-  <D:lockscope><D:exclusive/></D:lockscope>
-  <D:locktype><D:write/></D:locktype>
-  <D:owner><D:href>mailto:${'a'.repeat(70_000)}@example.com</D:href></D:owner>
-</D:lockinfo>`;
-        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            body: lockBody,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
-        expect(res.status).toBe(413);
+        expect((await lockRequest(url, { owner: 'a'.repeat(70_000) })).status).toBe(413);
     });
 
     test('LOCK with absurd Timeout is capped to 24h', async () => {
         const url = `${baseHref}/lock-timeout-cap.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
-        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:">
-  <D:lockscope><D:exclusive/></D:lockscope>
-  <D:locktype><D:write/></D:locktype>
-  <D:owner><D:href>mailto:alice@example.com</D:href></D:owner>
-</D:lockinfo>`;
-        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            body: lockBody,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8', Timeout: 'Second-2147483647' },
-        });
+        const res = await lockRequest(url, { owner: 'alice', timeout: 'Second-2147483647' });
         expect(res.status).toBe(200);
         const body = await res.text();
         const match = body.match(/<D:timeout>Second-(\d+)<\/D:timeout>/);

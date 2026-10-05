@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import { getMountQuotaState } from '../../lib/config/enforcement';
 import { getServerConfig } from '../../lib/config/server-config';
-import { authedRequest, getTestContext } from '../setup';
+import { addMember, authedRequest, createTeam, getTestContext } from '../setup';
 
 // A mount's cap belongs to the mount: the same mount meets the same cap, WebDAV reports the same quota,
 // whoever writes or looks.
@@ -11,19 +11,10 @@ describe('a mount cap takes the team overrides of the mount owner', () => {
     let mountId: string;
     const teamIds: string[] = [];
 
-    async function createTeam(name: string, memberId: string, defaultMountMaxSizeMB: number): Promise<void> {
-        const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, organizationId: getServerConfig()!.orgId }),
-        });
-        const { id } = (await res.json()) as { id: string };
+    async function teamWithOverride(name: string, memberId: string, defaultMountMaxSizeMB: number): Promise<void> {
+        const id = await createTeam(ctx, getServerConfig()!.orgId, name);
         teamIds.push(id);
-        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teamId: id, userId: memberId }),
-        });
+        await addMember(ctx, id, memberId);
         await setOverride(id, defaultMountMaxSizeMB);
     }
 
@@ -52,13 +43,13 @@ describe('a mount cap takes the team overrides of the mount owner', () => {
 
     test("a writer's teams do not lift the owner's mount", async () => {
         const ownCap = (await getMountQuotaState(ctx.alice.user.id, mountId)).max;
-        await createTeam('Writer Override Team', ctx.bob.user.id, 5000);
+        await teamWithOverride('Writer Override Team', ctx.bob.user.id, 5000);
 
         expect((await getMountQuotaState(ctx.alice.user.id, mountId)).max).toBe(ownCap);
     });
 
     test("the owner's teams lift the mount", async () => {
-        await createTeam('Owner Override Team', ctx.alice.user.id, 3000);
+        await teamWithOverride('Owner Override Team', ctx.alice.user.id, 3000);
 
         expect((await getMountQuotaState(ctx.alice.user.id, mountId)).max).toBe(3000 * 1024 * 1024);
     });

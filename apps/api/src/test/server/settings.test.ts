@@ -68,16 +68,17 @@ describe('Server Settings', () => {
         expect(data.defaults.mount.storageType).toBe('local-fullnames');
     });
 
+    const putQuotas = (quotas: Partial<ServerSettings['quotas']>) =>
+        authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quotas }),
+        });
+
     // The server refuses any request body over 1 GiB, so a cap at or above it promises an upload it cannot take.
     test('the upload cap stops below the largest request the server accepts', async () => {
-        const put = (maxUploadSizeMB: number) =>
-            authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quotas: { maxUploadSizeMB } }),
-            });
-        expect((await put(1024)).status).toBe(422);
-        const data = await assertJson<ServerSettings>(await put(UPLOAD_CAP_MAX_MB));
+        expect((await putQuotas({ maxUploadSizeMB: 1024 })).status).toBe(422);
+        const data = await assertJson<ServerSettings>(await putQuotas({ maxUploadSizeMB: UPLOAD_CAP_MAX_MB }));
         expect(data.quotas.maxUploadSizeMB).toBe(UPLOAD_CAP_MAX_MB);
     });
 
@@ -94,15 +95,9 @@ describe('Server Settings', () => {
 
     // 0 is the mount's "never purge"; the route must let the owner choose it.
     test('a trash retention of 0 days is accepted', async () => {
-        const put = (trashRetentionDays: number) =>
-            authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quotas: { trashRetentionDays } }),
-            });
-        const data = await assertJson<ServerSettings>(await put(0));
+        const data = await assertJson<ServerSettings>(await putQuotas({ trashRetentionDays: 0 }));
         expect(data.quotas.trashRetentionDays).toBe(0);
-        expect((await put(30)).status).toBe(200);
+        expect((await putQuotas({ trashRetentionDays: 30 })).status).toBe(200);
     });
 
     test('non-admin cannot update server settings', async () => {
