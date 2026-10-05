@@ -157,6 +157,13 @@ export function useKeyboardListNavigation<T>({
             setSelectedIndex(next);
         };
 
+        // ⌘A on a list nobody clicked yet selects every row with the cursor still at -1, so Space,
+        // Enter and Delete fall back to the topmost selected row; a Delete adopter expands it to the batch.
+        const targetIndex = () =>
+            selectedIndex >= 0 && selectedIndex < items.length
+                ? selectedIndex
+                : items.findIndex((item) => selection?.isSelected(getSelectionId(item)));
+
         switch (e.key) {
             case 'ArrowDown':
                 // From no selection, Down enters at the first item — not columns-1 in a grid.
@@ -175,39 +182,38 @@ export function useKeyboardListNavigation<T>({
                 if (columns > 1) moveTo((prev) => Math.max(prev - 1, 0));
                 break;
 
-            case ' ':
+            case ' ': {
                 e.preventDefault();
                 // React renders the quick-look overlay before this native event finishes bubbling,
                 // so without this the overlay's own Space-to-close hotkey (on document) would shut
                 // it again on the very press that opened it.
                 e.stopPropagation();
-                if (selectedIndex >= 0 && selectedIndex < items.length) {
-                    const id = getId(items[selectedIndex]);
+                const index = targetIndex();
+                if (index >= 0) {
+                    const id = getId(items[index]);
                     if (onQuickLook) onQuickLook(id);
                     else onSelect(id);
-                    scrollToRow(selectedIndex);
+                    scrollToRow(index);
                 }
                 break;
+            }
 
-            case 'Enter':
+            case 'Enter': {
                 e.preventDefault();
-                if (selectedIndex >= 0 && selectedIndex < items.length) {
-                    onSelect(getId(items[selectedIndex]));
-                    scrollToRow(selectedIndex);
+                const index = targetIndex();
+                if (index >= 0) {
+                    onSelect(getId(items[index]));
+                    scrollToRow(index);
                 }
                 break;
+            }
 
             // Backspace deletes too, the way Finder, Apple Mail and Contacts do on macOS.
             case 'Delete':
             case 'Backspace': {
                 e.preventDefault();
-                // ⌘A on a list nobody clicked yet selects every row with the cursor still at -1,
-                // so fall back to the first selected row — the adopter expands it to the batch.
-                const target =
-                    selectedIndex >= 0 && selectedIndex < items.length
-                        ? items[selectedIndex]
-                        : items.find((item) => selection?.isSelected(getSelectionId(item)));
-                if (onDelete && target) onDelete(target);
+                const index = targetIndex();
+                if (onDelete && index >= 0) onDelete(items[index]);
                 break;
             }
 

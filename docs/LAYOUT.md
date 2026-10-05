@@ -79,7 +79,7 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`:
 
 - `useListSelection`: click, modifier click, select all
-- `useKeyboardListNavigation`
+- `useKeyboardListNavigation`: Space, Enter and Delete act on the cursor row, or on the topmost selected row when a select-all left no cursor
 - `useListDrag`: the multi-drag badge
 - `useListDropTarget`: a drop on a sidebar item, through `DroppableSidebarItem`
 - `useContextMenu`, from `components/context-menu/`
