@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1610 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1611 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -888,7 +888,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (758)
+## Utilities & constants (759)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1135,6 +1135,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mailboxListFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxRouteSegment` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
+| `MAX_REQUEST_BODY_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1150,7 +1151,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
-| `UPLOAD_CAP_MAX_MB` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
+| `UPLOAD_CAP_MAX_MB` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `VCARD_CONTENT_TYPE` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `VCARD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |

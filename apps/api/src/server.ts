@@ -1,4 +1,4 @@
-import { BACKUP_UPLOAD_MAX_BYTES } from '@workspace/lib/constants/backup';
+import { MAX_REQUEST_BODY_BYTES } from '@workspace/lib/constants/mount';
 import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
@@ -39,9 +39,9 @@ const server = app.listen({
     // override is what lets a test spawn this file as a real child process on a free port, boot
     // sequence and signal handlers included.
     port: Number(process.env['EIGEN_API_PORT']) || 8000,
-    // The backup upload is the largest body the API accepts; per-file limits are enforced by the
-    // streaming parser, and this is the backstop under the upload route's own check.
-    maxRequestBodySize: BACKUP_UPLOAD_MAX_BYTES,
+    // Per-file limits are enforced by the streaming parser and the backup upload's own check; this is
+    // the backstop under both.
+    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
     // Bun closes idle connections by default (10s documented; ~30s observed on 1.3.14),
     // which killed every silent long-running response. 200s is a broad floor for slow
     // routes (protocol ops); it can NOT cover the transform routes — queue
