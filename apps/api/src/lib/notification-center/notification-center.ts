@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Notification, NotificationPersistInput, NotificationType } from '@workspace/lib/types/notification';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
+import { desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { type ManagedDatabase, PATHS } from '../core';
 import type { Home } from '../home';
@@ -87,27 +87,16 @@ export class NotificationCenter {
         return row;
     }
 
+    // The first page also holds every unread row, however old, so chat's unread dots can read this one list.
     list(limit: number = 50, before?: Date): Notification[] {
-        let query = this.db.select().from(schema.notifications);
+        const { notifications } = schema;
+        const newestFirst = desc(notifications.createdAt);
+        const query = this.db.select().from(notifications).orderBy(newestFirst).$dynamic();
+        if (before) return query.where(lt(notifications.createdAt, before)).limit(limit).all().map(toNotification);
 
-        if (before) {
-            query = query.where(sql`${schema.notifications.createdAt}
-            <
-            ${Math.floor(before.getTime() / 1000)}`) as typeof query;
-        }
-
-        const rows = query.orderBy(desc(schema.notifications.createdAt)).limit(limit).all();
-
-        return rows.map(toNotification);
-    }
-
-    // Every unread row of these types, however old: one row per tag, so the set stays small.
-    listUnread(types: readonly NotificationType[]): Notification[] {
-        return this.db
-            .select()
-            .from(schema.notifications)
-            .where(and(eq(schema.notifications.read, false), inArray(schema.notifications.type, [...types])))
-            .orderBy(desc(schema.notifications.createdAt))
+        const newest = this.db.select({ id: notifications.id }).from(notifications).orderBy(newestFirst).limit(limit);
+        return query
+            .where(or(eq(notifications.read, false), inArray(notifications.id, newest)))
             .all()
             .map(toNotification);
     }
@@ -123,6 +112,11 @@ export class NotificationCenter {
 
     markRead(id: string): void {
         this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.id, id)).run();
+        this.home.broadcast(buildNotificationChangedEvent());
+    }
+
+    markReadByTag(tag: string): void {
+        this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.tag, tag)).run();
         this.home.broadcast(buildNotificationChangedEvent());
     }
 

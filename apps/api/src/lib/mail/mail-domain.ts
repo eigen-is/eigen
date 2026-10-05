@@ -40,6 +40,7 @@ import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
 
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
+const MAIL_NOTIFICATION_TAG = 'mail:new';
 
 // A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
 // Folded to NFC first, the rule `isSafePathSegment` is written for: one spelling reaches the filesystem.
@@ -71,6 +72,10 @@ export class Mail {
         this.home.broadcast(buildMailEvent(type, mail));
     }
 
+    private readNotificationOnceInboxRead(): void {
+        if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications?.markReadByTag(MAIL_NOTIFICATION_TAG);
+    }
+
     async init(): Promise<void> {
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
@@ -81,7 +86,7 @@ export class Mail {
                         actorEmail: email.from?.value?.[0]?.address ?? null,
                         title: `New mail from ${email.fromShort}`,
                         body: email.subject || '(no subject)',
-                        tag: 'mail:new',
+                        tag: MAIL_NOTIFICATION_TAG,
                         coalesce: true,
                         details: {
                             mailId: email.id,
@@ -90,7 +95,10 @@ export class Mail {
                     });
                 }
             },
-            flagsChanged: (messageId, mailbox) => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox }),
+            flagsChanged: (messageId, mailbox) => {
+                this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox });
+                this.readNotificationOnceInboxRead();
+            },
             deleted: (messageId, mailbox) => this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox }),
         });
         // Every user Home carries a Mail; with mail off it seeds, watches and cleans nothing.
@@ -274,6 +282,7 @@ export class Mail {
 
         await this.store.setFlags(messageId, { seen: read });
         this.emit(SSEventType.MAIL_READ_CHANGED, { messageId, mailbox: email.mailbox });
+        this.readNotificationOnceInboxRead();
     }
 
     async messageSetFlagged(messageId: string, flagged: boolean): Promise<void> {

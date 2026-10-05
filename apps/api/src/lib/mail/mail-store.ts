@@ -67,6 +67,7 @@ export interface MailStore {
     ): Promise<EmailSummary[]>;
 
     getSummary(messageId: string): EmailSummary | undefined;
+    unreadCount(mailbox: string): number;
     getMessage(messageId: string): Promise<Email | null>;
     getRawMessage(messageId: string): Promise<ArrayBuffer>;
     getAttachments(messageId: string): Promise<Attachment[]>;

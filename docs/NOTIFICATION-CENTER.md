@@ -36,6 +36,8 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 
 An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 
+A producer can also read its own row: `Mail` calls `markReadByTag('mail:new')` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
+
 ## A coalesced persist skips the toast, not the row
 
 With `coalesce: true`, `persist()` reads the row with the same tag first. If that row was refreshed less than 30 s ago, the upsert still runs but the broadcast is skipped, so the bell stays correct while a burst of events on one tag doesn't flood the screen with toasts. The window slides: a steady stream faster than 30 s stays silent for its whole length, and the bell catches up on its next refetch. File events, incoming mail and admin alerts set it; everything else toasts every time.
@@ -48,7 +50,7 @@ With `coalesce: true`, `persist()` reads the row with the same tag first. If tha
 
 The five chat, comment and assignment tags are built and parsed in one module, `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`). A standalone chat is tagged with its own path. A comment thread is tagged with the container it comments on plus the thread's chat name, so the notification links to the document and still names the thread inside it. A mention adds the mentioned email, so each person's mention is their own row.
 
-`chatThreadKey` is what a reader compares on. `useAutoMarkChatRead` (`packages/lib/src/core/chat/hooks/use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's path id with its chat name rather than the thread's own id. `useUnreadChatIds` uses the tag's path id, so a comment's unread dot sits on the document. An assignment has the comment shape, so it clears with the card's other rows when the card opens. Only the assignee ever gets that row, so whoever clears it is the assignee. Both hooks read `GET /notifications/:ownerId/unread-chat`, every unread row of the chat types however old, not the bell's list, which holds the newest 50 of every type. A chat buried under newer rows still shows its dot and still clears when opened.
+`chatThreadKey` is what a reader compares on. `useAutoMarkChatRead` (`packages/lib/src/core/chat/hooks/use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's path id with its chat name rather than the thread's own id. `useUnreadChatIds` uses the tag's path id, so a comment's unread dot sits on the document. An assignment has the comment shape, so it clears with the card's other rows when the card opens. Only the assignee ever gets that row, so whoever clears it is the assignee. Both hooks read the bell's list, which holds every unread row however old ([The bell counts always and lists on open](#the-bell-counts-always-and-lists-on-open)), so a chat buried under newer rows still shows its dot and still clears when opened.
 
 ## Your own actions and plain edits never notify
 
@@ -64,7 +66,7 @@ No URL is stored. `resolveNotificationLink` (`packages/lib/src/core/notification
 
 ## The bell counts always and lists on open
 
-`NotificationBell` (`packages/ui/src/components/layout/app/notification-bell.tsx`) sits in the topbar. The unread count is always fetched, since it is the badge. The list is fetched only while the popover is open.
+`NotificationBell` (`packages/ui/src/components/layout/app/notification-bell.tsx`) sits in the topbar. The unread count is always fetched, since it is the badge. The list is fetched only while the popover is open. Its first page, `NotificationCenter.list()` without a `before` cursor, is every unread row plus the newest 50 of any state, newest first. A page with a cursor holds only the rows older than it, so a cursor taken from the first page's oldest row never repeats an unread row.
 
 ## The toast carries just enough to link
 
