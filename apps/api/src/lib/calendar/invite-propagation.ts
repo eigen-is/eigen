@@ -81,12 +81,11 @@ export async function propagateInvitation(
     const removed = oldAttendees.filter((a) => !newEmails.has(a.email.toLowerCase()));
     const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
 
-    const organizerEmail = user.email.toLowerCase();
-    // A collaborator writes in the owner's calendar, so the owner already holds the event: nothing is relayed to them, and the answer stays theirs to give.
-    const ownerEmail = organizerHome.user.email.toLowerCase();
+    // The acting user organizes. A collaborator writes in the owner's calendar, so the owner already holds the event: nothing is relayed to them, and the answer stays theirs to give.
+    const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
 
     for (const attendee of added) {
-        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -138,7 +137,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of removed) {
-        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -159,7 +158,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of existing) {
-        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
