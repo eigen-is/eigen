@@ -1,10 +1,10 @@
 # Proposal: Charts
 
-This proposal adds data charts to Eigen, with one chart model shared by sheets, vector, slides and docs. "Graphs" in the file name means data charts, not node-and-edge diagrams.
+This proposal adds data charts to Eigen, with one chart model shared by sheets, vector, slides and docs.
 
-**Status:** proposed, not built. Its facts were checked against the repository on 2026-09-22, and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row.
+**Status:** proposed, not built. Its facts were checked against the repository on 2026-10-05, and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row. It starts after the ROADMAP row "Sheets sync: make the op log honest", because sheets charts are written through the op pipeline that row changes.
 
-> **TLDR**: Eigen has no charts. Sheets drops every chart when it imports an xlsx, and vector, slides and docs cannot make one. This proposal adds one chart model for all four apps. A chart is a `ChartSpec`: a type, a title, axes, a legend and a list of series. Its data comes from one of two sources. **Inline data** (categories and series with stable ids) is what vector, slides and docs store. **Range data** (each series points at a cell range by sheet id, row and column) is what sheets stores, so a sheets chart follows its cells the way an Excel chart does. A pure resolver turns either source into the same resolved table, and one pure layout module plus the existing roughjs painter draw it, synchronously and without a DOM, so the live editor, the preview Worker and every export draw the same chart. Scales and shapes come from `d3-scale` and `d3-shape`. There is no Vega and no Recharts. Rules are ported from Excalidraw's chart module, Observable Plot and ECharts, each with its test, the way the canvas engine ported Excalidraw's arrows. Range refs shift on row and column inserts and deletes inside the engine's existing structural-edit pass, so collab, undo and replay need nothing new. xlsx charts map well: the real workbook inspected here carries line and stacked-area charts whose series are row ranges on another sheet, which is exactly the range form. Bar, line, pie and area cover the common cases; combo charts, scatter and Excel 2016 chart types import as a visible placeholder. On a canvas, an arrow can bind to a single bar, slice or point through an optional `mark` on the existing binding, docked by the existing docking code.
+> **TLDR**: Eigen has no charts. Sheets drops every chart when it imports an xlsx, and vector, slides and docs cannot make one. This proposal adds one chart model for all four apps. A chart is a `ChartSpec`: a type, a title, axes, a legend and a list of series. Its data comes from one of two sources. **Inline data** (categories and series with stable ids) is what vector, slides and docs store. **Range data** (each series points at a cell range by sheet id, row and column) is what sheets stores, so a sheets chart follows its cells the way an Excel chart does. A pure resolver turns either source into the same resolved table, and one pure layout module plus the existing roughjs painter draw it, synchronously and without a DOM, so the live editor, the preview Worker and every export draw the same chart. Scales and shapes come from `d3-scale` and `d3-shape`. There is no Vega and no Recharts. Rules are ported from Excalidraw's chart module, Observable Plot and ECharts, each with its test, the way the canvas engine ported Excalidraw's arrows. Range refs shift on row and column inserts and deletes inside the engine's existing structural-edit pass, so collab, undo and replay need nothing new. xlsx charts map well: the real workbook inspected here carries line and stacked-area charts whose series are row ranges on another sheet, which is exactly the range form. Bar, line, pie and area cover the common cases; combo charts, scatter and Excel 2016 chart types import as a visible placeholder. Sheets ships first, because a real xlsx loses its charts today. On a canvas, "Convert to shapes" turns a chart into plain shapes and text, one way, so it can be annotated with the tools a drawing already has.
 
 ## Goals
 
@@ -12,7 +12,7 @@ This proposal adds data charts to Eigen, with one chart model shared by sheets, 
 2. Sheets charts bound to cell ranges that update when the cells change and follow rows and columns when they are inserted or deleted.
 3. xlsx import reads the charts a workbook carries, and xlsx export writes native charts back, so a round trip through Eigen keeps them.
 4. Every preview and export draws the chart the editor draws: server previews, HTML, PDF, SVG, DOCX and xlsx.
-5. On a canvas, an arrow can point at one bar, one slice or one line point and keep pointing at it when the data changes.
+5. On a canvas, a chart converts to plain shapes and text, so it can be restyled and annotated like any drawing.
 
 ## Non-goals
 
@@ -20,6 +20,7 @@ This proposal adds data charts to Eigen, with one chart model shared by sheets, 
 - Pivot charts, chart sheets (`xl/chartsheets/`), 3D rendering and Excel's 2016 chart family (waterfall, histogram, treemap, sunburst, box and whisker, funnel). These import as a placeholder, see § xlsx import.
 - Live links from a vector, slides or docs chart to a sheet in another document. That is a later phase with its own permission and identity questions (§ Phasing, later work).
 - Annotating charts with arrows inside docs and sheets. Arrows need a scene; docs and sheets do not have one.
+- Arrows bound to a single bar, slice or point of a live chart. Convert to shapes covers annotation; the design for live mark binding is kept in § Later: arrows attached to marks.
 
 ## Current state
 
@@ -59,7 +60,7 @@ Measured on a real project workbook exported by Google Sheets (16 sheets, not co
 | Title, axes, legend | `c:title` rich text or a cell ref; `c:autoTitleDeleted`; axis `c:delete`, `c:axPos`, `c:scaling` (min, max, orientation, logBase), `c:majorGridlines`, `c:numFmt` (`sourceLinked`), axis titles; `c:legend` with `c:legendPos` | Titles as rich text; empty axis titles; value gridlines `B7B7B7`; `numFmt General sourceLinked="1"`; legend at top; theme font `+mn-lt` |
 | Visibility | `c:plotVisOnly` (skip hidden cells), `c:dispBlanksAs` (gap, zero, span) | `plotVisOnly val="1"` |
 
-Excel-authored files add things this Google export does not: filled caches, `twoCellAnchor` with `editAs`, `schemeClr` colors, `c:style` and `mc:AlternateContent` blocks, and `cx:chart` parts for the 2016 chart family. No xlsx fixture in the repository contains a chart (there are no committed `.xlsx` files at all), so phase 3 adds a small set: this shape (rows, cross-sheet, empty caches), an Excel-authored bar and pie with caches and theme colors, a combo chart and a `cx:` chart for the placeholder path.
+Excel-authored files add things this Google export does not: filled caches, `twoCellAnchor` with `editAs`, `schemeClr` colors, `c:style` and `mc:AlternateContent` blocks, and `cx:chart` parts for the 2016 chart family. No xlsx fixture in the repository contains a chart (there are no committed `.xlsx` files at all), so phase 2 adds a small set: this shape (rows, cross-sheet, empty caches), an Excel-authored bar and pie with caches and theme colors, a combo chart and a `cx:` chart for the placeholder path.
 
 Two conclusions drive the design. First, **an xlsx chart is series-first and range-bound**: each series names its own ranges, and nothing requires a rectangular table. Second, **caches cannot be the source**: this producer leaves them empty, and in an Eigen sheet the cells are the truth anyway. Excalidraw's parser (`tryParseCells`) returns the same series-first shape (`{ title, labels, series: [{ title, values }] }`), so both routes into a chart agree.
 
@@ -179,13 +180,13 @@ The canvas engine got its design by porting Excalidraw's rules with their tests,
 
 ### Sheets: range-bound charts
 
-**Storage.** lib's `Sheet` gains `charts?: Record<string, SheetChart>`, with `SheetChart = { id, index, x, y, width, height, spec, paint }`: pixel coordinates from A1 like `SheetImage`, a fractional `index` for paint order like canvas elements, the spec and the paint preset. A map keyed by id rather than an array, because array paths are positional in the op log: two clients adding a chart at once land on the same index, and a delete shifts a peer's edit onto the wrong chart. The map is materialized on every sheet wherever a sheet enters a consumer, in `withNormalizedSheet` beside `images`, because a base less materialized than the writer makes the first chart's `add` fail to resolve and the whole batch roll back ([SHEETS.md](../SHEETS.md), `calcChain` and `images` are the same case). The snapshot codec encodes the key explicitly and omits it when empty, as it does for `images`. No backwards compatibility is owed for sheets, so no migration either.
+**Storage.** lib's `Sheet` gains `charts?: Record<string, SheetChart>`, with `SheetChart = { id, index, x, y, width, height, spec, paint }`: pixel coordinates from A1 like `SheetImage`, a fractional `index` for paint order like canvas elements, the spec and the paint preset. A map keyed by id rather than an array, because array paths are positional in the op log: two clients adding a chart at once land on the same index, and a delete shifts a peer's edit onto the wrong chart. Images dodge the index problem by replacing the whole array on every write (`saveImage`, `state/modules/image.ts`), which loses a peer's concurrent change instead; that is its own ROADMAP row, and charts copy neither. The map is materialized on every sheet wherever a sheet enters a consumer, in `withNormalizedSheet` beside `images`, because a base less materialized than the writer makes the first chart's `add` fail to resolve and the whole batch roll back ([SHEETS.md](../SHEETS.md), `calcChain` and `images` are the same case). The snapshot codec encodes the key explicitly and omits it when empty, as it does for `images`. No backwards compatibility is owed for sheets, so no migration either.
 
-**Writes.** Charts are written in immer recipes through `ctx.sheets[i].charts` directly, one recipe per insert, move, resize, edit or delete, so collab and undo come from the existing op pipeline. They do not copy the `insertedImgs` context mirror, which exists only because fortune-sheet had it. A spec edit replaces that chart's `spec` as one value: two people editing the same chart's settings at once resolve last-writer-wins for that chart, the same limit rich text boxes have. The chart editor records the spec it started from and, on Apply, offers reload or overwrite when a peer changed it meanwhile.
+**Writes.** Charts are written in immer recipes through `ctx.sheets[i].charts` directly, one recipe per insert, move, resize, edit or delete, so collab and undo come from the existing op pipeline. They do not copy the `insertedImgs` context mirror, which exists only because fortune-sheet had it. A spec edit replaces that chart's `spec` as one value: two people editing the same chart's settings at once resolve last-writer-wins for that chart, the same limit rich text boxes have.
 
-**Structural edits.** `applyInsert` and `applyDelete` in `engine/rowcol.ts` shift every `CellRangeRef` in every sheet's charts whose `sheetId` is the edited sheet, in the same pass that shifts cross-sheet formulas. The range math is the one already written inline for conditional-format ranges, extracted into one `shiftRangeForInsert`/`shiftRangeForDelete` pair that both callers use. The rules follow Excel: an insert before a range moves it, an insert inside it grows it, an insert right after it does nothing; a delete shrinks it, and deleting all of it sets that ref to `null`, which draws as a "#REF" diagnostic, not a guess. Because the shift is inside the recipe, undo inverts it, and because the same function runs in `replaySheetsOps`, a joiner and a peer land on the same refs. A sort moves cell values under a fixed range, so the chart follows the values' new positions, as in Excel. Deleting the source sheet leaves an unresolved ref and a visible diagnostic.
+**Structural edits.** `applyInsert` and `applyDelete` in `engine/rowcol.ts` shift every `CellRangeRef` in every sheet's charts whose `sheetId` is the edited sheet, in the same pass that shifts cross-sheet formulas. The range math is the one already written inline for conditional-format ranges, extracted into one `shiftRangeForInsert`/`shiftRangeForDelete` pair that both callers use. The rules follow Excel: an insert before a range moves it, an insert inside it grows it, an insert right after it does nothing; a delete shrinks it, and deleting all of it sets that ref to `null`, which draws as a "#REF" diagnostic, not a guess. Because the shift is inside the recipe, undo inverts it, and because the same function runs in `replaySheetsOps`, a joiner and a peer land on the same refs. A sort moves cell values under a fixed range, so the chart follows the values' new positions, as in Excel. Deleting the source sheet leaves an unresolved ref and a visible diagnostic. Row and column numbers are today's cell model; the post-1.0 Yjs workbook with stable row and column ids ([PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md)) replaces them with ids in `CellRangeRef` too.
 
-**Updates.** A sheets chart has no cached values. It resolves from the materialized workbook on every render, memoized on the chart record and the revision of the sheets it reads, so a formula recalc, a peer's edit, an undo or a paste all show up on the next frame with no invalidation list to maintain. On the server, `readSheetsFromDoc` already returns every sheet with `data` materialized, so the preview and the export resolve the same way; the preview renders stored values and never recalcs, like the grid beside it.
+**Updates.** A sheets chart has no cached values. It resolves from the materialized workbook on every render, memoized on the identity of the chart record and of the sheet objects it reads (an immer recipe replaces every sheet object it changes, so no revision counter is needed), so a formula recalc, a peer's edit, an undo or a paste all show up on the next frame with no invalidation list to maintain. On the server, `readSheetsFromDoc` already returns every sheet with `data` materialized, so the preview and the export resolve the same way; the preview renders stored values and never recalcs, like the grid beside it.
 
 **Editor.** An overlay beside `ImgBoxs`, using `ObjectTransform` at the same z-index scheme, draws each chart's SVG from `renderChartSvg`. "Insert chart" takes the selection, applies the Excel rules above and creates range data with one ref per series; the chart editor offers type, title, series, "switch rows and columns", legend, axes and colors. Double-click opens it.
 
@@ -231,9 +232,27 @@ The chart is a kind: `'chart'` in `VectorElementType` and `VectorBindableElement
 
 A chart counts toward the preview's 500-element cap as one element, but its marks count against a per-chart cap (§ Limits), so one chart is not a way around the budget.
 
-### Arrows attached to marks
+### Convert to shapes
 
-Phase 1 ships the identity (series ids and category ids allocated once and never rebuilt), so every chart made from the start is a valid target. The docking arrives in phase 5 without a migration.
+A chart on a canvas has a "Convert to shapes" action in its context menu and in ⌘K. It runs `layoutChart` once and replaces the chart element with ordinary elements in one transaction:
+
+| Chart part | Becomes |
+|---|---|
+| Background | `rectangle` with the chart's fill |
+| Bar, legend swatch | `rectangle` |
+| Line series | open `line`, `roundness: 'round'` when curved |
+| Area, pie slice | closed, filled `line`; a slice's arc becomes points along the arc |
+| Point marker | `ellipse` |
+| Axis, tick, gridline | `line` |
+| Title, axis title, tick label, legend label | `richtext` in the chart's font |
+
+The canvas has no groups (no `groupId` in `packages/lib/src/vector/types.ts`), so the result is loose elements in the chart's z-order slot, left selected so they move as one right after. Each shape takes the seed its mark was drawn with, so the hatches do not reroll; paint parity (§ Testing) is what makes a bar and its rectangle draw the same. Arrows bound to the chart unbind and keep their endpoints, as when the chart is deleted. The data is gone after conversion, and there is no way back to a chart. ⌘Z undoes the conversion like any other edit. The action says it is one way.
+
+This is the canvas answer to annotation: an arrow binds to a converted bar like to any rectangle, with today's docking code.
+
+### Later: arrows attached to marks
+
+This is not in the phasing. Convert to shapes covers annotating a chart whose data is done; binding an arrow to a mark of a live chart is built only when people ask for annotations that follow changing data. The canvas phase already allocates series and category ids once and never rebuilds them, so every chart made from the start is a valid target and this needs no migration.
 
 **The binding grows one optional field.** `Binding = { elementId, fixedPoint, mark?: ChartMarkRef }`. The chart stays `elementId`, so `arrowsBoundTo` and every element-level rule keep working. `boundEndpoint` uses three things from its target: a box for `fixedPoint`, an `outline(inflate)` and a gap policy. A mark has all three at a smaller scale, so a `DockTarget = { box, outline(inflate), silhouette }` is derived either from the element (today's behavior, unchanged) or from a resolved mark, and `boundEndpoint`, `followBindings`, `elbowAnchorScene`, the aim lines and the elbow router's obstacles take a `DockTarget`. One docking algorithm, one gap policy, one set of tests. A bar's local box is oriented from baseline (`v = 1`) to value end (`v = 0`), so `[0.5, 0]` stays the value end when the value turns negative.
 
@@ -262,14 +281,14 @@ A `ChartNode` beside `FigureNode` in `packages/lib/src/docs/eigendoc/nodes/`, wi
 | Server preview | The compositor, as any element | Floating overlay in `renderSheetsPreviewHtml`, stored values, no recalc | `renderChartNode` in the eigendoc preview |
 | HTML, PDF | Inline SVG through the compositor; WeasyPrint draws it | Inline SVG in the floating overlay | Inline SVG in the figure wrapper |
 | SVG | Native (`sceneToSvg`) | Not offered | Not offered |
-| DOCX | Not offered | Not offered | `<img>` with an SVG data URI; html-to-docx converts it (phase 6 checks label fonts in the sharp rasterization, and falls back to the native `svgBlip` embed if they fail) |
+| DOCX | Not offered | Not offered | `<img>` with an SVG data URI; html-to-docx converts it (phase 5 checks label fonts in the sharp rasterization, and falls back to the native `svgBlip` embed if they fail) |
 | xlsx | Not offered | Native chart parts (§ xlsx export) | Not offered |
 
 **Clipboard.** A canvas chart, alone or with bound arrows, rides the existing typed `elements` item through `readElementsClipboardItem`. Docs and sheets read and write a chart from that same item, never a second chart flavor. A sheets chart copied out is resolved to inline data first. "Copy as SVG" is derived output under [CLIPBOARD.md](../CLIPBOARD.md)'s flavor rules.
 
 ### Limits and validation
 
-One table in `packages/lib/src/charts/limits.ts`, enforced by the chart editor, every reader (canvas, sheets codec, docs node) and the xlsx importer, so a hostile peer, clipboard or file meets it. Provisional values: 64 KiB per stored spec, 32 series, 2,000 points per series, 2,000 marks per chart, 200 charts per workbook, 16 KiB of label text per chart. A range longer than the point cap is rejected with a message, never sampled. roughjs work is bounded before drawing, by the mark cap, not by an output size check after generating a million hatch lines. Stored and pasted specs are untrusted: the validator checks the version, the type, finite numbers, unique ids, refs inside the sheet bounds, and colors through `isColorToken`; every label is escaped.
+One table in `packages/lib/src/charts/limits.ts`, enforced by the chart editor, every reader (canvas, sheets codec, docs node) and the xlsx importer, so a hostile peer, clipboard or file meets it. Provisional values: 64 KiB per stored spec, 32 series, 2,000 marks per chart (every series' points together), 200 charts per workbook, 16 KiB of label text per chart. Ranges that would draw more marks than that are rejected with a message, never sampled. roughjs work is bounded before drawing, by the mark cap, not by an output size check after generating a million hatch lines. Stored and pasted specs are untrusted: the validator checks the version, the type, finite numbers, unique ids, refs inside the sheet bounds, and colors through `isColorToken`; every label is escaped.
 
 ## Rulings and decisions to approve
 
@@ -281,22 +300,21 @@ Decisions this proposal asks for:
 2. `CellRangeRef` keyed by sheet id, shifted in `engine/rowcol.ts` beside formulas; no cached values in sheets.
 3. `d3-scale` and `d3-shape`, subject to the phase 0 measurement; no Vega, no Recharts.
 4. Placeholders for unsupported xlsx chart types rather than a best-effort drawing.
-5. `mark` as an optional field on the existing binding, with `DockTarget` replacing the element in the docking functions.
-6. Charts in docs and sheets without arrows in the first release.
+5. Sheets first: sheets charts, xlsx import and xlsx export ship before canvas and docs charts.
+6. Convert to shapes, one way, as the canvas answer to annotation; arrows bound to marks of a live chart wait for demand.
 
 ## Phasing
 
 Each phase ships on its own.
 
 0. **Prototype and cleanup (S).** Delete `chart_selection`. Bar, line and pie through `layoutChart` and the painter, in the browser and in a real Bun Worker. Gate: identical SVG from both, the advance-width table in place, seeds stable under reorder, the measured cost of `d3-scale` and `d3-shape` against inline math.
-1. **Canvas charts (M).** The kind, inline data, bar, line and pie, the chart editor with its data grid and "View data", Insert-menu and paste-text creation in vector and slides, preview and export through the existing compositor. Existing shape SVG stays byte-identical.
-2. **Sheets charts (M).** `charts` on the sheet and in the codec and replay base, range data and the engine resolver, the range shift extracted from the conditional-format code, the overlay, "Insert chart" from a selection, HTML/PDF export and preview. `area` and `stacking` join the model here.
-3. **xlsx import (M).** The drawing and chart reader, the mapping table, anchors, theme colors, placeholders, the fixtures in § What an xlsx chart carries. Floating-image import alongside (S).
-4. **xlsx export (M).** The DrawingML writer and the zip pass, pixel box to anchor, caches, and the import-export-import round-trip tests. The floating-image export ROADMAP row is best done in the same phase, since both write the sheet's one drawing part.
-5. **Arrows to marks (M).** `DockTarget`, the `sector` outline, the kind seam, the lifecycle and missing-target states; read-only output resolves the same endpoints.
-6. **Docs charts (M).** `ChartNode`, its view, export and preview, DOCX through the SVG image path, cross-app copy.
+1. **Sheets charts (M).** `charts` on the sheet and in the codec and replay base, range data and the engine resolver, the range shift extracted from the conditional-format code, the overlay, "Insert chart" from a selection, the chart editor, HTML/PDF export and preview. Bar, line, pie, area and `stacking`, since the inspected workbook needs stacked area.
+2. **xlsx import (M).** The drawing and chart reader, the mapping table, anchors, theme colors, placeholders, the fixtures in § What an xlsx chart carries. Floating-image import alongside (S).
+3. **xlsx export (M).** The DrawingML writer and the zip pass, pixel box to anchor, caches, and the import-export-import round-trip tests. The floating-image export ROADMAP row is best done in the same phase, since both write the sheet's one drawing part.
+4. **Canvas charts (M).** The kind, inline data, the chart editor's data grid and "View data", Insert-menu and paste-text creation in vector and slides, Convert to shapes, preview and export through the existing compositor. Existing shape SVG stays byte-identical.
+5. **Docs charts (M).** `ChartNode`, its view, export and preview, DOCX through the SVG image path, cross-app copy.
 
-Later, each its own decision: doughnut, horizontal bars and data labels (S each); scatter and time axes (M); combo charts and secondary axes (M); live links from a canvas or doc to another document's sheet range (L: a permission-checked refresh through the Drive ACL wrapper and the Home relay, and a key column for category identity before arrows can follow records); embedded canvas scenes in docs and sheets for annotated charts (its own proposal); "Convert to shapes".
+Later, each its own decision: doughnut, horizontal bars and data labels (S each); scatter and time axes (M); combo charts and secondary axes (M); arrows attached to marks of a live chart (M, § Later: arrows attached to marks); live links from a canvas or doc to another document's sheet range (L: a permission-checked refresh through the Drive ACL wrapper and the Home relay, and a key column for category identity before arrows can follow records); embedded canvas scenes in docs and sheets for annotated charts (its own proposal).
 
 ## Testing
 
@@ -307,7 +325,7 @@ Tests follow the workspace layout: chart model, layout and binding contracts und
 3. **Ranges.** Insert and delete rows and columns before, inside, at the edge of and after a range, on the chart's sheet and on another sheet; delete a whole range; delete and rename the source sheet; sort inside the range; undo each; replay the ops from the snapshot and compare with the live result.
 4. **Live data.** A formula feeding a series recalcs; a peer's edit, an undo and a paste all redraw; hidden and filtered rows follow `plotHidden`.
 5. **xlsx.** Each fixture imports with the right types, refs, colors and anchors; unsupported charts become placeholders; import, export, import is stable; the exported files open in Excel, LibreOffice and Google Sheets.
-6. **Attachment.** Rename and reorder categories and series, flip a bar negative or zero, change pie proportions: every arrow still names the same series and category and meets the intended mark; deleted targets show the unresolved state and never retarget.
+6. **Convert to shapes.** Each chart type converts to the elements in § Convert to shapes, in the chart's z-order slot, and the converted scene renders like the chart did up to scoped ids and the pie's arc approximation; bound arrows keep their endpoints; one ⌘Z brings the chart back.
 7. **Formats.** Open the real SVG, HTML, PDF and DOCX output and check presence, labels, hatches, gradients and arrow endpoints.
 8. **Limits.** Oversized ranges, hostile ids, labels and colors, and a malformed chart part produce a bounded placeholder or a clear rejection without losing the stored chart.
 
