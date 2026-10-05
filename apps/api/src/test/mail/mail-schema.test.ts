@@ -118,5 +118,17 @@ describe('mail.db schema', () => {
             { id: 'out', mailbox: 'Sent' },
         ]);
         await v6.close({ skipFinalSnapshot: true });
+
+        // The update trigger the migration lifted is back: a later edit still reaches the search index.
+        const raw = openRaw(dbPath);
+        try {
+            raw.run("UPDATE emails SET subject = 'Renamed' WHERE id = 'in'");
+            const hits = raw.query<{ id: string }, []>(
+                "SELECT e.id FROM emails_fts JOIN emails e ON e.rowid = emails_fts.rowid WHERE emails_fts MATCH 'renamed'",
+            );
+            expect(hits.all()).toEqual([{ id: 'in' }]);
+        } finally {
+            raw.close();
+        }
     });
 });
