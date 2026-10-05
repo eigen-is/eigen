@@ -1,7 +1,8 @@
 // DELETE on one occurrence of a series: a live override is the occurrence, so deleting it drops that
 // instance, and deleting the cancelled row that stands for a dropped instance puts it back.
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import * as propagation from '../../lib/calendar/invite-propagation';
 import { getHome } from '../../lib/home';
 import { davRequest } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
@@ -140,6 +141,43 @@ describe('Removing one occurrence of a series', () => {
         const restored = await occurrencesOf(parent.uid);
         expect(restored).toHaveLength(4);
         expect(findOrFail(restored, (e) => e.occurrenceDate === TARGET).title).toBe('Occurrence Delete Cancelled');
+    });
+
+    // Putting an occurrence back cancels nothing, so the series' guests get no CANCEL for it.
+    test('putting a dropped occurrence back sends its guests no cancellation', async () => {
+        const parent = await post({
+            title: 'Occurrence Restore Guests',
+            startTime: SERIES_START,
+            endTime: '2030-01-07T10:00:00Z',
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=4',
+            data: {
+                attendees: [{ email: 'carol.restore@example.org', name: 'Carol', status: 'pending', role: 'required' }],
+            },
+        });
+        await post({
+            title: 'Occurrence Restore Guests',
+            startTime: `${TARGET}T09:00:00Z`,
+            endTime: `${TARGET}T10:00:00Z`,
+            allDay: false,
+            parentEventId: parent.id,
+            recurrenceDate: TARGET,
+            status: 'cancelled',
+        });
+        const home = await getHome(ctx.alice.user.id);
+        const cancelled = findOrFail(
+            await home.calendar.getEventsByUid(parent.uid),
+            (e) => e.status === 'cancelled' && e.recurrenceDate === TARGET,
+        );
+
+        const spy = spyOn(propagation, 'propagateCancellation').mockResolvedValue();
+        spy.mockClear();
+        await deleteEvent(cancelled.id);
+        const cancellations = spy.mock.calls.length;
+        spy.mockRestore();
+
+        expect(cancellations).toBe(0);
+        expect(await occurrencesOf(parent.uid)).toHaveLength(4);
     });
 
     // A client may cancel an occurrence as a STATUS:CANCELLED override instead of an EXDATE. Deleting that

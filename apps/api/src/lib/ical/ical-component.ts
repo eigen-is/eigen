@@ -1,6 +1,6 @@
 // `ICAL.Component.toString()` is the only serializer here, so folding, escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
 import { randomUUID } from 'node:crypto';
-import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
@@ -457,10 +457,10 @@ export function serializeEventForImip(
     exceptions: CalendarEvent[] = [],
 ): string {
     // An override that states no guests inherits the series' list; the stored bytes keep it as written, but a guest's client would read the bare override as an occurrence they are not invited to.
-    const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent =>
-        override.data?.attendees
-            ? override
-            : { ...override, data: { ...override.data, attendees: master.data?.attendees } };
+    const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent => ({
+        ...override,
+        data: { ...override.data, attendees: heldAttendees(override, master) },
+    });
     const vcalendar = series
         ? newVCalendar()
         : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);

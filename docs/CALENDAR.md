@@ -35,7 +35,7 @@ Some facts no VCALENDAR can hold live only in the database: a calendar's name, c
 
 A resource holds one UID, the id iCalendar gives a series. Under it sit the master VEVENT, which carries the repeat rule, one override VEVENT per edited occurrence, and a VTIMEZONE, the definition of a time zone, for every TZID they name. A PUT carrying two UIDs is refused, or a second UID's overrides would hang off the first master.
 
-Eigen cancels one occurrence with an `EXDATE` on the master, never with a `STATUS:CANCELLED` override. Thunderbird omits such an override from its next PUT, and the full replace would read that as "the client removed the exception" and bring the occurrence back. Cancelling a moved occurrence replaces its override with an `EXDATE` too, and the cancelled row keeps the override's id. Deleting an occurrence that is already cancelled puts it back, whichever of the two spellings a client used.
+Eigen cancels one occurrence with an `EXDATE` on the master, never with a `STATUS:CANCELLED` override. Thunderbird omits such an override from its next PUT, and the full replace would read that as "the client removed the exception" and bring the occurrence back. Cancelling a moved occurrence replaces its override with an `EXDATE` too, and the cancelled row keeps the override's id. Deleting an occurrence that is already cancelled puts it back, whichever of the two spellings a client used, and sends the guests nothing.
 
 ## Eigen's own facts ride as `X-EIGEN-*` lines no client can write
 
@@ -174,7 +174,7 @@ When the organizer deletes, every copy is cancelled. When an attendee deletes, i
 
 A guest holds one linked series, and an override on it inherits the series' link. So every message about one occurrence names the series' event id plus the occurrence key, never the override's own row id. The receiver attaches it through `applyInvitationException`, the same path an iMIP REQUEST with a `RECURRENCE-ID` takes. The `RECURRENCE-ID` names the original instant, which only the series knows once the override has moved.
 
-An override that states no guests inherits the series' list. A stored VEVENT can't tell a client that didn't restate the list from one that emptied it, and reading it as empty would cancel that occurrence for every guest. Deleting such an override cancels it for the series' guests. A guest added to a series then gets every existing override as an update and every cancelled occurrence as a removal, or their copy would show a moved occurrence at its old slot.
+An override that states no guests inherits the series' list (`heldAttendees`, the one reading every sender and the RSVP path share). A stored VEVENT can't tell a client that didn't restate the list from one that emptied it, and reading it as empty would cancel that occurrence for every guest. Deleting such an override cancels it for the series' guests. A guest added to a series then gets every existing override as an update and every cancelled occurrence as a removal, or their copy would show a moved occurrence at its old slot.
 
 A series-wide edit of the title, description or location reaches each override that still carried the master's old value. Guests run the same rule, so a moved occurrence is renamed everywhere without a message of its own.
 
