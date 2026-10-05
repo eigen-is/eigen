@@ -20,7 +20,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     // could see it (getEffectiveMembers walks the current chain, which is gone after the trash).
     const members = user ? await drive.getEffectiveMembers(mount.id, item.id) : [];
 
-    // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
+    // Close collab docs before trashPath closes their databases under them, so each persists its last state.
     if (isContainerType(item.type)) {
         await closeCollabDocumentsRecursively(drive, mount, item.id);
         await propagateACLRemovalRecursively(mount, item.id, user);

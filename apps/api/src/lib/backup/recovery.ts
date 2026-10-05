@@ -1,12 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-    buildSafetyCopyName,
-    freeSafetyCopyStamp,
-    getBackupStagingDir,
-    getStagingRoot,
-    parseSafetyCopyName,
-} from './paths';
+import { getBackupStagingDir, getStagingRoot, parseSafetyCopyName } from './paths';
 
 // What tells the next boot that a restore died with a home folder that is not a home: the notes a
 // restore leaves in its staging folder, and the pass over them that runs before the API listens.
@@ -50,16 +44,12 @@ function readRestoringMarker(markerPath: string): RestoringMarker | null {
         return null;
     }
     if (typeof value !== 'object' || value === null) return null;
-    if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value)) return null;
-    const { ownerId, homeDir, preRestoreName } = value;
-    if (typeof ownerId !== 'string' || typeof homeDir !== 'string') return null;
+    if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value) || !('parkName' in value)) {
+        return null;
+    }
+    const { ownerId, homeDir, preRestoreName, parkName } = value;
+    if (typeof ownerId !== 'string' || typeof homeDir !== 'string' || typeof parkName !== 'string') return null;
     if (preRestoreName !== null && typeof preRestoreName !== 'string') return null;
-    // An older version's marker names no park: that version parked every interrupted install as a failed restore.
-    const parkName =
-        'parkName' in value
-            ? value.parkName
-            : path.basename(buildSafetyCopyName(homeDir, 'failed-restore', freeSafetyCopyStamp(homeDir, new Date())));
-    if (typeof parkName !== 'string') return null;
     if (parseSafetyCopyName(parkName)?.homeName !== path.basename(homeDir)) return null;
     if (preRestoreName !== null) {
         const parsed = parseSafetyCopyName(preRestoreName);

@@ -110,21 +110,15 @@ function listArchiveDatabases(
                 // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
                 // A warning, not a failure: an archive written before captures rewrote the row must still restore.
                 const byId = new Map(rows.map((row) => [row.id, row]));
-                const recorded = db
-                    .query<{ id: string; size: number | null; hash: string | null }, []>(
-                        "SELECT id, size, hash FROM paths WHERE type = 'file'",
-                    )
-                    .all();
-                for (const { id, size, hash } of recorded) {
-                    const row = byId.get(id);
-                    if (!row || managedDbContainer(row, byId)) continue;
+                for (const row of rows) {
+                    if (row.type !== 'file' || managedDbContainer(row, byId)) continue;
                     const file = entries.get(
                         archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row, byId)}`),
                     );
                     if (!file) continue;
-                    if (size !== file.bytes) {
-                        console.warn(`[backup] ${file.path}: ${file.bytes} bytes, its row says ${size}`);
-                    } else if (hash !== null && hash !== file.sha256) {
+                    if (row.size !== file.bytes) {
+                        console.warn(`[backup] ${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
+                    } else if (row.hash !== null && row.hash !== file.sha256) {
                         console.warn(`[backup] ${file.path}: sha256 does not match its row`);
                     }
                 }

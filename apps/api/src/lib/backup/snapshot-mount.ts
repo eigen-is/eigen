@@ -167,7 +167,8 @@ export async function snapshotMountData(
         } else {
             // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
             // each other. The shared tree lock only until the file is open, so no rename moves the bytes between the
-            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await.
+            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await
+            // (capture-race.test.ts moves the bytes as the lock releases).
             const entry = await mount.withPathLock(row.id, async () => {
                 const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
@@ -237,8 +238,9 @@ export async function snapshotMountData(
         db.transaction(() => {
             // A file overwritten between the database copy and its read: its row takes the size, hash and date of
             // the bytes the archive holds, as the overwrite gave the live one, and its search text is rebuilt from them.
+            // A row with no hash on record differs only by its size.
             const rewrite = db.prepare<unknown, [number, string, number, string]>(
-                'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3, contentDirty = 1 WHERE id = ?4 AND (size IS NOT ?1 OR hash IS NOT ?2)',
+                'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3, contentDirty = 1 WHERE id = ?4 AND (size IS NOT ?1 OR (hash IS NOT NULL AND hash IS NOT ?2))',
             );
             for (const { id, captured, updatedAt } of files) {
                 const seconds = Math.floor(updatedAt.getTime() / 1000);

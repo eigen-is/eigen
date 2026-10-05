@@ -108,6 +108,11 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     return JSON.stringify(snapshot);
 }
 
+// The encoder writes the format key first, so the probe reads the prefix and decodes nothing.
+export function isCurrentSheetsSnapshot(snapshot: string): boolean {
+    return snapshot.startsWith(`{"f":"${FORMAT}"`);
+}
+
 export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
     // Fail crisp on a corrupt envelope, a v1 array or a future format — silent

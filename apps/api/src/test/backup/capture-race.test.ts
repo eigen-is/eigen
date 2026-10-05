@@ -1,14 +1,16 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { eq } from 'drizzle-orm';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { restoreHome } from '../../lib/backup/restore';
 import { verifyFolder } from '../../lib/backup/verify';
 import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
+import { paths } from '../../lib/mount/schema';
 import {
     assertJson,
     authedRequest,
@@ -213,6 +215,20 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         }
     });
 
+    test('a file row with no hash on record and its folder sizes are archived as they are', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects } = await seed(user);
+        const mount = await defaultMount(user);
+        const [first] = await driveGetList(user.sessionToken, user.id, M, `folder/${projects.id}`);
+        await mount.db.update(paths).set({ hash: null }).where(eq(paths.id, first!.id));
+        mount.markContentIndexed(first!.id);
+        // Reading the folder caches its size, which the archived metadata.db copy then carries.
+        const { size } = (await mount.getPath(projects.id))!;
+        const { folder } = await snapshotInto(await getHome(user.id), 'full');
+        expect(archivedRow(folder, first!.id)).toMatchObject({ hash: null, contentDirty: 0 });
+        expect(archivedRow(folder, projects.id)?.size).toBe(size);
+    });
+
     test('a file trashed during the capture', async () => {
         const user = await raceUser('local-fullnames');
         const { single } = await seed(user);
@@ -367,6 +383,42 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
         expect(archived.equals(Buffer.alloc(size, 1))).toBe(true);
         expect((await verifyFolder(result.folder)).status).toBe('verified');
+    });
+
+    test('a file whose bytes leave its key the moment the tree lock releases is copied whole', async () => {
+        const user = await raceUser('local-fullnames');
+        await seed(user);
+        // The earliest a rename could move the bytes, and before any await: the copy must have opened the file by then.
+        const readKey = Mount.prototype.readKey;
+        const withTreeShared = Mount.prototype.withTreeShared;
+        let opened: string | undefined;
+        let moved: string | undefined;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            const file = await readKey.call(this, key);
+            if (key.startsWith('Projects/')) opened = file?.name;
+            return file;
+        });
+        const shared = spyOn(Mount.prototype, 'withTreeShared').mockImplementation(async function <T>(
+            this: Mount,
+            fn: () => Promise<T>,
+        ) {
+            const result = await withTreeShared.bind(this)(fn);
+            if (opened && !moved) {
+                moved = opened;
+                renameSync(moved, `${moved}.moved`);
+            }
+            return result;
+        });
+        let folder: string;
+        try {
+            ({ folder } = await snapshotInto(await getHome(user.id), 'full'));
+        } finally {
+            read.mockRestore();
+            shared.mockRestore();
+        }
+        expect(moved).toBeDefined();
+        expect(archivedReports(folder)).toEqual(reportBodies);
+        expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
     test('a large file overwritten in place during its copy is archived whole', async () => {
