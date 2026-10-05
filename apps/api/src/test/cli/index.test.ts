@@ -10,7 +10,6 @@ describe('parseFlags', () => {
     test.each([
         ['reset-password', 'Usage: ./eigen reset-password <email> [--generate]'],
         ['restore', 'Usage: restore <archive> --stage [--yes] [--s3-from-archive]'],
-        ['snapshot', 'Usage: snapshot --check [--light] [--from <version>]'],
         ['bootstrap', 'Usage: bootstrap [--out <dir>] [--force]'],
         ['update-check', 'Usage: update-check --from <version> [--accept-breaking | --level]'],
     ])('%s --help prints its usage and exits 0', async (command, usage) => {
@@ -26,9 +25,9 @@ describe('parseFlags', () => {
         [['reset-password', 'a@example.org', 'b@example.org'], 'Unknown argument "b@example.org".'],
         [['reset-password', 'a@example.org', '--bogus'], 'Unknown argument "--bogus".'],
         [['restore', 'server-manual-full-20200101-000000.tar', '--bogus=1'], 'Unknown argument "--bogus".'],
-        [['snapshot', '-x'], 'Unknown argument "-x".'],
+        [['bootstrap', '-x'], 'Unknown argument "-x".'],
         [['restore', 'server-manual-full-20200101-000000.tar', 'extra'], 'Unknown argument "extra".'],
-        [['snapshot', 'extra'], 'Unknown argument "extra".'],
+        [['bootstrap', 'extra'], 'Unknown argument "extra".'],
         [['bootstrap', '--out'], "Option '--out <value>' argument missing"],
     ])('%p is refused with the usage, exit 2', async (args, message) => {
         const { stdout, stderr, code } = await eigen(...args);

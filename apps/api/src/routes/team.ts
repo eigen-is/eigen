@@ -1,3 +1,4 @@
+import { MOUNT_STORAGE_TYPES } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
@@ -88,7 +89,7 @@ export const teamRouter = new Elysia({ name: 'team' })
         {
             body: t.Object({
                 name: t.String({ minLength: 1 }),
-                storageType: t.Optional(t.Union([t.Literal('local'), t.Literal('local-key'), t.Literal('s3')])),
+                storageType: t.Optional(t.UnionEnum(MOUNT_STORAGE_TYPES)),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                 s3Config: t.Optional(
                     t.Object({

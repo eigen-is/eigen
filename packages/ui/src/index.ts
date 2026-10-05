@@ -10,7 +10,6 @@
 // via eigen-app; page scaffolds live in @workspace/ui/components/layout/pages.
 
 export * from './components/activity-row';
-export * from './components/alphabetical-list';
 export * from './components/avatar-editor';
 export * from './components/braket';
 export * from './components/confirm-dialog';

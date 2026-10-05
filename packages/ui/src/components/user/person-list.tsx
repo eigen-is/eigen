@@ -6,8 +6,8 @@ import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-con
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import { type ReactNode, useMemo, useRef } from 'react';
-import { AlphabeticalList, alphaGroupKey } from '../alphabetical-list';
 import { ContextMenuAnchor } from '../context-menu';
+import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 
 type PersonListProps<T> = {
     items: T[];
@@ -103,7 +103,7 @@ export function PersonList<T>({
                     renderItem={(item, flatIndex) => (
                         <div
                             className={cn(
-                                'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                                'flex items-center gap-3 app-gutter-x py-3 eigen-list-item',
                                 renderMenuItems && 'group',
                                 (activeId === getId(item) || selectedIndex === flatIndex) && 'eigen-list-item-active',
                                 selectable && selection.isSelected(getSelectionId(item)) && 'eigen-list-item-selected',

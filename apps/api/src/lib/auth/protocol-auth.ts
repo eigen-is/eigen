@@ -1,8 +1,11 @@
 import { clientIpKey, requireNonGuest } from '../core/access';
 import { ApiError } from '../core/errors';
 import { getUserByEmail, type User } from '../user';
-import { auth } from './auth';
+import { APP_PASSWORD_LENGTH, auth } from './auth';
 import { checkProtocolAuthLimit, clearProtocolAuthFailures, recordProtocolAuthFailure } from './protocol-rate-limit';
+
+// Better Auth logs every missed key lookup at ERROR, so only a value shaped like an app password is looked up.
+const APP_PASSWORD_SHAPE = new RegExp(`^[A-Za-z]{${APP_PASSWORD_LENGTH}}$`);
 
 // HTTP Basic auth shared by CalDAV, CardDAV, and WebDAV routers. Browsers/clients send
 // `Authorization: Basic base64(email:password)`.
@@ -45,10 +48,12 @@ export async function verifyProtocolAuth(email: string, password: string, ip?: s
     // Verifying it is a cheap SHA-256 lookup; only the expensive scrypt password path below is gated.
     if (user) {
         requireNonGuest(user);
-        const keyResult = await auth.api.verifyApiKey({ body: { key: password } });
-        if (keyResult.valid && keyResult.key?.referenceId === user.id) {
-            clearProtocolAuthFailures(email);
-            return user;
+        if (APP_PASSWORD_SHAPE.test(password)) {
+            const keyResult = await auth.api.verifyApiKey({ body: { key: password } });
+            if (keyResult.valid && keyResult.key?.referenceId === user.id) {
+                clearProtocolAuthFailures(email);
+                return user;
+            }
         }
     }
 

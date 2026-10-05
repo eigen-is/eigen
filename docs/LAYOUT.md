@@ -2,7 +2,7 @@
 
 > **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Four things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
 
-This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, Drive's file UI, lists, drag, the keyboard, layering and where a click opens. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
+This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, the gutter, Drive's file UI, lists, drag, the keyboard, layering and where a click opens. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
 
 ## Every app is `EigenApp` around `AppShell`
 
@@ -23,6 +23,12 @@ The toolbar is the `toolbar` prop of a `Column`, never part of the page content.
 
 `width="flex"` takes the rest of the row. The bar's bottom border fades in once the content scrolls (`toolbarBorder="auto"`); columns with a canvas below set `"always"`. A plain page title is `ToolbarTitle`, which renders at the same regular weight as the `BreadcrumbPage` richer toolbars compose, so the two read alike.
 
+## Every horizontal inset is the one gutter
+
+**Every list, toolbar, header and pane takes its horizontal inset from `--app-gutter-x`**, through the `app-gutter-x` class, or `app-gutter` where it pads both axes (`packages/ui/src/styles/globals.css`). The gutter is 16px below the `sm` breakpoint (640px), wide enough for Mail's unread dot to sit centered in it clear of the sender, and 20px from `sm` up. Beside the content (desktop and the tablet rail), the navigation sidebar narrows it to 12px, because its items are padded pills; the mobile sidebar keeps 16px: `SidebarContainer` overrides `--app-gutter-x` with the `app-gutter-sidebar` class, so its primary button, items and scrollers follow. Each block of the topbar takes the inset of the column below it: its left block (app switcher and logo) takes `app-gutter-sidebar` too when a sidebar is beside the content, so it shares the sidebar's left edge, and its right block (search, bell, avatar) keeps the content gutter. No list, toolbar, header or pane hand-rolls its own inset, so a row, its header and the toolbar above it share one left edge, and a Drive tile lines up with the toolbar's first item. A dialog pads with its own `p-6` instead, and a full-pane dialog (the chat create wizard, the Drive file and location pickers) drops it and gives its header, footer and sections `px-6`.
+
+20px is what clears a macOS overlay scrollbar. It takes no layout width, so `scrollbar-gutter` can't reserve room for it, and its hover track paints over a scroller's last 16px or so. A scroller inside a padded parent (a dialog, a sidebar body) takes `app-gutter-bleed`: it reaches out by one gutter and pads its content back in, so the content keeps its edge and still clears the track. Whatever cancels the gutter (a hover fill that bleeds to the pane's edge) cancels it with the variable, `-mx-(--app-gutter-x)`, never a literal, so it follows the breakpoint. A literal negative margin only cancels an item's own padding, as the command palette's groups reach out by their items' `px-2` so item text lines up with the search icon.
+
 ## On a phone only the `mobileColumn` renders
 
 Below 769px (`useIsMobile`, [MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` renders only the `Column` whose `id` matches, at full width. Without a `mobileColumn`, or outside a `ColumnLayout`, every `Column` renders. That is how an editor mounts a full-width pane as a sibling. It is also why `PanelColumn`, the comments and activity pane on every viewport, must mount outside any `ColumnLayout` that sets one: a wrapped pane silently never shows ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)).
@@ -31,7 +37,7 @@ Below 769px (`useIsMobile`, [MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mob
 
 ## The sidebar is a rail on a tablet and a column on a phone
 
-`AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose only field is `condensed`. It is true on a tablet, where the sidebar is a `w-16` rail ([MOBILE.md § Width picks the layout](MOBILE.md#width-picks-the-layout-the-pointer-picks-the-affordances)). On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list keeps its scroll.
+`AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose only field is `condensed`. It is true on a tablet, where the sidebar is a `w-16` rail, its 40px icons inside the sidebar's 12px gutter on each side ([MOBILE.md § Width picks the layout](MOBILE.md#width-picks-the-layout-the-pointer-picks-the-affordances)). On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list keeps its scroll.
 
 `useLayout()` exposes the layout state (`sidebarColumnShown`, `isMobile`, `isTablet` and the setters) and `setDocumentTitle` for the browser tab. A fullscreen view with only the topbar (`RequestAccessView`, the admin access-denied screen) calls `setSidebarHidden(true)` and restores it on unmount.
 
@@ -88,8 +94,6 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 | `eigen-list-item-cursor` | the keyboard cursor (Mail) | stripe only, so it reads apart from the open row |
 | `eigen-list-item-selected` | multi-selected | wash |
 | `eigen-tile` (`-active`, `-selected`) | grid tiles | a full border, because a stripe and wash on a tile's label strip read as stray chrome |
-
-A row keeps its right-hand text clear of the scroller's edge: `PersonList` and Mail's rows pad `pr-6`, Drive's date cell `pr-4` inside `app-gutter-x`. A macOS overlay scrollbar takes no layout width, so `scrollbar-gutter` can't reserve room for it, and its hover track paints over the row's last 16px or so.
 
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 

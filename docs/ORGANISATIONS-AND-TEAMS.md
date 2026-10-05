@@ -10,6 +10,14 @@ Setup creates the organization with a system call (`auth.api.createOrganization`
 
 Every new non-guest user joins as `member` in `databaseHooks.user.create.after`, which also runs share reconciliation ([ACL.md § Reconciliation](ACL.md#reconciliation)). Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership` from `databaseHooks.session.create.after`). The sign-up join only logs a failure, so sign-in is its repair path: without it, an account whose join failed stays outside the org and invisible in Admin → Users. Guests never join ([GUEST-ACCESS.md](GUEST-ACCESS.md)).
 
+## Every new user joins the default team
+
+`createOrganization` also makes a team named after the org, the default team, and setup pins its id as `defaultTeamId` in the server config. It is the team every new user joins, because the ACL has no entry for the whole org ([ACL.md](ACL.md)). Renaming the org renames it by that id ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#renaming-the-organization-renames-its-default-team)).
+
+The org join adds the user to the default team in the same `addMember` call, then runs `reconcileSharesForNewTeamMember` itself, because `addMember` skips `afterAddTeamMember`. That delivers what was shared with the team before the user existed. `addMember` refuses a team that is gone before it writes anything, org join included, so the hook first checks that the team still exists: a deleted default team never keeps a user out of the org. Its undo covers only a failure after the member row is written, such as a team member limit. The team join runs only with the org join, so a member an admin later removes from the team stays out.
+
+An org that predates teams has no default team. A boot with no pinned id looks for it once (`pinDefaultTeam` in `apps/api/src/lib/org/org.ts`): a team in the org with the org's name, created within 5 seconds of the org. Only `createOrganization` makes such a team, since its rows are written in one call and stored to the second. Exactly one match is pinned; none or several pin nothing, and new users then join the org only. Existing members are never added, because a member an admin removed and one never added look the same.
+
 ## The owner holds server settings and admins manage people
 
 | Role     | Can                                             |

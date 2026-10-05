@@ -1,5 +1,8 @@
 export const DEFAULT_MOUNT_ID = 'default';
 
+export const MOUNT_STORAGE_TYPES = ['local', 'local-key', 's3'] as const;
+export type MountStorageType = (typeof MOUNT_STORAGE_TYPES)[number];
+
 export type S3Config = {
     endpoint: string;
     bucket: string;
@@ -24,7 +27,7 @@ export function keepsSavedSecret(next: S3Config, saved: S3Config): boolean {
 export type MountConfig = {
     id: string;
     name: string;
-    storageType: 'local' | 'local-key' | 's3';
+    storageType: MountStorageType;
     isDefault: boolean;
     maxSizeMB?: number;
     localPath?: string;
@@ -52,7 +55,7 @@ export function mountStorageIdentity(config: Pick<MountConfig, 'storageType' | '
 export type MountInfo = {
     id: string;
     name: string;
-    storageType: 'local' | 'local-key' | 's3';
+    storageType: MountStorageType;
     isDefault: boolean;
     totalSize: number;
     fileCount: number;

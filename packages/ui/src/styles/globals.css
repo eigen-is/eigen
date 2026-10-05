@@ -343,10 +343,10 @@
         --app-current-color: var(--app-drive-color);
         --app-current-color-soft: var(--app-drive-color-soft);
 
-        /* Project-wide content gutter. Adjust here to retune padding everywhere
-           the `.app-gutter` utility (or these vars) are used. Defaults match the
-           Tailwind px-3 / py-3 scale (symmetric). */
-        --app-gutter-x: 0.75rem;
+        /* The one content gutter. Every list, toolbar, header and pane takes its
+           horizontal inset from --app-gutter-x, which widens from the sm breakpoint
+           up (below). */
+        --app-gutter-x: 1rem;
         --app-gutter-y: 0.75rem;
 
         /* Topbar chrome tokens — a neutral background bar that follows the
@@ -370,6 +370,14 @@
         --sidebar-newbtn-fg: #fff;
 
         scroll-behavior: smooth;
+    }
+
+    /* 20px clears a macOS overlay scrollbar, which takes no layout width and
+       paints its hover track over a scroller's last 16px or so. */
+    @media (width >= 40rem) {
+        :root {
+            --app-gutter-x: 1.25rem;
+        }
     }
 
     /* Compact uppercase label shared by sidebar section titles, table column
@@ -397,6 +405,20 @@
        breathing room but manage their own vertical rhythm (e.g. the drive table). */
     .app-gutter-x {
         padding-inline: var(--app-gutter-x);
+    }
+
+    /* A scroller inside a padded parent (a dialog, a sidebar body): it reaches
+       out by one gutter into that padding and pads its content back in, so the
+       content keeps its edge and clears the overlay scrollbar. */
+    .app-gutter-bleed {
+        margin-inline: calc(-1 * var(--app-gutter-x));
+        padding-inline: var(--app-gutter-x);
+    }
+
+    /* The navigation sidebar's gutter beside the content: its items are padded
+       pills. The topbar's left block takes it too, to share the sidebar's edge. */
+    .app-gutter-sidebar {
+        --app-gutter-x: 0.75rem;
     }
 
     /* The fit box a server-composed canvas page is scaled in. renderFittedPage

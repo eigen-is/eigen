@@ -6,7 +6,7 @@ import { pruneBucketArchives, pruneServerArchives, type RetainedArchive } from '
 // One archive a night at 02:00 UTC, `night` days after 1 September.
 function archive(reason: BackupReason, night: number, good = true): RetainedArchive {
     const at = new Date(Date.UTC(2026, 8, 1 + night, 2, 0, 0));
-    return { name: buildServerArchiveName(reason, 'full', at), reason, at, good };
+    return { name: buildServerArchiveName(reason, 'full', at), reason, at, good, done: good };
 }
 
 // The backups folder lists its archives newest first.
@@ -51,6 +51,14 @@ describe('Server archive retention', () => {
         const retries = [2, 3].map((night) => ({ ...archive('pre-update', night), build: 'api@sha256:new' }));
         expect(prune([rollback, ...retries], 10, 'api@sha256:new')).toEqual([]);
         expect(prune([rollback, ...retries], 10, 'api@sha256:old')).toEqual([rollback.name]);
+    });
+
+    test('keeps the rollback archive when it was backed up with warnings: ./eigen update went on after it', () => {
+        const rollback = { ...archive('pre-update', 1, false), done: true, build: 'api@sha256:old' };
+        const retry = { ...archive('pre-update', 2), build: 'api@sha256:new' };
+        expect(prune([rollback, retry], 10, 'api@sha256:new')).toEqual([]);
+        const failed = { ...archive('pre-update', 0, false), build: 'api@sha256:older' };
+        expect(prune([failed, rollback, retry], 10, 'api@sha256:new')).toEqual([failed.name]);
     });
 
     test('a failed night never pushes out the last good archive', () => {

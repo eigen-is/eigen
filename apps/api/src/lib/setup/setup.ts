@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
+import type { ServerStorageType, SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
@@ -10,6 +10,7 @@ import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/se
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { storedSender } from '../core/mailer';
+import { findDefaultTeamId } from '../org';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
 
@@ -233,8 +234,9 @@ async function resetAuthDatabase(): Promise<void> {
 
 export type SetupInput = {
     orgName: string;
-    storageType: 'local-fullnames' | 'local-id' | 's3';
+    storageType: ServerStorageType;
     s3Bucket?: string;
+    s3Prefix?: string;
     s3Region?: string;
     s3AccessKeyId?: string;
     s3SecretAccessKey?: string;
@@ -266,7 +268,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             s3Config = {
                 endpoint: input.s3Endpoint ?? '',
                 bucket: input.s3Bucket,
-                prefix: '',
+                prefix: input.s3Prefix ?? '',
                 accessKeyId: input.s3AccessKeyId,
                 secretAccessKey: input.s3SecretAccessKey,
                 region: input.s3Region,
@@ -324,6 +326,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         await updateServerConfig({
             orgName: input.orgName,
             orgId: org.id,
+            defaultTeamId: findDefaultTeamId(org.id),
             setupCompleted: true,
             setupCompletedAt: new Date().toISOString(),
             mailDomain: getMailDomain(),

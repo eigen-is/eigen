@@ -533,10 +533,14 @@ describe('the server backup on the control socket', () => {
         test(
             'prints the steps it sees, then what it saved, and ends with the archive',
             async () => {
-                // Long enough that a poll sees the step.
+                // Only the first home is slow, long enough that a poll sees the step.
                 const pull = homeRelay.pullHomeSnapshot;
+                let first = true;
                 const slow = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
-                    await Bun.sleep(1200);
+                    if (first) {
+                        first = false;
+                        await Bun.sleep(1200);
+                    }
                     return pull(...args);
                 });
                 const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']).finally(() =>

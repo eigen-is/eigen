@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import { type S3Config, teamOwnerId } from '@workspace/lib/types';
+import { type MountStorageType, type S3Config, teamOwnerId } from '@workspace/lib/types';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateTeamMounts, teamKeys } from './keys';
 
@@ -24,7 +24,7 @@ export function useAddTeamMount(teamId: string) {
     return useMutation({
         mutationFn: async (body: {
             name: string;
-            storageType?: 'local' | 'local-key' | 's3';
+            storageType?: MountStorageType;
             maxSizeMB?: number;
             s3Config?: S3Config;
         }) => {

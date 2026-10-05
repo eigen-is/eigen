@@ -51,7 +51,7 @@ type PropertySectionProps = {
 
 export function PropertySection({ title, children }: PropertySectionProps) {
     return (
-        <div className="border-b px-3 py-3">
+        <div className="border-b app-gutter">
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">{title}</h4>
             <div className="space-y-2">{children}</div>
         </div>

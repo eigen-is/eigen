@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1602 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1609 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -17,7 +17,6 @@ rather than inlining `queryClient.invalidateQueries`.
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
-| `AlphabeticalList` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
@@ -171,6 +170,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FindInDocumentButton` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `FindInDocumentMenuItem` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `UploadContainer` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-container.tsx |
+| `AlphabeticalList` | `@workspace/ui/components/user` | packages/ui/src/components/user/alphabetical-list.tsx |
 | `CollapsibleUserList` | `@workspace/ui/components/user` | packages/ui/src/components/user/collapsible-user-list.tsx |
 | `ContactDetailCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/contact-detail-card.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
@@ -513,7 +513,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (370)
+## Types (371)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -676,6 +676,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MountInfo` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MountResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `MountSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `MountStorageType` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `NewDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Notification` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationDetails` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
@@ -888,7 +889,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (750)
+## Utilities & constants (756)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1119,6 +1120,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isStandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `isStorageType` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `MAIL_PREVIEW_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAILBOX_ARCHIVE` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
@@ -1147,6 +1149,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `specialMailboxFromFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
 | `STANDARD_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1313,14 +1316,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `isServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `isStructuredTextFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `keepsSavedSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mailAttachmentName` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `MOUNT_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `stripEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
@@ -1591,7 +1597,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
@@ -1631,6 +1636,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
+| `alphaGroupKey` | `@workspace/ui/components/user` | packages/ui/src/components/user/alphabetical-list.tsx |
+| `USER_ITEM_AVATAR_SIZE` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |

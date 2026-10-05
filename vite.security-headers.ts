@@ -81,11 +81,14 @@ const NON_JS_TYPE = /\stype=["'](?!(?:module|text\/javascript|application\/javas
 // prerender appends TanStack Router's dehydration scripts, whose content differs per page, so the
 // hashes can only be computed once the page is final. Hashes already present (the theme script) are
 // kept; a page without a CSP meta is returned unchanged.
+// The browser hashes the parsed text: the parser turns CR and CRLF into LF and NUL into U+FFFD, and
+// TanStack's dehydration writes NUL into match ids on purpose. Assumes the page decodes as UTF-8.
 export function withInlineScriptHashes(html: string): string {
     const hashes: string[] = [];
     for (const [, attrs, body] of html.matchAll(INLINE_SCRIPT)) {
         if (NON_JS_TYPE.test(attrs)) continue;
-        hashes.push(`'sha256-${createHash('sha256').update(body).digest('base64')}'`);
+        const parsed = body.replace(/\r\n?/g, '\n').replaceAll('\0', '\uFFFD');
+        hashes.push(`'sha256-${createHash('sha256').update(parsed).digest('base64')}'`);
     }
     return html.replace(/(<meta http-equiv="Content-Security-Policy" content="[^"]*?script-src[^;"]*)/, (directive) => {
         const missing = hashes.filter((hash) => !directive.includes(hash));

@@ -17,6 +17,9 @@ const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(proc
 export type ServerConfig = {
     orgName: string;
     orgId: string;
+    // The team setup made with the org, which every new user joins. An older install pins it at boot (pinDefaultTeam),
+    // or leaves it unset when it has none.
+    defaultTeamId?: string;
     secret: string;
     setupCompleted: boolean;
     setupCompletedAt?: string;

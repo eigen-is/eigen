@@ -1,4 +1,5 @@
 import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
+import { getAdminAppUrl } from '@workspace/lib/api';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -13,6 +14,8 @@ import { Label } from '@workspace/ui/components/label';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
+
+const ORG_NAME_PLACEHOLDER = 'My Organization';
 
 export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
     if (!setupToken) {
@@ -40,8 +43,8 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
     const [completed, setCompleted] = useState(false);
 
     const [orgName, setOrgName] = useState('');
-    // Follows the org name until edited; the server stores only a sender that differs from the defaults.
-    const [senderName, setSenderName] = useState<string | null>(null);
+    // Empty means the org name; the server stores only a sender that differs from the defaults.
+    const [senderName, setSenderName] = useState('');
     const [senderAddress, setSenderAddress] = useState(defaultSenderAddress(status.mailDomain));
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
@@ -69,8 +72,8 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
         if (!formReady) return;
         completeSetup.mutate(
             {
-                orgName,
-                senderName: senderName ?? orgName,
+                orgName: orgName.trim(),
+                senderName,
                 senderAddress,
                 storageType,
                 adminUsername: username,
@@ -80,6 +83,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                     ? {
                           s3Endpoint: s3Config.endpoint,
                           s3Bucket: s3Config.bucket,
+                          s3Prefix: s3Config.prefix,
                           s3Region: s3Config.region ?? '',
                           s3AccessKeyId: s3Config.accessKeyId,
                           s3SecretAccessKey: s3Config.secretAccessKey,
@@ -102,7 +106,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Button className="w-full" onClick={() => (window.location.href = '/')}>
+                        <Button className="w-full" onClick={() => (window.location.href = getAdminAppUrl('login'))}>
                             Go to Login
                         </Button>
                     </CardContent>
@@ -131,8 +135,8 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                 <Input
                                     id="orgName"
                                     value={orgName}
-                                    onChange={(e) => setOrgName(e.target.value)}
-                                    placeholder="My Organization"
+                                    onChange={(e) => setOrgName(e.target.value.trimStart())}
+                                    placeholder={ORG_NAME_PLACEHOLDER}
                                     required
                                     className="mt-1.5"
                                 />
@@ -144,8 +148,9 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                         <Label htmlFor="senderName">Sender name</Label>
                                         <Input
                                             id="senderName"
-                                            value={senderName ?? orgName}
+                                            value={senderName}
                                             onChange={(e) => setSenderName(e.target.value)}
+                                            placeholder={orgName.trim() || ORG_NAME_PLACEHOLDER}
                                             maxLength={100}
                                             className="mt-1.5"
                                         />
@@ -237,9 +242,16 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                             </div>
                         </div>
 
-                        <Button type="submit" disabled={!formReady || completeSetup.isPending} className="w-full">
-                            {completeSetup.isPending ? 'Setting up...' : 'Complete Setup'}
-                        </Button>
+                        <div className="space-y-1.5">
+                            <Button type="submit" disabled={completeSetup.isPending} className="w-full">
+                                {completeSetup.isPending ? 'Setting up...' : 'Complete Setup'}
+                            </Button>
+                            {!s3Verified && (
+                                <p className="text-xs text-muted-foreground text-center">
+                                    Test the S3 connection first.
+                                </p>
+                            )}
+                        </div>
                     </form>
                 </CardContent>
             </Card>

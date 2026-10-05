@@ -1,8 +1,8 @@
 import type { DriveViewPreferences } from './drive';
-import type { S3Config } from './mount';
+import type { MountStorageType, S3Config } from './mount';
 
 export type MountSettings = {
-    storageType: 'local' | 'local-key' | 's3';
+    storageType: MountStorageType;
     maxSizeMB?: number;
     enabled: boolean;
     name?: string;
@@ -39,7 +39,12 @@ export type TeamSettings = {
     };
 };
 
-export type ServerStorageType = 'local-id' | 'local-fullnames' | 's3';
+export const SERVER_STORAGE_TYPES = ['local-id', 'local-fullnames', 's3'] as const;
+export type ServerStorageType = (typeof SERVER_STORAGE_TYPES)[number];
+
+export function isServerStorageType(value: string): value is ServerStorageType {
+    return SERVER_STORAGE_TYPES.some((type) => type === value);
+}
 
 // 'unknown' = the access key cannot read the setting, so nothing may be written blind either.
 export type S3VersioningState = 'enabled' | 'suspended' | 'disabled' | 'unknown';

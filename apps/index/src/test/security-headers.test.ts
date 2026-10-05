@@ -70,6 +70,14 @@ describe('withInlineScriptHashes', () => {
         expect(scriptSrc).not.toContain("'unsafe-inline'");
     });
 
+    test('hashes the text the HTML parser hands the browser: NUL as U+FFFD, CR and CRLF as LF', () => {
+        const out = withInlineScriptHashes(page('<script>a("x\0y")</script><script>b()\r\nc()\rd()</script>'));
+        const scriptSrc = out.match(/script-src[^;]*/)?.[0] ?? '';
+        expect(scriptSrc).toContain(sha('a("x�y")'));
+        expect(scriptSrc).toContain(sha('b()\nc()\nd()'));
+        expect(scriptSrc).not.toContain(sha('a("x\0y")'));
+    });
+
     test('data blocks and external scripts get no hash', () => {
         const out = withInlineScriptHashes(
             page(

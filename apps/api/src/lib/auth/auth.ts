@@ -27,6 +27,7 @@ import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
+import { getTeamExists } from '../team';
 import { getOrgRole, type User } from '../user';
 
 const deploymentDomain = getDomain();
@@ -100,6 +101,10 @@ function rejectRoleAddress(email: string | undefined): void {
         throw new APIError('BAD_REQUEST', { message: 'This address is reserved' });
     }
 }
+
+// Every app password is this many ASCII letters (the plugin's generator, no prefix), which lets
+// protocol auth tell one from an account password without a key lookup.
+export const APP_PASSWORD_LENGTH = 64;
 
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath(SERVER_DATABASES.users)), {
@@ -236,6 +241,7 @@ export const auth = betterAuth({
         // (see apps/api/src/lib/waitlist), which is why no `sendInvitationEmail` hook is wired
         // here. Existing users get auto-added to the default org via the user-create hook
         // above, and to teams via `auth.api.addMember` (admin UI), which both bypass invites.
+        // The hook's org join also adds them to the default team.
         organization({
             // Single-org app: product code never calls /organization/create (the plugin is used
             // only for its data model). Block user-initiated creation so a normal user can't spin
@@ -261,6 +267,7 @@ export const auth = betterAuth({
             },
         }),
         apiKey({
+            defaultKeyLength: APP_PASSWORD_LENGTH,
             rateLimit: { enabled: false },
         }),
     ],
@@ -276,11 +283,12 @@ export const auth = betterAuth({
 });
 
 // Joins the default org (config.orgId, pinned at setup — not "the first org row", whose order is
-// unspecified). Both the sign-up hook and every sign-in call this, so an account whose sign-up join
-// failed still reaches Admin → Users instead of staying outside the org with no repair path.
+// unspecified) and its default team. Both the sign-up hook and every sign-in call this, so an account whose
+// sign-up join failed still reaches Admin → Users instead of staying outside the org with no repair path.
 async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
-    const orgId = getServerConfig()?.orgId;
-    if (!orgId) return;
+    const config = getServerConfig();
+    if (!config) return;
+    const { orgId, defaultTeamId } = config;
 
     const db = getAuthDrizzleDb();
     const membership = await db
@@ -294,13 +302,23 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
     const row = await db.select({ role: userScheme.role }).from(userScheme).where(eq(userScheme.id, userId)).get();
     if (row?.role === 'guest') return;
 
+    // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
+    const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;
     await auth.api.addMember({
         body: {
             userId,
             organizationId: orgId,
             role: 'member',
+            teamId,
         },
     });
+    if (!teamId) return;
+    // addMember skips afterAddTeamMember.
+    try {
+        await reconcileSharesForNewTeamMember(userId, teamId);
+    } catch (error) {
+        console.error(`Failed to reconcile default team shares for user ${userId}:`, error);
+    }
 }
 
 // Membership deletion also sweeps rows whose user is already gone, so instances that

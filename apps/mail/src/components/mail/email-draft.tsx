@@ -46,6 +46,10 @@ function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): 
     return { all, bcc };
 }
 
+function focusBodyEditor(root: HTMLElement) {
+    root.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+}
+
 export function EmailDraftToolbar({
     onDelete,
     onAttach,
@@ -370,6 +374,15 @@ export function EmailDraft({
                     e.preventDefault();
                     handleSendEmail();
                 }}
+                // Enter in a field would submit the form, which sends, with any modifier: on a Mac Ctrl+Enter
+                // is not the send hotkey. Mod+Enter still sends, as the hotkey ignores defaultPrevented.
+                // ContactAutosuggest's own Enter, picking a suggestion, runs on the input first.
+                onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                    if (!(e.target instanceof HTMLInputElement)) return;
+                    e.preventDefault();
+                    if (e.target.id === 'subject') focusBodyEditor(e.currentTarget);
+                }}
             >
                 <div className="space-y-1 app-gutter-x py-2 shrink-0">
                     <div className="grid grid-cols-[4rem_1fr] items-center border-b">
@@ -447,10 +460,7 @@ export function EmailDraft({
                 <div
                     className="flex-1 overflow-auto app-gutter cursor-text"
                     onClick={(e) => {
-                        if (e.target === e.currentTarget) {
-                            const editable = e.currentTarget.querySelector<HTMLElement>('[contenteditable="true"]');
-                            editable?.focus();
-                        }
+                        if (e.target === e.currentTarget) focusBodyEditor(e.currentTarget);
                     }}
                 >
                     <LightEditor

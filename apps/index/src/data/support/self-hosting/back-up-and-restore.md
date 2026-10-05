@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, backup, restore, s3, cron]
 related: [self-hosting/move-to-another-server, self-hosting/update, admin/server-settings, admin/back-up-home, admin/backup-contents]
 order: 90
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops: only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
@@ -125,7 +125,7 @@ To restore on a new machine, see [Move Eigen to another server](/support/self-ho
 A Light backup holds no files and no mail. Its restore puts back the accounts, the settings, `.env.production`, and every database. The files and the mail stay on disk as they are now, but Drive lists only what it held at the time of the backup:
 
 - Files and documents made since the backup no longer show in Drive. Their content stays on disk.
-- On drives that store files by their names, the default **Local (Full names)**, a file renamed, moved, or put in the Trash since shows at its old place and does not open. Its content is under the new name, or in the trash folder.
+- On drives that store files by their names, the default **Local (full names)**, a file renamed, moved, or put in the Trash since shows at its old place and does not open. Its content is under the new name, or in the trash folder.
 - A file deleted for good since comes back without its content.
 - Calendars and contacts go back to the time of the backup.
 - Mail stays as it is now.

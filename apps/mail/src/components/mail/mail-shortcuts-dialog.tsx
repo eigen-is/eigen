@@ -94,7 +94,7 @@ export function MailShortcutsDialog({ open, onOpenChange, enabled }: MailShortcu
                     <DialogTitle>Keyboard shortcuts</DialogTitle>
                     <DialogDescription>Keyboard shortcuts to move around Mail without the mouse.</DialogDescription>
                 </DialogHeader>
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="app-gutter-bleed min-h-0 flex-1 overflow-y-auto">
                     {/* Balanced CSS columns flow the groups top-to-bottom, evenly, without the ragged
                         gaps a row-based grid leaves. break-inside-avoid keeps a group whole. */}
                     <div className="columns-1 gap-8 sm:columns-2">

@@ -94,7 +94,7 @@ function WaitlistRoute() {
         <ColumnLayout mobileColumn={entryId ? 'detail' : 'list'}>
             <Column id="list" width="400px" onBack="sidebar" toolbar={listToolbar}>
                 <div className="flex h-full flex-col border-r overflow-y-auto">
-                    <div className="p-2">
+                    <div className="app-gutter-x py-2">
                         <Tabs value={activeTab} onValueChange={handleTabChange}>
                             <TabsList className="w-full">
                                 {TABS.map((t) => (
@@ -114,7 +114,7 @@ function WaitlistRoute() {
                                     key={entry.id}
                                     type="button"
                                     className={cn(
-                                        'flex flex-col gap-0.5 px-4 py-3 text-left hover:bg-muted/50 border-b',
+                                        'flex flex-col gap-0.5 app-gutter-x py-3 text-left hover:bg-muted/50 border-b',
                                         entry.id === entryId && 'bg-muted',
                                     )}
                                     onClick={() => handleRowClick(entry.id)}

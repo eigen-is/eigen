@@ -189,6 +189,9 @@ export default class CollabDocument {
     private clientIdOwners: Map<number, ServerWebSocket<unknown>> = new Map();
     private closed: boolean = false;
     private lastTouchedAt = 0;
+    // An update the touch throttle skipped; destruct stamps it, so closing a document that was only
+    // read leaves Modified alone and the 60 s linger never shows as the edit time.
+    private untouchedUpdateAt: number | null = null;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
     private closeLingerMs = CLOSE_LINGER_MS;
@@ -276,9 +279,13 @@ export default class CollabDocument {
 
     private throttledTouchUpdatedAt(): void {
         const now = Date.now();
-        if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) return;
+        if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) {
+            this.untouchedUpdateAt = now;
+            return;
+        }
         this.lastTouchedAt = now;
-        this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
+        this.untouchedUpdateAt = null;
+        this.drive.touchUpdatedAt(this.path.mountId, this.path.id, new Date(now)).catch(() => {});
     }
 
     private recordEditThrottled(user: User): void {
@@ -295,7 +302,11 @@ export default class CollabDocument {
         if (this.closed) return;
         this.closed = true;
         clearTimeout(this.closeTimer);
-        this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
+        if (this.untouchedUpdateAt !== null) {
+            this.drive
+                .touchUpdatedAt(this.path.mountId, this.path.id, new Date(this.untouchedUpdateAt))
+                .catch(() => {});
+        }
         for (const conn of this.connections.keys()) {
             conn.close();
         }

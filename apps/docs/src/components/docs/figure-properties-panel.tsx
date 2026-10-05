@@ -36,7 +36,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
     return (
         <PropertiesPanel title="Image">
             {previewUrl && (
-                <div className="px-3 py-3 border-b">
+                <div className="app-gutter border-b">
                     <div className="rounded border overflow-hidden">
                         <img src={previewUrl} alt="" className="max-h-24 mx-auto object-contain" />
                     </div>
