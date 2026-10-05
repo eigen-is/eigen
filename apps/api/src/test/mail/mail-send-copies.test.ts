@@ -5,7 +5,8 @@ import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/t
 import * as mailer from '../../lib/core/mailer';
 import { getHome } from '../../lib/home';
 import { restoreEnvAfterEach } from '../env-test-helpers';
-import { assertJson, authedRequest, getTestContext } from '../setup';
+import { makeEml } from '../mail-test-helpers';
+import { assertJson, authedRequest, eventually, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -515,13 +516,13 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         const deliverOriginal = async (subject: string): Promise<string> => {
             const home = await getHome(ctx.alice.user.id);
             const id = await home.mail.mailboxDeliver(
-                Buffer.from(`From: bob@x.com\r\nTo: ${ctx.alice.user.email}\r\nSubject: ${subject}\r\n\r\nhello`),
+                Buffer.from(makeEml(subject, { from: 'bob@x.com', to: ctx.alice.user.email })),
             );
             // A delivery's sync can coalesce with a watcher's and miss the file, so a read drives another.
-            for (let i = 0; i < 40 && !home.mail.messageGetSummary(id); i++) {
+            await eventually(async () => {
                 await home.mail.mailboxGet(MAILBOX_INBOX);
-                await Bun.sleep(25);
-            }
+                return home.mail.messageGetSummary(id);
+            }, `${subject} indexed`);
             return id;
         };
         const reply = { subject: 'RE: question', to: addr('bob@x.com'), text: 'answer', html: '<p>answer</p>' };

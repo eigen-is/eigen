@@ -5,7 +5,7 @@ import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { boxDir } from '../mail-test-helpers';
-import { assertJson, authedRequest, createTestUser, getTestContext, type TestUser } from '../setup';
+import { assertJson, authedRequest, createTestUser, eventually, getTestContext, type TestUser } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -90,7 +90,7 @@ describe('Mail-arrival notification read state', () => {
 
         const cur = join(boxDir(user.id, MAILBOX_INBOX), 'cur');
         renameSync(join(cur, mail!.filename), join(cur, `${mail!.filename}S`));
-        for (let i = 0; i < 60 && (await unreadInbox()).length > 0; i++) await Bun.sleep(50);
+        await eventually(async () => ((await unreadInbox()).length === 0 ? true : undefined), 'the Seen flag indexed');
         expect(await mailNewIsRead()).toBe(true);
     });
 
