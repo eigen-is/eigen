@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
@@ -8,6 +8,8 @@ import { sanitizeCommentCardHtml } from '../../html-dom';
 function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
     for (const [id, yCard] of map) {
+        // A peer can write anything into the map; one scalar entry must not take the board down.
+        if (!(yCard instanceof Y.Map)) continue;
         const title = yCard.get('title');
         const description = yCard.get('description');
         const color = yCard.get('color');

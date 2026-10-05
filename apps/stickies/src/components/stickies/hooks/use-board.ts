@@ -28,6 +28,27 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     );
 }
 
+export function readColumns(columnsMap: Y.Map<Y.Map<unknown>>): Record<string, ColumnItem> {
+    const columns: Record<string, ColumnItem> = {};
+    for (const [id, columnMap] of columnsMap) {
+        // A peer can write anything into the map; one scalar entry must not take the board down.
+        if (!(columnMap instanceof Y.Map)) continue;
+        const title = columnMap.get('title');
+        const creator = columnMap.get('creator');
+        const createdAt = columnMap.get('createdAt');
+        columns[id] = {
+            id,
+            title: typeof title === 'string' ? title : '',
+            taskIds: getIdArray(columnMap, 'taskIds')?.toArray() ?? [],
+            creator: typeof creator === 'string' ? creator : '',
+            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
+            // legacy columns that predate the createdAt field. Nothing renders it.
+            createdAt: typeof createdAt === 'number' ? createdAt : 0,
+        };
+    }
+    return columns;
+}
+
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
@@ -129,19 +150,10 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
 
             const updateReactState = () => {
                 setBoard((prev) => {
-                    const columns: Record<string, ColumnItem> = {};
-                    for (const [columnId, columnMap] of columnsMap) {
-                        const next: ColumnItem = {
-                            id: columnId,
-                            title: (columnMap.get('title') as string) || '',
-                            taskIds: getIdArray(columnMap, 'taskIds')?.toArray() ?? [],
-                            creator: (columnMap.get('creator') as string) || '',
-                            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
-                            // legacy columns that predate the createdAt field. Nothing renders it.
-                            createdAt: (columnMap.get('createdAt') as number) || 0,
-                        };
-                        const prevColumn = prev.columns[columnId];
-                        columns[columnId] = prevColumn && sameColumn(prevColumn, next) ? prevColumn : next;
+                    const columns = readColumns(columnsMap);
+                    for (const id in columns) {
+                        if (prev.columns[id] && sameColumn(prev.columns[id], columns[id]))
+                            columns[id] = prev.columns[id];
                     }
                     return { columns, columnOrder: columnOrderArray.toArray() };
                 });

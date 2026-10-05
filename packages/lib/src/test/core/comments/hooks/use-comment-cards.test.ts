@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { getItemMapRoot } from '../../../../core/collab/yjs-utils';
 import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
 import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
 import type { CommentCard } from '../../../../types/comments';
@@ -135,6 +136,20 @@ describe('readCards (BC for legacy stickies cards)', () => {
         const result = readCards(tasks);
         expect(result['legacy'].creator).toBe('old@example.com');
         expect(result['fresh'].creator).toBeUndefined();
+    });
+
+    test("skips a peer's scalar entry instead of throwing on it", () => {
+        const doc = new Y.Doc();
+        const tasks = doc.getMap<unknown>('tasks');
+        doc.transact(() => {
+            const card = new Y.Map<unknown>();
+            card.set('id', 'ok');
+            card.set('title', 'Fine');
+            tasks.set('ok', card);
+            tasks.set('scalar', 'not-a-card');
+        });
+
+        expect(Object.keys(readCards(getItemMapRoot(doc, 'tasks')))).toEqual(['ok']);
     });
 });
 
