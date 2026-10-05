@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
-import { desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { type ManagedDatabase, PATHS } from '../core';
 import type { Home } from '../home';
@@ -116,8 +116,13 @@ export class NotificationCenter {
     }
 
     markReadByTag(tag: string): void {
-        this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.tag, tag)).run();
-        this.home.broadcast(buildNotificationChangedEvent());
+        const marked = this.db
+            .update(schema.notifications)
+            .set({ read: true })
+            .where(and(eq(schema.notifications.tag, tag), eq(schema.notifications.read, false)))
+            .returning({ id: schema.notifications.id })
+            .all();
+        if (marked.length > 0) this.home.broadcast(buildNotificationChangedEvent());
     }
 
     markAllRead(): void {
