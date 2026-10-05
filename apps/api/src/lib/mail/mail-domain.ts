@@ -73,7 +73,7 @@ export class Mail {
     }
 
     private readNotificationOnceInboxRead(): void {
-        if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications?.markReadByTag(MAIL_NOTIFICATION_TAG);
+        if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications.markReadByTag(MAIL_NOTIFICATION_TAG);
     }
 
     async init(): Promise<void> {
@@ -81,7 +81,7 @@ export class Mail {
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
                 if (isNewMessage && email.fromShort) {
-                    this.home.notifications?.persist({
+                    this.home.notifications.persist({
                         type: 'mail',
                         actorEmail: email.from?.value?.[0]?.address ?? null,
                         title: `New mail from ${email.fromShort}`,
