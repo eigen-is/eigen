@@ -209,6 +209,33 @@ describe('Occurrence edits of an invited series', () => {
         expect(master.startTime.toISOString()).toBe(new Date(SERIES_START).toISOString());
     });
 
+    // The web app's "Delete this" on a moved occurrence: the organizer stores an EXDATE in its place, and the guest drops it too.
+    test('cancelling a moved occurrence drops it for the guest', async () => {
+        const { series, target } = await seeded('Weekly Occurrence Cancel Moved');
+        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
+        const override = await editOccurrence(series.id, target, {
+            title: 'Moved Then Cancelled',
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+        });
+        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Moved Then Cancelled'));
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'cancelled' }),
+            },
+        );
+        expect(res.status).toBe(200);
+
+        const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
+        expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
+        expect(await bobIcs(series.uid)).not.toContain('RECURRENCE-ID');
+    });
+
     // A DELETE of the override row is the API's "delete this": the cancellation names the series plus the
     // ORIGINAL occurrence, which is what the guest's copy holds, not the override's own id or moved start.
     test('deleting a moved occurrence over REST cancels that occurrence for every guest', async () => {

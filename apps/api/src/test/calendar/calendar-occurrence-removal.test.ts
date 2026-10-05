@@ -86,6 +86,37 @@ describe('Removing one occurrence of a series', () => {
         expect(remaining.find((e) => e.occurrenceDate === TARGET)).toBeUndefined();
     });
 
+    // The web app's "Delete this" on a moved occurrence is an update to `cancelled`. Stored as a STATUS:CANCELLED
+    // override, Thunderbird would drop that VEVENT from its next PUT and bring the occurrence back.
+    test('cancelling a moved occurrence stores an EXDATE, not a cancelled override', async () => {
+        const parent = await series('Occurrence Cancel Moved');
+        const override = await moveTarget(parent, 'Occurrence Cancel Moved (moved)');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl()}/${override.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'cancelled' }),
+        });
+        expect((await assertJson<CalendarEvent>(res)).status).toBe('cancelled');
+
+        const remaining = await occurrencesOf(parent.uid);
+        expect(remaining).toHaveLength(3);
+        expect(remaining.find((e) => e.occurrenceDate === TARGET)).toBeUndefined();
+        const home = await getHome(ctx.alice.user.id);
+        const resource = findOrFail(await home.calendar.listResources(calendarId), (r) => r.uid === parent.uid);
+        const get = await davRequest('GET', `/dav/calendars/${ctx.alice.user.id}/${calendarId}/${resource.uri}`, {
+            email: ctx.alice.user.email,
+        });
+        const ics = await get.text();
+        expect(ics).toContain(`EXDATE:${TARGET.replace(/-/g, '')}T090000Z`);
+        expect(ics).not.toContain('RECURRENCE-ID');
+        expect(ics).not.toContain('STATUS:CANCELLED');
+
+        // The cancelled row keeps the override's id, so deleting it puts the occurrence back.
+        await deleteEvent(override.id);
+        expect(await occurrencesOf(parent.uid)).toHaveLength(4);
+    });
+
     test('deleting the cancelled row of a dropped occurrence puts it back', async () => {
         const parent = await series('Occurrence Delete Cancelled');
         await post({

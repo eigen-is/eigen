@@ -309,6 +309,15 @@ async function patchStoredEvent(
         throw new ApiError(412, 'Event was changed elsewhere');
     }
 
+    // Cancelling an override replaces it with an EXDATE: Thunderbird drops a STATUS:CANCELLED override from its next PUT, which brings the occurrence back.
+    if (existing.parentEventId && input.status === 'cancelled') {
+        const parent = eventById(calendar, existing.parentEventId)!;
+        await editResource(calendar, resource, (component) => {
+            addExclusion(component, parent, existing, writeContext(actorIsOrganizer(parent)));
+        });
+        return { updated: eventById(calendar, id)!, oldAttendees };
+    }
+
     // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
     const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();

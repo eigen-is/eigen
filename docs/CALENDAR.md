@@ -35,7 +35,7 @@ Some facts no VCALENDAR can hold live only in the database: a calendar's name, c
 
 A resource holds one UID, the id iCalendar gives a series. Under it sit the master VEVENT, which carries the repeat rule, one override VEVENT per edited occurrence, and a VTIMEZONE, the definition of a time zone, for every TZID they name. A PUT carrying two UIDs is refused, or a second UID's overrides would hang off the first master.
 
-Eigen cancels one occurrence with an `EXDATE` on the master, never with a `STATUS:CANCELLED` override. Thunderbird omits such an override from its next PUT, and the full replace would read that as "the client removed the exception" and bring the occurrence back. Cancelling a moved override is the one path that still stores one ([ROADMAP.md](ROADMAP.md)). Deleting an occurrence that is already cancelled puts it back, whichever of the two spellings a client used.
+Eigen cancels one occurrence with an `EXDATE` on the master, never with a `STATUS:CANCELLED` override. Thunderbird omits such an override from its next PUT, and the full replace would read that as "the client removed the exception" and bring the occurrence back. Cancelling a moved occurrence replaces its override with an `EXDATE` too, and the cancelled row keeps the override's id. Deleting an occurrence that is already cancelled puts it back, whichever of the two spellings a client used.
 
 ## Eigen's own facts ride as `X-EIGEN-*` lines no client can write
 
