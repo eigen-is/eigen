@@ -18,7 +18,7 @@ import { user } from '../../../auth-schema';
 import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
-import { updateServerSettings } from '../../lib/config/server-settings';
+import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -79,6 +79,17 @@ describe('Server Settings', () => {
         expect((await put(1024)).status).toBe(422);
         const data = await assertJson<ServerSettings>(await put(UPLOAD_CAP_MAX_MB));
         expect(data.quotas.maxUploadSizeMB).toBe(UPLOAD_CAP_MAX_MB);
+    });
+
+    // A cap saved before the route bounded it still sits in settings.json above the request bound.
+    test('a stored upload cap above the bound reads as the bound', async () => {
+        const previous = getServerSettings().quotas.maxUploadSizeMB;
+        await updateServerSettings({ quotas: { maxUploadSizeMB: 4096 } });
+        try {
+            expect(getMaxUploadSize()).toBe(UPLOAD_CAP_MAX_MB * 1024 * 1024);
+        } finally {
+            await updateServerSettings({ quotas: { maxUploadSizeMB: previous } });
+        }
     });
 
     // 0 is the mount's "never purge"; the route must let the owner choose it.
