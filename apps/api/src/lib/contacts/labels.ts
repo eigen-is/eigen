@@ -117,6 +117,7 @@ function rewriteCardCategories(
 
 // Everything a fan-out owes the world once its transaction has committed.
 function settleFanOut(contacts: Contacts, fanout: FanOut): void {
+    // Unmetered by decision: each member card grows by one label name at most. See docs/QUOTA.md.
     contacts.cardsBytes += fanout.bytes;
     for (const id of fanout.createdLabelIds) contacts.emitLabel(SSEventType.LABEL_CREATED, id);
     for (const id of fanout.contactIds) contacts.announce(SSEventType.CONTACT_UPDATED, id);
