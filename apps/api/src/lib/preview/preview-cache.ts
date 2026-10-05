@@ -59,7 +59,8 @@ export const VCARD_FORMAT = 'vcard-f1';
 // eml-f3: the parts past the cap are counted as `remainingAttachments`.
 // eml-f4: CSS is read again as the color-scheme deletion a viewer makes would leave it, and a repeated
 //         To:/Cc: keeps every recipient.
-export const EML_FORMAT = 'eml-f4';
+// eml-f5: a stylesheet loses only its rules that fetch, not the whole sheet.
+export const EML_FORMAT = 'eml-f5';
 
 // ics-f2: `dropped` is the unreadable masters alone, and an event counts its `remainingAttendees`.
 export const ICS_FORMAT = 'ics-f2';
