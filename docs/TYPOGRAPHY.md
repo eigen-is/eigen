@@ -56,7 +56,7 @@ The registry drives the pickers and the sheet lists. The other places keep their
 2. Its `@font-face` rules in `fonts.css`.
 3. The entry in `EIGEN_FONTS`, appended at the end.
 4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's.
-5. `FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback.
+5. `FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback. `apps/api/src/test/export/fonts.test.ts` fails when it and `fonts.css` disagree.
 6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
 
 A `--font-*` token in `globals.css` is needed only when the font fills a new category.

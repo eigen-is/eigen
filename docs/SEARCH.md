@@ -2,7 +2,7 @@
 
 > **TLDR:** Full-text search is SQLite FTS5 inside each domain's own database, with no search service: `emails_fts` in `mail.db`, and `paths_fts` (names) plus `paths_content_fts` (bodies) in every mount's `metadata.db`. One route, `GET /search/:ownerId`, fans out and returns `{ mail, file }`. Three things are not obvious from the code: a `bm25()` score is never compared across two indexes, so the final file list sorts by recency; the `contentDirty` bit on `paths` is the reindex queue; and a document's body comes from the same readers export and preview use. Calendar events and contacts have no index. Finding a match inside the open document is [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
 
-Search answers "which mail or file holds this term". Two places ask it. The ⌘K command palette shows mail and file hits as you type ([the proposal](proposals/PROPOSAL_COMMAND_PALETTE.md)), and the mail app's search box shows mail hits. Both read the user's own Home: their mail, the files in their Drive mounts and, for the palette, their teams' drives, which the home relay reads in each team's Home ([SCALABILITY.md](SCALABILITY.md)).
+Search answers "which mail or file holds this term". Two places ask it. The ⌘K command palette shows mail and file hits as you type ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)), and the mail app's search box shows mail hits. Both read the user's own Home: their mail, the files in their Drive mounts and, for the palette, their teams' drives, which the home relay reads in each team's Home ([SCALABILITY.md](SCALABILITY.md)).
 
 A body index needs plain text. So docs, sheets, slides and drawings are read through the document content layer ([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)) in a background Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). The client caches results for a short time and drops them on the SSE events that can change a hit ([SSE.md](SSE.md)).
 
@@ -57,7 +57,7 @@ A `bm25()` score is comparable only within one index. So `Drive.search` (`apps/a
 - Stickies and chat are light reads on the main thread: card and column text, and the newest chat messages.
 - A plain-text or code file qualifies through `isSearchableTextFile`. Its first 100 KB come through `mount.readBytes` with a limit, so a huge file is never read whole. An `.ics` indexes its raw text too.
 
-Each body is capped at `CONTENT_INDEX_MAX_BYTES` (`search/limits.ts`, about 100 KB), so one huge file can't dominate the index. The Worker collectors cut to that UTF-8 byte budget at a code-point boundary. The preview renderers and the export pipeline are not reused: the first emits capped HTML, the second embeds media and can densify a sparse sheet.
+Each body is capped at `CONTENT_INDEX_MAX_BYTES` (`search/limits.ts`, about 100 KB), so one huge file can't dominate the index. The Worker collectors cut to that UTF-8 byte budget at a code-point boundary. A plain text file's bytes are decoded without the character the cut splits. The preview renderers and the export pipeline are not reused: the first emits capped HTML, the second embeds media and can densify a sparse sheet.
 
 ## A .vcf indexes its cards, an .eml nothing
 

@@ -113,9 +113,9 @@ So a GET can write, which matters for any read-replica idea. The first listing a
 
 A container that opts in (collab documents and chats, the `snapshot` key in their database config) keeps file-level snapshots of its `data.db` in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`). `ManagedDatabase` takes one every 100 writes and on close, and each snapshot prunes by the retention policy. A database adopted from a crash temp ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)) owes its close a snapshot even with no new write, because the fresh connection counts no change for the recovered tail.
 
-- A manual save and the pre-restore snapshot block on the container's path lock, because an explicit user action must never skip.
+- A manual save and the pre-restore snapshot block on the container's path lock, because an explicit user action must never skip. They read the live db, or with none open the crash temp an unclean shutdown left, then the staged copy, then the stored object (`stageManagedDbCopy`).
 - The timer and close path try-locks and skips when the lock is held (`trySnapshotContainerDataDb`). It runs inside a close that a lock holder may be waiting on, and a skip loses one history entry, never bytes.
-- A restore first copies the chosen snapshot to a temp file, since the pre-restore snapshot prunes and could delete it. It then replays the snapshot into the live Y.Doc for a collab document ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)) or overwrites the chat's `data.db` bytes (`replaceContainerDataDb`). No lock is held across the steps.
+- A restore first copies the chosen snapshot to a temp file, since the pre-restore snapshot prunes and could delete it. It then replays the snapshot into the live Y.Doc for a collab document ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)) or overwrites the chat's `data.db` bytes under the same row (`replaceContainerDataDb`): one slot call closes the live db, removes its crash temp and writes the bytes, through the upload queue on `s3` and as a fresh file on `local-key`. No lock is held across the steps.
 
 ## Copy goes anywhere, a move stays in its mount
 

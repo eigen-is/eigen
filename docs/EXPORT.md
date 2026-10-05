@@ -70,7 +70,7 @@ A frame is the page: 1920 by 1080, and an overhanging element is clipped as the 
 
 The `svg` arm is `sceneToSvg` (`packages/lib/src/vector`) with the used `@font-face` blocks spliced in. The sanitizer allows `<foreignObject>` as an HTML integration point, or it would drop the rich-text `<div>`. The result is re-serialized as XML, because an XML parser reads an `.svg` and one unclosed `<br>` from a text box would blank the drawing.
 
-The `pdf` arm is a single compositor page sized to the content plus 10 px on each side, the margin `sceneToSvg` leaves for roughjs's overshoot. Rich text prints because it is an HTML div; WeasyPrint ignores `<foreignObject>`. A transparent drawing prints on white paper, because WeasyPrint has no canvas behind the page.
+The `pdf` arm is a single compositor page sized to the content plus 10 px on each side, the margin `sceneToSvg` leaves for roughjs's overshoot. Rich text prints because it is an HTML div; WeasyPrint ignores `<foreignObject>`. A transparent drawing prints on white paper, because WeasyPrint has no canvas behind the page. The page is capped at 19,200 px a side (`MAX_PDF_PAGE_PX`, `export/pdf-page.ts`), the PDF's 200-inch limit, so a far-out element cannot make WeasyPrint lay out an unbounded sheet. Artwork past it is cut off. A sheet's PDF page has the same cap, and a taller sheet continues on the next page.
 
 ## WeasyPrint dictates how a layer references its paint
 
