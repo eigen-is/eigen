@@ -42,7 +42,7 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
-Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` checks the per-file cap and the quota against the `Content-Length` the client sends, before any bytes move, so a chunked PUT that sends none meets neither ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
+Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` checks the per-file cap and the quota against a `Content-Length` before any bytes move, and counts a chunked body as it streams, stopping at the same bounds ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
 
 ## A write that knows its size is checked on the projection
 
@@ -89,7 +89,7 @@ The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SER
 
 When the owner lowers a server quota or an admin a team override below what a user has, or the user leaves the team that raised it, nothing is deleted. New writes answer 507 until the user deletes enough. The usage bar (`packages/ui/src/components/home/usage.tsx`) clamps at full and turns red above 85%.
 
-The limits are soft. Every check reads usage and writes after, with no reservation, so concurrent uploads, several files in one request and chunked WebDAV `PUT`s can each pass and together overshoot. That is by design: the overage is small, and the next write sees it.
+The limits are soft. Every check reads usage and writes after, with no reservation, so concurrent uploads and several files in one request can each pass and together overshoot. That is by design: the overage is small, and the next write sees it.
 
 ## See also
 

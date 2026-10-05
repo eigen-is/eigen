@@ -62,7 +62,7 @@ A post, edit or delete broadcasts a `chat:` event to the home that owns the room
 
 ## Messages page backwards from the newest
 
-`useMessages` loads 50 messages per page, newest page first, with the oldest loaded message's id as the `before` cursor, and `useChatRoom` reverses the pages into reading order. The list asks for more when you scroll near the top. It scrolls to a new message only when you were already near the bottom, so reading history is never interrupted.
+`useMessages` loads 50 messages per page, newest page first, with the oldest loaded message's id as the `before` cursor (the server pages on `(createdAt, rowid)`, because `createdAt` is whole seconds), and `useChatRoom` reverses the pages into reading order. The list asks for more when you scroll near the top. It scrolls to a new message only when you were already near the bottom, so reading history is never interrupted.
 
 ## A deleted message keeps its row and loses its content
 
