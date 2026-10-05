@@ -14,6 +14,7 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
+import { storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
@@ -1906,5 +1907,24 @@ describe('content reindex failure handling', () => {
         await queue.close();
         expect(mount.searchPaths({ q: 'flibberretry', limit: 20 }).some((h) => h.id === txt)).toBe(true);
         expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
+    });
+
+    // A gone data.db answers 410 on every open, so retrying it every cap window never ends. It indexes as
+    // empty instead; a version restore re-marks it.
+    test('a 410 extract clears the body from search and leaves the path indexed', async () => {
+        const txt = await mount.createFile(rootId, 'reindex-gone.txt', 'text/plain', 0, undefined);
+        mount.upsertPathContent(txt, 'quorblegone body text');
+        const queue = new ContentReindexQueue({
+            mount,
+            label: 'gone-test',
+            extract: async () => {
+                throw storageGone();
+            },
+        });
+
+        await queue.drain();
+        await queue.close();
+        expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
+        expect(mount.searchPaths({ q: 'quorblegone', limit: 20 }).some((h) => h.id === txt)).toBe(false);
     });
 });
