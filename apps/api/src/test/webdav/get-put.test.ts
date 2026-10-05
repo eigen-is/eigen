@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { getHome } from '../../lib/home';
 import { driveGet, driveUpload, getTestContext, setMaxUploadSizeMB, TEST_PNG_BYTES, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
@@ -151,6 +152,58 @@ describe('WebDAV PUT', () => {
         } finally {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
+    });
+
+    // A ReadableStream body goes out chunked, with no Content-Length, as macOS Finder sends a PUT.
+    const chunked = (bytes: number, chunk = 64 * 1024) => {
+        let sent = 0;
+        return new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (sent >= bytes) return controller.close();
+                const size = Math.min(chunk, bytes - sent);
+                sent += size;
+                controller.enqueue(new Uint8Array(size).fill(120));
+            },
+        });
+    };
+
+    test('a chunked PUT over the max upload size → 413, and no file lands', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-chunked-too-big.txt`;
+        await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+        try {
+            const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: chunked(2 * 1024 * 1024) });
+            expect(res.status).toBe(413);
+        } finally {
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
+        }
+        expect((await webdavRequest(ctx.alice.user.email, 'HEAD', url)).status).toBe(404);
+    });
+
+    test('a chunked PUT past what is left of the mount → 507, and the file keeps its old bytes', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-chunked-over-quota.txt`;
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'kept' })).status).toBe(201);
+
+        const home = await getHome(ctx.alice.user.id);
+        const snapshot = { ...home.drive.getMountConfig(mountId) };
+        const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
+        // Room for 512 KB more, under the 35 MB per-file cap, so only the mount can refuse.
+        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 0.5 }, true);
+        try {
+            const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: chunked(1024 * 1024) });
+            expect(res.status).toBe(507);
+        } finally {
+            await home.drive.updateMount(snapshot, true);
+        }
+        expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('kept');
+    });
+
+    test('a chunked PUT within both bounds lands whole', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-chunked-ok.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: chunked(200 * 1024) });
+        expect(res.status).toBe(201);
+        expect((await webdavRequest(ctx.alice.user.email, 'HEAD', url)).headers.get('Content-Length')).toBe(
+            String(200 * 1024),
+        );
     });
 });
 

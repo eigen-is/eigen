@@ -57,7 +57,7 @@ An overwrite trashes the target first. So a request whose source and destination
 
 A create and an overwrite both stream the body to a temp file while hashing it, then write the row. The hash becomes the ETag. An empty PUT succeeds, because Finder reserves a new name with a 0-byte PUT before it sends the content. A PUT over a folder is a 409. The MIME type comes from the name's extension, and an overwrite regenerates the thumbnail.
 
-**The size checks trust `Content-Length`.** Before any bytes move, a PUT meets the per-file upload cap a Drive upload meets (`enforceMaxUploadSize`, `quotas.maxUploadSizeMB`), which is a 413, and the mount's quota, which is a 507. A chunked upload sends no `Content-Length`, so nothing is checked, and one upload can pass both. The client is authenticated, so this chunked-PUT gap is a noisy-user problem, not an attack. How a mount's quota resolves is in [QUOTA.md](QUOTA.md).
+**The size checks count the bytes.** A PUT meets the per-file upload cap a Drive upload meets (`enforceMaxUploadSize`, `quotas.maxUploadSizeMB`), which is a 413, and what is left of the mount's quota, which is a 507. An overwrite is charged only its growth. A `Content-Length` is checked before any bytes move. Finder sends its PUTs chunked, with no `Content-Length`, so the body is also counted as it streams to the temp file, and the upload stops with the same status the moment it passes either bound. How a mount's quota resolves is in [QUOTA.md](QUOTA.md).
 
 ## The ETag is the content hash
 
