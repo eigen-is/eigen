@@ -298,6 +298,26 @@ update_steps() {
 # A restore's stub swap writes the pins of its archive into .env.production; this puts the fixture's back.
 reset_release() { printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/release/.env.production"; }
 
+# A server backup's record in local/backups/, and its JSON, with \n escapes, while the backup runs.
+BACKUP_RECORD=$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json
+BACKUP_RUNNING='{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}'
+
+# launch_during_backup <record JSON> <args…>: launch in local/ with that backup record, which ends 3 s in.
+launch_during_backup() {
+    mkdir -p "$FIX/local/backups"
+    printf '%b\n' "$1" >"$BACKUP_RECORD"
+    shift
+    (sleep 3; rm -f "$BACKUP_RECORD") &
+    launch local "$@"
+    wait
+    rm -r "$FIX/local/backups"
+}
+
+# waited_for_backup: the last launch said the server backup ended, then that Eigen stopped.
+waited_for_backup() {
+    [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ]
+}
+
 for SHELL_NAME in dash busybox host; do
     case $SHELL_NAME in
         dash) IMAGE=debian:bookworm-slim SHELL_CMD=dash ;;
@@ -599,26 +619,15 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: stop: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     # The stop would kill a server backup that runs, and that night would have none.
-    mkdir -p "$FIX/local/backups"
-    record="$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json"
-    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
-    (sleep 3; rm -f "$record") &
-    launch local stop
-    wait
-    rm -r "$FIX/local/backups"
-    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ]; then
+    launch_during_backup "$BACKUP_RUNNING" stop
+    if [ "$CODE" = 0 ] && waited_for_backup; then
         ok "$SHELL_NAME: stop waits for the server backup that runs to end"
     else
         fail "$SHELL_NAME: stop during a server backup: exit $CODE, '$OUT'"
     fi
     # The upload that follows a backup runs in the API too, and a stop cuts it off before the bucket has the archive.
-    mkdir -p "$FIX/local/backups"
-    printf '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}\n' >"$record"
-    (sleep 3; rm -f "$record") &
-    launch local stop
-    wait
-    rm -r "$FIX/local/backups"
-    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ]; then
+    launch_during_backup '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}' stop
+    if [ "$CODE" = 0 ] && waited_for_backup; then
         ok "$SHELL_NAME: stop waits for the upload of a server backup to end"
     else
         fail "$SHELL_NAME: stop during the upload of a server backup: exit $CODE, '$OUT'"
@@ -845,23 +854,16 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     # The stop would kill a server backup that runs, so it waits for its record to end.
-    mkdir -p "$FIX/local/backups"
-    record="$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json"
-    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
-    (sleep 3; rm -f "$record") &
-    launch local restore "$ARCHIVE" --yes
-    wait
-    rm -r "$FIX/local/backups"
-    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ] &&
-        printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
+    launch_during_backup "$BACKUP_RUNNING" restore "$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
         ok "$SHELL_NAME: a restore waits for the server backup that runs to end before it stops Eigen"
     else
         fail "$SHELL_NAME: a restore during a server backup: exit $CODE, '$OUT', steps '$(steps)'"
     fi
     # A record whose end was never written, as on a full disk, stays running with no job behind it.
     mkdir -p "$FIX/local/backups"
-    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
-    touch -t 202601010200 "$record"
+    printf '%b\n' "$BACKUP_RUNNING" >"$BACKUP_RECORD"
+    touch -t 202601010200 "$BACKUP_RECORD"
     launch local restore "$ARCHIVE" --yes
     rm -r "$FIX/local/backups"
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'looks stale' &&
