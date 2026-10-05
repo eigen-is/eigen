@@ -77,9 +77,11 @@ async function handleCalendarQuery(
 ): Promise<Response> {
     // A filter naming a component Eigen does not store matches nothing; a time-range may over-match, never under-match.
     if (!report.matchesEvents) return multistatusResponse([]);
-    const resources = report.timeRange
-        ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
-        : await calendar.listResources(calendarId);
+    const resources = (
+        report.timeRange
+            ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
+            : await calendar.listResources(calendarId)
+    ).filter((resource) => report.matchesUid?.(resource.uid) ?? true);
 
     const responses: string[] = [];
     for (const resource of resources) {

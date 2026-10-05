@@ -48,7 +48,7 @@ The shared core in `dav/propfind.ts` returns the requested props it has, and ech
 
 ## A time-range query over-reports rather than lose an occurrence
 
-`calendar-query` answers a VEVENT `time-range` from the projected index. A resource whose recurrence the index can't expand, a stripped rule or an `RDATE` (`hasUnindexedRecurrence`), rides along in every window. A filter naming a component Eigen doesn't store matches nothing. Every other filter element is parsed past, so no filter narrows the answer. The window does: a cancelled occurrence is no occurrence, so a resource whose only instance in the window is cancelled is not matched.
+`calendar-query` answers a VEVENT `time-range` from the projected index. A resource whose recurrence the index can't expand, a stripped rule or an `RDATE` (`hasUnindexedRecurrence`), rides along in every window. A filter naming a component Eigen doesn't store matches nothing. A `UID` `text-match` on the VEVENT, the shape a lookup by UID sends, is answered from the index's UID column, so a lookup costs one resource and not the collection. It is a substring match, ASCII case-folded unless the client names `i;octet`, and `negate-condition` inverts it. Every other filter element, and a text-match in any other collation, is parsed past and narrows nothing. The window narrows too: a cancelled occurrence is no occurrence, so a resource whose only instance in the window is cancelled is not matched.
 
 `calendar-multiget` decodes each href before matching and re-encodes it on output. It caps a request at `MULTIGET_HREF_LIMIT` and dedupes hrefs per resource through the NFC key, so a client listing one resource in both Unicode forms can't make the server hold its bytes twice.
 
