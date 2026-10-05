@@ -313,7 +313,7 @@ export function EditEventDialog({
                                         />
                                         {isPartOfSeries && attendees.length === 0 && (
                                             <p className="text-xs text-muted-foreground mt-1">
-                                                Saved for this event only, it keeps the series' guests.
+                                                Saved for one occurrence, this keeps the series' guests.
                                             </p>
                                         )}
                                     </div>
