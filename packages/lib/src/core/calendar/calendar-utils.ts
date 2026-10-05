@@ -179,11 +179,13 @@ export function isSeriesOccurrence(event: { rrule: string | null; parentEventId:
     return !!event.rrule || !!event.parentEventId;
 }
 
-// CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation; a team Home has none.
+// CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation. A team Home has no
+// address, so there only Eigen's organizer stamp does: a member's own event carries the member's address.
 export function isInvitationFromOthers(event: { data?: EventData | null }, ownerEmail?: string): boolean {
     const organizer = event.data?.organizer;
     if (!organizer) return false;
-    return !ownerEmail || organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+    if (!ownerEmail) return !!event.data?.organizerEventId;
+    return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
