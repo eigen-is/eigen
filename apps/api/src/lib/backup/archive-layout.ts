@@ -164,27 +164,35 @@ function brokenChain(row: MountPathRow, byId: Map<string, MountPathRow>): string
         : `reaches a parent (${top.parentId}) the table does not hold`;
 }
 
-// The rows no path builder can place: the capture leaves them out of an archive, verify refuses an archive with one.
-export function unreachableRows(rows: MountPathRow[]): MountPathRow[] {
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    return rows.filter((row) => brokenChain(row, byId) !== null);
+// Every path a restore builds is a join of id, name and file: a `..` or a separator in one moves bytes out of the
+// mount. The one separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly
+// trashPath's key.
+function unusableParts(row: MountPathRow): string[] {
+    const failures: string[] = [];
+    if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
+    if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
+    // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
+    const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
+    if (row.file !== '' && !trashKey && !isUsableName(row.file)) {
+        failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
+    }
+    return failures;
 }
 
-// An archived paths table arrived inside a file an admin uploaded, and every path a restore builds is a join of id,
-// name and file: a `..` or a separator in one moves bytes out of the mount, so the archive is refused whole. The one
-// separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly trashPath's key.
-// A tree that does not end at the root describes no archive.
+// The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
+// an archive, with what is inside them, and verify refuses an archive with one.
+export function unreachableRows(rows: MountPathRow[]): MountPathRow[] {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return rows.filter((row) => brokenChain(row, byId) !== null || unusableParts(row).length > 0);
+}
+
+// An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
+// archive whole, and so does a tree that does not end at the root.
 export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const failures: string[] = [];
     for (const row of rows) {
-        if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
-        if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
-        // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
-        const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
-        if (row.file !== '' && !trashKey && !isUsableName(row.file)) {
-            failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
-        }
+        failures.push(...unusableParts(row));
         const broken = brokenChain(row, byId);
         if (broken) failures.push(`path row ${row.id} ${broken}`);
     }
