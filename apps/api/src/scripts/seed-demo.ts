@@ -707,16 +707,18 @@ async function main(): Promise<void> {
     const boardCreatedAt = Date.now() - 14 * 86_400_000;
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
-            for (const [, entry] of board.doc.getMap<Y.Map<unknown>>(rootName)) {
+            for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
+                if (!(entry instanceof Y.Map)) continue;
                 const creator = entry.get('creator');
                 if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
                 // The baked createdAt is the day the fixture was authored — weeks before the replies.
                 entry.set('createdAt', boardCreatedAt);
             }
         }
-        const tasksMap = board.doc.getMap<Y.Map<unknown>>('tasks');
+        const tasksMap = getItemMapRoot(board.doc, 'tasks');
         for (const [i, spec] of KANBAN.cards.entries()) {
-            const task = tasksMap.get(`card-${i + 1}`)!;
+            const task = tasksMap.get(`card-${i + 1}`);
+            if (!(task instanceof Y.Map)) continue;
             task.set('color', DEFAULT_CARD_COLOR);
             task.set('chatName', cardChatNames.get(`card-${i + 1}`)!);
             task.set('createdAt', boardCreatedAt + (i + 1) * 86_400_000); // a card a day after the board
