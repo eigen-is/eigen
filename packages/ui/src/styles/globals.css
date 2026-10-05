@@ -648,8 +648,8 @@
         display: none;
     }
 
-    body *:not(.printable, .printable *) {
-        /* hide everything but printable elements and their children */
+    /* With a print clone on the page, print only the clone; without one, the browser prints the page as is. */
+    body:has(.printable) *:not(.printable, .printable *) {
         display: none;
     }
 
