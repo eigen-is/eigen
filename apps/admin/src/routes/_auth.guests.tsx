@@ -1,13 +1,10 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAdminGuests, useDeleteUser } from '@workspace/lib/admin';
-import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui';
+import { useAdminGuests } from '@workspace/lib/admin';
+import { Column, ColumnLayout, EmptyState, LoadingState, SearchBar } from '@workspace/ui';
+import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
-import {
-    AdminUserDetail,
-    AdminUserDetailToolbar,
-    AdminUserList,
-    AdminUserListToolbar,
-} from '../components/admin/admin-user-list';
+import { UserDetail, UserDetailToolbar } from '../components/admin/user-detail';
+import { AdminUsersTable } from '../components/admin/users-table';
 
 type GuestsSearch = { userId?: string };
 
@@ -22,51 +19,48 @@ function GuestsRoute() {
     const { userId } = Route.useSearch();
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
-    const { data: users = [], isLoading } = useAdminGuests();
-    const deleteUser = useDeleteUser();
+    const { data: guests = [], isLoading } = useAdminGuests();
 
-    const user = users.find((u) => u.id === userId);
+    const selected = guests.find((u) => u.id === userId);
 
-    const handleDelete = async () => {
-        if (!user) return;
-        await deleteUser.mutateAsync(user.id);
+    const handleBackToList = () => {
         navigate({ to: '/guests', search: {} });
     };
 
-    if (isLoading) return <LoadingState />;
+    if (isLoading) {
+        return <LoadingState />;
+    }
+
+    const listToolbar = (
+        <SearchBar
+            placeholder="Search guests..."
+            value={searchQuery}
+            onChange={setSearchQuery}
+            maxWidth="full"
+            inputClassName="h-8 bg-background"
+        />
+    );
+
+    const detailToolbar = selected ? <UserDetailToolbar user={selected} onClose={handleBackToList} guest /> : null;
 
     return (
         <ColumnLayout mobileColumn={userId ? 'detail' : 'list'}>
-            <Column
-                id="list"
-                width="350px"
-                onBack="sidebar"
-                toolbar={
-                    <AdminUserListToolbar
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                        placeholder="Search guests..."
-                    />
-                }
-            >
-                <div className="flex h-full flex-col border-r overflow-y-auto">
-                    <AdminUserList
-                        users={users}
+            <Column id="list" width={userId ? '350px' : 'flex'} onBack="sidebar" toolbar={listToolbar}>
+                <div className={cn('flex h-full flex-col overflow-y-auto', userId && 'border-r')}>
+                    <AdminUsersTable
+                        users={guests}
                         searchQuery={searchQuery}
                         activeUserId={userId}
                         onRowClick={(id) => navigate({ to: '/guests', search: { userId: id } })}
-                        emptyMessage="No guest users"
+                        guests
                     />
                 </div>
             </Column>
-            <Column
-                id="detail"
-                width="flex"
-                onBack={() => navigate({ to: '/guests', search: {} })}
-                toolbar={user ? <AdminUserDetailToolbar user={user} onDelete={handleDelete} /> : undefined}
-            >
-                {user ? <AdminUserDetail user={user} /> : <EmptyState message="Select a guest to view details" />}
-            </Column>
+            {userId && (
+                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
+                    {selected ? <UserDetail user={selected} guest /> : <EmptyState message="Guest not found" />}
+                </Column>
+            )}
         </ColumnLayout>
     );
 }

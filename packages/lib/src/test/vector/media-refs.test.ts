@@ -46,6 +46,7 @@ describe('eigen-media codec', () => {
         expect(parseEigenMediaHref('eigen-media:a%5Cb')).toBeNull(); // backslash
         expect(parseEigenMediaHref('eigen-media:a%00b')).toBeNull(); // NUL
         expect(parseEigenMediaHref('eigen-media:a%09b')).toBeNull(); // tab
+        expect(parseEigenMediaHref('eigen-media:a%7Fb')).toBeNull(); // DEL
     });
 
     test('parse returns null for non-refs, empty, and malformed encoding', () => {

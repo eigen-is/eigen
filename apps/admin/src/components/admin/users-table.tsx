@@ -100,16 +100,34 @@ const COL_VISIBILITY: Record<Exclude<SortCol, 'name'>, string> = {
     joined: 'hidden @[950px]:flex',
 };
 
+// A guest has no role, no teams and no storage of its own (GuestHome sizes to zero), so the guests page
+// keeps name, email and last active, on tracks that match those three.
+const guestGridCols = cn(
+    'grid-cols-[minmax(0,1fr)]',
+    '@[550px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)]',
+    '@[850px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1.5fr)_110px]',
+);
+const GUEST_COL_VISIBILITY: typeof COL_VISIBILITY = {
+    ...COL_VISIBILITY,
+    role: 'hidden',
+    disk: 'hidden',
+    teams: 'hidden',
+    joined: 'hidden',
+};
+
 type AdminUsersTableProps = {
     users: AdminUserRow[];
-    usage: Record<string, HomeSizeResponse> | undefined;
+    usage?: Record<string, HomeSizeResponse>;
     searchQuery: string;
     activeUserId?: string;
     onRowClick: (userId: string) => void;
+    guests?: boolean;
 };
 
-export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRowClick }: AdminUsersTableProps) {
+export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRowClick, guests }: AdminUsersTableProps) {
     const [sort, setSort] = useState<SortState>({ col: 'name', dir: 'asc' });
+    const grid = guests ? guestGridCols : gridCols;
+    const visibility = guests ? GUEST_COL_VISIBILITY : COL_VISIBILITY;
 
     const handleSort = (col: SortCol) => {
         setSort((prev) => ({ col, dir: nextSortDir(col, prev.col, prev.dir, DEFAULT_DIR).dir }));
@@ -151,14 +169,15 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
     const drag = useListDrag({ selection, getId: (u) => u.id, dragType: 'member' });
 
     if (visible.length === 0) {
-        return <EmptyState message={searchQuery ? 'No users match your search.' : 'No users found'} />;
+        const none = guests ? 'No guest users' : 'No users found';
+        return <EmptyState message={searchQuery ? 'No users match your search.' : none} />;
     }
 
     const dir = sort.dir;
 
     return (
         <div className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none">
-            <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
+            <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', grid)}>
                 <SortHeader
                     label="Name"
                     active={sort.col === 'name'}
@@ -171,42 +190,42 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                     active={sort.col === 'role'}
                     dir={dir}
                     onClick={() => handleSort('role')}
-                    className={cn('pr-2', COL_VISIBILITY.role)}
+                    className={cn('pr-2', visibility.role)}
                 />
                 <SortHeader
                     label="Email"
                     active={sort.col === 'email'}
                     dir={dir}
                     onClick={() => handleSort('email')}
-                    className={cn('pr-2', COL_VISIBILITY.email)}
+                    className={cn('pr-2', visibility.email)}
                 />
                 <SortHeader
                     label="Disk"
                     active={sort.col === 'disk'}
                     dir={dir}
                     onClick={() => handleSort('disk')}
-                    className={cn('pr-2', COL_VISIBILITY.disk)}
+                    className={cn('pr-2', visibility.disk)}
                 />
                 <SortHeader
                     label="Teams"
                     active={sort.col === 'teams'}
                     dir={dir}
                     onClick={() => handleSort('teams')}
-                    className={cn('pr-2', COL_VISIBILITY.teams)}
+                    className={cn('pr-2', visibility.teams)}
                 />
                 <SortHeader
                     label="Last active"
                     active={sort.col === 'lastActive'}
                     dir={dir}
                     onClick={() => handleSort('lastActive')}
-                    className={cn('pr-2', COL_VISIBILITY.lastActive)}
+                    className={cn('pr-2', visibility.lastActive)}
                 />
                 <SortHeader
                     label="Joined"
                     active={sort.col === 'joined'}
                     dir={dir}
                     onClick={() => handleSort('joined')}
-                    className={cn('pr-2', COL_VISIBILITY.joined)}
+                    className={cn('pr-2', visibility.joined)}
                 />
             </div>
 
@@ -228,7 +247,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                         {...(selectable ? drag.getDragProps(u) : undefined)}
                         className={cn(
                             'grid w-full app-gutter-x items-center text-left eigen-list-item',
-                            gridCols,
+                            grid,
                             activeUserId === u.id && 'eigen-list-item-active',
                             selectable && selection.isSelected(u.id) && 'eigen-list-item-selected',
                         )}
@@ -241,7 +260,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                             </div>
                         </div>
 
-                        <div className={cn('items-center pr-2', COL_VISIBILITY.role)}>
+                        <div className={cn('items-center pr-2', visibility.role)}>
                             {u.role ? (
                                 <Badge variant={roleBadgeVariant[u.role] ?? 'outline'} className="text-xs">
                                     {u.role}
@@ -253,23 +272,23 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                             )}
                         </div>
 
-                        <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.email)}>
+                        <div className={cn('min-w-0 items-center text-muted-foreground pr-2', visibility.email)}>
                             <span className="truncate">{u.email}</span>
                         </div>
 
-                        <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.disk)}>
+                        <div className={cn('items-center text-muted-foreground pr-2', visibility.disk)}>
                             {usage?.[u.id] ? formatFileSize(usage[u.id].total.used) : '—'}
                         </div>
 
-                        <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.teams)}>
+                        <div className={cn('min-w-0 items-center text-muted-foreground pr-2', visibility.teams)}>
                             <span className="truncate">{u.teams.length > 0 ? u.teams.join(', ') : '—'}</span>
                         </div>
 
-                        <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.lastActive)}>
+                        <div className={cn('items-center text-muted-foreground pr-2', visibility.lastActive)}>
                             {u.lastActiveAt ? formatTimeAgo(u.lastActiveAt) : '—'}
                         </div>
 
-                        <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.joined)}>
+                        <div className={cn('items-center text-muted-foreground pr-2', visibility.joined)}>
                             {formatDate(u.createdAt)}
                         </div>
                     </button>

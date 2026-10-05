@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, edit, delete]
 related: [contacts/add-a-contact]
 order: 30
-updated: 2026-09-13
+updated: 2026-10-05
 ---
 
 You can update any of a contact's details at any time, and delete contacts you no longer need.
@@ -22,9 +22,9 @@ You can update any of a contact's details at any time, and delete contacts you n
 
 To cancel without saving, click **Cancel**.
 
-If someone else changes the same contact while you have it open, your save is refused. A message tells you the
-contact changed elsewhere and has been reloaded, and the form reopens with the newer version, so you can make
-your change again on top of theirs.
+If the contact changes elsewhere while you have it open, for example on your phone, the form switches to the newer version as long as you haven't changed anything yet. If you have, a message at the top of the form says the contact changed elsewhere. Click **Reload** to see the newer version, which drops your edits.
+
+If you save anyway, your save is refused. A message tells you the contact changed elsewhere and has been reloaded, and the form reopens with the newer version, so you can make your change again on top of theirs.
 
 ### Add or remove a photo
 

@@ -52,8 +52,7 @@ export function normalizeParentChildRefs(
 
     const childToParents: Record<string, string[]> = {};
     for (const parentId of parentIds) {
-        const parent = parents.get(parentId);
-        const refs = parent && getIdArray(parent, childRefField);
+        const refs = getIdArray(parents.get(parentId), childRefField);
         if (!refs) continue; // tolerate a parent missing its ref array
         for (const childId of refs.toArray()) {
             if (!childToParents[childId]) childToParents[childId] = [];
@@ -69,8 +68,7 @@ export function normalizeParentChildRefs(
             if (owners.length <= 1) continue;
             owners.sort((a, b) => rank[a] - rank[b]);
             for (let i = 0; i < owners.length - 1; i++) {
-                const parent = parents.get(owners[i]);
-                const refs = parent && getIdArray(parent, childRefField);
+                const refs = getIdArray(parents.get(owners[i]), childRefField);
                 if (!refs) continue;
                 const idx = refs.toArray().indexOf(childId);
                 if (idx !== -1) refs.delete(idx, 1);
@@ -81,14 +79,11 @@ export function normalizeParentChildRefs(
         // strays. No ordered parents → fall back to map-key order (sequence[0]).
         const homeParentId = orderedParents.length > 0 ? orderedParents[0] : sequence[0];
         if (homeParentId !== undefined) {
-            const homeParent = parents.get(homeParentId);
-            if (homeParent) {
-                const homeRefs = getIdArray(homeParent, childRefField);
-                if (!homeRefs) return; // tolerate here too — a throw would escape into the observer
-                for (const childId of childIds) {
-                    if (!childToParents[childId] || childToParents[childId].length === 0) {
-                        homeRefs.push([childId]);
-                    }
+            const homeRefs = getIdArray(parents.get(homeParentId), childRefField);
+            if (!homeRefs) return; // tolerate here too — a throw would escape into the observer
+            for (const childId of childIds) {
+                if (!childToParents[childId] || childToParents[childId].length === 0) {
+                    homeRefs.push([childId]);
                 }
             }
         }

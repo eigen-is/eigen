@@ -121,8 +121,7 @@ export const useDragAndDrop = ({
                         attachments: source.attachments,
                     },
                     (card) => {
-                        const destColumn = columnsMap.get(destColumnId);
-                        const destTaskIds = destColumn && getIdArray(destColumn, 'taskIds');
+                        const destTaskIds = getIdArray(columnsMap.get(destColumnId), 'taskIds');
                         if (!destTaskIds) return;
                         const at = overIsColumn ? destTaskIds.length : destTaskIds.toArray().indexOf(overId);
                         destTaskIds.insert(at === -1 ? destTaskIds.length : at, [card.id]);
@@ -171,9 +170,9 @@ export const useDragAndDrop = ({
                 // Dropping on a column appends; dropping back onto the own column header is a no-op.
                 if (sourceColumnId && destColumnId && !(overIsColumn && destColumnId === sourceColumnId)) {
                     const sourceColumn = columnsMap.get(sourceColumnId);
-                    const sourceTaskIds = sourceColumn && getIdArray(sourceColumn, 'taskIds');
+                    const sourceTaskIds = getIdArray(sourceColumn, 'taskIds');
                     const destColumn = sourceColumnId === destColumnId ? sourceColumn : columnsMap.get(destColumnId);
-                    const destTaskIds = destColumn && getIdArray(destColumn, 'taskIds');
+                    const destTaskIds = getIdArray(destColumn, 'taskIds');
                     if (sourceTaskIds && destTaskIds) {
                         const sourceIndex = sourceTaskIds.toArray().indexOf(activeId);
                         const destIndex = overIsColumn ? destTaskIds.length : destTaskIds.toArray().indexOf(overId);

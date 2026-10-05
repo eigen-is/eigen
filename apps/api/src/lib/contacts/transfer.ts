@@ -129,7 +129,11 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
             let put: PutResourceResult;
             try {
-                put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
+                put = await contacts.putCard(`${randomUUID()}.vcf`, body, {
+                    ifMatch: null,
+                    ifNoneMatch: '*',
+                    import: true,
+                });
             } catch {
                 // One card's write failing is that card's failure; a retry finishes the file.
                 result.failed++;

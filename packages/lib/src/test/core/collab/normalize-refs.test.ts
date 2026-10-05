@@ -81,6 +81,14 @@ describe('normalizeParentChildRefs', () => {
         expect(() => normalizeParentChildRefs(doc, 'parents', 'children', 'refs', 'order')).not.toThrow();
     });
 
+    test('tolerates a scalar parent entry from a peer and still repairs the others', () => {
+        const doc = makeDoc({ p1: ['c1'], p2: ['c1'] }, ['c1', 'orphan'], ['p1', 'p2']);
+        doc.getMap('parents').set('p0', 'not a map');
+        expect(() => normalizeParentChildRefs(doc, 'parents', 'children', 'refs', 'order')).not.toThrow();
+        expect(refsOf(doc, 'p1')).toEqual(['orphan']);
+        expect(refsOf(doc, 'p2')).toEqual(['c1']);
+    });
+
     test('is idempotent — a well-formed doc is left untouched', () => {
         const doc = makeDoc({ p1: ['c1'], p2: ['c2'] }, ['c1', 'c2']);
         const before = Y.encodeStateAsUpdate(doc);

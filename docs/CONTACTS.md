@@ -56,7 +56,7 @@ Metering switches on at the very end of init. The quota lookup opens the Home, a
 
 ## Import replays each card through the CardDAV PUT
 
-`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted.
+`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted. An imported card never claims the self-link, because nobody inspects an imported card one by one (`import: true` on `putCard`).
 
 The file is decoded as strict UTF-8, because a lenient decode would store replacement characters in every accented name and serve them to devices. Both import routes lift the server idle timeout, since a whole book answers nothing until its last card lands.
 
@@ -66,7 +66,7 @@ Export reads one row at a time, since the whole book's bytes in one query would 
 
 ## The web app writes with the etag it loaded
 
-A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes.
+A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes. The edit form (`contact-edit.tsx`) re-seeds from a sync only while it is clean. With unsaved edits it keeps them and asks "changed elsewhere, reload?", as Drive's editor does. After a 412 it re-seeds anyway, because the toast has said the card was reloaded (`isStaleWrite`).
 
 A REST field bound is never tighter than what a CardDAV PUT may store (`routes/contacts.ts`). A tighter bound would make a card a device stored uneditable in the web app.
 

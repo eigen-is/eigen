@@ -20,16 +20,18 @@ import { ResetPasswordDialog } from './reset-password-dialog';
 type UserDetailToolbarProps = {
     user: AdminUserRow;
     onClose: () => void;
+    // A guest signs in with an emailed code, so there is no password to reset.
+    guest?: boolean;
 };
 
-export function UserDetailToolbar({ user, onClose }: UserDetailToolbarProps) {
+export function UserDetailToolbar({ user, onClose, guest }: UserDetailToolbarProps) {
     const { isMobile } = useLayout();
     const { user: me } = useAuth();
     const [showResetPassword, setShowResetPassword] = useState(false);
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            {(user.role !== 'owner' || user.id === me?.id) && (
+            {!guest && (user.role !== 'owner' || user.id === me?.id) && (
                 <>
                     <TooltipButton
                         icon={KeyRound}
@@ -53,9 +55,11 @@ type UserDetailProps = {
     user: AdminUserRow;
     usage?: HomeSizeResponse;
     organizationId?: string;
+    // A guest has no role, teams, storage or backup: it only reaches what others shared with it.
+    guest?: boolean;
 };
 
-export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
+export function UserDetail({ user, usage, organizationId, guest }: UserDetailProps) {
     const [draftRole, setDraftRole] = useState(user.role);
     const updateRole = useUpdateMemberRole(organizationId);
     const deleteUser = useDeleteUser(organizationId);
@@ -80,7 +84,7 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
 
     const handleDelete = async () => {
         await deleteUser.mutateAsync(user.id);
-        navigate({ to: '/users', search: {} });
+        navigate({ to: guest ? '/guests' : '/users', search: {} });
     };
 
     return (
@@ -88,35 +92,39 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
             <UserDetailHero name={user.name} email={user.email} userId={user.id} subtitle={user.email} />
 
             <div className="space-y-4">
-                <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Role</h3>
-                    {user.role === null ? (
-                        <p className="text-sm text-muted-foreground">
-                            No organization — this user is not a member of the organization
-                        </p>
-                    ) : user.role === 'owner' ? (
-                        <Badge variant="default">owner</Badge>
-                    ) : (
-                        <Select
-                            value={draftRole ?? undefined}
-                            // The two items below are the whole of what this can hand back.
-                            onValueChange={(value) => setDraftRole(value === 'admin' ? 'admin' : 'member')}
-                        >
-                            <SelectTrigger className="w-40">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="member">Member</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    )}
-                </div>
+                {!guest && (
+                    <>
+                        <div>
+                            <h3 className="text-sm font-medium text-muted-foreground mb-2">Role</h3>
+                            {user.role === null ? (
+                                <p className="text-sm text-muted-foreground">
+                                    No organization — this user is not a member of the organization
+                                </p>
+                            ) : user.role === 'owner' ? (
+                                <Badge variant="default">owner</Badge>
+                            ) : (
+                                <Select
+                                    value={draftRole ?? undefined}
+                                    // The two items below are the whole of what this can hand back.
+                                    onValueChange={(value) => setDraftRole(value === 'admin' ? 'admin' : 'member')}
+                                >
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                        <SelectItem value="member">Member</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
 
-                <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Teams</h3>
-                    <p className="text-sm">{user.teams.length > 0 ? user.teams.join(', ') : '—'}</p>
-                </div>
+                        <div>
+                            <h3 className="text-sm font-medium text-muted-foreground mb-2">Teams</h3>
+                            <p className="text-sm">{user.teams.length > 0 ? user.teams.join(', ') : '—'}</p>
+                        </div>
+                    </>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -129,10 +137,12 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                     </div>
                 </div>
 
-                <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Storage</h3>
-                    {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
-                </div>
+                {!guest && (
+                    <div>
+                        <h3 className="text-sm font-medium text-muted-foreground mb-2">Storage</h3>
+                        {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
+                    </div>
+                )}
             </div>
 
             {hasChanges && (
@@ -147,9 +157,12 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
             )}
 
             {/* DangerZone below brings its own top rule, so this section needs only a leading one. */}
-            <Separator />
-
-            <BackupSection ownerId={user.id} />
+            {!guest && (
+                <>
+                    <Separator />
+                    <BackupSection ownerId={user.id} />
+                </>
+            )}
 
             {user.role !== 'owner' && (
                 <DangerZone

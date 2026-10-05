@@ -31,7 +31,7 @@ What a reader tolerates is the contract:
 - A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). `title` and `description` default to '', and the description is sanitized. `color`, `chatName`, `creator`, `createdAt` and `attachments` are optional, and a value of the wrong type reads as absent. An `attachments` list keeps only its string and object elements.
 - A column is read by `readColumns` (`hooks/use-board.ts`). A `title` or `creator` that is missing or not a string reads as '', a `createdAt` that is not a number as 0, and a missing `taskIds` as an empty list. The add-card dialog creates the list before it inserts.
 - A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
-- Every entry of `tasks` and `columns` is written as a map. Both readers skip an entry that is not one, so a peer's scalar entry drops out instead of breaking the board. The ref repair (`normalizeParentChildRefs`) still reads every `columns` entry as a map, so a scalar column throws when the board syncs.
+- Every entry of `tasks` and `columns` is written as a map. Both readers and the ref repair (`normalizeParentChildRefs`) skip an entry that is not one, so a peer's scalar entry drops out instead of breaking the board.
 
 ## A card is a shared CommentCard
 
