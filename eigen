@@ -573,11 +573,11 @@ stop() {
 # Backups run nightly, so one still running after a day is not: its end was never written, as on a full disk.
 BACKUP_STALE_MINUTES=1440
 
-# running_records <find test…>: the records in backups/ that say running, of those the test picks. A record is written
-# at the start and at the end only, so while it says running its mtime is its startedAt. An upload's own state is
-# nested deeper.
+# running_records <find test…>: the records in backups/ whose backup or upload says running, of those the test picks.
+# A record is written when either starts and when it ends only, so while one says running the mtime is its start. The
+# upload's state is the one nested a level deeper.
 running_records() {
-    find backups -maxdepth 1 -name 'server-*.json' "$@" -exec grep -l '^  "state": "running"' {} + 2>/dev/null || :
+    find backups -maxdepth 1 -name 'server-*.json' "$@" -exec grep -lE '^  (  )?"state": "running"' {} + 2>/dev/null || :
 }
 
 # The server backup that runs, by the record it keeps in backups/ until it ends. The boot marks the record of one a stop
@@ -586,8 +586,8 @@ running_backup() { running_records ! -mmin +"$BACKUP_STALE_MINUTES" | head -n 1;
 
 wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
 
-# before_stop: a stop, and a restart that stops eigen-api, waits for the server backup that runs, which the stop would
-# kill, and the night it was would have no backup. A restore and an update wait before they arm the restart, and stop
+# before_stop: a stop, and a restart that stops eigen-api, waits for the server backup that runs, or its upload, which the
+# stop would kill: the night it was would have no backup, or none in the bucket. A restore and an update wait before they arm the restart, and stop
 # looks again. A stale record is named and passed. An interrupt here leaves Eigen running as it was.
 before_stop() {
     if ! api_running; then return 0; fi

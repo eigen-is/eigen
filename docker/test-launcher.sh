@@ -611,6 +611,18 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: stop during a server backup: exit $CODE, '$OUT'"
     fi
+    # The upload that follows a backup runs in the API too, and a stop cuts it off before the bucket has the archive.
+    mkdir -p "$FIX/local/backups"
+    printf '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}\n' >"$record"
+    (sleep 3; rm -f "$record") &
+    launch local stop
+    wait
+    rm -r "$FIX/local/backups"
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ]; then
+        ok "$SHELL_NAME: stop waits for the upload of a server backup to end"
+    else
+        fail "$SHELL_NAME: stop during the upload of a server backup: exit $CODE, '$OUT'"
+    fi
 
     mkdir -p "$FIX/release/backups" "$FIX/release/.eigen" "$FIX/channel/.eigen"
     : >"$FIX/release/backups/server-manual-full-20260101-000000.tar"
@@ -832,11 +844,10 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
-    # The stop would kill a server backup that runs, so it waits for its record to end; an upload's state is no backup.
+    # The stop would kill a server backup that runs, so it waits for its record to end.
     mkdir -p "$FIX/local/backups"
     record="$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json"
     printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
-    printf '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}\n' >"$FIX/local/backups/server-manual-full-20260101-010000.tar.json"
     (sleep 3; rm -f "$record") &
     launch local restore "$ARCHIVE" --yes
     wait
