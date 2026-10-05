@@ -137,8 +137,8 @@ function archivedRow(folder: string, id: string) {
     const db = new Database(join(folder, 'home/mounts', M, 'metadata.db'), { readonly: true });
     try {
         return db
-            .query<{ name: string; size: number | null; hash: string | null }, [string]>(
-                'SELECT name, size, hash FROM paths WHERE id = ?',
+            .query<{ name: string; size: number | null; hash: string | null; contentDirty: number }, [string]>(
+                'SELECT name, size, hash, contentDirty FROM paths WHERE id = ?',
             )
             .get(id);
     } finally {
@@ -174,29 +174,43 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         const user = await raceUser('local-fullnames');
         const { single } = await seed(user);
         const mount = await defaultMount(user);
+        // Indexed with its old bytes when the database is copied.
+        mount.markContentIndexed(single.id);
         const overwritten = Buffer.from('single, overwritten');
         const { folder } = await captureDuring(user, () => mount.writeFile(single.id, overwritten));
         expect(readFileSync(join(folder, 'home/mounts', M, 'data/zz-single.txt'))).toEqual(overwritten);
         expect(archivedRow(folder, single.id)).toMatchObject({
             size: overwritten.byteLength,
             hash: new Bun.CryptoHasher('sha256').update(overwritten).digest('hex'),
+            contentDirty: 1,
         });
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('an archive whose file row does not describe its bytes fails verify', async () => {
+    test('an archive whose file row does not describe its bytes verifies with a warning, as older archives do', async () => {
         const user = await raceUser('local-fullnames');
         const { single } = await seed(user);
-        const { folder } = await snapshotInto(await getHome(user.id), 'full');
-        const db = new Database(join(folder, 'home/mounts', M, 'metadata.db'));
+        const { manifest, folder } = await snapshotInto(await getHome(user.id), 'full');
+        const metadataPath = join(folder, 'home/mounts', M, 'metadata.db');
+        const db = new Database(metadataPath);
         try {
             db.run('UPDATE paths SET size = 1 WHERE id = ?', [single.id]);
         } finally {
             db.close();
         }
-        const verified = await verifyFolder(folder);
-        expect(verified.status).toBe('failed');
-        expect(verified.failures).toContain(`home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`);
+        // Restated, so the transport stage passes and the row is all verify has to judge.
+        const metadata = readFileSync(metadataPath);
+        const entry = findOrFail(manifest.entries, (candidate) => candidate.path === `home/mounts/${M}/metadata.db`);
+        entry.bytes = metadata.byteLength;
+        entry.sha256 = new Bun.CryptoHasher('sha256').update(metadata).digest('hex');
+        writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+        const warn = spyOn(console, 'warn');
+        try {
+            expect((await verifyFolder(folder)).status).toBe('verified');
+            expect(warn).toHaveBeenCalledWith(`[backup] home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`);
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     test('a file trashed during the capture', async () => {

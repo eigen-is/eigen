@@ -108,6 +108,7 @@ function listArchiveDatabases(
                 for (const failure of checkArchivedPathRows(rows)) fail(`${relMetadata}: ${failure}`);
                 // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the
                 // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
+                // A warning, not a failure: an archive written before captures rewrote the row must still restore.
                 const byId = new Map(rows.map((row) => [row.id, row]));
                 const recorded = db
                     .query<{ id: string; size: number | null; hash: string | null }, []>(
@@ -121,8 +122,11 @@ function listArchiveDatabases(
                         archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row, byId)}`),
                     );
                     if (!file) continue;
-                    if (size !== file.bytes) fail(`${file.path}: ${file.bytes} bytes, its row says ${size}`);
-                    else if (hash !== null && hash !== file.sha256) fail(`${file.path}: sha256 does not match its row`);
+                    if (size !== file.bytes) {
+                        console.warn(`[backup] ${file.path}: ${file.bytes} bytes, its row says ${size}`);
+                    } else if (hash !== null && hash !== file.sha256) {
+                        console.warn(`[backup] ${file.path}: sha256 does not match its row`);
+                    }
                 }
                 for (const managed of listManagedDatabases(rows)) {
                     const relDatabase = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);

@@ -200,8 +200,7 @@ export async function snapshotHome(
         await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
         // Before the walk, which reads its rows from the copy, so nothing below meets a row it cannot place. Kept
         // apart until the mount is whole: a disabled mount that fails later is skipped, warnings and all.
-        const pruned = pruneUnreachableRows(config.id, stagedPath(relMetadata));
-        const mountWarnings = pruned ? [pruned] : [];
+        const mountWarnings = pruneUnreachableRows(config.id, stagedPath(relMetadata));
         const mountEntries: BackupEntry[] = [];
         if (mount) {
             const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);

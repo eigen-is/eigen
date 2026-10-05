@@ -58,7 +58,7 @@ A mount's capture copies its `metadata.db` first, and every row in the archive c
 | A file is renamed, moved or trashed | Holds it, at the path its archived row gives |
 | A file is created after its drive's database was copied | Does not hold it |
 | A file or a version is deleted for good | Holds neither its row nor its bytes, since the archive lists no file it holds no bytes for. A folder above it that was deleted with it goes too, unless it holds something the archive took, which then comes back in it |
-| A file is overwritten before the backup reads it | Holds the new content, with the size and date of the old row until the next save |
+| A file is overwritten before the backup reads it | Holds the new content, and its row gives the new size, hash and date. A restored home rebuilds its search text from those bytes |
 | An upload over a file is in flight when the backup reaches it | Holds the whole new file: the backup waits for the upload |
 | A document is edited | Holds its database as it was at its own copy, one committed state that verify checks |
 | An image is added to a document after the database copy | Holds the reference without the image |
@@ -80,7 +80,7 @@ A backup of a home with a few holes is better than none, so a lost file or a row
 | A file whose row records bytes and whose object is gone | Keeps the row without bytes and names the file in a warning. A restore mirrors the absence | The live home cannot serve it either |
 | A mount with a lost file and no file whose bytes were read from storage | Fails, "storage unreachable" | An empty store is an outage, not a store with holes: an unmounted disk or a folder the API cannot read answers every lookup as missing, and so does a renamed bucket or a wrong prefix, since a HEAD answers it as a missing key. Bytes copied from an open document, a crash temp or an upload still in `staging/` are not read from the store, so they do not count. A mount whose only file is lost fails too |
 | A row whose parent chain ends at a missing row or in a cycle | Deletes it from the archive's copy of `metadata.db` before the walk, as a live delete would, and names it in a warning. Its bytes and thumbnail stay out; the live table is not touched | No path is its own. Only a salvaged database or a hand edit with foreign keys off makes one |
-| A row whose id, name or file holds a control character or a separator (`isUsableName` in `apps/api/src/lib/mount/names.ts`) | The same, and a folder's contents go with it | No path can hold it. Only a hand edit, or a name written before the rule, makes one |
+| A row whose id, name or file holds a control character or a separator (`isUsableName` in `apps/api/src/lib/mount/names.ts`) | The same, and a folder's contents go with it. Its warning is a kind of its own and counts what went with a folder | No path can hold it. Only a hand edit, or a name written before the rule, makes one |
 | A `metadata.db` whose root row is gone | Fails | Nothing in it can be placed |
 | A file with no bytes on record | Keeps its row | There is nothing to take |
 
@@ -125,7 +125,7 @@ A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-
 Every home archive is verified after the backup that wrote it, on **Verify**, and again before every restore:
 
 1. Transport: every file the manifest lists has exactly its size and sha256, and the folder holds nothing it does not list.
-2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open.
+2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open. A plain file whose row gives another size or sha256 than the manifest is a warning in the log, not a failure: an archive written before the capture rewrote such a row must still restore.
 3. Content: for the ten largest collab documents plus ten more, a sample that is the same on every run, every Yjs blob decodes and a document with blobs decodes to shared types. Chat containers are skipped, since their `data.db` is not Yjs.
 
 The verdict goes into the sidecar, which the admin pane's list reads. The manifest inside the archive is canonical; the sidecar is a cache.
@@ -193,7 +193,7 @@ A home archive is a POSIX tar (pax headers for long names, empty folders include
 
 Before a per-home restore moves the home aside, it writes `restoring.json` in its staging folder, and `restore-complete.json` beside it once the install is whole. The next boot (`apps/api/src/lib/backup/recovery.ts`) reads them before the staging wipe:
 
-- Marker without the completion note: the process died in the install. The folder at the home's path goes aside under the name the marker gives, and the pre-restore copy goes back. For a restore from an archive that name is `<id>.failed-restore-<date>-<time>`, since the folder is half written. **Restore this copy** renames the copy into place before its checks, so there the folder is the pristine copy, and it goes back under its own name: a `.failed-restore-` name would leave it nothing but **Delete safety copy**. This is the window an OOM kill lands in. It is long whenever the install copies instead of renaming (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`, which falls back to a copy on `EXDEV` without blocking other requests): always on Docker, where `data/` and `backups/` are two bind mounts and a rename between them fails, and wherever the backups folder is on another disk.
+- Marker without the completion note: the process died in the install. The folder at the home's path goes aside under the name the marker gives, and the pre-restore copy goes back. For a restore from an archive that name is `<id>.failed-restore-<date>-<time>`, since the folder is half written. **Restore this copy** renames the copy into place before its checks, so there the folder is the pristine copy, and it goes back under its own name: a `.failed-restore-` name would leave it nothing but **Delete safety copy**. A marker an older version wrote names no such name, and its folder takes a `.failed-restore-` one, as that version gave it. This is the window an OOM kill lands in. It is long whenever the install copies instead of renaming (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`, which falls back to a copy on `EXDEV` without blocking other requests): always on Docker, where `data/` and `backups/` are two bind mounts and a rename between them fails, and wherever the backups folder is on another disk.
 - Both notes: the restore finished, and both folders stay.
 
 A marker lost to a torn write does nothing, and the home sits complete in its pre-restore copy, to rename back by hand.
@@ -267,7 +267,7 @@ Every failure of a server backup or its upload sends an `admin-alert` to `getOrg
 
 ## Upload goes to a bucket of its own
 
-A verified scheduled or manual archive goes to the backup bucket as an upload job of its own, which holds no home slot, so a backup never waits for the bucket and a pre-update backup never waits for an upload. Uploads take turns. **Upload to the bucket** on an archive's row in Settings sends one again. Pre-update archives never leave the server: they exist for `./eigen rollback` on it.
+A verified scheduled or manual archive goes to the backup bucket as an upload job of its own, which holds no home slot, so a backup never waits for the bucket and a pre-update backup never waits for an upload. Uploads take turns. `./eigen stop` waits while an archive's record says its backup or its upload runs, so the record the backup ends with already says the upload runs: a stop finds no moment between the two. **Upload to the bucket** on an archive's row in Settings sends one again. Pre-update archives never leave the server: they exist for `./eigen rollback` on it.
 
 `apps/api/src/lib/backup/upload.ts` streams the file as a multipart upload, reads the object's size back, and deletes an object that came out short. A failed or aborted upload makes Bun abort the multipart upload. Archives go under `<prefix>/<domain>/`, with the domain from `DOMAIN`, so two servers can share a bucket and each prunes only its own folder. Two servers of one domain share a folder and prune each other's archives by the shared count. A server restored from another's archive is one: it brings `.env.production` and `settings.json`, so the same domain, schedule and bucket ([Try a restore without moving](https://eigen.is/support/self-hosting/back-up-and-restore#try-a-restore-without-moving)).
 

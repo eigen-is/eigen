@@ -233,15 +233,16 @@ async function runServerBackup(
         throw error;
     } finally {
         sidecar.finishedAt = new Date();
+        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
+        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box.
+        const { enabled, s3 } = getServerSettings().backups.upload;
+        const uploads = enabled && options.reason !== 'pre-update' && sidecar.verify?.status === 'verified';
+        // Running in the record the backup ends with, so ./eigen stop finds no moment where neither runs.
+        if (uploads) sidecar.upload = { state: 'running', at: new Date(), key: backupKey(s3, name) };
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives().catch(console.error);
-        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
-        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box.
-        const uploads = getServerSettings().backups.upload.enabled && options.reason !== 'pre-update';
-        if (uploads && sidecar.verify?.status === 'verified') {
-            job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
-        }
+        if (uploads) job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
     }
     return name;
 }

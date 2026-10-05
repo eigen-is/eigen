@@ -113,6 +113,7 @@ main channel instead of releases.
 EOF
             ;;
         rollback)
+            kept=$(pre_update_archives | sed 's/^/  /')
             cat <<EOF
 Usage: ./eigen rollback [--yes]
 
@@ -121,6 +122,9 @@ a light one, the accounts, settings and databases are as they were then, and mai
 Files and documents made since drop out of Drive, though they stay on disk; files renamed, moved
 or trashed since are listed where they were and, on drives that store files by their names, do
 not open. The current data is kept aside.
+
+To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:
+${kept:-  none}
 
   --yes   Do not ask
 EOF
@@ -1212,6 +1216,25 @@ update_apply() {
     fi
 }
 
+# pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
+pre_update_archives() {
+    for archive in backups/server-pre-update-*.tar; do
+        if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
+    done | sort -t- -k5r
+}
+
+# no_rollback <what went wrong> <what to do next>: a rollback's refusal, which points at the backups earlier updates
+# made when there are any, since ./eigen restore puts one of them back.
+no_rollback() {
+    kept=$(pre_update_archives)
+    if [ -z "$kept" ]; then die "$1" "$2"; fi
+    say "$RED" '■' "$1" >&2
+    say "$GRAY" '│' "The backups earlier updates made:" >&2
+    printf '%s\n' "$kept" | while IFS= read -r archive; do say "$GRAY" '│' "  $archive" >&2; done
+    say "$GRAY" '└' "./eigen restore <file> puts one of them back." >&2
+    exit 1
+}
+
 # The pre-update backup brings back the data and .env.production, staged while Eigen runs, then the images it pins
 # and their bundle files.
 rollback() {
@@ -1231,11 +1254,11 @@ rollback() {
     # First: a swap that was cut off, finished here, clears .eigen/last-update.
     preflight
     if [ ! -f .eigen/last-update ]; then
-        die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
+        no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
     if [ ! -f "backups/$archive" ]; then
-        die "The backup the last update made, backups/$archive, is gone." \
+        no_rollback "The backup the last update made, backups/$archive, is gone." \
             "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
     fi
     lock

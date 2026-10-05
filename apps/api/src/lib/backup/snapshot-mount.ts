@@ -65,28 +65,36 @@ function warningOf(mountId: string, what: string, names: string[]): string {
     return `mount ${mountId}: ${what}: ${names.slice(0, WARNING_NAMES).join(', ')}${more}`;
 }
 
-// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle. No path is
-// theirs, so the archive's copy drops them before anything reads it, as a live delete would, and the backup goes on
-// with a warning. A table whose root row is gone holds nothing that can be placed. The live table is never touched.
-export function pruneUnreachableRows(mountId: string, metadataPath: string): string | null {
+// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle, and a hand edit
+// or an older name rule rows whose name no path can hold. No path is theirs, so the archive's copy drops them before
+// anything reads it, as a live delete would, and the backup goes on with a warning per kind. A table whose root row is
+// gone holds nothing that can be placed. The live table is never touched.
+export function pruneUnreachableRows(mountId: string, metadataPath: string): string[] {
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {
         const rows = readMountPathRows(db);
-        const unreachable = unreachableRows(rows);
-        if (unreachable.length === 0) return null;
-        if (unreachable.length === rows.length) throw new Error(`mount ${mountId}: the table has no root row`);
+        const { orphaned, unusable } = unreachableRows(rows);
+        const dropped = [...orphaned, ...unusable].map((row) => row.id);
+        if (dropped.length === 0) return [];
+        if (dropped.length === rows.length) throw new Error(`mount ${mountId}: the table has no root row`);
         db.run('PRAGMA foreign_keys = ON');
-        db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [
-            JSON.stringify(unreachable.map((row) => row.id)),
-        ]);
-        console.warn(
-            `[backup] mount ${mountId}: left out unreachable rows ${unreachable.map((row) => row.id).join(', ')}`,
-        );
-        return warningOf(
-            mountId,
-            "entries that do not reach the drive's root, left out",
-            unreachable.map((row) => row.name),
-        );
+        db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(dropped)]);
+        // A dropped folder takes its contents with it through the foreign key, and no list names them. Counted, not
+        // read from the delete's changes: the triggers that clear search rows count there too.
+        const left = db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM paths').get()?.count ?? 0;
+        const inside = rows.length - dropped.length - left;
+        console.warn(`[backup] mount ${mountId}: left out rows ${dropped.join(', ')} and ${inside} more inside them`);
+        const warnings: string[] = [];
+        if (orphaned.length > 0) {
+            const names = orphaned.map((row) => row.name);
+            warnings.push(warningOf(mountId, "entries that do not reach the drive's root, left out", names));
+        }
+        if (unusable.length > 0) {
+            const names = unusable.map((row) => row.name);
+            const more = inside > 0 ? ` with ${inside} more inside them` : '';
+            warnings.push(warningOf(mountId, `entries with a name no path can hold, left out${more}`, names));
+        }
+        return warnings;
     } finally {
         db.close();
     }
@@ -228,9 +236,9 @@ export async function snapshotMountData(
         db.run('PRAGMA foreign_keys = ON');
         db.transaction(() => {
             // A file overwritten between the database copy and its read: its row takes the size, hash and date of
-            // the bytes the archive holds, as the overwrite gave the live one.
+            // the bytes the archive holds, as the overwrite gave the live one, and its search text is rebuilt from them.
             const rewrite = db.prepare<unknown, [number, string, number, string]>(
-                'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3 WHERE id = ?4 AND (size IS NOT ?1 OR hash IS NOT ?2)',
+                'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3, contentDirty = 1 WHERE id = ?4 AND (size IS NOT ?1 OR hash IS NOT ?2)',
             );
             for (const { id, captured, updatedAt } of files) {
                 const seconds = Math.floor(updatedAt.getTime() / 1000);

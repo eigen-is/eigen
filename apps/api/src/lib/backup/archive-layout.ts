@@ -181,9 +181,15 @@ function unusableParts(row: MountPathRow): string[] {
 
 // The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
 // an archive, with what is inside them, and verify refuses an archive with one.
-export function unreachableRows(rows: MountPathRow[]): MountPathRow[] {
+export function unreachableRows(rows: MountPathRow[]): { orphaned: MountPathRow[]; unusable: MountPathRow[] } {
     const byId = new Map(rows.map((row) => [row.id, row]));
-    return rows.filter((row) => brokenChain(row, byId) !== null || unusableParts(row).length > 0);
+    const orphaned: MountPathRow[] = [];
+    const unusable: MountPathRow[] = [];
+    for (const row of rows) {
+        if (unusableParts(row).length > 0) unusable.push(row);
+        else if (brokenChain(row, byId) !== null) orphaned.push(row);
+    }
+    return { orphaned, unusable };
 }
 
 // An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
