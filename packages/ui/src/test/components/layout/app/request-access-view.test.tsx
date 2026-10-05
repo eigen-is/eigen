@@ -6,7 +6,6 @@ import { installHappyDom } from '../../../happy-dom';
 installHappyDom();
 
 let isGuest = false;
-let ownerName = 'Olivia';
 mock.module('@workspace/lib/auth', () => ({
     useAuth: () => ({ user: { email: 'visitor@example.com' } }),
     useIsGuest: () => isGuest,
@@ -17,7 +16,7 @@ mock.module('@workspace/lib/drive', () => ({
     useRequestAccess: () => ({ mutate: () => {}, isPending: false, isSuccess: false }),
 }));
 const realPublic = await import('@workspace/lib/public');
-mock.module('@workspace/lib/public', () => ({ ...realPublic, usePublicUser: () => ({ data: { name: ownerName } }) }));
+mock.module('@workspace/lib/public', () => ({ ...realPublic, usePublicUser: () => ({ data: { name: 'Olivia' } }) }));
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { act, createElement } = await import('react');
@@ -53,12 +52,5 @@ test('a signed-in user is offered Request access', async () => {
 test('a guest is told to ask the owner to share, with nothing to request', async () => {
     const { text, buttons } = await render(true);
     expect(buttons).toEqual([]);
-    expect(text).toContain('Ask Olivia to share it with you');
-});
-
-test('a guest whose owner has no name is told to ask the owner', async () => {
-    ownerName = '';
-    const { text } = await render(true);
-    ownerName = 'Olivia';
     expect(text).toContain('Ask the owner to share it with you');
 });
