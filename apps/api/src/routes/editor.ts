@@ -34,7 +34,7 @@ export const editorRouter = new Elysia({ name: 'editor' })
             );
             if (result.conflict) return { conflict: true, currentUpdatedAt: result.currentUpdatedAt };
             // Quota pre-check at the route boundary, where the Buffer length is known (mirrors WebDAV PUT).
-            await enforceMountQuota(params.ownerId, user.id, params.mountId, result.data.length, path.size);
+            await enforceMountQuota(params.ownerId, params.mountId, result.data.length, path.size);
             const updated = await drive.writeFileContent(params.mountId, params.pathId, result.data, user);
             return { conflict: false, updatedAt: updated.updatedAt };
         },

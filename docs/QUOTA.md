@@ -28,7 +28,7 @@ Nothing is cached, so every upload resolves again. The overrides come through `p
 
 ## A mount's cap takes its owner's overrides
 
-`getMountQuotaState(ownerId, userId, mountId)` reads the mount and the team overrides from the owner, as `getHomeDataQuotaState` does for home data. So a mount has one cap, whoever uploads into it and whoever reads WebDAV's quota properties. A user writing into a folder another user shared with them meets the owner's cap, lifted by the owner's teams and never by their own. A team is in no teams, so a team mount's cap is its own `maxSizeMB`, and a member's override never lifts it.
+`getMountQuotaState(ownerId, mountId)` reads the mount and the team overrides from the owner, as `getHomeDataQuotaState` does for home data. So a mount has one cap, whoever uploads into it and whoever reads WebDAV's quota properties. A user writing into a folder another user shared with them meets the owner's cap, lifted by the owner's teams and never by their own. A team is in no teams, so a team mount's cap is its own `maxSizeMB`, and a member's override never lifts it.
 
 ## A mount keeps what it was stamped with
 
@@ -46,7 +46,7 @@ Every other route that brings a whole file into a mount takes the same number an
 
 ## A write that knows its size is checked on the projection
 
-`enforceMountQuota(ownerId, userId, mountId, addBytes, creditExisting)` throws 507 when `used + addBytes - creditExisting > max`. `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. The editor save and WebDAV `PUT` use it. WebDAV only checks when the client sends `Content-Length` ([WEBDAV.md](WEBDAV.md)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
+`getMountRoom(ownerId, mountId, creditExisting)` is what a write may add: `max - used + creditExisting`, where `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. `enforceMountQuota(ownerId, mountId, addBytes, creditExisting)` throws 507 when `addBytes` is more than that, for the editor save. WebDAV `PUT` takes the room itself, because it checks a `Content-Length` against it and counts a chunked body against it as it streams ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
 
 A team avatar calls the bare `enforceMaxUploadSize` (`apps/api/src/routes/team.ts`), because a team logo must not consume the uploading admin's own home-data budget.
 

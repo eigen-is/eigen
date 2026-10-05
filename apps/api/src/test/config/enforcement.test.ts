@@ -51,17 +51,15 @@ describe('a mount cap takes the team overrides of the mount owner', () => {
     });
 
     test("a writer's teams do not lift the owner's mount", async () => {
-        const ownCap = (await getMountQuotaState(ctx.alice.user.id, ctx.alice.user.id, mountId)).max;
+        const ownCap = (await getMountQuotaState(ctx.alice.user.id, mountId)).max;
         await createTeam('Writer Override Team', ctx.bob.user.id, 5000);
 
-        const asBob = await getMountQuotaState(ctx.alice.user.id, ctx.bob.user.id, mountId);
-        expect(asBob.max).toBe(ownCap);
+        expect((await getMountQuotaState(ctx.alice.user.id, mountId)).max).toBe(ownCap);
     });
 
-    test("the owner's teams lift the mount whoever writes", async () => {
+    test("the owner's teams lift the mount", async () => {
         await createTeam('Owner Override Team', ctx.alice.user.id, 3000);
 
-        const asBob = await getMountQuotaState(ctx.alice.user.id, ctx.bob.user.id, mountId);
-        expect(asBob.max).toBe(3000 * 1024 * 1024);
+        expect((await getMountQuotaState(ctx.alice.user.id, mountId)).max).toBe(3000 * 1024 * 1024);
     });
 });
