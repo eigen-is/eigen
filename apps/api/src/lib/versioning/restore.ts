@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
+import { DRIVE_TYPE_SHEETS, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
 import type Drive from '../drive/drive';
@@ -29,6 +31,21 @@ export async function restoreContainer(
     const tempId = randomUUID();
     const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
+        // Read before the pre-restore snapshot, so a version that cannot be restored changes nothing.
+        const state = isCollabType(container.type)
+            ? readYjsStateFromFile(tempPath, { label: `restore:${target.name}` })
+            : null;
+        if (state && container.type === DRIVE_TYPE_SHEETS) {
+            // A snapshot in an older encoding would lock every open editor read-only (SHEETS.md).
+            const doc = new Y.Doc();
+            Y.applyUpdate(doc, state);
+            const snapshot = doc.getMap<string>('state').get('snapshot');
+            try {
+                if (snapshot) decodeSheetsSnapshot(snapshot);
+            } catch {
+                throw new ApiError(409, 'This version was saved in an older sheet format and cannot be restored');
+            }
+        }
         // A gone data.db (410, once the temp and staged copy were checked) has no bytes to preserve and no
         // live Y.Doc to converge.
         const gone = await mount.snapshotContainerDataDb(container.id, policy).then(
@@ -38,10 +55,9 @@ export async function restoreContainer(
                 return true;
             },
         );
-        if (!gone && isCollabType(container.type)) {
+        if (!gone && state) {
             // Yjs (doc/sheets/slides/stickies): replay the snapshot's state into the
             // live Y.Doc so connected editors converge with no reload.
-            const state = readYjsStateFromFile(tempPath, { label: `restore:${target.name}` });
             await restoreYjsContainer(drive, mount, container.id, state);
         } else {
             // Chat, or a gone data.db: overwrite data.db's bytes with the snapshot's.
