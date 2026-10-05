@@ -1196,9 +1196,8 @@ export default class Drive {
         }
     }
 
-    // Called by: ChatRoom.init — serializes the lazy data.db auto-create against a concurrent
-    // version restore (replaceContainerDataDb holds this same per-mount container lock). Not
-    // route-callable.
+    // Called by: ChatRoom.init — serializes the lazy data.db auto-create across the fresh ChatRoom
+    // Drive.getChat builds per request. Not route-callable.
     async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
         return this.getMount(mountId).withPathLock(pathId, fn);
     }

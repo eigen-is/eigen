@@ -44,12 +44,9 @@ export class ChatRoom {
     async init(): Promise<ChatRoom> {
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
-            // Provision the missing data.db under the container lock and re-check under it. A
-            // concurrent version restore (replaceContainerDataDb) holds this same lock while it
-            // deletes and recreates data.db, and Drive.getChat builds a fresh ChatRoom per request.
-            // Without the lock a post landing in the delete→recreate window would provision a second
-            // empty data.db, the restore's createFileFromTemp would then 4xx on the duplicate name,
-            // and the chat would be left on the empty db with its earlier messages gone.
+            // Provision the missing data.db under the container lock and re-check under it:
+            // Drive.getChat builds a fresh ChatRoom per request, so two concurrent first requests
+            // would otherwise each provision a data.db.
             dataDbPath = await this.drive.withPathLock(this.path.mountId, this.path.id, async () => {
                 const existing = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
                 if (existing) return existing;
