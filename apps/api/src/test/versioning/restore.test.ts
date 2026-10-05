@@ -1,20 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import type Drive from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
-import {
-    chatGet,
-    chatPost,
-    createTestUser,
-    driveGet,
-    drivePost,
-    ensureServer,
-    findOrFail,
-    type TestUser,
-} from '../setup';
+import { chatGet, chatPost, createTestUserOnStorage, driveGet, drivePost, findOrFail, type TestUser } from '../setup';
 
 const M = 'default';
 
@@ -24,15 +14,8 @@ let rootId: string;
 
 // A `local` mount, which keeps an open document's working copy in tmp/, as `s3` does.
 beforeAll(async () => {
-    await ensureServer();
-    const before = getStorageType();
-    await updateServerSettings({ defaults: { mount: { storageType: 'local-fullnames' } } });
-    try {
-        user = await createTestUser(`restore-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Restore');
-        drive = (await getHome(user.id)).drive;
-    } finally {
-        await updateServerSettings({ defaults: { mount: { storageType: before } } });
-    }
+    user = await createTestUserOnStorage('local-fullnames', 'Restore');
+    drive = (await getHome(user.id)).drive;
     rootId = (await drive.getRootFolder(M))!.id;
 });
 

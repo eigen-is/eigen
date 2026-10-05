@@ -7,7 +7,6 @@ import { eq } from 'drizzle-orm';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { restoreHome } from '../../lib/backup/restore';
 import { verifyFolder } from '../../lib/backup/verify';
-import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { paths } from '../../lib/mount/schema';
@@ -16,13 +15,12 @@ import {
     authedRequest,
     chatPost,
     countLoopTurns,
-    createTestUser,
+    createTestUserOnStorage,
     driveDelete,
     driveGetList,
     drivePost,
     drivePut,
     driveUpload,
-    ensureServer,
     findOrFail,
     type TestUser,
 } from '../setup';
@@ -31,18 +29,7 @@ import { snapshotInto, waitForJob } from './backup-test-helpers';
 const M = 'default';
 const REPORTS = [0, 1, 2, 3, 4];
 
-async function raceUser(storageType: 'local-fullnames' | 'local-id'): Promise<TestUser> {
-    await ensureServer();
-    const before = getStorageType();
-    await updateServerSettings({ defaults: { mount: { storageType } } });
-    try {
-        const user = await createTestUser(`race-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Race');
-        await getHome(user.id);
-        return user;
-    } finally {
-        await updateServerSettings({ defaults: { mount: { storageType: before } } });
-    }
-}
+const raceUser = (storageType: 'local-fullnames' | 'local-id') => createTestUserOnStorage(storageType, 'Race');
 
 async function seed(user: TestUser) {
     const t = user.sessionToken;

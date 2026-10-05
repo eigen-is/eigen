@@ -1345,13 +1345,30 @@ describe('Backup round trip of a home that stores files by name', () => {
         await expectRealShapeServed(shape);
     });
 
+    // The restore as it runs when the backups folder is another disk than data/: the home cannot rename into place.
+    async function restoreAcrossDisks(artifact: string, userId: string, jobId: string): Promise<void> {
+        const homeDir = join(TEST_DATA_DIR, 'home', userId);
+        const rename = fsp.rename;
+        let crossed = false;
+        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
+            if (to !== homeDir) return rename(from, to);
+            crossed = true;
+            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
+        });
+        try {
+            await restoreHome(artifact, userId, jobId);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(crossed).toBe(true);
+    }
+
     // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
     // of the home at the restore in a client that sorts by received date.
     test('a restore puts a Maildir message back with its mtime, through a rename and through a copy', async () => {
         const { user } = await realShapeHome();
         await deliverMail(user.email, 'Received long ago');
-        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
-        const maildir = join(homeDir, MAILDIR_ROOT);
+        const maildir = join(TEST_DATA_DIR, 'home', user.id, MAILDIR_ROOT);
         const received = new Date('2021-03-04T05:06:07Z');
         const [delivered] = [...new Bun.Glob('{cur,new}/*').scanSync({ cwd: maildir })];
         utimesSync(join(maildir, delivered), received, received);
@@ -1365,40 +1382,14 @@ describe('Backup round trip of a home that stores files by name', () => {
         await restoreHome(artifact, user.id, `restore-mtime-${Date.now()}`);
         expect(receivedAt()).toEqual(received);
 
-        const rename = fsp.rename;
-        let crossed = false;
-        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
-            if (to !== homeDir) return rename(from, to);
-            crossed = true;
-            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
-        });
-        try {
-            await restoreHome(artifact, user.id, `restore-mtime-copy-${Date.now()}`);
-        } finally {
-            spy.mockRestore();
-        }
-        expect(crossed).toBe(true);
+        await restoreAcrossDisks(artifact, user.id, `restore-mtime-copy-${Date.now()}`);
         expect(receivedAt()).toEqual(received);
     });
 
     test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
         const shape = await realShapeHome();
         const { user } = shape;
-        const artifact = await backUp(user.id);
-        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
-        const rename = fsp.rename;
-        let crossed = false;
-        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
-            if (to !== homeDir) return rename(from, to);
-            crossed = true;
-            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
-        });
-        try {
-            await restoreHome(artifact, user.id, `restore-cross-device-${Date.now()}`);
-        } finally {
-            spy.mockRestore();
-        }
-        expect(crossed).toBe(true);
-        expectRealShape(homeDir, shape);
+        await restoreAcrossDisks(await backUp(user.id), user.id, `restore-cross-device-${Date.now()}`);
+        expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
     });
 });
