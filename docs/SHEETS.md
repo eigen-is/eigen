@@ -83,7 +83,7 @@ The editor flushes a snapshot and clears the op log on unmount, and on `beforeun
 
 Anything that is not a v2 envelope throws, and so does a dictionary index past its table. How `use-sheet.ts` reacts depends on when. On the initial load it opens read-only on blank defaults, and the `loadedRef` gate keeps it from ever flushing them over the stored snapshot or sending an op built on them. On a peer's flush it can't read mid-session, it keeps the workbook already on screen and arms the same lock, because local state may now diverge from the wire. Either way a persistent banner in `editor.tsx` says so, because a blank read-only sheet with no lasting explanation looks like data loss.
 
-Version history keeps snapshots in older encodings. Restoring one hands every connected client an undecodable snapshot, which trips the same lock, so that restore does not take.
+Version history keeps snapshots in older encodings. Restoring one answers 409 and changes nothing (`apps/api/src/lib/versioning/restore.ts`), because every connected editor would lock.
 
 ## Undo is per tab and blind to peers
 

@@ -327,10 +327,12 @@ export function CanvasEditor({
 
     // The marked elements: those carrying at least one comment card, with the corner the mark sits on
     // (a zero-size box, so boxToStyle maps it to the screen point at render time) and the card's color.
+    // A card id with no card is skipped: `comments` is not a declared yjsRoot, so restoring a version
+    // from before a delete brings the element's id back without its card.
     const commentedElements = useMemo(
         () =>
             ordered.flatMap((el) => {
-                const [cardId] = parseIdList(el.commentCardIds);
+                const cardId = parseIdList(el.commentCardIds).find((id) => commentCards?.[id]);
                 if (!cardId) return [];
                 const box = elementBox(el);
                 // The corner travels with the element's rotation, like every other chrome layer, so the

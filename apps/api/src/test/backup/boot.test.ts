@@ -25,18 +25,25 @@ describe('Backup boot', () => {
 
     // What restoreHome writes before it moves a home aside, in the staging folder of its job — and,
     // when the install got all the way through, the note it writes beside it. `preRestoreName` is
-    // null for a restore of a deleted user: there was no home folder to move aside.
+    // null for a restore of a deleted user: there was no home folder to move aside. `parkName` is a
+    // `.failed-restore-` name unless a safety-copy restore gives its copy's own.
     function seedRestoringMarker(
         jobId: string,
         homeName: string,
         preRestoreName: string | null,
         complete = false,
+        parkName = `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
     ): void {
         const dir = join(getBackupsDir(), '.staging', jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
-            JSON.stringify({ ownerId: homeName, homeDir: join(homeRoot, homeName), preRestoreName }),
+            JSON.stringify({
+                ownerId: homeName,
+                homeDir: join(homeRoot, homeName),
+                preRestoreName,
+                parkName,
+            }),
         );
         if (complete) writeFileSync(join(dir, 'restore-complete.json'), JSON.stringify({ completedAt: 'seeded' }));
         made.push(dir);
@@ -141,6 +148,24 @@ describe('Backup boot', () => {
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written');
         made.push(join(homeRoot, parked[0]));
+    });
+
+    // A safety-copy restore renames the copy into place before its checks, so a kill there leaves a pristine home at
+    // the home's path. It goes back under its own name: a `.failed-restore-` one could only be deleted.
+    test('a marker of a safety-copy restore parks the copy under its own name and puts the home back', () => {
+        const id = 'bootrecoverIIIIIIIIIIIIIIIIIIIII';
+        const copy = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000100`;
+        seedFolder(id, 'the copy, put in place');
+        seedFolder(aside, 'the home as it was');
+        seedRestoringMarker('boot-job-i', id, aside, false, copy);
+        made.push(join(homeRoot, copy));
+
+        recoverInterruptedRestores();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, copy, 'marker'), 'utf8')).toBe('the copy, put in place');
+        expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
     });
 
     // A restore of a deleted user has no folder to move aside, so there is nothing to put back —

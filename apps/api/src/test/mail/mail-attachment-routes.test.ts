@@ -1,16 +1,20 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, setSystemTime, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { renameSync } from 'node:fs';
+import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
-import type { EmailSummary } from '@workspace/lib/types/mail';
+import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
 import * as mailParse from '../../lib/mail/mail-parse';
+import { boxDir } from '../mail-test-helpers';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -260,43 +264,80 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(first.headers.get('etag')).not.toBe(second.headers.get('etag'));
     });
 
-    test('a rewritten draft serves a new ETag for the same part index', async () => {
+    // A draft with one text attachment, its part's URL, and the ETag that part was first served with.
+    async function draftWithPart(subject: string, body: string) {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
-        const uploadA = await uploadDraftAttachment(token, ownerId, new File(['AAA'], 'a.txt', { type: 'text/plain' }));
+        const upload = await uploadDraftAttachment(token, ownerId, new File([body], 'a.txt', { type: 'text/plain' }));
         const draft = await putDraft(
             token,
             ownerId,
-            { subject: 'Rewritten draft', text: 'first', html: '<p>first</p>', isDraft: true, mailbox: 'Drafts' },
-            { tempAttachmentIds: [uploadA.tempId] },
+            { subject, text: 'first', html: '<p>first</p>', isDraft: true, mailbox: MAILBOX_DRAFTS },
+            { tempAttachmentIds: [upload.tempId] },
         );
         const partUrl = `/mail/${ownerId}/message/${draft.id}/attachment/0/part.txt`;
-
         const before = await authedRequest(token, partUrl);
-        expect(await before.text()).toBe('AAA');
+        expect(await before.text()).toBe(body);
         const staleEtag = before.headers.get('etag') ?? '';
         expect(staleEtag).not.toBe('');
+        return { draft, partUrl, staleEtag };
+    }
 
-        const uploadB = await uploadDraftAttachment(
+    // The draft saved again with `body` as its one attachment, and its text the same length as before.
+    async function rewriteDraft(draft: EmailDraft, body: string): Promise<EmailDraft> {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const upload = await uploadDraftAttachment(token, ownerId, new File([body], 'a.txt', { type: 'text/plain' }));
+        return putDraft(
             token,
             ownerId,
-            new File(['BBBBBB'], 'b.txt', { type: 'text/plain' }),
+            { ...draft, text: 'other', html: '<p>other</p>' },
+            { tempAttachmentIds: [upload.tempId], keepAttachmentIndexes: [] },
         );
-        const resaved = await putDraft(
-            token,
-            ownerId,
-            { ...draft, text: 'second', html: '<p>second</p>' },
-            { tempAttachmentIds: [uploadB.tempId], keepAttachmentIndexes: [] },
-        );
-        expect(resaved.id).toBe(draft.id);
+    }
 
-        const after = await authedRequest(token, partUrl);
+    const revalidate = (partUrl: string, etag: string) =>
+        authedRequest(ctx.alice.user.sessionToken, partUrl, { headers: { 'if-none-match': etag } });
+
+    test('a rewritten draft serves a new ETag for the same part index', async () => {
+        const { draft, partUrl, staleEtag } = await draftWithPart('Rewritten draft', 'AAA');
+        expect((await rewriteDraft(draft, 'BBBBBB')).id).toBe(draft.id);
+
+        const after = await authedRequest(ctx.alice.user.sessionToken, partUrl);
         expect(await after.text()).toBe('BBBBBB');
         expect(after.headers.get('etag')).not.toBe(staleEtag);
 
-        const revalidated = await authedRequest(token, partUrl, { headers: { 'if-none-match': staleEtag } });
+        const revalidated = await revalidate(partUrl, staleEtag);
         expect(revalidated.status).toBe(200);
         expect(await revalidated.text()).toBe('BBBBBB');
+    });
+
+    // The row's date has second precision, so a rewrite in the same second at the same size moves neither.
+    test('a same-size draft rewrite within one second serves a new ETag', async () => {
+        setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+        try {
+            const { draft, partUrl, staleEtag } = await draftWithPart('Same-size draft', 'AAA');
+            const resaved = await rewriteDraft(draft, 'BBB');
+            expect(resaved.size).toBe(draft.size);
+            expect(new Date(resaved.date).getTime()).toBe(new Date(draft.date).getTime());
+
+            const revalidated = await revalidate(partUrl, staleEtag);
+            expect(revalidated.status).toBe(200);
+            expect(await revalidated.text()).toBe('BBB');
+        } finally {
+            setSystemTime();
+        }
+    });
+
+    // Dovecot renames a message file on a flag change, and the index learns the new name a moment later.
+    test('a part whose file was just renamed answers as changed, not as an error', async () => {
+        const { draft, partUrl, staleEtag } = await draftWithPart('Renamed draft', 'AAA');
+        const cur = join(boxDir(ctx.alice.user.id, MAILBOX_DRAFTS), 'cur');
+        renameSync(join(cur, draft.filename), join(cur, `${draft.filename}F`));
+
+        const revalidated = await revalidate(partUrl, staleEtag);
+        expect(revalidated.status).toBe(200);
+        expect(await revalidated.text()).toBe('AAA');
     });
 
     test('the download route serves a range as 206', async () => {

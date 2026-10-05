@@ -232,6 +232,23 @@ describe('buildEmlPreviewPayload', () => {
         expect(payload.html).toContain('hello');
     });
 
+    // A newsletter's sheet holds its layout beside the rule that fetches: dropping the whole sheet collapses
+    // a fixed-width table on a phone. The rules that fetch go, the rest stay.
+    test('a stylesheet loses only the rules that fetch', () => {
+        const payload = payloadOf(
+            htmlMessage(
+                [
+                    `<style>.hero{background:url(https://${HOSTILE}/hero.png)}.wide{width:900px}@import "https://${HOSTILE}/s.css";@media (max-width:600px){.wide{width:100%}}</style>`,
+                    '<table class="wide"><tr><td>cell</td></tr></table>',
+                ].join('\n'),
+            ),
+        );
+
+        expect(payload.html).not.toContain(HOSTILE);
+        expect(payload.html).toContain('.wide{width:900px}');
+        expect(payload.html).toContain('@media (max-width:600px){.wide{width:100%}}');
+    });
+
     // A data: reference is kept for the inline images a message really carries; an SVG or an HTML one is a
     // document tree of its own, and only the browser's SVG-as-image rules would stand between it and a fetch.
     test('only a raster data: image survives, in an attribute and in CSS', () => {

@@ -47,7 +47,7 @@ Below 769px (`useIsMobile`, [MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mob
 
 ## The command palette is the one shell surface with its own engine
 
-The engine, parsers, providers and commands live in `packages/lib/src/core/command-palette/`, the dialog and rows in `packages/ui/src/components/layout/app/command-palette/`. Its New commands come from the shared `apps` registry and the EigenDocType registries (`EIGEN_DOC_TYPE_INFO`, `EIGEN_DOC_ICONS`), so a new EigenDocType appears in the palette with no palette change. A route publishes what is selected and what can be done with it through `usePaletteSelection` and `usePaletteSelectionActions`. Design and open work: [the proposal](proposals/PROPOSAL_COMMAND_PALETTE.md).
+The engine, parsers, providers and commands live in `packages/lib/src/core/command-palette/`, the dialog and rows in `packages/ui/src/components/layout/app/command-palette/`. Its New commands come from the shared `apps` registry and the EigenDocType registries (`EIGEN_DOC_TYPE_INFO`, `EIGEN_DOC_ICONS`), so a new EigenDocType appears in the palette with no palette change. A route publishes what is selected and what can be done with it through `usePaletteSelection` and `usePaletteSelectionActions`. How it merges, scopes, ranks and takes a published selection: [COMMAND-PALETTE.md](COMMAND-PALETTE.md).
 
 ## One `DriveCapabilities` value gates every Drive action
 
@@ -79,7 +79,7 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`:
 
 - `useListSelection`: click, modifier click, select all
-- `useKeyboardListNavigation`
+- `useKeyboardListNavigation`: Space, Enter and Delete act on the cursor row, or on the topmost selected row when a select-all left no cursor
 - `useListDrag`: the multi-drag badge
 - `useListDropTarget`: a drop on a sidebar item, through `DroppableSidebarItem`
 - `useContextMenu`, from `components/context-menu/`
@@ -118,6 +118,8 @@ Icon buttons with a tooltip are `TooltipButton`. When hover icons would change t
 Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for tooltip labels. Manual listeners stay for stateful navigation (`use-keyboard-list-navigation.ts`) and for editors that own their keys (Tiptap, the canvas keymap in [CANVAS.md](CANVAS.md)). Mod+K is a raw window listener rather than a `useHotkey`, so the palette opens from inside a text field too.
 
 **A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key pressed on a dialog button otherwise acts on the document behind it: Delete on a confirm button deleting the canvas selection, `#` in Mail's location picker trashing the message. The hook watches the DOM for an open `role="dialog"` or `role="alertdialog"`, so it keeps no registry. An overlay that is a dialog itself (the file preview, Mail's cheat sheet) registers its keys ungated.
+
+**A suggestion input inside a dialog is a combobox that says when its list is open.** Radix dismisses a dialog from a document capture listener, which runs before any React handler. So `DialogContent` leaves Escape alone when it comes from a `role="combobox"` with `aria-expanded="true"`, and the input's own keydown closes the list. `ChatMessageInput` and `ContactAutosuggest` set both; a new suggestion input sets them too. cmdk's input is skipped: it says expanded always, and its list is the dialog.
 
 ## One z-index scale, and app code sets none
 

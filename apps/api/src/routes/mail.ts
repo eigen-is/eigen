@@ -66,6 +66,7 @@ const MailDraftSchema = t.Object({
     inReplyTo: t.Optional(t.String()),
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
     driveReferences: t.Optional(t.Array(attachmentReferenceSchema, { maxItems: MAX_SEND_REFERENCES })),
+    repliedToId: t.Optional(t.String()),
 });
 // Compile-time guard: a field added to NewDraft without a schema entry here would be stripped by Elysia's
 // normalize, so the key sets must match (a structural `extends` check would not catch it).
@@ -87,6 +88,8 @@ const AttachmentPreviewParamsSchema = t.Omit(AttachmentParamsSchema, ['fileName'
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
+    // A server without hosted mail has no Maildir open behind any of these routes.
+    .onBeforeHandle(() => requireMailEnabled())
     // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
     // No auth: Postfix connects from localhost and is trusted.
     .post(
@@ -244,7 +247,6 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, user }): Promise<SentMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            requireMailEnabled();
             return await (await getMailClient(user)).messageSend(body.mail, {
                 grantAccessRefIds: body.grantAccessRefIds,
             });
@@ -424,7 +426,6 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            requireMailEnabled();
             // The whole message uploads, parses and indexes before this answers — at EML_MAX_BYTES
             // that outlasts any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
@@ -439,7 +440,6 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            requireMailEnabled();
             // Same idle-timeout exemption as the raw import route: silent until the message is indexed.
             server?.timeout(request, 0);
             const bytes = await readImportSourceBytes(user, body, {

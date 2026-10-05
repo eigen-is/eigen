@@ -1,3 +1,4 @@
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
@@ -72,8 +73,9 @@ export async function updateServerSettings(update: DeepPartial<ServerSettings>):
     await settingsStore.set(update);
 }
 
+// A cap saved before the settings route bounded it can sit above what any request may carry.
 export function getMaxUploadSize(): number {
-    return getServerSettings().quotas.maxUploadSizeMB * 1024 * 1024;
+    return Math.min(getServerSettings().quotas.maxUploadSizeMB, UPLOAD_CAP_MAX_MB) * 1024 * 1024;
 }
 
 export function getStorageType(): ServerStorageType {

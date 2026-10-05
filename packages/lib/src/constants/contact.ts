@@ -19,3 +19,7 @@ export const VCARD_MAX_BYTES = 20 * 1024 * 1024;
 
 // The media type every vCard byte stream is served under (CardDAV GET, PROPFIND getcontenttype, export).
 export const VCARD_CONTENT_TYPE = `${VCARD_MIMES[0]}; charset=utf-8`;
+
+// A label name a user types. A rename writes it into every member card past the per-card size check, so it stays short;
+// a label minted from a card's CATEGORIES keeps whatever length the card spells.
+export const LABEL_NAME_MAX_LENGTH = 100;

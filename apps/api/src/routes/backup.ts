@@ -9,6 +9,7 @@ import {
     getBackupJob,
     isServerJob,
     listBackupJobs,
+    requireHomeSlotFree,
     runArtifactVerify,
     runHomeBackup,
     startBackupJob,
@@ -171,8 +172,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts/:name',
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
-            const { artifactPath } = resolveArtifact(params.name);
+            const { artifactPath, ownerId } = resolveArtifact(params.name);
             if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
+            requireHomeSlotFree(ownerId);
             deleteArtifact(artifactPath);
             return { success: true };
         },

@@ -1,3 +1,4 @@
+import type { OrgRole } from '@workspace/lib/types/admin';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const user = sqliteTable('user', {
@@ -88,7 +89,7 @@ export const member = sqliteTable('member', {
     userId: text('user_id')
         .notNull()
         .references(() => user.id, { onDelete: 'cascade' }),
-    role: text('role').notNull(),
+    role: text('role').notNull().$type<OrgRole>(),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 

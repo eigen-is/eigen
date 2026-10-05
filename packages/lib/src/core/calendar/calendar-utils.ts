@@ -1,6 +1,6 @@
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
-import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
+import type { Attendee, CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
 
@@ -179,11 +179,21 @@ export function isSeriesOccurrence(event: { rrule: string | null; parentEventId:
     return !!event.rrule || !!event.parentEventId;
 }
 
-// CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation; a team Home has none.
+// CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation. A team Home has no
+// address, so there only Eigen's organizer stamp does: a member's own event carries the member's address.
 export function isInvitationFromOthers(event: { data?: EventData | null }, ownerEmail?: string): boolean {
     const organizer = event.data?.organizer;
     if (!organizer) return false;
-    return !ownerEmail || organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+    if (!ownerEmail) return !!event.data?.organizerEventId;
+    return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+}
+
+// An empty or absent list on an override means its series' guests, so a guest added to the series later reaches every occurrence.
+export function heldAttendees(
+    override: { data?: EventData | null } | null | undefined,
+    series: { data?: EventData | null } | null | undefined,
+): Attendee[] {
+    return override?.data?.attendees?.length ? override.data.attendees : (series?.data?.attendees ?? []);
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {

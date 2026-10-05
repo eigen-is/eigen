@@ -1,53 +1,40 @@
 import { ApiError } from '../core';
 import { getHome } from '../home';
-import type { Home } from '../home/home';
 import { getMemberships } from '../user';
-import { type ResolvedQuotas, resolveHomeDataMax, resolveUserQuotas } from './quota';
+import { resolveHomeDataMax, resolveUserQuotas } from './quota';
 import { getMaxUploadSize } from './server-settings';
 
-async function resolveQuotas(
-    ownerId: string,
-    userId: string,
-    mountId: string,
-): Promise<{ home: Home; quotas: ResolvedQuotas }> {
+// The overrides are the owner's, as for home data: a mount's cap must not change with who writes or looks.
+export async function getMountQuotaState(ownerId: string, mountId: string): Promise<{ used: number; max: number }> {
     const home = await getHome(ownerId); // ownerId-routed: called from drive upload routes
-    const mountConfig = home.drive.getMountConfig(mountId);
-    const { teamIds } = await getMemberships(userId);
-    const quotas = await resolveUserQuotas(mountConfig, teamIds);
-    return { home, quotas };
-}
-
-export async function getMountQuotaState(
-    ownerId: string,
-    userId: string,
-    mountId: string,
-): Promise<{ used: number; max: number }> {
-    const { home, quotas } = await resolveQuotas(ownerId, userId, mountId);
-    const used = await home.drive.size(mountId);
-    return { used, max: quotas.mountMax };
+    const { teamIds } = await getMemberships(ownerId);
+    const quotas = await resolveUserQuotas(home.drive.getMountConfig(mountId), teamIds);
+    return { used: await home.drive.size(mountId), max: quotas.mountMax };
 }
 
 // creditExisting is the size of the file being overwritten, so an in-place rewrite is charged only its growth.
+export async function getMountRoom(ownerId: string, mountId: string, creditExisting = 0): Promise<number> {
+    const { used, max } = await getMountQuotaState(ownerId, mountId);
+    return max - used + creditExisting;
+}
+
 export async function enforceMountQuota(
     ownerId: string,
-    userId: string,
     mountId: string,
     addBytes: number,
     creditExisting = 0,
 ): Promise<void> {
-    const { used, max } = await getMountQuotaState(ownerId, userId, mountId);
-    if (used + addBytes - creditExisting > max) {
+    if (addBytes > (await getMountRoom(ownerId, mountId, creditExisting))) {
         throw new ApiError(507, 'Insufficient Storage');
     }
 }
 
-export async function getUploadMaxSize(ownerId: string, userId: string, mountId: string): Promise<number> {
-    const { used, max } = await getMountQuotaState(ownerId, userId, mountId);
-    const remainingQuota = max - used;
-    if (remainingQuota <= 0) {
+export async function getUploadMaxSize(ownerId: string, mountId: string): Promise<number> {
+    const room = await getMountRoom(ownerId, mountId);
+    if (room <= 0) {
         throw new ApiError(507, 'Insufficient Storage');
     }
-    return Math.min(getMaxUploadSize(), remainingQuota);
+    return Math.min(getMaxUploadSize(), room);
 }
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;

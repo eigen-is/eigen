@@ -30,7 +30,7 @@ Any case or compatibility variant of `.trash` is a reserved name on every mount,
 
 ## Trash closes what is open under the item first
 
-Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set.
+Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set. So the trash closes the collab documents under the item a second time once the row is trashed, which ends any session opened in that window.
 
 ## Trash revokes every share, and restore re-shares without an email
 
@@ -52,7 +52,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 ## Expired trash is purged only when a Home loads
 
-`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off, but the settings route accepts only 1 and up ([ROADMAP.md](ROADMAP.md)). The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
+`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
 
 History and watcher notifications for trash, restore and permanent delete are in [FILE-HISTORY.md](FILE-HISTORY.md#chain-rewriting-mutations-record-their-own-events).
 

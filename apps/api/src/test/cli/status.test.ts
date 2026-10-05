@@ -30,10 +30,10 @@ describe('status', () => {
         expect(result.stderr).toContain('Eigen is not running.');
     });
 
-    test('files of another build, as the launcher finds them, say an update is unfinished, before any newer release', async () => {
+    test('files of another build, as the launcher finds them, say an update or a restore is unfinished, before any newer release', async () => {
         const result = await status('--files=9.9.9 (def5678)', '--latest=99.0.0');
         expect(result.stdout).toContain(
-            `▲  Update  files of 9.9.9 (def5678), running ${pkg.version}: run ./eigen update`,
+            `▲  Update  files of 9.9.9 (def5678), running ${pkg.version}: run ./eigen restart`,
         );
         expect(result.stdout).not.toContain('99.0.0');
         expect((await status(`--files=${pkg.version}`)).stdout).toContain(`files of ${pkg.version}, running`);
@@ -47,7 +47,7 @@ describe('status', () => {
         );
         expect((await onMain('--latest=')).stdout).toMatch(/Update +could not check/);
         expect((await onMain(`--files=${pkg.version} (def5678)`, '--latest=abc1234')).stdout).toContain(
-            `files of ${pkg.version} (def5678), running ${pkg.version} (abc1234): run ./eigen update`,
+            `files of ${pkg.version} (def5678), running ${pkg.version} (abc1234): run ./eigen restart`,
         );
     });
 

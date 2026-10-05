@@ -948,21 +948,26 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {/* Unmounted when closed: the properties panels key-remount per caret move. */}
+                                {/* Unmounted when closed: the properties panels key-remount per caret move.
+                                    The stable gutter is as wide as the scroll box's scrollbar and draws
+                                    none, so the panel ends left of that scrollbar, where the shift math
+                                    already puts its edge. */}
                                 {showSidebar && (
-                                    <div className="absolute inset-y-0 right-0">
-                                        {panel ? (
-                                            <PanelColumn activePanel={panel} {...panelProps} />
-                                        ) : lastPanelRef.current === 'figure' ? (
-                                            <FigurePropertiesPanel
-                                                key={editor.state.selection.from}
-                                                editor={editor}
-                                                onReplaceImage={handleReplaceImage}
-                                                onReplaceImageFromDrive={handleReplaceImageFromDrive}
-                                            />
-                                        ) : (
-                                            <TablePropertiesPanel editor={editor} />
-                                        )}
+                                    <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
+                                        <div className="pointer-events-auto absolute inset-y-0 right-0">
+                                            {panel ? (
+                                                <PanelColumn activePanel={panel} {...panelProps} />
+                                            ) : lastPanelRef.current === 'figure' ? (
+                                                <FigurePropertiesPanel
+                                                    key={editor.state.selection.from}
+                                                    editor={editor}
+                                                    onReplaceImage={handleReplaceImage}
+                                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                                />
+                                            ) : (
+                                                <TablePropertiesPanel editor={editor} />
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>

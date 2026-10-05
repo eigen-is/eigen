@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 
@@ -12,7 +12,7 @@ export type CommentCardPatch = {
 
 export function applyCardPatch(doc: Y.Doc, mapName: string, cardId: string, patch: CommentCardPatch): void {
     const card = getItemMapRoot(doc, mapName).get(cardId);
-    if (!card) return;
+    if (!(card instanceof Y.Map)) return;
     doc.transact(() => {
         if (patch.title !== undefined) card.set('title', patch.title);
         if (patch.description !== undefined) card.set('description', patch.description);

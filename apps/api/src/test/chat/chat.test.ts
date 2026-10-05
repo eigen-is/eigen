@@ -7,7 +7,9 @@ import { DRIVE_MIME_CHAT } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
 import { sql } from 'drizzle-orm';
 import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
+import { messages } from '../../lib/chat/schema';
 import { ManagedDatabase } from '../../lib/core';
+import { getHome } from '../../lib/home';
 import { authedRequest, chatGet, chatPost, driveGet, drivePost, findOrFail, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -257,6 +259,33 @@ describe('Chat', () => {
             );
             expect(msgs.length).toBe(1);
         });
+    });
+
+    // createdAt is whole seconds, so messages posted back to back share it: paging back must not skip them.
+    test('paging back walks every message sent in the same second, in order', async () => {
+        const { sessionToken: token, id: ownerId } = ctx.alice.user;
+        const chat = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/chat`, {
+            fileName: 'Paging Test Chat',
+        });
+        const sent = ['one', 'two', 'three', 'four', 'five'];
+        for (const content of sent) await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content });
+        // Pinned, so the posts share one second however slowly they land.
+        const { mount, path } = await (await getHome(ownerId)).drive.resolveFile(aliceMountId, chat.id);
+        const dataDb = await mount.getChildByName(path.id, 'data.db');
+        if (!dataDb) throw new Error('chat has no data.db');
+        const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id);
+        managedDb.db
+            .update(messages)
+            .set({ createdAt: new Date('2026-10-05T12:00:00Z') })
+            .run();
+
+        const page = (before: string) =>
+            chatGet<ChatMessage[]>(token, ownerId, aliceMountId, `${chat.id}/messages?limit=2${before}`);
+        let seen: string[] = [];
+        for (let rows = await page(''); rows.length > 0; rows = await page(`&before=${rows[0].id}`)) {
+            seen = [...rows.map((m) => m.content), ...seen];
+        }
+        expect(seen).toEqual(sent);
     });
 
     describe('Whisper Visibility', () => {

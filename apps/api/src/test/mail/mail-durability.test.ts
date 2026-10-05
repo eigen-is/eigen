@@ -3,7 +3,7 @@ import { existsSync, fstatSync, mkdirSync, readdirSync, statSync, utimesSync, wr
 import * as fsPromises from 'node:fs/promises';
 import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
-import { MAILBOX_DRAFTS, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';
 import { boxDir, mailRootOf, makeEml, seedMaildirFolder } from '../mail-test-helpers';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
@@ -22,10 +22,11 @@ beforeAll(async () => {
     userId = user.id;
     // The welcome mail is appended with skipReconcile; one listing indexes it, so new/ is empty below.
     const home = await getHome(userId);
-    await home.mail.mailboxGet('');
+    await home.mail.mailboxGet(MAILBOX_INBOX);
 });
 
 const box = (mailbox: string) => boxDir(userId, mailbox);
+const inbox = (dir: string) => join(box(MAILBOX_INBOX), dir);
 
 const eml = (subject: string) => Buffer.from(makeEml(subject, { to: 'durability@test.eigen.is' }), 'utf-8');
 
@@ -76,7 +77,7 @@ async function record(dirs: Record<string, string>, fn: () => Promise<void>): Pr
 describe('Maildir write durability', () => {
     test('a delivery fsyncs the message, then new/, then cur/ once the sync moves it', async () => {
         const home = await getHome(userId);
-        const dirs = { tmp: join(box(''), 'tmp'), new: join(box(''), 'new'), cur: join(box(''), 'cur') };
+        const dirs = { tmp: inbox('tmp'), new: inbox('new'), cur: inbox('cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.mailboxDeliver(eml('Durable delivery'));
@@ -113,7 +114,7 @@ describe('Maildir write durability', () => {
     test('a flag change fsyncs the one directory its rename lands in', async () => {
         const home = await getHome(userId);
         const messageId = await home.mail.mailboxDeliver(eml('Durable flag'));
-        const dirs = { cur: join(box(''), 'cur') };
+        const dirs = { cur: inbox('cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageSetRead(messageId, true);
@@ -125,7 +126,7 @@ describe('Maildir write durability', () => {
     test('a move fsyncs the target directory and then the one it left', async () => {
         const home = await getHome(userId);
         const messageId = await home.mail.mailboxDeliver(eml('Durable move'));
-        const dirs = { inbox: join(box(''), 'cur'), trash: join(box(MAILBOX_TRASH), 'cur') };
+        const dirs = { inbox: inbox('cur'), trash: join(box(MAILBOX_TRASH), 'cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageMove(messageId, MAILBOX_TRASH);
@@ -137,7 +138,7 @@ describe('Maildir write durability', () => {
     test('a delete fsyncs the directory after the unlink it made durable', async () => {
         const home = await getHome(userId);
         const messageId = await home.mail.mailboxDeliver(eml('Durable delete'));
-        const dirs = { cur: join(box(''), 'cur') };
+        const dirs = { cur: inbox('cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageDelete(messageId);
@@ -202,8 +203,8 @@ describe('Maildir write durability', () => {
             spy.mockRestore();
         }
 
-        expect(readdirSync(join(box(''), 'tmp'))).toEqual([]);
-        expect(readdirSync(join(box(''), 'new'))).toEqual([]);
+        expect(readdirSync(inbox('tmp'))).toEqual([]);
+        expect(readdirSync(inbox('new'))).toEqual([]);
     });
 
     test('a new/ rename that fails without an errno fails the sync instead of vanishing', async () => {
@@ -225,7 +226,7 @@ describe('Maildir write durability', () => {
     test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
         const home = await getHome(userId);
         const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
-        const tmpDir = join(box(''), 'tmp');
+        const tmpDir = inbox('tmp');
         const stale = join(tmpDir, 'stale.M1P1Q1.host,S=4');
         const fresh = join(tmpDir, 'fresh.M1P1Q1.host,S=4');
         writeFileSync(stale, 'body');

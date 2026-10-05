@@ -1,6 +1,6 @@
 # Quotas
 
-> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and a mount write takes the overrides of the user writing, not the mount's owner. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
+> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and only the owner's teams count, never those of the user writing. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
 
 Quotas keep one user from filling the server's disk or bucket. The owner sets the server defaults and the per-file cap in the Admin app ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)), an org admin can raise them for a team's members on the team's page, and the app sidebars show each user their usage.
 
@@ -26,9 +26,9 @@ A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`
 
 Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)).
 
-## A mount write takes the writer's overrides
+## A mount's cap takes its owner's overrides
 
-`getMountQuotaState(ownerId, userId, mountId)` reads the mount from the owner's Home but the team overrides from `userId`, the user writing. So the cap an upload meets depends on who uploads. A member writing into a team mount lifts it to their own teams' overrides, that team's override included. A user writing into a folder another user shared with them brings their own overrides to the owner's mount, and the owner's are not counted. The home-data budget takes the owner's teams (`getHomeDataQuotaState`), so it does not vary by writer.
+`getMountQuotaState(ownerId, mountId)` reads the mount and the team overrides from the owner, as `getHomeDataQuotaState` does for home data. So a mount has one cap, whoever uploads into it and whoever reads WebDAV's quota properties. A user writing into a folder another user shared with them meets the owner's cap, lifted by the owner's teams and never by their own. A team is in no teams, so a team mount's cap is its own `maxSizeMB`, and a member's override never lifts it.
 
 ## A mount keeps what it was stamped with
 
@@ -38,15 +38,15 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 ## 507 is a full budget, 413 a file too large
 
-`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`).
+`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/mount.ts`): the API's `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` beside it, 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it. `getMaxUploadSize` caps a value saved above it too.
 
 The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
-Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` checks the per-file cap and the quota against the `Content-Length` the client sends, before any bytes move, so a chunked PUT that sends none meets neither ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
+Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` checks the per-file cap and the quota against a `Content-Length` before any bytes move, and counts a chunked body as it streams, stopping at the same bounds ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
 
 ## A write that knows its size is checked on the projection
 
-`enforceMountQuota(ownerId, userId, mountId, addBytes, creditExisting)` throws 507 when `used + addBytes - creditExisting > max`. `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. The editor save and WebDAV `PUT` use it. WebDAV only checks when the client sends `Content-Length` ([WEBDAV.md](WEBDAV.md)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
+`getMountRoom(ownerId, mountId, creditExisting)` is what a write may add: `max - used + creditExisting`, where `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. `enforceMountQuota(ownerId, mountId, addBytes, creditExisting)` throws 507 when `addBytes` is more than that, for the editor save. WebDAV `PUT` takes the room itself, because it checks a `Content-Length` against it and counts a chunked body against it as it streams ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
 
 A team avatar calls the bare `enforceMaxUploadSize` (`apps/api/src/routes/team.ts`), because a team logo must not consume the uploading admin's own home-data budget.
 
@@ -64,7 +64,7 @@ Each ingress turns the 507 into its own answer: a CalDAV `PUT` gets the typed `q
 
 A Home that `atHome()` does not know, such as a test harness or a seeding script, is not metered, because the quota lookup goes through `getHome` and would boot a second Home over the same files. Contacts turns metering on only at the end of its init ([CONTACTS.md](CONTACTS.md)).
 
-Mail attachments and contact avatars take their own checks. `getMailUploadMaxSize` returns `min(per-file cap, 25 MB, what is left of home data)` and throws 507 when nothing is left. `enforceAvatarUpload` runs the per-file cap and then `used + fileSize > max`, with no credit and no grace ([ROADMAP.md](ROADMAP.md)).
+Mail attachments and contact avatars take their own checks. `getMailUploadMaxSize` returns `min(per-file cap, 25 MB, what is left of home data)` and throws 507 when nothing is left. `enforceAvatarUpload` runs the per-file cap and then `used + fileSize > max`, with no credit and no grace ([ROADMAP.md](ROADMAP.md)). A label rename is unmetered by decision: it rewrites every member card's `CATEGORIES` with no ceiling in front, but a typed name is capped at `LABEL_NAME_MAX_LENGTH` (100 characters), so each card grows by at most one such name, and the delta settles into `cardsBytes` after the commit (`settleFanOut`, `contacts/labels.ts`).
 
 ## What the home-data budget counts
 
@@ -80,7 +80,7 @@ A staged attachment is charged from the moment it lands until the draft saves or
 
 The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#the-users-page-sizes-homes-without-booting-them)). It reads each part from the home's own files with the query its counter is seeded from, so the page and a live Home report the same number.
 
-- Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk.
+- Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk. On a server with mail turned off, `MaildirStore.init` opens no index and seeds its byte counter from these same two reads instead, so the mail kept from before still counts toward storage.
 - Contacts and calendar: `readContactsTotalSize` (`card-store.ts`, plus the `avatars/` folder) and `readCalendarTotalSize` (`resource-store.ts`), both through `readBlobTableSize` (`apps/api/src/lib/core/blob-store.ts`).
 
 `readBlobTableSize` sizes a missing database as 0. It also sizes as 0 a database whose schema stamp is not this build's `currentVersion`, a newer stamp and a missing stamp table included. The column it would sum may not exist yet or may mean other bytes, and the pending migration drops those bytes anyway. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.
@@ -89,7 +89,7 @@ The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SER
 
 When the owner lowers a server quota or an admin a team override below what a user has, or the user leaves the team that raised it, nothing is deleted. New writes answer 507 until the user deletes enough. The usage bar (`packages/ui/src/components/home/usage.tsx`) clamps at full and turns red above 85%.
 
-The limits are soft. Every check reads usage and writes after, with no reservation, so concurrent uploads, several files in one request and chunked WebDAV `PUT`s can each pass and together overshoot. That is by design: the overage is small, and the next write sees it.
+The limits are soft. Every check reads usage and writes after, with no reservation, so concurrent uploads and several files in one request can each pass and together overshoot. That is by design: the overage is small, and the next write sees it.
 
 ## See also
 

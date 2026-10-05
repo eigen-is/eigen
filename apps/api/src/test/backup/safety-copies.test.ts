@@ -6,7 +6,10 @@ import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/valida
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { withBackupJobSlot } from '../../lib/backup/jobs';
+import * as pathsModule from '../../lib/backup/paths';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import * as recoveryModule from '../../lib/backup/recovery';
+import { recoverInterruptedRestores } from '../../lib/backup/recovery';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -383,6 +386,31 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
 
     afterAll(() => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // A process killed after the copy is in place and before the completion note: the next boot finds no note and a
+    // folder at the home's path. That folder is the pristine copy, so it goes back under its own name.
+    test('a safety-copy restore killed before its completion note is put back under the copy name at boot', async () => {
+        const [copy] = safetyCopies(userId);
+        const jobId = `safety-killed-${Date.now()}`;
+        const spies = [
+            spyOn(recoveryModule, 'markRestoreComplete').mockImplementation(() => {}),
+            spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(async () => {}),
+        ];
+        try {
+            await restoreSafetyCopy(userId, copy, jobId);
+        } finally {
+            for (const spy of spies) spy.mockRestore();
+        }
+        recoverInterruptedRestores();
+        rmSync(join(getBackupsDir(), '.staging', jobId), { recursive: true, force: true });
+
+        expect(safetyCopies(userId)).toEqual([copy]);
+        expect(safetyCopies(userId, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        const listed = await assertJson<DrivePath[]>(
+            await authedRequest(token, `/drive/${userId}/${mountId}/folder/${rootId}`),
+        );
+        expect(listed.map((item) => item.name)).not.toContain('after.png');
     });
 
     test('a failed restore puts the copy back under the name it came from', async () => {

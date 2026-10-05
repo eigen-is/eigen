@@ -47,7 +47,6 @@ export type CommentEntry = {
     lastActivityAt: Date | null;
     messageCount: number;
     createdAt: Date;
-    createdBy: string | null;
     assignee: string | null;
     title: string | null;
 };

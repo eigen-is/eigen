@@ -6,8 +6,8 @@ export const emailKeys = {
     all: ['emails'] as const,
     owner: (ownerId: string) => [...emailKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...emailKeys.owner(ownerId), 'list'] as const,
-    // Through `mailboxRouteSegment`, so a canonical-case SSE event ('Sent', or '' for the inbox) and the
-    // sidebar URL it belongs to (/box/sent, /box/inbox) land on the one key.
+    // Through `mailboxRouteSegment`, so a canonical-case SSE event ('Sent', 'INBOX') and the sidebar URL it
+    // belongs to (/box/sent, /box/inbox) land on the one key.
     list: (ownerId: string, mailbox: string) =>
         [...emailKeys.lists(ownerId), { mailbox: mailboxRouteSegment(mailbox) }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,

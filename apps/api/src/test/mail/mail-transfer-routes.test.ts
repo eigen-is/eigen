@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { type DrivePath, EML_MIME } from '@workspace/lib/types/drive';
 import type { Email, EmailSummary, ImportMailResult } from '@workspace/lib/types/mail';
@@ -128,7 +129,7 @@ describe('Mail transfer routes', () => {
         const summary = (await inbox(alice)).find((m) => m.id === id);
         expect(summary?.subject).toBe(subject);
         expect(summary?.isRead).toBe(false);
-        expect(summary?.mailbox).toBe('');
+        expect(summary?.mailbox).toBe(MAILBOX_INBOX);
 
         const messageRes = await authedRequest(alice.sessionToken, `/mail/${alice.id}/message/${id}`);
         expect((await assertJson<Email>(messageRes)).text).toContain('Saved from another client.');
@@ -332,6 +333,8 @@ describe('Mail transfer routes', () => {
             expect(res.status).toBe(403);
             expect(await res.text()).toBe('Mail is turned off on this server');
         }
+        // The inbox route refuses too while mail is off, so the count is read with it back on.
+        delete process.env['MAIL_ENABLED'];
         expect((await inbox(alice)).length).toBe(before);
     });
 

@@ -4,13 +4,13 @@ import {
     isStandardMailbox,
     MAILBOX_DRAFTS,
     MAILBOX_INBOX,
-    MAILBOX_INBOX_IMAP,
     mailboxListFlags,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
+import { isMailAppEnabled } from '../config/env';
 import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
@@ -22,6 +22,7 @@ import {
     buildRecipientSummary,
     createUniqueMessageId,
     getMailIDfromFileName,
+    maildirFolder,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -33,7 +34,7 @@ const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
-// Keyed by id and trusted only while the row's size and date match, the same inputs a part's ETag hashes.
+// Keyed by id and trusted only while the row's size and date match; saveDraft drops the entry a rewrite outdates.
 const PARSED_MESSAGE_CACHE_ENTRIES = 8;
 const PARSED_MESSAGE_CACHE_BYTES = 32 * 1024 * 1024;
 
@@ -106,6 +107,12 @@ export class MaildirStore implements MailStore {
 
     async init(events: MailStoreEvents): Promise<boolean> {
         this.events = events;
+        // With mail off the store builds no Maildir and opens no index, yet the mail kept on disk still counts.
+        if (!isMailAppEnabled()) {
+            this.indexBytes = readMailIndexSize(this.home.fs.absolutePath(PATHS.MAIL.DB));
+            await this.recountStaged();
+            return false;
+        }
         const isNew = !(await this.exists());
         if (isNew) {
             await this.createStandardMailboxes();
@@ -239,6 +246,10 @@ export class MaildirStore implements MailStore {
         return this.db.getEmail(messageId);
     }
 
+    unreadCount(mailbox: string): number {
+        return this.db.getEmailsCountUnread(mailbox);
+    }
+
     // null means "no summary row" only: a parse, read or DB fault propagates rather than masking as a missing message.
     async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
@@ -282,6 +293,18 @@ export class MaildirStore implements MailStore {
             bytes -= entry.size;
         }
         return parsed.attachments;
+    }
+
+    async getModifiedAt(email: EmailSummary): Promise<number> {
+        const filePath = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename);
+        // A flag change from Dovecot renames the file before the index hears of it: answer "changed", never a 500.
+        return this.storage.stat(filePath).then(
+            (stats) => stats.mtimeMs,
+            (err) => {
+                if (!isEnoent(err)) throw err;
+                return Date.now();
+            },
+        );
     }
 
     async append(
@@ -366,12 +389,15 @@ export class MaildirStore implements MailStore {
 
             if (newFilename !== email.filename) {
                 await this.renameInCur(email.mailbox, email.filename, newFilename);
-                this.db.setFilename(messageId, newFilename);
             }
 
-            if (changes.seen !== undefined) this.db.setRead(messageId, changes.seen);
-            if (changes.flagged !== undefined) this.db.setFlagged(messageId, changes.flagged);
-            if (changes.draft !== undefined) this.db.setDraft(messageId, changes.draft);
+            // The row mirrors the filename's letters, so no flag can be written to one and not the other.
+            const flags = parseFlagsFromFilename(newFilename);
+            this.db.updateFlags(
+                messageId,
+                { isRead: flags.seen, isFlagged: flags.flagged, isDraft: flags.draft, isReplied: flags.replied },
+                newFilename,
+            );
         });
     }
 
@@ -770,11 +796,9 @@ export class MaildirStore implements MailStore {
         await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
     }
 
-    // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.
     private mailboxDir(mailbox: string): string {
-        if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
         if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
-        return `${this.basePath}/.${mailbox.replaceAll('/', '.')}`;
+        return maildirFolder(this.basePath, mailbox);
     }
 
     // -- Private helpers --

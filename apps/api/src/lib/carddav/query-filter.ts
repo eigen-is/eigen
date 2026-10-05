@@ -1,6 +1,7 @@
 // The addressbook-query filter engine (RFC 6352 § 8.6 / § 10.5). Matching runs in-memory over a card's
 // content-line AST — books are small and queries rare, so this stays off every hot path. The parser
 // (xml-parser.ts) builds a QueryFilter from the REPORT body; matchCard evaluates one card against it.
+import { asciiLower } from '../dav/xml-node';
 import { unescapeText } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 
@@ -37,11 +38,10 @@ export function assertSupportedCollation(collation: string | null): void {
     if (collation !== null && !SUPPORTED_COLLATIONS.has(collation)) throw new UnsupportedCollationError(collation);
 }
 
-// Case-fold a value for comparison. i;ascii-casemap folds only ASCII A–Z, so accented letters keep their
-// case; i;unicode-casemap (the default, i.e. anything the parser let through that isn't ascii-casemap) folds
-// via toLowerCase().
+// Case-fold a value for comparison. i;unicode-casemap (the default, i.e. anything the parser let through that
+// isn't ascii-casemap) folds via toLowerCase().
 function foldForCollation(value: string, collation: string | null): string {
-    return collation === 'i;ascii-casemap' ? value.replace(/[A-Z]/g, (c) => c.toLowerCase()) : value.toLowerCase();
+    return collation === 'i;ascii-casemap' ? asciiLower(value) : value.toLowerCase();
 }
 
 function textValueMatches(value: string, tm: TextMatch): boolean {

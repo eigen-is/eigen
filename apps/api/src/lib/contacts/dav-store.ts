@@ -22,6 +22,9 @@ import * as schema from './schema';
 // The size lets a REPORT weigh a row against its byte budget before reading the bytes at all; the id is what
 // an announcement names.
 export type CardRow = { id: string; uri: string; etag: string; size: number };
+
+// A whole-file import never claims the self-link: nobody inspects an imported card one by one.
+export type PutCardOptions = ResourcePreconditions & { import?: boolean };
 const CARD_ROW = {
     id: schema.contacts.id,
     uri: schema.contacts.uri,
@@ -95,13 +98,14 @@ function resolveSelfLinkOnPut(
     parsed: ParsedCard,
     bytes: Uint8Array,
     existing: { id: string; eigenId: string } | undefined,
+    imported: boolean,
 ): { eigenId: string; bytes: Uint8Array; merged: boolean } {
     const me = contacts.home.user.id;
     let eigenId: string;
     if (existing) {
         eigenId = existing.eigenId;
     } else {
-        const claim = selfClaimRank(contacts, parsed, undefined) >= 1;
+        const claim = !imported && selfClaimRank(contacts, parsed, undefined) >= 1;
         const heldElsewhere = !!contacts.db
             .select({ id: schema.contacts.id })
             .from(schema.contacts)
@@ -120,7 +124,7 @@ export async function putCard(
     contacts: Contacts,
     uri: string,
     body: string,
-    options: ResourcePreconditions,
+    options: PutCardOptions,
 ): Promise<PutResourceResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
 
@@ -178,6 +182,7 @@ export async function putCard(
             parsed,
             new TextEncoder().encode(stored),
             existing,
+            !!options.import,
         );
         // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
         const verbatim = stored === body && !merged;

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { getItemMapRoot } from '../../../../core/collab/yjs-utils';
 import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
 import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
 import type { CommentCard } from '../../../../types/comments';
@@ -12,7 +13,7 @@ installHappyDom();
 
 function cardWithDescription(html: string): CommentCard {
     const doc = new Y.Doc();
-    const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+    const tasks = doc.getMap<unknown>('tasks');
     doc.transact(() => {
         const c = new Y.Map<unknown>();
         c.set('id', 'c1');
@@ -26,7 +27,7 @@ function cardWithDescription(html: string): CommentCard {
 describe('readCards (BC for legacy stickies cards)', () => {
     test('preserves legacy creator/createdAt fields', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
             const c = new Y.Map<unknown>();
             c.set('id', 'legacy-1');
@@ -53,7 +54,7 @@ describe('readCards (BC for legacy stickies cards)', () => {
 
     test('new cards have creator/createdAt undefined', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
             const c = new Y.Map<unknown>();
             c.set('id', 'new-1');
@@ -72,7 +73,7 @@ describe('readCards (BC for legacy stickies cards)', () => {
 
     test('parses attachments and ignores malformed values', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         const reference: AttachmentReference = {
             type: 'reference',
             ownerId: 'o1',
@@ -113,7 +114,7 @@ describe('readCards (BC for legacy stickies cards)', () => {
 
     test('mixed legacy + new cards both project correctly', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
             const legacy = new Y.Map<unknown>();
             legacy.set('id', 'legacy');
@@ -135,6 +136,20 @@ describe('readCards (BC for legacy stickies cards)', () => {
         const result = readCards(tasks);
         expect(result['legacy'].creator).toBe('old@example.com');
         expect(result['fresh'].creator).toBeUndefined();
+    });
+
+    test("skips a peer's scalar entry instead of throwing on it", () => {
+        const doc = new Y.Doc();
+        const tasks = doc.getMap<unknown>('tasks');
+        doc.transact(() => {
+            const card = new Y.Map<unknown>();
+            card.set('id', 'ok');
+            card.set('title', 'Fine');
+            tasks.set('ok', card);
+            tasks.set('scalar', 'not-a-card');
+        });
+
+        expect(Object.keys(readCards(getItemMapRoot(doc, 'tasks')))).toEqual(['ok']);
     });
 });
 

@@ -46,7 +46,7 @@ On 0.3.2 and later, it refuses too when you edited `.env.production` since Eigen
 
 This goes back to the version before the last update. It puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first: `./eigen rollback --yes` skips the question, for scripts. Like a restore, it needs `data/` as a plain folder inside the install folder, on the same disk, with room to unpack the backup.
 
-After a Full backup, a rollback puts back everything, files and mail included. A rollback goes back one update, not further.
+After a Full backup, a rollback puts back everything, files and mail included. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
 
 After a Light backup, the usual kind, a rollback puts back the accounts, settings, databases, and `.env.production`. The files and the mail stay on disk as they are now, but Drive lists only what it held before the update. Files and documents made since no longer show in Drive, and on drives that store files by their names, files renamed, moved, or put in the Trash since do not open. Calendars and contacts go back to before the update, and mail stays as it is. Nothing is deleted from disk. See [A Light backup leaves the files where they are](/support/self-hosting/back-up-and-restore#a-light-backup-leaves-the-files-where-they-are). To be able to go back with the files too, update with `./eigen update --full`.
 

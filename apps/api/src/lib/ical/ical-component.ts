@@ -1,6 +1,6 @@
 // `ICAL.Component.toString()` is the only serializer here, so folding, escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
 import { randomUUID } from 'node:crypto';
-import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
@@ -456,11 +456,18 @@ export function serializeEventForImip(
     series?: CalendarEvent,
     exceptions: CalendarEvent[] = [],
 ): string {
-    const vcalendar = series ? newVCalendar() : buildResource([event, ...exceptions]);
+    // An override that states no guests inherits the series' list; the stored bytes keep it as written, but a guest's client would read the bare override as an occurrence they are not invited to.
+    const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent => ({
+        ...override,
+        data: { ...override.data, attendees: heldAttendees(override, master) },
+    });
+    const vcalendar = series
+        ? newVCalendar()
+        : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);
     if (series) {
         // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
         for (const vtimezone of vtimezoneComponents([event, series])) vcalendar.addSubcomponent(vtimezone);
-        vcalendar.addSubcomponent(buildVEvent(event, { master: series }));
+        vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: series }));
     }
     vcalendar.addPropertyWithValue('method', method);
     for (const vevent of vcalendar.getAllSubcomponents('vevent')) shapeForImip(vevent, method);

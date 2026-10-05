@@ -173,7 +173,7 @@ describe('getItemMapRoot / getIdArrayRoot / getIdArray', () => {
         const slide = new Y.Map();
         slide.set('id', 'slide-1');
         slides.set('slide-1', slide);
-        expect(getItemMapRoot(doc, 'slides').get('slide-1')?.get('id')).toBe('slide-1');
+        expect(getItemMapRoot(doc, 'slides').get('slide-1')).toBe(slide);
     });
 
     test('upgrades an AbstractType root left by Y.applyUpdate (server-side path)', () => {
@@ -187,7 +187,7 @@ describe('getItemMapRoot / getIdArrayRoot / getIdArray', () => {
         Y.applyUpdate(live, Y.encodeStateAsUpdate(seed));
         for (const value of live.share.values()) expect(value.constructor.name).toBe('AbstractType');
 
-        expect(getItemMapRoot(live, 'slides').get('slide-1')?.get('id')).toBe('slide-1');
+        expect(getItemMapRoot(live, 'slides').toJSON()).toEqual({ 'slide-1': { id: 'slide-1' } });
         expect(getIdArrayRoot(live, 'slideOrder').toArray()).toEqual(['slide-1']);
         expect(live.share.get('slides')).toBeInstanceOf(Y.Map);
         expect(live.share.get('slideOrder')).toBeInstanceOf(Y.Array);

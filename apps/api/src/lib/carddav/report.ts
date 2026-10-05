@@ -3,8 +3,8 @@ import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
 import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
-import { type DataBudget, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
-import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
+import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
+import { handleSyncCollection } from '../dav/sync-collection';
 import { davError, multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { parseVCardLines } from '../vcard';
 import type { VCardLine } from '../vcard/types';
@@ -34,7 +34,14 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
         case 'addressbook-multiget':
             return handleMultiget(contacts, ownerId, report, budget);
         case 'sync-collection':
-            return handleSyncCollection(contacts, ownerId, report, budget);
+            return handleSyncCollection(report.syncToken, {
+                state: await contacts.getBook(),
+                list: () => contacts.listCards(),
+                changedSince: (ctag) => contacts.getChangedCardsSince(ctag),
+                deletedSince: (ctag) => contacts.getDeletedCardsSince(ctag),
+                href: (uri) => cardHref(ownerId, uri),
+                row: (card) => cardRow(contacts, ownerId, card, report.wantsData, null, budget, removedRow),
+            });
         case 'addressbook-query':
             return handleQuery(contacts, ownerId, report, budget);
     }
@@ -59,21 +66,14 @@ async function handleMultiget(
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
     // Only the Unicode form is folded, so an NFD href and its NFC twin yield one row (the shared resolver's `keyOf`).
-    const responses: string[] = [];
-    for (const { uri, href } of resolveMultigetHrefs(report.hrefs, bookHref(ownerId), normalizeResourceUri)) {
-        if (uri === null) {
-            responses.push(notFoundRow(href));
-            continue;
-        }
-
-        const row = await contacts.getCardMeta(uri);
-        if (!row) {
-            responses.push(notFoundRow(cardHref(ownerId, uri)));
-            continue;
-        }
-        responses.push(await cardRow(contacts, ownerId, row, report.wantsData, report.partialProps, budget));
-    }
-    return multistatusResponse(responses);
+    return multistatusResponse(
+        await multigetRows(
+            resolveMultigetHrefs(report.hrefs, bookHref(ownerId), normalizeResourceUri),
+            (uri) => contacts.getCardMeta(uri),
+            (uri) => cardHref(ownerId, uri),
+            (card) => cardRow(contacts, ownerId, card, report.wantsData, report.partialProps, budget),
+        ),
+    );
 }
 
 // Matching runs in-memory over the whole book (RFC 6352 § 8.6 is match-only); books are small and queries rare.
@@ -124,39 +124,6 @@ async function handleQuery(
         );
     }
     return multistatusResponse(responses);
-}
-
-async function handleSyncCollection(
-    contacts: Contacts,
-    ownerId: string,
-    report: Extract<CardReportRequest, { type: 'sync-collection' }>,
-    budget: DataBudget,
-): Promise<Response> {
-    const book = await contacts.getBook();
-    const responses: string[] = [];
-
-    if (!report.syncToken) {
-        // Initial sync — the whole book as 200 rows.
-        for (const card of await contacts.listCards()) {
-            responses.push(await cardRow(contacts, ownerId, card, report.wantsData, null, budget, removedRow));
-        }
-    } else {
-        const token = parseSyncToken(report.syncToken);
-        if (!token) return invalidSyncToken();
-        // A stale generation or a token ahead of the ctag forces a full resync; an empty delta with a lower token stalls a client.
-        if (token.gen !== book.syncGen || token.since > book.ctag) return invalidSyncToken();
-
-        for (const card of await contacts.getChangedCardsSince(token.since)) {
-            responses.push(await cardRow(contacts, ownerId, card, report.wantsData, null, budget, removedRow));
-        }
-        // One tombstone row per uri: no href may appear as both a 200 and a 404 in one response.
-        for (const d of await contacts.getDeletedCardsSince(token.since)) {
-            responses.push(removedRow(cardHref(ownerId, d.uri)));
-        }
-    }
-
-    // RFC 6578: the current token is appended after the responses.
-    return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(book)}</D:sync-token>`);
 }
 
 // A row normally reads its own blob; the query passes the bytes it already matched, so its cards are read once.

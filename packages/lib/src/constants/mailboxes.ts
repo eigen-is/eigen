@@ -1,19 +1,12 @@
-// The special mailboxes every Maildir carries: wire name (the DB column, SSE payloads; inbox = ''), IMAP
-// special-use flag and UI label. React-free so the API imports it; icons live in `core/mailbox-icons.ts`.
+// The special mailboxes every Maildir carries: wire name (the DB column, SSE payloads), IMAP special-use
+// flag and UI label. React-free so the API imports it; icons live in `core/mailbox-icons.ts`.
 
-export const MAILBOX_INBOX = '';
+export const MAILBOX_INBOX = 'INBOX';
 export const MAILBOX_SENT = 'Sent';
 export const MAILBOX_DRAFTS = 'Drafts';
 export const MAILBOX_TRASH = 'Trash';
 export const MAILBOX_JUNK = 'Junk';
 export const MAILBOX_ARCHIVE = 'Archive';
-
-// The inbox as the frontend spells it: query keys and `/box/:filterId` segments lowercase every mailbox, and
-// the canonical inbox has no lowercase form, so it travels as this instead.
-export const MAILBOX_INBOX_KEY = 'inbox';
-
-// The inbox as IMAP and the Maildir on disk name it — the root folder, not a `.Mailbox` subdirectory.
-export const MAILBOX_INBOX_IMAP = 'INBOX';
 
 export type StandardMailbox =
     | typeof MAILBOX_INBOX
@@ -64,12 +57,11 @@ const BY_FLAG = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES)
 
 const STANDARD_BY_NAME = new Set<string>(STANDARD_MAILBOXES);
 
-// The one name a mailbox answers to: the standard six case-fold onto their canonical spelling and `INBOX`
-// onto the inbox's empty name, while a folder the user (or their IMAP client) made keeps its own spelling.
+// The one name a mailbox answers to: the standard six case-fold onto their canonical spelling (INBOX is
+// case-insensitive, RFC 3501), while a folder the user (or their IMAP client) made keeps its own spelling.
 // Both hierarchy delimiters address one directory, so `/` folds onto Maildir++'s `.` here — or the DB
 // `mailbox` column, the SSE payloads and the query keys would hold a second spelling of the same folder.
 export function canonicalMailbox(mailbox: string): string {
-    if (mailbox === MAILBOX_INBOX || mailbox.toLowerCase() === MAILBOX_INBOX_KEY) return MAILBOX_INBOX;
     const dotted = mailbox.replaceAll('/', '.');
     return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === dotted.toLowerCase()) ?? dotted;
 }
@@ -83,7 +75,6 @@ export function isStandardMailbox(mailbox: string): boolean {
 // The `/box/:filterId` segment and the mailbox part of a list query key. A custom folder travels verbatim:
 // the server case-folds only the standard names, so `Projects` lowercased would address no mailbox at all.
 export function mailboxRouteSegment(mailbox: string): string {
-    if (mailbox === MAILBOX_INBOX) return MAILBOX_INBOX_KEY;
     return isStandardMailbox(mailbox) ? mailbox.toLowerCase() : mailbox;
 }
 

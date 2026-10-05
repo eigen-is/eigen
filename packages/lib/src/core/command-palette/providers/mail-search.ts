@@ -22,9 +22,9 @@ export function useMailSearchResults(
     const debouncedInput = useDebouncedValue(input, MAIL_SEARCH_DEBOUNCE_MS);
     const parsed = parseQuery(debouncedInput);
 
-    // Skip the network call when hosted mail is off or the scope excludes mail. The effective scope already
+    // Skip the network call when hosted mail is off or the scope is another kind. The effective scope already
     // merges the typed prefix (`mail:`, `>`, `@`) with the chip scope set via Tab.
-    const scopeBlocks = !ctx.mailEnabled || scope === 'actions' || scope === 'contacts' || scope === 'doc';
+    const scopeBlocks = !ctx.mailEnabled || (!!scope && scope !== 'mail');
 
     const { data, isFetching } = useSearchQuery({
         ownerId: ctx.ownerId,
@@ -41,9 +41,7 @@ export function useMailSearchResults(
         const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
         return data.mail.map((email, i) => {
             // The mail route lives at /_auth/$filterType/$filterId — `box/<mailbox>` is
-            // its canonical shape. Inbox is stored as the empty string in mail.db; route
-            // segments need 'inbox'. Other mailboxes are lowercased because useEmails
-            // lowercases the URL path on the wire (and the sidebar URLs match).
+            // its canonical shape, with a standard mailbox lowercased as the sidebar URLs are.
             const filterId = mailboxRouteSegment(email.mailbox);
             return {
                 kind: 'mail' as const,

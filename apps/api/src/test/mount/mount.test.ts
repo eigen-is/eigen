@@ -14,6 +14,7 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
+import { storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
@@ -182,28 +183,17 @@ describe('replaceContainerDataDb', () => {
         rootId = (await mount.getRootFolder())!.id;
     });
 
-    test('recreates data.db even when it is missing (crash-recovery self-heal)', async () => {
+    test('replaces the bytes of data.db under the same row', async () => {
         const container = await mount.createFolder(rootId, 'replace-container');
-        await mount.createFile(container, 'data.db', 'application/x-sqlite3', 3, Buffer.from('old'));
+        const dataDbId = await mount.createFile(container, 'data.db', 'application/x-sqlite3', 3, Buffer.from('old'));
         const sourcePath = join(TEST_DIR, 'replace-source.db');
         await Bun.write(sourcePath, 'restored-bytes');
 
-        // Normal path: data.db present → replaced with the source content.
         await mount.replaceContainerDataDb(container, sourcePath);
-        let dataDb = await mount.getChildByName(container, 'data.db');
-        expect(dataDb).not.toBeNull();
-        expect(await (await mount.readFile(dataDb!.id))!.text()).toBe('restored-bytes');
-
-        // Simulate a restore that crashed after deleting data.db but before recreating it.
-        await mount.deletePath(dataDb!.id);
-        expect(await mount.getChildByName(container, 'data.db')).toBeNull();
-
-        // Re-running restore must self-heal (recreate data.db), not throw a 404.
-        await mount.replaceContainerDataDb(container, sourcePath);
-        dataDb = await mount.getChildByName(container, 'data.db');
-        expect(dataDb).not.toBeNull();
-        expect(dataDb!.mimeType).toBe('application/x-sqlite3');
-        expect(await (await mount.readFile(dataDb!.id))!.text()).toBe('restored-bytes');
+        const dataDb = await mount.getChildByName(container, 'data.db');
+        expect(dataDb?.id).toBe(dataDbId);
+        expect(dataDb?.size).toBe('restored-bytes'.length);
+        expect(await (await mount.readFile(dataDbId))!.text()).toBe('restored-bytes');
     });
 });
 
@@ -301,11 +291,14 @@ describe('Mount (local-key storage)', () => {
         const childId = await mount.createFolder(folderId, 'ChildFolder');
         const data = Buffer.from('child file');
         const fileId = await mount.createFile(childId, 'child.txt', 'text/plain', data.length, data);
+        const objectPath = join(mount.dataDir, buildStorageKey(fileId, 'child.txt'));
+        expect(existsSync(objectPath)).toBe(true);
 
         await mount.deletePath(folderId);
         expect(await mount.getPath(folderId)).toBeNull();
         expect(await mount.getPath(childId)).toBeNull();
         expect(await mount.getPath(fileId)).toBeNull();
+        expect(existsSync(objectPath)).toBe(false);
     });
 
     test('breadcrumb returns full path', async () => {
@@ -1906,5 +1899,24 @@ describe('content reindex failure handling', () => {
         await queue.close();
         expect(mount.searchPaths({ q: 'flibberretry', limit: 20 }).some((h) => h.id === txt)).toBe(true);
         expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
+    });
+
+    // A gone data.db answers 410 on every open, so retrying it every cap window never ends. It indexes as
+    // empty instead; a version restore re-marks it.
+    test('a 410 extract clears the body from search and leaves the path indexed', async () => {
+        const txt = await mount.createFile(rootId, 'reindex-gone.txt', 'text/plain', 0, undefined);
+        mount.upsertPathContent(txt, 'quorblegone body text');
+        const queue = new ContentReindexQueue({
+            mount,
+            label: 'gone-test',
+            extract: async () => {
+                throw storageGone();
+            },
+        });
+
+        await queue.drain();
+        await queue.close();
+        expect(mount.getContentDirtyPaths(-1, 100).map((p) => p.id)).not.toContain(txt);
+        expect(mount.searchPaths({ q: 'quorblegone', limit: 20 }).some((h) => h.id === txt)).toBe(false);
     });
 });

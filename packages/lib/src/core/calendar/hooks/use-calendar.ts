@@ -1,5 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { parseOwnerId } from '@workspace/lib/types';
 import type {
@@ -8,6 +9,7 @@ import type {
     CalendarItem,
     CalendarOption,
     CreateEventInput,
+    EventData,
     FreeBusyBlock,
     SharedCalendar,
     UpdateCalendarInput,
@@ -16,8 +18,8 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { useCallback, useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
-import { usePublicUsers } from '../../public';
-import { formatFreeBusyTitle, occurrenceDateToString } from '../calendar-utils';
+import { usePublicUser, usePublicUsers } from '../../public';
+import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
 import {
     calendarKeys,
     invalidateCalendarCreated,
@@ -180,6 +182,20 @@ export function useMoveEvent(ownerId: string) {
         onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
+}
+
+// The owner's address tells their own organized events from invitations; a team owner has none to ask for. Until a
+// user owner's address arrives every event counts as an invitation, so none is briefly editable.
+export function useIsInvitationFromOthers(eventOwnerId: string): (event: { data?: EventData | null }) => boolean {
+    const { user } = useAuth();
+    const ownerIsViewer = eventOwnerId === user?.id;
+    const ownerIsTeam = parseOwnerId(eventOwnerId).type === 'team';
+    const owner = usePublicUser(ownerIsViewer || ownerIsTeam ? undefined : eventOwnerId);
+    const ownerEmail = ownerIsViewer ? user?.email : owner.data?.email;
+    return useCallback(
+        (event: { data?: EventData | null }) => owner.isLoading || isInvitationFromOthers(event, ownerEmail),
+        [owner.isLoading, ownerEmail],
+    );
 }
 
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {

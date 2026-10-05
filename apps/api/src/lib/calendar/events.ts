@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
-import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import { heldAttendees, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import type { CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq } from 'drizzle-orm';
@@ -125,7 +125,7 @@ export async function createEvent(
     });
 
     calendar.announce(SSEventType.CALENDAR_EVENT_CREATED, calendarId);
-    if (user) propagateWrite(calendar, created, user, replaced?.data?.attendees ?? []).catch(console.error);
+    if (user) propagateWrite(calendar, created, user, replaced).catch(console.error);
     return created;
 }
 
@@ -134,14 +134,13 @@ async function propagateWrite(
     calendar: Calendar,
     event: CalendarEvent,
     user: User,
-    oldAttendees: Attendee[],
+    previous: CalendarEvent | null,
 ): Promise<void> {
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // The guests hold the series' list when the override states none of its own, so a name missing from it cancels that instance.
-    const held = oldAttendees.length ? oldAttendees : (series?.data?.attendees ?? []);
-    // A cancelled occurrence rides as an EXDATE and keeps no guest list, so the ones it drops are the ones who held it.
-    const attendees = event.data?.attendees ?? (series ? held : []);
-    // A write that names nobody and replaced nobody owes the guests nothing; emptying the list cancels.
+    // A name missing from the list the guests held cancels that instance.
+    const held = heldAttendees(previous, series);
+    const attendees = heldAttendees(event, series);
+    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
     if (!attendees.length && !held.length) return;
     // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
@@ -246,12 +245,12 @@ export async function updateEvent(
     user?: User,
     expectedEtag?: string,
 ): Promise<CalendarEvent> {
-    const { updated, oldAttendees } = await calendar.writeLock.run(() =>
+    const { updated, existing } = await calendar.writeLock.run(() =>
         patchStoredEvent(calendar, calendarId, id, input, user, expectedEtag),
     );
     calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 
-    if (user) propagateWrite(calendar, updated, user, oldAttendees).catch(console.error);
+    if (user) propagateWrite(calendar, updated, user, existing).catch(console.error);
     return updated;
 }
 
@@ -263,7 +262,7 @@ async function patchStoredEvent(
     input: EventPatch,
     user?: User,
     expectedEtag?: string,
-): Promise<{ updated: CalendarEvent; oldAttendees: Attendee[] }> {
+): Promise<{ updated: CalendarEvent; existing: CalendarEvent }> {
     const existing = eventById(calendar, id);
     // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
     if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
@@ -279,7 +278,6 @@ async function patchStoredEvent(
         input = { data: localData };
     }
 
-    const oldAttendees = existing.data?.attendees ?? [];
     const startTime = input.startTime ?? existing.startTime;
     const endTime = input.endTime ?? existing.endTime;
     // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
@@ -309,6 +307,17 @@ async function patchStoredEvent(
         throw new ApiError(412, 'Event was changed elsewhere');
     }
 
+    // Cancelling an override replaces it with an EXDATE: Thunderbird drops a STATUS:CANCELLED override from its next PUT, which brings the occurrence back.
+    if (existing.parentEventId && input.status === 'cancelled') {
+        const parent = eventById(calendar, existing.parentEventId)!;
+        await editResource(calendar, resource, (component) => {
+            addExclusion(component, parent, existing, writeContext(actorIsOrganizer(parent)));
+        });
+        // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
+        const cancelled = eventById(calendar, id)!;
+        return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, existing };
+    }
+
     // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
     const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
@@ -334,7 +343,7 @@ async function patchStoredEvent(
         writeContext(!!user && !linked),
     );
 
-    return { updated: eventById(calendar, id)!, oldAttendees };
+    return { updated: eventById(calendar, id)!, existing };
 }
 
 export async function deleteEvent(calendar: Calendar, calendarId: string, id: string, user?: User): Promise<void> {
@@ -342,8 +351,12 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
     if (!existing) return;
 
     const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
+    // An override's guests and cancellation come from its series, as propagateWrite's do: only the series knows the original instant.
+    // Deleting a cancelled row answers and cancels nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
+    const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
+    const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
     // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
-    const declining = user && invitation?.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
+    const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (user && declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
         // An organizer known by address only has no Eigen id to relay to, so the decline goes as a REPLY.
@@ -355,9 +368,9 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
                 console.error,
             );
         }
-    } else if (!invitation && existing.data?.attendees?.length) {
+    } else if (!invitation && held.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
-        propagateCancellation(calendar.home, existing, existing.data.attendees).catch(console.error);
+        propagateCancellation(calendar.home, existing, held, series ?? undefined).catch(console.error);
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);

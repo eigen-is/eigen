@@ -340,13 +340,14 @@ function ProgressiveImage({
 
     return (
         <div className="relative rounded" style={style}>
-            {/* Thumbnail: crossfades out as the preview lands. It must not stay underneath, or its
-                upscaled edges show through the transparent parts of an SVG or PNG. */}
+            {/* Thumbnail: fades out once the preview has faded in over it, since fading both at once
+                lets the checkerboard flash through. It must not stay underneath, or its upscaled
+                edges show through the transparent parts of an SVG or PNG. */}
             {thumbnailUrl && (
                 <img
                     src={thumbnailUrl}
                     alt={alt}
-                    className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300"
+                    className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300 delay-300"
                     style={{ opacity: previewReady ? 0 : 1 }}
                 />
             )}

@@ -21,8 +21,8 @@ export function useFileSearchResults(
     const debouncedInput = useDebouncedValue(input, FILE_SEARCH_DEBOUNCE_MS);
     const parsed = parseQuery(debouncedInput);
 
-    // Skip the network call when the effective scope excludes files.
-    const scopeBlocks = scope === 'mail' || scope === 'actions' || scope === 'contacts' || scope === 'doc';
+    // Skip the network call when the effective scope is another kind.
+    const scopeBlocks = !!scope && scope !== 'file';
 
     const { data, isFetching } = useSearchQuery({
         ownerId: ctx.ownerId,

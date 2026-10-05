@@ -177,7 +177,7 @@ Route in `apps/api/src/routes/chat.ts`, delegating to `drive.inviteToChat(mountI
 
 ### Why Not Set ACL on the Chat Directly
 
-An embedded chat usually has no ACL of its own; it inherits from the container. Granting access on the chat would put the entry on the wrong path, and a client cannot reliably see (or safely rewrite) the container's ACL. Resolving the container server-side puts the entry where inheritance actually reads it. The server writes it with a full replace outside the per-path delta chain the [ACL route](#acl-route) uses, so an invite can race a concurrent ACL change ([ROADMAP.md](ROADMAP.md)).
+An embedded chat usually has no ACL of its own; it inherits from the container. Granting access on the chat would put the entry on the wrong path, and a client cannot reliably see (or safely rewrite) the container's ACL. Resolving the container server-side puts the entry where inheritance actually reads it. The server adds it as a delta through the same per-path chain the [ACL route](#acl-route) uses, so an invite and a concurrent ACL change both land.
 
 ### findContainerFromAncestors()
 
@@ -214,7 +214,7 @@ The ACL model treats "can edit content" and "can manage access" as one permissio
 { add?: DriveACL[]; remove?: string[]; visibility?: DriveVisibility; sharingRestricted?: boolean }
 ```
 
-The server merges onto the path's current ACL (`mergeACLDelta` in `acl.ts`): removals first (matched on `canonicalACLId`, so emails match case-insensitively), then upserts. Re-adding an existing id replaces its entry, which is how permission changes travel. `Drive.updateACLDelta` serializes the read-merge-write per path, then delegates to the internal full-replace `Drive.updateACL` for validation, persistence, and propagation. Full-array replace is deliberately not accepted from clients: a dialog built from a stale cache would silently revert entries a concurrent sharer just added. The FE share dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta. Defined in `apps/api/src/routes/drive.ts`. Each `add[].id` is bounded by `MAX_EMAIL_LENGTH` at the schema (an id is an email or a `team_` id, the same bound the chat invite route uses); the number of entries is not capped ([ROADMAP](ROADMAP.md) § Cheap wins).
+The server merges onto the path's current ACL (`mergeACLDelta` in `acl.ts`): removals first (matched on `canonicalACLId`, so emails match case-insensitively), then upserts. Re-adding an existing id replaces its entry, which is how permission changes travel. `Drive.updateACLDelta` serializes the read-merge-write per path, then delegates to the internal full-replace `Drive.updateACL` for validation, persistence, and propagation. Full-array replace is deliberately not accepted from clients: a dialog built from a stale cache would silently revert entries a concurrent sharer just added. The FE share dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta. Defined in `apps/api/src/routes/drive.ts`. Each `add[].id` is bounded by `MAX_EMAIL_LENGTH` at the schema (an id is an email or a `team_` id, the same bound the chat invite route uses); `add` holds at most `MAX_SEND_RECIPIENTS` (100) entries, the cap the access-check route puts on its email list.
 
 `GET /drive/:ownerId/:mountId/path/:pathId/permissions` answers `{ canRead, canWrite }` for any caller, never 403. A stranger gets `{ false, false }`, which is what the request-access view keys off.
 

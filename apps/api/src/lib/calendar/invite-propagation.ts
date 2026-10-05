@@ -1,3 +1,4 @@
+import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings } from '../config/server-settings';
@@ -24,7 +25,7 @@ async function sendSeriesExceptions(
     organizerHome: Home,
     organizerEventId: string,
     exceptions: CalendarEvent[],
-    seriesAttendees: Attendee[],
+    series: CalendarEvent,
 ): Promise<void> {
     for (const exception of exceptions) {
         if (!exception.recurrenceDate) continue;
@@ -56,7 +57,7 @@ async function sendSeriesExceptions(
                 sequence: exception.sequence,
                 dtstamp: exception.updatedAt,
                 // The organizer's list for that occurrence, so an answer the guest already gave to it stands.
-                attendees: exception.data?.attendees ?? seriesAttendees,
+                attendees: heldAttendees(exception, series),
             },
         });
     }
@@ -81,10 +82,11 @@ export async function propagateInvitation(
     const removed = oldAttendees.filter((a) => !newEmails.has(a.email.toLowerCase()));
     const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
 
-    const organizerEmail = user.email.toLowerCase();
+    // The acting user organizes. A collaborator writes in the owner's calendar, so the owner already holds the event: nothing is relayed to them, and the answer stays theirs to give.
+    const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
 
     for (const attendee of added) {
-        if (attendee.email.toLowerCase() === organizerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -122,7 +124,7 @@ export async function propagateInvitation(
                     organizerUserId: organizerHome.user.id,
                 },
             });
-            await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, newAttendees);
+            await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, event);
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series);
@@ -136,7 +138,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of removed) {
-        if (attendee.email.toLowerCase() === organizerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -157,7 +159,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of existing) {
-        if (attendee.email.toLowerCase() === organizerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -224,6 +226,11 @@ export async function propagateCancellation(
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
+                // A team Home has no address, and a CANCEL with an empty organizer names no one a client could match.
+                if (!organizerHome.user.email) {
+                    console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
+                    continue;
+                }
                 const organizer = {
                     userId: organizerHome.user.id,
                     email: organizerHome.user.email,

@@ -1825,15 +1825,52 @@ describe('CalDAV', () => {
             expect(await res.text()).not.toContain('<D:response>');
         });
 
-        test('a lookup by UID is answered, the text-match it carries ignored rather than refused', async () => {
-            // python-caldav's event_by_uid, and Evolution's every query: RFC 4791 § 9.7 makes prop-filter
-            // and text-match part of the mandatory grammar, so a 403 takes the whole collection with it.
-            expect((await putIcs('caldav-by-uid.ics', ics('caldav-by-uid@eigen', 'By UID'))).status).toBe(201);
-            const res = await query(
-                '<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:prop-filter name="UID"><C:text-match>caldav-by-uid@eigen</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter>',
+        // python-caldav's event_by_uid, and Evolution's every query: RFC 4791 § 9.7 makes prop-filter and
+        // text-match part of the mandatory grammar, so a 403 would take the whole collection with it.
+        const byProp = (prop: string, textMatch: string) =>
+            query(
+                `<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:prop-filter name="${prop}">${textMatch}</C:prop-filter></C:comp-filter></C:comp-filter>`,
             );
+
+        test('a lookup by UID answers that resource and no other', async () => {
+            expect((await putIcs('caldav-by-uid.ics', ics('caldav-by-uid@eigen', 'By UID'))).status).toBe(201);
+            expect((await putIcs('caldav-by-uid-other.ics', ics('caldav-other@eigen', 'Other UID'))).status).toBe(201);
+
+            const res = await byProp('UID', '<C:text-match collation="i;octet">caldav-by-uid@eigen</C:text-match>');
             expect(res.status).toBe(207);
-            expect(await res.text()).toContain('By UID');
+            const xml = await res.text();
+            expect(xml).toContain('By UID');
+            expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
+
+            // i;octet is case-sensitive; the default i;ascii-casemap is not, and a text-match is a substring match.
+            expect(
+                await (await byProp('UID', '<C:text-match collation="i;octet">CALDAV-BY-UID</C:text-match>')).text(),
+            ).not.toContain('<D:response>');
+            expect(await (await byProp('UID', '<C:text-match>CALDAV-BY-UID</C:text-match>')).text()).toContain(
+                'By UID',
+            );
+        });
+
+        test('a negated UID text-match answers every other resource', async () => {
+            expect((await putIcs('caldav-negated-uid.ics', ics('caldav-negated-uid@eigen', 'Negated'))).status).toBe(
+                201,
+            );
+            const xml = await (
+                await byProp('UID', '<C:text-match negate-condition="yes">caldav-negated-uid@eigen</C:text-match>')
+            ).text();
+            expect(xml).toContain('<D:response>');
+            expect(xml).not.toContain('caldav-negated-uid.ics');
+        });
+
+        test('a text-match Eigen cannot evaluate narrows nothing', async () => {
+            expect((await putIcs('caldav-superset.ics', ics('caldav-superset@eigen', 'Superset'))).status).toBe(201);
+            for (const res of [
+                await byProp('SUMMARY', '<C:text-match>no such summary</C:text-match>'),
+                await byProp('UID', '<C:text-match collation="i;unicode-casemap">no such uid</C:text-match>'),
+            ]) {
+                expect(res.status).toBe(207);
+                expect(await res.text()).toContain('caldav-superset.ics');
+            }
         });
 
         test('an identical re-PUT changes nothing: no ctag bump, no sync row, an ETag back', async () => {

@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -17,7 +18,7 @@ import { user } from '../../../auth-schema';
 import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
-import { updateServerSettings } from '../../lib/config/server-settings';
+import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -65,6 +66,38 @@ describe('Server Settings', () => {
         });
         const data = await assertJson<ServerSettings>(res);
         expect(data.defaults.mount.storageType).toBe('local-fullnames');
+    });
+
+    const putQuotas = (quotas: Partial<ServerSettings['quotas']>) =>
+        authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quotas }),
+        });
+
+    // The server refuses any request body over 1 GiB, so a cap at or above it promises an upload it cannot take.
+    test('the upload cap stops below the largest request the server accepts', async () => {
+        expect((await putQuotas({ maxUploadSizeMB: 1024 })).status).toBe(422);
+        const data = await assertJson<ServerSettings>(await putQuotas({ maxUploadSizeMB: UPLOAD_CAP_MAX_MB }));
+        expect(data.quotas.maxUploadSizeMB).toBe(UPLOAD_CAP_MAX_MB);
+    });
+
+    // A cap saved before the route bounded it still sits in settings.json above the request bound.
+    test('a stored upload cap above the bound reads as the bound', async () => {
+        const previous = getServerSettings().quotas.maxUploadSizeMB;
+        await updateServerSettings({ quotas: { maxUploadSizeMB: 4096 } });
+        try {
+            expect(getMaxUploadSize()).toBe(UPLOAD_CAP_MAX_MB * 1024 * 1024);
+        } finally {
+            await updateServerSettings({ quotas: { maxUploadSizeMB: previous } });
+        }
+    });
+
+    // 0 is the mount's "never purge"; the route must let the owner choose it.
+    test('a trash retention of 0 days is accepted', async () => {
+        const data = await assertJson<ServerSettings>(await putQuotas({ trashRetentionDays: 0 }));
+        expect(data.quotas.trashRetentionDays).toBe(0);
+        expect((await putQuotas({ trashRetentionDays: 30 })).status).toBe(200);
     });
 
     test('non-admin cannot update server settings', async () => {
@@ -1011,6 +1044,38 @@ describe('GET /settings/users', () => {
         expect(atHome('unlisted-home-id')).toBe(false);
         expect(fs.existsSync(getUserHomePath('unlisted-home-id'))).toBe(false);
         await db.delete(user).where(eq(user.id, 'unlisted-home-id'));
+    });
+});
+
+describe('GET /settings/users/guests', () => {
+    test('403 for non-admin', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/users/guests');
+        expect(res.status).toBe(403);
+    });
+
+    // The Users list's row shape, so the guests page draws the same table: no role, membership or teams.
+    test('lists guests as user rows with when they were last active, and only guests', async () => {
+        const ctx = await getTestContext();
+        const db = getAuthDrizzleDb();
+        const now = new Date();
+        await db.insert(user).values({
+            id: 'guest-row-id',
+            name: 'Guest Row',
+            email: 'guest-list@test.eigen.is',
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+            lastLoginAt: now,
+            role: 'guest',
+        });
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users/guests');
+        const rows = await assertJson<AdminUserRow[]>(res);
+        const guest = rows.find((r) => r.id === 'guest-row-id');
+        expect(guest).toMatchObject({ name: 'Guest Row', memberId: null, role: null, teams: [] });
+        expect(guest?.lastActiveAt).not.toBeNull();
+        expect(rows.find((r) => r.email === 'alice@test.eigen.is')).toBeUndefined();
+        await db.delete(user).where(eq(user.id, 'guest-row-id'));
     });
 });
 

@@ -20,6 +20,7 @@ Layout, stack, and scripts are derivable: read `package.json` (scripts + workspa
 - **Sanitize user-provided paths**: validate against `..`, `/`, and control characters before filesystem or header use. Never interpolate raw user input into HTTP headers
 - **One source of truth per fact**: a set, map, schema, or constant that answers a question lives in exactly one module. Import it; never re-list its members inline; derive subsets from the canonical one ([why](docs/ARCHITECTURE.md#one-source-of-truth-per-fact))
 - **A primitive isn't "shared" until its barrel exports it**: values through `@workspace/ui` / `@workspace/lib/<domain>`, types through `@workspace/lib/types/<domain>`; a deep import past a barrel means it should have been exported ([why](docs/ARCHITECTURE.md#a-primitive-is-shared-only-when-its-barrel-exports-it))
+- **A new API route needs the owner's explicit yes, asked as its own question right before you build it**: name the route, why no existing route serves, and the simpler alternative. An approved plan or ruling that implies a route is not that yes; a subagent stops and reports instead of adding one
 - **Fix broken windows**: fix pre-existing issues if the fix is straightforward. Over-engineered code is a broken window too: removing lines is always welcome when the result is cleaner and easier to understand
 - **Keep docs up to date**: gotchas land in `docs/<DOMAIN>.md`, written and trimmed via the [domain-doc skill](.claude/skills/domain-doc/SKILL.md); this file only if cross-domain; a new backend or frontend concept gets its row in the [ARCHITECTURE.md](docs/ARCHITECTURE.md) tables. A user-visible change corrects the help center (`apps/index/src/data/support/`) in the same cycle, minimally, via the [support-article skill](.claude/skills/support-article/SKILL.md) and [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
 - **No hard line-wrapping in Markdown prose**: when writing `.md` content (docs, blog posts, proposals), keep each paragraph on one line; never insert manual line breaks to satisfy a maximum line length. Editors soft-wrap, and rendered HTML is unaffected either way
@@ -37,6 +38,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Sharing and permissions: [ACL.md](docs/ACL.md); guests: [GUEST-ACCESS.md](docs/GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)
 - Collab documents (Yjs, offline, restore): [COLLAB.md](docs/COLLAB.md)
 - Canvas engine (vector + slides): [CANVAS.md](docs/CANVAS.md), [SLIDES.md](docs/SLIDES.md); clipboard: [CLIPBOARD.md](docs/CLIPBOARD.md)
+- Docs app, the eigendoc schema and figures: [DOCS.md](docs/DOCS.md)
 - Sheets: [SHEETS.md](docs/SHEETS.md); stickies: [STICKIES.md](docs/STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](docs/INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
 - Comments: [COMMENTS.md](docs/COMMENTS.md)
 - Mail: [MAIL.md](docs/MAIL.md), [IMAP.md](docs/IMAP.md)
@@ -52,7 +54,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Self-hosting and `./eigen`: [SELF-HOSTING.md](docs/SELF-HOSTING.md); the operator's steps live in the help center's `self-hosting/` section
 - Server config, settings, quotas: [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md), [QUOTA.md](docs/QUOTA.md); demo instance: [DEMO_MODE.md](docs/DEMO_MODE.md)
 - Cross-home relay and sharding: [SCALABILITY.md](docs/SCALABILITY.md)
-- Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [the proposal](docs/proposals/PROPOSAL_COMMAND_PALETTE.md)
+- Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [COMMAND-PALETTE.md](docs/COMMAND-PALETTE.md)
 - Testing and browser verification: [TESTING.md](docs/TESTING.md), the [verify-in-browser skill](.claude/skills/verify-in-browser/SKILL.md)
 - Help center: [HELP-CENTER.md](docs/HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
 - Code standards and their worked examples: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), [CODE-EXAMPLES.md](docs/CODE-EXAMPLES.md); setting up and contributing: [CONTRIBUTING.md](docs/CONTRIBUTING.md)

@@ -9,7 +9,7 @@
 # while eigen-api reads a .env.production replaced since it started or cannot be asked, and backup refused and restart
 # stopping eigen-api first then, what setup
 # downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
-# what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, an
+# what each failure leaves, an archive uid 1000 cannot read, a running server backup or its upload waited out before a stop, a restore that cannot write its files, an
 # update interrupted in that wait that stops and restarts nothing, a swap
 # that was cut off and finished first, with no .env.production too, a restore on a new machine from the launcher
 # alone, what rollback runs or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
@@ -297,6 +297,26 @@ update_steps() {
 
 # A restore's stub swap writes the pins of its archive into .env.production; this puts the fixture's back.
 reset_release() { printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/release/.env.production"; }
+
+# A server backup's record in local/backups/, and its JSON, with \n escapes, while the backup runs.
+BACKUP_RECORD=$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json
+BACKUP_RUNNING='{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}'
+
+# launch_during_backup <record JSON> <args…>: launch in local/ with that backup record, which ends 3 s in.
+launch_during_backup() {
+    mkdir -p "$FIX/local/backups"
+    printf '%b\n' "$1" >"$BACKUP_RECORD"
+    shift
+    (sleep 3; rm -f "$BACKUP_RECORD") &
+    launch local "$@"
+    wait
+    rm -r "$FIX/local/backups"
+}
+
+# waited_for_backup: the last launch said the server backup ended, then that Eigen stopped.
+waited_for_backup() {
+    [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ]
+}
 
 for SHELL_NAME in dash busybox host; do
     case $SHELL_NAME in
@@ -598,6 +618,20 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: stop: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    # The stop would kill a server backup that runs, and that night would have none.
+    launch_during_backup "$BACKUP_RUNNING" stop
+    if [ "$CODE" = 0 ] && waited_for_backup; then
+        ok "$SHELL_NAME: stop waits for the server backup that runs to end"
+    else
+        fail "$SHELL_NAME: stop during a server backup: exit $CODE, '$OUT'"
+    fi
+    # The upload that follows a backup runs in the API too, and a stop cuts it off before the bucket has the archive.
+    launch_during_backup '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}' stop
+    if [ "$CODE" = 0 ] && waited_for_backup; then
+        ok "$SHELL_NAME: stop waits for the upload of a server backup to end"
+    else
+        fail "$SHELL_NAME: stop during the upload of a server backup: exit $CODE, '$OUT'"
+    fi
 
     mkdir -p "$FIX/release/backups" "$FIX/release/.eigen" "$FIX/channel/.eigen"
     : >"$FIX/release/backups/server-manual-full-20260101-000000.tar"
@@ -762,7 +796,7 @@ for SHELL_NAME in dash busybox host; do
     # A launcher older than 0.3.1 hands over with neither the backup nor --no-backup.
     STUB_DIGEST=ddd launch release update --pulled 0.2.99
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  This update was started by a launcher older than 0.3.1.' &&
-        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen update 0.3.1 --no-backup first, then ./eigen update.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Copy data/ and .env.production somewhere safe, then run ./eigen update 0.3.1 --no-backup, then ./eigen update.' &&
         ! printf '%s\n' "$CALLS" | grep -Eq ' configure | stop$| up -d' && [ ! -e "$FIX/release/.eigen/lock" ]; then
         ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything"
     else
@@ -819,25 +853,17 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
-    # The stop would kill a server backup that runs, so it waits for its record to end; an upload's state is no backup.
-    mkdir -p "$FIX/local/backups"
-    record="$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json"
-    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
-    printf '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}\n' >"$FIX/local/backups/server-manual-full-20260101-010000.tar.json"
-    (sleep 3; rm -f "$record") &
-    launch local restore "$ARCHIVE" --yes
-    wait
-    rm -r "$FIX/local/backups"
-    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ] &&
-        printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
+    # The stop would kill a server backup that runs, so it waits for its record to end.
+    launch_during_backup "$BACKUP_RUNNING" restore "$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
         ok "$SHELL_NAME: a restore waits for the server backup that runs to end before it stops Eigen"
     else
         fail "$SHELL_NAME: a restore during a server backup: exit $CODE, '$OUT', steps '$(steps)'"
     fi
     # A record whose end was never written, as on a full disk, stays running with no job behind it.
     mkdir -p "$FIX/local/backups"
-    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
-    touch -t 202601010200 "$record"
+    printf '%b\n' "$BACKUP_RUNNING" >"$BACKUP_RECORD"
+    touch -t 202601010200 "$BACKUP_RECORD"
     launch local restore "$ARCHIVE" --yes
     rm -r "$FIX/local/backups"
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'looks stale' &&
@@ -1004,6 +1030,24 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: a release restore to other images: exit $CODE, steps '$(steps)'"
     fi
+    # Files that cannot be written after the swap stay those of the build before, which the restart the failure points
+    # at writes anew.
+    reset_release
+    echo ghcr.io/eigen-is/eigen/api:local >"$FIX/release/.eigen/bundle"
+    STUB_IMAGE=1 STUB_CHECKED=$checked STUB_RUN_FAIL=bootstrap launch release restore "$ARCHIVE" --yes
+    outcome="exit $CODE, bundle $(cat "$FIX/release/.eigen/bundle"), '$ERR'"
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q 'The data is restored. Fix what it says, then run ./eigen restart.' &&
+        [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api:local ]; then
+        launch release restart
+        if [ "$CODE" = 0 ] && [ "$(steps)" = 'bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&
+            [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api@sha256:bbb ]; then
+            ok "$SHELL_NAME: a release restore that cannot write its files leaves them stale, and restart writes them"
+        else
+            fail "$SHELL_NAME: restart after a restore that could not write its files: exit $CODE, steps '$(steps)'"
+        fi
+    else
+        fail "$SHELL_NAME: a release restore that cannot write its files: $outcome"
+    fi
     rm "$FIX/release/.eigen/bundle"
     reset_release
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:bbb launch release restore "$ARCHIVE" --yes
@@ -1103,6 +1147,23 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         ok "$SHELL_NAME: rollback whose archive is gone says so before it stages anything"
     else
         fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one.
+    older="$FIX/release/backups/server-pre-update-full-20251201-000000.tar"
+    newer="$FIX/release/backups/server-pre-update-light-20251202-000000.tar"
+    : >"$older"
+    : >"$newer"
+    STUB_CHECKED=$checked launch release rollback --yes
+    refused=$(printf '%s\n' "$ERR" | sed -n 's/^[│└]  *//p' | tr '\n' '|')
+    refused_code=$CODE
+    launch release rollback --help
+    rm "$older" "$newer"
+    if [ "$refused_code" = 1 ] &&
+        [ "$refused" = "The backups earlier updates made:|$(basename "$newer")|$(basename "$older")|./eigen restore <file> puts one of them back.|" ] &&
+        [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | sed -n '/Kept:$/,/^$/p' | tr '\n' '|')" = "To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:|  $(basename "$newer")|  $(basename "$older")||" ]; then
+        ok "$SHELL_NAME: rollback whose archive is gone, and its --help, name the backups earlier updates made for ./eigen restore"
+    else
+        fail "$SHELL_NAME: rollback lists the backups earlier updates made: exit $refused_code, '$refused'; --help exit $CODE, '$OUT'"
     fi
     : >"$FIX/release/backups/server-pre-update-light-20260101-000000.tar"
     STUB_CHECKED=$checked launch release rollback --yes

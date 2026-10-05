@@ -1,9 +1,9 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { emptyContact } from '@workspace/lib/constants/contact';
-import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
+import { isStaleWrite, useContacts, useUpdateContact } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { ContactEdit, ContactEditToolbar, type ContactFormValues } from '../components/contacts/contact-edit';
 
@@ -38,6 +38,12 @@ function EditContactRoute() {
     const { data: contacts = [], isLoading: contactsLoading } = useContacts();
     const contact = contactId ? contacts.find((c): c is Contact => c.id === contactId) : undefined;
     const updateContactMutation = useUpdateContact();
+    // Bumped to remount the form on the live contact, so its fields and snapshotted etag re-seed together.
+    const [seed, setSeed] = useState(0);
+    const handleReload = () => {
+        updateContactMutation.reset();
+        setSeed((n) => n + 1);
+    };
 
     // Redirect away from a contactId that no longer exists (e.g. deleted elsewhere) from an effect, not the
     // render body — matching the sibling list route's idiom rather than calling navigate() while rendering.
@@ -96,12 +102,12 @@ function EditContactRoute() {
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew} />}>
                 <ContactEdit
-                    // Remount when the loaded card's etag changes (e.g. after a 412 refetch) so the form fields
-                    // and the snapshotted etag re-seed together and the next save carries the fresh etag.
-                    key={(contact || emptyContact).etag}
+                    key={`${contactId}:${seed}`}
                     contact={contact || emptyContact}
                     onSave={handleSave}
                     onCancel={handleCancel}
+                    onReload={handleReload}
+                    staleWrite={isStaleWrite(updateContactMutation.error)}
                 />
             </Column>
         </ColumnLayout>

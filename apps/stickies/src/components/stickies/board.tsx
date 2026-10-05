@@ -214,7 +214,7 @@ export function StickiesBoard({
             const targetColumnId = addTargetColumn;
             const card = await createCard({ ...patch, attachments }, (card) => {
                 const col = getItemMapRoot(yjsDoc, 'columns').get(targetColumnId);
-                if (!col) return;
+                if (!(col instanceof Y.Map)) return;
                 let taskIds = getIdArray(col, 'taskIds');
                 if (!taskIds) {
                     taskIds = new Y.Array<string>();

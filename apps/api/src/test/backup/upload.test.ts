@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { BackupJob, BackupReason } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupReason, ServerArchiveSidecar } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { drainBackupJobs, getBackupJob } from '../../lib/backup/jobs';
 import {
@@ -10,6 +10,7 @@ import {
     getBackupsDir,
     serverSidecarPath,
 } from '../../lib/backup/paths';
+import * as serverArchives from '../../lib/backup/server-archives';
 import { readServerSidecar } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
@@ -26,7 +27,7 @@ import { S3Storage } from '../../lib/storage/s3-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';
 import { CLEARED_S3, DUMMY_S3, waitFor } from '../fault-storage-helpers';
-import { getTestContext, type TestContext } from '../setup';
+import { findOrFail, getTestContext, type TestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 import {
     alertTitlesTo,
@@ -378,6 +379,30 @@ describe('Upload of server archives', () => {
                 expect(record?.upload?.at).toBeInstanceOf(Date);
                 const stored = new Uint8Array(await backing.read(own(job.artifact!)).arrayBuffer());
                 expect(stored).toEqual(new Uint8Array(await Bun.file(archivePath).arrayBuffer()));
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        // ./eigen stop waits while a record says running, so the upload must say so before the backup stops saying it.
+        test(
+            'the record the backup ends with already says its upload runs',
+            async () => {
+                await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
+                const written: ServerArchiveSidecar[] = [];
+                const write = serverArchives.writeServerSidecar;
+                const writes = spyOn(serverArchives, 'writeServerSidecar').mockImplementation((archivePath, record) => {
+                    written.push(structuredClone(record));
+                    return write(archivePath, record);
+                });
+                let job: BackupJob;
+                try {
+                    job = await waitForJob((await startServerBackup({ level: 'light', reason: 'manual' })).id);
+                    expect((await uploadOf(job)).state).toBe('done');
+                } finally {
+                    writes.mockRestore();
+                }
+                const ended = findOrFail(written, (record) => record.state === 'done');
+                expect(ended.upload).toMatchObject({ state: 'running', key: own(job.artifact!) });
             },
             JOB_TIMEOUT_MS,
         );

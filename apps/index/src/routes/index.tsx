@@ -69,6 +69,10 @@ export function HomeComponent() {
                             ? 'Explore a shared workspace of a small fictional crew organizing the Tuimel Festival. It resets every hour.'
                             : 'Simple and secure. You control your data.'}
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                        Mail, drive, docs, sheets, slides, vector drawings, calendar and chat. Works with your own apps
+                        over IMAP, CalDAV, CardDAV and WebDAV.
+                    </p>
                 </div>
             </div>
 

@@ -1,4 +1,4 @@
-import { memberProps, propstatNotFound, propstatOk, response } from './xml';
+import { memberProps, notFoundRow, propstatNotFound, propstatOk, response } from './xml';
 
 // Past it a row still appears, with its etag and a 404 for the data (RFC 4918 § 9.1): a truncated collection loses resources silently.
 export const REPORT_DATA_BUDGET_BYTES = 33_554_432;
@@ -36,4 +36,20 @@ export async function resourceDataRow(member: ResourceDataRow): Promise<string> 
     return response(member.href, [
         propstatOk([...props(served.etag), member.dataProp(new TextDecoder().decode(served.bytes))]),
     ]);
+}
+
+// Runs over `resolveMultigetHrefs`: an href outside the collection 404s as sent, a missing member on its own href.
+export async function multigetRows<Row>(
+    resolved: { uri: string | null; href: string }[],
+    find: (uri: string) => Promise<Row | null>,
+    href: (uri: string) => string,
+    row: (row: Row) => Promise<string>,
+): Promise<string[]> {
+    const responses: string[] = [];
+    for (const { uri, href: sent } of resolved) {
+        const found = uri === null ? null : await find(uri);
+        if (found) responses.push(await row(found));
+        else responses.push(notFoundRow(uri === null ? sent : href(uri)));
+    }
+    return responses;
 }

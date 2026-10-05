@@ -152,16 +152,18 @@ function cloneXmlChildren(source: Y.XmlFragment | Y.XmlElement): (Y.XmlElement |
     });
 }
 
-// No runtime guard on roots: doc.get upgrades an AbstractType root (post-applyUpdate) in place.
-export function getItemMapRoot(doc: Y.Doc, name: string): Y.Map<Y.Map<unknown>> {
-    return doc.getMap<Y.Map<unknown>>(name);
+// No runtime guard on roots: doc.get upgrades an AbstractType root (post-applyUpdate) in place. Entries
+// stay unknown: a peer can write a scalar where a map belongs, so every reader checks for a Y.Map.
+export function getItemMapRoot(doc: Y.Doc, name: string): Y.Map<unknown> {
+    return doc.getMap<unknown>(name);
 }
 
 export function getIdArrayRoot(doc: Y.Doc, name: string): Y.Array<string> {
     return doc.getArray<string>(name);
 }
 
-export function getIdArray(map: Y.Map<unknown>, field: string): Y.Array<string> | undefined {
+export function getIdArray(map: unknown, field: string): Y.Array<string> | undefined {
+    if (!(map instanceof Y.Map)) return undefined;
     const value = map.get(field);
     return value instanceof Y.Array ? value : undefined;
 }

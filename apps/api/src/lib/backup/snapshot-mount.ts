@@ -65,28 +65,36 @@ function warningOf(mountId: string, what: string, names: string[]): string {
     return `mount ${mountId}: ${what}: ${names.slice(0, WARNING_NAMES).join(', ')}${more}`;
 }
 
-// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle. No path is
-// theirs, so the archive's copy drops them before anything reads it, as a live delete would, and the backup goes on
-// with a warning. A table whose root row is gone holds nothing that can be placed. The live table is never touched.
-export function pruneUnreachableRows(mountId: string, metadataPath: string): string | null {
+// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle, and a hand edit
+// or an older name rule rows whose name no path can hold. No path is theirs, so the archive's copy drops them before
+// anything reads it, as a live delete would, and the backup goes on with a warning per kind. A table whose root row is
+// gone holds nothing that can be placed. The live table is never touched.
+export function pruneUnreachableRows(mountId: string, metadataPath: string): string[] {
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {
         const rows = readMountPathRows(db);
-        const unreachable = unreachableRows(rows);
-        if (unreachable.length === 0) return null;
-        if (unreachable.length === rows.length) throw new Error(`mount ${mountId}: the table has no root row`);
+        const { orphaned, unusable } = unreachableRows(rows);
+        const dropped = [...orphaned, ...unusable].map((row) => row.id);
+        if (dropped.length === 0) return [];
+        if (dropped.length === rows.length) throw new Error(`mount ${mountId}: the table has no root row`);
         db.run('PRAGMA foreign_keys = ON');
-        db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [
-            JSON.stringify(unreachable.map((row) => row.id)),
-        ]);
-        console.warn(
-            `[backup] mount ${mountId}: left out unreachable rows ${unreachable.map((row) => row.id).join(', ')}`,
-        );
-        return warningOf(
-            mountId,
-            "entries that do not reach the drive's root, left out",
-            unreachable.map((row) => row.name),
-        );
+        db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(dropped)]);
+        // A dropped folder takes its contents with it through the foreign key, and no list names them. Counted, not
+        // read from the delete's changes: the triggers that clear search rows count there too.
+        const left = db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM paths').get()?.count ?? 0;
+        const inside = rows.length - dropped.length - left;
+        console.warn(`[backup] mount ${mountId}: left out rows ${dropped.join(', ')} and ${inside} more inside them`);
+        const warnings: string[] = [];
+        if (orphaned.length > 0) {
+            const names = orphaned.map((row) => row.name);
+            warnings.push(warningOf(mountId, "entries that do not reach the drive's root, left out", names));
+        }
+        if (unusable.length > 0) {
+            const names = unusable.map((row) => row.name);
+            const more = inside > 0 ? ` with ${inside} more inside them` : '';
+            warnings.push(warningOf(mountId, `entries with a name no path can hold, left out${more}`, names));
+        }
+        return warnings;
     } finally {
         db.close();
     }
@@ -114,6 +122,8 @@ export async function snapshotMountData(
     let stored = 0;
     const lost: string[] = [];
     let databases = 0;
+    // The plain files taken, with the date of the live row, which the path lock kept in step with the bytes read.
+    const files: { id: string; captured: BackupEntry; updatedAt: Date }[] = [];
     for (const [index, row] of fileRows.entries()) {
         await eventLoopTurn();
         const relPath = archivePath(row, byId);
@@ -134,22 +144,13 @@ export async function snapshotMountData(
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
             // no bytes anywhere. A gone row is never read: on a by-name mount its key resolves to the data/ folder.
-            // A chat's version restore recreates its data.db under a new id: the archived row holds those bytes, as
-            // it holds an overwrite's.
-            let sourceId = row.id;
             const source = await mount
-                .withPathLock(container.id, async () => {
-                    const sourceRow =
-                        (await mount.getPath(row.id)) ??
-                        (row.parentId === container.id ? await mount.getChildByName(container.id, row.name) : null);
-                    if (!sourceRow) return null;
-                    sourceId = sourceRow.id;
-                    return stageManagedDbCopy(mount, sourceId, destPath, 'open-handle-first');
-                })
+                .withPathLock(container.id, async () =>
+                    (await isGone()) ? null : stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
+                )
                 .catch(async (error: unknown) => {
                     // Empty trash takes no path lock, so a row can still go between the check and the read.
-                    if (await mount.getPath(sourceId))
-                        rethrowStorageFailure(mount.id, await mount.getStorageKey(sourceId), error);
+                    if (!(await isGone())) rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error);
                     fs.rmSync(destPath, { force: true });
                     return null;
                 });
@@ -160,14 +161,16 @@ export async function snapshotMountData(
                 if (source === 'stored') stored++;
                 databases++;
             } else {
-                const live = await mount.getPath(sourceId);
-                if (live?.size) recordLost(live.size, await mount.getStorageKey(sourceId));
+                const live = await mount.getPath(row.id);
+                if (live?.size) recordLost(live.size, await mount.getStorageKey(row.id));
             }
         } else {
-            // Path lock, then shared: an overwrite rewrites the file in place, so it and the copy wait for each other,
-            // and no rename moves the bytes between the key and the copy.
-            const entry = await mount.withPathLock(row.id, () =>
-                mount.withTreeShared(async () => {
+            // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
+            // each other. The shared tree lock only until the file is open, so no rename moves the bytes between the
+            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await
+            // (capture-race.test.ts moves the bytes as the lock releases).
+            const entry = await mount.withPathLock(row.id, async () => {
+                const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
                     if (!live) return null;
                     const storageKey = await mount.getStorageKey(row.id);
@@ -181,20 +184,22 @@ export async function snapshotMountData(
                         if (live.size && !(await isGone())) recordLost(live.size, storageKey);
                         return null;
                     }
-                    const captured = await captureFile(file, destPath, entryPath, true).catch(
-                        async (error: unknown) => {
-                            if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
-                            fs.rmSync(destPath, { force: true });
-                            return null;
-                        },
-                    );
-                    if (captured && fromStorage) stored++;
-                    return captured;
-                }),
-            );
+                    const copy = captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
+                        if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
+                        fs.rmSync(destPath, { force: true });
+                        return null;
+                    });
+                    return { copy, fromStorage, updatedAt: live.updatedAt };
+                });
+                if (!opened) return null;
+                const captured = await opened.copy;
+                if (captured && opened.fromStorage) stored++;
+                return captured && { captured, updatedAt: opened.updatedAt };
+            });
             if (entry) {
-                entries.push(entry);
+                entries.push(entry.captured);
                 held.add(row.id);
+                files.push({ id: row.id, ...entry });
             }
         }
         onProgress?.('mount files', index + 1, fileRows.length);
@@ -223,25 +228,34 @@ export async function snapshotMountData(
             top = up;
         gone.add(top);
     }
-    if (gone.size > 0) {
-        const stale = new Set<string>();
-        for (const top of gone) {
-            for (let up = byId.get(top)?.parentId; up && !stale.has(up); up = byId.get(up)?.parentId) stale.add(up);
-        }
-        const db = new Database(metadataPath, { readwrite: true, create: false });
-        try {
+    const stale = new Set<string>();
+    const staleAbove = (id: string) => {
+        for (let up = byId.get(id)?.parentId; up && !stale.has(up); up = byId.get(up)?.parentId) stale.add(up);
+    };
+    const db = new Database(metadataPath, { readwrite: true, create: false });
+    try {
+        db.run('PRAGMA foreign_keys = ON');
+        db.transaction(() => {
+            // A file overwritten between the database copy and its read: its row takes the size, hash and date of
+            // the bytes the archive holds, as the overwrite gave the live one, and its search text is rebuilt from them.
+            // A row with no hash on record differs only by its size.
+            const rewrite = db.prepare<unknown, [number, string, number, string]>(
+                'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3, contentDirty = 1 WHERE id = ?4 AND (size IS NOT ?1 OR (hash IS NOT NULL AND hash IS NOT ?2))',
+            );
+            for (const { id, captured, updatedAt } of files) {
+                const seconds = Math.floor(updatedAt.getTime() / 1000);
+                if (rewrite.run(captured.bytes, captured.sha256, seconds, id).changes > 0) staleAbove(id);
+            }
             // As a live delete: its children, file events and watchers cascade, the triggers clear its search rows,
             // and every folder above it has its cached size NULLed (stale).
-            db.run('PRAGMA foreign_keys = ON');
-            db.transaction(() => {
-                db.run('UPDATE paths SET size = NULL WHERE id IN (SELECT value FROM json_each(?))', [
-                    JSON.stringify([...stale]),
-                ]);
-                db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
-            })();
-        } finally {
-            db.close();
-        }
+            for (const top of gone) staleAbove(top);
+            db.run('UPDATE paths SET size = NULL WHERE id IN (SELECT value FROM json_each(?))', [
+                JSON.stringify([...stale]),
+            ]);
+            db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
+        })();
+    } finally {
+        db.close();
     }
     const left = gone.size > 0 ? readArchivedRows(metadataPath) : rows;
     return {

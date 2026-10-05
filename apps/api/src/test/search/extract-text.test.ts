@@ -89,4 +89,18 @@ describe('extraction dispatch', () => {
         const { mount, path } = await resolve(uploaded.id);
         expect(await extractText(mount, path)).toBe('ford prefect');
     });
+
+    test('a text file cut at the cap drops the character the cut splits, not decodes it as U+FFFD', async () => {
+        const head = 'a'.repeat(CONTENT_INDEX_MAX_BYTES - 1);
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            new File([`${head}é and more`], 'long-extract.txt', { type: 'text/plain' }),
+        );
+
+        const { mount, path } = await resolve(uploaded.id);
+        expect(await extractText(mount, path)).toBe(head);
+    });
 });

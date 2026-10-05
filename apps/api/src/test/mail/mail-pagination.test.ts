@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { seedMaildirFolder } from '../mail-test-helpers';
@@ -9,18 +10,26 @@ const isWindows = process.platform === 'win32';
 // Seed a dedicated custom mailbox (unique name, isolated from every other test file) with a
 // known set of messages: 201 total (> the default page size of 200), three of which share a
 // single timestamp to pin the (date, id) keyset tiebreak, plus one long body whose unique word
-// sits past character 200 to prove the list-response textShort cap doesn't touch the FTS index.
+// sits past character 200 to prove the list-response textShort cap doesn't touch the FTS index. The long
+// one has a sender of its own, so a from:-only search (the path with no FTS term) can find it too.
 const TOTAL = 201;
 const LONG_IDX = 50;
 const NEEDLE = 'pagefindneedle';
+const LONG_SENDER = 'longbody@example.com';
 const LONG_BODY = `${'lorem ipsum dolor sit amet '.repeat(10)}${NEEDLE} end`;
 const WALK_LIMIT = 5;
 
 type Seed = { id: string; subject: string; dateMs: number };
 
-async function deliverToInbox(email: string, subject: string, dateMs: number, body: string): Promise<string> {
+async function deliverToInbox(
+    email: string,
+    subject: string,
+    dateMs: number,
+    body: string,
+    from = 'sender@example.com',
+): Promise<string> {
     const eml = [
-        'From: sender@example.com',
+        `From: ${from}`,
         `To: ${email}`,
         `Subject: ${subject}`,
         `Date: ${new Date(dateMs).toUTCString()}`,
@@ -45,7 +54,7 @@ async function moveWhenIndexed(ownerId: string, id: string, box: string): Promis
     const { getHome } = await import('../../lib/home');
     const home = await getHome(ownerId);
     for (let i = 0; i < 40; i++) {
-        await home.mail.mailboxGet('');
+        await home.mail.mailboxGet(MAILBOX_INBOX);
         if (await home.mail.messageGet(id)) {
             await home.mail.messageMove(id, box);
             return;
@@ -79,8 +88,10 @@ describe.skipIf(isWindows)('Mail pagination', () => {
             // sharing one date; every other index gets its own distinct minute.
             const dateMs = i === 101 || i === 102 ? base + 100 * 60_000 : base + i * 60_000;
             const subject = `Page ${i}`;
-            const body = i === LONG_IDX ? LONG_BODY : `body ${i}`;
-            const id = await deliverToInbox(ctx.charlie.user.email, subject, dateMs, body);
+            const id =
+                i === LONG_IDX
+                    ? await deliverToInbox(ctx.charlie.user.email, subject, dateMs, LONG_BODY, LONG_SENDER)
+                    : await deliverToInbox(ctx.charlie.user.email, subject, dateMs, `body ${i}`);
             await moveWhenIndexed(ownerId, id, box);
             seeds.push({ id, subject, dateMs });
             if (i === LONG_IDX) longId = id;
@@ -159,7 +170,7 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         expect(new Set(walked)).toEqual(new Set(seeds.map((s) => s.id)));
     });
 
-    test('textShort is capped at 200 in the list response but stays fully searchable via FTS', async () => {
+    test('textShort is capped at 200 in the list and search responses but stays fully searchable via FTS', async () => {
         const full = await assertJson<EmailSummary[]>(
             await authedRequest(token, `/mail/${ownerId}/mailbox/${box}?limit=500`),
         );
@@ -171,6 +182,14 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         const search = await assertJson<SearchResponse>(
             await authedRequest(token, `/search/${ownerId}?q=${NEEDLE}&sources=mail`),
         );
-        expect(search.mail.some((h) => h.id === longId)).toBe(true);
+        const ranked = search.mail.find((h) => h.id === longId);
+        expect(ranked).toBeDefined();
+        expect(ranked!.textShort.length).toBeLessThanOrEqual(200);
+
+        const filtered = await assertJson<SearchResponse>(
+            await authedRequest(token, `/search/${ownerId}?q=&from=${LONG_SENDER}&mailbox=${box}&sources=mail`),
+        );
+        expect(filtered.mail.map((h) => h.id)).toEqual([longId]);
+        expect(filtered.mail[0].textShort.length).toBeLessThanOrEqual(200);
     });
 });

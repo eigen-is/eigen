@@ -49,7 +49,7 @@ The resource name is client-chosen, so `sanitizeCardUri` runs before any store c
 
 ## A sync token carries the book's generation
 
-Tokens have the grammar and the generation rules of CalDAV's ([CALDAV.md § A sync token carries the calendar's generation](CALDAV.md#a-sync-token-carries-the-calendars-generation)), from one module (`lib/dav/sync-token.ts`). The delta is every row whose `cardCtag` is past the token, plus tombstones as 404 rows. Tombstones are keyed by name, so a re-created card clears its own, and no href is both a 200 and a 404.
+Tokens have the grammar and the generation rules of CalDAV's ([CALDAV.md § A sync token carries the calendar's generation](CALDAV.md#a-sync-token-carries-the-calendars-generation)), because one handler answers `sync-collection` for both (`lib/dav/sync-collection.ts`). The delta is every row whose `cardCtag` is past the token, plus tombstones as 404 rows. Tombstones are keyed by name, so a re-created card clears its own, and no href is both a 200 and a 404.
 
 A stale token gets 403 `valid-sync-token`, and that full resync is what heals ghost deletions.
 

@@ -16,8 +16,8 @@ const HELP_RESULT_LIMIT = 6;
 // Help is a client-side source: it queries the index app's static Pagefind index
 // (core/search/pagefind.ts), not the /search route. The content is public — no ownerId,
 // no backend. Returns the same { results, isPending } shape as mail/file so the merge
-// holds it stable while in flight. Unlike mail/file it only fires under the help scope
-// or no scope, so the WASM index isn't loaded while the user is narrowed to another kind.
+// holds it stable while in flight. Like mail/file it only fires under its own scope or
+// no scope, so the WASM index isn't loaded while the user is narrowed to another kind.
 export function useHelpSearchResults(
     input: string,
     scope: PaletteScope | undefined,

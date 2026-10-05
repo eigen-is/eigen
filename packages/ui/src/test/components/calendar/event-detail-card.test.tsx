@@ -5,29 +5,20 @@
 import { expect, mock, test } from 'bun:test';
 import type { EventDetailCardProps } from '../../../components/calendar/event-detail-card';
 import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
 const session = { user: { id: 'owner-1' } };
 mock.module('@workspace/lib/auth', () => ({ useAuth: () => session, useIsGuest: () => false }));
 
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { act, createElement } = await import('react');
-const { createRoot } = await import('react-dom/client');
+const { createElement } = await import('react');
 const { EventDetailCard } = await import('../../../components/calendar/event-detail-card');
 
 async function render(props: EventDetailCardProps): Promise<string> {
-    const container = document.createElement('div');
-    document.body.append(container);
-    const root = createRoot(container);
-    await act(async () => {
-        root.render(
-            createElement(QueryClientProvider, { client: new QueryClient() }, createElement(EventDetailCard, props)),
-        );
-    });
+    const { container, unmount } = await renderInDocument(createElement(EventDetailCard, props));
     const text = container.textContent ?? '';
-    await act(async () => root.unmount());
-    container.remove();
+    await unmount();
     return text;
 }
 

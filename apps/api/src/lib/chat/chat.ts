@@ -4,7 +4,7 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { and, desc, eq, isNull, lt, ne } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -44,12 +44,9 @@ export class ChatRoom {
     async init(): Promise<ChatRoom> {
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
-            // Provision the missing data.db under the container lock and re-check under it. A
-            // concurrent version restore (replaceContainerDataDb) holds this same lock while it
-            // deletes and recreates data.db, and Drive.getChat builds a fresh ChatRoom per request.
-            // Without the lock a post landing in the delete→recreate window would provision a second
-            // empty data.db, the restore's createFileFromTemp would then 4xx on the duplicate name,
-            // and the chat would be left on the empty db with its earlier messages gone.
+            // Provision the missing data.db under the container lock and re-check under it:
+            // Drive.getChat builds a fresh ChatRoom per request, so two concurrent first requests
+            // would otherwise each provision a data.db.
             dataDbPath = await this.drive.withPathLock(this.path.mountId, this.path.id, async () => {
                 const existing = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
                 if (existing) return existing;
@@ -311,29 +308,21 @@ export class ChatRoom {
     }
 
     private async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
-        let rows: ChatMessage[];
-        if (beforeId) {
-            const beforeMsg = await this.db
-                .select()
-                .from(schema.messages)
-                .where(eq(schema.messages.id, beforeId))
-                .get();
-            if (!beforeMsg) return [];
-            rows = await this.db
-                .select()
-                .from(schema.messages)
-                .where(lt(schema.messages.createdAt, beforeMsg.createdAt))
-                .orderBy(desc(schema.messages.createdAt))
-                .limit(limit)
-                .all();
-        } else {
-            rows = await this.db
-                .select()
-                .from(schema.messages)
-                .orderBy(desc(schema.messages.createdAt))
-                .limit(limit)
-                .all();
-        }
+        const before = beforeId
+            ? await this.db
+                  .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
+                  .from(schema.messages)
+                  .where(eq(schema.messages.id, beforeId))
+                  .get()
+            : undefined;
+        if (beforeId && !before) return [];
+        const rows = await this.db
+            .select()
+            .from(schema.messages)
+            .where(before && schema.olderThan(before))
+            .orderBy(...schema.NEWEST_FIRST)
+            .limit(limit)
+            .all();
 
         return rows.map((r) => this.toMessage(r)).reverse();
     }
@@ -471,7 +460,7 @@ export class ChatRoom {
                     ne(schema.messages.content, ''),
                 ),
             )
-            .orderBy(desc(schema.messages.createdAt))
+            .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
             // Empty messages are filtered out above, so every row adds at least one char and
             // RECENT_TEXT_CAP rows always fill the byte cap — bound the fetch instead of scanning the thread.
             .limit(RECENT_TEXT_CAP)

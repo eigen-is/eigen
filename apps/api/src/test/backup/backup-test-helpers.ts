@@ -11,7 +11,6 @@ import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { readServerArchive } from '../../lib/backup/verify';
 import { getDomain } from '../../lib/config/server-config';
-import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import { type DatabaseConfig, PATHS } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
@@ -19,10 +18,9 @@ import * as homeRelay from '../../lib/home/home-relay';
 import {
     assertJson,
     authedRequest,
-    createTestUser,
+    createTestUserOnStorage,
     drivePost,
     driveUpload,
-    ensureServer,
     TEST_DATA_DIR,
     type TestUser,
 } from '../setup';
@@ -170,16 +168,7 @@ async function trash(user: TestUser, pathId: string): Promise<void> {
 }
 
 export async function realShapeHome(): Promise<RealShapeHome> {
-    await ensureServer();
-    const storageType = getStorageType();
-    await updateServerSettings({ defaults: { mount: { storageType: 'local-fullnames' } } });
-    let user: TestUser;
-    try {
-        user = await createTestUser(`real-shape-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Real Shape');
-        await getHome(user.id);
-    } finally {
-        await updateServerSettings({ defaults: { mount: { storageType } } });
-    }
+    const user = await createTestUserOnStorage('local-fullnames', 'Real Shape');
     const upload = (parentId: string, name: string, body: string) =>
         driveUpload<DrivePath>(user.sessionToken, user.id, MOUNT_ID, parentId, new File([body], name));
     const folder = (parentId: string, folderName: string) =>

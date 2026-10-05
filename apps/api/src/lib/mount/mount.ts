@@ -12,6 +12,7 @@ import {
     parseOwnerId,
 } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { CONTROL_CHARS } from '@workspace/lib/validation';
 import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -43,7 +44,7 @@ import {
     docContainerDescendantIds,
     rethrowDuplicateActiveName,
 } from './helpers';
-import { buildStorageKey, CONTROL_CHARS, isReservedName, validateName } from './names';
+import { buildStorageKey, isReservedName, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -799,26 +800,13 @@ export class Mount {
             await this.withTreeShared(async () => {
                 const storageKey = await this.getStorageKey(pathId);
                 await this.db.delete(paths).where(eq(paths.id, pathId));
-                await deleteThumbnail(this.thumbsDir, pathId);
-                // Cancel any queued upload + staged copy first, so an in-flight/queued PUT can't
-                // resurrect the object we're about to delete (invariant 7). Covers container
-                // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
-                // replace, which all route data.db deletion through here.
-                if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
-                if (!(await this.storage.delete(storageKey))) {
-                    console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
-                }
+                await this.removeObject(pathId, storageKey);
             });
         } else if (this.isPathBased && deleteDir) {
             await this.withTreeExclusive(async () => {
                 const storageKey = await this.getStorageKey(pathId);
-                // Collected before the rows go: only files own a thumbnail, so folder ids are no-ops.
-                const descendantIds = this.collectDescendantIds(pathId);
-                this.db.transaction((tx) => {
-                    this.deleteDescendantsInTx(tx, pathId);
-                    tx.delete(paths).where(eq(paths.id, pathId)).run();
-                });
-                for (const id of descendantIds) {
+                const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
+                for (const { id } of files) {
                     await deleteThumbnail(this.thumbsDir, id);
                 }
                 if (storageKey && !(await deleteDir.call(this.storage, storageKey))) {
@@ -826,14 +814,24 @@ export class Mount {
                 }
             });
         } else {
-            const children = await this.listFolderAll(pathId);
-            for (const child of children) {
-                await this.deletePath(child.id);
-            }
-            await this.db.delete(paths).where(eq(paths.id, pathId));
+            // One walk for the whole subtree: an id key does not depend on its folder, so every object
+            // goes after all the rows, as for a single file.
+            const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
+            for (const { id, file } of files) await this.removeObject(id, file || id);
         }
 
         await this.invalidateSizesFrom(pathEntry.parentId);
+    }
+
+    // Cancels any queued upload + staged copy first, so an in-flight/queued PUT can't resurrect the
+    // object we're about to delete (invariant 7). Covers container deletes, provisionManagedDbs
+    // rollback, and the chat-restore replace, which all route data.db deletion through here.
+    private async removeObject(pathId: string, storageKey: string): Promise<void> {
+        await deleteThumbnail(this.thumbsDir, pathId);
+        if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
+        if (!(await this.storage.delete(storageKey))) {
+            console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
+        }
     }
 
     // `seen` bounds the walk, so a tree that already holds a cycle fails instead of spinning.
@@ -855,21 +853,28 @@ export class Mount {
         }
     }
 
-    private deleteDescendantsInTx(
+    // Deletes the folder and everything under it. Returns the deleted files: only they own a
+    // thumbnail and an object, which go after the rows.
+    private deleteSubtreeInTx(
         tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        parentId: string,
-    ): void {
+        folderId: string,
+    ): { id: string; file: string }[] {
         const children = tx
-            .select({ id: paths.id, type: paths.type })
+            .select({ id: paths.id, type: paths.type, file: paths.file })
             .from(paths)
-            .where(eq(paths.parentId, parentId))
+            .where(eq(paths.parentId, folderId))
             .all();
+        const files: { id: string; file: string }[] = [];
         for (const child of children) {
             if (child.type !== 'file') {
-                this.deleteDescendantsInTx(tx, child.id);
+                files.push(...this.deleteSubtreeInTx(tx, child.id));
+                continue;
             }
+            files.push({ id: child.id, file: child.file });
             tx.delete(paths).where(eq(paths.id, child.id)).run();
         }
+        tx.delete(paths).where(eq(paths.id, folderId)).run();
+        return files;
     }
 
     // ---- Trash facade — implementation in mount/trash.ts ----

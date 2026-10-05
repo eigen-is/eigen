@@ -1,8 +1,8 @@
 # Mail
 
-> **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. The Maildir files are the truth and `mail.db` is only an index rebuilt from them, because Dovecot writes the same files out of process. The inbox has three spellings, one per layer. A send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
+> **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. The Maildir files are the truth and `mail.db` is only an index rebuilt from them, because Dovecot writes the same files out of process. A send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
 
-Every user has one mailbox, and no team or guest has one. Mail exists only on a server that hosts its own mail ([SERVER-SETTINGS.md § What a server without hosted mail leaves out](SERVER-SETTINGS.md#what-a-server-without-hosted-mail-leaves-out)), and on a demo box, which seeds mailboxes without a mail server. A message gets in and out in four ways. The web app talks to the REST routes in `apps/api/src/routes/mail.ts`. A mail client such as Apple Mail or Thunderbird reads the same mailbox over IMAP, which Dovecot serves straight from the files. Postfix, the mail server beside the API, hands every arriving message to the API and carries every send out. And a `.eml` file can be imported, from the computer or from Drive.
+Every user has one mailbox, and no team or guest has one. Mail exists only on a server that hosts its own mail ([SERVER-SETTINGS.md § What a server without hosted mail leaves out](SERVER-SETTINGS.md#what-a-server-without-hosted-mail-leaves-out)), and on a demo box, which seeds mailboxes without a mail server. Elsewhere every `/mail/` route answers 403 and a home opens no Maildir (`isMailAppEnabled`). A message gets in and out in four ways. The web app talks to the REST routes in `apps/api/src/routes/mail.ts`. A mail client such as Apple Mail or Thunderbird reads the same mailbox over IMAP, which Dovecot serves straight from the files. Postfix, the mail server beside the API, hands every arriving message to the API and carries every send out. And a `.eml` file can be imported, from the computer or from Drive.
 
 A Maildir is a tree of plain files, one per message, at `eigen.mail/Maildir/` in the user's home folder, with `mail.db` beside it ([STORAGE.md § Every owner's data lives under one folder](STORAGE.md#every-owners-data-lives-under-one-folder)). Mail reaches the rest of Eigen at a few points. A draft can link Drive documents, and a send can share them with its recipients, guests included ([ACL.md](ACL.md), [GUEST-ACCESS.md](GUEST-ACCESS.md)). An invitation in an arriving mail updates the calendar ([CALENDAR.md](CALENDAR.md)). Mail counts toward the user's home-data budget together with contacts and calendar ([QUOTA.md](QUOTA.md)). And every change reaches the open app as an SSE event ([SSE.md](SSE.md)).
 
@@ -12,7 +12,7 @@ The sections run from the store through reading, the mailbox names and the list,
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
 
-The `emails` row is the `EmailSummary` the list returns, unmapped except that the list cuts `textShort` to its preview length (`MAIL_PREVIEW_CHARS`). A full message is re-parsed from its `.eml`.
+The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): a received message's row keeps the whole body for the full-text index. A draft's row keeps only the first `MAIL_PREVIEW_CHARS`, so a draft is searched at preview length. A full message is re-parsed from its `.eml`.
 
 ## The Maildir is the truth and the index follows it
 
@@ -26,17 +26,16 @@ DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message),
 
 The reader's sanitize keeps remote images, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`). So a message loads its remote images as it opens, and a tracking pixel tells its sender. Blocking them takes an opt-in toggle or an image proxy, a [ROADMAP](ROADMAP.md) row.
 
-## The inbox has three spellings
+## The inbox is INBOX, and only URLs lowercase it
 
-`packages/lib/src/constants/mailboxes.ts` is the one source of the six standard mailboxes, their special-use flags and their labels. Nobody spells a mailbox by hand. The inbox still differs per layer, the top source of subtle mail bugs:
+`packages/lib/src/constants/mailboxes.ts` is the one source of the six standard mailboxes, their special-use flags and their labels. Nobody spells a mailbox by hand. A mailbox has the name IMAP gives it everywhere inside Eigen, so the inbox is `INBOX` (RFC 3501), the name Dovecot and every mail client use too. Only the URL and the frontend query keys differ, because a URL reads better in lowercase:
 
 | Layer | Inbox | Standard mailbox | Custom folder |
 |---|---|---|---|
-| Backend: DB `mailbox` column, SSE payloads | `''` | `Sent` | verbatim |
-| Frontend query keys (`emailKeys.list`) | `'inbox'` | `sent` | verbatim |
-| URL segment (`mailboxRouteSegment`) | `box/inbox` | `box/sent` | verbatim |
+| DB `mailbox` column, SSE payloads, REST answers | `INBOX` | `Sent` | verbatim |
+| URL segment and query key (`mailboxRouteSegment`) | `box/inbox` | `box/sent` | verbatim |
 
-`canonicalMailbox` turns any spelling into the backend form at every domain entry. It case-folds the standard names, maps `INBOX` to `''`, and folds `/` onto `.`, since both delimiters name one directory. Without the fold, `Clients/Acme` would reach the DB as a second name for `Clients.Acme`. The search box passes the URL's `inbox` as is: `Mail.search` canonicalizes it, and `''` would drop the filter. Optimistic list patches match on the message id, never on a mailbox key.
+`canonicalMailbox` turns any spelling into the canonical one at every domain entry. It case-folds the standard names and folds `/` onto `.`, since both delimiters name one directory. Without the fold, `Clients/Acme` would reach the DB as a second name for `Clients.Acme`. A custom folder keeps its case in the URL, because the server folds only the standard six. So the search box passes the URL's `inbox` as is. Optimistic list patches match on the message id, never on a mailbox key.
 
 ## A mailbox name is a folder name, not an id
 
@@ -55,7 +54,7 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
 - `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
 
-A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. What counts as an arrival: [IMAP.md § Only a delivered message is new mail](IMAP.md#only-a-delivered-message-is-new-mail).
+A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. What counts as an arrival: [IMAP.md § Only a delivered message is new mail](IMAP.md#only-a-delivered-message-is-new-mail). The row goes read once the inbox holds no unread mail, whether the app or an IMAP client read the last message.
 
 ## A draft skips the rebuild until its attachments change
 
@@ -70,6 +69,8 @@ The client chooses a draft's id, and that id names a file. So the domain answers
 `messageSend` full-saves the draft and hands each copy to `sendMail` (`lib/core/mailer.ts`). That save pins From to the account, so a crafted draft can't send as anyone else. The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)).
 
 `sendMail` returns `false` instead of throwing, so the loop tries every copy. If any is accepted, the draft moves to Sent and the response lists `failedRecipients`. If all fail, the route answers 500. Nothing retries, because a retry would deliver the accepted copies twice.
+
+A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered. A failure to set it is logged and the send still succeeds, for the same reason. The draft's sidecar keeps the id, and a save without one keeps the stored one, since a draft reopened from Drafts never learns it. So a reply sent later from Drafts marks its original too.
 
 ## A send with links splits per external recipient
 
@@ -97,7 +98,7 @@ The send carries `grantAccessRefIds`, so one send can share some documents and n
 
 ## A mail part is revalidated on every request
 
-Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index and the row's date and size, and a match is a 304 before the `.eml` is parsed. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
+Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index, the row's size and the file's modification time in milliseconds, and a match is a 304 before the `.eml` is parsed. A preview route adds its renderer's format tag, so a fix to the renderer is never answered with a 304. The row's date would not do: it has second precision, and two saves of one draft within a second can keep its size. A file Dovecot just renamed for a flag change, before the index has its new name, answers with the current time in place of its modification time, so the request is served rather than failed. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
 
 The preview routes feed Drive's bytes-in renderers, so the quick look draws a mail part like a Drive file ([PREVIEWS.md](PREVIEWS.md)). They gate on `getBytesTextPreviewMode`, never `getTextPreviewMode`: the sender writes the mime, so a part can't pass as an Eigen document. The routes sit two segments past the index, so a part named `text` can't shadow one. `MessageView` draws the header and body for the reader and the `.eml` quick look alike, so a saved message reads as the message it was.
 

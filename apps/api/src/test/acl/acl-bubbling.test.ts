@@ -99,6 +99,20 @@ describe('ACL Bubbling', () => {
             expect(body.alreadyHasAccess).toBe(false);
             expect(body.targetPathId).toBe(chatId);
         });
+
+        test('an invite and a concurrent ACL change both land', async () => {
+            const { getHome } = await import('../../lib/home');
+            const { drive } = await getHome(ctx.alice.user.id);
+            await Promise.all([
+                drive.inviteToChat(aliceMountId, chatId, 'racer-a@test.eigen.is'),
+                drive.updateACLDelta(aliceMountId, chatId, {
+                    add: [{ id: 'racer-b@test.eigen.is', read: true, write: false }],
+                }),
+            ]);
+            const path = await drive.getPath(aliceMountId, chatId);
+            expect(path?.acl).toContainEqual({ id: 'racer-a@test.eigen.is', read: true, write: true });
+            expect(path?.acl).toContainEqual({ id: 'racer-b@test.eigen.is', read: true, write: false });
+        });
     });
 
     describe('embedded chat inside eigendoc', () => {

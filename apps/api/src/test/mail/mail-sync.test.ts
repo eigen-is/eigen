@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_ARCHIVE, MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
@@ -254,7 +254,7 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
         expect((await mailNewRows(user)).map((row) => row.body)).toEqual(['The real arrival']);
 
         // Silent, not unindexed: the welcome mail is listed alongside the delivery.
-        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX, 50);
         expect(inbox.map((message) => message.subject)).toContain('The real arrival');
         expect(inbox.length).toBeGreaterThan(1);
     });
@@ -266,7 +266,7 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
 
         await deliverEmail(userEmail, 'Old one', 'a');
         await deliverEmail(userEmail, 'Old two', 'b');
-        expect((await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50)).length).toBeGreaterThanOrEqual(2);
+        expect((await listBox(user.sessionToken, user.id, MAILBOX_INBOX, 50)).length).toBeGreaterThanOrEqual(2);
 
         // A row still inside the coalesce window suppresses the next broadcast.
         await dismissMailNotifications(user);
@@ -279,7 +279,7 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
         expect(broadcast).toEqual(['After the loss']);
         expect((await mailNewRows(user)).map((row) => row.body)).toEqual(['After the loss']);
 
-        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX, 50);
         expect(inbox.map((message) => message.subject)).toContain('Old one');
         expect(inbox.map((message) => message.subject)).toContain('Old two');
     });
@@ -290,7 +290,7 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
         await initHome(user);
 
         await deliverEmail(userEmail, 'The original', 'body');
-        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX_KEY, 50);
+        const inbox = await listBox(user.sessionToken, user.id, MAILBOX_INBOX, 50);
         const original = findOrFail(inbox, (message) => message.subject === 'The original');
         await dismissMailNotifications(user);
 

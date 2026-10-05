@@ -36,7 +36,7 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 
 - Every database, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
 - Every mount the home declares, disabled ones too. What happens to a mount or file the backup cannot read: [An unreadable mount fails the backup, a lost file or a stray row is a warning](#an-unreadable-mount-fails-the-backup-a-lost-file-or-a-stray-row-is-a-warning).
-- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. The capture reads a mount's rows from the archived copy of its `metadata.db` and fetches each file by id from wherever the mount keeps it now. It copies each file under that file's path lock ([STORAGE.md](STORAGE.md#writes-to-one-row-serialize-on-its-path-lock)), so an overwrite and the copy wait for each other and the archive holds the whole old file or the whole new one. On a `local` mount, whose keys are names, it also holds the mount's shared tree lock, so no rename moves the bytes mid-read. Each file is in the archive at the path its archived row gives, which is the path a restore puts it at. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
+- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. The capture reads a mount's rows from the archived copy of its `metadata.db` and fetches each file by id from wherever the mount keeps it now. It copies each file under that file's path lock ([STORAGE.md](STORAGE.md#writes-to-one-row-serialize-on-its-path-lock)), so an overwrite and the copy wait for each other and the archive holds the whole old file or the whole new one. On a `local` mount, whose keys are names, it also holds the mount's shared tree lock until the file is open, so no rename moves the bytes between the key and the open. Each file is in the archive at the path its archived row gives, which is the path a restore puts it at. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
 - Every container's `data.db` and `comments.db`, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
 - Version history and trash (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
 - Thumbnails. A thumbnail is made once, at upload, and never again, so it is not derived data.
@@ -58,11 +58,11 @@ A mount's capture copies its `metadata.db` first, and every row in the archive c
 | A file is renamed, moved or trashed | Holds it, at the path its archived row gives |
 | A file is created after its drive's database was copied | Does not hold it |
 | A file or a version is deleted for good | Holds neither its row nor its bytes, since the archive lists no file it holds no bytes for. A folder above it that was deleted with it goes too, unless it holds something the archive took, which then comes back in it |
-| A file is overwritten before the backup reads it | Holds the new content, with the size and date of the old row until the next save |
+| A file is overwritten before the backup reads it | Holds the new content, and its row gives the new size, hash and date. A restored home rebuilds its search text from those bytes |
 | An upload over a file is in flight when the backup reaches it | Holds the whole new file: the backup waits for the upload |
 | A document is edited | Holds its database as it was at its own copy, one committed state that verify checks |
 | An image is added to a document after the database copy | Holds the reference without the image |
-| A chat's version is restored | Holds the chat as restored. If the restore lands in the few milliseconds while the drive's database is copied, the archive has no database for that chat, and it restores empty. Its messages are in its version history ([ROADMAP.md](ROADMAP.md)) |
+| A chat's version is restored | Holds the chat as restored |
 | A mail message is renamed by a flag change or a delivery | Holds it under its new name. A message moved to another mailbox can be missing |
 | A drive is added or removed | `settings.json` is captured after the drives, so one may list a drive the other lacks |
 | The user or team is deleted | That home's backup fails with an error. A server backup names the home `skipped` |
@@ -80,10 +80,11 @@ A backup of a home with a few holes is better than none, so a lost file or a row
 | A file whose row records bytes and whose object is gone | Keeps the row without bytes and names the file in a warning. A restore mirrors the absence | The live home cannot serve it either |
 | A mount with a lost file and no file whose bytes were read from storage | Fails, "storage unreachable" | An empty store is an outage, not a store with holes: an unmounted disk or a folder the API cannot read answers every lookup as missing, and so does a renamed bucket or a wrong prefix, since a HEAD answers it as a missing key. Bytes copied from an open document, a crash temp or an upload still in `staging/` are not read from the store, so they do not count. A mount whose only file is lost fails too |
 | A row whose parent chain ends at a missing row or in a cycle | Deletes it from the archive's copy of `metadata.db` before the walk, as a live delete would, and names it in a warning. Its bytes and thumbnail stay out; the live table is not touched | No path is its own. Only a salvaged database or a hand edit with foreign keys off makes one |
+| A row whose id, name or file is empty, `.` or `..`, or holds a control character or a separator (`isUsableName` in `apps/api/src/lib/mount/names.ts`) | The same, and a folder's contents go with it. Its warning is a kind of its own and counts what went with a folder | No path can hold it. Only a hand edit, or a name written before the rule, makes one |
 | A `metadata.db` whose root row is gone | Fails | Nothing in it can be placed |
 | A file with no bytes on record | Keeps its row | There is nothing to take |
 
-The warnings are in the home manifest's `warnings`, one line per mount and kind with up to five names, and the log names every one. A home archive with warnings verifies and restores: it is complete in every other respect. Its row in the admin pane lists them. It is not a complete archive for retention and the status, though ([A home that fails is named, and the archive goes on](#a-home-that-fails-is-named-and-the-archive-goes-on)). Verify stays strict: an uploaded archive with a row that does not reach the root is refused. A Full backup of an `s3` mount reads no object, so it cannot see a lost one.
+The warnings are in the home manifest's `warnings`, one line per mount and kind with up to five names, and the log names every one. A home archive with warnings verifies and restores: it is complete in every other respect. Its row in the admin pane lists them. It is not a complete archive for retention and the status, though ([A home that fails is named, and the archive goes on](#a-home-that-fails-is-named-and-the-archive-goes-on)). Verify stays strict: an uploaded archive with a row that does not reach the root, or that no path can hold, is refused. A Full backup of an `s3` mount reads no object, so it cannot see a lost one.
 
 ## A home archive leaves out caches, sessions and other homes
 
@@ -93,9 +94,9 @@ The warnings are in the home manifest's `warnings`, one line per mount and kind 
 - Other homes. A team's data lives in the team's home, which has its own archive.
 - Guest and org homes. Guest homes are disposable (guest cleanup deletes them) and an org home holds no databases, so the per-home routes answer a guest or org ownerId with 400. A server archive takes the org folder as plain files and leaves guest homes out: after a Full restore a guest keeps their account and gets a new home on their next visit, and a Light restore leaves guest homes as they are.
 
-## A restore does not put mtimes back
+## A restore puts the mtimes of the home's own files back
 
-The extractor writes every file with the clock of the restore. Mail is the only domain that reads a file's stats, and its first pass re-reads what looks drifted.
+Dovecot dates a Maildir message, its INTERNALDATE, by its file's mtime, so a restore that wrote every file with its own clock would put every message at the restore in a client that sorts by received date. The capture gives each file of the home outside its drives, the Maildir included, the mtime of its source, the tar carries it, and the extractor puts every file's back, as `tar -x` does. A copy between two disks keeps them too (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`). A drive's file and a database carry the time of the backup, which nothing reads.
 
 ## Archives live outside data/
 
@@ -111,11 +112,11 @@ A home archive holds every file and mail, the password hash, app passwords, API 
 
 **Create backup** in the Backup section of a user or team in the admin app starts a job. It captures the home into staging, verifies the folder, packs it into `home-<ownerId>-<date>-<time>.tar.zst` and writes a sidecar beside it with the manifest and the verify result. A home archive that does not verify is kept, with its failures and no Restore button, and the admin who started it gets a notification. One with warnings verifies, and its row lists them.
 
-A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The home archives and their sidecars are the durable record, so a restart loses nothing but the progress line. A job sends `backup:job-updated` when it starts and when it ends, and the event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). Progress has no event: the pane polls every 2 s while a job runs, which also covers an admin restoring their own home, who gets no event while that home is offline.
+A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. So does a delete of one of the home's archives, so a verify never writes a sidecar for an archive that is gone. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The home archives and their sidecars are the durable record, so a restart loses nothing but the progress line. A job sends `backup:job-updated` when it starts and when it ends, and the event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). Progress has no event: the pane polls every 2 s while a job runs, which also covers an admin restoring their own home, who gets no event while that home is offline.
 
 There is no read-only window. Capturing a container's `data.db` takes that container's path lock, so a sync or close of that one document waits for one copy. Typing is not affected. Capturing a plain file takes that file's path lock, so an overwrite or a trash of that one file waits for its copy.
 
-On a `local` mount the copy of a file also holds the shared tree lock, and that lock serves requests in arrival order. So a rename, move, trash or folder delete anywhere on that drive that arrives while one file is being copied waits for that file. Every later write on that drive waits behind it: a save, an upload, a document opening or syncing. For an ordinary file that is milliseconds. For a file of several gigabytes it is the length of its copy ([ROADMAP.md](ROADMAP.md)). A `local-key` or `s3` mount has no tree lock, so there only that one file waits.
+On a `local` mount the capture also holds the shared tree lock while it resolves a file's key and opens it, and that lock serves requests in arrival order. A rename, move, trash or folder delete on that drive waits for that open, not for the copy, so a file of several gigabytes holds up no other write. A `local-key` or `s3` mount has no tree lock.
 
 A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-relay.ts`), and `lib/backup/` never imports `getHome`. While a capture runs it touches the home once a minute, so a capture that outlasts the idle window keeps its databases open. A home the backup had to boot gets a 30 s idle (`BACKUP_RELEASE_MS`) once it is captured, so a nightly Full does not keep every home resident. It is never evicted: a user may have opened it meanwhile, and a home a request reached after the capture started keeps its normal idle.
 
@@ -124,7 +125,7 @@ A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-
 Every home archive is verified after the backup that wrote it, on **Verify**, and again before every restore:
 
 1. Transport: every file the manifest lists has exactly its size and sha256, and the folder holds nothing it does not list.
-2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open.
+2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open. A plain file whose row gives another size or sha256 than the manifest is a warning in the log, not a failure: an archive written before the capture rewrote such a row must still restore.
 3. Content: for the ten largest collab documents plus ten more, a sample that is the same on every run, every Yjs blob decodes and a document with blobs decodes to shared types. Chat containers are skipped, since their `data.db` is not Yjs.
 
 The verdict goes into the sidecar, which the admin pane's list reads. The manifest inside the archive is canonical; the sidecar is a cache.
@@ -192,10 +193,10 @@ A home archive is a POSIX tar (pax headers for long names, empty folders include
 
 Before a per-home restore moves the home aside, it writes `restoring.json` in its staging folder, and `restore-complete.json` beside it once the install is whole. The next boot (`apps/api/src/lib/backup/recovery.ts`) reads them before the staging wipe:
 
-- Marker without the completion note: the process died in the install. The half-written folder is parked as `<id>.failed-restore-<date>-<time>` and the pre-restore copy goes back. This is the window an OOM kill lands in. It is long whenever the install copies instead of renaming (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`, which falls back to a copy on `EXDEV` without blocking other requests): always on Docker, where `data/` and `backups/` are two bind mounts and a rename between them fails, and wherever the backups folder is on another disk.
+- Marker without the completion note: the process died in the install. The folder at the home's path goes aside under the name the marker gives, and the pre-restore copy goes back. For a restore from an archive that name is `<id>.failed-restore-<date>-<time>`, since the folder is half written. **Restore this copy** renames the copy into place before its checks, so there the folder is the pristine copy, and it goes back under its own name: a `.failed-restore-` name would leave it nothing but **Delete safety copy**. This is the window an OOM kill lands in. It is long whenever the install copies instead of renaming (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`, which falls back to a copy on `EXDEV` without blocking other requests): always on Docker, where `data/` and `backups/` are two bind mounts and a rename between them fails, and wherever the backups folder is on another disk.
 - Both notes: the restore finished, and both folders stay.
 
-A marker lost to a torn write does nothing, and the home sits complete in its pre-restore copy, to rename back by hand.
+A marker lost to a torn write, or one missing a field, does nothing, and the home sits complete in its pre-restore copy, to rename back by hand.
 
 ## A restore refuses databases from a newer server
 
@@ -216,7 +217,7 @@ The job:
 7. Reads the finished tar back and checks every member against the manifest's sha256.
 8. Writes the sidecar, prunes, and starts the upload.
 
-Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart". So `./eigen restore`, `./eigen rollback` and `./eigen update` wait for a running server backup to end before they stop Eigen, by its `running` sidecar in `backups/`. A sidecar that has said `running` for over a day lost its final write, say on a full disk: the launcher names it as stale and goes on.
+Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart". So `./eigen stop`, `restore`, `rollback`, `update` and a `restart` that stops eigen-api wait for a running server backup, or its upload, to end before they stop Eigen, by a `running` state in its sidecar in `backups/`, of the backup or under `upload`. A sidecar that has said `running` for over a day lost its final write, say on a full disk: the launcher names it as stale and goes on.
 
 ## A server archive is a plain tar of home archives, manifest last
 
@@ -266,7 +267,7 @@ Every failure of a server backup or its upload sends an `admin-alert` to `getOrg
 
 ## Upload goes to a bucket of its own
 
-A verified scheduled or manual archive goes to the backup bucket as an upload job of its own, which holds no home slot, so a backup never waits for the bucket and a pre-update backup never waits for an upload. Uploads take turns. **Upload to the bucket** on an archive's row in Settings sends one again. Pre-update archives never leave the server: they exist for `./eigen rollback` on it.
+A verified scheduled or manual archive goes to the backup bucket as an upload job of its own, which holds no home slot, so a backup never waits for the bucket and a pre-update backup never waits for an upload. Uploads take turns. `./eigen stop` waits while an archive's record says its backup or its upload runs, so the record the backup ends with already says the upload runs: a stop finds no moment between the two. **Upload to the bucket** on an archive's row in Settings sends one again. Pre-update archives never leave the server: they exist for `./eigen rollback` on it.
 
 `apps/api/src/lib/backup/upload.ts` streams the file as a multipart upload, reads the object's size back, and deletes an object that came out short. A failed or aborted upload makes Bun abort the multipart upload. Archives go under `<prefix>/<domain>/`, with the domain from `DOMAIN`, so two servers can share a bucket and each prunes only its own folder. Two servers of one domain share a folder and prune each other's archives by the shared count. A server restored from another's archive is one: it brings `.env.production` and `settings.json`, so the same domain, schedule and bucket ([Try a restore without moving](https://eigen.is/support/self-hosting/back-up-and-restore#try-a-restore-without-moving)).
 

@@ -276,6 +276,8 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                         e.target.style.height = 'auto';
                         e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                     }}
+                    role="combobox"
+                    aria-expanded={slashSuggest.isActive || targetSuggest.isActive || atSuggest.isActive}
                     onKeyDown={handleKeyDown}
                     onPaste={onPaste}
                     placeholder={placeholder}

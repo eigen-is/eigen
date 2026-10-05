@@ -1,5 +1,6 @@
 import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
-import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
+import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
     HomeSizeResponse,
@@ -9,7 +10,7 @@ import type {
     ServerSettingsSaved,
 } from '@workspace/lib/types/settings';
 import { SERVER_STORAGE_TYPES } from '@workspace/lib/types/settings';
-import { eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { eq, isNull, ne, or, type SQL, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
@@ -39,6 +40,72 @@ import {
 // Who appears on the admin Users page: everyone except guests, orphans included.
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
 const nonGuestUsers = () => or(isNull(user.role), ne(user.role, 'guest'));
+
+// One row shape for the Users and Guests pages. A guest has no member row and no team, so it comes back with
+// no role and no teams.
+function adminUserRows(where: SQL | undefined): AdminUserRow[] {
+    const db = getAuthDrizzleDb();
+    const orgId = getServerConfig()?.orgId;
+    // Project explicitly so the wire payload matches AdminUserRow exactly — `select()`
+    // would ship banReason / twoFactorEnabled / banned etc. to the admin UI.
+    const users = db
+        .select({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt,
+            lastLoginAt: user.lastLoginAt,
+        })
+        .from(user)
+        .where(where)
+        .all();
+    const members = orgId
+        ? db
+              .select({ id: member.id, userId: member.userId, role: member.role })
+              .from(member)
+              .where(eq(member.organizationId, orgId))
+              .all()
+        : [];
+    // Scope to the configured org like the member query above — teams belong to an org, so
+    // an unscoped join would leak other orgs' team memberships into this org's admin view.
+    const teamRows = orgId
+        ? db
+              .select({ userId: teamMember.userId, name: team.name })
+              .from(teamMember)
+              .innerJoin(team, eq(teamMember.teamId, team.id))
+              .where(eq(team.organizationId, orgId))
+              .all()
+        : [];
+    // MAX() over a timestamp-mode column comes back as raw epoch seconds
+    const lastSessions = db
+        .select({ userId: session.userId, last: sql<number>`max(${session.updatedAt})` })
+        .from(session)
+        .groupBy(session.userId)
+        .all();
+    const memberByUser = new Map(members.map((m) => [m.userId, m]));
+    const sessionByUser = new Map(lastSessions.map((s) => [s.userId, new Date(s.last * 1000)]));
+    const teamsByUser = new Map<string, string[]>();
+    for (const t of teamRows) {
+        const names = teamsByUser.get(t.userId);
+        if (names) names.push(t.name);
+        else teamsByUser.set(t.userId, [t.name]);
+    }
+    return users.map((u) => {
+        const m = memberByUser.get(u.id);
+        const seen = [u.lastLoginAt, sessionByUser.get(u.id)].filter((d): d is Date => d != null);
+        const lastActiveAt = seen.length ? new Date(Math.max(...seen.map(Number))) : null;
+        return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            memberId: m?.id ?? null,
+            role: m?.role ?? null,
+            createdAt: u.createdAt,
+            lastActiveAt,
+            teams: teamsByUser.get(u.id) ?? [],
+        };
+    });
+}
 
 // t.Integer is a union with a numeric string, whose default 422 dumps both branches; `error` replaces it.
 const backupKeepSchema = t.Integer({
@@ -93,8 +160,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                     t.Object({
                         mailAndContactsMaxMB: t.Optional(t.Number({ minimum: 10 })),
                         defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
-                        maxUploadSizeMB: t.Optional(t.Number({ minimum: 1 })),
-                        trashRetentionDays: t.Optional(t.Number({ minimum: 1 })),
+                        maxUploadSizeMB: t.Optional(t.Number({ minimum: 1, maximum: UPLOAD_CAP_MAX_MB })),
+                        trashRetentionDays: t.Optional(t.Number({ minimum: 0 })),
                     }),
                 ),
                 defaults: t.Optional(
@@ -266,89 +333,16 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/users',
         async ({ user: authUser }): Promise<AdminUserRow[]> => {
             await requireAdmin(authUser.id);
-            const db = getAuthDrizzleDb();
-            const orgId = getServerConfig()?.orgId;
-            // Project explicitly so the wire payload matches AdminUserRow exactly — `select()`
-            // would ship banReason / twoFactorEnabled / banned etc. to the admin UI.
-            const users = db
-                .select({
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    createdAt: user.createdAt,
-                    lastLoginAt: user.lastLoginAt,
-                })
-                .from(user)
-                .where(nonGuestUsers())
-                .all();
-            const members = orgId
-                ? db
-                      .select({ id: member.id, userId: member.userId, role: member.role })
-                      .from(member)
-                      .where(eq(member.organizationId, orgId))
-                      .all()
-                : [];
-            // Scope to the configured org like the member query above — teams belong to an org, so
-            // an unscoped join would leak other orgs' team memberships into this org's admin view.
-            const teamRows = orgId
-                ? db
-                      .select({ userId: teamMember.userId, name: team.name })
-                      .from(teamMember)
-                      .innerJoin(team, eq(teamMember.teamId, team.id))
-                      .where(eq(team.organizationId, orgId))
-                      .all()
-                : [];
-            // MAX() over a timestamp-mode column comes back as raw epoch seconds
-            const lastSessions = db
-                .select({ userId: session.userId, last: sql<number>`max(${session.updatedAt})` })
-                .from(session)
-                .groupBy(session.userId)
-                .all();
-            const memberByUser = new Map(members.map((m) => [m.userId, m]));
-            const sessionByUser = new Map(lastSessions.map((s) => [s.userId, new Date(s.last * 1000)]));
-            const teamsByUser = new Map<string, string[]>();
-            for (const t of teamRows) {
-                const names = teamsByUser.get(t.userId);
-                if (names) names.push(t.name);
-                else teamsByUser.set(t.userId, [t.name]);
-            }
-            return users.map((u) => {
-                const m = memberByUser.get(u.id);
-                const seen = [u.lastLoginAt, sessionByUser.get(u.id)].filter((d): d is Date => d != null);
-                const lastActiveAt = seen.length ? new Date(Math.max(...seen.map(Number))) : null;
-                return {
-                    id: u.id,
-                    name: u.name,
-                    email: u.email,
-                    memberId: m?.id ?? null,
-                    role: (m?.role as AdminUserRow['role']) ?? null,
-                    createdAt: u.createdAt,
-                    lastActiveAt,
-                    teams: teamsByUser.get(u.id) ?? [],
-                };
-            });
+            return adminUserRows(nonGuestUsers());
         },
         { auth: true },
     )
 
     .get(
         '/settings/users/guests',
-        async ({ user: authUser }): Promise<AdminUser[]> => {
+        async ({ user: authUser }): Promise<AdminUserRow[]> => {
             await requireAdmin(authUser.id);
-            const db = getAuthDrizzleDb();
-            // Project explicitly so the wire payload matches AdminUser exactly — `select()`
-            // would ship banReason / twoFactorEnabled / banned etc. to the admin UI.
-            return db
-                .select({
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    role: user.role,
-                    createdAt: user.createdAt,
-                })
-                .from(user)
-                .where(eq(user.role, 'guest'))
-                .all();
+            return adminUserRows(eq(user.role, 'guest'));
         },
         { auth: true },
     )

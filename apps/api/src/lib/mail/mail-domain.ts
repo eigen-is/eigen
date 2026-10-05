@@ -1,5 +1,5 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -20,7 +20,7 @@ import {
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { enforceHomeDataQuota } from '../config/enforcement';
-import { isDemo } from '../config/env';
+import { isDemo, isMailAppEnabled } from '../config/env';
 import { getMailDomain, isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
@@ -40,10 +40,11 @@ import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
 
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
+const MAIL_NOTIFICATION_TAG = 'mail:new';
 
 // A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
 // Folded to NFC first, the rule `isSafePathSegment` is written for: one spelling reaches the filesystem.
-function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
+function draftIdOf(email: NewDraft): string | undefined {
     const id = email.id?.trim().normalize('NFC') || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
     return id;
@@ -71,17 +72,21 @@ export class Mail {
         this.home.broadcast(buildMailEvent(type, mail));
     }
 
+    private readNotificationOnceInboxRead(): void {
+        if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications.markReadByTag(MAIL_NOTIFICATION_TAG);
+    }
+
     async init(): Promise<void> {
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
                 if (isNewMessage && email.fromShort) {
-                    this.home.notifications?.persist({
+                    this.home.notifications.persist({
                         type: 'mail',
                         actorEmail: email.from?.value?.[0]?.address ?? null,
                         title: `New mail from ${email.fromShort}`,
                         body: email.subject || '(no subject)',
-                        tag: 'mail:new',
+                        tag: MAIL_NOTIFICATION_TAG,
                         coalesce: true,
                         details: {
                             mailId: email.id,
@@ -90,13 +95,21 @@ export class Mail {
                     });
                 }
             },
-            flagsChanged: (messageId, mailbox) => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox }),
-            deleted: (messageId, mailbox) => this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox }),
+            flagsChanged: (messageId, mailbox) => {
+                this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox });
+                this.readNotificationOnceInboxRead();
+            },
+            deleted: (messageId, mailbox) => {
+                this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox });
+                this.readNotificationOnceInboxRead();
+            },
         });
+        // Every user Home carries a Mail; with mail off it seeds, watches and cleans nothing.
+        if (!isMailAppEnabled()) return;
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
-            if (welcome) await this.store.append('', welcome, { skipReconcile: true, arrival: false });
+            if (welcome) await this.store.append(MAILBOX_INBOX, welcome, { skipReconcile: true, arrival: false });
         }
         await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
@@ -107,6 +120,7 @@ export class Mail {
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
+        if (!isMailAppEnabled()) return [];
         // The FTS mailbox filter matches the stored value exactly, so any caller casing is canonicalised first.
         const mailboxes = opts.mailboxes?.map(canonicalMailbox);
         return this.store.search({ ...opts, mailboxes });
@@ -119,7 +133,7 @@ export class Mail {
     }
 
     async mailboxDeliver(message: Buffer): Promise<string> {
-        const uniqueId = await this.store.append('', message);
+        const uniqueId = await this.store.append(MAILBOX_INBOX, message);
 
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
@@ -157,7 +171,7 @@ export class Mail {
         }
         await enforceHomeDataQuota(this.home.user.id, bytes.byteLength);
 
-        const id = await this.store.append('', bytes, { arrival: false });
+        const id = await this.store.append(MAILBOX_INBOX, bytes, { arrival: false });
         return { id };
     }
 
@@ -215,6 +229,10 @@ export class Mail {
         return this.store.getSummary(messageId);
     }
 
+    messageGetModifiedAt(summary: EmailSummary): Promise<number> {
+        return this.store.getModifiedAt(summary);
+    }
+
     async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {
         const attachments = await this.store.getAttachments(messageId);
         if (index < 0 || index >= attachments.length) {
@@ -235,6 +253,7 @@ export class Mail {
         await this.store.deleteDraftMeta(messageId);
 
         this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox: email.mailbox });
+        this.readNotificationOnceInboxRead();
     }
 
     async messageMove(messageId: string, targetMailbox: string): Promise<void> {
@@ -245,6 +264,7 @@ export class Mail {
         await this.store.move(messageId, targetMailbox);
 
         this.emit(SSEventType.MAIL_MOVED, { messageId, mailbox: email.mailbox, toMailbox: targetMailbox });
+        this.readNotificationOnceInboxRead();
     }
 
     async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
@@ -267,6 +287,7 @@ export class Mail {
 
         await this.store.setFlags(messageId, { seen: read });
         this.emit(SSEventType.MAIL_READ_CHANGED, { messageId, mailbox: email.mailbox });
+        this.readNotificationOnceInboxRead();
     }
 
     async messageSetFlagged(messageId: string, flagged: boolean): Promise<void> {
@@ -279,7 +300,7 @@ export class Mail {
 
     // -- Draft & Send --
 
-    async messageHandleDraft(email: NewDraft | EmailDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
+    async messageHandleDraft(email: NewDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
         const existingId = draftIdOf(email);
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
@@ -310,7 +331,7 @@ export class Mail {
     }
 
     private async draftFastSave(
-        email: NewDraft | EmailDraft,
+        email: NewDraft,
         existingId: string,
         prevMeta: DraftMeta,
         parts: Array<Required<DraftMetaAttachment>>,
@@ -328,6 +349,7 @@ export class Mail {
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
+            repliedToId: email.repliedToId ?? prevMeta.repliedToId,
             lastFullSaveAt: prevMeta.lastFullSaveAt,
         };
         await this.store.writeDraftMeta(existingId, meta);
@@ -369,7 +391,7 @@ export class Mail {
     }
 
     private async draftFullSave(
-        email: NewDraft | EmailDraft,
+        email: NewDraft,
         existingId: string | undefined,
         options: Pick<DraftUpdateOptions, 'tempAttachmentIds' | 'keepAttachmentIndexes'>,
     ): Promise<EmailDraft> {
@@ -389,6 +411,7 @@ export class Mail {
                     html: email.html || meta.html, // || not ?? — empty html also falls back to the sidecar
                     inReplyTo: email.inReplyTo ?? meta.inReplyTo,
                     references: email.references ?? meta.references,
+                    repliedToId: email.repliedToId ?? meta.repliedToId,
                 };
                 driveReferences = driveReferences ?? meta.driveReferences;
             }
@@ -468,6 +491,7 @@ export class Mail {
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
+            repliedToId: email.repliedToId,
             lastFullSaveAt: Date.now(),
         });
 
@@ -531,10 +555,7 @@ export class Mail {
         );
     }
 
-    async messageSend(
-        mailToSend: NewDraft | EmailDraft,
-        options?: { grantAccessRefIds?: string[] },
-    ): Promise<SentMailResult> {
+    async messageSend(mailToSend: NewDraft, options?: { grantAccessRefIds?: string[] }): Promise<SentMailResult> {
         // Full EML rebuild so attachment content is available for SMTP.
         const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
@@ -617,18 +638,29 @@ export class Mail {
             }
         }
 
+        const repliedToId = (await this.store.readDraftMeta(mail.id))?.repliedToId;
         await this.store.deleteDraftMeta(mail.id);
         await this.messageMove(mail.id, MAILBOX_SENT);
         await this.store.setFlags(mail.id, { draft: false });
         this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: MAILBOX_SENT });
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
 
+        // The mail is out: a reply mark that fails to stick must not fail the send, or a retry sends it twice.
+        const original = repliedToId ? this.store.getSummary(repliedToId) : undefined;
+        if (original) {
+            await this.store.setFlags(original.id, { replied: true }).then(
+                () => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: original.id, mailbox: original.mailbox }),
+                (err) => console.error('mail: marking the answered message failed', err),
+            );
+        }
+
         return failedRecipients.length ? { ...mail, failedRecipients } : mail;
     }
 
     async destruct(): Promise<void> {
         await this.store.unwatch();
-        await this.flushDraftSidecars();
+        // With mail off no index is open for a sidecar to be saved into.
+        if (isMailAppEnabled()) await this.flushDraftSidecars();
         return this.store.destruct();
     }
 

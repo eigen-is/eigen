@@ -35,6 +35,7 @@ import { MARKER_DB_CONFIG, MARKER_SCHEMA, snapshotInto, waitForJob } from './bac
 // of a store that holds no object at all fails the home: an empty store is an outage, not a store with holes.
 
 const ORPHAN_WARNING = "entries that do not reach the drive's root, left out:";
+const UNUSABLE_WARNING = 'entries with a name no path can hold, left out';
 const LOST_WARNING = 'files with no object in storage, archived without their bytes:';
 
 // Every home here is broken on purpose, and a whole-server backup in a later file would fail or warn on it.
@@ -188,6 +189,58 @@ describe('Backup of a home whose drives hold rows that do not reach the root', (
             await expect(snapshotInto(rootless, level)).rejects.toThrow(`mount ${mountId}: the table has no root row`);
         }
     });
+});
+
+// A row written before a name rule, or by a hand edit: a control character or a separator in a name no path can hold.
+// Verify refuses an uploaded archive with one, so a capture that kept it would leave the home out of every archive.
+describe('Backup of a home whose drive holds a name no path can hold', () => {
+    let user: TestUser;
+    let home: Home;
+    let mountId: string;
+    // The unusable rows, and the file inside the folder that goes with it.
+    const unusable: string[] = [];
+    let insideId: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        ({ user, home, mountId } = await newUser('unusable'));
+        const root = await rootOf(user, mountId);
+        await upload(user, mountId, root.id, 'kept.txt', 'kept bytes');
+        const control = await upload(user, mountId, root.id, 'control.txt', 'control bytes');
+        const folder = await drivePost(user.sessionToken, user.id, mountId, `folder/${root.id}`, {
+            folderName: 'Separated',
+        });
+        insideId = (await upload(user, mountId, folder.id, 'inside.txt', 'inside bytes')).id;
+        writeWithoutForeignKeys(home.homeDir, mountId, [
+            ['UPDATE paths SET name = ? WHERE id = ?', ['control\x01.txt', control.id]],
+            ['UPDATE paths SET name = ? WHERE id = ?', ['Sepa/rated', folder.id]],
+        ]);
+        unusable.push(control.id, folder.id);
+    });
+
+    for (const level of ['full', 'light'] as const) {
+        test(`a ${level} archive leaves them out with what is inside them, names them and verifies`, async () => {
+            const { manifest, folder } = await snapshotInto(home, level);
+            expect((await verifyFolder(folder)).failures).toEqual([]);
+            const warning = warningOf(manifest, mountId, UNUSABLE_WARNING);
+            expect(warning).toStartWith(`mount ${mountId}: ${UNUSABLE_WARNING} with 1 more inside them:`);
+            expect(warning).toContain('control\x01.txt');
+            expect(warning).toContain('Sepa/rated');
+            expect(manifest.warnings?.some((line) => line.includes(ORPHAN_WARNING))).toBe(false);
+            const archived = rowIds(join(folder, 'home', PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB));
+            const live = rowIds(metadataPath(home.homeDir, mountId));
+            for (const id of [...unusable, insideId]) {
+                expect(archived.has(id)).toBe(false);
+                expect(live.has(id)).toBe(true);
+            }
+            if (level === 'full') {
+                const data = `home/${PATHS.DRIVE.ROOT}/${mountId}/${PATHS.DRIVE.DATA_DIR}`;
+                expect(manifest.entries.map((entry) => entry.path).filter((path) => path.startsWith(data))).toEqual([
+                    `${data}/kept.txt`,
+                ]);
+            }
+        });
+    }
 });
 
 describe('Backup of a home whose drive lost files', () => {

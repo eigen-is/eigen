@@ -22,7 +22,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { prosemirrorJSONToYDoc, yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
@@ -229,7 +229,7 @@ async function main(): Promise<void> {
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { convertToDocument } = await import('../lib/import/import-document');
-    const { writeEigendocToYjs } = await import('../lib/document/doc');
+    const { writeEigendocUpdateToYjs } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/import/doc/from-docx');
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
@@ -520,7 +520,9 @@ async function main(): Promise<void> {
         }
         // One fragment rebuild with the anchored marks; cards land in the comments Y.Map the
         // panel renders from. Both persist through the live collab doc.
-        writeEigendocToYjs(collab.doc, docJson, docSchema);
+        const marked = prosemirrorJSONToYDoc(docSchema, docJson, 'default');
+        writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(marked));
+        marked.destroy();
         collab.doc.transact(() => {
             for (const { card } of cards) writeCommentCard(collab.doc, card);
         });
@@ -706,6 +708,7 @@ async function main(): Promise<void> {
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
+                if (!(entry instanceof Y.Map)) continue;
                 const creator = entry.get('creator');
                 if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
                 // The baked createdAt is the day the fixture was authored — weeks before the replies.
@@ -714,7 +717,8 @@ async function main(): Promise<void> {
         }
         const tasksMap = getItemMapRoot(board.doc, 'tasks');
         for (const [i, spec] of KANBAN.cards.entries()) {
-            const task = tasksMap.get(`card-${i + 1}`)!;
+            const task = tasksMap.get(`card-${i + 1}`);
+            if (!(task instanceof Y.Map)) continue;
             task.set('color', DEFAULT_CARD_COLOR);
             task.set('chatName', cardChatNames.get(`card-${i + 1}`)!);
             task.set('createdAt', boardCreatedAt + (i + 1) * 86_400_000); // a card a day after the board

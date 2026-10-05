@@ -86,13 +86,13 @@ On a closed-signup server, the drive `access-check` (`checkAccessForEmails`, use
 
 Every document app (docs, stickies, slides, sheets, vector) renders `<RequestAccessView>` from `EigenDocEditorRoute` when `useCollabDocumentInfo()` says `!canRead`. Drive shows it when the folder listing fails with a 403 `AppError`, chat when `useCheckPermissions()` says `!canRead`.
 
-A guest sees the same screen, but `POST .../request-access` rejects guests with 403 (`requireNonGuest`).
+A guest sees the same screen without the request form, told to ask the owner to share: `POST .../request-access` rejects guests with 403 (`requireNonGuest`).
 
 ## An access request notifies the owner and never reveals the path
 
 `POST /drive/:ownerId/:mountId/path/:pathId/request-access` calls `propagateAccessRequest` (`apps/api/src/lib/drive/access-request-propagation.ts`), which reads the path through the home relay and pushes an `access-request` notification into the owner's home. The route skips the SharedDrive facade by design: the caller has no permission yet, which is the point. It returns 200 whether or not the path exists or is trashed, so it never reveals a path. An unknown owner or mount still answers 404.
 
-The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default). A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only ([ROADMAP.md](ROADMAP.md) § Cheap wins).
+The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default), at most once an hour per requester and path. The notification folds a repeat on its tag, but a mail cannot be taken back, so without the window one user could mail an owner on every click. The window lives in the API process, as the OTP limiter's does. A failed send opens it again, so the next click retries the mail. A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only ([ROADMAP.md](ROADMAP.md) § Cheap wins).
 
 The "Access requested" state on the button is client-side only and resets on a refresh.
 
@@ -118,7 +118,7 @@ The sweep calls `deleteUserCompletely(userId, null)`, the system mode that goes 
 
 ## Guests have two Admin pages, and one is the org owner's
 
-The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, with a detail view and delete. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
+The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, drawn by the Users page's own table and detail (`AdminUsersTable`, `UserDetail` with `guest`). The route returns the Users row shape, so a guest comes back with no role and no teams. The table keeps name, email and last active, and the detail drops role, teams, storage, backup and the password reset: a guest has none of them, and `GuestHome.size()` is zero. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
 ## See also
 

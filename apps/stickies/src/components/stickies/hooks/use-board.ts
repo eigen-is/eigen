@@ -28,6 +28,33 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     );
 }
 
+// Lists only the columns and cards it could read: the board looks up every listed id.
+export function readBoard(doc: Y.Doc): BoardData {
+    const tasksMap = getItemMapRoot(doc, 'tasks');
+    const columns: Record<string, ColumnItem> = {};
+    for (const [id, columnMap] of getItemMapRoot(doc, 'columns')) {
+        if (!(columnMap instanceof Y.Map)) continue;
+        const title = columnMap.get('title');
+        const creator = columnMap.get('creator');
+        const createdAt = columnMap.get('createdAt');
+        columns[id] = {
+            id,
+            title: typeof title === 'string' ? title : '',
+            taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter(
+                (taskId) => tasksMap.get(taskId) instanceof Y.Map,
+            ),
+            creator: typeof creator === 'string' ? creator : '',
+            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
+            // legacy columns that predate the createdAt field. Nothing renders it.
+            createdAt: typeof createdAt === 'number' ? createdAt : 0,
+        };
+    }
+    const columnOrder = getIdArrayRoot(doc, 'columnOrder')
+        .toArray()
+        .filter((id) => Object.hasOwn(columns, id));
+    return { columns, columnOrder };
+}
+
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
@@ -125,34 +152,29 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         onInit: ({ doc }) => {
             initializedRef.current = false;
             const columnsMap = getItemMapRoot(doc, 'columns');
+            const tasksMap = getItemMapRoot(doc, 'tasks');
             const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
 
             const updateReactState = () => {
                 setBoard((prev) => {
-                    const columns: Record<string, ColumnItem> = {};
-                    for (const [columnId, columnMap] of columnsMap) {
-                        const next: ColumnItem = {
-                            id: columnId,
-                            title: (columnMap.get('title') as string) || '',
-                            taskIds: getIdArray(columnMap, 'taskIds')?.toArray() ?? [],
-                            creator: (columnMap.get('creator') as string) || '',
-                            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
-                            // legacy columns that predate the createdAt field. Nothing renders it.
-                            createdAt: (columnMap.get('createdAt') as number) || 0,
-                        };
-                        const prevColumn = prev.columns[columnId];
-                        columns[columnId] = prevColumn && sameColumn(prevColumn, next) ? prevColumn : next;
+                    const next = readBoard(doc);
+                    for (const id in next.columns) {
+                        if (prev.columns[id] && sameColumn(prev.columns[id], next.columns[id]))
+                            next.columns[id] = prev.columns[id];
                     }
-                    return { columns, columnOrder: columnOrderArray.toArray() };
+                    return next;
                 });
             };
 
+            // tasks shallow: a card's own edits don't change which ids the board can read.
             columnsMap.observeDeep(updateReactState);
+            tasksMap.observe(updateReactState);
             columnOrderArray.observe(updateReactState);
             updateReactState();
 
             return () => {
                 columnsMap.unobserveDeep(updateReactState);
+                tasksMap.unobserve(updateReactState);
                 columnOrderArray.unobserve(updateReactState);
             };
         },

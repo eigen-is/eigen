@@ -34,7 +34,8 @@ export async function movePathAsync(from: string, to: string): Promise<void> {
     await fsp.mkdir(path.dirname(to), { recursive: true });
     await fsp.rename(from, to).catch(async (error: unknown) => {
         if (errnoOf(error) !== 'EXDEV') throw error;
-        await fsp.cp(from, to, { recursive: true });
+        // A rename keeps every mtime, and Dovecot dates a Maildir message by its own.
+        await fsp.cp(from, to, { recursive: true, preserveTimestamps: true });
         await fsp.rm(from, { recursive: true, force: true });
     });
 }

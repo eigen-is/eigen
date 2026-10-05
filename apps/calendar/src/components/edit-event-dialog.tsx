@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
-    isInvitationFromOthers,
+    heldAttendees,
     isSeriesOccurrence,
     occurrenceDateToString,
     parseOccurrenceDate,
@@ -12,6 +12,7 @@ import {
     useCreateEvent,
     useDeleteEvent,
     useEvent,
+    useIsInvitationFromOthers,
     useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
@@ -95,6 +96,7 @@ export function EditEventDialog({
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
     const moveEvent = useMoveEvent(eventOwnerId);
+    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
     // A series is saved on its master, and only the master's own row says which date the series starts on.
     const { data: master } = useEvent(
         eventOwnerId,
@@ -112,7 +114,7 @@ export function EditEventDialog({
             setLocation(event.location || '');
             setAllDay(event.allDay);
             setRruleString(event.rrule);
-            setAttendees(event.data?.attendees || []);
+            setAttendees(heldAttendees(event, master));
 
             const currentCal = calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId);
             setSelectedCalKey(
@@ -137,7 +139,7 @@ export function EditEventDialog({
                 setEndTime(toTimeString(event.endTime));
             }
         }
-    }, [event, open, calendarOptions, eventOwnerId]);
+    }, [event, master, open, calendarOptions, eventOwnerId]);
 
     if (!event) return null;
 
@@ -145,7 +147,7 @@ export function EditEventDialog({
     // An override of one occurrence carries no rule of its own: sending one back saves over the whole series.
     const isOverride = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
-    const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
+    const isLinkedEvent = isFromOthers(event);
     // An invitation from someone else is read-only except for which calendar holds the copy.
     const canSave = !isLinkedEvent || calendarChanged;
 
@@ -153,8 +155,7 @@ export function EditEventDialog({
     const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
     const moveLossReasons: string[] = [];
     if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
-    else if (event.data?.attendees?.length)
-        moveLossReasons.push('guests will be notified it was canceled and re-invited');
+    else if (attendees.length) moveLossReasons.push('guests will be notified it was canceled and re-invited');
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
     const handleSaveClick = () => {
@@ -293,14 +294,11 @@ export function EditEventDialog({
                         detailsDisabled={isLinkedEvent}
                         attendeesSection={
                             isLinkedEvent ? (
-                                event.data?.attendees?.length ? (
+                                attendees.length ? (
                                     <div className="flex items-start gap-3">
                                         <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                         <div className="flex-1">
-                                            <AttendeeList
-                                                attendees={event.data.attendees}
-                                                organizer={event.data.organizer}
-                                            />
+                                            <AttendeeList attendees={attendees} organizer={event.data?.organizer} />
                                         </div>
                                     </div>
                                 ) : null
@@ -313,6 +311,11 @@ export function EditEventDialog({
                                             onChange={setAttendees}
                                             currentUserEmail={user?.email}
                                         />
+                                        {isPartOfSeries && attendees.length === 0 && (
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Saved for one occurrence, this keeps the series' guests.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             )

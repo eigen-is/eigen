@@ -113,6 +113,7 @@ main channel instead of releases.
 EOF
             ;;
         rollback)
+            kept=$(pre_update_archives | sed 's/^/  /')
             cat <<EOF
 Usage: ./eigen rollback [--yes]
 
@@ -121,6 +122,9 @@ a light one, the accounts, settings and databases are as they were then, and mai
 Files and documents made since drop out of Drive, though they stay on disk; files renamed, moved
 or trashed since are listed where they were and, on drives that store files by their names, do
 not open. The current data is kept aside.
+
+To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:
+${kept:-  none}
 
   --yes   Do not ask
 EOF
@@ -136,7 +140,8 @@ EOF
             cat <<EOF
 Usage: ./eigen stop
 
-Stops Eigen. ./eigen restart starts it again.
+Stops Eigen. When a server backup or its upload to the backup bucket is running, it
+waits for that to end first. ./eigen restart starts it again.
 EOF
             ;;
     esac
@@ -564,6 +569,7 @@ stop_containers() {
 
 # From the stop on, a hangup must not end the command halfway: dash runs no EXIT trap on one.
 stop() {
+    before_stop
     trap '' HUP
     project
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
@@ -572,11 +578,11 @@ stop() {
 # Backups run nightly, so one still running after a day is not: its end was never written, as on a full disk.
 BACKUP_STALE_MINUTES=1440
 
-# running_records <find test…>: the records in backups/ that say running, of those the test picks. A record is written
-# at the start and at the end only, so while it says running its mtime is its startedAt. An upload's own state is
-# nested deeper.
+# running_records <find test…>: the records in backups/ whose backup or upload says running, of those the test picks.
+# A record is written when either starts and when it ends only, so while one says running the mtime is its start. The
+# upload's state is the one nested a level deeper.
 running_records() {
-    find backups -maxdepth 1 -name 'server-*.json' "$@" -exec grep -l '^  "state": "running"' {} + 2>/dev/null || :
+    find backups -maxdepth 1 -name 'server-*.json' "$@" -exec grep -lE '^  (  )?"state": "running"' {} + 2>/dev/null || :
 }
 
 # The server backup that runs, by the record it keeps in backups/ until it ends. The boot marks the record of one a stop
@@ -585,8 +591,9 @@ running_backup() { running_records ! -mmin +"$BACKUP_STALE_MINUTES" | head -n 1;
 
 wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
 
-# before_stop: a restore, an update or a restart that stops eigen-api waits for the server backup that runs, which the stop would kill, and the night it
-# was would have no backup. A stale record is named and passed. An interrupt here leaves Eigen running as it was.
+# before_stop: a stop, and a restart that stops eigen-api, waits for the server backup that runs, or its upload, which the
+# stop would kill: the night it was would have no backup, or none in the bucket. A restore and an update wait before they arm the restart, and stop
+# looks again. A stale record is named and passed. An interrupt here leaves Eigen running as it was.
 before_stop() {
     if ! api_running; then return 0; fi
     record=$(running_backup)
@@ -820,13 +827,15 @@ prune_images() {
 }
 
 # write_bundle <api image>: a release install's launcher and Compose files, as that api image writes them, to temporary
-# files that are renamed, so this running launcher reads on in its own copy. .eigen/bundle names the image first, so
-# files written halfway are told apart too.
+# files that are renamed, so this running launcher reads on in its own copy. Files written halfway must read as stale:
+# .eigen/bundle names an image .env.production does not pin yet first, as an update writes them, and one it pins
+# already, as after a restore's swap, only once they are written.
 write_bundle() {
     build=$(describe "$1")
-    echo "$1" >.eigen/bundle
+    if [ "$1" != "$(image api)" ]; then echo "$1" >.eigen/bundle; fi
     step "Writing the Eigen $build launcher and Compose files" "Eigen $build files written" \
         "Could not write the Eigen $build files" with_image "$1" cli bootstrap --force --out /install
+    echo "$1" >.eigen/bundle
 }
 
 # The api image of the files an unfinished update or restore wrote, when .env.production pins another.
@@ -1170,7 +1179,8 @@ update_get() {
 update_apply() {
     # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
-        die "This update was started by a launcher older than 0.3.1." "Run ./eigen update 0.3.1 --no-backup first, then ./eigen update."
+        die "This update was started by a launcher older than 0.3.1." \
+            "Copy data/ and .env.production somewhere safe, then run ./eigen update 0.3.1 --no-backup, then ./eigen update."
     fi
     domain=$(env_value DOMAIN)
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
@@ -1207,6 +1217,25 @@ update_apply() {
     fi
 }
 
+# pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
+pre_update_archives() {
+    for archive in backups/server-pre-update-*.tar; do
+        if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
+    done | sort -t- -k5r
+}
+
+# no_rollback <what went wrong> <what to do next>: a rollback's refusal, which points at the backups earlier updates
+# made when there are any, since ./eigen restore puts one of them back.
+no_rollback() {
+    kept=$(pre_update_archives)
+    if [ -z "$kept" ]; then die "$1" "$2"; fi
+    say "$RED" '■' "$1" >&2
+    say "$GRAY" '│' "The backups earlier updates made:" >&2
+    printf '%s\n' "$kept" | while IFS= read -r archive; do say "$GRAY" '│' "  $archive" >&2; done
+    say "$GRAY" '└' "./eigen restore <file> puts one of them back." >&2
+    exit 1
+}
+
 # The pre-update backup brings back the data and .env.production, staged while Eigen runs, then the images it pins
 # and their bundle files.
 rollback() {
@@ -1226,11 +1255,11 @@ rollback() {
     # First: a swap that was cut off, finished here, clears .eigen/last-update.
     preflight
     if [ ! -f .eigen/last-update ]; then
-        die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
+        no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
     if [ ! -f "backups/$archive" ]; then
-        die "The backup the last update made, backups/$archive, is gone." \
+        no_rollback "The backup the last update made, backups/$archive, is gone." \
             "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
     fi
     lock
@@ -1259,6 +1288,8 @@ case $COMMAND in
         wordmark "$COMMAND"
         preflight
         lock
+        # A restore that stopped writing the files, as its failure says, left those of the build before.
+        if [ "$COMMAND" = restart ] && [ -n "$(stale_bundle)" ]; then write_bundle "$(image api)"; fi
         "$COMMAND"
         ;;
     reset-password)

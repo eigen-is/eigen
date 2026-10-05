@@ -201,7 +201,7 @@ describe('versions HTTP routes', () => {
         expect(dataDb?.hash).toBe(expectedHash);
     });
 
-    // replaceContainerDataDb recreates data.db without an onSync, so the chat restore must mark the
+    // replaceContainerDataDb writes data.db without an onSync, so the chat restore must mark the
     // container contentDirty itself — otherwise body search serves pre-restore content until the
     // next write. (The Yjs restore path converges via DbProvider → sync → onSync; chat has no Y.Doc.)
     test('chat: restore marks the container for content reindex (body search follows the restore)', async () => {

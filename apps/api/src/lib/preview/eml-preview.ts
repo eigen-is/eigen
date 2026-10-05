@@ -76,6 +76,34 @@ function cssFetches(css: string): boolean {
     return fetchTokens(css) || SCHEME_MEDIA_BLOCKS.some((block) => fetchTokens(css.replace(block, '')));
 }
 
+// A sheet's top-level statements: a rule or block ends at the `}` that closes it, an at-statement at its `;`.
+// Braces in strings and comments can misplace a cut, which is why the kept text is checked again whole.
+function cssStatements(css: string): string[] {
+    const statements: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}') depth = Math.max(depth - 1, 0);
+        else if (css[i] !== ';') continue;
+        if (depth === 0) {
+            statements.push(css.slice(start, i + 1));
+            start = i + 1;
+        }
+    }
+    statements.push(css.slice(start));
+    return statements;
+}
+
+// Only the statements that fetch go, so the layout beside them survives; a sheet whose kept text still
+// fetches is emptied.
+function restrictSheet(css: string): string {
+    const kept = cssStatements(css)
+        .filter((statement) => !cssFetches(statement))
+        .join('');
+    return cssFetches(kept) ? '' : kept;
+}
+
 function restrictNode(node: AttrNode): void {
     const style = node.getAttribute('style');
     if (style !== null && cssFetches(style)) node.removeAttribute('style');
@@ -101,7 +129,7 @@ function restrictNode(node: AttrNode): void {
 function sanitizeEmlHtml(html: string): string {
     DOMPurify.addHook('afterSanitizeAttributes', restrictNode);
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
-        if (data.tagName === 'style' && cssFetches(node.textContent ?? '')) node.textContent = '';
+        if (data.tagName === 'style') node.textContent = restrictSheet(node.textContent ?? '');
     });
     try {
         return DOMPurify.sanitize(html, { ...READER_SANITIZE_CONFIG, FORBID_TAGS });

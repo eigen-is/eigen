@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1609 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1613 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -213,7 +213,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (295)
+## Hooks (296)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -284,6 +284,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useImportCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportCalendarFromDevice` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportToCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `useIsInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendarLabel` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -513,7 +514,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (371)
+## Types (369)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -576,7 +577,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `AdminUser` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `AdminUserRow` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `Attachment` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AttachmentMeta` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -684,6 +684,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NotificationPersistInput` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationType` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `OrgMember` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
+| `OrgRole` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OrgTeam` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `OwnerType` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `ParsedMail` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -720,8 +721,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventMail` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventNotificationChanged` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventNotificationCreated` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
-| `SSEventSpace` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
-| `SSEventTeam` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `TeamSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `UpdateCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UpdateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
@@ -889,7 +888,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (756)
+## Utilities & constants (761)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1005,6 +1004,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getMonthRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
+| `heldAttendees` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1121,14 +1121,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isStandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `isStorageType` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
+| `LABEL_NAME_MAX_LENGTH` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `MAIL_PREVIEW_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAILBOX_ARCHIVE` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_DRAFTS` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_HAS_CHILDREN_FLAG` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_INBOX` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
-| `MAILBOX_INBOX_IMAP` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
-| `MAILBOX_INBOX_KEY` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_JUNK` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_NO_CHILDREN_FLAG` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAILBOX_SENT` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
@@ -1137,6 +1136,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mailboxListFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxRouteSegment` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
+| `MAX_REQUEST_BODY_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1152,11 +1152,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `UPLOAD_CAP_MAX_MB` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `VCARD_CONTENT_TYPE` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `VCARD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
+| `isStaleWrite` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `isIllegalC0` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -1252,6 +1254,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `forEachInRect` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1349,6 +1352,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `canUploadServerArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `CONTROL_CHARS` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |

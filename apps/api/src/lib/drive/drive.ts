@@ -789,7 +789,7 @@ export default class Drive {
         return run;
     }
 
-    // Called by: updateACLDelta (after its server-side merge) and inviteToChat. Not route-callable —
+    // Called by: updateACLDelta (after its server-side merge). Not route-callable —
     // the ACL route accepts only deltas, so full-array replaces can't originate from clients.
     async updateACL(
         mountId: string,
@@ -978,8 +978,14 @@ export default class Drive {
             return { alreadyHasAccess: true, targetPathId: targetPath.id };
         }
 
-        const newAcl = [...currentAcl, { id: email.toLowerCase(), read: true, write: true }];
-        await this.updateACL(mountId, targetPath.id, newAcl, undefined, undefined, actor);
+        await this.updateACLDelta(
+            mountId,
+            targetPath.id,
+            { add: [{ id: email.toLowerCase(), read: true, write: true }] },
+            undefined,
+            undefined,
+            actor,
+        );
 
         return { alreadyHasAccess: false, targetPathId: targetPath.id };
     }
@@ -1173,7 +1179,7 @@ export default class Drive {
         const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
         if (existing) {
             if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;
-            if (existing.name !== CHATS_FOLDER_NAME) await mount.updatePath(existing.id, { name: CHATS_FOLDER_NAME });
+            if (existing.name !== CHATS_FOLDER_NAME) await this.renamePath(mountId, existing.id, CHATS_FOLDER_NAME);
             return existing.id;
         }
 
@@ -1190,9 +1196,8 @@ export default class Drive {
         }
     }
 
-    // Called by: ChatRoom.init — serializes the lazy data.db auto-create against a concurrent
-    // version restore (replaceContainerDataDb holds this same per-mount container lock). Not
-    // route-callable.
+    // Called by: ChatRoom.init — serializes the lazy data.db auto-create across the fresh ChatRoom
+    // Drive.getChat builds per request. Not route-callable.
     async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
         return this.getMount(mountId).withPathLock(pathId, fn);
     }

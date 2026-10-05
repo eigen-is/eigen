@@ -33,6 +33,26 @@ async function createDoc(name: string): Promise<{ id: string }> {
     });
 }
 
+// Bob, or the caller `token` names, asking Alice for access to `pathId`.
+function requestAccess(pathId: string, body: object = {}, token = ctx.bob.user.sessionToken): Promise<Response> {
+    return authedRequest(token, `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${pathId}/request-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+}
+
+// sendMail stubbed; `toAlice()` lists the mails it was handed for Alice.
+async function catchMail() {
+    const mailer = await import('../../lib/core/mailer');
+    const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+    spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+    return {
+        spy,
+        toAlice: () => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.alice.user.email)),
+    };
+}
+
 describe('Access-request email', () => {
     // Reset toggle before AND after each test — JsonStore is shared across the whole
     // suite, and the default for ownerOnAccessRequest is true.
@@ -40,23 +60,13 @@ describe('Access-request email', () => {
     afterEach(() => setToggle(true));
 
     test('emails owner when toggle on', async () => {
-        const mailer = await import('../../lib/core/mailer');
-        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+        const { spy, toAlice } = await catchMail();
 
         const doc = await createDoc('access-request-on');
-        await authedRequest(
-            ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: 'Please' }),
-            },
-        );
+        await requestAccess(doc.id, { message: 'Please' });
         await new Promise((r) => setTimeout(r, 100));
 
-        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.alice.user.email));
+        const calls = toAlice();
         expect(calls.length).toBe(1);
         expect(calls[0][0].subject).toContain(ctx.bob.user.name);
         expect(calls[0][0].html).toContain('Please');
@@ -71,37 +81,50 @@ describe('Access-request email', () => {
         expect(req?.details).toEqual({ message: 'Please', pathType: 'doc' });
     });
 
-    test('does not email when toggle off', async () => {
-        await setToggle(false);
-        const mailer = await import('../../lib/core/mailer');
-        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+    // The notification folds a repeat on its tag; the mail must not go out once per click either.
+    test('a repeated request mails the owner once, while a request for another file still mails', async () => {
+        const { spy, toAlice } = await catchMail();
 
-        const doc = await createDoc('access-request-off');
-        await authedRequest(
-            ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) },
-        );
+        const doc = await createDoc('access-request-repeat');
+        const other = await createDoc('access-request-repeat-other');
+        for (let i = 0; i < 5; i++) await requestAccess(doc.id);
+        await requestAccess(other.id);
         await new Promise((r) => setTimeout(r, 100));
 
-        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.alice.user.email));
-        expect(calls.length).toBe(0);
+        expect(toAlice().length).toBe(2);
+        spy.mockRestore();
+    });
+
+    test('a failed send leaves the next request free to mail again', async () => {
+        const { spy, toAlice } = await catchMail();
+        spy.mockResolvedValueOnce(false);
+
+        const doc = await createDoc('access-request-failed-send');
+        for (let i = 0; i < 3; i++) {
+            await requestAccess(doc.id);
+            await new Promise((r) => setTimeout(r, 50));
+        }
+
+        expect(toAlice().length).toBe(2);
+        spy.mockRestore();
+    });
+
+    test('does not email when toggle off', async () => {
+        await setToggle(false);
+        const { spy, toAlice } = await catchMail();
+
+        const doc = await createDoc('access-request-off');
+        await requestAccess(doc.id);
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(toAlice().length).toBe(0);
         spy.mockRestore();
     });
 
     // Finding #15: the route accepted an unbounded message and any authenticated caller.
     test('rejects an oversized message with 422', async () => {
         const doc = await createDoc('access-request-huge');
-        const res = await authedRequest(
-            ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: 'x'.repeat(100_000) }),
-            },
-        );
+        const res = await requestAccess(doc.id, { message: 'x'.repeat(100_000) });
         expect(res.status).toBe(422);
     });
 
@@ -116,15 +139,7 @@ describe('Access-request email', () => {
             (signIn.headers.get('set-cookie') ?? '').match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
 
         const doc = await createDoc('access-request-guest');
-        const res = await authedRequest(
-            guestToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/request-access`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: 'let me in' }),
-            },
-        );
+        const res = await requestAccess(doc.id, { message: 'let me in' }, guestToken);
         expect(res.status).toBe(403);
     });
 });

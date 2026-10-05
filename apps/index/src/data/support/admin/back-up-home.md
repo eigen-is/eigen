@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-10-01
+updated: 2026-10-05
 ---
 
 You can make a backup of a single user or a single team in Admin. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -24,7 +24,7 @@ The backup runs in the background, so you can keep working. While it runs, the s
 
 Only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there.
 
-A file Eigen has on record that is gone from its disk or bucket, for example because someone deleted it outside Eigen, does not stop the backup. The archive keeps its entry without the file, and the archive's row names it in a warning. The same goes for a document whose data is gone. Items whose folder is gone from the drive's records are left out, and named the same way. An archive with warnings still restores: the account comes back as it is now, without those files. The backup stops only when none of a drive's files can be read from its disk or bucket, even if someone has a document open, because then the disk or bucket is out of reach: the section shows **Creating backup failed**. An empty file, or one deleted while the backup runs, is left out without a warning.
+A file Eigen has on record that is gone from its disk or bucket, for example because someone deleted it outside Eigen, does not stop the backup. The archive keeps its entry without the file, and the archive's row names it in a warning. The same goes for a document whose data is gone. Items whose folder is gone from the drive's records are left out, and named the same way. So are items whose name holds a character a file name cannot have, such as a `/`, together with what is inside them. An archive with warnings still restores: the account comes back as it is now, without those files. The backup stops only when none of a drive's files can be read from its disk or bucket, even if someone has a document open, because then the disk or bucket is out of reach: the section shows **Creating backup failed**. An empty file, or one deleted while the backup runs, is left out without a warning.
 
 Each archive is one file named `home-<id>-<date>-<time>.tar.zst`. Its row shows the date and size, and a badge:
 
@@ -65,6 +65,6 @@ A backup of the whole server holds an archive of every user and team too. Whoeve
 
 ## Delete an archive
 
-Hover over an archive row and click **Delete**, then confirm. This removes the file for good. If a user or team has no archives, the section shows **No backups yet**.
+Hover over an archive row and click **Delete**, then confirm. This removes the file for good. While a backup, a verify, or a restore of the same user or team is running, Eigen refuses the delete: try again once it ends. If a user or team has no archives, the section shows **No backups yet**.
 
 To put an account back from an archive, see [Restore a user or team](/support/admin/restore-home).

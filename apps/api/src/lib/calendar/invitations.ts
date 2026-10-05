@@ -1,4 +1,4 @@
-import { isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -342,7 +342,7 @@ async function applyInvitationException(
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
     const data: EventData = {
         ...linked.data,
-        attendees: payload.attendees ?? existing?.data?.attendees ?? linked.data?.attendees,
+        attendees: payload.attendees ?? heldAttendees(existing, linked),
     };
     await events.writeEvent(calendar, linked.calendarId, {
         title: payload.title,
@@ -677,7 +677,7 @@ async function rsvpForOccurrence(
         if (existing?.status === 'cancelled' && !restoreCancelled) return null;
         const data = existing?.data ?? parent.data ?? {};
         // Only recorded invitees may leave a PARTSTAT; someone can be invited to a single occurrence only.
-        const invitees = data.attendees ?? parent.data?.attendees ?? [];
+        const invitees = heldAttendees(existing, parent);
         if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
         const attendees = withAttendeeStatus(invitees, email, status);
 

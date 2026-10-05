@@ -1,26 +1,26 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { eq } from 'drizzle-orm';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { restoreHome } from '../../lib/backup/restore';
 import { verifyFolder } from '../../lib/backup/verify';
-import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
+import { paths } from '../../lib/mount/schema';
 import {
     assertJson,
     authedRequest,
     chatPost,
     countLoopTurns,
-    createTestUser,
+    createTestUserOnStorage,
     driveDelete,
     driveGetList,
     drivePost,
     drivePut,
     driveUpload,
-    ensureServer,
     findOrFail,
     type TestUser,
 } from '../setup';
@@ -29,18 +29,7 @@ import { snapshotInto, waitForJob } from './backup-test-helpers';
 const M = 'default';
 const REPORTS = [0, 1, 2, 3, 4];
 
-async function raceUser(storageType: 'local-fullnames' | 'local-id'): Promise<TestUser> {
-    await ensureServer();
-    const before = getStorageType();
-    await updateServerSettings({ defaults: { mount: { storageType } } });
-    try {
-        const user = await createTestUser(`race-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Race');
-        await getHome(user.id);
-        return user;
-    } finally {
-        await updateServerSettings({ defaults: { mount: { storageType: before } } });
-    }
-}
+const raceUser = (storageType: 'local-fullnames' | 'local-id') => createTestUserOnStorage(storageType, 'Race');
 
 async function seed(user: TestUser) {
     const t = user.sessionToken;
@@ -137,7 +126,9 @@ function archivedRow(folder: string, id: string) {
     const db = new Database(join(folder, 'home/mounts', M, 'metadata.db'), { readonly: true });
     try {
         return db
-            .query<{ name: string; size: number | null }, [string]>('SELECT name, size FROM paths WHERE id = ?')
+            .query<{ name: string; size: number | null; hash: string | null; contentDirty: number }, [string]>(
+                'SELECT name, size, hash, contentDirty FROM paths WHERE id = ?',
+            )
             .get(id);
     } finally {
         db.close();
@@ -166,6 +157,63 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         );
         expect(archivedReports(folder)).toEqual(reportBodies);
         expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a file overwritten after the database copy is archived with a row that describes its new bytes', async () => {
+        const user = await raceUser('local-fullnames');
+        const { single } = await seed(user);
+        const mount = await defaultMount(user);
+        // Indexed with its old bytes when the database is copied.
+        mount.markContentIndexed(single.id);
+        const overwritten = Buffer.from('single, overwritten');
+        const { folder } = await captureDuring(user, () => mount.writeFile(single.id, overwritten));
+        expect(readFileSync(join(folder, 'home/mounts', M, 'data/zz-single.txt'))).toEqual(overwritten);
+        expect(archivedRow(folder, single.id)).toMatchObject({
+            size: overwritten.byteLength,
+            hash: new Bun.CryptoHasher('sha256').update(overwritten).digest('hex'),
+            contentDirty: 1,
+        });
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('an archive whose file row does not describe its bytes verifies with a warning, as older archives do', async () => {
+        const user = await raceUser('local-fullnames');
+        const { single } = await seed(user);
+        const { manifest, folder } = await snapshotInto(await getHome(user.id), 'full');
+        const metadataPath = join(folder, 'home/mounts', M, 'metadata.db');
+        const db = new Database(metadataPath);
+        try {
+            db.run('UPDATE paths SET size = 1 WHERE id = ?', [single.id]);
+        } finally {
+            db.close();
+        }
+        // Restated, so the transport stage passes and the row is all verify has to judge.
+        const metadata = readFileSync(metadataPath);
+        const entry = findOrFail(manifest.entries, (candidate) => candidate.path === `home/mounts/${M}/metadata.db`);
+        entry.bytes = metadata.byteLength;
+        entry.sha256 = new Bun.CryptoHasher('sha256').update(metadata).digest('hex');
+        writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+        const warn = spyOn(console, 'warn');
+        try {
+            expect((await verifyFolder(folder)).status).toBe('verified');
+            expect(warn).toHaveBeenCalledWith(`[backup] home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    test('a file row with no hash on record and its folder sizes are archived as they are', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects } = await seed(user);
+        const mount = await defaultMount(user);
+        const [first] = await driveGetList(user.sessionToken, user.id, M, `folder/${projects.id}`);
+        await mount.db.update(paths).set({ hash: null }).where(eq(paths.id, first!.id));
+        mount.markContentIndexed(first!.id);
+        // Reading the folder caches its size, which the archived metadata.db copy then carries.
+        const { size } = (await mount.getPath(projects.id))!;
+        const { folder } = await snapshotInto(await getHome(user.id), 'full');
+        expect(archivedRow(folder, first!.id)).toMatchObject({ hash: null, contentDirty: 0 });
+        expect(archivedRow(folder, projects.id)?.size).toBe(size);
     });
 
     test('a file trashed during the capture', async () => {
@@ -267,6 +315,98 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         }
         expect(renamed).toBeDefined();
         expect(existsSync(join(folder, 'home/mounts', M, 'data/Projects/Plan.eigendoc/data.db'))).toBe(true);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a rename during the copy of a large file runs to its end before the copy does', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects, root } = await seed(user);
+        const size = 8 * 1024 * 1024;
+        const big = await driveUpload(
+            user.sessionToken,
+            user.id,
+            M,
+            root.id,
+            new File([new Uint8Array(size).fill(1)], 'big.bin'),
+        );
+        const bigKey = await (await defaultMount(user)).getStorageKey(big.id);
+        // The copy hands over its first chunk, then waits for the rename it started, up to a bound.
+        let renamed: Promise<unknown> | undefined;
+        let renamedMidCopy = false;
+        const readKey = Mount.prototype.readKey;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            const file = await readKey.call(this, key);
+            if (key !== bigKey || !file) return file;
+            const stream = file.stream.bind(file);
+            file.stream = () => {
+                const reader = stream().getReader();
+                let chunks = 0;
+                renamed = drivePut(user.sessionToken, user.id, M, `path/${projects.id}/rename`, {
+                    newName: 'Projects 2026',
+                });
+                const done = renamed.then(() => true);
+                return new ReadableStream<Uint8Array<ArrayBuffer>>({
+                    async pull(controller) {
+                        if (chunks++ === 1)
+                            renamedMidCopy = await Promise.race([done, Bun.sleep(2_000).then(() => false)]);
+                        const { done: end, value } = await reader.read();
+                        if (end) controller.close();
+                        else controller.enqueue(value);
+                    },
+                });
+            };
+            return file;
+        });
+        let result: Awaited<ReturnType<typeof snapshotInto>>;
+        try {
+            result = await snapshotInto(await getHome(user.id), 'full');
+            await renamed;
+        } finally {
+            read.mockRestore();
+        }
+        expect(renamedMidCopy).toBe(true);
+        expect(archivedRow(result.folder, projects.id)?.name).toBe('Projects');
+        expect(archivedReports(result.folder)).toEqual(reportBodies);
+        const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
+        expect(archived.equals(Buffer.alloc(size, 1))).toBe(true);
+        expect((await verifyFolder(result.folder)).status).toBe('verified');
+    });
+
+    test('a file whose bytes leave its key the moment the tree lock releases is copied whole', async () => {
+        const user = await raceUser('local-fullnames');
+        await seed(user);
+        // The earliest a rename could move the bytes, and before any await: the copy must have opened the file by then.
+        const readKey = Mount.prototype.readKey;
+        const withTreeShared = Mount.prototype.withTreeShared;
+        let opened: string | undefined;
+        let moved: string | undefined;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            const file = await readKey.call(this, key);
+            if (key.startsWith('Projects/')) opened = file?.name;
+            return file;
+        });
+        const shared = spyOn(Mount.prototype, 'withTreeShared').mockImplementation(async function <T>(
+            this: Mount,
+            fn: () => Promise<T>,
+        ) {
+            const result = await withTreeShared.bind(this)(fn);
+            if (opened && !moved) {
+                moved = opened;
+                renameSync(moved, `${moved}.moved`);
+            }
+            return result;
+        });
+        let folder: string;
+        try {
+            ({ folder } = await snapshotInto(await getHome(user.id), 'full'));
+        } finally {
+            read.mockRestore();
+            shared.mockRestore();
+            // Back at its key: a later server backup in this process must not find the row without its bytes.
+            if (moved) renameSync(`${moved}.moved`, moved);
+        }
+        expect(moved).toBeDefined();
+        expect(archivedReports(folder)).toEqual(reportBodies);
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
@@ -472,7 +612,7 @@ describe('a capture of a local mount shares the event loop', () => {
 });
 
 describe('a chat whose version is restored during the backup', () => {
-    // A chat with v1 in its saved version and v2 after it, and the call that restores the version.
+    // A chat with v1 in its saved version and v2 after it, the version, and the call that restores it.
     async function seedChat(user: TestUser) {
         const t = user.sessionToken;
         const { root } = await seed(user);
@@ -486,7 +626,7 @@ describe('a chat whose version is restored during the backup', () => {
             authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
                 method: 'POST',
             });
-        return { chat, restoreVersion };
+        return { chat, saved, restoreVersion };
     }
 
     for (const storageType of ['local-fullnames', 'local-id'] as const) {
@@ -503,13 +643,14 @@ describe('a chat whose version is restored during the backup', () => {
             expect(messages.map((message) => message.content)).toContain('v1');
         }, 120_000);
 
-        // Fails until the ROADMAP row "A chat version restored at the instant of a backup's database copy" is done.
-        test.failing(`reopens with its messages when its restore straddles the metadata.db copy, on ${storageType}`, async () => {
+        test(`reopens with its messages when its restore straddles the metadata.db copy, on ${storageType}`, async () => {
             const user = await raceUser(storageType);
             const t = user.sessionToken;
-            const { chat, restoreVersion } = await seedChat(user);
-            // The backup starts after the restore deleted data.db and before it creates the new one, which waits for
-            // the capture's first plain read: metadata.db is staged by then, with neither row.
+            const { chat, saved, restoreVersion } = await seedChat(user);
+            const mount = await defaultMount(user);
+            const version = Buffer.from((await mount.readBytes(saved.id))!);
+            // The backup starts as the restore writes the version's bytes as data.db, which waits for the capture's
+            // first plain read: metadata.db is staged by then.
             const firstRead = Promise.withResolvers<void>();
             let job: ReturnType<typeof backupJob> | undefined;
             const readKey = Mount.prototype.readKey;
@@ -518,25 +659,21 @@ describe('a chat whose version is restored during the backup', () => {
                 if (job) firstRead.resolve();
                 return readKey.call(this, key);
             });
-            const createFileFromTemp = Mount.prototype.createFileFromTemp;
-            const create = spyOn(Mount.prototype, 'createFileFromTemp').mockImplementation(async function (
-                this: Mount,
-                parentId: string,
-                name: string,
-                ...rest: [string, number, string, string]
-            ) {
-                if (parentId === chat.id && name === 'data.db' && !job) {
+            const write = mount.storage.write.bind(mount.storage);
+            const writeSpy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+                if (!job && data instanceof Blob && version.equals(Buffer.from(await data.arrayBuffer()))) {
                     job = backupJob(user);
                     await firstRead.promise;
                 }
-                return createFileFromTemp.call(this, parentId, name, ...rest);
+                return write(key, data);
             });
             try {
                 expect((await restoreVersion()).status).toBe(200);
             } finally {
-                create.mockRestore();
+                writeSpy.mockRestore();
                 read.mockRestore();
             }
+            expect(job).toBeDefined();
             const done = await job;
             expect(done?.state).toBe('done');
             await restoreHome(done!.artifact!, user.id, `race-${Date.now()}`);

@@ -1,4 +1,4 @@
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useRequestAccess } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
@@ -16,6 +16,7 @@ type RequestAccessViewProps = {
 
 export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessViewProps) {
     const auth = useAuth();
+    const isGuest = useIsGuest();
     const { setSidebarHidden } = useLayout();
     const { data: owner } = usePublicUser(ownerId);
     const requestAccess = useRequestAccess(ownerId, mountId, pathId);
@@ -44,31 +45,35 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
                 )}
             </div>
 
-            <div className="flex flex-col items-center gap-3 w-full max-w-sm">
-                {showMessage ? (
-                    <Textarea
-                        placeholder="Add a message (optional)"
-                        value={message}
-                        onChange={(e) => setMessage(e.target.value)}
-                        rows={3}
-                        className="w-full"
-                    />
-                ) : (
-                    !requestAccess.isSuccess && (
-                        <button
-                            type="button"
-                            className="text-sm text-muted-foreground hover:text-foreground underline"
-                            onClick={() => setShowMessage(true)}
-                        >
-                            Add a message
-                        </button>
-                    )
-                )}
+            {isGuest ? (
+                <p className="text-sm text-muted-foreground">Ask the owner to share it with you.</p>
+            ) : (
+                <div className="flex flex-col items-center gap-3 w-full max-w-sm">
+                    {showMessage ? (
+                        <Textarea
+                            placeholder="Add a message (optional)"
+                            value={message}
+                            onChange={(e) => setMessage(e.target.value)}
+                            rows={3}
+                            className="w-full"
+                        />
+                    ) : (
+                        !requestAccess.isSuccess && (
+                            <button
+                                type="button"
+                                className="text-sm text-muted-foreground hover:text-foreground underline"
+                                onClick={() => setShowMessage(true)}
+                            >
+                                Add a message
+                            </button>
+                        )
+                    )}
 
-                <Button onClick={handleSubmit} disabled={requestAccess.isPending || requestAccess.isSuccess}>
-                    {requestAccess.isSuccess ? 'Access requested' : 'Request access'}
-                </Button>
-            </div>
+                    <Button onClick={handleSubmit} disabled={requestAccess.isPending || requestAccess.isSuccess}>
+                        {requestAccess.isSuccess ? 'Access requested' : 'Request access'}
+                    </Button>
+                </div>
+            )}
 
             {auth.user?.email && <p className="text-xs text-muted-foreground">Signed in as {auth.user.email}</p>}
         </div>

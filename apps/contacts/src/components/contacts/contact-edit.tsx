@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AvatarEditor, Toolbar, ToolbarTitle, useContactAvatarUpload } from '@workspace/ui';
+import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
@@ -9,7 +10,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -89,15 +90,18 @@ type ContactEditProps = {
     contact: Contact;
     onSave: (data: ContactFormValues, etag: string) => void;
     onCancel: () => void;
+    // Remounts the form on the live contact. After a 412 the toast says it reloaded, so even a dirty form follows.
+    onReload?: () => void;
+    staleWrite?: boolean;
 };
 
-export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
+export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
-    // Snapshot the etag from the same first-render contact that seeds the form fields below. The route's live
-    // useContacts() copy is refetched by SSE, so reading its etag at submit would pair fresh-server etag with
-    // stale field values and silently clobber a concurrent edit; this ref stays paired with the loaded fields.
-    const loadedEtagRef = useRef(contact?.etag);
+    // Snapshot the first-render contact that seeds the form fields below. The route's live useContacts() copy
+    // is refetched by SSE, so reading its etag at submit would pair fresh-server etag with stale field values
+    // and silently clobber a concurrent edit; this ref stays paired with the loaded fields.
+    const loadedRef = useRef(contact);
 
     const uploadAvatar = useContactAvatarUpload(setAvatar);
     const form = useForm<FormValues>({
@@ -149,15 +153,34 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                 phone: data.phone.map((row) => row.value).filter(Boolean),
                 avatar,
             },
-            loadedEtagRef.current,
+            loadedRef.current.etag,
         );
     });
 
     const isLoading = form.formState.isSubmitting;
 
+    // A sync re-seeds a clean form; a dirty one keeps its edits and asks first, as Drive's editor does.
+    const changedElsewhere = contact.etag !== loadedRef.current.etag;
+    const isDirty = form.formState.isDirty || avatar !== (loadedRef.current.avatar ?? null);
+    const followSync = changedElsewhere && (!isDirty || !!staleWrite);
+    useEffect(() => {
+        if (followSync) onReload?.();
+    }, [followSync, onReload]);
+
     return (
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto app-gutter">
+                {changedElsewhere && !followSync && (
+                    <Alert variant="warning" className="flex items-center justify-between gap-4 mb-4">
+                        <AlertDescription>
+                            This contact changed elsewhere. Reload it and lose your edits?
+                        </AlertDescription>
+                        <Button type="button" variant="outline" size="sm" onClick={onReload}>
+                            Reload
+                        </Button>
+                    </Alert>
+                )}
+
                 {labelsError && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
                         An error occurred while loading labels.

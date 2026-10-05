@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import { homeKeys } from '../../../../core/home/hooks/keys';
 import {
     emailKeys,
@@ -32,7 +33,7 @@ describe('invalidateMailImported', () => {
     test('refreshes the inbox, the unread counts and the home size', () => {
         const keys = invalidatedBy((queryClient) => invalidateMailImported(queryClient, OWNER));
 
-        expect(keys).toContainEqual([...emailKeys.list(OWNER, '')]);
+        expect(keys).toContainEqual([...emailKeys.list(OWNER, MAILBOX_INBOX)]);
         expect(keys).toContainEqual([...mailboxKeys.lists(OWNER)]);
         expect(keys).toContainEqual([...homeKeys.size(OWNER)]);
     });

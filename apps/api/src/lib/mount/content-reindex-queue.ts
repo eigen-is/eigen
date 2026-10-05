@@ -1,5 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { settlesWithin } from '../../utils/timing';
+import { ApiError } from '../core';
 import type { Mount } from './mount';
 
 // Re-extract any one container at most once per window: an append-heavy chat or a long edit
@@ -118,7 +119,11 @@ export class ContentReindexQueue {
                 // Read before the extract: the body this job returns is the document as of now.
                 const generation = this.generations.get(path.id) ?? 0;
                 try {
-                    const body = await this.extract(this.mount, path);
+                    const body = await this.extract(this.mount, path).catch((err: unknown) => {
+                        // A gone object (410) answers every open alike: index it empty, a version restore re-marks it.
+                        if (err instanceof ApiError && err.status === 410) return '';
+                        throw err;
+                    });
                     if (body) this.mount.upsertPathContent(path.id, body);
                     else this.mount.clearPathContent(path.id);
                     // Clear the dirty bit only on a completed extract (empty counts) — a throw below must

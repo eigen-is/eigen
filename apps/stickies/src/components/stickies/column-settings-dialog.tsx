@@ -12,7 +12,7 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 
 type ColumnSettingsDialogProps = {
     isOpen: boolean;
@@ -43,7 +43,7 @@ export function ColumnSettingsDialog({
 
         yjsDoc.transact(() => {
             const columnMap = getItemMapRoot(yjsDoc, 'columns').get(columnId);
-            if (columnMap) columnMap.set('title', title.trim());
+            if (columnMap instanceof Y.Map) columnMap.set('title', title.trim());
         });
 
         onClose();

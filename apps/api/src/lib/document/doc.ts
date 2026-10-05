@@ -1,6 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import type { Schema } from '@tiptap/pm/model';
-import { prosemirrorJSONToYDoc, yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 
 // Materialized Yjs doc → ProseMirror JSON. Media-free, so it runs identically on the
@@ -20,10 +19,4 @@ export function writeEigendocUpdateToYjs(doc: Y.Doc, update: Uint8Array): void {
         if (fragment.length > 0) fragment.delete(0, fragment.length);
     });
     Y.applyUpdate(doc, update);
-}
-
-export function writeEigendocToYjs(doc: Y.Doc, json: JSONContent, schema: Schema): void {
-    const tempDoc = prosemirrorJSONToYDoc(schema, json, 'default');
-    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
-    tempDoc.destroy();
 }

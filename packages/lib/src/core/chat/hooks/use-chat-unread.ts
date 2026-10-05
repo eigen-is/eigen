@@ -6,9 +6,13 @@ import { notificationKeys } from '../../notification/hooks/keys';
 import { useNotifications } from '../../notification/hooks/use-notifications';
 import { chatThreadKey, parseChatNotificationThread } from '../../notification/tags';
 
+// The thread an unread chat or comment notification names; null for a read row or another type.
+function unreadThread(n: Notification) {
+    return !n.read && n.tag ? parseChatNotificationThread(n.type, n.tag) : null;
+}
+
 function isUnreadForThread(n: Notification, key: string): boolean {
-    if (n.read || !n.tag) return false;
-    const thread = parseChatNotificationThread(n.type, n.tag);
+    const thread = unreadThread(n);
     return !!thread && chatThreadKey(thread) === key;
 }
 
@@ -19,8 +23,7 @@ export function useUnreadChatIds(userId: string): Set<string> {
     return useMemo(() => {
         const ids = new Set<string>();
         for (const n of notifications) {
-            if (n.read || !n.tag) continue;
-            const thread = parseChatNotificationThread(n.type, n.tag);
+            const thread = unreadThread(n);
             if (thread) ids.add(thread.pathId);
         }
         return ids;

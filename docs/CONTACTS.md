@@ -38,7 +38,7 @@ If the junction were the truth, it and the blob would hold one fact twice, and e
 
 A category with no matching label mints one, keyed on the normalized name (NFC, trimmed, lowercase) with a color hashed from that key. A DAV write can therefore emit `contacts:label-created`. REST label writes enforce the same unique key and answer a duplicate with 409.
 
-A rename rewrites `CATEGORIES` in every member card, so their etags change and clients re-fetch them. `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, so the label and its members move together under one `ctag` bump. A member card that won't parse is skipped with a warning. A label delete strips the category the same way.
+A rename rewrites `CATEGORIES` in every member card, so their etags change and clients re-fetch them. `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, so the label and its members move together under one `ctag` bump. A member card that won't parse is skipped with a warning. A label delete strips the category the same way. A name typed in a REST create or rename is capped at `LABEL_NAME_MAX_LENGTH` (100 characters) and answers 422 past it, because the rename skips the per-card size check. A label minted from `CATEGORIES` keeps any length, and an update that keeps its name, such as a color change, still saves.
 
 ## The avatars folder is a second source of truth, not a cache
 
@@ -56,7 +56,7 @@ Metering switches on at the very end of init. The quota lookup opens the Home, a
 
 ## Import replays each card through the CardDAV PUT
 
-`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted.
+`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted. An imported card never claims the self-link, because nobody inspects an imported card one by one (`import: true` on `putCard`).
 
 The file is decoded as strict UTF-8, because a lenient decode would store replacement characters in every accented name and serve them to devices. Both import routes lift the server idle timeout, since a whole book answers nothing until its last card lands.
 
@@ -66,7 +66,7 @@ Export reads one row at a time, since the whole book's bytes in one query would 
 
 ## The web app writes with the etag it loaded
 
-A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes.
+A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes. The edit form (`contact-edit.tsx`) re-seeds from a sync only while it is clean. With unsaved edits it keeps them and asks "changed elsewhere, reload?", as Drive's editor does. After a 412 it re-seeds anyway, because the toast has said the card was reloaded (`isStaleWrite`).
 
 A REST field bound is never tighter than what a CardDAV PUT may store (`routes/contacts.ts`). A tighter bound would make a card a device stored uneditable in the web app.
 

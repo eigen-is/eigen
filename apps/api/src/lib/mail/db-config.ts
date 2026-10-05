@@ -1,9 +1,17 @@
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
+// Spelled once: v6 lifts it around a bulk update of an unindexed column and puts it back.
+const EMAILS_AU_TRIGGER = `CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE ON emails BEGIN
+                    INSERT INTO emails_fts(emails_fts, rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                    VALUES ('delete', old.rowid, old.subject, old.fromShort, old.fromAddress, old.toShort, old.toAddress, old.recipientsAll, old.textShort);
+                    INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
+                    VALUES (new.rowid, new.subject, new.fromShort, new.fromAddress, new.toShort, new.toAddress, new.recipientsAll, new.textShort);
+                END;`;
+
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 5,
+    currentVersion: 6,
     schema,
     migrations: [
         {
@@ -80,12 +88,7 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     VALUES ('delete', old.rowid, old.subject, old.fromShort, old.fromAddress, old.toShort, old.toAddress, old.recipientsAll, old.textShort);
                 END;
 
-                CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE ON emails BEGIN
-                    INSERT INTO emails_fts(emails_fts, rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
-                    VALUES ('delete', old.rowid, old.subject, old.fromShort, old.fromAddress, old.toShort, old.toAddress, old.recipientsAll, old.textShort);
-                    INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
-                    VALUES (new.rowid, new.subject, new.fromShort, new.fromAddress, new.toShort, new.toAddress, new.recipientsAll, new.textShort);
-                END;
+                ${EMAILS_AU_TRIGGER}
 
                 -- Populate from existing rows. No-op on a fresh database; fills the index on
                 -- upgrade. Idempotent on re-run because the migration framework's version gate
@@ -109,6 +112,17 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 db.exec(`
                 DROP TABLE IF EXISTS emails_to_labels;
                 DROP TABLE IF EXISTS email_labels;
+            `),
+        },
+        {
+            // An index written before v6 names the inbox ''. The mailbox is not indexed text, so the
+            // update trigger is lifted for it rather than re-tokenising every inbox row.
+            version: 6,
+            up: (db) =>
+                db.exec(`
+                DROP TRIGGER emails_au;
+                UPDATE emails SET mailbox = 'INBOX' WHERE mailbox = '';
+                ${EMAILS_AU_TRIGGER}
             `),
         },
     ],

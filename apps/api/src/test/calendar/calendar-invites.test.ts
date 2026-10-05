@@ -380,6 +380,50 @@ describe('Calendar Invites', () => {
             );
             expect(selfInviteCopies).toHaveLength(0);
         });
+
+        // The event lands in the owner's own calendar, so the owner gets no copy, and the answer stays theirs to give.
+        test("a collaborator inviting the calendar's owner leaves the owner's answer open", async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const shared = await home.calendar.createCalendar({ name: 'Shared with Bob', color: '#ccbbaa' });
+            await home.calendar.updateCalendar(shared.id, {
+                shares: [{ targetId: ctx.bob.user.email, permission: 'write' }],
+            });
+
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${shared.id}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Owner Invited By Bob',
+                        startTime: new Date(Date.now() + 3600_000),
+                        endTime: new Date(Date.now() + 7200_000),
+                        allDay: false,
+                        data: {
+                            attendees: [ctx.alice.user.email, ctx.charlie.user.email].map((email) => ({
+                                email,
+                                status: 'pending',
+                                role: 'required',
+                            })),
+                        },
+                    }),
+                },
+            );
+            const created = await assertJson<CalendarEvent>(res);
+            // The owner comes first on the list, so Charlie's copy means the fan-out went past them.
+            const charlie = await getHome(ctx.charlie.user.id);
+            await eventually(
+                async () => ((await charlie.calendar.getEventsByUid(created.uid)).length ? true : undefined),
+                "Charlie's copy",
+            );
+
+            const stored = (await aliceEvents()).filter((e) => e.title === 'Owner Invited By Bob');
+            expect(stored).toHaveLength(1);
+            expect(stored[0].calendarId).toBe(shared.id);
+            const owner = findOrFail(stored[0].data?.attendees ?? [], (a) => a.email === ctx.alice.user.email);
+            expect(owner.status).toBe('pending');
+        });
     });
 
     describe('Per-occurrence RSVP', () => {

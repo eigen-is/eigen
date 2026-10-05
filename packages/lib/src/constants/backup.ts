@@ -1,8 +1,9 @@
 import type { BackupLevel } from '../types/backup';
+import { MAX_REQUEST_BODY_BYTES } from './mount';
 
-// The largest archive the upload route accepts. Anything bigger is copied into the backups folder
-// by hand (scp). The API's own maxRequestBodySize is the backstop.
-export const BACKUP_UPLOAD_MAX_BYTES = 1024 * 1024 * 1024;
+// The largest archive the upload route accepts: the most the API reads in one request. Anything
+// bigger is copied into the backups folder by hand (scp).
+export const BACKUP_UPLOAD_MAX_BYTES = MAX_REQUEST_BODY_BYTES;
 
 // The same limit as the messages about it spell it, so the number and the words cannot drift: the
 // route's 413 and the admin pane's refusal both read from here.

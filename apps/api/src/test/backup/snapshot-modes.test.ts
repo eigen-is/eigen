@@ -15,7 +15,7 @@ import type { Home } from '../../lib/home';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import * as mountHelpers from '../../lib/mount/helpers';
-import type { Mount } from '../../lib/mount/mount';
+import { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import {
@@ -453,6 +453,71 @@ describe('Backup capture modes of a disabled mount', () => {
             contents: 'metadata',
         });
         expect(entryPaths(manifest)).toContain(`home/mounts/${DISABLED_MOUNT_ID}/metadata.db`);
+    });
+});
+
+describe('Backup of a disabled mount enabled while it is captured', () => {
+    const MOUNT_ID = 'modes-enabled-mid-capture';
+
+    // The capture reads a disabled mount through a Mount of its own. Enabling the mount gives writers the drive's new
+    // Mount, whose path locks are another object's, so an overwrite and the capture's copy must still take turns.
+    // Fails until the ROADMAP row "A mount replaced during a backup is outside the capture's path lock" is done.
+    test.failing('an overwrite through the enabled mount waits for the copy of its file', async () => {
+        await getTestContext();
+        const owner = await createTestUser('backup-modes-enabled@test.eigen.is', 'testpassword123', 'Modes Enabled');
+        const ownerHome = await getHome(owner.id);
+        const on = await ownerHome.settings.set({
+            mounts: { [MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Toggled' } },
+        });
+        await ownerHome.drive.addMount(createMountConfig(MOUNT_ID, on.mounts![MOUNT_ID]));
+        const root = await ownerHome.drive
+            .getMounts()
+            .find((mount) => mount.id === MOUNT_ID)!
+            .getRootFolder();
+        const file = await driveUpload(
+            owner.sessionToken,
+            owner.id,
+            MOUNT_ID,
+            root!.id,
+            new File(['before the backup'], 'toggled.txt'),
+        );
+        const off = await ownerHome.settings.set({
+            mounts: { [MOUNT_ID]: { ...on.mounts![MOUNT_ID], enabled: false } },
+        });
+        await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, off.mounts![MOUNT_ID]), false);
+
+        let overwrite: Promise<number> | undefined;
+        let overwroteDuringCopy = false;
+        const withPathLock = Mount.prototype.withPathLock;
+        const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(
+            this: Mount,
+            pathId: string,
+            fn: () => Promise<T>,
+        ) {
+            if (pathId !== file.id || overwrite) return withPathLock.bind(this)(pathId, fn);
+            return withPathLock.bind(this)(pathId, async () => {
+                const enabled = await ownerHome.settings.set({ mounts: { [MOUNT_ID]: on.mounts![MOUNT_ID] } });
+                await ownerHome.drive.updateMount(createMountConfig(MOUNT_ID, enabled.mounts![MOUNT_ID]), true);
+                const live = ownerHome.drive.getMounts().find((mount) => mount.id === MOUNT_ID)!;
+                overwrite = live.writeFile(file.id, new TextEncoder().encode('written during the backup'));
+                overwroteDuringCopy = await Promise.race([
+                    overwrite.then(() => true),
+                    Bun.sleep(200).then(() => false),
+                ]);
+                return fn();
+            });
+        });
+        try {
+            const { folder } = await snapshotInto(ownerHome, 'full');
+            await overwrite;
+            expect(readFileSync(join(folder, `home/mounts/${MOUNT_ID}/data/toggled.txt`), 'utf8')).toBe(
+                'before the backup',
+            );
+        } finally {
+            lock.mockRestore();
+            await deleteUserCompletely(owner.id, null);
+        }
+        expect(overwroteDuringCopy).toBe(false);
     });
 });
 

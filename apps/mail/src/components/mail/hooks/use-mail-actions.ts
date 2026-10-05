@@ -352,14 +352,15 @@ export function useMailActions() {
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
-        openPrefilledCompose(
-            createDraftEmail({
+        openPrefilledCompose({
+            ...createDraftEmail({
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
-        );
+            repliedToId: email.id,
+        });
     };
 
     const handleReplyAllEmail = async (emailId: string) => {
@@ -378,14 +379,15 @@ export function useMailActions() {
         const allRecipients = [...replyTo, ...toValues, ...ccValues].filter(
             (addr) => addr.address.toLowerCase() !== myEmail,
         );
-        openPrefilledCompose(
-            createDraftEmail({
+        openPrefilledCompose({
+            ...createDraftEmail({
                 to: { value: allRecipients, text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
-        );
+            repliedToId: email.id,
+        });
     };
 
     const handleForwardEmail = async (emailId: string) => {

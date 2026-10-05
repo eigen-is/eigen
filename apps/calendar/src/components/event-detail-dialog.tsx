@@ -1,6 +1,6 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
-    isInvitationFromOthers,
+    heldAttendees,
     isSeriesOccurrence,
     isTransferableCalendarHome,
     occurrenceDateToString,
@@ -8,7 +8,9 @@ import {
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
+    useEvent,
     useExportCalendar,
+    useIsInvitationFromOthers,
     useRsvp,
     useSharedCalendarLabel,
     useUpdateEvent,
@@ -57,6 +59,13 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const isGuest = useIsGuest();
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
+    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
+    const { data: series } = useEvent(
+        eventOwnerId,
+        event?.calendarId ?? '',
+        event?.parentEventId ?? '',
+        open && !!event?.parentEventId,
+    );
 
     if (!event) return null;
 
@@ -67,12 +76,9 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
     const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
-    // The owner's address is known only when the owner is the viewer; without it an organized event reads as an invitation.
-    const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
-    const myAttendeeStatus = event.data?.attendees?.find(
-        (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
-    )?.status;
-    const attendees = event.data?.attendees ?? [];
+    const isLinkedEvent = isFromOthers(event);
+    const attendees = heldAttendees(event, series);
+    const myAttendeeStatus = attendees.find((a) => a.email.toLowerCase() === user?.email?.toLowerCase())?.status;
 
     const handleDelete = async (action: RecurringAction) => {
         if (isLinkedEvent && isPartOfSeries) {

@@ -15,10 +15,10 @@ export function useListDrag<T>({ selection, getId, dragType }: UseListDragOption
         (item: T) => ({
             draggable: true,
             onDragStart: (e: React.DragEvent) => {
-                if (!selection.isSelected(getId(item))) {
-                    selection.select(getId(item));
-                }
-                const items = selection.selectedItems.length > 0 ? selection.selectedItems : [item];
+                const selected = selection.isSelected(getId(item));
+                // select() lands next render; this render's selectedItems is still the old selection.
+                if (!selected) selection.select(getId(item));
+                const items = selected ? selection.selectedItems : [item];
                 setDraggedItems(items);
                 setIsDragging(true);
 

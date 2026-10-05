@@ -39,7 +39,7 @@ import {
     prepareCard,
     syncCardLabels,
 } from './card-store';
-import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
+import type { CardBook, CardRow, DeleteCardResult, PutCardOptions } from './dav-store';
 import * as davStore from './dav-store';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
@@ -636,7 +636,7 @@ export class Contacts {
         return davStore.getCardMeta(this, uri);
     }
 
-    public async putCard(uri: string, body: string, options: ResourcePreconditions): Promise<PutResourceResult> {
+    public async putCard(uri: string, body: string, options: PutCardOptions): Promise<PutResourceResult> {
         const result = await davStore.putCard(this, uri, body, options);
         // Told once the write lock is released, from the id the write read inside it: a re-read could lose a racing delete.
         if (result.ok) {

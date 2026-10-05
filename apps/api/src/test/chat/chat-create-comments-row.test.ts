@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
+import { getCommentIndex } from '../../lib/chat/comment-index';
+import { getHome } from '../../lib/home';
 import {
     assertJson,
     authedRequest,
@@ -56,6 +58,13 @@ describe('Comment lifecycle via chat-create', () => {
         return assertJson<CommentEntry[]>(res);
     }
 
+    // The list leaves createdBy out, so the seed is read from comments.db itself.
+    async function createdByOf(chatName: string): Promise<string | null | undefined> {
+        const home = await getHome(ctx.alice.user.id);
+        const index = await getCommentIndex(home.drive, mountId, docId);
+        return (await index.get(chatName))?.createdBy;
+    }
+
     test('chat created under container/chat/ → comments.db row with createdBy', async () => {
         await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -67,7 +76,7 @@ describe('Comment lifecycle via chat-create', () => {
 
         const row = (await listComments()).find((r) => r.chatName === 'inside-container.eigenchat');
         expect(row).toBeDefined();
-        expect(row!.createdBy).toBe(ctx.alice.user.email);
+        expect(await createdByOf('inside-container.eigenchat')).toBe(ctx.alice.user.email);
         expect(row!.status).toBe('open');
         expect(row!.messageCount).toBe(0);
     });
@@ -104,7 +113,7 @@ describe('Comment lifecycle via chat-create', () => {
         expect(row.messageCount).toBe(1);
         expect(row.lastAuthorEmail).toBe(ctx.alice.user.email);
         expect(row.lastActivityAt).toBeTruthy();
-        expect(row.createdBy).toBe(ctx.alice.user.email);
+        expect(await createdByOf(chatName)).toBe(ctx.alice.user.email);
     });
 
     test('resolve → status=resolved + resolvedBy set; re-open → status=open + resolvedBy null', async () => {
@@ -152,9 +161,7 @@ describe('Comment lifecycle via chat-create', () => {
             { fileName: 'by-bob' },
         );
 
-        const row = (await listComments()).find((r) => r.chatName === 'by-bob.eigenchat');
-        expect(row).toBeDefined();
-        expect(row!.createdBy).toBe(ctx.bob.user.email);
+        expect(await createdByOf('by-bob.eigenchat')).toBe(ctx.bob.user.email);
     });
 
     test('status PATCH on a nonexistent chatName → 404, no history event', async () => {

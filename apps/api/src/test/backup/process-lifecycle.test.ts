@@ -351,7 +351,12 @@ describe('Boot recovery in a real boot', () => {
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
-            JSON.stringify({ ownerId: homeName, homeDir: join(homeRoot, homeName), preRestoreName }),
+            JSON.stringify({
+                ownerId: homeName,
+                homeDir: join(homeRoot, homeName),
+                preRestoreName,
+                parkName: `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
+            }),
         );
         if (complete) writeFileSync(join(dir, 'restore-complete.json'), JSON.stringify({ completedAt: 'seeded' }));
     }

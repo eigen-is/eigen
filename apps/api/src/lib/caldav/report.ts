@@ -4,8 +4,8 @@ import type { ResourceRow } from '../calendar/dav-store';
 import type { CalendarCollection } from '../calendar/resource-store';
 import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
-import { type DataBudget, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
-import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
+import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
+import { handleSyncCollection } from '../dav/sync-collection';
 import { multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
@@ -34,7 +34,15 @@ export async function handleReport(
         case 'calendar-multiget':
             return handleCalendarMultiget(calendar, calendarId, ownerId, report, budget);
         case 'sync-collection':
-            return handleSyncCollection(calendar, calendarId, collection, ownerId, report, budget);
+            return handleSyncCollection(report.syncToken, {
+                state: collection,
+                list: () => calendar.listResources(calendarId),
+                changedSince: (ctag) => calendar.getChangedResourcesSince(calendarId, ctag),
+                deletedSince: (ctag) => calendar.getDeletedResourcesSince(calendarId, ctag),
+                href: (uri) => eventHref(ownerId, calendarId, uri),
+                row: (resource) =>
+                    resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, removedRow),
+            });
     }
 }
 
@@ -69,9 +77,11 @@ async function handleCalendarQuery(
 ): Promise<Response> {
     // A filter naming a component Eigen does not store matches nothing; a time-range may over-match, never under-match.
     if (!report.matchesEvents) return multistatusResponse([]);
-    const resources = report.timeRange
-        ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
-        : await calendar.listResources(calendarId);
+    const resources = (
+        report.timeRange
+            ? await calendar.getResourcesInRange(calendarId, report.timeRange.start, report.timeRange.end)
+            : await calendar.listResources(calendarId)
+    ).filter((resource) => report.matchesUid(resource.uid));
 
     const responses: string[] = [];
     for (const resource of resources) {
@@ -100,53 +110,12 @@ async function handleCalendarMultiget(
         ).map((resource) => [normalizeResourceUri(resource.uri), resource] as const),
     );
 
-    const responses: string[] = [];
-    for (const { uri, href } of resolved) {
-        const resource = uri ? found.get(normalizeResourceUri(uri)) : undefined;
-        if (!resource) {
-            // Missing but in-collection → 404 on the resource href; unresolvable → 404 echoing the original.
-            responses.push(notFoundRow(uri ? eventHref(ownerId, calendarId, uri) : href));
-            continue;
-        }
-        responses.push(await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget));
-    }
-    return multistatusResponse(responses);
-}
-
-async function handleSyncCollection(
-    calendar: Calendar,
-    calendarId: string,
-    collection: CalendarCollection,
-    ownerId: string,
-    report: Extract<ReportRequest, { type: 'sync-collection' }>,
-    budget: DataBudget,
-): Promise<Response> {
-    const responses: string[] = [];
-
-    if (!report.syncToken) {
-        // Initial sync — the whole collection as 200 rows.
-        for (const resource of await calendar.listResources(calendarId)) {
-            responses.push(
-                await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, removedRow),
-            );
-        }
-    } else {
-        const token = parseSyncToken(report.syncToken);
-        if (!token) return invalidSyncToken();
-        // A stale generation or a ctag ahead of the collection forces a resync: an empty delta under a lower token stalls the client forever.
-        if (token.gen !== collection.syncGen || token.since > collection.ctag) return invalidSyncToken();
-
-        for (const resource of await calendar.getChangedResourcesSince(calendarId, token.since)) {
-            responses.push(
-                await resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, removedRow),
-            );
-        }
-        // One tombstone row per uri: no href may be both a 200 and a 404 in one response (RFC 6578).
-        for (const removed of await calendar.getDeletedResourcesSince(calendarId, token.since)) {
-            responses.push(removedRow(eventHref(ownerId, calendarId, removed.uri)));
-        }
-    }
-
-    // RFC 6578: the current token is appended after the responses.
-    return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(collection)}</D:sync-token>`);
+    return multistatusResponse(
+        await multigetRows(
+            resolved,
+            async (uri) => found.get(normalizeResourceUri(uri)) ?? null,
+            (uri) => eventHref(ownerId, calendarId, uri),
+            (resource) => resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget),
+        ),
+    );
 }

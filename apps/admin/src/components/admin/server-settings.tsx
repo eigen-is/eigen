@@ -1,4 +1,5 @@
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/lib/public';
 import {
     useCheckS3Connection,
@@ -271,18 +272,25 @@ export function ServerSettingsPage() {
                         <Input
                             type="number"
                             min={1}
+                            max={UPLOAD_CAP_MAX_MB}
                             value={current.quotas.maxUploadSizeMB}
                             onChange={(e) => updateQuota('maxUploadSizeMB', e.target.valueAsNumber)}
                         />
+                        <p className="text-xs text-muted-foreground">
+                            At most {UPLOAD_CAP_MAX_MB} MB, the largest upload the server takes.
+                        </p>
                     </div>
                     <div className="space-y-1.5">
                         <Label>Trash Retention (days)</Label>
                         <Input
                             type="number"
-                            min={1}
+                            min={0}
                             value={current.quotas.trashRetentionDays}
                             onChange={(e) => updateQuota('trashRetentionDays', e.target.valueAsNumber)}
                         />
+                        <p className="text-xs text-muted-foreground">
+                            0 keeps deleted files until the Trash is emptied.
+                        </p>
                     </div>
                 </div>
             </SettingsSection>

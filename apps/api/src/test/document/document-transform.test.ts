@@ -19,7 +19,7 @@ import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { ApiError } from '../../lib/core/errors';
-import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
@@ -35,7 +35,7 @@ import { exportDocument, runDocumentExport } from '../../lib/export/export-docum
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
-import { docSchema, docxToPmJson } from '../../lib/import/doc/from-docx';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
@@ -1068,7 +1068,7 @@ describe('document transform (eigenvector)', () => {
 });
 
 // Recorded from the pre-Worker docx import pipeline (docxToPmJson, then
-// writeEigendocToYjs into a fresh document) over buildGoldenDocx(), so the move
+// a Yjs commit into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
 // survive the transfer untouched. Regenerate only for an intentional converter change. The parse hash
@@ -1090,7 +1090,7 @@ describe('document transform (docx import)', () => {
     async function referenceDocument(): Promise<JSONContent> {
         const { json } = await docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
         const doc = new Y.Doc();
-        writeEigendocToYjs(doc, json, docSchema);
+        seedEigendoc(doc, json);
         const read = readEigendocFromDoc(doc);
         doc.destroy();
         return read;
@@ -1105,7 +1105,7 @@ describe('document transform (docx import)', () => {
         expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
 
         const doc = new Y.Doc();
-        writeEigendocToYjs(doc, json, docSchema);
+        seedEigendoc(doc, json);
         expect(sha256(JSON.stringify(readEigendocFromDoc(doc)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
         doc.destroy();
     }, 120_000);

@@ -62,7 +62,7 @@ A post, edit or delete broadcasts a `chat:` event to the home that owns the room
 
 ## Messages page backwards from the newest
 
-`useMessages` loads 50 messages per page, newest page first, with the oldest loaded message's id as the `before` cursor, and `useChatRoom` reverses the pages into reading order. The list asks for more when you scroll near the top. It scrolls to a new message only when you were already near the bottom, so reading history is never interrupted.
+`useMessages` loads 50 messages per page, newest page first, with the oldest loaded message's id as the `before` cursor (the server pages on `(createdAt, rowid)`, because `createdAt` is whole seconds), and `useChatRoom` reverses the pages into reading order. The list asks for more when you scroll near the top. It scrolls to a new message only when you were already near the bottom, so reading history is never interrupted.
 
 ## A deleted message keeps its row and loses its content
 
@@ -115,7 +115,7 @@ A wizard chat is born shared. If the ACL step fails, the route trashes and purge
 
 ### Wizard chats land in a `chats` folder resolved by name
 
-`CHATS_FOLDER_NAME` (`packages/lib/src/types/chat.ts`) is the default parent. `Mount.ensureRootFolder` seeds it only on a default personal mount, when it first creates the root. `Drive.ensureChatsFolder` finds it by name on every use (`getChildByName` folds case) and recreates it when it is missing, so it stays an ordinary folder that you can rename, move or delete, never pinned by id. A concurrent create's 409 adopts the winner's folder, and a non-folder with that name makes the chat land in the root. A legacy `Chats` folder is renamed to `chats` in place on the next resolve.
+`CHATS_FOLDER_NAME` (`packages/lib/src/types/chat.ts`) is the default parent. `Mount.ensureRootFolder` seeds it only on a default personal mount, when it first creates the root. `Drive.ensureChatsFolder` finds it by name on every use (`getChildByName` folds case) and recreates it when it is missing, so it stays an ordinary folder that you can rename, move or delete, never pinned by id. A concurrent create's 409 adopts the winner's folder, and a non-folder with that name makes the chat land in the root. A legacy `Chats` folder is renamed to `chats` in place on the next resolve, through `Drive.renamePath`, so open drive lists and shared mirrors see the new name at once.
 
 ### Adding someone to a chat sends no share email
 

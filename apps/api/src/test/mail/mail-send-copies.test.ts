@@ -1,9 +1,12 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/types/mail';
 import * as mailer from '../../lib/core/mailer';
+import { getHome } from '../../lib/home';
 import { restoreEnvAfterEach } from '../env-test-helpers';
-import { assertJson, authedRequest, getTestContext } from '../setup';
+import { makeEml } from '../mail-test-helpers';
+import { assertJson, authedRequest, eventually, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -506,5 +509,57 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
             await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${first.id}`),
         );
         expect(reloaded.cc?.value ?? []).toEqual([]);
+    });
+
+    // IMAP clients read the reply mark off the original's filename (`R`, \Answered); the app off its row.
+    describe('a reply', () => {
+        const deliverOriginal = async (subject: string): Promise<string> => {
+            const home = await getHome(ctx.alice.user.id);
+            const id = await home.mail.mailboxDeliver(
+                Buffer.from(makeEml(subject, { from: 'bob@x.com', to: ctx.alice.user.email })),
+            );
+            // A delivery's sync can coalesce with a watcher's and miss the file, so a read drives another.
+            await eventually(async () => {
+                await home.mail.mailboxGet(MAILBOX_INBOX);
+                return home.mail.messageGetSummary(id);
+            }, `${subject} indexed`);
+            return id;
+        };
+        const reply = { subject: 'RE: question', to: addr('bob@x.com'), text: 'answer', html: '<p>answer</p>' };
+        const sendReply = (repliedToId: string) => sendMailBody({ ...reply, repliedToId });
+
+        test('marks the message it answers as replied once it is sent', async () => {
+            startCapture();
+            const originalId = await deliverOriginal('Question');
+            expect((await sendReply(originalId)).status).toBe(200);
+
+            const original = (await getHome(ctx.alice.user.id)).mail.messageGetSummary(originalId);
+            expect(original?.isReplied).toBe(true);
+            expect(original?.filename).toMatch(/:2,[A-Z]*R/);
+        });
+
+        test('that fails to send leaves the message it answers unmarked', async () => {
+            startCapture(() => true);
+            const originalId = await deliverOriginal('Unanswered');
+            expect((await sendReply(originalId)).status).toBe(500);
+
+            expect((await getHome(ctx.alice.user.id)).mail.messageGetSummary(originalId)?.isReplied).toBe(false);
+        });
+
+        test('saved as a draft and sent later marks the message it answers as replied', async () => {
+            startCapture();
+            const originalId = await deliverOriginal('Later');
+            const draft = await assertJson<EmailDraft>(
+                await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mail: { ...reply, repliedToId: originalId } }),
+                }),
+            );
+
+            // Reopened from Drafts, the composer sends what the draft shows, which has no repliedToId.
+            expect((await sendMailBody({ ...reply, id: draft.id })).status).toBe(200);
+            expect((await getHome(ctx.alice.user.id)).mail.messageGetSummary(originalId)?.isReplied).toBe(true);
+        });
     });
 });

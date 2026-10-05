@@ -1,5 +1,5 @@
 import { isContainerType } from '@workspace/lib/types/drive';
-import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
+import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
@@ -78,11 +78,6 @@ export async function handlePut(args: {
     ifHeader: string | null;
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, body, contentLength, ifMatch, ifNoneMatch, ifHeader } = args;
-    // macOS Finder (WebDAVFS/3.0.0) opens a copy by sending a 0-byte PUT to
-    // reserve the resource, then follows up with the actual content. A null
-    // body or Content-Length: 0 must succeed and create an empty file.
-    const data: Buffer | ReadableStream<Uint8Array> = body ?? Buffer.alloc(0);
-
     const drive = await getSharedDrive(ownerId, user);
     const existing = await drive.resolvePath(mountId, pathStr);
 
@@ -115,13 +110,26 @@ export async function handlePut(args: {
         return new Response(null, { status: 412 });
     }
 
-    // Pre-check Content-Length against the upload cap and quota — cheap reject for honest clients.
-    // A client that lies (or omits Content-Length) can exceed them by one PUT;
-    // they're authenticated, so noisy-user not attack-vector.
-    if (contentLength !== null) {
-        enforceMaxUploadSize(contentLength);
-        await enforceMountQuota(ownerId, user.id, mountId, contentLength, existing?.size ?? 0);
-    }
+    // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
+    const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
+    const withinLimits = (bytes: number) => {
+        enforceMaxUploadSize(bytes);
+        if (bytes > room) throw new ApiError(507, 'Insufficient Storage');
+    };
+    // Content-Length refuses before a byte moves; a chunked body (Finder's) has none, so the stream is counted too.
+    if (contentLength !== null) withinLimits(contentLength);
+    let received = 0;
+    // Finder (WebDAVFS/3.0.0) reserves a name with a 0-byte PUT before the content, so no body is an empty file.
+    const data =
+        body?.pipeThrough(
+            new TransformStream<Uint8Array, Uint8Array>({
+                transform(chunk, controller) {
+                    received += chunk.byteLength;
+                    withinLimits(received);
+                    controller.enqueue(chunk);
+                },
+            }),
+        ) ?? Buffer.alloc(0);
 
     const mimeType = Bun.file(name).type || 'application/octet-stream';
     const path = existing

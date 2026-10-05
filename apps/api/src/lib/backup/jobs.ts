@@ -69,9 +69,10 @@ function poke(job: BackupJob): void {
 
 // One piece of work per home at a time — a second backup while one is running would read a folder
 // the first is still walking, a second restore would move aside a folder the first is writing, and a
-// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage. A server
-// job's archive is the owner's to know, so only another server job hears its name.
-function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
+// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage, and an archive
+// deleted under a verify would get its sidecar back. A server job's archive is the owner's to know, so only
+// another server job hears its name.
+export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     dropExpiredJobs();
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);

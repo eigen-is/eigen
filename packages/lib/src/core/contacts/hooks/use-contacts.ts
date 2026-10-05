@@ -11,10 +11,15 @@ import { contactKeys, invalidateContactList } from './keys';
 // the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
 const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
 
+// The edit form re-seeds after one, since the toast tells the user the card was reloaded.
+export function isStaleWrite(error: unknown): boolean {
+    return error instanceof AppError && error.status === 412;
+}
+
 // Both the update and delete onError paths recover a 412 the same way — reload, toast, and swallow. Shared so
 // the two callbacks can't drift; returns true when it handled the 412 so the caller skips onMutationError.
 function handleStaleWrite(queryClient: QueryClient, ownerId: string, error: unknown): boolean {
-    if (error instanceof AppError && error.status === 412) {
+    if (isStaleWrite(error)) {
         invalidateContactList(queryClient, ownerId);
         toast.error(STALE_WRITE_TOAST);
         return true;

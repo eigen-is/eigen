@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { and, desc, isNull, lt } from 'drizzle-orm';
+import { and, isNull, sql } from 'drizzle-orm';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
-import { messages } from '../chat/schema';
+import { messages, NEWEST_FIRST, olderThan } from '../chat/schema';
 import type { Mount } from '../mount';
 
 const CHAT_CONTENT_PAGE = 512;
@@ -15,17 +15,21 @@ export async function readChatContent(mount: Mount, drivePath: DrivePath, capByt
 
     const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDbPath.id);
 
-    // Walk the newest messages a page at a time (keyset on createdAt, like getMessages) and stop
-    // the moment `out` reaches capBytes, so a long chat never materialises more than one page past
-    // the cap — the old `.limit(capBytes)` was a ROW limit that pulled up to capBytes rows at once.
+    // Walk the newest messages a page at a time, on getMessages' keyset, and stop the moment `out` reaches
+    // capBytes, so a long chat never materialises more than one page past the cap.
     let out = '';
-    let before: Date | undefined;
+    let before: { createdAt: Date; rowid: number } | undefined;
     while (out.length < capBytes) {
         const page = managedDb.db
-            .select({ content: messages.content, authorEmail: messages.authorEmail, createdAt: messages.createdAt })
+            .select({
+                content: messages.content,
+                authorEmail: messages.authorEmail,
+                createdAt: messages.createdAt,
+                rowid: sql<number>`rowid`,
+            })
             .from(messages)
-            .where(and(isNull(messages.deletedAt), before ? lt(messages.createdAt, before) : undefined))
-            .orderBy(desc(messages.createdAt))
+            .where(and(isNull(messages.deletedAt), before && olderThan(before)))
+            .orderBy(...NEWEST_FIRST)
             .limit(CHAT_CONTENT_PAGE)
             .all();
         for (const row of page) {
@@ -34,7 +38,7 @@ export async function readChatContent(mount: Mount, drivePath: DrivePath, capByt
             out += piece;
         }
         if (page.length < CHAT_CONTENT_PAGE) break;
-        before = page[page.length - 1].createdAt;
+        before = page[page.length - 1];
     }
     return out;
 }

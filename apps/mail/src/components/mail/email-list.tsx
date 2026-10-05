@@ -1,4 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
@@ -207,6 +208,8 @@ export function EmailList({
                             const index = vi.index;
                             const formattedDate = email.date ? formatDateTime(email.date) : '';
                             const isOpen = activeRowId === email.id;
+                            // In Sent the sender is always the user, so the row names who it went to.
+                            const correspondent = email.mailbox === MAILBOX_SENT ? email.toShort : email.fromShort;
 
                             return (
                                 <div
@@ -259,7 +262,7 @@ export function EmailList({
                                                         !email.isRead && 'font-semibold',
                                                     )}
                                                 >
-                                                    {email.fromShort || 'Unknown'}
+                                                    {correspondent || 'Unknown'}
                                                 </div>
                                                 <div className="flex items-center gap-1 ml-2 shrink-0">
                                                     {email.isFlagged && (
