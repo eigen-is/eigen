@@ -1,5 +1,6 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
+    heldAttendees,
     isSeriesOccurrence,
     isTransferableCalendarHome,
     occurrenceDateToString,
@@ -7,6 +8,7 @@ import {
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
+    useEvent,
     useExportCalendar,
     useIsInvitationFromOthers,
     useRsvp,
@@ -58,6 +60,12 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
     const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
+    const { data: series } = useEvent(
+        eventOwnerId,
+        event?.calendarId ?? '',
+        event?.parentEventId ?? '',
+        open && !!event?.parentEventId,
+    );
 
     if (!event) return null;
 
@@ -69,10 +77,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
     const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
     const isLinkedEvent = isFromOthers(event);
-    const myAttendeeStatus = event.data?.attendees?.find(
-        (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
-    )?.status;
-    const attendees = event.data?.attendees ?? [];
+    const attendees = heldAttendees(event, series);
+    const myAttendeeStatus = attendees.find((a) => a.email.toLowerCase() === user?.email?.toLowerCase())?.status;
 
     const handleDelete = async (action: RecurringAction) => {
         if (isLinkedEvent && isPartOfSeries) {

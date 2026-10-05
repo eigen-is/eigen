@@ -139,8 +139,7 @@ async function propagateWrite(
     const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
     // A name missing from the list the guests held cancels that instance.
     const held = heldAttendees(previous, series);
-    // A cancelled occurrence rides as an EXDATE and keeps no guest list, so the ones it drops are the ones who held it.
-    const attendees = event.data?.attendees ?? (series ? held : []);
+    const attendees = heldAttendees(event, series);
     // A write that names nobody and replaced nobody owes the guests nothing; emptying the list cancels.
     if (!attendees.length && !held.length) return;
     // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.

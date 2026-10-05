@@ -497,6 +497,31 @@ describe('Occurrence edits of an invited series', () => {
         expect(findOrFail(occurrences, (e) => e.occurrenceDate === target).title).toBe('Still Bob');
     });
 
+    // Emptying an occurrence's own list hands it back to the series, so a guest that list had left out is invited again.
+    test("emptying an occurrence's guest list invites the series guests it had left out", async () => {
+        const CAROL = 'carol.reinherit@example.org';
+        const { series, target } = await seededWithExternal('Weekly Occurrence Reinherit', CAROL);
+        await editOccurrence(series.id, target, { title: 'Bob Only' });
+
+        const mailer = await import('../../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+        try {
+            await editOccurrence(series.id, target, { title: 'Everyone Again', data: { attendees: [] } });
+            await eventually(
+                async () =>
+                    spy.mock.calls
+                        .map((call) => call[0])
+                        .find(
+                            (m) => m.subject === 'Invitation: Everyone Again' && m.to.some((t) => t.address === CAROL),
+                        ),
+                'the invitation to reach Carol',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     // Eigen reads that override as inheriting the series' guests, so the mail an external guest gets says so too:
     // an override with only the organizer on it reads as an occurrence the guest is not invited to.
     test("an override naming no guests travels with the series' guests", async () => {

@@ -188,7 +188,7 @@ export function isInvitationFromOthers(event: { data?: EventData | null }, owner
     return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
 }
 
-// An override that states no guests holds its series' list: a stored VEVENT cannot tell "no list" from "nobody".
+// An empty or absent list on an override means its series' guests, so a guest added to the series later reaches every occurrence.
 export function heldAttendees(
     override: { data?: EventData | null } | null | undefined,
     series: { data?: EventData | null } | null | undefined,

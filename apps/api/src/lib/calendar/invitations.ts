@@ -342,7 +342,7 @@ async function applyInvitationException(
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
     const data: EventData = {
         ...linked.data,
-        attendees: payload.attendees ?? existing?.data?.attendees ?? linked.data?.attendees,
+        attendees: payload.attendees ?? heldAttendees(existing, linked),
     };
     await events.writeEvent(calendar, linked.calendarId, {
         title: payload.title,
