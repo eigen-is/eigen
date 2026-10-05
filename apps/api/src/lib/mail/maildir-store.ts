@@ -21,7 +21,7 @@ import {
     buildRecipientSummary,
     createUniqueMessageId,
     getMailIDfromFileName,
-    mailboxDir,
+    maildirFolder,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -789,7 +789,7 @@ export class MaildirStore implements MailStore {
 
     private mailboxDir(mailbox: string): string {
         if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
-        return mailboxDir(this.basePath, mailbox);
+        return maildirFolder(this.basePath, mailbox);
     }
 
     // -- Private helpers --

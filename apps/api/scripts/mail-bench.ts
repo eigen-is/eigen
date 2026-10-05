@@ -19,7 +19,7 @@ import { type DatabaseConfig, openLocalDatabase, type SchemaType } from '../src/
 import type { Home } from '../src/lib/home/home';
 import type MailDB from '../src/lib/mail/maildb';
 import { MaildirStore } from '../src/lib/mail/maildir-store';
-import { buildMaildirFilename, createUniqueMessageId, mailboxDir } from '../src/lib/mail/mailutils';
+import { buildMaildirFilename, createUniqueMessageId, maildirFolder } from '../src/lib/mail/mailutils';
 
 const BENCH_ROOT = process.env['BENCH_ROOT'] ?? path.join(tmpdir(), 'eigen-mail-bench');
 const HOME_DIR = path.join(BENCH_ROOT, 'home');
@@ -92,14 +92,14 @@ function rfc822(i: number, mailbox: string, extAddr: string, to: string): string
 const USER_EMAIL = 'bench@eigen.test';
 function ensureMailbox(mailbox: string) {
     for (const sub of ['cur', 'new', 'tmp'])
-        mkdirSync(path.join(mailboxDir(MAILDIR, mailbox), sub), { recursive: true });
+        mkdirSync(path.join(maildirFolder(MAILDIR, mailbox), sub), { recursive: true });
 }
 
 let gid = 0;
 function generate(mailbox: string, n: number, onlyNew = false) {
     ensureMailbox(mailbox);
-    const curDir = path.join(mailboxDir(MAILDIR, mailbox), 'cur');
-    const newDir = path.join(mailboxDir(MAILDIR, mailbox), 'new');
+    const curDir = path.join(maildirFolder(MAILDIR, mailbox), 'cur');
+    const newDir = path.join(maildirFolder(MAILDIR, mailbox), 'new');
     for (let k = 0; k < n; k++) {
         gid++;
         const extAddr = `${pick(firstNames)} ${pick(lastNames)} <seed${gid}@seed.eigen.test>`;

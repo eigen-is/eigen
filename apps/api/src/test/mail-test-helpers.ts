@@ -1,13 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { mailboxDir } from '../lib/mail/mailutils';
+import { maildirFolder } from '../lib/mail/mailutils';
 import { TEST_DATA_DIR } from './setup';
 
 // One spelling of the mail layout for every mail test that reaches past the API and touches the files
 // (the precedent is contacts-test-helpers.ts and its cardsDirOf/avatarsDirOf).
 export const mailRootOf = (userId: string) => join(TEST_DATA_DIR, 'home', userId, 'eigen.mail');
 export const maildirOf = (userId: string) => join(mailRootOf(userId), 'Maildir');
-export const boxDir = (userId: string, mailbox: string) => mailboxDir(maildirOf(userId), mailbox);
+export const boxDir = (userId: string, mailbox: string) => maildirFolder(maildirOf(userId), mailbox);
 
 // Fabricates a Maildir++ folder the way Dovecot does: a dot-prefixed directory with cur/new/tmp and
 // the `maildirfolder` marker. Eigen itself makes no folder but the standard six.

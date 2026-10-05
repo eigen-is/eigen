@@ -51,7 +51,7 @@ export function getMailIDfromFileName(fileName: string): string {
 
 // Maildir++: the inbox is the root and any other folder a `.Name` directory in it, where either delimiter
 // addresses one directory (`Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`).
-export function mailboxDir(maildirRoot: string, mailbox: string): string {
+export function maildirFolder(maildirRoot: string, mailbox: string): string {
     return mailbox === MAILBOX_INBOX ? maildirRoot : path.join(maildirRoot, `.${mailbox.replaceAll('/', '.')}`);
 }
 
