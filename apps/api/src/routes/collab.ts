@@ -292,10 +292,13 @@ export const collabRouter = new Elysia({
             const session = sessions.get(ws.raw);
             if (!session) return;
             await session.opened;
-            const remaining = session.collabDocument ? session.collabDocument.connectionCount - 1 : null;
+            const { collabDocument } = session;
             cleanupSession(session, ws.raw, ws.data.params.ownerId);
-            if (remaining !== null) {
-                console.log(`[collab] close path=${ws.data.params.pathId} code=${code} connections=${remaining}`);
+            // Counted after the unsubscribe: a Home teardown has already dropped every connection.
+            if (collabDocument) {
+                console.log(
+                    `[collab] close path=${ws.data.params.pathId} code=${code} connections=${collabDocument.connectionCount}`,
+                );
             }
         },
     });

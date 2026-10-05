@@ -53,6 +53,8 @@ export class ManagedDatabase<S extends SchemaType> {
     private lastSyncedChanges = 0;
     private lastSnapshotChanges = 0;
     private forceDirty = false;
+    // The tail markDirty() recovered is unsnapshotted too, though the fresh connection counts no change for it.
+    private forceSnapshot = false;
     // One lifecycle op at a time: a tick and a close never run their sync + snapshot concurrently,
     // so close can't tear the db down under an in-flight tick. flush() deliberately takes only
     // syncLock — onSnapshot flushes the very db it is snapshotting (versioning/snapshot.ts
@@ -204,6 +206,7 @@ export class ManagedDatabase<S extends SchemaType> {
     // unsynced bytes. Marking dirty guarantees they re-reach storage. Cleared on sync.
     markDirty(): void {
         this.forceDirty = true;
+        this.forceSnapshot = true;
     }
 
     // Push pending writes to storage. Snapshots are handled separately by
@@ -234,10 +237,12 @@ export class ManagedDatabase<S extends SchemaType> {
         if (!this.config.snapshot || !this.callbacks.onSnapshot) return;
         const total = this.getTotalChanges();
         const unsnapshotted = total - this.lastSnapshotChanges;
-        if (unsnapshotted <= 0 || (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot)) return;
+        if (unsnapshotted <= 0 && !this.forceSnapshot) return;
+        if (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot) return;
         // A skip must stay due — advancing would record it as taken and never retry it.
         if ((await this.callbacks.onSnapshot()) !== 'skipped') {
             this.lastSnapshotChanges = total;
+            this.forceSnapshot = false;
         }
     }
 

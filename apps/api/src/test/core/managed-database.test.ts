@@ -407,6 +407,29 @@ describe('ManagedDatabase dirty tracking', () => {
         await db.close({ skipFinalSnapshot: true });
     });
 
+    test('a recovered tail closed without further edits still takes its version entry', async () => {
+        // The fresh connection counts no change for the tail a crash left in the temp, so only
+        // markDirty() says it holds bytes no snapshot has.
+        const dbPath = nextDbPath();
+        const crashed = new ManagedDatabase(makeConfig(1000), dbPath);
+        await crashed.open(0);
+        crashed.db.insert(items).values({ v: 'tail' }).run();
+        await crashed.close();
+
+        let snapshots = 0;
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {
+            onSync: async () => {},
+            onSnapshot: async () => {
+                snapshots++;
+                return 'taken';
+            },
+        });
+        await db.open(0);
+        db.markDirty();
+        await db.close();
+        expect(snapshots).toBe(1);
+    });
+
     test('a write landing DURING the sync callback stays dirty and re-syncs (AUDIT 2b)', async () => {
         // onSync freezes the bytes it stages up front (Mount's VACUUM INTO); a write that lands
         // during the callback's later awaits is NOT in that copy. sync() used to set the watermark

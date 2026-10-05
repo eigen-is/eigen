@@ -111,7 +111,7 @@ So a GET can write, which matters for any read-replica idea. The first listing a
 
 ## Version snapshots live inside the container
 
-A container that opts in (collab documents and chats, the `snapshot` key in their database config) keeps file-level snapshots of its `data.db` in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`). `ManagedDatabase` takes one every 100 writes and on close, and each snapshot prunes by the retention policy.
+A container that opts in (collab documents and chats, the `snapshot` key in their database config) keeps file-level snapshots of its `data.db` in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`). `ManagedDatabase` takes one every 100 writes and on close, and each snapshot prunes by the retention policy. A database adopted from a crash temp ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)) owes its close a snapshot even with no new write, because the fresh connection counts no change for the recovered tail.
 
 - A manual save and the pre-restore snapshot block on the container's path lock, because an explicit user action must never skip.
 - The timer and close path try-locks and skips when the lock is held (`trySnapshotContainerDataDb`). It runs inside a close that a lock holder may be waiting on, and a skip loses one history entry, never bytes.

@@ -10,6 +10,9 @@ import type Drive from './drive';
 // (the lock-manager precedent); doc contents persist through the mount's data.db.
 export class CollabRegistry {
     private documents = new Map<string, () => Promise<CollabDocument>>();
+    // Set by destructAll: a document opened after the sweep would never be destructed, and the mount
+    // teardown that follows would close its db under it.
+    private destructed = false;
 
     constructor(private ownerId: string) {}
 
@@ -22,6 +25,7 @@ export class CollabRegistry {
     }
 
     async get(drive: Drive, mount: Mount, pathId: string): Promise<CollabDocument> {
+        if (this.destructed) throw new ApiError(503, 'Drive is shutting down');
         const key = this.key(mount.id, pathId);
         let getter = this.documents.get(key);
         if (!getter) {
@@ -90,9 +94,12 @@ export class CollabRegistry {
     // Destruct every open Yjs doc; the caller closes the mount databases afterwards
     // (Yjs may flush pending changes during destruct(), which needs the db still open).
     async destructAll(): Promise<void> {
+        this.destructed = true;
         for (const [key, getter] of this.documents) {
+            // A load this teardown aborted, or one that failed, opened nothing; its caller has the error.
+            const doc = await getter().catch(() => null);
+            if (!doc) continue;
             try {
-                const doc = await getter();
                 doc.destruct();
             } catch (error) {
                 console.error(`Failed to close document ${key}:`, error);
