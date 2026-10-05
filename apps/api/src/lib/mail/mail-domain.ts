@@ -99,7 +99,10 @@ export class Mail {
                 this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox });
                 this.readNotificationOnceInboxRead();
             },
-            deleted: (messageId, mailbox) => this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox }),
+            deleted: (messageId, mailbox) => {
+                this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox });
+                this.readNotificationOnceInboxRead();
+            },
         });
         // Every user Home carries a Mail; with mail off it seeds, watches and cleans nothing.
         if (!isMailAppEnabled()) return;
@@ -250,6 +253,7 @@ export class Mail {
         await this.store.deleteDraftMeta(messageId);
 
         this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox: email.mailbox });
+        this.readNotificationOnceInboxRead();
     }
 
     async messageMove(messageId: string, targetMailbox: string): Promise<void> {
@@ -260,6 +264,7 @@ export class Mail {
         await this.store.move(messageId, targetMailbox);
 
         this.emit(SSEventType.MAIL_MOVED, { messageId, mailbox: email.mailbox, toMailbox: targetMailbox });
+        this.readNotificationOnceInboxRead();
     }
 
     async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
