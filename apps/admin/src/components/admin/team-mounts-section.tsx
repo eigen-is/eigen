@@ -27,10 +27,6 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
     const addMount = useAddTeamMount(teamId);
     const updateMount = useUpdateTeamMount(teamId);
 
-    const defaultMountStorageType = serverSettings
-        ? mapStorageType(serverSettings.defaults.mount.storageType)
-        : ('local' as const);
-
     const handleAddMount = async (values: MountFormValues) => {
         await addMount.mutateAsync({
             name: values.name,
@@ -72,7 +68,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 onS3Harden={handleS3Harden}
                 title="Add Mount"
                 submitLabel="Create Mount"
-                defaultStorageType={defaultMountStorageType}
+                defaultStorageType={serverSettings && mapStorageType(serverSettings.defaults.mount.storageType)}
                 defaultMaxSizeMB={serverSettings?.quotas.defaultMountMaxSizeMB}
                 defaultS3Config={serverSettings?.defaults.mount.s3Config}
             />
@@ -90,7 +86,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                         ? {
                               name: editingMount.mount.name ?? editingMount.id,
                               storageType: editingMount.mount.storageType,
-                              maxSizeMB: editingMount.mount.maxSizeMB ?? 500,
+                              maxSizeMB: editingMount.mount.maxSizeMB,
                               s3Config: editingMount.mount.s3Config,
                           }
                         : undefined
@@ -108,7 +104,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 />
             ) : (
                 <div className="space-y-2">
-                    {Object.entries(mounts).map(([id, mount]: [string, MountSettings]) => (
+                    {Object.entries(mounts).map(([id, mount]) => (
                         <div key={id} className="flex items-center gap-3 p-3 border rounded-lg">
                             <HardDrive className="h-4 w-4 text-muted-foreground shrink-0" />
                             <div className="flex-1 min-w-0">
