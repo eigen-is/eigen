@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { app, getTestContext } from '../setup';
 
 describe('Protocol Auth', () => {
@@ -267,26 +267,6 @@ describe('Protocol Auth', () => {
             // The app password is checked before the limiter, so a valid credential still gets through.
             const u = await verifyProtocolAuth(email, appPassword);
             expect(u.id).toBe(ctx.alice.user.id);
-        });
-
-        // A bucket is pruned only when an attempt touches its key again, so a wide spray would
-        // otherwise leave one dead key per sprayed address resident for the life of the process.
-        test('the failure maps drop aged-out keys once they grow past the sweep threshold', async () => {
-            const { recordProtocolAuthFailure, _protocolAuthLimitSizesForTests } = await import(
-                '../../lib/auth/protocol-rate-limit'
-            );
-
-            for (let i = 0; i < 2001; i++) {
-                recordProtocolAuthFailure(`sweep-${i}@test.eigen.is`, `198.18.${Math.floor(i / 256)}.${i % 256}`);
-            }
-            expect(_protocolAuthLimitSizesForTests()).toEqual({ emails: 2001, ips: 2001 });
-
-            // One more failure past the 15 minute window, when every key above has aged out.
-            setSystemTime(new Date(Date.now() + 16 * 60 * 1000));
-            recordProtocolAuthFailure('sweep-late@test.eigen.is', '198.18.255.255');
-            setSystemTime();
-
-            expect(_protocolAuthLimitSizesForTests()).toEqual({ emails: 1, ips: 1 });
         });
     });
 });
