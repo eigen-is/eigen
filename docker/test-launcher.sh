@@ -1146,6 +1146,23 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
     fi
+    # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one.
+    older="$FIX/release/backups/server-pre-update-full-20251201-000000.tar"
+    newer="$FIX/release/backups/server-pre-update-light-20251202-000000.tar"
+    : >"$older"
+    : >"$newer"
+    STUB_CHECKED=$checked launch release rollback --yes
+    refused=$(printf '%s\n' "$ERR" | sed -n 's/^[│└]  *//p' | tr '\n' '|')
+    refused_code=$CODE
+    launch release rollback --help
+    rm "$older" "$newer"
+    if [ "$refused_code" = 1 ] &&
+        [ "$refused" = "The backups earlier updates made:|$(basename "$newer")|$(basename "$older")|./eigen restore <file> puts one of them back.|" ] &&
+        [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | sed -n '/Kept:$/,/^$/p' | tr '\n' '|')" = "To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:|  $(basename "$newer")|  $(basename "$older")||" ]; then
+        ok "$SHELL_NAME: rollback whose archive is gone, and its --help, name the backups earlier updates made for ./eigen restore"
+    else
+        fail "$SHELL_NAME: rollback lists the backups earlier updates made: exit $refused_code, '$refused'; --help exit $CODE, '$OUT'"
+    fi
     : >"$FIX/release/backups/server-pre-update-light-20260101-000000.tar"
     STUB_CHECKED=$checked launch release rollback --yes
     rm "$FIX/release/backups/server-pre-update-light-20260101-000000.tar"
