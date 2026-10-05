@@ -44,7 +44,7 @@ const MAIL_NOTIFICATION_TAG = 'mail:new';
 
 // A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
 // Folded to NFC first, the rule `isSafePathSegment` is written for: one spelling reaches the filesystem.
-function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
+function draftIdOf(email: NewDraft): string | undefined {
     const id = email.id?.trim().normalize('NFC') || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
     return id;
@@ -295,7 +295,7 @@ export class Mail {
 
     // -- Draft & Send --
 
-    async messageHandleDraft(email: NewDraft | EmailDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
+    async messageHandleDraft(email: NewDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
         const existingId = draftIdOf(email);
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
@@ -326,7 +326,7 @@ export class Mail {
     }
 
     private async draftFastSave(
-        email: NewDraft | EmailDraft,
+        email: NewDraft,
         existingId: string,
         prevMeta: DraftMeta,
         parts: Array<Required<DraftMetaAttachment>>,
@@ -344,6 +344,7 @@ export class Mail {
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
+            repliedToId: email.repliedToId ?? prevMeta.repliedToId,
             lastFullSaveAt: prevMeta.lastFullSaveAt,
         };
         await this.store.writeDraftMeta(existingId, meta);
@@ -385,7 +386,7 @@ export class Mail {
     }
 
     private async draftFullSave(
-        email: NewDraft | EmailDraft,
+        email: NewDraft,
         existingId: string | undefined,
         options: Pick<DraftUpdateOptions, 'tempAttachmentIds' | 'keepAttachmentIndexes'>,
     ): Promise<EmailDraft> {
@@ -405,6 +406,7 @@ export class Mail {
                     html: email.html || meta.html, // || not ?? — empty html also falls back to the sidecar
                     inReplyTo: email.inReplyTo ?? meta.inReplyTo,
                     references: email.references ?? meta.references,
+                    repliedToId: email.repliedToId ?? meta.repliedToId,
                 };
                 driveReferences = driveReferences ?? meta.driveReferences;
             }
@@ -484,6 +486,7 @@ export class Mail {
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
+            repliedToId: email.repliedToId,
             lastFullSaveAt: Date.now(),
         });
 
@@ -547,10 +550,7 @@ export class Mail {
         );
     }
 
-    async messageSend(
-        mailToSend: NewDraft | EmailDraft,
-        options?: { grantAccessRefIds?: string[]; repliedToId?: string },
-    ): Promise<SentMailResult> {
+    async messageSend(mailToSend: NewDraft, options?: { grantAccessRefIds?: string[] }): Promise<SentMailResult> {
         // Full EML rebuild so attachment content is available for SMTP.
         const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
@@ -633,6 +633,7 @@ export class Mail {
             }
         }
 
+        const repliedToId = (await this.store.readDraftMeta(mail.id))?.repliedToId;
         await this.store.deleteDraftMeta(mail.id);
         await this.messageMove(mail.id, MAILBOX_SENT);
         await this.store.setFlags(mail.id, { draft: false });
@@ -640,7 +641,7 @@ export class Mail {
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
 
         // The mail is out: a reply mark that fails to stick must not fail the send, or a retry sends it twice.
-        const original = options?.repliedToId ? this.store.getSummary(options.repliedToId) : undefined;
+        const original = repliedToId ? this.store.getSummary(repliedToId) : undefined;
         if (original) {
             await this.store.setFlags(original.id, { replied: true }).then(
                 () => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: original.id, mailbox: original.mailbox }),

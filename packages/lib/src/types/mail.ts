@@ -142,6 +142,8 @@ export type NewDraft = {
     inReplyTo?: string;
     references?: string[] | string;
     driveReferences?: AttachmentReference[];
+    // The message this one answers, marked replied once it is sent.
+    repliedToId?: string;
 };
 
 export type DraftInput = Pick<NewDraft, 'to' | 'cc' | 'bcc' | 'subject' | 'text' | 'html' | 'inReplyTo' | 'references'>;

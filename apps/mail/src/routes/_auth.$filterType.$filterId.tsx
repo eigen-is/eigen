@@ -66,7 +66,7 @@ function MailRoute() {
     // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
     // seeds the composer; composeSessionKey is a nonce that flips the EmailDraft remount key
     // each time a new compose session starts, so an in-progress composer is unmounted cleanly.
-    const { prefillDraft, repliedToId, composeSessionKey } = useLocation().state;
+    const { prefillDraft, composeSessionKey } = useLocation().state;
 
     // Cross-app drive attachments (palette "Mail to…") arrive via ?attach=. Resolve each
     // tuple to a DrivePath via the shared driveKeys.path cache, then hand the resolved list
@@ -400,9 +400,7 @@ function MailRoute() {
                                     to={to}
                                     initialDriveAttachments={initialDriveAttachments}
                                     signatureHtml={signatureHtml}
-                                    sendDraft={(mail, grantAccessRefIds) =>
-                                        actions.handleSendEmail(mail, grantAccessRefIds, repliedToId)
-                                    }
+                                    sendDraft={actions.handleSendEmail}
                                     onAutoSave={actions.saveDraft}
                                     onDraftIdAssigned={actions.handleDraftIdAssigned}
                                     isSending={isSending}

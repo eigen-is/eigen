@@ -524,15 +524,8 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
             }
             return id;
         };
-        const sendReply = (repliedToId: string) =>
-            authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    mail: { subject: 'RE: question', to: addr('bob@x.com'), text: 'answer', html: '<p>answer</p>' },
-                    repliedToId,
-                }),
-            });
+        const reply = { subject: 'RE: question', to: addr('bob@x.com'), text: 'answer', html: '<p>answer</p>' };
+        const sendReply = (repliedToId: string) => sendMailBody({ ...reply, repliedToId });
 
         test('marks the message it answers as replied once it is sent', async () => {
             startCapture();
@@ -550,6 +543,22 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
             expect((await sendReply(originalId)).status).toBe(500);
 
             expect((await getHome(ctx.alice.user.id)).mail.messageGetSummary(originalId)?.isReplied).toBe(false);
+        });
+
+        test('saved as a draft and sent later marks the message it answers as replied', async () => {
+            startCapture();
+            const originalId = await deliverOriginal('Later');
+            const draft = await assertJson<EmailDraft>(
+                await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mail: { ...reply, repliedToId: originalId } }),
+                }),
+            );
+
+            // Reopened from Drafts, the composer sends what the draft shows, which has no repliedToId.
+            expect((await sendMailBody({ ...reply, id: draft.id })).status).toBe(200);
+            expect((await getHome(ctx.alice.user.id)).mail.messageGetSummary(originalId)?.isReplied).toBe(true);
         });
     });
 });

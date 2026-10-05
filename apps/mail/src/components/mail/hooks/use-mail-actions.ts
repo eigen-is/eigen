@@ -128,8 +128,8 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleSendEmail = async (mail: NewDraft, grantAccessRefIds?: string[], repliedToId?: string) => {
-        await sendDraftMutation.mutateAsync({ draft: mail, grantAccessRefIds, repliedToId });
+    const handleSendEmail = async (mail: NewDraft, grantAccessRefIds?: string[]) => {
+        await sendDraftMutation.mutateAsync({ draft: mail, grantAccessRefIds });
         navigateToList();
     };
 
@@ -138,12 +138,12 @@ export function useMailActions() {
     // POST only fires once the user actually edits (triggering the auto-save). The fresh
     // composeSessionKey remounts any composer that was already open (so clicking Reply
     // while typing a different message gives a clean composer with the new quoted body).
-    const openPrefilledCompose = (prefillDraft: NewDraft, repliedToId?: string) => {
+    const openPrefilledCompose = (prefillDraft: NewDraft) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: { mode: 'compose' },
-            state: { prefillDraft, repliedToId, composeSessionKey: crypto.randomUUID() },
+            state: { prefillDraft, composeSessionKey: crypto.randomUUID() },
         });
     };
 
@@ -352,15 +352,15 @@ export function useMailActions() {
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
-        openPrefilledCompose(
-            createDraftEmail({
+        openPrefilledCompose({
+            ...createDraftEmail({
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
-            email.id,
-        );
+            repliedToId: email.id,
+        });
     };
 
     const handleReplyAllEmail = async (emailId: string) => {
@@ -379,15 +379,15 @@ export function useMailActions() {
         const allRecipients = [...replyTo, ...toValues, ...ccValues].filter(
             (addr) => addr.address.toLowerCase() !== myEmail,
         );
-        openPrefilledCompose(
-            createDraftEmail({
+        openPrefilledCompose({
+            ...createDraftEmail({
                 to: { value: allRecipients, text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
-            email.id,
-        );
+            repliedToId: email.id,
+        });
     };
 
     const handleForwardEmail = async (emailId: string) => {

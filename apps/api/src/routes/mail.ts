@@ -66,6 +66,7 @@ const MailDraftSchema = t.Object({
     inReplyTo: t.Optional(t.String()),
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
     driveReferences: t.Optional(t.Array(attachmentReferenceSchema, { maxItems: MAX_SEND_REFERENCES })),
+    repliedToId: t.Optional(t.String()),
 });
 // Compile-time guard: a field added to NewDraft without a schema entry here would be stripped by Elysia's
 // normalize, so the key sets must match (a structural `extends` check would not catch it).
@@ -248,7 +249,6 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await (await getMailClient(user)).messageSend(body.mail, {
                 grantAccessRefIds: body.grantAccessRefIds,
-                repliedToId: body.repliedToId,
             });
         },
         {
@@ -256,8 +256,6 @@ export const mailRouter = new Elysia({ name: 'mail' })
             body: t.Object({
                 mail: MailDraftSchema,
                 grantAccessRefIds: t.Optional(t.Array(t.String(), { maxItems: MAX_SEND_REFERENCES })),
-                // The message this one answers, marked replied once the send succeeds.
-                repliedToId: t.Optional(t.String()),
             }),
         },
     )
