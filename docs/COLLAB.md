@@ -65,7 +65,7 @@ A revoked read would otherwise keep receiving broadcasts until the socket drops.
 
 ## A drive that is shutting down refuses a new open
 
-Once `Drive.destruct` has destructed the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) refuses any new open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
+Once `Drive.destruct` starts its sweep of the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) answers every open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
 
 ## Modified moves for an update, never for an open or a close
 
