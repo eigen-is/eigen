@@ -1,6 +1,6 @@
 # Quotas
 
-> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and a mount write takes the overrides of the user writing, not the mount's owner. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
+> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and only the owner's teams count, never those of the user writing. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
 
 Quotas keep one user from filling the server's disk or bucket. The owner sets the server defaults and the per-file cap in the Admin app ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)), an org admin can raise them for a team's members on the team's page, and the app sidebars show each user their usage.
 
@@ -26,9 +26,9 @@ A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`
 
 Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)).
 
-## A mount write takes the writer's overrides
+## A mount's cap takes its owner's overrides
 
-`getMountQuotaState(ownerId, userId, mountId)` reads the mount from the owner's Home but the team overrides from `userId`, the user writing. So the cap an upload meets depends on who uploads. A member writing into a team mount lifts it to their own teams' overrides, that team's override included. A user writing into a folder another user shared with them brings their own overrides to the owner's mount, and the owner's are not counted. The home-data budget takes the owner's teams (`getHomeDataQuotaState`), so it does not vary by writer.
+`getMountQuotaState(ownerId, userId, mountId)` reads the mount and the team overrides from the owner, as `getHomeDataQuotaState` does for home data. So a mount has one cap, whoever uploads into it and whoever reads WebDAV's quota properties. A user writing into a folder another user shared with them meets the owner's cap, lifted by the owner's teams and never by their own. A team is in no teams, so a team mount's cap is its own `maxSizeMB`, and a member's override never lifts it.
 
 ## A mount keeps what it was stamped with
 

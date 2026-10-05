@@ -5,24 +5,22 @@ import { getMemberships } from '../user';
 import { type ResolvedQuotas, resolveHomeDataMax, resolveUserQuotas } from './quota';
 import { getMaxUploadSize } from './server-settings';
 
-async function resolveQuotas(
-    ownerId: string,
-    userId: string,
-    mountId: string,
-): Promise<{ home: Home; quotas: ResolvedQuotas }> {
+// The overrides are the owner's, as for home data: a mount's cap must not change with who writes or looks.
+async function resolveQuotas(ownerId: string, mountId: string): Promise<{ home: Home; quotas: ResolvedQuotas }> {
     const home = await getHome(ownerId); // ownerId-routed: called from drive upload routes
     const mountConfig = home.drive.getMountConfig(mountId);
-    const { teamIds } = await getMemberships(userId);
+    const { teamIds } = await getMemberships(ownerId);
     const quotas = await resolveUserQuotas(mountConfig, teamIds);
     return { home, quotas };
 }
 
+// _userId is unread: the cap is the owner's alone. The callers still pass it.
 export async function getMountQuotaState(
     ownerId: string,
-    userId: string,
+    _userId: string,
     mountId: string,
 ): Promise<{ used: number; max: number }> {
-    const { home, quotas } = await resolveQuotas(ownerId, userId, mountId);
+    const { home, quotas } = await resolveQuotas(ownerId, mountId);
     const used = await home.drive.size(mountId);
     return { used, max: quotas.mountMax };
 }
