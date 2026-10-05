@@ -38,7 +38,7 @@ If the junction were the truth, it and the blob would hold one fact twice, and e
 
 A category with no matching label mints one, keyed on the normalized name (NFC, trimmed, lowercase) with a color hashed from that key. A DAV write can therefore emit `contacts:label-created`. REST label writes enforce the same unique key and answer a duplicate with 409.
 
-A rename rewrites `CATEGORIES` in every member card, so their etags change and clients re-fetch them. `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, so the label and its members move together under one `ctag` bump. A member card that won't parse is skipped with a warning. A label delete strips the category the same way.
+A rename rewrites `CATEGORIES` in every member card, so their etags change and clients re-fetch them. `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, so the label and its members move together under one `ctag` bump. A member card that won't parse is skipped with a warning. A label delete strips the category the same way. A name typed in a REST create or rename is capped at `LABEL_NAME_MAX_LENGTH` (100 characters) and answers 422 past it, because the rename skips the per-card size check. A label minted from `CATEGORIES` keeps any length, and an update that keeps its name, such as a color change, still saves.
 
 ## The avatars folder is a second source of truth, not a cache
 

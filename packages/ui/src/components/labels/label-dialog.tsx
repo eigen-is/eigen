@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
 import { Button } from '@workspace/ui/components/button';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
@@ -145,6 +145,7 @@ export function LabelDialog({
                                                 <Input
                                                     placeholder="Enter label name"
                                                     autoFocus
+                                                    maxLength={LABEL_NAME_MAX_LENGTH}
                                                     {...field}
                                                     disabled={isLoading}
                                                 />

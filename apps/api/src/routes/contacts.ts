@@ -57,7 +57,8 @@ const UpdateContactSchema = t.Object({
     etag: t.String({ ...TEXT, minLength: 1 }),
 });
 
-// A label is minted from a card's CATEGORIES, which the file spells however long; the color is Eigen's own.
+// A label is minted from a card's CATEGORIES, which the file spells however long, so only a typed name is capped
+// (labels.ts); the color is Eigen's own.
 const LabelSchema = t.Object({
     id: t.Optional(t.String(TEXT)),
     name: t.String(FREE_TEXT),
