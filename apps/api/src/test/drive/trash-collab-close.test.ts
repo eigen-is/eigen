@@ -19,14 +19,13 @@ describe('trash closes open collab documents', () => {
         home = await getHome(ctx.alice.user.id);
     });
 
+    const createDoc = (fileName: string) =>
+        drivePost<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${rootId}/create/doc`, {
+            fileName,
+        });
+
     test('DELETE on an open .eigendoc closes it', async () => {
-        const doc = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'trash-close' },
-        );
+        const doc = await createDoc('trash-close');
         await home.drive.getCollabDocument(mountId, doc.id);
         expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(true);
 
@@ -41,13 +40,7 @@ describe('trash closes open collab documents', () => {
 
     // trashPath closes the document's database, which a collab doc still open would then persist into.
     test('an open .eigendoc is closed before its database, so its last state persists cleanly', async () => {
-        const doc = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'trash-clean' },
-        );
+        const doc = await createDoc('trash-clean');
         const collab = await home.drive.getCollabDocument(mountId, doc.id);
         collab.doc.getMap('state').set('marker', 'edited');
         const errors = spyOn(console, 'error');
@@ -64,13 +57,7 @@ describe('trash closes open collab documents', () => {
     // The path stays active until trashPath writes trashedAt, so a socket can open the doc after the
     // first close. The trash closes it again once the row is trashed.
     test('a doc opened between the collab close and the trash write is closed too', async () => {
-        const doc = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'trash-reopen' },
-        );
+        const doc = await createDoc('trash-reopen');
         const { mount } = await home.drive.resolveFile(mountId, doc.id);
         const trashPath = mount.trashPath.bind(mount);
         const spy = spyOn(mount, 'trashPath').mockImplementation(async (pathId) => {

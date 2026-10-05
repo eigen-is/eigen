@@ -263,27 +263,14 @@ describe('Chat', () => {
 
     // createdAt is whole seconds, so messages posted back to back share it: paging back must not skip them.
     test('paging back walks every message sent in the same second, in order', async () => {
-        const chat = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            aliceMountId,
-            `folder/${aliceRootId}/create/chat`,
-            { fileName: 'Paging Test Chat' },
-        );
+        const { sessionToken: token, id: ownerId } = ctx.alice.user;
+        const chat = await drivePost<DrivePath>(token, ownerId, aliceMountId, `folder/${aliceRootId}/create/chat`, {
+            fileName: 'Paging Test Chat',
+        });
         const sent = ['one', 'two', 'three', 'four', 'five'];
-        for (const content of sent) {
-            await chatPost<ChatMessage>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `${chat.id}/messages`,
-                {
-                    content,
-                },
-            );
-        }
+        for (const content of sent) await chatPost(token, ownerId, aliceMountId, `${chat.id}/messages`, { content });
         // Pinned, so the posts share one second however slowly they land.
-        const { mount, path } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(aliceMountId, chat.id);
+        const { mount, path } = await (await getHome(ownerId)).drive.resolveFile(aliceMountId, chat.id);
         const dataDb = await mount.getChildByName(path.id, 'data.db');
         if (!dataDb) throw new Error('chat has no data.db');
         const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id);
@@ -292,21 +279,11 @@ describe('Chat', () => {
             .set({ createdAt: new Date('2026-10-05T12:00:00Z') })
             .run();
 
+        const page = (before: string) =>
+            chatGet<ChatMessage[]>(token, ownerId, aliceMountId, `${chat.id}/messages?limit=2${before}`);
         let seen: string[] = [];
-        let page = await chatGet<ChatMessage[]>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            aliceMountId,
-            `${chat.id}/messages?limit=2`,
-        );
-        while (page.length > 0) {
-            seen = [...page.map((m) => m.content), ...seen];
-            page = await chatGet<ChatMessage[]>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `${chat.id}/messages?limit=2&before=${page[0].id}`,
-            );
+        for (let rows = await page(''); rows.length > 0; rows = await page(`&before=${rows[0].id}`)) {
+            seen = [...rows.map((m) => m.content), ...seen];
         }
         expect(seen).toEqual(sent);
     });
