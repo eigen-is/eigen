@@ -415,6 +415,8 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         } finally {
             read.mockRestore();
             shared.mockRestore();
+            // Back at its key: a later server backup in this process must not find the row without its bytes.
+            if (moved) renameSync(`${moved}.moved`, moved);
         }
         expect(moved).toBeDefined();
         expect(archivedReports(folder)).toEqual(reportBodies);
