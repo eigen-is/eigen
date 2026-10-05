@@ -315,7 +315,9 @@ async function patchStoredEvent(
         await editResource(calendar, resource, (component) => {
             addExclusion(component, parent, existing, writeContext(actorIsOrganizer(parent)));
         });
-        return { updated: eventById(calendar, id)!, oldAttendees };
+        // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
+        const cancelled = eventById(calendar, id)!;
+        return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, oldAttendees };
     }
 
     // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
