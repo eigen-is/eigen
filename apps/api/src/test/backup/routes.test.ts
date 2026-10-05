@@ -275,6 +275,21 @@ describe('Backup routes', () => {
         expect((await listArtifacts(target.id)).artifacts.some((entry) => entry.name === name)).toBe(false);
     });
 
+    test('refuses to delete an archive while a verify of its home runs', async () => {
+        const name = buildArtifactName(target.id, new Date('2020-01-03T03:04:05Z'));
+        expect((await uploadRequest(name, Uint8Array.from(readFileSync(await packTargetHome(name))))).status).toBe(200);
+
+        // A verify that ran on past a delete would write a sidecar for an archive that is gone.
+        const { jobId } = await assertJson<{ jobId: string }>(
+            await adminRequest(`/admin/backup/artifacts/${name}/verify`, { method: 'POST' }),
+        );
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(409);
+        expect((await waitForJob(jobId)).state).toBe('done');
+
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(200);
+        expect(existsSync(join(getBackupsDir(), `${name}.manifest.json`))).toBe(false);
+    });
+
     test('refuses an upload whose name is not an artifact name, and reads no body', async () => {
         const bad = ['my-backup.tar.zst', `home-${target.id}-20200101-000000.tar.gz`, '', '../evil.tar.zst'];
         for (const name of bad) {

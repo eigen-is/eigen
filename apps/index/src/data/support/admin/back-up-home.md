@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-10-01
+updated: 2026-10-05
 ---
 
 You can make a backup of a single user or a single team in Admin. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -65,6 +65,6 @@ A backup of the whole server holds an archive of every user and team too. Whoeve
 
 ## Delete an archive
 
-Hover over an archive row and click **Delete**, then confirm. This removes the file for good. If a user or team has no archives, the section shows **No backups yet**.
+Hover over an archive row and click **Delete**, then confirm. This removes the file for good. While a backup, a verify, or a restore of the same user or team is running, Eigen refuses the delete: try again once it ends. If a user or team has no archives, the section shows **No backups yet**.
 
 To put an account back from an archive, see [Restore a user or team](/support/admin/restore-home).
