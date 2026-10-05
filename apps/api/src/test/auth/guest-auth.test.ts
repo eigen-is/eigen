@@ -354,6 +354,7 @@ describe('Guest Auth', () => {
             expect(retry.status).toBe(400);
         });
 
+        // Ten wrong guesses, each a hash verify, plus a sign-in: 1.3 s on CI, past the 5 s default under heavy local load.
         test('a fresh code gets a fresh set of guesses', async () => {
             const email = `again-${randomUUID()}@external.com`;
             const first = await requestOtpAndCapture(email);
@@ -363,7 +364,7 @@ describe('Guest Auth', () => {
             const second = await requestOtpAndCapture(email);
             const res = await verifyOtp(email, second);
             expect(res.status).toBe(200);
-        });
+        }, 20_000);
 
         // Eleven full sign-ins, each a handful of password hashes: ~3.4 s on CI, too close to the 5 s default.
         test('a successful sign-in does not count toward the request limit', async () => {
