@@ -69,9 +69,15 @@ async function replaceHomeFolder(
         // There is no home folder to move aside on a restore after the user was deleted.
         const stamp = freeSafetyCopyStamp(homeDir, new Date());
         const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
+        const parked = parkOnFailure(stamp);
         // Before the move: a process killed from here on leaves a home folder gone or half written, and which one
-        // only this note tells the next boot.
-        writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: movedAside && path.basename(movedAside) });
+        // only this note tells the next boot, with the name the folder at the home's path goes aside under.
+        writeRestoringMarker(jobId, {
+            ownerId,
+            homeDir,
+            preRestoreName: movedAside && path.basename(movedAside),
+            parkName: path.basename(parked),
+        });
         if (movedAside) fs.renameSync(homeDir, movedAside);
 
         try {
@@ -83,7 +89,7 @@ async function replaceHomeFolder(
         } catch (error) {
             // A failure while putting the home back must not hide the one that brought us here.
             try {
-                if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parkOnFailure(stamp));
+                if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parked);
                 if (movedAside) fs.renameSync(movedAside, homeDir);
             } catch (rollbackError) {
                 console.error(`[backup] could not put ${ownerId}'s home back after a failed restore:`, rollbackError);
@@ -217,8 +223,8 @@ export async function restoreSafetyCopy(
         jobId,
         // Nothing to unpack or judge: the folder is right there, and resolveSafetyCopy vouched for it.
         async () => install,
-        // Back under the name it came from. A `.failed-restore-` name would make a pristine home
-        // unrestorable, and the only action left on one deletes its bytes.
+        // Back under the name it came from, here and at boot after a kill. A `.failed-restore-` name would make a
+        // pristine home unrestorable, and the only action left on one deletes its bytes.
         () => folder,
     );
     onProgress?.('done', 1, 1);

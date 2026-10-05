@@ -1,12 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-    buildSafetyCopyName,
-    freeSafetyCopyStamp,
-    getBackupStagingDir,
-    getStagingRoot,
-    parseSafetyCopyName,
-} from './paths';
+import { getBackupStagingDir, getStagingRoot, parseSafetyCopyName } from './paths';
 
 // What tells the next boot that a restore died with a home folder that is not a home: the notes a
 // restore leaves in its staging folder, and the pass over them that runs before the API listens.
@@ -19,8 +13,9 @@ const RESTORING_MARKER = 'restoring.json';
 const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
 // `preRestoreName` is null when there was no home folder to move aside (a restore of a deleted
 // user). The marker is still written: the folder the install is halfway through is not a home
-// either, and nothing but this says so.
-type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null };
+// either, and nothing but this says so. `parkName` is what that folder goes aside as: a
+// `.failed-restore-` name for an extraction, the copy's own name for a safety copy put back.
+type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null; parkName: string };
 
 function restoringMarkerPath(jobId: string): string {
     return path.join(getBackupStagingDir(jobId), RESTORING_MARKER);
@@ -38,7 +33,8 @@ export function markRestoreComplete(jobId: string): void {
 }
 
 // The marker survived a crash and names two paths this then renames, so it is read as untrusted
-// input: the name has to be a pre-restore copy of exactly the home folder it claims.
+// input: both names have to be safety copies of exactly the home folder it claims, the one to put back a
+// pre-restore copy.
 function readRestoringMarker(markerPath: string): RestoringMarker | null {
     if (!fs.existsSync(markerPath)) return null;
     let value: unknown;
@@ -48,15 +44,18 @@ function readRestoringMarker(markerPath: string): RestoringMarker | null {
         return null;
     }
     if (typeof value !== 'object' || value === null) return null;
-    if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value)) return null;
-    const { ownerId, homeDir, preRestoreName } = value;
-    if (typeof ownerId !== 'string' || typeof homeDir !== 'string') return null;
+    if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value) || !('parkName' in value)) {
+        return null;
+    }
+    const { ownerId, homeDir, preRestoreName, parkName } = value;
+    if (typeof ownerId !== 'string' || typeof homeDir !== 'string' || typeof parkName !== 'string') return null;
     if (preRestoreName !== null && typeof preRestoreName !== 'string') return null;
+    if (parseSafetyCopyName(parkName)?.homeName !== path.basename(homeDir)) return null;
     if (preRestoreName !== null) {
         const parsed = parseSafetyCopyName(preRestoreName);
         if (parsed?.kind !== 'pre-restore' || parsed.homeName !== path.basename(homeDir)) return null;
     }
-    return { ownerId, homeDir, preRestoreName };
+    return { ownerId, homeDir, preRestoreName, parkName };
 }
 
 // Boot: a restore killed anywhere between the move-aside and the last install step left the home
@@ -80,19 +79,15 @@ export function recoverInterruptedRestores(): void {
         // A copy the restore's own rollback already put back is not there any more, and this must
         // not move the home folder that is in place over it.
         if (aside && !fs.existsSync(aside)) continue;
-        // A folder that is there without the completion note is the half-written one: the extract
-        // landed and the mount materialization, the checks or the identity writes did not. It keeps
-        // a name of its own, exactly as a failure the job itself caught would have left it. Nothing
-        // is deleted — this holds whether or not there is a copy to put back afterwards.
+        // A folder that is there without the completion note is the one the install was writing: an
+        // extraction whose mount materialization, checks or identity writes did not land, or a safety
+        // copy renamed into place before its checks. It goes aside under the name the marker gives,
+        // exactly as a failure the job itself caught would have left it. Nothing is deleted — this
+        // holds whether or not there is a copy to put back afterwards.
         if (fs.existsSync(marker.homeDir)) {
-            const parked = buildSafetyCopyName(
-                marker.homeDir,
-                'failed-restore',
-                freeSafetyCopyStamp(marker.homeDir, new Date()),
-            );
-            fs.renameSync(marker.homeDir, parked);
+            fs.renameSync(marker.homeDir, path.join(path.dirname(marker.homeDir), marker.parkName));
             console.error(
-                `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the half-written folder is ${path.basename(parked)}`,
+                `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
             );
         }
         if (!aside) {
