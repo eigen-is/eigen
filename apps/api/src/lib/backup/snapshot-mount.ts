@@ -114,6 +114,8 @@ export async function snapshotMountData(
     let stored = 0;
     const lost: string[] = [];
     let databases = 0;
+    // The plain files taken, with the date of the live row, which the path lock kept in step with the bytes read.
+    const files: { id: string; captured: BackupEntry; updatedAt: Date }[] = [];
     for (const [index, row] of fileRows.entries()) {
         await eventLoopTurn();
         const relPath = archivePath(row, byId);
@@ -178,16 +180,17 @@ export async function snapshotMountData(
                         fs.rmSync(destPath, { force: true });
                         return null;
                     });
-                    return { copy, fromStorage };
+                    return { copy, fromStorage, updatedAt: live.updatedAt };
                 });
                 if (!opened) return null;
                 const captured = await opened.copy;
                 if (captured && opened.fromStorage) stored++;
-                return captured;
+                return captured && { captured, updatedAt: opened.updatedAt };
             });
             if (entry) {
-                entries.push(entry);
+                entries.push(entry.captured);
                 held.add(row.id);
+                files.push({ id: row.id, ...entry });
             }
         }
         onProgress?.('mount files', index + 1, fileRows.length);
@@ -216,25 +219,33 @@ export async function snapshotMountData(
             top = up;
         gone.add(top);
     }
-    if (gone.size > 0) {
-        const stale = new Set<string>();
-        for (const top of gone) {
-            for (let up = byId.get(top)?.parentId; up && !stale.has(up); up = byId.get(up)?.parentId) stale.add(up);
-        }
-        const db = new Database(metadataPath, { readwrite: true, create: false });
-        try {
+    const stale = new Set<string>();
+    const staleAbove = (id: string) => {
+        for (let up = byId.get(id)?.parentId; up && !stale.has(up); up = byId.get(up)?.parentId) stale.add(up);
+    };
+    const db = new Database(metadataPath, { readwrite: true, create: false });
+    try {
+        db.run('PRAGMA foreign_keys = ON');
+        db.transaction(() => {
+            // A file overwritten between the database copy and its read: its row takes the size, hash and date of
+            // the bytes the archive holds, as the overwrite gave the live one.
+            const rewrite = db.prepare<unknown, [number, string, number, string]>(
+                'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3 WHERE id = ?4 AND (size IS NOT ?1 OR hash IS NOT ?2)',
+            );
+            for (const { id, captured, updatedAt } of files) {
+                const seconds = Math.floor(updatedAt.getTime() / 1000);
+                if (rewrite.run(captured.bytes, captured.sha256, seconds, id).changes > 0) staleAbove(id);
+            }
             // As a live delete: its children, file events and watchers cascade, the triggers clear its search rows,
             // and every folder above it has its cached size NULLed (stale).
-            db.run('PRAGMA foreign_keys = ON');
-            db.transaction(() => {
-                db.run('UPDATE paths SET size = NULL WHERE id IN (SELECT value FROM json_each(?))', [
-                    JSON.stringify([...stale]),
-                ]);
-                db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
-            })();
-        } finally {
-            db.close();
-        }
+            for (const top of gone) staleAbove(top);
+            db.run('UPDATE paths SET size = NULL WHERE id IN (SELECT value FROM json_each(?))', [
+                JSON.stringify([...stale]),
+            ]);
+            db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
+        })();
+    } finally {
+        db.close();
     }
     const left = gone.size > 0 ? readArchivedRows(metadataPath) : rows;
     return {

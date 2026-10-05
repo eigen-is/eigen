@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { parseBackupManifest, parseServerArchiveManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
@@ -12,7 +12,14 @@ import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
 import { type ArchiveMember, readArchiveMember, readArchiveMembers } from './archive';
-import { checkArchivedPathRows, HOME_DATABASE_PATHS, listManagedDatabases, readMountPathRows } from './archive-layout';
+import {
+    archivePath,
+    checkArchivedPathRows,
+    HOME_DATABASE_PATHS,
+    listManagedDatabases,
+    managedDbContainer,
+    readMountPathRows,
+} from './archive-layout';
 import { describeError } from './errors';
 import {
     ARCHIVE_HOME_DIR,
@@ -64,7 +71,11 @@ async function listFolderFiles(
     }
 }
 
-function listArchiveDatabases(root: string, fail: (message: string) => void): ArchiveDatabase[] {
+function listArchiveDatabases(
+    root: string,
+    entries: ReadonlyMap<string, BackupEntry>,
+    fail: (message: string) => void,
+): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
     // A home folder holds the first, the server member the second; neither holds the other's.
     const fixed = [
@@ -95,6 +106,24 @@ function listArchiveDatabases(root: string, fail: (message: string) => void): Ar
                 // Before a path is derived from them: every path a restore builds is a join of these
                 // rows' two name columns, and the table came in inside a file somebody uploaded.
                 for (const failure of checkArchivedPathRows(rows)) fail(`${relMetadata}: ${failure}`);
+                // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the
+                // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
+                const byId = new Map(rows.map((row) => [row.id, row]));
+                const recorded = db
+                    .query<{ id: string; size: number | null; hash: string | null }, []>(
+                        "SELECT id, size, hash FROM paths WHERE type = 'file'",
+                    )
+                    .all();
+                for (const { id, size, hash } of recorded) {
+                    const row = byId.get(id);
+                    if (!row || managedDbContainer(row, byId)) continue;
+                    const file = entries.get(
+                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row, byId)}`),
+                    );
+                    if (!file) continue;
+                    if (size !== file.bytes) fail(`${file.path}: ${file.bytes} bytes, its row says ${size}`);
+                    else if (hash !== null && hash !== file.sha256) fail(`${file.path}: sha256 does not match its row`);
+                }
                 for (const managed of listManagedDatabases(rows)) {
                     const relDatabase = archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`);
                     const abs = resolveInside(root, relDatabase);
@@ -182,7 +211,7 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
 
     // Stage 2 — structure: SQLite's own verdict on every database the archive owns. A file already
     // reported missing by stage 1 is skipped rather than reported twice.
-    const databases = listArchiveDatabases(root, fail);
+    const databases = listArchiveDatabases(root, new Map(manifest.entries.map((entry) => [entry.path, entry])), fail);
     for (const [index, database] of databases.entries()) {
         if (fs.existsSync(database.abs)) {
             try {
