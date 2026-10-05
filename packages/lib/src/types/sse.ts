@@ -42,10 +42,6 @@ export const SSEventType = {
     CALENDAR_INVITE_CANCELLED: 'calendar:invite-cancelled',
     CALENDAR_INVITE_RSVP: 'calendar:invite-rsvp',
     CALENDAR_EVENTS_CHANGED: 'calendar:events-changed',
-    // Space events
-    SPACE_SETTINGS_UPDATED: 'space:settings-updated',
-    // Team events
-    TEAM_SETTINGS_UPDATED: 'team:settings-updated',
     // Notification events
     NOTIFICATION_CREATED: 'notification:created',
     NOTIFICATION_CHANGED: 'notification:changed',
@@ -115,10 +111,6 @@ type SSEventNotificationChanged = {
     type: typeof SSEventType.NOTIFICATION_CHANGED;
 };
 
-type SSEventSpace = {
-    type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
-};
-
 // Sent on every state or progress change: a home job's to every admin, since any of them can have the pane open,
 // and a server job's to the owner alone.
 // The payload is a poke: the pane refetches the job and artifact lists, which the server answers from
@@ -136,11 +128,6 @@ type SSEventHomeDataEpochs = {
     epochs: Record<string, string>;
 };
 
-type SSEventTeam = {
-    type: typeof SSEventType.TEAM_SETTINGS_UPDATED;
-    teamId: string;
-};
-
 // Union of all events
 export type SSEvent =
     | SSEventBackup
@@ -153,9 +140,7 @@ export type SSEvent =
     | SSEventHomeDataEpochs
     | SSEventLabel
     | SSEventNotificationCreated
-    | SSEventNotificationChanged
-    | SSEventSpace
-    | SSEventTeam;
+    | SSEventNotificationChanged;
 
 export type {
     SSEventBackup,
@@ -169,6 +154,4 @@ export type {
     SSEventMail,
     SSEventNotificationChanged,
     SSEventNotificationCreated,
-    SSEventSpace,
-    SSEventTeam,
 };
