@@ -514,7 +514,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (369)
+## Types (368)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -577,7 +577,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `AdminUser` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `AdminUserRow` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `Attachment` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AttachmentMeta` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -888,7 +887,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (756)
+## Utilities & constants (757)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1155,6 +1154,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VCARD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
+| `isStaleWrite` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `isIllegalC0` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
