@@ -140,7 +140,7 @@ async function propagateWrite(
     // A name missing from the list the guests held cancels that instance.
     const held = heldAttendees(previous, series);
     const attendees = heldAttendees(event, series);
-    // A write that names nobody and replaced nobody owes the guests nothing; emptying the list cancels.
+    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
     if (!attendees.length && !held.length) return;
     // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
@@ -351,8 +351,12 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
     if (!existing) return;
 
     const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
+    // An override's guests and cancellation come from its series, as propagateWrite's do: only the series knows the original instant.
+    // Deleting a cancelled row answers and cancels nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
+    const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
+    const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
     // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
-    const declining = user && invitation?.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
+    const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (user && declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
         // An organizer known by address only has no Eigen id to relay to, so the decline goes as a REPLY.
@@ -364,12 +368,9 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
                 console.error,
             );
         }
-    } else if (!invitation && existing.status !== 'cancelled') {
-        // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels; deleting a cancelled row cancels nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
-        // An override's cancellation names its series, as propagateWrite's does: only the series knows the original instant.
-        const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
-        const held = heldAttendees(existing, series);
-        if (held.length) propagateCancellation(calendar.home, existing, held, series ?? undefined).catch(console.error);
+    } else if (!invitation && held.length) {
+        // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
+        propagateCancellation(calendar.home, existing, held, series ?? undefined).catch(console.error);
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);

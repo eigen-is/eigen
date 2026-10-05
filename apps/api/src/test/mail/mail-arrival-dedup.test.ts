@@ -93,4 +93,23 @@ describe('Mail-arrival notification read state', () => {
         for (let i = 0; i < 60 && (await unreadInbox()).length > 0; i++) await Bun.sleep(50);
         expect(await mailNewIsRead()).toBe(true);
     });
+
+    test('moving or deleting the last unread inbox message unread reads the notification', async () => {
+        for (const remove of [
+            (id: string) =>
+                authedRequest(user.sessionToken, `/mail/${user.id}/message/move-to-trash`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messageId: id }),
+                }),
+            (id: string) => authedRequest(user.sessionToken, `/mail/${user.id}/message/${id}`, { method: 'DELETE' }),
+        ]) {
+            await deliverEmail(user.email, 'three@external.com', 'Third', 'three');
+            const [mail] = await unreadInbox();
+            expect(await mailNewIsRead()).toBe(false);
+
+            expect((await remove(mail!.id)).status).toBe(200);
+            expect(await mailNewIsRead()).toBe(true);
+        }
+    });
 });

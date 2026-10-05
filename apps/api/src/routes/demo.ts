@@ -14,7 +14,6 @@ const entryLimiter = new WindowLimiter(60 * 1000, 10);
 // The /p/ prefix is eigen's PUBLIC API surface — intentionally unauthenticated. Do NOT add
 // `auth: true` / `.use(betterAuth)` (see routes/public.ts). The route is registered at startup;
 // isDemo() is the runtime gate, so on real instances it 404s and is inert.
-
 export const demoRouter = new Elysia({ name: 'demo' }).get('/p/demo/enter', async ({ set, request, server }) => {
     if (!isDemo()) throw new ApiError(404, 'Not found');
 

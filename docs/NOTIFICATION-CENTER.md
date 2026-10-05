@@ -66,7 +66,7 @@ No URL is stored. `resolveNotificationLink` (`packages/lib/src/core/notification
 
 ## The bell counts always and lists on open
 
-`NotificationBell` (`packages/ui/src/components/layout/app/notification-bell.tsx`) sits in the topbar. The unread count is always fetched, since it is the badge. The list is fetched only while the popover is open. Its first page, `NotificationCenter.list()` without a `before` cursor, is every unread row plus the newest 50 of any state, newest first. A page with a cursor holds only the rows older than it, so a cursor taken from the first page's oldest row never repeats an unread row.
+`NotificationBell` (`packages/ui/src/components/layout/app/notification-bell.tsx`) sits in the topbar. The unread count is always fetched, since it is the badge. The list is fetched while the popover is open, and by chat's unread dots and auto-mark-read (`useUnreadChatIds`, `useAutoMarkChatRead` in `packages/lib/src/core/chat/hooks/use-chat-unread.ts`). The list is every unread row plus the newest 50 of any state, newest first (`NotificationCenter.list()` without a `before` cursor). Paging past it isn't offered: a page that mixes all unread rows with the newest read ones has no cursor that neither skips nor repeats a row.
 
 ## The toast carries just enough to link
 

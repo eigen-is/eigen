@@ -46,7 +46,3 @@ export function _resetProtocolAuthLimitForTests(): void {
     emailFailures.clear();
     ipFailures.clear();
 }
-
-export function _protocolAuthLimitSizesForTests(): { emails: number; ips: number } {
-    return { emails: emailFailures.size, ips: ipFailures.size };
-}

@@ -44,8 +44,4 @@ export class WindowLimiter {
     clear(): void {
         this.hits.clear();
     }
-
-    get size(): number {
-        return this.hits.size;
-    }
 }
