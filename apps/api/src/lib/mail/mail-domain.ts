@@ -32,6 +32,7 @@ import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
+import { readMailTotalSize } from './maildir-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
@@ -62,6 +63,9 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
 }
 
 export class Mail {
+    // With mail off the store stays closed, yet the mail kept on disk still counts, as a cold read counts it.
+    private keptSize?: number;
+
     constructor(
         private home: Home,
         private store: MailStore,
@@ -73,7 +77,10 @@ export class Mail {
 
     async init(): Promise<void> {
         // Every user Home carries a Mail; with mail off it builds no Maildir and watches nothing.
-        if (!isMailAppEnabled()) return;
+        if (!isMailAppEnabled()) {
+            this.keptSize = await readMailTotalSize(this.home.fs);
+            return;
+        }
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
@@ -105,7 +112,7 @@ export class Mail {
     }
 
     async size(): Promise<number> {
-        return this.store.size();
+        return this.keptSize ?? this.store.size();
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
