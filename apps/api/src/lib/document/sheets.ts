@@ -17,7 +17,7 @@ export function readSheetsFromDoc(
     doc: Y.Doc,
     { recalc = true }: { recalc?: boolean } = {},
 ): { sheets: Sheet[]; recalcError: string | null } {
-    const snapshot = doc.getMap<string>('state').get('snapshot');
+    const snapshot = readSheetsSnapshotJson(doc);
     const opBatches = doc.getArray<Op[]>('ops').toArray();
     // No snapshot + pending ops = a fresh doc closed before its first
     // flushSnapshot. The ops were recorded against the editor's default sheets
@@ -46,6 +46,11 @@ export function readSheetsFromDoc(
     } catch (e) {
         return { sheets: replayed, recalcError: e instanceof Error ? e.message : String(e) };
     }
+}
+
+// The workbook's snapshot JSON; undefined before the first flush.
+export function readSheetsSnapshotJson(doc: Y.Doc): string | undefined {
+    return doc.getMap<string>('state').get('snapshot');
 }
 
 // The import commit: an already-serialized snapshot goes straight into the live

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
+import { isCurrentSheetsSnapshot } from '@workspace/lib/sheets';
 import { DRIVE_TYPE_SHEETS, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
+import { readSheetsSnapshotJson } from '../document/sheets';
 import type Drive from '../drive/drive';
 import type { Mount } from '../mount/mount';
 import { DEFAULT_RETENTION, type RetentionPolicy } from './retention';
@@ -38,12 +39,14 @@ export async function restoreContainer(
         if (state && container.type === DRIVE_TYPE_SHEETS) {
             // A snapshot in an older encoding would lock every open editor read-only (SHEETS.md).
             const doc = new Y.Doc();
-            Y.applyUpdate(doc, state);
-            const snapshot = doc.getMap<string>('state').get('snapshot');
             try {
-                if (snapshot) decodeSheetsSnapshot(snapshot);
-            } catch {
-                throw new ApiError(409, 'This version was saved in an older sheet format and cannot be restored');
+                Y.applyUpdate(doc, state);
+                const snapshot = readSheetsSnapshotJson(doc);
+                if (snapshot && !isCurrentSheetsSnapshot(snapshot)) {
+                    throw new ApiError(409, 'This version was saved in an older sheet format and cannot be restored');
+                }
+            } finally {
+                doc.destroy();
             }
         }
         // A gone data.db (410, once the temp and staged copy were checked) has no bytes to preserve and no

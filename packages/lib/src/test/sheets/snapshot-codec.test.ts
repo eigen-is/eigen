@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '../../sheets/snapshot-codec';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from '../../sheets/snapshot-codec';
 import type { Cell, CellWithRowAndCol, Sheet } from '../../sheets/types';
 
 type SheetWithCalcChain = Sheet & { calcChain?: { r: number; c: number; id: string }[] };
@@ -252,6 +252,12 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             'Unknown sheets snapshot format',
         );
         expect(() => decodeSheetsSnapshot('{"foo":1}')).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('the format probe tells the current encoding from an older or a future one without decoding', () => {
+        expect(isCurrentSheetsSnapshot(encodeSheetsSnapshot(WORKBOOK, { computed: true }))).toBe(true);
+        expect(isCurrentSheetsSnapshot(JSON.stringify(WORKBOOK))).toBe(false);
+        expect(isCurrentSheetsSnapshot('{"f":"eigensheets/99","sheets":[]}')).toBe(false);
     });
 
     test('a border entry that is not a [row, col, index] tuple throws the same error', () => {

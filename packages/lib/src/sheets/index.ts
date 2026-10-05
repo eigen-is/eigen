@@ -10,5 +10,5 @@ export {
     parseCellKey,
 } from './borders';
 export { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from './defaults';
-export { decodeSheetsSnapshot, encodeSheetsSnapshot } from './snapshot-codec';
+export { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from './snapshot-codec';
 export * from './types';
