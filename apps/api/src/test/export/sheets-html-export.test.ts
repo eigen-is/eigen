@@ -6,6 +6,7 @@ import {
     getSheetContentSize,
     renderSheetsExportDocument,
     renderSheetsHtml,
+    renderSheetsPdfDocument,
     renderSheetsPreviewHtml,
 } from '../../lib/export/sheets/render';
 import { NO_MEDIA } from '../setup';
@@ -787,6 +788,13 @@ describe('Sheets export — content size (@page)', () => {
             width: SHEET_DEFAULT_COL_WIDTH + 100,
             height: 25 + SHEET_DEFAULT_ROW_HEIGHT,
         });
+    });
+
+    test('the PDF page of a huge sheet is capped at the PDF page limit', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'wide' } }]);
+        sheet.config = { columnlen: { 0: 1e9 }, rowlen: { 0: 1e9 } };
+        const html = renderSheetsPdfDocument([sheet], 'Huge', NO_MEDIA);
+        expect(html).toContain('@page { size: 19200px 19200px; margin: 40px; }');
     });
 
     test('an image parked past the used range is measured too', () => {

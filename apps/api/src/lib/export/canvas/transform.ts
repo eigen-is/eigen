@@ -13,6 +13,7 @@ import {
 } from '../../document/transform/protocol';
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
+import { MAX_PDF_PAGE_PX } from '../pdf-page';
 import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
 
@@ -169,7 +170,7 @@ ${fallbackLadder(width)}
 
 function pdfCss(width: number, height: number): string {
     return `
-@page { size: ${width}px ${height}px; margin: 0; }
+@page { size: ${Math.min(width, MAX_PDF_PAGE_PX)}px ${Math.min(height, MAX_PDF_PAGE_PX)}px; margin: 0; }
 body { font-family: ${FONT_STACK_SANS}; }
 .canvas-page { break-after: page; }
 .canvas-page:last-child { break-after: auto; }

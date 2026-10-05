@@ -94,10 +94,17 @@ export class TeamHome extends Home {
         }
 
         const updated = { ...existing, ...update };
-        await this.settings.set({ mounts: { [mountId]: updated } });
         // Persisting alone leaves the already-built Drive on a stale config until the Home is evicted;
-        // push the change onto the live mount so quota/name/enabled apply immediately.
-        await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
+        // push the change onto the live mount so quota/name/enabled apply immediately. The push goes
+        // first: a storage re-point whose new mount fails to start puts the old one back and persists
+        // nothing, rather than leaving settings enabled with no live mount.
+        try {
+            await this.drive.updateMount(createMountConfig(mountId, updated), updated.enabled);
+        } catch (err) {
+            await this.drive.updateMount(createMountConfig(mountId, existing), existing.enabled);
+            throw err;
+        }
+        await this.settings.set({ mounts: { [mountId]: updated } });
         return updated;
     }
 }

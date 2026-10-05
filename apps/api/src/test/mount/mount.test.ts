@@ -302,11 +302,14 @@ describe('Mount (local-key storage)', () => {
         const childId = await mount.createFolder(folderId, 'ChildFolder');
         const data = Buffer.from('child file');
         const fileId = await mount.createFile(childId, 'child.txt', 'text/plain', data.length, data);
+        const objectPath = join(mount.dataDir, buildStorageKey(fileId, 'child.txt'));
+        expect(existsSync(objectPath)).toBe(true);
 
         await mount.deletePath(folderId);
         expect(await mount.getPath(folderId)).toBeNull();
         expect(await mount.getPath(childId)).toBeNull();
         expect(await mount.getPath(fileId)).toBeNull();
+        expect(existsSync(objectPath)).toBe(false);
     });
 
     test('breadcrumb returns full path', async () => {

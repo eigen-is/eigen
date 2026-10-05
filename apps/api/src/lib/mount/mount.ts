@@ -812,13 +812,12 @@ export class Mount {
         } else if (this.isPathBased && deleteDir) {
             await this.withTreeExclusive(async () => {
                 const storageKey = await this.getStorageKey(pathId);
-                // Collected before the rows go: only files own a thumbnail, so folder ids are no-ops.
-                const descendantIds = this.collectDescendantIds(pathId);
-                this.db.transaction((tx) => {
-                    this.deleteDescendantsInTx(tx, pathId);
+                const files = this.db.transaction((tx) => {
+                    const files = this.deleteDescendantsInTx(tx, pathId);
                     tx.delete(paths).where(eq(paths.id, pathId)).run();
+                    return files;
                 });
-                for (const id of descendantIds) {
+                for (const { id } of files) {
                     await deleteThumbnail(this.thumbsDir, id);
                 }
                 if (storageKey && !(await deleteDir.call(this.storage, storageKey))) {
@@ -826,11 +825,21 @@ export class Mount {
                 }
             });
         } else {
-            const children = await this.listFolderAll(pathId);
-            for (const child of children) {
-                await this.deletePath(child.id);
+            // One walk for the whole subtree: an id key does not depend on its folder, so every object
+            // goes after all the rows, as for a single file.
+            const files = this.db.transaction((tx) => {
+                const files = this.deleteDescendantsInTx(tx, pathId);
+                tx.delete(paths).where(eq(paths.id, pathId)).run();
+                return files;
+            });
+            for (const { id, file } of files) {
+                const storageKey = file || id;
+                await deleteThumbnail(this.thumbsDir, id);
+                if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
+                if (!(await this.storage.delete(storageKey))) {
+                    console.warn(`[Mount] deleted ${id}, but its object ${storageKey} stays behind`);
+                }
             }
-            await this.db.delete(paths).where(eq(paths.id, pathId));
         }
 
         await this.invalidateSizesFrom(pathEntry.parentId);
@@ -855,21 +864,23 @@ export class Mount {
         }
     }
 
+    // Returns the deleted files: only they own a thumbnail and an object, which go after the rows.
     private deleteDescendantsInTx(
         tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
         parentId: string,
-    ): void {
+    ): { id: string; file: string }[] {
         const children = tx
-            .select({ id: paths.id, type: paths.type })
+            .select({ id: paths.id, type: paths.type, file: paths.file })
             .from(paths)
             .where(eq(paths.parentId, parentId))
             .all();
+        const files: { id: string; file: string }[] = [];
         for (const child of children) {
-            if (child.type !== 'file') {
-                this.deleteDescendantsInTx(tx, child.id);
-            }
+            if (child.type === 'file') files.push({ id: child.id, file: child.file });
+            else files.push(...this.deleteDescendantsInTx(tx, child.id));
             tx.delete(paths).where(eq(paths.id, child.id)).run();
         }
+        return files;
     }
 
     // ---- Trash facade — implementation in mount/trash.ts ----
