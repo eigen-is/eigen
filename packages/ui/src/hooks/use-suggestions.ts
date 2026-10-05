@@ -22,8 +22,8 @@ type UseSuggestionsResult = {
     onItemsChange: (count: number, items: string[]) => void;
     // Returns true when the key was consumed; callers should early-return in that case.
     handleKeyDown: (e: React.KeyboardEvent) => boolean;
-    // Whether handleKeyDown takes keys right now, for a listener that must claim a key before React sees it.
-    isActive: () => boolean;
+    // Whether handleKeyDown takes keys right now: the input's aria-expanded.
+    isActive: boolean;
 };
 
 export function useSuggestions({
@@ -36,13 +36,13 @@ export function useSuggestions({
 }: UseSuggestionsOptions): UseSuggestionsResult {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const selectedIndexRef = useRef(0);
-    const countRef = useRef(0);
+    const [count, setCount] = useState(0);
     const itemsRef = useRef<string[]>([]);
 
     selectedIndexRef.current = selectedIndex;
 
     const onItemsChange = useCallback((count: number, items: string[]) => {
-        countRef.current = count;
+        setCount(count);
         itemsRef.current = items;
         if (count > 0) setSelectedIndex((prev) => Math.min(prev, count - 1));
     }, []);
@@ -51,15 +51,11 @@ export function useSuggestions({
         if (!visible) setSelectedIndex(0);
     }, [visible]);
 
-    const isActive = useCallback(
-        () => visible && !(passthroughWhenEmpty && countRef.current === 0),
-        [visible, passthroughWhenEmpty],
-    );
+    const isActive = visible && !(passthroughWhenEmpty && count === 0);
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent): boolean => {
-            if (!isActive()) return false;
-            const count = countRef.current;
+            if (!isActive) return false;
 
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -91,7 +87,7 @@ export function useSuggestions({
             }
             return false;
         },
-        [isActive, acceptShiftEnter, onSelect, onEscape, onCommitEmpty],
+        [isActive, count, acceptShiftEnter, onSelect, onEscape, onCommitEmpty],
     );
 
     return { selectedIndex, onItemsChange, handleKeyDown, isActive };
