@@ -789,7 +789,7 @@ export default class Drive {
         return run;
     }
 
-    // Called by: updateACLDelta (after its server-side merge) and inviteToChat. Not route-callable —
+    // Called by: updateACLDelta (after its server-side merge). Not route-callable —
     // the ACL route accepts only deltas, so full-array replaces can't originate from clients.
     async updateACL(
         mountId: string,
@@ -978,8 +978,14 @@ export default class Drive {
             return { alreadyHasAccess: true, targetPathId: targetPath.id };
         }
 
-        const newAcl = [...currentAcl, { id: email.toLowerCase(), read: true, write: true }];
-        await this.updateACL(mountId, targetPath.id, newAcl, undefined, undefined, actor);
+        await this.updateACLDelta(
+            mountId,
+            targetPath.id,
+            { add: [{ id: email.toLowerCase(), read: true, write: true }] },
+            undefined,
+            undefined,
+            actor,
+        );
 
         return { alreadyHasAccess: false, targetPathId: targetPath.id };
     }

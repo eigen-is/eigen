@@ -177,7 +177,7 @@ Route in `apps/api/src/routes/chat.ts`, delegating to `drive.inviteToChat(mountI
 
 ### Why Not Set ACL on the Chat Directly
 
-An embedded chat usually has no ACL of its own; it inherits from the container. Granting access on the chat would put the entry on the wrong path, and a client cannot reliably see (or safely rewrite) the container's ACL. Resolving the container server-side puts the entry where inheritance actually reads it. The server writes it with a full replace outside the per-path delta chain the [ACL route](#acl-route) uses, so an invite can race a concurrent ACL change ([ROADMAP.md](ROADMAP.md)).
+An embedded chat usually has no ACL of its own; it inherits from the container. Granting access on the chat would put the entry on the wrong path, and a client cannot reliably see (or safely rewrite) the container's ACL. Resolving the container server-side puts the entry where inheritance actually reads it. The server adds it as a delta through the same per-path chain the [ACL route](#acl-route) uses, so an invite and a concurrent ACL change both land.
 
 ### findContainerFromAncestors()
 
