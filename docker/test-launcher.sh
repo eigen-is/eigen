@@ -9,7 +9,7 @@
 # while eigen-api reads a .env.production replaced since it started or cannot be asked, and backup refused and restart
 # stopping eigen-api first then, what setup
 # downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
-# what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, an
+# what each failure leaves, an archive uid 1000 cannot read, a running server backup or its upload waited out before a stop, a restore that cannot write its files, an
 # update interrupted in that wait that stops and restarts nothing, a swap
 # that was cut off and finished first, with no .env.production too, a restore on a new machine from the launcher
 # alone, what rollback runs or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
@@ -1027,6 +1027,24 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the archive pins while Eigen runs, then writes the files of its api image"
     else
         fail "$SHELL_NAME: a release restore to other images: exit $CODE, steps '$(steps)'"
+    fi
+    # Files that cannot be written after the swap stay those of the build before, which the restart the failure points
+    # at writes anew.
+    reset_release
+    echo ghcr.io/eigen-is/eigen/api:local >"$FIX/release/.eigen/bundle"
+    STUB_IMAGE=1 STUB_CHECKED=$checked STUB_RUN_FAIL=bootstrap launch release restore "$ARCHIVE" --yes
+    outcome="exit $CODE, bundle $(cat "$FIX/release/.eigen/bundle"), '$ERR'"
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q 'The data is restored. Fix what it says, then run ./eigen restart.' &&
+        [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api:local ]; then
+        launch release restart
+        if [ "$CODE" = 0 ] && [ "$(steps)" = 'bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&
+            [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api@sha256:bbb ]; then
+            ok "$SHELL_NAME: a release restore that cannot write its files leaves them stale, and restart writes them"
+        else
+            fail "$SHELL_NAME: restart after a restore that could not write its files: exit $CODE, steps '$(steps)'"
+        fi
+    else
+        fail "$SHELL_NAME: a release restore that cannot write its files: $outcome"
     fi
     rm "$FIX/release/.eigen/bundle"
     reset_release

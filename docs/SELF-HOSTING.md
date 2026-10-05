@@ -57,7 +57,7 @@ The help center at eigen.is follows the `main` channel, so it can describe a bui
 | `rollback` | Restores the backup the last update made, with the version it ran. `--yes` does not ask |
 | `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait`. Its exit codes: [BACKUP.md § The whole-server backup runs inside the API](BACKUP.md#the-whole-server-backup-runs-inside-the-api) |
 | `restore <archive>` | Puts a whole-server backup back, from `backups/` or a path, on this machine or a new one. `--yes` does not ask, `--s3-from-archive` uploads an archive's S3 files under fresh keys instead of keeping each bucket as it is |
-| `restart` | Starts Eigen, and any part of it that stopped |
+| `restart` | Starts Eigen, and any part of it that stopped. First it writes the launcher and Compose files of the build `.env.production` pins, when an update or a restore stopped before it did |
 | `stop` | Stops Eigen, once a server backup that runs has ended |
 | `logs [service]` | Follows the logs of every service, or of one |
 | `reset-password` | Sets a new password for an account and signs it out everywhere |

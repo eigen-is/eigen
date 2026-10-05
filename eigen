@@ -822,13 +822,15 @@ prune_images() {
 }
 
 # write_bundle <api image>: a release install's launcher and Compose files, as that api image writes them, to temporary
-# files that are renamed, so this running launcher reads on in its own copy. .eigen/bundle names the image first, so
-# files written halfway are told apart too.
+# files that are renamed, so this running launcher reads on in its own copy. Files written halfway must read as stale:
+# .eigen/bundle names an image .env.production does not pin yet first, as an update writes them, and one it pins
+# already, as after a restore's swap, only once they are written.
 write_bundle() {
     build=$(describe "$1")
-    echo "$1" >.eigen/bundle
+    if [ "$1" != "$(image api)" ]; then echo "$1" >.eigen/bundle; fi
     step "Writing the Eigen $build launcher and Compose files" "Eigen $build files written" \
         "Could not write the Eigen $build files" with_image "$1" cli bootstrap --force --out /install
+    echo "$1" >.eigen/bundle
 }
 
 # The api image of the files an unfinished update or restore wrote, when .env.production pins another.
@@ -1262,6 +1264,8 @@ case $COMMAND in
         wordmark "$COMMAND"
         preflight
         lock
+        # A restore that stopped writing the files, as its failure says, left those of the build before.
+        if [ "$COMMAND" = restart ] && [ -n "$(stale_bundle)" ]; then write_bundle "$(image api)"; fi
         "$COMMAND"
         ;;
     reset-password)
