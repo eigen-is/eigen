@@ -182,17 +182,6 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     });
 
     // ── Keyboard handling ───────────────────────────────────────────────
-    // A Radix dialog dismisses on Escape from a document capture listener, before handleKeyDown
-    // runs. Claiming the key on window capture leaves an Escape to the open list instead.
-    useEffect(() => {
-        const claimEscape = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape' || e.target !== textareaRef.current) return;
-            if (slashSuggest.isActive() || targetSuggest.isActive() || atSuggest.isActive()) e.preventDefault();
-        };
-        window.addEventListener('keydown', claimEscape, true);
-        return () => window.removeEventListener('keydown', claimEscape, true);
-    }, [slashSuggest.isActive, targetSuggest.isActive, atSuggest.isActive]);
-
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         // Slash and target are mutually exclusive (target is gated on !slashSuggestOpen), but
         // target and @-mention can both match at once — e.g. typing `/whisper @al`. Target
@@ -287,6 +276,8 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                         e.target.style.height = 'auto';
                         e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                     }}
+                    role="combobox"
+                    aria-expanded={slashSuggest.isActive || targetSuggest.isActive || atSuggest.isActive}
                     onKeyDown={handleKeyDown}
                     onPaste={onPaste}
                     placeholder={placeholder}

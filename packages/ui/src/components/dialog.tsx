@@ -101,9 +101,14 @@ function DialogContent({
                     }
                     onPointerDownOutside?.(e);
                 }}
-                // Escape over an open preview is the preview's to close, not the dialog's under it.
+                // Escape over an open preview is the preview's to close, not the dialog's under it, and Escape
+                // in a combobox with its list open is the list's. cmdk's input says expanded always: its list
+                // is the dialog.
                 onEscapeKeyDown={(e) => {
-                    if (preview?.isPreviewOpen && !abovePreview) e.preventDefault();
+                    const listOpen =
+                        e.target instanceof Element &&
+                        e.target.matches('[role="combobox"][aria-expanded="true"]:not([cmdk-input])');
+                    if ((preview?.isPreviewOpen && !abovePreview) || listOpen) e.preventDefault();
                     onEscapeKeyDown?.(e);
                 }}
                 {...props}

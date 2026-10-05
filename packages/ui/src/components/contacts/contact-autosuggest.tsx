@@ -35,6 +35,7 @@ export function ContactAutosuggest({
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
     const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyInternalMails, excludeEmails);
+    const listOpen = isOpen && suggestions.length > 0;
 
     const handleSelect = useCallback(
         (suggestion: ContactSuggestion) => {
@@ -71,7 +72,7 @@ export function ContactAutosuggest({
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent<HTMLInputElement>) => {
-            if (!isOpen || suggestions.length === 0) return;
+            if (!listOpen) return;
 
             switch (e.key) {
                 case 'ArrowDown':
@@ -98,7 +99,7 @@ export function ContactAutosuggest({
                     break;
             }
         },
-        [isOpen, suggestions, selectedIndex, handleSelect],
+        [listOpen, suggestions, selectedIndex, handleSelect],
     );
 
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -148,6 +149,8 @@ export function ContactAutosuggest({
                     handleKeyDown(e);
                     handleKeyDownSubmit(e);
                 }}
+                role="combobox"
+                aria-expanded={listOpen}
                 className={inputClassName}
                 placeholder={placeholder}
                 disabled={disabled}
