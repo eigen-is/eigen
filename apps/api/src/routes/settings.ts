@@ -94,7 +94,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         mailAndContactsMaxMB: t.Optional(t.Number({ minimum: 10 })),
                         defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                         maxUploadSizeMB: t.Optional(t.Number({ minimum: 1, maximum: UPLOAD_CAP_MAX_MB })),
-                        trashRetentionDays: t.Optional(t.Number({ minimum: 1 })),
+                        trashRetentionDays: t.Optional(t.Number({ minimum: 0 })),
                     }),
                 ),
                 defaults: t.Optional(

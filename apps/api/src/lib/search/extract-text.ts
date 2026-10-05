@@ -60,7 +60,8 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     if (!isSearchableTextFile(path.mimeType, path.name)) return '';
     if (isVCardFile(path.mimeType, path.name)) return extractVCardText(mount, path);
     const bytes = await mount.readBytes(path.id, CONTENT_INDEX_MAX_BYTES);
-    return bytes ? Buffer.from(bytes).toString() : '';
+    // stream: true holds back a character the cap split, where a plain decode ends on U+FFFD.
+    return bytes ? new TextDecoder().decode(bytes, { stream: true }) : '';
 }
 
 // A .vcf indexes by the contacts it holds: its raw body is mostly base64 photo, and a name folded across

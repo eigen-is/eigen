@@ -81,6 +81,19 @@ describe('Server Settings', () => {
         expect(data.quotas.maxUploadSizeMB).toBe(UPLOAD_CAP_MAX_MB);
     });
 
+    // 0 is the mount's "never purge"; the route must let the owner choose it.
+    test('a trash retention of 0 days is accepted', async () => {
+        const put = (trashRetentionDays: number) =>
+            authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quotas: { trashRetentionDays } }),
+            });
+        const data = await assertJson<ServerSettings>(await put(0));
+        expect(data.quotas.trashRetentionDays).toBe(0);
+        expect((await put(30)).status).toBe(200);
+    });
+
     test('non-admin cannot update server settings', async () => {
         const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/server', {
             method: 'PUT',

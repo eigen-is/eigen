@@ -23,7 +23,6 @@ function makeEntry(overrides: Partial<CommentEntry> = {}): CommentEntry {
         lastActivityAt: null,
         messageCount: 0,
         createdAt: new Date(0),
-        createdBy: null,
         assignee: null,
         title: null,
         ...overrides,

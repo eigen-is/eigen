@@ -284,10 +284,13 @@ export function ServerSettingsPage() {
                         <Label>Trash Retention (days)</Label>
                         <Input
                             type="number"
-                            min={1}
+                            min={0}
                             value={current.quotas.trashRetentionDays}
                             onChange={(e) => updateQuota('trashRetentionDays', e.target.valueAsNumber)}
                         />
+                        <p className="text-xs text-muted-foreground">
+                            0 keeps deleted files until the Trash is emptied.
+                        </p>
                     </div>
                 </div>
             </SettingsSection>

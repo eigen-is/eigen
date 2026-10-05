@@ -123,6 +123,25 @@ describe('Comment Index', () => {
             expect(comments[0].lastMessageSnippet).toBe('Follow-up message');
             expect(comments[0].messageCount).toBe(2);
         });
+
+        // The search text and the creator stay on the server: no client reads them, and the text is ~8 KB a thread.
+        test('the list ships the panel fields only', async () => {
+            const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
+            const comments = await assertJson<CommentEntry[]>(res);
+            expect(Object.keys(comments[0]).sort()).toEqual([
+                'assignee',
+                'chatName',
+                'createdAt',
+                'lastActivityAt',
+                'lastAuthorEmail',
+                'lastMessageSnippet',
+                'messageCount',
+                'resolvedAt',
+                'resolvedBy',
+                'status',
+                'title',
+            ]);
+        });
     });
 
     describe('resolve and reopen', () => {
