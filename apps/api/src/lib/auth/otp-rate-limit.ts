@@ -7,6 +7,8 @@ import { ApiError } from '../core/errors';
 // mailbox count; the per-IP cap leaves room for an office of guests behind one address.
 // State is process-local — fine while Eigen runs as a single API process. Swap to
 // a DB-backed store behind the same `checkOtpRateLimit` signature if we ever shard.
+// Not a WindowLimiter: a refund takes one email's hits out of a shared IP bucket, so each hit
+// carries its email.
 
 const WINDOW_MS = 60 * 60 * 1000;
 export const MAX_OTP_REQUESTS_PER_EMAIL = 10;
