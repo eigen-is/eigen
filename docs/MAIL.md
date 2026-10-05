@@ -12,7 +12,7 @@ The sections run from the store through reading, the mailbox names and the list,
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
 
-The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): the row keeps the whole body for the full-text index. A full message is re-parsed from its `.eml`.
+The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): a received message's row keeps the whole body for the full-text index. A draft's row keeps only the first `MAIL_PREVIEW_CHARS`, so a draft is searched at preview length. A full message is re-parsed from its `.eml`.
 
 ## The Maildir is the truth and the index follows it
 
@@ -98,7 +98,7 @@ The send carries `grantAccessRefIds`, so one send can share some documents and n
 
 ## A mail part is revalidated on every request
 
-Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index, the row's size and the file's modification time in milliseconds, and a match is a 304 before the `.eml` is parsed. The row's date would not do: it has second precision, and two saves of one draft within a second can keep its size. A file Dovecot just renamed for a flag change, before the index has its new name, answers with the current time in place of its modification time, so the request is served rather than failed. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
+Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index, the row's size and the file's modification time in milliseconds, and a match is a 304 before the `.eml` is parsed. A preview route adds its renderer's format tag, so a fix to the renderer is never answered with a 304. The row's date would not do: it has second precision, and two saves of one draft within a second can keep its size. A file Dovecot just renamed for a flag change, before the index has its new name, answers with the current time in place of its modification time, so the request is served rather than failed. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
 
 The preview routes feed Drive's bytes-in renderers, so the quick look draws a mail part like a Drive file ([PREVIEWS.md](PREVIEWS.md)). They gate on `getBytesTextPreviewMode`, never `getTextPreviewMode`: the sender writes the mime, so a part can't pass as an Eigen document. The routes sit two segments past the index, so a part named `text` can't shadow one. `MessageView` draws the header and body for the reader and the `.eml` quick look alike, so a saved message reads as the message it was.
 
