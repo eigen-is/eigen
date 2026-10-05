@@ -218,8 +218,8 @@ export class Mail {
         return this.store.getSummary(messageId);
     }
 
-    messageGetModifiedAt(messageId: string): Promise<number> {
-        return this.store.getModifiedAt(messageId);
+    messageGetModifiedAt(summary: EmailSummary): Promise<number> {
+        return this.store.getModifiedAt(summary);
     }
 
     async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {

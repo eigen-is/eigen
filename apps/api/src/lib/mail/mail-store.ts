@@ -71,7 +71,7 @@ export interface MailStore {
     getRawMessage(messageId: string): Promise<ArrayBuffer>;
     getAttachments(messageId: string): Promise<Attachment[]>;
     // When the message's bytes were last written, in ms: a draft rewrite moves it within the second.
-    getModifiedAt(messageId: string): Promise<number>;
+    getModifiedAt(email: EmailSummary): Promise<number>;
     // skipReconcile: leave discovery to the next pass. arrival: false for a message the user placed there —
     // indexed and broadcast, but not mail arriving, so it reaches `received` as not new.
     append(mailbox: string, message: Buffer, opts?: { skipReconcile?: boolean; arrival?: boolean }): Promise<string>;

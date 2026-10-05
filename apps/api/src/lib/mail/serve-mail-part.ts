@@ -20,7 +20,7 @@ export async function answerMailPart<T>(
     const summary = mail.messageGetSummary(messageId);
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
 
-    const modifiedAt = await mail.messageGetModifiedAt(messageId);
+    const modifiedAt = await mail.messageGetModifiedAt(summary);
     const etag = `"${summary.id}-${index}-${modifiedAt}-${summary.size}${format ? `-${format}` : ''}"`;
     return answerRevalidated(request, set, etag, async () => serve(await mail.messageGetAttachment(messageId, index)));
 }
