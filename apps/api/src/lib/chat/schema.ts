@@ -1,5 +1,5 @@
 import type { ChatAttachment, ChatMessageType } from '@workspace/lib/types/chat';
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const messages = sqliteTable('messages', {
@@ -14,3 +14,14 @@ export const messages = sqliteTable('messages', {
     deletedAt: integer('deletedAt', { mode: 'timestamp' }),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
+
+// The keyset every page of messages walks. createdAt is whole seconds: rowid breaks the tie, so a page edge
+// inside a second skips nothing.
+export const NEWEST_FIRST = [desc(messages.createdAt), desc(sql`rowid`)];
+
+export function olderThan(cursor: { createdAt: Date; rowid: number }) {
+    return or(
+        lt(messages.createdAt, cursor.createdAt),
+        and(eq(messages.createdAt, cursor.createdAt), lt(sql`rowid`, cursor.rowid)),
+    );
+}
