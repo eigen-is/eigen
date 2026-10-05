@@ -2,7 +2,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sanitizeFtsQuery } from '../core';
 import { ApiError } from '../core/errors';
@@ -110,23 +110,8 @@ export class CommentIndex {
     // The panel's fields only: recentText (~8 KB a thread) is for search, createdBy for no client.
     async list(): Promise<CommentEntry[]> {
         const { comments } = commentSchema;
-        return this.db
-            .select({
-                chatName: comments.chatName,
-                status: comments.status,
-                resolvedBy: comments.resolvedBy,
-                resolvedAt: comments.resolvedAt,
-                lastAuthorEmail: comments.lastAuthorEmail,
-                lastMessageSnippet: comments.lastMessageSnippet,
-                lastActivityAt: comments.lastActivityAt,
-                messageCount: comments.messageCount,
-                createdAt: comments.createdAt,
-                assignee: comments.assignee,
-                title: comments.title,
-            })
-            .from(comments)
-            .orderBy(comments.createdAt)
-            .all();
+        const { recentText: _text, createdBy: _by, ...columns } = getTableColumns(comments);
+        return this.db.select(columns).from(comments).orderBy(comments.createdAt).all();
     }
 
     async searchComments(query: string): Promise<DocCommentMatch[]> {
