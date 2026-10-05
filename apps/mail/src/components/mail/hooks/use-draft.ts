@@ -25,6 +25,7 @@ type DraftFields = {
     driveReferences: AttachmentReference[];
     inReplyTo?: string;
     references?: string[] | string;
+    repliedToId?: string;
     messageId?: string;
 };
 
@@ -160,6 +161,7 @@ export function initFields(
             driveReferences: prefillDraft.driveReferences ?? [],
             inReplyTo: prefillDraft.inReplyTo,
             references: prefillDraft.references,
+            repliedToId: prefillDraft.repliedToId,
             messageId: prefillDraft.messageId,
         };
     }
@@ -204,6 +206,7 @@ function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDr
         html: f.body,
         inReplyTo: f.inReplyTo,
         references: f.references,
+        repliedToId: f.repliedToId,
         messageId: f.messageId,
         driveReferences: f.driveReferences,
     };

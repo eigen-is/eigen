@@ -70,7 +70,7 @@ The client chooses a draft's id, and that id names a file. So the domain answers
 
 `sendMail` returns `false` instead of throwing, so the loop tries every copy. If any is accepted, the draft moves to Sent and the response lists `failedRecipients`. If all fail, the route answers 500. Nothing retries, because a retry would deliver the accepted copies twice.
 
-A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered. A failure to set it is logged and the send still succeeds, for the same reason. The app knows that id only from the router's history state of the compose session Reply opened, so a reply sent later from Drafts marks nothing ([ROADMAP](ROADMAP.md)).
+A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered. A failure to set it is logged and the send still succeeds, for the same reason. The draft's sidecar keeps the id, and a save without one keeps the stored one, since a draft reopened from Drafts never learns it. So a reply sent later from Drafts marks its original too.
 
 ## A send with links splits per external recipient
 

@@ -36,6 +36,7 @@ export type DraftMeta = {
     driveReferences?: AttachmentReference[];
     inReplyTo?: string;
     references?: string[] | string;
+    repliedToId?: string;
     lastFullSaveAt?: number;
 };
 
