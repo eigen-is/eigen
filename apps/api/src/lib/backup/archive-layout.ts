@@ -52,6 +52,8 @@ export const MOUNT_PATH_COLUMNS = {
     type: paths.type,
     parentId: paths.parentId,
     trashedFrom: paths.trashedFrom,
+    size: paths.size,
+    hash: paths.hash,
 };
 
 type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
