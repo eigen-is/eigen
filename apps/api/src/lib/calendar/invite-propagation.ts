@@ -82,10 +82,17 @@ export async function propagateInvitation(
     const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
 
     const organizerEmail = user.email.toLowerCase();
+    // A collaborator writes in the owner's calendar, so the owner already holds the event: they attend it, and nothing is relayed to them.
+    const ownerEmail = organizerHome.user.email.toLowerCase();
 
     for (const attendee of added) {
         if (attendee.email.toLowerCase() === organizerEmail) continue;
         try {
+            if (attendee.email.toLowerCase() === ownerEmail) {
+                await organizerHome.calendar.receiveAttendeeStatus(event.id, attendee.email, 'accepted');
+                organizerHome.calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, event.calendarId);
+                continue;
+            }
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
@@ -136,7 +143,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of removed) {
-        if (attendee.email.toLowerCase() === organizerEmail) continue;
+        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -157,7 +164,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of existing) {
-        if (attendee.email.toLowerCase() === organizerEmail) continue;
+        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
