@@ -62,17 +62,19 @@ export function HomeComponent() {
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
             <EigenCyclingLogo className="text-5xl mb-8" />
             <div className="text-lg text-center mb-8 max-w-md">
-                <div>
-                    <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
-                    <p className="mb-4">
-                        {demoMode
-                            ? 'Explore a shared workspace of a small fictional crew organizing the Tuimel Festival. It resets every hour.'
-                            : 'Simple and secure. You control your data.'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                        Mail, drive, docs, sheets, slides, vector drawings, calendar and chat. Works with your own apps
-                        over IMAP, CalDAV, CardDAV and WebDAV.
-                    </p>
+                <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
+                <div className="text-sm text-muted-foreground text-balance">
+                    {demoMode ? (
+                        <p>
+                            Explore a shared workspace of a small fictional crew organizing the Tuimel Festival. It
+                            resets every hour.
+                        </p>
+                    ) : (
+                        <>
+                            <p>Mail, drive, docs, sheets, slides, drawings, calendar and chat.</p>
+                            <p>Syncs with your own apps over IMAP, CalDAV, CardDAV and WebDAV.</p>
+                        </>
+                    )}
                 </div>
             </div>
 
