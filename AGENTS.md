@@ -37,6 +37,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Sharing and permissions: [ACL.md](docs/ACL.md); guests: [GUEST-ACCESS.md](docs/GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)
 - Collab documents (Yjs, offline, restore): [COLLAB.md](docs/COLLAB.md)
 - Canvas engine (vector + slides): [CANVAS.md](docs/CANVAS.md), [SLIDES.md](docs/SLIDES.md); clipboard: [CLIPBOARD.md](docs/CLIPBOARD.md)
+- Docs app, the eigendoc schema and figures: [DOCS.md](docs/DOCS.md)
 - Sheets: [SHEETS.md](docs/SHEETS.md); stickies: [STICKIES.md](docs/STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](docs/INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
 - Comments: [COMMENTS.md](docs/COMMENTS.md)
 - Mail: [MAIL.md](docs/MAIL.md), [IMAP.md](docs/IMAP.md)
