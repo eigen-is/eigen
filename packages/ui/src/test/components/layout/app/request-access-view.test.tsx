@@ -2,6 +2,7 @@
 // the owner to share instead.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
+import { renderInDocument } from '../../../render-in-document';
 
 installHappyDom();
 
@@ -18,29 +19,17 @@ mock.module('@workspace/lib/drive', () => ({
 const realPublic = await import('@workspace/lib/public');
 mock.module('@workspace/lib/public', () => ({ ...realPublic, usePublicUser: () => ({ data: { name: 'Olivia' } }) }));
 
-const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { act, createElement } = await import('react');
-const { createRoot } = await import('react-dom/client');
+const { createElement } = await import('react');
 const { RequestAccessView } = await import('../../../../components/layout/app/request-access-view');
 
 async function render(guest: boolean): Promise<{ text: string; buttons: string[] }> {
     isGuest = guest;
-    const container = document.createElement('div');
-    document.body.append(container);
-    const root = createRoot(container);
-    await act(async () => {
-        root.render(
-            createElement(
-                QueryClientProvider,
-                { client: new QueryClient() },
-                createElement(RequestAccessView, { ownerId: 'owner-1', mountId: 'default', pathId: 'path-1' }),
-            ),
-        );
-    });
+    const { container, unmount } = await renderInDocument(
+        createElement(RequestAccessView, { ownerId: 'owner-1', mountId: 'default', pathId: 'path-1' }),
+    );
     const text = container.textContent ?? '';
     const buttons = [...container.querySelectorAll('button')].map((button) => button.textContent ?? '');
-    await act(async () => root.unmount());
-    container.remove();
+    await unmount();
     return { text, buttons };
 }
 
