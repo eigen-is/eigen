@@ -305,6 +305,31 @@ describe('Occurrence edits of an invited series', () => {
         expect(ics).toContain('STATUS:CANCELLED');
     });
 
+    // An override that names no guests holds the series' list, so deleting it owes those guests the CANCEL.
+    test('deleting a moved occurrence that names no guests cancels it for the series guests', async () => {
+        const CAROL = 'carol.delete-guestless@example.org';
+        const { series, target } = await seededWithExternal('Weekly Occurrence Delete Guestless', CAROL);
+        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
+        const override = await editOccurrence(series.id, target, {
+            title: 'Guestless Then Deleted',
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+            data: { attendees: [] },
+        });
+        await untilBob(series.uid, (occ) => occ.some((e) => e.title === 'Guestless Then Deleted'));
+
+        const { ics } = await cancelMailTo(CAROL, () =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${override.id}`,
+                { method: 'DELETE' },
+            ),
+        );
+        expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${target.replaceAll('-', '')}T100000`);
+        const occurrences = await untilBob(series.uid, (occ) => occ.length === 3);
+        expect(occurrences.some((e) => e.occurrenceDate === target)).toBe(false);
+    });
+
     // "Delete this" on a moved occurrence: the mail names the slot the guest last saw, the RECURRENCE-ID the original one.
     test('cancelling a moved occurrence mails its moved time', async () => {
         const CAROL = 'carol.cancel-moved@example.org';

@@ -174,7 +174,7 @@ When the organizer deletes, every copy is cancelled. When an attendee deletes, i
 
 A guest holds one linked series, and an override on it inherits the series' link. So every message about one occurrence names the series' event id plus the occurrence key, never the override's own row id. The receiver attaches it through `applyInvitationException`, the same path an iMIP REQUEST with a `RECURRENCE-ID` takes. The `RECURRENCE-ID` names the original instant, which only the series knows once the override has moved.
 
-An override that states no guests inherits the series' list. A stored VEVENT can't tell a client that didn't restate the list from one that emptied it, and reading it as empty would cancel that occurrence for every guest. A guest added to a series then gets every existing override as an update and every cancelled occurrence as a removal, or their copy would show a moved occurrence at its old slot.
+An override that states no guests inherits the series' list. A stored VEVENT can't tell a client that didn't restate the list from one that emptied it, and reading it as empty would cancel that occurrence for every guest. Deleting such an override cancels it for the series' guests. A guest added to a series then gets every existing override as an update and every cancelled occurrence as a removal, or their copy would show a moved occurrence at its old slot.
 
 A series-wide edit of the title, description or location reaches each override that still carried the master's old value. Guests run the same rule, so a moved occurrence is renamed everywhere without a message of its own.
 
