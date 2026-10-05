@@ -5,12 +5,12 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { calendarKeys } from '../../../../core/calendar/hooks/keys';
+import { renderHook } from '../../../render-hook';
 import {
     fetchCalls,
     hasKey,
     installTransferHarness,
     OWNER,
-    renderHook,
     served,
     toasts,
     trackingClient,
@@ -88,7 +88,7 @@ describe('useImportCalendar', () => {
                 drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' },
             });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(driveImportOwners).toEqual([OWNER]);
         expect(driveImportBodies[0]).toEqual({
@@ -114,7 +114,7 @@ describe('useImportCalendar', () => {
                 drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' },
             });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(driveImportOwners).toEqual([TEAM]);
         expect(hasKey(invalidated, calendarKeys.events(TEAM))).toBe(true);
@@ -135,7 +135,7 @@ describe('useImportCalendar', () => {
                 drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' },
             });
         });
-        await act(() => unmount());
+        await unmount();
         driveImportResult = { imported: 2, skipped: 1, failed: 0 };
 
         expect(toasts.at(-1)).toBe('error: 3 events could not be read');
@@ -154,7 +154,7 @@ describe('useImportCalendar', () => {
                 calendarId: CALENDAR,
             });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(fetchCalls[0]!.url).toBe('/mail/owner/message/m1/attachment/0');
         expect(fetchCalls[1]!.url).toContain(`/calendar/${OWNER}/import?calendarId=${CALENDAR}`);
@@ -185,7 +185,7 @@ describe('useImportToCalendar', () => {
         await act(async () => {
             await latest.importToCalendar(DRIVE_SOURCE, { kind: 'existing', ownerId: TEAM, calendarId: CALENDAR });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(created).toEqual([]);
         expect(deleted).toEqual([]);
@@ -201,7 +201,7 @@ describe('useImportToCalendar', () => {
         await act(async () => {
             await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
         expect(driveImportOwners).toEqual([OWNER]);
@@ -219,7 +219,7 @@ describe('useImportToCalendar', () => {
         await act(async () => {
             await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
         expect(deleted).toEqual(['cal-1']);
@@ -242,7 +242,7 @@ describe('useImportToCalendar', () => {
         await act(async () => {
             await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' });
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
         expect(driveImportBodies.map((body) => (body as { calendarId: string }).calendarId)).toEqual(['cal-1']);
@@ -278,7 +278,7 @@ describe('useExportCalendar', () => {
         await act(async () => {
             await latest.exportCalendar(OWNER, CALENDAR);
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(fetchCalls[0]!.url).toEndWith(`/calendar/${OWNER}/export`);
         expect(JSON.parse(String(fetchCalls[0]!.body))).toEqual({ calendarId: CALENDAR });
@@ -294,7 +294,7 @@ describe('useExportCalendar', () => {
         await act(async () => {
             await latest.exportCalendar(TEAM, CALENDAR, ['event-1']);
         });
-        await act(() => unmount());
+        await unmount();
 
         expect(fetchCalls[0]!.url).toEndWith(`/calendar/${TEAM}/export`);
         expect(JSON.parse(String(fetchCalls[0]!.body))).toEqual({ calendarId: CALENDAR, ids: ['event-1'] });

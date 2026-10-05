@@ -6,6 +6,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { backupKeys, invalidateBackup } from '../../../../core/admin/hooks/keys';
 import { handleAdminSSEvent } from '../../../../core/admin/sse-handlers';
 import { installHappyDom } from '../../../happy-dom';
+import { renderHook } from '../../../render-hook';
 
 // react-dom needs a DOM to render the upload hook into.
 installHappyDom();
@@ -102,25 +103,6 @@ describe('handleAdminSSEvent', () => {
     });
 });
 
-// One React root for every hook that has to be rendered to be observed.
-async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ latest: T; unmount: () => void }> {
-    const { act, createElement } = await import('react');
-    const { createRoot } = await import('react-dom/client');
-    const { QueryClientProvider } = await import('@tanstack/react-query');
-
-    const seen: { latest: T | null } = { latest: null };
-    function Harness() {
-        seen.latest = use();
-        return null;
-    }
-    const container = document.createElement('div');
-    const root = createRoot(container);
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
-    });
-    return { latest: seen.latest as T, unmount: () => root.unmount() };
-}
-
 function runningJob(ownerId: string): BackupJob {
     return {
         id: 'job-1',
@@ -145,7 +127,7 @@ async function uploadRefusal(file: File): Promise<string> {
             message = error instanceof Error ? error.message : String(error);
         });
     });
-    await act(() => unmount());
+    await unmount();
     return message;
 }
 
@@ -199,7 +181,7 @@ describe('useBackupJobs', () => {
         });
 
         expect(invalidated).toEqual([[...backupKeys.artifacts(OWNER)]]);
-        await act(() => unmount());
+        await unmount();
     });
 });
 
@@ -217,6 +199,6 @@ describe('useRestoreSafetyCopy', () => {
 
         expect(safetyCalls).toEqual([{ ownerId: OWNER, name: copy }]);
         expect(invalidated).toEqual([[...backupKeys.artifacts(OWNER)], [...backupKeys.jobs(OWNER)]]);
-        await act(() => unmount());
+        await unmount();
     });
 });
