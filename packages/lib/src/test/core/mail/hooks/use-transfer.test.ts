@@ -2,6 +2,7 @@
 // Drive path the server copies, bytes the browser fetched) and lands one message in the inbox, so the
 // copy, the invalidation and the metered bytes are pinned here rather than in each caller.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { ImportMailResult } from '@workspace/lib/types/mail';
 import { emailKeys, mailboxKeys } from '../../../../core/mail/hooks/keys';
 import {
@@ -52,7 +53,7 @@ describe('useImportMail', () => {
         await act(() => unmount());
 
         expect(toasts.at(-1)).toBe('success: Imported to your inbox');
-        expect(hasKey(invalidated, emailKeys.list(OWNER, ''))).toBe(true);
+        expect(hasKey(invalidated, emailKeys.list(OWNER, MAILBOX_INBOX))).toBe(true);
         expect(hasKey(invalidated, mailboxKeys.lists(OWNER))).toBe(true);
     });
 
@@ -70,6 +71,6 @@ describe('useImportMail', () => {
         expect(fetchCalls[0]!.url).toBe('/mail/owner/message/m1/attachment/0');
         expect(fetchCalls[1]!.body).toBeInstanceOf(Blob);
         expect(toasts.at(-1)).toBe('success: Imported to your inbox');
-        expect(hasKey(invalidated, emailKeys.list(OWNER, ''))).toBe(true);
+        expect(hasKey(invalidated, emailKeys.list(OWNER, MAILBOX_INBOX))).toBe(true);
     });
 });

@@ -1,5 +1,5 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -32,6 +32,7 @@ import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
+import { readMailTotalSize } from './maildir-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
@@ -62,6 +63,9 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
 }
 
 export class Mail {
+    // With mail off the store stays closed, yet the mail kept on disk still counts, as a cold read counts it.
+    private keptSize?: number;
+
     constructor(
         private home: Home,
         private store: MailStore,
@@ -73,7 +77,10 @@ export class Mail {
 
     async init(): Promise<void> {
         // Every user Home carries a Mail; with mail off it builds no Maildir and watches nothing.
-        if (!isMailAppEnabled()) return;
+        if (!isMailAppEnabled()) {
+            this.keptSize = await readMailTotalSize(this.home.fs);
+            return;
+        }
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
@@ -98,14 +105,14 @@ export class Mail {
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
-            if (welcome) await this.store.append('', welcome, { skipReconcile: true, arrival: false });
+            if (welcome) await this.store.append(MAILBOX_INBOX, welcome, { skipReconcile: true, arrival: false });
         }
         await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 
     async size(): Promise<number> {
-        return this.store.size();
+        return this.keptSize ?? this.store.size();
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
@@ -122,7 +129,7 @@ export class Mail {
     }
 
     async mailboxDeliver(message: Buffer): Promise<string> {
-        const uniqueId = await this.store.append('', message);
+        const uniqueId = await this.store.append(MAILBOX_INBOX, message);
 
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
@@ -160,7 +167,7 @@ export class Mail {
         }
         await enforceHomeDataQuota(this.home.user.id, bytes.byteLength);
 
-        const id = await this.store.append('', bytes, { arrival: false });
+        const id = await this.store.append(MAILBOX_INBOX, bytes, { arrival: false });
         return { id };
     }
 

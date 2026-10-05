@@ -265,7 +265,7 @@ describe('Backup restoreHome', () => {
         }
 
         await deliverMail(target.email, 'Before the backup');
-        await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
+        await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/inbox`);
 
         const home = await getHome(target.id);
         // A contact photo: the derived webp is written once, at the card write, from the pristine upload,
@@ -371,7 +371,7 @@ describe('Backup restoreHome', () => {
             new File([TEST_PNG_BYTES], 'after-backup.png', { type: 'image/png' }),
         );
         await deliverMail(target.email, 'After the backup');
-        await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
+        await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/inbox`);
         // ...and lose the thumbnail and the contact photo nothing would ever generate again.
         rmSync(keptThumbPath, { force: true });
         rmSync(avatarPath, { force: true });

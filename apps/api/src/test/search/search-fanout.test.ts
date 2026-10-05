@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse } from '@workspace/lib/types/search';
@@ -187,7 +188,7 @@ describe('Search team fan-out', () => {
         const { getHome } = await import('../../lib/home');
         for (let i = 0; i < 40; i++) {
             const home = await getHome(ctx.alice.user.id);
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'zaphodmail', limit: 20 }).length >= 1) break;
             await Bun.sleep(25);
         }

@@ -1,6 +1,6 @@
 # Mail
 
-> **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. The Maildir files are the truth and `mail.db` is only an index rebuilt from them, because Dovecot writes the same files out of process. The inbox has three spellings, one per layer. A send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
+> **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. The Maildir files are the truth and `mail.db` is only an index rebuilt from them, because Dovecot writes the same files out of process. A send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
 
 Every user has one mailbox, and no team or guest has one. Mail exists only on a server that hosts its own mail ([SERVER-SETTINGS.md § What a server without hosted mail leaves out](SERVER-SETTINGS.md#what-a-server-without-hosted-mail-leaves-out)), and on a demo box, which seeds mailboxes without a mail server. Elsewhere every `/mail/` route answers 403 and a home opens no Maildir (`isMailAppEnabled`). A message gets in and out in four ways. The web app talks to the REST routes in `apps/api/src/routes/mail.ts`. A mail client such as Apple Mail or Thunderbird reads the same mailbox over IMAP, which Dovecot serves straight from the files. Postfix, the mail server beside the API, hands every arriving message to the API and carries every send out. And a `.eml` file can be imported, from the computer or from Drive.
 
@@ -26,17 +26,16 @@ DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message),
 
 The reader's sanitize keeps remote images, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`). So a message loads its remote images as it opens, and a tracking pixel tells its sender. Blocking them takes an opt-in toggle or an image proxy, a [ROADMAP](ROADMAP.md) row.
 
-## The inbox has three spellings
+## The inbox is INBOX, and only URLs lowercase it
 
-`packages/lib/src/constants/mailboxes.ts` is the one source of the six standard mailboxes, their special-use flags and their labels. Nobody spells a mailbox by hand. The inbox still differs per layer, the top source of subtle mail bugs:
+`packages/lib/src/constants/mailboxes.ts` is the one source of the six standard mailboxes, their special-use flags and their labels. Nobody spells a mailbox by hand. A mailbox has the name IMAP gives it everywhere inside Eigen, so the inbox is `INBOX` (RFC 3501), the name Dovecot and every mail client use too. Only the URL and the frontend query keys differ, because a URL reads better in lowercase:
 
 | Layer | Inbox | Standard mailbox | Custom folder |
 |---|---|---|---|
-| Backend: DB `mailbox` column, SSE payloads | `''` | `Sent` | verbatim |
-| Frontend query keys (`emailKeys.list`) | `'inbox'` | `sent` | verbatim |
-| URL segment (`mailboxRouteSegment`) | `box/inbox` | `box/sent` | verbatim |
+| DB `mailbox` column, SSE payloads, REST answers | `INBOX` | `Sent` | verbatim |
+| URL segment and query key (`mailboxRouteSegment`) | `box/inbox` | `box/sent` | verbatim |
 
-`canonicalMailbox` turns any spelling into the backend form at every domain entry. It case-folds the standard names, maps `INBOX` to `''`, and folds `/` onto `.`, since both delimiters name one directory. Without the fold, `Clients/Acme` would reach the DB as a second name for `Clients.Acme`. The search box passes the URL's `inbox` as is: `Mail.search` canonicalizes it, and `''` would drop the filter. Optimistic list patches match on the message id, never on a mailbox key.
+`canonicalMailbox` turns any spelling into the canonical one at every domain entry. It case-folds the standard names and folds `/` onto `.`, since both delimiters name one directory. Without the fold, `Clients/Acme` would reach the DB as a second name for `Clients.Acme`. A custom folder keeps its case in the URL, because the server folds only the standard six. So the search box passes the URL's `inbox` as is. Optimistic list patches match on the message id, never on a mailbox key.
 
 ## A mailbox name is a folder name, not an id
 
@@ -99,7 +98,7 @@ The send carries `grantAccessRefIds`, so one send can share some documents and n
 
 ## A mail part is revalidated on every request
 
-Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index, the row's size and the file's modification time in milliseconds, and a match is a 304 before the `.eml` is parsed. The row's date would not do: it has second precision, and two saves of one draft within a second can keep its size. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
+Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index, the row's size and the file's modification time in milliseconds, and a match is a 304 before the `.eml` is parsed. The row's date would not do: it has second precision, and two saves of one draft within a second can keep its size. A file Dovecot just renamed for a flag change, before the index has its new name, answers with the current time in place of its modification time, so the request is served rather than failed. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
 
 The preview routes feed Drive's bytes-in renderers, so the quick look draws a mail part like a Drive file ([PREVIEWS.md](PREVIEWS.md)). They gate on `getBytesTextPreviewMode`, never `getTextPreviewMode`: the sender writes the mime, so a part can't pass as an Eigen document. The routes sit two segments past the index, so a part named `text` can't shadow one. `MessageView` draws the header and body for the reader and the `.eml` quick look alike, so a saved message reads as the message it was.
 

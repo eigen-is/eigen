@@ -115,7 +115,7 @@ function MailRoute() {
     const { data: selectedEmail = null, isPending: isEmailPending } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
     // Canonical mailbox identity for the list context menu — resolve the URL filterId ('inbox'/'sent'/…)
-    // to the mailbox's canonical `path` (inbox = ''), the same identity EmailSummary.mailbox carries and
+    // to the mailbox's canonical `path` ('INBOX'/'Sent'/…), the same identity EmailSummary.mailbox carries and
     // that emailKeys.list normalizes. Lets the menu hide the current box as a move target and drop the
     // already-satisfied Archive/Spam actions instead of offering no-op self-moves.
     const currentFolderId = mailboxes.find((m) => mailboxRouteSegment(m.path) === filterId)?.path;
@@ -124,9 +124,8 @@ function MailRoute() {
 
     // The search box hits the server FTS index scoped to the current mailbox instead of
     // client-filtering the loaded window. filterId ('inbox'/'sent'/…) is passed verbatim — the
-    // BE canonicalises it (inbox -> ''); passing '' here would strip the filter and search all
-    // mailboxes. Capped at the search route's max (50); results replace the paginated list while
-    // searching.
+    // BE case-folds it. Capped at the search route's max (50); results replace the paginated list
+    // while searching.
     const isSearching = searchQuery.trim().length > 0;
     const { data: searchData, isFetching: isSearchFetching } = useSearchQuery({
         ownerId,

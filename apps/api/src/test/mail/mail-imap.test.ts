@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import {
     applyFlagsFromFilename,
@@ -141,7 +142,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const data = await assertJson<MaildirMailbox[]>(res);
 
         const names = data.map((m) => m.path);
-        expect(names).toContain('');
+        expect(names).toContain('INBOX');
         expect(names).toContain('Sent');
         expect(names).toContain('Drafts');
         expect(names).toContain('Trash');
@@ -194,7 +195,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         expect(res.status).toBe(200);
 
         // Check files in cur/
-        const files = readdirSync(curDir(charlieId, ''));
+        const files = readdirSync(curDir(charlieId, MAILBOX_INBOX));
         const newFile = findOrFail(files, (f) => !f.endsWith('.eml') && f.includes(':2,'));
         expect(newFile).toMatch(/^\d+\.M\d+P\d+Q\d+\..+,S=\d+:2,/);
     });
@@ -293,7 +294,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const filename = `${uniqueId},S=${size}:2,S`;
 
         // Simulate Dovecot placing a file directly in cur/
-        writeFileSync(join(curDir(charlieId, ''), filename), eml);
+        writeFileSync(join(curDir(charlieId, MAILBOX_INBOX), filename), eml);
 
         // Background sync reconciles it eventually — poll until it shows up.
         const messages = await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
@@ -311,7 +312,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const filename = `${uniqueId},S=${size}`;
 
         // Place in new/ (no :2, suffix — raw delivery)
-        writeFileSync(join(newDir(charlieId, ''), filename), eml);
+        writeFileSync(join(newDir(charlieId, MAILBOX_INBOX), filename), eml);
 
         // Background sync reconciles it eventually — poll until it shows up.
         const messages = await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
@@ -387,7 +388,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const size = Buffer.byteLength(eml, 'utf-8');
         const filename = `${uniqueId},S=${size}:2,S`;
 
-        writeFileSync(join(curDir(charlieId, ''), filename), eml);
+        writeFileSync(join(curDir(charlieId, MAILBOX_INBOX), filename), eml);
 
         // Poll inbox until the background sync indexes it, so it's in DB before we read it.
         await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
@@ -397,7 +398,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         expect(getRes.status).toBe(200);
 
         // Simulate Dovecot IMAP MOVE: delete from inbox cur/, place in Archive cur/
-        unlinkSync(join(curDir(charlieId, ''), filename));
+        unlinkSync(join(curDir(charlieId, MAILBOX_INBOX), filename));
         writeFileSync(join(curDir(charlieId, 'Archive'), filename), eml);
 
         // Poll both mailboxes until the move is reconciled: gone from inbox, present in Archive.
@@ -416,7 +417,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         // Dovecot adds lowercase keyword flags 'ab' alongside standard flags
         const filename = `${uniqueId},S=${size}:2,Sab`;
 
-        writeFileSync(join(curDir(charlieId, ''), filename), eml);
+        writeFileSync(join(curDir(charlieId, MAILBOX_INBOX), filename), eml);
 
         // Poll until the background sync indexes it.
         const messages = await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));
@@ -432,7 +433,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
             body: JSON.stringify({ read: false }),
         });
 
-        const files = readdirSync(curDir(charlieId, ''));
+        const files = readdirSync(curDir(charlieId, MAILBOX_INBOX));
         const renamedFile = findOrFail(files, (f) => f.startsWith(uniqueId));
         // Should have keyword flags but no S
         expect(renamedFile).toMatch(/:2,ab$/);
@@ -527,8 +528,8 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         expect(res.status).toBe(200);
 
         // After delivery + sync, file should be in cur/, not new/ or tmp/
-        const newFiles = readdirSync(newDir(charlieId, ''));
-        const curFiles = readdirSync(curDir(charlieId, ''));
+        const newFiles = readdirSync(newDir(charlieId, MAILBOX_INBOX));
+        const curFiles = readdirSync(curDir(charlieId, MAILBOX_INBOX));
         const tmpDir = join(maildirOf(charlieId), 'tmp');
         const tmpFiles = readdirSync(tmpDir);
 
@@ -553,7 +554,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         );
         expect(res.status).toBe(200);
 
-        const dir = curDir(charlieId, '');
+        const dir = curDir(charlieId, MAILBOX_INBOX);
         const deliveredFile = findOrFail(readdirSync(dir), (f) => readFileSync(join(dir, f)).includes(marker));
         const onDisk = readFileSync(join(dir, deliveredFile));
 
@@ -572,7 +573,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         const marker = `copy-latin1-${crypto.randomUUID()}`;
         const rawEml = makeRawNonUtf8Eml('Copy Latin-1', ctx.charlie.user.email, marker);
         const uniqueId = createUniqueMessageId();
-        writeFileSync(join(curDir(charlieId, ''), `${uniqueId},S=${rawEml.byteLength}:2,S`), rawEml);
+        writeFileSync(join(curDir(charlieId, MAILBOX_INBOX), `${uniqueId},S=${rawEml.byteLength}:2,S`), rawEml);
 
         // Poll until the background sync learns of it, then copy to Archive.
         await pollList('inbox', (rows) => rows.some((m) => m.id === uniqueId));

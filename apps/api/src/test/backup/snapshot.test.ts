@@ -210,7 +210,7 @@ describe('Backup snapshotHome', () => {
             );
             expect(res.status).toBe(200);
         }
-        await authedRequest(alice.sessionToken, `/mail/${alice.id}/mailbox/`);
+        await authedRequest(alice.sessionToken, `/mail/${alice.id}/mailbox/inbox`);
 
         // A contact card and a calendar event.
         await authedRequest(alice.sessionToken, `/contacts/${alice.id}/contacts`, {

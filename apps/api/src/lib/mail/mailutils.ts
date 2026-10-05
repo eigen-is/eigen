@@ -1,4 +1,6 @@
 import { hostname } from 'node:os';
+import * as path from 'node:path';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { AddressObject, EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
 import { getMailDomain } from '../config/server-config';
 import type { MailFlag } from './mail-store';
@@ -45,6 +47,12 @@ export function getMailIDfromFileName(fileName: string): string {
     const withoutFlags = colonIndex >= 0 ? fileName.substring(0, colonIndex) : fileName;
     const commaIndex = withoutFlags.indexOf(',');
     return commaIndex >= 0 ? withoutFlags.substring(0, commaIndex) : withoutFlags;
+}
+
+// Maildir++: the inbox is the root and any other folder a `.Name` directory in it, where either delimiter
+// addresses one directory (`Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`).
+export function mailboxDir(maildirRoot: string, mailbox: string): string {
+    return mailbox === MAILBOX_INBOX ? maildirRoot : path.join(maildirRoot, `.${mailbox.replaceAll('/', '.')}`);
 }
 
 export function buildMaildirFilename(

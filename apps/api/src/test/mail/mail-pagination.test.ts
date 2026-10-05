@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { seedMaildirFolder } from '../mail-test-helpers';
@@ -53,7 +54,7 @@ async function moveWhenIndexed(ownerId: string, id: string, box: string): Promis
     const { getHome } = await import('../../lib/home');
     const home = await getHome(ownerId);
     for (let i = 0; i < 40; i++) {
-        await home.mail.mailboxGet('');
+        await home.mail.mailboxGet(MAILBOX_INBOX);
         if (await home.mail.messageGet(id)) {
             await home.mail.messageMove(id, box);
             return;

@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import {
     app,
@@ -37,7 +38,7 @@ async function deliverMail(ownerId: string, to: string, subject: string, body: s
     for (let i = 0; i < 40; i++) {
         const home = await getHome(ownerId);
         // Drive a fresh sync so any email sitting in new/ is indexed.
-        await home.mail.mailboxGet('');
+        await home.mail.mailboxGet(MAILBOX_INBOX);
         const hits = home.mail.search({ q: probeWord, limit: 50 });
         if (hits.some((h) => h.subject === subject)) return;
         await Bun.sleep(25);
@@ -109,7 +110,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         let found = false;
         for (let i = 0; i < 40; i++) {
             const home = await getHome(ctx.alice.user.id);
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (
                 home.mail
                     .search({ q: 'distinctive.sender@example.com', limit: 20 })
@@ -143,7 +144,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i++) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'squibbly', limit: 20 }).length > 0) break;
             await Bun.sleep(25);
         }
@@ -193,7 +194,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         let found = false;
         for (let i = 0; i < 40; i++) {
             const home = await getHome(ctx.alice.user.id);
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'jane.doe@example.com', limit: 20 }).length >= 1) {
                 found = true;
                 break;
@@ -223,7 +224,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i += 1) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'floopendish', limit: 50 }).length > 0) break;
             await Bun.sleep(25);
         }
@@ -274,7 +275,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         let found = false;
         for (let i = 0; i < 40; i++) {
             const home = await getHome(ctx.alice.user.id);
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (
                 home.mail
                     .search({ q: 'distinctive.carol@example.com', limit: 20 })
@@ -337,7 +338,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const home = await getHome(ctx.alice.user.id);
         // Poll until both rows are indexed.
         for (let i = 0; i < 40; i++) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'fromfilter', limit: 50 }).length >= 2) break;
             await Bun.sleep(25);
         }
@@ -369,7 +370,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i++) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'tofilter', limit: 20 }).length >= 1) break;
             await Bun.sleep(25);
         }
@@ -406,7 +407,7 @@ describe.skipIf(isWindows)('Mail search (Maildir)', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i++) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'ccfilter', limit: 20 }).length >= 1) break;
             await Bun.sleep(25);
         }
@@ -506,7 +507,9 @@ describe.skipIf(isWindows)('Search endpoint', () => {
             `/search/${ctx.alice.user.id}?q=quorbifax&mailbox=inbox`,
         );
         const lowerData = await assertJson<SearchResponse>(lowerRes);
-        expect(lowerData.mail.some((h) => h.subject === 'Quorbifax inbox normalise test')).toBe(true);
+        const hit = lowerData.mail.find((h) => h.subject === 'Quorbifax inbox normalise test');
+        // The inbox has one name on the wire, the one IMAP gives it.
+        expect(hit?.mailbox).toBe('INBOX');
     });
 
     test('mailbox=trash (any case) reaches the Trash bucket', async () => {
@@ -562,7 +565,7 @@ describe.skipIf(isWindows)('Search endpoint', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i++) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'endpointfrom', limit: 20 }).length >= 2) break;
             await Bun.sleep(25);
         }
@@ -596,7 +599,7 @@ describe.skipIf(isWindows)('Search endpoint', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         for (let i = 0; i < 40; i++) {
-            await home.mail.mailboxGet('');
+            await home.mail.mailboxGet(MAILBOX_INBOX);
             if (home.mail.search({ q: 'endpointto', limit: 20 }).length >= 1) break;
             await Bun.sleep(25);
         }

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_ARCHIVE } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getMailUploadMaxSize } from '../../lib/config/enforcement';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -28,7 +28,7 @@ describe('Mail usage', () => {
         // The welcome mail is appended with skipReconcile, so the index only learns about it on the first
         // sync — one list on the empty DB blocks on that, leaving the deltas below to these messages.
         const home = await getHome(userId);
-        await home.mail.mailboxGet('');
+        await home.mail.mailboxGet(MAILBOX_INBOX);
     });
 
     test('a delivered message is counted by its own bytes', async () => {
@@ -135,7 +135,7 @@ describe('Staged draft attachment usage', () => {
         // The welcome mail is appended with skipReconcile; one list on the empty DB indexes it, so the
         // deltas below belong to the staged files alone.
         const home = await getHome(userId);
-        await home.mail.mailboxGet('');
+        await home.mail.mailboxGet(MAILBOX_INBOX);
     });
 
     async function reportedUsage(): Promise<number> {

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
@@ -20,7 +21,7 @@ describe.skipIf(isWindows)('Mail', () => {
     test('list mailboxes returns structure', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailboxes`);
         const data = await assertJson<MaildirMailbox[]>(res);
-        const inbox = findOrFail(data, (mailbox) => mailbox.path === '');
+        const inbox = findOrFail(data, (mailbox) => mailbox.path === MAILBOX_INBOX);
         expect(inbox.flags).toContain('\\Inbox');
     });
 

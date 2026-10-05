@@ -9,13 +9,12 @@ import { createTestUser, ensureServer } from '../setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mail-schema-${Date.now()}`);
 
-// The shape a home carries before the label drop: the v1..v4 migrations, whose v1 creates
-// `email_labels` + `emails_to_labels`.
-const V4_CONFIG: DatabaseConfig<typeof schema> = {
+// The shape a home carries at an older schema version: the migrations up to it.
+const configAt = (version: number): DatabaseConfig<typeof schema> => ({
     ...MAIL_DB_CONFIG,
-    currentVersion: 4,
-    migrations: MAIL_DB_CONFIG.migrations.filter((m) => m.version <= 4),
-};
+    currentVersion: version,
+    migrations: MAIL_DB_CONFIG.migrations.filter((m) => m.version <= version),
+});
 
 // A WAL database its owner is not holding open has no -shm beside it, and a read-only open of one
 // fails outright. Read-write on purpose; only ever used for SELECTs and the v4 seed.
@@ -55,7 +54,8 @@ describe('mail.db schema', () => {
 
     test('a v4 home drops its label tables and keeps every message row', async () => {
         const dbPath = join(TEST_DIR, 'mail-v4.db');
-        const v4 = new ManagedDatabase(V4_CONFIG, dbPath, {});
+        // v1 creates `email_labels` + `emails_to_labels`.
+        const v4 = new ManagedDatabase(configAt(4), dbPath, {});
         await v4.open(0);
         v4.db
             .insert(schema.emails)
@@ -95,5 +95,28 @@ describe('mail.db schema', () => {
         expect(names).toContain('emails');
         expect(names).not.toContain('email_labels');
         expect(names).not.toContain('emails_to_labels');
+    });
+
+    test('a v5 home names its inbox INBOX and keeps every other mailbox', async () => {
+        const dbPath = join(TEST_DIR, 'mail-v5.db');
+        const v5 = new ManagedDatabase(configAt(5), dbPath, {});
+        await v5.open(0);
+        await v5.close({ skipFinalSnapshot: true });
+
+        const seed = openRaw(dbPath);
+        seed.run(
+            `INSERT INTO emails (id, filename, subject, fromShort, textShort, date, mailbox)
+             VALUES ('in', 'in:2,S', 'In', 'A', 'a', 0, ''), ('out', 'out:2,S', 'Out', 'B', 'b', 0, 'Sent')`,
+        );
+        seed.close();
+
+        const v6 = new ManagedDatabase(MAIL_DB_CONFIG, dbPath, {}, true);
+        await v6.open(0);
+        const rows = v6.db.select({ id: schema.emails.id, mailbox: schema.emails.mailbox }).from(schema.emails).all();
+        expect(rows.sort((a, b) => a.id.localeCompare(b.id))).toEqual([
+            { id: 'in', mailbox: 'INBOX' },
+            { id: 'out', mailbox: 'Sent' },
+        ]);
+        await v6.close({ skipFinalSnapshot: true });
     });
 });

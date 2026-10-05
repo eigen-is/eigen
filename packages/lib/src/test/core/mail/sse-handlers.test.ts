@@ -2,6 +2,7 @@
 // list (the unread counts) once, while each message list it touched still refetches at once.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { emailKeys, mailboxKeys } from '../../../core/mail/hooks/keys';
 import { handleMailSSEvent } from '../../../core/mail/sse-handlers';
@@ -34,11 +35,11 @@ describe('handleMailSSEvent — burst', () => {
         const { queryClient, touched } = trackingClient();
 
         for (let i = 0; i < 50; i++) {
-            const event = { type: SSEventType.MAIL_RECEIVED, mail: { messageId: `msg-${i}`, mailbox: '' } };
+            const event = { type: SSEventType.MAIL_RECEIVED, mail: { messageId: `msg-${i}`, mailbox: MAILBOX_INBOX } };
             expect(handleMailSSEvent(event, queryClient, owner)).toBe(true);
         }
 
-        expect(countKey(touched, emailKeys.list(owner, ''))).toBe(50);
+        expect(countKey(touched, emailKeys.list(owner, MAILBOX_INBOX))).toBe(50);
         expect(countKey(touched, mailboxKeys.lists(owner))).toBe(0);
 
         await settle();

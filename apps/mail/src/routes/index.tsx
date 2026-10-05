@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { MAILBOX_INBOX_KEY } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_INBOX, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
 
 export const Route = createFileRoute('/')({
     beforeLoad: () => {
@@ -7,7 +7,7 @@ export const Route = createFileRoute('/')({
             to: '/$filterType/$filterId',
             params: {
                 filterType: 'box',
-                filterId: MAILBOX_INBOX_KEY,
+                filterId: mailboxRouteSegment(MAILBOX_INBOX),
             },
         });
     },

@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 5,
+    currentVersion: 6,
     schema,
     migrations: [
         {
@@ -110,6 +110,11 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 DROP TABLE IF EXISTS emails_to_labels;
                 DROP TABLE IF EXISTS email_labels;
             `),
+        },
+        {
+            // An index written before v6 names the inbox ''.
+            version: 6,
+            up: (db) => db.exec(`UPDATE emails SET mailbox = 'INBOX' WHERE mailbox = ''`),
         },
     ],
 };

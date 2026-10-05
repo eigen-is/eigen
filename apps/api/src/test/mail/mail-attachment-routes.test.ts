@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, setSystemTime, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { renameSync } from 'node:fs';
+import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
 import type { EmailSummary } from '@workspace/lib/types/mail';
@@ -11,6 +14,7 @@ import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
 import * as mailParse from '../../lib/mail/mail-parse';
+import { boxDir } from '../mail-test-helpers';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -341,6 +345,30 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         } finally {
             setSystemTime();
         }
+    });
+
+    // Dovecot renames a message file on a flag change, and the index learns the new name a moment later.
+    test('a part whose file was just renamed answers as changed, not as an error', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const upload = await uploadDraftAttachment(token, ownerId, new File(['AAA'], 'a.txt', { type: 'text/plain' }));
+        const draft = await putDraft(
+            token,
+            ownerId,
+            { subject: 'Renamed draft', text: 'body', html: '<p>body</p>', isDraft: true, mailbox: MAILBOX_DRAFTS },
+            { tempAttachmentIds: [upload.tempId] },
+        );
+        const partUrl = `/mail/${ownerId}/message/${draft.id}/attachment/0/part.txt`;
+        const before = await authedRequest(token, partUrl);
+        expect(await before.text()).toBe('AAA');
+        const staleEtag = before.headers.get('etag') ?? '';
+
+        const cur = join(boxDir(ownerId, MAILBOX_DRAFTS), 'cur');
+        renameSync(join(cur, draft.filename), join(cur, `${draft.filename}F`));
+
+        const revalidated = await authedRequest(token, partUrl, { headers: { 'if-none-match': staleEtag } });
+        expect(revalidated.status).toBe(200);
+        expect(await revalidated.text()).toBe('AAA');
     });
 
     test('the download route serves a range as 206', async () => {
