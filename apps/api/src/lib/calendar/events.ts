@@ -140,7 +140,7 @@ async function propagateWrite(
     // A name missing from the list the guests held cancels that instance.
     const held = heldAttendees(previous, series);
     const attendees = heldAttendees(event, series);
-    // A write that names nobody and replaced nobody owes the guests nothing; emptying the list cancels.
+    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
     if (!attendees.length && !held.length) return;
     // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
