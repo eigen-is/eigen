@@ -196,6 +196,22 @@ describe('Contacts import', () => {
         expect(card.firstName).toBe('Grace');
     });
 
+    test('an imported card never claims the self-link, by X-EIGEN-ID or by owner email', async () => {
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
+        // With no self row, a device PUT carrying either claim would take the link.
+        db.delete(contactsSchema.contacts).where(eq(contactsSchema.contacts.eigenId, user.id)).run();
+        const text =
+            card30('Forged Id', 'forged@example.com', randomUUID(), [`X-EIGEN-ID:${user.id}`]) +
+            card30('Owner Mail', user.email, randomUUID());
+
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 2, skipped: 0, failed: 0 });
+
+        expect(
+            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.eigenId, user.id)).get(),
+        ).toBeUndefined();
+    });
+
     test('text that is not a vCard file throws 400', async () => {
         const { instance: contacts } = await makeContacts();
         await expect(contacts.importCards(fileBytes('just some notes\n'))).rejects.toMatchObject({ status: 400 });

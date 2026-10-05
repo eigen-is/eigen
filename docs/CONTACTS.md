@@ -56,7 +56,7 @@ Metering switches on at the very end of init. The quota lookup opens the Home, a
 
 ## Import replays each card through the CardDAV PUT
 
-`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted.
+`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted. An imported card never claims the self-link, because nobody inspects an imported card one by one (`import: true` on `putCard`).
 
 The file is decoded as strict UTF-8, because a lenient decode would store replacement characters in every accented name and serve them to devices. Both import routes lift the server idle timeout, since a whole book answers nothing until its last card lands.
 
