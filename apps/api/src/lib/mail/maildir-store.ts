@@ -288,7 +288,14 @@ export class MaildirStore implements MailStore {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
         const filePath = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename);
-        return (await this.storage.stat(filePath)).mtimeMs;
+        // A flag change from Dovecot renames the file before the index hears of it: answer "changed", never a 500.
+        return this.storage.stat(filePath).then(
+            (stats) => stats.mtimeMs,
+            (err) => {
+                if (!isEnoent(err)) throw err;
+                return Date.now();
+            },
+        );
     }
 
     async append(
