@@ -59,6 +59,7 @@ export const EMOTE_COMMANDS: EmoteCommandDef[] = [
     { key: 'insult', desc: 'Son of a motherless ogre', canTarget: true },
     { key: 'introduce', desc: 'Introduce yourself', canTarget: true },
     { key: 'laugh', aliases: ['lol'], desc: 'Laugh', canTarget: true },
+    { key: 'mindblown', desc: 'Pshhhh. Mind blown.', canTarget: true },
     { key: 'mock', desc: 'Mock life and all it stands for', canTarget: true },
     { key: 'moo', desc: 'Mooooooooooo', canTarget: true },
     { key: 'moon', desc: 'Moon everyone', canTarget: true },
