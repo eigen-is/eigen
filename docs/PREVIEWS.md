@@ -141,6 +141,8 @@ The build decodes strict UTF-8 and parses no more cards than an import accepts. 
 
 The overlay and the drive hero render a body with `dangerouslySetInnerHTML`, with no iframe and no shadow root, so it takes the app's styles. Text and documents sit in `.eigen-prose` (`packages/ui/src/styles/eigen-prose.css`), which the docs editor shares.
 
+A doc sits on the docs page, its box from `pageBoxStyle` ([DOCS.md](DOCS.md#one-page-setup-sizes-every-page-a-doc-is-drawn-on)), in quick look and in the drive hero. The hero puts markdown, plain text and code on that page too, so every text thumbnail is a miniature of that page, margins included.
+
 Two bodies bring their own box. A deck and a drawing are compositor pages composed at `CANVAS_PREVIEW_WIDTH`, so the hero scales them from a known width with no wrapper class. A sheet is a bare grid whose floating images sit at declared pixels, so `.eigensheets-preview` in `globals.css` undoes the two app rules that would move the grid under them.
 
 Drive's inline editor shows the same body read-only and loads Tiptap or CodeMirror only on Edit (`apps/drive/src/components/editor/native-file-editor.tsx`).

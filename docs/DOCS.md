@@ -38,9 +38,17 @@ A figure stores its width and never its height, so the height always follows the
 
 An insert, a drop or a pasted image file writes the figure with the pending name `startUpload` returns, so the image shows on the next frame. When the upload settles, `swapFigureMediaName` rewrites every figure still holding that name to the real one, or removes the figure if the upload failed. A figure whose name never resolves shows `ImagePlaceholder`. The mechanics, and the sweep that clears a pending name a closed tab left behind, are in [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md#a-new-upload-renders-from-a-pending-name).
 
+## One page setup sizes every page a doc is drawn on
+
+Every doc is an A4 page with 2 cm margins. One `PageSetup` in millimetres describes it (`DEFAULT_PAGE_SETUP`, `packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it: the editor's page and its layout math, browser print, quick look, the Drive thumbnail, the HTML export, the PDF and the docx. Each takes the unit it needs: pixels at 96 dpi for layout math (`pagePx`), a width and padding for a page box on screen (`pageBoxStyle`), a CSS `@page` rule for paper (`pageAtRule`) and twips for the docx (`pageTwips`). One value means no surface can disagree with another, so what prints is what the editor shows.
+
+On screen the margins are the page box's padding. On paper the `@page` rule draws them, so browser print zeroes the cloned page's padding and width (`apps/docs/css/globals.css`). Without that, the margins would print twice.
+
+File → **Page setup…** shows the page in a dialog whose controls are all disabled. A doc carries no page of its own: page size and margins per document is a [ROADMAP](ROADMAP.md) row.
+
 ## The page keeps its width and slides, then scales, clear of a panel
 
-The page is a fixed A4 sheet, 210 mm wide with 2 cm margins (`A4_WIDTH_PX` and `PAGE_MARGIN_PX`), centered in a scroll box. Its width never changes, so a line breaks in the same place on every screen, and the drive preview and the HTML export lay the doc out at the same A4 width ([EXPORT.md](EXPORT.md#every-format-but-xlsx-and-svg-is-one-html-document)).
+The page is centered in a scroll box. Its width never changes, so a line breaks in the same place on every screen, and the drive preview and the HTML export lay the doc out at the same width ([EXPORT.md](EXPORT.md#every-format-but-xlsx-and-svg-is-one-html-document)).
 
 A panel is an absolute overlay on the right of the scroll box, so opening one never reflows the page. Only the text column has to stay clear of it: the page's right margin may tuck under. Below `PANEL_CLEAR_WIDTH_PX` the page slides left by its overlap with the panel, and scales down only once the space left of the page runs out. A screen narrower than the page scales it too. The scale is a CSS transform with a negative bottom margin that gives back the space the transform frees.
 
