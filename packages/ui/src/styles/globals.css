@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./fonts.css";
+@import "./font-weights.css";
 @import "./eigen-prose.css";
 @import "./canvas-text.css";
 
@@ -270,13 +271,6 @@
             height: 0;
         }
     }
-}
-
-@theme {
-    --font-weight-normal: 400;
-    --font-weight-medium: 450;
-    --font-weight-semibold: 525;
-    --font-weight-bold: 600;
 }
 
 @layer base {

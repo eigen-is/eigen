@@ -12,6 +12,7 @@ import {
 import { escapeHtml } from '@workspace/lib/html';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
+import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
@@ -58,6 +59,8 @@ const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
 const proseCSS = flattenEigenProseCSS(eigenProseCSSRaw);
+// The app's @theme weight scale, which eigen-prose.css reads through var().
+const fontWeightsCSS = fontWeightsCSSRaw.replace(/^@theme\b/m, ':root');
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
@@ -84,7 +87,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${proseCSS}${PRINT_EXTRAS}</style>
+    <style>${getFontCSS()}${fontWeightsCSS}${proseCSS}${PRINT_EXTRAS}</style>
 </head>
 <body>
     <div class="page">

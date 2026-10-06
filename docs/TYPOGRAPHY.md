@@ -23,7 +23,7 @@ All four are licensed under the SIL Open Font License (OFL 1.1). The license ask
 
 ## The weight scale is lighter than Tailwind's
 
-One `@theme` block in `globals.css` sets `--font-weight-medium` to 450, `--font-weight-semibold` to 525 and `--font-weight-bold` to 600. So `font-bold` renders at 600, not 700. The body and the prose headings read these tokens, so the whole scale is tuned in that one block. The variable faces render the in-between weights exactly.
+One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--font-weight-medium` to 450, `--font-weight-semibold` to 525 and `--font-weight-bold` to 600. So `font-bold` renders at 600, not 700. The body and the prose headings read these tokens, so the whole scale is tuned in that one block. The doc export reads the same file and declares it under `:root`, because `eigen-prose.css` reads the weights through `var()`. The variable faces render the in-between weights exactly.
 
 ## The registry's order is load-bearing
 

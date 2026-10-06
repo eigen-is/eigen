@@ -10,6 +10,11 @@ function seededDoc(): Y.Doc {
     return doc;
 }
 
+async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
+    const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', []);
+    return new TextDecoder().decode(data).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
+}
+
 describe('doc export — the page', () => {
     test.each(['html', 'pdf-html'] as const)('%s draws the docs page and prints on it', async (format) => {
         const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', []);
@@ -32,5 +37,23 @@ describe('doc export — the page', () => {
         expect(pgSz).toContain('w:h="16838"');
         const pgMar = xml?.match(/<w:pgMar\b[^>]*>/)?.[0];
         for (const side of ['top', 'right', 'bottom', 'left']) expect(pgMar).toContain(`w:${side}="1134"`);
+    });
+});
+
+describe('doc export — the stylesheet', () => {
+    test('every var() without a fallback is defined in the same stylesheet', async () => {
+        const css = await exportStyle('pdf-html');
+        const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+        const undefinedVars = new Set(
+            [...css.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)].map((m) => m[1]).filter((name) => !defined.has(name)),
+        );
+        // The editor-only search flash (.search-flash-match) is the one rule no exported element carries.
+        expect([...undefinedVars].sort()).toEqual(['--background', '--radius', '--warning']);
+    });
+
+    test('bold and headings get the app weight scale', async () => {
+        const root = (await exportStyle('pdf-html')).match(/:root\s*\{([^}]*)\}/)?.[1];
+        expect(root).toContain('--font-weight-medium: 450;');
+        expect(root).toContain('--font-weight-bold: 600;');
     });
 });
