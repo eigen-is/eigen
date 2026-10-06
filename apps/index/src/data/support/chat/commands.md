@@ -5,7 +5,7 @@ type: reference
 tags: [chat, commands, slash, emotes, whisper]
 related: [chat/get-started, chat/mentions, chat/send-messages]
 order: 120
-updated: 2026-09-13
+updated: 2026-10-06
 ---
 
 Chat has a set of slash commands you type directly in the message box. Start typing `/` and a suggestion list
@@ -103,6 +103,7 @@ The table below lists every emote. Aliases shown alongside the primary name also
 | `/insult` | Son of a motherless ogre |
 | `/introduce` | Introduce yourself |
 | `/laugh`, `/lol` | Laugh |
+| `/mindblown` | Pshhhh. Mind blown. |
 | `/mock` | Mock life and all it stands for |
 | `/moo` | Mooooooooooo |
 | `/moon` | Moon everyone |

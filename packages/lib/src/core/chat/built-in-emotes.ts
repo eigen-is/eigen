@@ -344,6 +344,16 @@ export const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedSecondPerson: '{name} claps vigorously for you, clearly impressed.',
         targetedThirdPerson: '{name} claps vigorously for {target}, clearly impressed.',
     },
+    mindblown: {
+        firstPerson: 'You touch your temples and slowly spread your hands. Pshhhh. Mind blown.',
+        thirdPerson: '{name} touches their temples and slowly spreads their hands. Pshhhh. Mind blown.',
+        targetedFirstPerson:
+            'You look at {target}, touch your temples and slowly spread your hands. Pshhhh. Mind blown.',
+        targetedSecondPerson:
+            '{name} looks at you, touches their temples and slowly spreads their hands. Pshhhh. Mind blown.',
+        targetedThirdPerson:
+            '{name} looks at {target}, touches their temples and slowly spreads their hands. Pshhhh. Mind blown.',
+    },
     wince: {
         firstPerson: 'You wince sympathetically.',
         thirdPerson: '{name} winces sympathetically.',
