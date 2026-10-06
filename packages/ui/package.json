@@ -93,6 +93,7 @@
     "./components/upload-provider": "./src/components/upload-provider/index.ts",
     "./components/user": "./src/components/user/index.ts",
     "./components/vector": "./src/components/vector/index.ts",
-    "./hooks/*": "./src/hooks/*.ts"
+    "./hooks/*": "./src/hooks/*.ts",
+    "./test/*": "./src/test/*.ts"
   }
 }

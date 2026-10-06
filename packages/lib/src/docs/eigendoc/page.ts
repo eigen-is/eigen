@@ -2,9 +2,14 @@
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
 export type PageSetup = { width: number; height: number; margin: PageMargin };
 
+// Portrait sizes; a landscape page is the same paper turned.
+export const PAPER_SIZES = [{ name: 'A4', width: 210, height: 297 }] as const;
+
+const [A4] = PAPER_SIZES;
+
 export const DEFAULT_PAGE_SETUP: PageSetup = {
-    width: 210,
-    height: 297,
+    width: A4.width,
+    height: A4.height,
     margin: { top: 20, right: 20, bottom: 20, left: 20 },
 };
 
