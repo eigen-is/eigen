@@ -1,7 +1,14 @@
 /// <reference path="../modules.d.ts" />
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    type FigureAttrs,
+    getDocExtensions,
+    pageAtRule,
+    pageBoxStyle,
+    pageTwips,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
@@ -38,9 +45,11 @@ export async function renderEigendocExport(
     if (format !== 'docx') return { data: toTransferableText(html), warnings: [] };
 
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
+    const { width, height, margin } = pageTwips(DEFAULT_PAGE_SETUP);
     const docx = await HTMLtoDOCX(html, undefined, {
         title: stripEigenExtension(title),
-        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+        pageSize: { width, height },
+        margins: margin,
     });
     return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
 }
@@ -164,11 +173,10 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
     return results.join('\n');
 }
 
+const PAGE_BOX = pageBoxStyle(DEFAULT_PAGE_SETUP);
+
 const PRINT_EXTRAS = `
-@page {
-    size: A4;
-    margin: 2.5cm;
-}
+${pageAtRule(DEFAULT_PAGE_SETUP)}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -187,12 +195,12 @@ body {
     padding: 0;
 }
 
-/* Match the editor/quick-preview layout: A4 width with 2cm padding (screen only) */
+/* The docs page as the editor and quick look draw it (screen only) */
 .page {
-    width: 210mm;
+    width: ${PAGE_BOX.width};
     max-width: 100%;
     margin: 0 auto;
-    padding: 2cm;
+    padding: ${PAGE_BOX.padding};
     overflow-wrap: anywhere;
 }
 
