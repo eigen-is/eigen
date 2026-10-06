@@ -28,9 +28,7 @@ way to format text and manage the file.
 
 The toolbar has three areas:
 
-- **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing
-  one, import a Word file, download, rename, share, see the page setup, print, view version history, and move the document
-  to the trash.
+- **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing one, import a Word file, download, rename, share, email collaborators, view version history, see the page setup, print, and move the document to the trash.
 - **Formatting controls**, in the center. Change the font, heading level (Normal text, Heading 1
   through Heading 4), and character formatting: **Bold**, **Italic**, **Underline**, **Strikethrough**,
   and more. You can also set text color, highlight color, alignment, and list style (bulleted,
