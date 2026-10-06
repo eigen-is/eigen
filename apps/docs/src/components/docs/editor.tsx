@@ -170,6 +170,8 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 // The page at 96 dpi, for the layout math below and the text column before the page mounts.
 const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
 const TEXT_COLUMN_WIDTH_PX = PAGE_PX.width - PAGE_PX.margin.left - PAGE_PX.margin.right;
+const PAGE_BOX_STYLE = pageBoxStyle(DEFAULT_PAGE_SETUP);
+const PAGE_AT_RULE = pageAtRule(DEFAULT_PAGE_SETUP);
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
@@ -917,8 +919,8 @@ const TiptapEditor = ({
                             }
                         >
                             <div className="h-full relative overflow-hidden">
-                                {/* Paper carries the page's margins, so the printed clone drops its padding (globals.css). */}
-                                <style>{`@media print { ${pageAtRule(DEFAULT_PAGE_SETUP)} }`}</style>
+                                {/* Paper carries the page's margins, so the printed clone drops its padding and width (globals.css). */}
+                                <style>{PAGE_AT_RULE}</style>
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
@@ -940,7 +942,7 @@ const TiptapEditor = ({
                                         )}
                                         ref={setDocumentEl}
                                         style={{
-                                            ...pageBoxStyle(DEFAULT_PAGE_SETUP),
+                                            ...PAGE_BOX_STYLE,
                                             ...(needsScale
                                                 ? {
                                                       transform: `scale(${canvasScale})`,

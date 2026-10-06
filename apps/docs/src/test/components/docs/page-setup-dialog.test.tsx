@@ -1,7 +1,5 @@
 // Page setup shows the one page every doc is laid out on, read-only until a document can carry its own.
 import { afterEach, expect, test } from 'bun:test';
-import type { PageSetup } from '@workspace/lib/docs/eigendoc';
-import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -19,12 +17,12 @@ function control(label: string): HTMLElement | null {
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function render(setup: PageSetup, onOpenChange: (open: boolean) => void = () => {}) {
-    ({ unmount } = await renderInDocument(createElement(PageSetupDialog, { open: true, onOpenChange, setup })));
+async function render(onOpenChange: (open: boolean) => void = () => {}) {
+    ({ unmount } = await renderInDocument(createElement(PageSetupDialog, { open: true, onOpenChange })));
 }
 
 test('the default page is portrait A4 with 2 cm margins, and nothing can be changed', async () => {
-    await render(DEFAULT_PAGE_SETUP);
+    await render();
 
     expect(control('Portrait')?.getAttribute('aria-checked')).toBe('true');
     expect(control('Landscape')?.getAttribute('aria-checked')).toBe('false');
@@ -43,20 +41,14 @@ test('the default page is portrait A4 with 2 cm margins, and nothing can be chan
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Every document uses this page for now.');
 });
 
-test('a landscape page is still A4', async () => {
-    await render({ ...DEFAULT_PAGE_SETUP, width: 297, height: 210 });
-
-    expect(control('Portrait')?.getAttribute('aria-checked')).toBe('false');
-    expect(control('Landscape')?.getAttribute('aria-checked')).toBe('true');
-    expect(control('Paper size')?.textContent).toBe('A4 (21.0 cm × 29.7 cm)');
-});
-
-test('Close closes the dialog', async () => {
+test('one Close button closes the dialog', async () => {
     const calls: boolean[] = [];
-    await render(DEFAULT_PAGE_SETUP, (open) => calls.push(open));
+    await render((open) => calls.push(open));
 
-    const close = document.querySelector<HTMLButtonElement>('[data-slot="dialog-footer"] button');
-    expect(close?.textContent).toBe('Close');
-    await act(async () => close?.click());
+    const closes = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].filter(
+        (button) => button.textContent === 'Close',
+    );
+    expect(closes.length).toBe(1);
+    await act(async () => closes[0]?.click());
     expect(calls).toEqual([false]);
 });

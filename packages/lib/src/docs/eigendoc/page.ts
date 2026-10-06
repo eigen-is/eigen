@@ -1,4 +1,4 @@
-// The docs page, in millimetres because paper is defined in them. Orientation is width > height.
+// In millimetres because paper is defined in them; pagePx and pageTwips return this shape in their unit. Orientation is width > height.
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
 export type PageSetup = { width: number; height: number; margin: PageMargin };
 

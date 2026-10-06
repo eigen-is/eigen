@@ -9,6 +9,9 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
+  "devDependencies": {
+    "happy-dom": "^20.14.0"
+  },
   "dependencies": {
     "@tanstack/react-hotkeys": "^0.1.3",
     "@workspace/lib": "workspace:*",

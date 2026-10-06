@@ -2,7 +2,6 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
@@ -748,7 +747,7 @@ export const EditorToolbar = ({
                 </DialogContent>
             </Dialog>
 
-            <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} setup={DEFAULT_PAGE_SETUP} />
+            <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} />
 
             <ExportProgressDialog open={isExporting} />
 

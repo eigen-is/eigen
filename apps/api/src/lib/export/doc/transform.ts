@@ -204,23 +204,19 @@ body {
     overflow-wrap: anywhere;
 }
 
-/* For PDF: @page margin handles whitespace, so remove .page padding */
+/* For PDF: @page draws the margins and the paper sets the width, so .page drops its padding and width */
 @media print {
     .page { padding: 0; width: auto; }
 }
 
-/* Page break avoidance */
 figure, table, pre, blockquote { page-break-inside: avoid; }
 
-/* Clear floats before structural elements */
 h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
 
-/* Text alignment (tiptap output classes) */
 .has-text-align-center { text-align: center; }
 .has-text-align-right { text-align: right; }
 .has-text-align-left { text-align: left; }
 
-/* Ensure pre wraps for PDF */
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */

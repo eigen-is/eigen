@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_PAGE_SETUP, pageAtRule, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
 import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
@@ -15,14 +14,13 @@ describe('doc export — the page', () => {
     test.each(['html', 'pdf-html'] as const)('%s draws the docs page and prints on it', async (format) => {
         const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', []);
         const html = new TextDecoder().decode(data);
-        const box = pageBoxStyle(DEFAULT_PAGE_SETUP);
 
-        expect(html).toContain(pageAtRule(DEFAULT_PAGE_SETUP));
+        expect(html).toContain('@page { size: 210mm 297mm; margin: 20mm 20mm 20mm 20mm; }');
         expect(html).not.toContain('2.5cm');
-        // The first .page rule is the screen page; the print one under it drops the padding for @page's margin.
+        // The first .page rule is the screen page; the print one under it leaves the margins and width to @page.
         const pageRule = html.match(/\.page \{([^}]*)\}/)?.[1];
-        expect(pageRule).toContain(`width: ${box.width};`);
-        expect(pageRule).toContain(`padding: ${box.padding};`);
+        expect(pageRule).toContain('width: 210mm;');
+        expect(pageRule).toContain('padding: 20mm 20mm 20mm 20mm;');
     });
 
     test('docx is an A4 page with 2 cm margins', async () => {

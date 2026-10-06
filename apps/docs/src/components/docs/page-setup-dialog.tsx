@@ -1,5 +1,5 @@
-import type { PageMargin, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { PAPER_SIZES } from '@workspace/lib/docs/eigendoc';
+import type { PageMargin } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, PAPER_SIZES } from '@workspace/lib/docs/eigendoc';
 import {
     Dialog,
     DialogContent,
@@ -17,7 +17,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 type PageSetupDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    setup: PageSetup;
 };
 
 const MARGIN_FIELDS: { side: keyof PageMargin; label: string }[] = [
@@ -27,17 +26,17 @@ const MARGIN_FIELDS: { side: keyof PageMargin; label: string }[] = [
     { side: 'right', label: 'Right' },
 ];
 
-const cm = (mm: number) => (mm / 10).toFixed(1);
+const cm = (mm: number) => mm / 10;
+
+const paper = PAPER_SIZES.find(
+    (size) => size.width === DEFAULT_PAGE_SETUP.width && size.height === DEFAULT_PAGE_SETUP.height,
+);
 
 // Read-only until a document carries its own page: every control is disabled, not absent.
-export function PageSetupDialog({ open, onOpenChange, setup }: PageSetupDialogProps) {
-    const short = Math.min(setup.width, setup.height);
-    const long = Math.max(setup.width, setup.height);
-    const paper = PAPER_SIZES.find((size) => size.width === short && size.height === long);
-
+export function PageSetupDialog({ open, onOpenChange }: PageSetupDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="md">
+            <DialogContent size="md" showCloseButton={false}>
                 <DialogHeader>
                     <DialogTitle>Page setup</DialogTitle>
                     <DialogDescription>Every document uses this page for now.</DialogDescription>
@@ -47,7 +46,10 @@ export function PageSetupDialog({ open, onOpenChange, setup }: PageSetupDialogPr
                     <div className="flex flex-col gap-6">
                         <FieldSet>
                             <FieldLegend variant="label">Orientation</FieldLegend>
-                            <RadioGroup value={setup.width > setup.height ? 'landscape' : 'portrait'} disabled>
+                            <RadioGroup
+                                value={DEFAULT_PAGE_SETUP.width > DEFAULT_PAGE_SETUP.height ? 'landscape' : 'portrait'}
+                                disabled
+                            >
                                 <div className="flex items-center gap-2">
                                     <RadioGroupItem value="portrait" id="page-setup-portrait" />
                                     <Label htmlFor="page-setup-portrait">Portrait</Label>
@@ -66,9 +68,9 @@ export function PageSetupDialog({ open, onOpenChange, setup }: PageSetupDialogPr
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {PAPER_SIZES.map((size) => (
-                                        <SelectItem key={size.name} value={size.name}>
-                                            {size.name} ({cm(size.width)} cm × {cm(size.height)} cm)
+                                    {PAPER_SIZES.map(({ name, width, height }) => (
+                                        <SelectItem key={name} value={name}>
+                                            {name} ({cm(width).toFixed(1)} cm × {cm(height).toFixed(1)} cm)
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -85,7 +87,7 @@ export function PageSetupDialog({ open, onOpenChange, setup }: PageSetupDialogPr
                                     id={`page-setup-${side}`}
                                     type="number"
                                     className="w-24"
-                                    value={setup.margin[side] / 10}
+                                    value={cm(DEFAULT_PAGE_SETUP.margin[side])}
                                     disabled
                                 />
                             </Field>

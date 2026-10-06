@@ -753,10 +753,10 @@ describe('document transform (xlsx import)', () => {
 // moved again when the two DOM boxes started drawing their paint with roughjs: the bordered image gained a
 // rough border path, and every painted rich-text box gained an svg backdrop before its text div while its
 // style dropped the CSS background and radius. The two doc export hashes moved when the page came from
-// the one page setup: the @page rule, the .page padding and its comment, and nothing else.
+// the one page setup: the @page rule, the .page padding and the print CSS comments, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'e2623d3a9c1e69ea8f7e85590d11880e4c3c8510524286b9a027cb38ea44d014';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'e2623d3a9c1e69ea8f7e85590d11880e4c3c8510524286b9a027cb38ea44d014';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '35d400fd9fdfaeca2ca6ae646abfb21a15b24c6ce03c99870317f44270a14511';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '35d400fd9fdfaeca2ca6ae646abfb21a15b24c6ce03c99870317f44270a14511';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';

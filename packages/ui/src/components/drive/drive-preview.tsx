@@ -205,11 +205,14 @@ function VCardRow({ contact }: { contact: Contact }) {
     );
 }
 
-type IntrinsicPage = { widthPx: number; style: { width: string; padding?: string } };
+type IntrinsicPage = { widthPx: number; padding?: string };
 
 // Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page.
-const DOC_PAGE: IntrinsicPage = { widthPx: pagePx(DEFAULT_PAGE_SETUP).width, style: pageBoxStyle(DEFAULT_PAGE_SETUP) };
-const CANVAS_PAGE: IntrinsicPage = { widthPx: CANVAS_PREVIEW_WIDTH, style: { width: `${CANVAS_PREVIEW_WIDTH}px` } };
+const DOC_PAGE: IntrinsicPage = {
+    widthPx: pagePx(DEFAULT_PAGE_SETUP).width,
+    padding: pageBoxStyle(DEFAULT_PAGE_SETUP).padding,
+};
+const CANVAS_PAGE: IntrinsicPage = { widthPx: CANVAS_PREVIEW_WIDTH };
 
 // The page a mode composes on, so the hero scales by containerW / its width: a deck and a drawing both
 // compose at CANVAS_PREVIEW_WIDTH. Sheets vary with their content — null falls back to measuring the rendered body.
@@ -268,7 +271,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                 style={{
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
-                    ...page?.style,
+                    ...(page ? { width: `${page.widthPx}px`, padding: page.padding } : null),
                 }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />

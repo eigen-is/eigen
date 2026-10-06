@@ -1,12 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    DEFAULT_PAGE_SETUP,
-    type PageSetup,
-    pageAtRule,
-    pageBoxStyle,
-    pagePx,
-    pageTwips,
-} from '../../../docs/eigendoc';
+import type { PageSetup } from '../../../docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, pageAtRule, pageBoxStyle, pagePx, pageTwips } from '../../../docs/eigendoc';
 
 // Landscape A4 with four different margins, so no derivation can hide a hard-coded value or a swapped side.
 const LANDSCAPE: PageSetup = { width: 297, height: 210, margin: { top: 10, right: 15, bottom: 25, left: 30 } };
