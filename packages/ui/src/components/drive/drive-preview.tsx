@@ -249,17 +249,16 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const [scale, setScale] = useState(1);
 
     const page = data ? INTRINSIC_PAGE[data.mode] : null;
-    const intrinsicWidth = page?.widthPx;
 
     useEffect(() => {
         if (containerW === 0) return;
-        if (intrinsicWidth) {
-            setScale(containerW / intrinsicWidth);
+        if (page) {
+            setScale(containerW / page.widthPx);
             return;
         }
         const contentW = contentRef.current?.scrollWidth ?? 0;
         if (contentW > 0) setScale(containerW / contentW);
-    }, [containerW, contentBox, data?.body, intrinsicWidth]);
+    }, [containerW, contentBox, data?.body, page]);
 
     if (!data?.body) return null;
 

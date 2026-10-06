@@ -3,7 +3,8 @@
 // upload from the device and a pick from Drive alike.
 import { expect, mock, test } from 'bun:test';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
-import { DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -23,25 +24,7 @@ const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { DocumentImportPicker } = await import('../../../components/drive/document-import-picker');
 
-const path: DrivePath = {
-    id: 'path-1',
-    mountId: 'default',
-    name: 'Budget.eigensheets',
-    type: 'file',
-    parentId: null,
-    ownerId: 'owner-1',
-    mimeType: DRIVE_MIME_SHEETS,
-    size: 0,
-    hash: null,
-    thumbnail: null,
-    acl: null,
-    visibility: 'private',
-    sharingRestricted: false,
-    details: null,
-    trashedAt: null,
-    createdAt: new Date('2026-09-20T09:00:00Z'),
-    updatedAt: new Date('2026-09-20T09:00:00Z'),
-};
+const path = drivePath({ name: 'Budget.eigensheets', mimeType: DRIVE_MIME_SHEETS });
 
 async function dialogTitleWhile(state: typeof pending): Promise<string | null> {
     Object.assign(pending, state);

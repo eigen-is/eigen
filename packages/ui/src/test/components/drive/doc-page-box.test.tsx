@@ -2,8 +2,8 @@
 // one page setup the editor uses: the same width, and the page's margins as its padding.
 import { expect, mock, test } from 'bun:test';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC, DRIVE_TYPE_DOC } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -25,25 +25,12 @@ const { PreviewContext } = await import('../../../components/preview-provider/pr
 const { FilePreview } = await import('../../../components/drive/file-preview');
 const { DrivePreview } = await import('../../../components/drive/drive-preview');
 
-const path: DrivePath = {
-    id: 'path-1',
-    mountId: 'default',
+const path = drivePath({
     name: 'Quarterly report.eigendoc',
     type: DRIVE_TYPE_DOC,
-    parentId: null,
-    ownerId: 'owner-1',
     mimeType: DRIVE_MIME_DOC,
     size: 2048,
-    hash: null,
-    thumbnail: null,
-    acl: null,
-    visibility: 'private',
-    sharingRestricted: false,
-    details: null,
-    trashedAt: null,
-    createdAt: new Date('2026-09-20T09:00:00Z'),
-    updatedAt: new Date('2026-09-20T09:00:00Z'),
-};
+});
 
 const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
 

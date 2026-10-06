@@ -2,8 +2,9 @@
 // What is pinned here is who is offered which way: a writer gets the version list to restore from, and a
 // reader, who cannot restore, is not told to.
 import { expect, mock, test } from 'bun:test';
-import { DRIVE_MIME_DOC, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
+import { drivePath } from '../../../drive-path';
 import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
@@ -25,25 +26,7 @@ const { createRoot } = await import('react-dom/client');
 const { formatDateTime } = await import('@workspace/lib/date');
 const { CollabLoadingState } = await import('../../../../components/layout/app/collab-loading-state');
 
-const path: DrivePath = {
-    id: 'path-1',
-    mountId: 'default',
-    name: 'Minutes.eigendoc',
-    type: 'file',
-    parentId: null,
-    ownerId: 'owner-1',
-    mimeType: DRIVE_MIME_DOC,
-    size: 0,
-    hash: null,
-    thumbnail: null,
-    acl: null,
-    visibility: 'private',
-    sharingRestricted: false,
-    details: null,
-    trashedAt: null,
-    createdAt: new Date('2026-09-20T09:00:00Z'),
-    updatedAt: new Date('2026-09-20T09:00:00Z'),
-};
+const path = drivePath({ name: 'Minutes.eigendoc', mimeType: DRIVE_MIME_DOC });
 
 async function goneScreen(canWrite: boolean): Promise<{ text: string; rows: string[] }> {
     const container = document.createElement('div');

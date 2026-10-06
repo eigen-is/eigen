@@ -10,53 +10,39 @@ order: 10
 updated: 2026-10-06
 ---
 
-Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and
-share it with other people who can edit alongside you in real time. This page is a quick tour of what
-you can do.
+Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time. This page is a quick tour of what you can do.
 
 ## Create a document
 
-Click **New doc** in the sidebar. A dialog opens where you can give the document a name and choose a
-location in Drive. Click **Create** and the document opens straight away.
+Click **New doc** in the sidebar. A dialog opens where you can give the document a name and choose a location in Drive. Click **Create** and the document opens straight away.
 
 You can also create a document from Drive by clicking **New** and choosing **New doc** from the menu.
 
 ## The editor and its toolbar
 
-The document opens on an A4 page with 2 cm margins. At the top you will find the toolbar, which is the main
-way to format text and manage the file.
+The document opens on an A4 page with 2 cm margins. At the top you will find the toolbar, which is the main way to format text and manage the file.
 
 The toolbar has three areas:
 
 - **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing one, import a Word file, download, rename, share, email collaborators, view version history, see the page setup, print, and move the document to the trash.
-- **Formatting controls**, in the center. Change the font, heading level (Normal text, Heading 1
-  through Heading 4), and character formatting: **Bold**, **Italic**, **Underline**, **Strikethrough**,
-  and more. You can also set text color, highlight color, alignment, and list style (bulleted,
-  numbered, or checklist) here.
+- **Formatting controls**, in the center. Change the font, heading level (Normal text, Heading 1 through Heading 4), and character formatting: **Bold**, **Italic**, **Underline**, **Strikethrough**, and more. You can also set text color, highlight color, alignment, and list style (bulleted, numbered, or checklist) here.
 - **Share** and **Comments** buttons, on the right.
 
-On a narrow screen the formatting controls move into **Format** and **Insert** dropdown
-menus to save space.
+On a narrow screen the formatting controls move into **Format** and **Insert** dropdown menus to save space.
 
 ## Your changes save automatically
 
-There is no Save button. Every change you make is saved to the server as you type. You can close the
-tab at any time without losing work.
+There is no Save button. Every change you make is saved to the server as you type. You can close the tab at any time without losing work.
 
 ## Edit with others
 
-Docs supports real-time editing. Share the document with other people (see
-[Share a document and set access](/support/docs/share-a-document)), and anyone with **Editor** access
-can work on it at the same time as you. Their cursor appears in the document labeled with their name.
+Docs supports real-time editing. Share the document with other people (see [Share a document and set access](/support/docs/share-a-document)), and anyone with **Editor** access can work on it at the same time as you. Their cursor appears in the document labeled with their name.
 
-If you have **Viewer** access to a document, the toolbar shows an eye icon in place of the **Share**
-button and the text is not editable.
+If you have **Viewer** access to a document, the toolbar shows an eye icon in place of the **Share** button and the text is not editable.
 
 ## Comments
 
-You can attach comments to any piece of text. Select the text, right-click, and choose **Add comment**.
-A panel opens on the right where you can reply and track discussions. Click the **Comments** button in
-the toolbar to open or close the panel. See [Comment and discuss](/support/docs/comments) for details.
+You can attach comments to any piece of text. Select the text, right-click, and choose **Add comment**. A panel opens on the right where you can reply and track discussions. Click the **Comments** button in the toolbar to open or close the panel. See [Comment and discuss](/support/docs/comments) for details.
 
 ## Export and import
 
@@ -66,13 +52,10 @@ To download a copy of the document, open the **File** menu and go to **Download*
 - **PDF (.pdf)**
 - **Web Page (.html)**
 
-To bring content from a Word file into the current document, open the **File** menu and choose
-**Import docx file…**. See [Export to Word, PDF, or HTML](/support/docs/export) and
-[Import a Word document](/support/docs/import-word) for more.
+To bring content from a Word file into the current document, open the **File** menu and choose **Import docx file…**. See [Export to Word, PDF, or HTML](/support/docs/export) and [Import a Word document](/support/docs/import-word) for more.
 
 ## Keep things tidy
 
 - **Rename** a document from the **File** menu or from its context menu in Drive.
-- **Move to trash** to delete it. Deleted documents are not removed immediately and can be
-  restored from the Drive Trash.
+- **Move to trash** to delete it. Deleted documents are not removed immediately and can be restored from the Drive Trash.
 - Use **Version history** in the **File** menu to restore an earlier state of the document.

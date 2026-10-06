@@ -169,13 +169,13 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 
 // The page at 96 dpi, for the layout math below and the text column before the page mounts.
 const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
-const TEXT_COLUMN_WIDTH_PX = PAGE_PX.width - PAGE_PX.margin.left - PAGE_PX.margin.right;
+// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
+const TEXT_COLUMN_RIGHT_PX = PAGE_PX.width - PAGE_PX.margin.right;
+const TEXT_COLUMN_WIDTH_PX = TEXT_COLUMN_RIGHT_PX - PAGE_PX.margin.left;
 const PAGE_STYLESHEET = pageStylesheet(DEFAULT_PAGE_SETUP, '[data-document]');
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
-// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
-const TEXT_COLUMN_RIGHT_PX = PAGE_PX.width - PAGE_PX.margin.right;
 // Above this the panel clears the centered page outright: every value below is pinned, so stop storing width.
 const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - PAGE_PX.width;
 

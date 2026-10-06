@@ -163,9 +163,6 @@
         "y-websocket": "^3.1.0",
         "yjs": "^13.6.32",
       },
-      "devDependencies": {
-        "happy-dom": "^20.14.0",
-      },
     },
     "apps/drive": {
       "name": "@apps/drive",

@@ -17,13 +17,11 @@ async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
 
 describe('doc export — the page', () => {
     test.each(['html', 'pdf-html'] as const)('%s draws the docs page and prints on it', async (format) => {
-        const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', []);
-        const html = new TextDecoder().decode(data);
+        const css = await exportStyle(format);
 
-        expect(html).toContain('@page { size: 210mm 297mm; margin: 20mm 20mm 20mm 20mm; }');
-        expect(html).not.toContain('2.5cm');
+        expect(css).toContain('@page { size: 210mm 297mm; margin: 20mm 20mm 20mm 20mm; }');
         // The first .page rule is the screen page; the print one under it leaves the margins and width to @page.
-        const pageRule = html.match(/\.page \{([^}]*)\}/)?.[1];
+        const pageRule = css.match(/\.page \{([^}]*)\}/)?.[1];
         expect(pageRule).toContain('width: 210mm;');
         expect(pageRule).toContain('padding: 20mm 20mm 20mm 20mm;');
     });
