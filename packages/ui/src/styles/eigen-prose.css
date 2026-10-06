@@ -498,24 +498,3 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
         background-color: transparent;
     }
 }
-
-/* ===== In-document search flash (docs) =====
-   The steady-state prosemirror-search classes are styled in globals.css beside
-   .eigen-search-match — one source of truth for the wash/ring values. Only the one-shot
-   palette-reveal flash lives here: a background FADE (0.8s, mixed with --background so it
-   settles onto the page), deliberately not merged with globals' eigen-search-ring-flash,
-   which is a box-shadow PULSE (1.1s) — different property, duration, and mix base. */
-
-.tiptap .search-flash-match {
-    border-radius: calc(var(--radius) - 3px);
-    animation: eigen-search-flash 0.8s ease-out;
-}
-
-@keyframes eigen-search-flash {
-    from {
-        background-color: color-mix(in oklab, var(--warning) 45%, var(--background));
-    }
-    to {
-        background-color: transparent;
-    }
-}

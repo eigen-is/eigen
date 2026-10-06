@@ -58,9 +58,15 @@ export async function renderEigendocExport(
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
+// The app's weight scale, rounded: WeasyPrint drops any font-weight that is not a multiple of 100.
+const FONT_WEIGHTS = new Map(
+    [...fontWeightsCSSRaw.matchAll(/(--font-weight-[\w-]+):\s*(\d+);/g)].map(([, name, weight]) => [
+        name,
+        String(Math.round(Number(weight) / 100) * 100),
+    ]),
+);
+
 const proseCSS = flattenEigenProseCSS(eigenProseCSSRaw);
-// The app's @theme weight scale, which eigen-prose.css reads through var().
-const fontWeightsCSS = fontWeightsCSSRaw.replace(/^@theme\b/m, ':root');
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
@@ -87,7 +93,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${fontWeightsCSS}${proseCSS}${PRINT_EXTRAS}</style>
+    <style>${getFontCSS()}${proseCSS}${PRINT_EXTRAS}</style>
 </head>
 <body>
     <div class="page">
@@ -124,7 +130,8 @@ function flattenEigenProseCSS(raw: string): string {
         .replace(/var\(--color-muted-foreground\)/g, '#6b7280')
         .replace(/var\(--color-primary\)/g, '#2563eb')
         .replace(/var\(--color-link,\s*#2563eb\)/g, '#2563eb')
-        .replace(/var\(--color-selected\)/g, '#bfdbfe');
+        .replace(/var\(--color-selected\)/g, '#bfdbfe')
+        .replace(/var\((--font-weight-[\w-]+)\)/g, (match, name: string) => FONT_WEIGHTS.get(name) ?? match);
 
     return css;
 }

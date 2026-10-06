@@ -41,19 +41,14 @@ describe('doc export — the page', () => {
 });
 
 describe('doc export — the stylesheet', () => {
-    test('every var() without a fallback is defined in the same stylesheet', async () => {
-        const css = await exportStyle('pdf-html');
-        const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
-        const undefinedVars = new Set(
-            [...css.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)].map((m) => m[1]).filter((name) => !defined.has(name)),
-        );
-        // The editor-only search flash (.search-flash-match) is the one rule no exported element carries.
-        expect([...undefinedVars].sort()).toEqual(['--background', '--radius', '--warning']);
+    test('no CSS variable survives into the export', async () => {
+        expect(await exportStyle('pdf-html')).not.toContain('var(');
     });
 
-    test('bold and headings get the app weight scale', async () => {
-        const root = (await exportStyle('pdf-html')).match(/:root\s*\{([^}]*)\}/)?.[1];
-        expect(root).toContain('--font-weight-medium: 450;');
-        expect(root).toContain('--font-weight-bold: 600;');
+    test('headings print at medium and bold at 600', async () => {
+        const css = await exportStyle('pdf-html');
+        expect(css).toMatch(/h6 \{[^}]*font-weight: 500;/);
+        expect(css).toMatch(/\.eigen-prose th \{[^}]*font-weight: 500;/);
+        expect(css).toMatch(/strong \{ font-weight: 600; \}/);
     });
 });

@@ -1,5 +1,5 @@
-/* The weight scale, lighter than Tailwind's. The doc export reads this file as text
-   and declares it under :root, so the export prints the weights the app draws. */
+/* The weight scale, lighter than Tailwind's. The doc export reads this file as text and
+   writes each var() as its value, rounded to the nearest 100 for WeasyPrint. */
 @theme {
     --font-weight-normal: 400;
     --font-weight-medium: 450;
