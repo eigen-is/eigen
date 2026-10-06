@@ -6,6 +6,7 @@ declare module '@turbodocx/html-to-docx' {
         headerHtml?: string,
         options?: {
             title?: string;
+            pageSize?: { width?: number; height?: number };
             margins?: { top?: number; right?: number; bottom?: number; left?: number };
         },
     ): Promise<ArrayBuffer>;

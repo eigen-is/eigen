@@ -1,10 +1,17 @@
 /// <reference path="../modules.d.ts" />
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    type FigureAttrs,
+    getDocExtensions,
+    pageStylesheet,
+    pageTwips,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
+import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
@@ -40,13 +47,22 @@ export async function renderEigendocExport(
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
     const docx = await HTMLtoDOCX(html, undefined, {
         title: stripEigenExtension(title),
-        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+        pageSize: { width: PAGE_TWIPS.width, height: PAGE_TWIPS.height },
+        margins: PAGE_TWIPS.margin,
     });
     return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
 }
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
+
+// The app's weight scale, rounded: WeasyPrint drops any font-weight that is not a multiple of 100.
+const FONT_WEIGHTS = new Map(
+    [...fontWeightsCSSRaw.matchAll(/(--font-weight-[\w-]+):\s*(\d+);/g)].map(([, name, weight]) => [
+        name,
+        String(Math.round(Number(weight) / 100) * 100),
+    ]),
+);
 
 const proseCSS = flattenEigenProseCSS(eigenProseCSSRaw);
 
@@ -112,7 +128,8 @@ function flattenEigenProseCSS(raw: string): string {
         .replace(/var\(--color-muted-foreground\)/g, '#6b7280')
         .replace(/var\(--color-primary\)/g, '#2563eb')
         .replace(/var\(--color-link,\s*#2563eb\)/g, '#2563eb')
-        .replace(/var\(--color-selected\)/g, '#bfdbfe');
+        .replace(/var\(--color-selected\)/g, '#bfdbfe')
+        .replace(/var\((--font-weight-[\w-]+)\)/g, (match, name: string) => FONT_WEIGHTS.get(name) ?? match);
 
     return css;
 }
@@ -164,11 +181,11 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
     return results.join('\n');
 }
 
+const PAGE_TWIPS = pageTwips(DEFAULT_PAGE_SETUP);
+
 const PRINT_EXTRAS = `
-@page {
-    size: A4;
-    margin: 2.5cm;
-}
+/* The docs page as the editor draws it; on paper @page draws the margins */
+${pageStylesheet(DEFAULT_PAGE_SETUP, '.page')}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -187,32 +204,20 @@ body {
     padding: 0;
 }
 
-/* Match the editor/quick-preview layout: A4 width with 2cm padding (screen only) */
 .page {
-    width: 210mm;
     max-width: 100%;
     margin: 0 auto;
-    padding: 2cm;
     overflow-wrap: anywhere;
 }
 
-/* For PDF: @page margin handles whitespace, so remove .page padding */
-@media print {
-    .page { padding: 0; width: auto; }
-}
-
-/* Page break avoidance */
 figure, table, pre, blockquote { page-break-inside: avoid; }
 
-/* Clear floats before structural elements */
 h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
 
-/* Text alignment (tiptap output classes) */
 .has-text-align-center { text-align: center; }
 .has-text-align-right { text-align: right; }
 .has-text-align-left { text-align: left; }
 
-/* Ensure pre wraps for PDF */
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */

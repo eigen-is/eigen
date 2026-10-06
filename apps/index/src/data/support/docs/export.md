@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-06-08
+updated: 2026-10-06
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original
@@ -35,6 +35,8 @@ formats are available.
 
 The exported file contains the document text and all formatting: headings, lists, tables, images,
 code blocks, and other content. Comment threads are not included in the exported file.
+
+The PDF and the Word file use the same page as the editor: A4 with 2 cm margins. You can see it under **File → Page setup…**.
 
 <div class="eigen-callout">
 

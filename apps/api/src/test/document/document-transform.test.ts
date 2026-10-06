@@ -752,10 +752,14 @@ describe('document transform (xlsx import)', () => {
 // rather than for its own breakpoint: one CSS scale value in the wrapping document, nothing else. All three
 // moved again when the two DOM boxes started drawing their paint with roughjs: the bordered image gained a
 // rough border path, and every painted rich-text box gained an svg backdrop before its text div while its
-// style dropped the CSS background and radius.
+// style dropped the CSS background and radius. The two doc export hashes moved when the page came from
+// the one page setup: the @page rule, the .page padding and the print CSS comments, and nothing else.
+// They moved again when the export resolved the weight scale to values (headings 500, bold 600) and dropped the
+// editor-only search flash: those lines, and nothing else.
+// And again when the page box, @page and the print reset came from one page stylesheet: the same rules, reordered.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'd5e01e5cd564cabf6d69b6fe777c69dd36023f9faa7068d77b58cdd0ed6dd327';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'd5e01e5cd564cabf6d69b6fe777c69dd36023f9faa7068d77b58cdd0ed6dd327';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '828aef8ca3e02eae5093fb948b519df8d3755fb0b0b8d0ad9f648a2f3e016e3c';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '828aef8ca3e02eae5093fb948b519df8d3755fb0b0b8d0ad9f648a2f3e016e3c';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';

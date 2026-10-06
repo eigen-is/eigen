@@ -46,6 +46,7 @@ import {
     ChevronDown,
     Code,
     CodeXml,
+    FileSliders,
     Heading1,
     Heading2,
     Heading3,
@@ -71,6 +72,7 @@ import {
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
+import { PageSetupDialog } from './page-setup-dialog';
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -112,6 +114,7 @@ export const EditorToolbar = ({
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+    const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
@@ -183,6 +186,9 @@ export const EditorToolbar = ({
                             createLabel="New doc"
                             createType="doc"
                         >
+                            <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
+                                <FileSliders className="h-4 w-4 mr-2" /> Page setup…
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={printDocument}>
                                 <Printer className="h-4 w-4 mr-2" /> Print
                             </DropdownMenuItem>
@@ -740,6 +746,8 @@ export const EditorToolbar = ({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} />
 
             <ExportProgressDialog open={isExporting} />
 

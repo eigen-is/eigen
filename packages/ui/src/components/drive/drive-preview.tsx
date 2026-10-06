@@ -5,7 +5,7 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
-import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -205,17 +205,25 @@ function VCardRow({ contact }: { contact: Contact }) {
     );
 }
 
-// The width a mode composes at, so the hero scales by containerW / that width: text modes render
-// into an A4 page, a deck and a drawing both compose at CANVAS_PREVIEW_WIDTH. Sheets vary with
-// their content — null falls back to measuring the rendered body.
-const INTRINSIC_WIDTH: Record<TextPreviewMode, number | null> = {
-    eigendoc: A4_WIDTH_PX,
-    eigenslides: CANVAS_PREVIEW_WIDTH,
+type IntrinsicPage = { widthPx: number; padding?: string };
+
+// Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page.
+const DOC_PAGE: IntrinsicPage = {
+    widthPx: pagePx(DEFAULT_PAGE_SETUP).width,
+    padding: pageBoxStyle(DEFAULT_PAGE_SETUP).padding,
+};
+const CANVAS_PAGE: IntrinsicPage = { widthPx: CANVAS_PREVIEW_WIDTH };
+
+// The page a mode composes on, so the hero scales by containerW / its width: a deck and a drawing both
+// compose at CANVAS_PREVIEW_WIDTH. Sheets vary with their content — null falls back to measuring the rendered body.
+const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
+    eigendoc: DOC_PAGE,
+    eigenslides: CANVAS_PAGE,
     eigensheets: null,
-    eigenvector: CANVAS_PREVIEW_WIDTH,
-    markdown: A4_WIDTH_PX,
-    plaintext: A4_WIDTH_PX,
-    code: A4_WIDTH_PX,
+    eigenvector: CANVAS_PAGE,
+    markdown: DOC_PAGE,
+    plaintext: DOC_PAGE,
+    code: DOC_PAGE,
 };
 
 // eigen-prose for rendered prose, drive-preview-code for raw <pre><code> blocks — eigen-prose's
@@ -240,19 +248,17 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const [setContent, contentBox] = useElementSize(contentRef);
     const [scale, setScale] = useState(1);
 
-    const intrinsicWidth = data ? INTRINSIC_WIDTH[data.mode] : null;
-    // The A4 page's own margin, so a text thumbnail is a proportional miniature of the printed page.
-    const intrinsicPadding = intrinsicWidth === A4_WIDTH_PX ? '2cm' : undefined;
+    const page = data ? INTRINSIC_PAGE[data.mode] : null;
 
     useEffect(() => {
         if (containerW === 0) return;
-        if (intrinsicWidth) {
-            setScale(containerW / intrinsicWidth);
+        if (page) {
+            setScale(containerW / page.widthPx);
             return;
         }
         const contentW = contentRef.current?.scrollWidth ?? 0;
         if (contentW > 0) setScale(containerW / contentW);
-    }, [containerW, contentBox, data?.body, intrinsicWidth]);
+    }, [containerW, contentBox, data?.body, page]);
 
     if (!data?.body) return null;
 
@@ -264,8 +270,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                 style={{
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
-                    ...(intrinsicWidth ? { width: `${intrinsicWidth}px` } : null),
-                    ...(intrinsicPadding ? { padding: intrinsicPadding } : null),
+                    ...(page ? { width: `${page.widthPx}px`, padding: page.padding } : null),
                 }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />

@@ -1,0 +1,8 @@
+/* The weight scale, lighter than Tailwind's. The doc export reads this file as text and
+   writes each var() as its value, rounded to the nearest 100 for WeasyPrint. */
+@theme {
+    --font-weight-normal: 400;
+    --font-weight-medium: 450;
+    --font-weight-semibold: 525;
+    --font-weight-bold: 600;
+}

@@ -3,7 +3,7 @@
 // changed — it has to follow the cell.
 
 import { expect, test } from 'bun:test';
-import { installHappyDom } from '../../happy-dom';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 

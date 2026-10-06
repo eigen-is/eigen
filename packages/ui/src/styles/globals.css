@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./fonts.css";
+@import "./font-weights.css";
 @import "./eigen-prose.css";
 @import "./canvas-text.css";
 
@@ -270,13 +271,6 @@
             height: 0;
         }
     }
-}
-
-@theme {
-    --font-weight-normal: 400;
-    --font-weight-medium: 450;
-    --font-weight-semibold: 525;
-    --font-weight-bold: 600;
 }
 
 @layer base {
@@ -618,6 +612,23 @@
         }
         100% {
             box-shadow: 0 0 0 0 transparent;
+        }
+    }
+
+    /* The docs palette-reveal flash: a background FADE (0.8s, mixed with --background so it settles
+       onto the page), deliberately not merged with eigen-search-ring-flash above, which is a
+       box-shadow PULSE (1.1s): different property, duration, and mix base. */
+    .tiptap .search-flash-match {
+        border-radius: calc(var(--radius) - 3px);
+        animation: eigen-search-flash 0.8s ease-out;
+    }
+
+    @keyframes eigen-search-flash {
+        from {
+            background-color: color-mix(in oklab, var(--warning) 45%, var(--background));
+        }
+        to {
+            background-color: transparent;
         }
     }
 

@@ -1,27 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { browseCapabilities, DRIVE_CAPABILITIES } from '../../../components/drive/drive-capabilities';
+import { drivePath } from '../../drive-path';
 
-const path = {
-    id: 'p1',
-    mountId: 'm1',
-    name: 'Report.pdf',
-    type: 'file',
-    parentId: 'root',
-    ownerId: 'someone-else',
-    mimeType: 'application/pdf',
-    size: 10,
-    hash: null,
-    thumbnail: null,
-    acl: null,
-    visibility: 'private',
-    sharingRestricted: false,
-    details: null,
-    trashedAt: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-} satisfies DrivePath;
+const path = drivePath({ name: 'Report.pdf', mimeType: 'application/pdf', ownerId: 'someone-else' });
 
 describe('browseCapabilities', () => {
     test('a viewer who can write gets the full browser', () => {

@@ -1,5 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
+import { DEFAULT_PAGE_SETUP, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
 import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
@@ -241,6 +242,8 @@ function MailTextPreviewContent({ part }: { part: MailPartRef }) {
     return <TextPreviewBody data={data} isLoading={isLoading} />;
 }
 
+const DOC_PAGE_BOX_STYLE = pageBoxStyle(DEFAULT_PAGE_SETUP);
+
 function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefined; isLoading: boolean }) {
     if (isLoading) {
         return (
@@ -261,7 +264,7 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
     return (
         <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {data.mode === 'eigendoc' ? (
-                <div className="p-[2cm] w-[210mm] mx-auto">
+                <div className="mx-auto" style={DOC_PAGE_BOX_STYLE}>
                     <div className="eigen-prose tiptap" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : data.mode === 'eigenslides' ? (

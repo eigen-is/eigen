@@ -3,7 +3,7 @@
 // answered yet reaches: a query still disabled (the owner is not known until auth settles) has no data
 // and is not fetching either, and must read as loading rather than as a file that could not be read.
 import { expect, mock, test } from 'bun:test';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -26,25 +26,7 @@ const { VCardPreviewContent } = await import('../../../components/drive/vcard-pr
 const { EmlPreviewContent } = await import('../../../components/drive/eml-preview-content');
 const { IcsPreviewContent } = await import('../../../components/drive/ics-preview-content');
 
-const path: DrivePath = {
-    id: 'path-1',
-    mountId: 'default',
-    name: 'Autumn market.ics',
-    type: 'file',
-    parentId: null,
-    ownerId: 'owner-1',
-    mimeType: 'text/calendar',
-    size: 2048,
-    hash: null,
-    thumbnail: null,
-    acl: null,
-    visibility: 'private',
-    sharingRestricted: false,
-    details: null,
-    trashedAt: null,
-    createdAt: new Date('2026-09-20T09:00:00Z'),
-    updatedAt: new Date('2026-09-20T09:00:00Z'),
-};
+const path = drivePath({ name: 'Autumn market.ics', mimeType: 'text/calendar', size: 2048 });
 
 const contents = [VCardPreviewContent, EmlPreviewContent, IcsPreviewContent];
 

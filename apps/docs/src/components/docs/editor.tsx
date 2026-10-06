@@ -27,7 +27,7 @@ import {
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
 import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
-import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -167,12 +167,17 @@ const lowlight = createLowlight(common);
 // Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
 const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 
+// The page at 96 dpi, for the layout math below and the text column before the page mounts.
+const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
+// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
+const TEXT_COLUMN_RIGHT_PX = PAGE_PX.width - PAGE_PX.margin.right;
+const TEXT_COLUMN_WIDTH_PX = TEXT_COLUMN_RIGHT_PX - PAGE_PX.margin.left;
+const PAGE_STYLESHEET = pageStylesheet(DEFAULT_PAGE_SETUP, '[data-document]');
+
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
-// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
-const TEXT_COLUMN_RIGHT_PX = A4_WIDTH_PX - PAGE_MARGIN_PX;
 // Above this the panel clears the centered page outright: every value below is pinned, so stop storing width.
-const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - A4_WIDTH_PX;
+const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - PAGE_PX.width;
 
 export const CollaborativeEditor = ({
     path,
@@ -301,7 +306,7 @@ const TiptapEditor = ({
 
     const getEditorMaxWidth = useCallback(() => {
         const el = documentRef.current;
-        if (!el) return 642;
+        if (!el) return TEXT_COLUMN_WIDTH_PX;
         const style = getComputedStyle(el);
         return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     }, []);
@@ -806,7 +811,7 @@ const TiptapEditor = ({
     const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
-    const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
+    const centredSlack = Math.max(0, (containerWidth - PAGE_PX.width) / 2);
     const panelLeft = containerWidth - PANEL_INTRUSION_PX;
     const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;
     const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
@@ -814,7 +819,7 @@ const TiptapEditor = ({
     const canvasScale =
         containerWidth === 0
             ? 1
-            : Math.min(1, containerWidth / A4_WIDTH_PX, canShift ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX);
+            : Math.min(1, containerWidth / PAGE_PX.width, canShift ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX);
     const needsScale = canvasScale < 1;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.
@@ -913,6 +918,8 @@ const TiptapEditor = ({
                             }
                         >
                             <div className="h-full relative overflow-hidden">
+                                {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
+                                <style>{PAGE_STYLESHEET}</style>
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
@@ -929,7 +936,7 @@ const TiptapEditor = ({
                                         data-document="true"
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            'eigen-paper grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
+                                            'eigen-paper grid bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
