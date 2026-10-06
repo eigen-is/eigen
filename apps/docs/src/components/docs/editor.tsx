@@ -27,7 +27,7 @@ import {
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
 import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, getDocExtensions, pageAtRule, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -170,8 +170,7 @@ const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 // The page at 96 dpi, for the layout math below and the text column before the page mounts.
 const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
 const TEXT_COLUMN_WIDTH_PX = PAGE_PX.width - PAGE_PX.margin.left - PAGE_PX.margin.right;
-const PAGE_BOX_STYLE = pageBoxStyle(DEFAULT_PAGE_SETUP);
-const PAGE_AT_RULE = pageAtRule(DEFAULT_PAGE_SETUP);
+const PAGE_STYLESHEET = pageStylesheet(DEFAULT_PAGE_SETUP, '[data-document]');
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
@@ -919,8 +918,8 @@ const TiptapEditor = ({
                             }
                         >
                             <div className="h-full relative overflow-hidden">
-                                {/* Paper carries the page's margins, so the printed clone drops its padding and width (globals.css). */}
-                                <style>{PAGE_AT_RULE}</style>
+                                {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
+                                <style>{PAGE_STYLESHEET}</style>
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
@@ -941,9 +940,8 @@ const TiptapEditor = ({
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
-                                        style={{
-                                            ...PAGE_BOX_STYLE,
-                                            ...(needsScale
+                                        style={
+                                            needsScale
                                                 ? {
                                                       transform: `scale(${canvasScale})`,
                                                       transformOrigin: 'top left',
@@ -951,8 +949,8 @@ const TiptapEditor = ({
                                                   }
                                                 : canvasShift > 0
                                                   ? { transform: `translateX(${-canvasShift}px)` }
-                                                  : null),
-                                        }}
+                                                  : undefined
+                                        }
                                     >
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>

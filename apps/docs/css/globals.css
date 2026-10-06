@@ -103,18 +103,13 @@
     text-align: left;
 }
 
-/* The page's narrow-viewport scale-to-fit and its page box are cloned with their inline styles; paper
-   gets the unscaled layout, and the editor's @page rule draws the margins the padding drew on screen.
-   !important is the only way a stylesheet rule can override a cloned inline style. */
+/* The page's narrow-viewport scale-to-fit is cloned with its inline transform; paper gets the
+   unscaled layout. !important is the only way a stylesheet rule can override a cloned inline style. */
 @media print {
     [data-document] {
         /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline transform */
         transform: none !important;
         /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline margin */
         margin-bottom: 0 !important;
-        /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline padding */
-        padding: 0 !important;
-        /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline width */
-        width: auto !important;
     }
 }

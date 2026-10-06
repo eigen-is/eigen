@@ -41,6 +41,12 @@ export function pageBoxStyle({ width, margin }: PageSetup): { width: string; pad
     return { width: `${width}mm`, padding: `${margin.top}mm ${margin.right}mm ${margin.bottom}mm ${margin.left}mm` };
 }
 
-export function pageAtRule(setup: PageSetup): string {
-    return `@page { size: ${setup.width}mm ${setup.height}mm; margin: ${pageBoxStyle(setup).padding}; }`;
+// The page as a stylesheet: on screen `selector` is the page box; on paper @page draws the margins, so it drops them.
+export function pageStylesheet(setup: PageSetup, selector: string): string {
+    const { width, padding } = pageBoxStyle(setup);
+    return [
+        `@page { size: ${setup.width}mm ${setup.height}mm; margin: ${padding}; }`,
+        `${selector} { width: ${width}; padding: ${padding}; }`,
+        `@media print { ${selector} { padding: 0; width: auto; } }`,
+    ].join('\n');
 }

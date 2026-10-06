@@ -40,9 +40,9 @@ An insert, a drop or a pasted image file writes the figure with the pending name
 
 ## One page setup sizes every page a doc is drawn on
 
-Every doc is an A4 page with 2 cm margins. One `PageSetup` in millimetres describes it (`DEFAULT_PAGE_SETUP`, `packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it: the editor's page and its layout math, browser print, quick look, the Drive thumbnail, the HTML export, the PDF and the docx. Each takes the unit it needs: pixels at 96 dpi for layout math (`pagePx`), a width and padding for a page box on screen (`pageBoxStyle`), a CSS `@page` rule for paper (`pageAtRule`) and twips for the docx (`pageTwips`). One value means no surface can disagree with another, so what prints is what the editor shows.
+Every doc is an A4 page with 2 cm margins. One `PageSetup` in millimetres describes it (`DEFAULT_PAGE_SETUP`, `packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it: the editor's page and its layout math, browser print, quick look, the Drive thumbnail, the HTML export, the PDF and the docx. Each takes the unit it needs: pixels at 96 dpi for layout math (`pagePx`), a width and padding for a page box on screen (`pageBoxStyle`), a stylesheet for a page that also prints (`pageStylesheet`) and twips for the docx (`pageTwips`). One value means no surface can disagree with another, so what prints is what the editor shows.
 
-On screen the margins are the page box's padding. On paper the `@page` rule draws them, so browser print zeroes the cloned page's padding and width (`apps/docs/css/globals.css`). Without that, the margins would print twice.
+On screen the margins are the page box's padding. On paper the `@page` rule draws them, so the page must drop its padding and width in print, or the margins print twice. `pageStylesheet(setup, selector)` holds all three rules: the `@page` rule, the selector's width and padding, and the print reset. The editor renders it for `[data-document]` in a `<style>`, which also matches the clone browser print makes, and the export embeds it for `.page`. Quick look and the thumbnail never print, so they keep `pageBoxStyle` inline.
 
 File → **Page setup…** shows the page in a dialog whose controls are all disabled. A doc carries no page of its own: page size and margins per document is a [ROADMAP](ROADMAP.md) row.
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { PageSetup } from '../../../docs/eigendoc';
-import { DEFAULT_PAGE_SETUP, pageAtRule, pageBoxStyle, pagePx, pageTwips } from '../../../docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, pageBoxStyle, pagePx, pageStylesheet, pageTwips } from '../../../docs/eigendoc';
 
 // Landscape A4 with four different margins, so no derivation can hide a hard-coded value or a swapped side.
 const LANDSCAPE: PageSetup = { width: 297, height: 210, margin: { top: 10, right: 15, bottom: 25, left: 30 } };
@@ -34,9 +34,21 @@ describe('page setup', () => {
         expect(pageBoxStyle(LANDSCAPE)).toEqual({ width: '297mm', padding: '10mm 15mm 25mm 30mm' });
     });
 
-    test('pageAtRule sizes the printed page and its margins', () => {
-        expect(pageAtRule(DEFAULT_PAGE_SETUP)).toBe('@page { size: 210mm 297mm; margin: 20mm 20mm 20mm 20mm; }');
-        expect(pageAtRule(LANDSCAPE)).toBe('@page { size: 297mm 210mm; margin: 10mm 15mm 25mm 30mm; }');
+    test('pageStylesheet sizes the printed page, boxes the page on screen and leaves the margins to @page on paper', () => {
+        expect(pageStylesheet(DEFAULT_PAGE_SETUP, '[data-document]')).toBe(
+            [
+                '@page { size: 210mm 297mm; margin: 20mm 20mm 20mm 20mm; }',
+                '[data-document] { width: 210mm; padding: 20mm 20mm 20mm 20mm; }',
+                '@media print { [data-document] { padding: 0; width: auto; } }',
+            ].join('\n'),
+        );
+        expect(pageStylesheet(LANDSCAPE, '.page')).toBe(
+            [
+                '@page { size: 297mm 210mm; margin: 10mm 15mm 25mm 30mm; }',
+                '.page { width: 297mm; padding: 10mm 15mm 25mm 30mm; }',
+                '@media print { .page { padding: 0; width: auto; } }',
+            ].join('\n'),
+        );
     });
 
     test('pageTwips is whole twips', () => {

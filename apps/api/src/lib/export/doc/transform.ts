@@ -5,8 +5,7 @@ import {
     DEFAULT_PAGE_SETUP,
     type FigureAttrs,
     getDocExtensions,
-    pageAtRule,
-    pageBoxStyle,
+    pageStylesheet,
     pageTwips,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
@@ -46,11 +45,10 @@ export async function renderEigendocExport(
     if (format !== 'docx') return { data: toTransferableText(html), warnings: [] };
 
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
-    const { width, height, margin } = pageTwips(DEFAULT_PAGE_SETUP);
     const docx = await HTMLtoDOCX(html, undefined, {
         title: stripEigenExtension(title),
-        pageSize: { width, height },
-        margins: margin,
+        pageSize: { width: PAGE_TWIPS.width, height: PAGE_TWIPS.height },
+        margins: PAGE_TWIPS.margin,
     });
     return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
 }
@@ -183,10 +181,11 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
     return results.join('\n');
 }
 
-const PAGE_BOX = pageBoxStyle(DEFAULT_PAGE_SETUP);
+const PAGE_TWIPS = pageTwips(DEFAULT_PAGE_SETUP);
 
 const PRINT_EXTRAS = `
-${pageAtRule(DEFAULT_PAGE_SETUP)}
+/* The docs page as the editor draws it; on paper @page draws the margins */
+${pageStylesheet(DEFAULT_PAGE_SETUP, '.page')}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -205,18 +204,10 @@ body {
     padding: 0;
 }
 
-/* The docs page as the editor and quick look draw it (screen only) */
 .page {
-    width: ${PAGE_BOX.width};
     max-width: 100%;
     margin: 0 auto;
-    padding: ${PAGE_BOX.padding};
     overflow-wrap: anywhere;
-}
-
-/* For PDF: @page draws the margins and the paper sets the width, so .page drops its padding and width */
-@media print {
-    .page { padding: 0; width: auto; }
 }
 
 figure, table, pre, blockquote { page-break-inside: avoid; }

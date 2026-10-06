@@ -31,7 +31,7 @@ The response is silent while the job queues and its Worker runs. Queue wait plus
 
 `html` and `pdf-html` render the identical document, so WeasyPrint prints exactly what the HTML download serves. A doc's docx is that HTML fed to `@turbodocx/html-to-docx`. There is one document per type to get right, not one per format. A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
 
-A doc's page comes from its page setup ([DOCS.md](DOCS.md#one-page-setup-sizes-every-page-a-doc-is-drawn-on)): the HTML's screen page from `pageBoxStyle`, the PDF's `@page` from `pageAtRule` (both in `PRINT_EXTRAS`, `export/doc/transform.ts`), and the docx's page size and margins from `pageTwips`. So all three match the editor's A4 page and its 2 cm margins.
+A doc's page comes from its page setup ([DOCS.md](DOCS.md#one-page-setup-sizes-every-page-a-doc-is-drawn-on)): the HTML's screen page and the PDF's `@page` from `pageStylesheet` (in `PRINT_EXTRAS`, `export/doc/transform.ts`), and the docx's page size and margins from `pageTwips`. So all three match the editor's A4 page and its 2 cm margins.
 
 The document is self-contained, because WeasyPrint and a downloaded file have no app to fetch from. Fonts are WOFF2 files base64'd into `@font-face` rules (`export/fonts.ts`). A doc imports `eigen-prose.css` as text and flattens it at load: WeasyPrint does not read CSS nesting, so nesting is expanded, `.dark` rules are dropped and theme variables become values, so no `var()` survives. The font weights come from `font-weights.css`, rounded to the nearest multiple of 100 because WeasyPrint accepts no other weight: headings and table headers print at 500 and bold at 600.
 
