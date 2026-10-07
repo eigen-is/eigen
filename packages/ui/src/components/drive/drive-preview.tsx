@@ -263,7 +263,14 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     if (!data?.body) return null;
 
     return (
-        <div ref={setContainer} className="drive-preview-hero absolute inset-0 bg-background pointer-events-none">
+        <div
+            ref={setContainer}
+            className={cn(
+                'drive-preview-hero absolute inset-0 bg-background pointer-events-none',
+                // A doc thumbnail is its page, light like the editor's; the prose inside escapes the dark rules.
+                data.mode === 'eigendoc' && 'eigen-paper',
+            )}
+        >
             <div
                 ref={setContent}
                 className={WRAPPER_CLASS[data.mode]}

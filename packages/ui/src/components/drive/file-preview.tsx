@@ -264,7 +264,8 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
     return (
         <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {data.mode === 'eigendoc' ? (
-                <div className="mx-auto" style={DOC_PAGE_BOX_STYLE}>
+                // eigen-paper: the page renders light like the editor's; the prose inside escapes the dark rules.
+                <div className="eigen-paper mx-auto bg-background" style={DOC_PAGE_BOX_STYLE}>
                     <div className="eigen-prose tiptap" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : data.mode === 'eigenslides' ? (
