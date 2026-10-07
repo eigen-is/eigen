@@ -5,10 +5,10 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-09-23
+updated: 2026-10-07
 ---
 
-You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file, including text formatting, headings, lists, tables, and embedded images.
+You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file, including text formatting, headings, lists, tables, page breaks, and embedded images. A numbered list with a page break in the middle comes back as two lists, and the second one starts again at 1.
 
 <div class="eigen-callout">
 

@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-09-18
+updated: 2026-10-07
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content
@@ -40,6 +40,15 @@ On desktop, the toolbar above the editor gives you access to formatting options.
 only shown when you have write access to the document.
 
 If you have read-only access, the formatting tools are hidden and you can view but not change the content.
+
+## Start a new page
+
+A page break makes the text after it start on a new page when you print the document or download it as a PDF or Word file.
+
+1. Place your cursor where the new page should start.
+2. Click the **Page break** button in the toolbar, or press Cmd+Enter (Mac) or Ctrl+Enter (Windows). On a narrow screen, open the **Insert** menu and choose **Page break**.
+
+In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print.
 
 ## Rename a document
 
