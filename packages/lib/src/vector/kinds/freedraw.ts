@@ -1,6 +1,6 @@
 import { getStroke } from 'perfect-freehand';
 import { RoughGenerator } from 'roughjs/bin/generator';
-import { escapeXml } from '../../core/html';
+import { escapeXml } from '../../core/xml';
 import { isTransparentFill, parseFill } from '../fill';
 import {
     FREEDRAW_SIZE_FACTOR,

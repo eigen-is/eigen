@@ -1,4 +1,4 @@
-import { escapeXml } from '@workspace/lib/html';
+import { escapeXml, escapeXmlText } from '@workspace/lib/xml';
 import type { CalendarCollection } from '../calendar/resource-store';
 import { EVENT_MAX_BYTES } from '../calendar/resource-store';
 import { calendarHomeHref } from '../dav/href';
@@ -31,7 +31,7 @@ export function calendarCollectionProps(cal: CalendarCollection, ownerId: string
 
 // Event with calendar-data (used in REPORT responses)
 export function calendarDataProp(icsData: string): string {
-    return `<C:calendar-data>${escapeXml(icsData)}</C:calendar-data>`;
+    return `<C:calendar-data>${escapeXmlText(icsData)}</C:calendar-data>`;
 }
 
 // Home collection — includes discovery props Thunderbird needs at Depth:0

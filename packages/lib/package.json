@@ -45,6 +45,7 @@
     "./mailbox-icons": "./src/core/mailbox-icons.ts",
     "./transfer": "./src/core/transfer.ts",
     "./use-debounced-value": "./src/core/use-debounced-value.ts",
+    "./xml": "./src/core/xml.ts",
     "./auth": "./src/core/auth/index.ts",
     "./calendar": "./src/core/calendar/index.ts",
     "./calendar/calendar-utils": "./src/core/calendar/calendar-utils.ts",

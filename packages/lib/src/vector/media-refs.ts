@@ -5,10 +5,10 @@
 // `data:` URI at serve time. Pure string ops, no XML parsing.
 //
 // escapeXml invariance is the load-bearing property: sceneToSvg writes `href="${escapeXml(href)}"`,
-// and escapeXml touches `& < > " '`. encodeURIComponent already percent-encodes `& < > "` and space,
-// leaving only `'` raw — so eigenMediaHref also encodes `'` to %27. The resulting token contains none
-// of escapeXml's characters, so the SVG stores the token verbatim and rewrite/strip are exact-token
-// string replaces, never a parse-and-reserialize.
+// and escapeXml touches only `& < > " '`, tab/LF/CR and characters XML can't hold. encodeURIComponent
+// already percent-encodes all of them but `'` (a lone surrogate throws), so eigenMediaHref also encodes
+// `'` to %27. The resulting token contains none of escapeXml's characters, so the SVG stores the token
+// verbatim and rewrite/strip are exact-token string replaces, never a parse-and-reserialize.
 
 import { CONTROL_CHARS } from '../validation/text';
 

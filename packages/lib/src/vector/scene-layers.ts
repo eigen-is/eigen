@@ -4,7 +4,7 @@
 // elementLayer per element (ElementLayer); sceneLayers is the same pass over a whole scene, for a host
 // that lays a whole page out at once.
 
-import { escapeXml } from '../core/html';
+import { escapeXml } from '../core/xml';
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';

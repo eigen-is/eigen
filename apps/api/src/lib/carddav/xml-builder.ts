@@ -1,4 +1,4 @@
-import { escapeXml } from '@workspace/lib/html';
+import { escapeXmlText } from '@workspace/lib/xml';
 import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
 import { addressbookHomeHref } from '../dav/href';
@@ -43,5 +43,5 @@ export function addressbookCollectionProps(book: CardBook, ownerId: string): Pro
 }
 
 export function addressDataProp(vcf: string): string {
-    return `<CARD:address-data>${escapeXml(vcf)}</CARD:address-data>`;
+    return `<CARD:address-data>${escapeXmlText(vcf)}</CARD:address-data>`;
 }
