@@ -1,7 +1,8 @@
 import ICAL from 'ical.js';
 import { ApiError } from '../core/errors';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../core/xml';
+import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
 import { asciiLower } from '../dav/collation';
+import { UnsupportedFilterError } from '../dav/report-request';
 import { DAV_NAMESPACES } from '../dav/xml';
 
 const CALDAV = DAV_NAMESPACES.C;
@@ -70,6 +71,18 @@ function readFilter(filter: XmlElement | undefined): {
     };
 }
 
+// On a stack, as parseXml walks: the filter's depth is the client's.
+function hasForeignElement(filter: XmlElement): boolean {
+    const open = [filter];
+    for (let element = open.pop(); element; element = open.pop()) {
+        for (const child of xmlElements(element)) {
+            if (child.ns !== CALDAV) return true;
+            open.push(child);
+        }
+    }
+    return false;
+}
+
 export type ReportRequest =
     | {
           type: 'calendar-query';
@@ -100,9 +113,13 @@ export function parseReport(body: Uint8Array): ReportRequest {
         return { type: 'sync-collection', syncToken: (token && xmlText(token).trim()) || undefined, wantsData };
     }
     if (root.ns === CALDAV && root.local === 'calendar-query') {
+        const filter = xmlChild(root, CALDAV, 'filter');
+        // A filter element in another namespace is no CalDAV filter: read past, it would answer every event.
+        if (filter ? hasForeignElement(filter) : xmlElements(root).some((child) => child.local === 'filter')) {
+            throw new UnsupportedFilterError();
+        }
         // A filter that names no UID matches every one.
-        const filter = readFilter(xmlChild(root, CALDAV, 'filter'));
-        return { type: 'calendar-query', matchesUid: () => true, ...filter, wantsData };
+        return { type: 'calendar-query', matchesUid: () => true, ...readFilter(filter), wantsData };
     }
     throw new ApiError(400, 'Unsupported REPORT type');
 }

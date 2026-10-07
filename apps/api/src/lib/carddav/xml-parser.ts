@@ -1,5 +1,6 @@
 import { ApiError } from '../core/errors';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { UnsupportedFilterError } from '../dav/report-request';
 import { DAV_NAMESPACES } from '../dav/xml';
 import {
     assertSupportedCollation,
@@ -7,7 +8,6 @@ import {
     type PropFilter,
     type QueryFilter,
     type TextMatch,
-    UnsupportedFilterError,
 } from './query-filter';
 
 const CARDDAV = DAV_NAMESPACES.CARD;

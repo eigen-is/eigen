@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { parseXml, type XmlElement, xmlChild } from '../../lib/core/xml';
+import { getSharedDrive } from '../../lib/drive/get-drive';
+import { getUserById } from '../../lib/user';
 import { getTestContext, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
@@ -183,6 +185,47 @@ describe('WebDAV PROPPATCH', () => {
         expect(res.status).toBe(207);
         expect(await res.text()).toMatch(/<getetag xmlns=""\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 403 Forbidden/);
         expect(await deadProp('proppatch-no-ns-live.txt', 'getetag', '')).toBeUndefined();
+    });
+
+    test('a prop in no namespace named like a live one, stored before the refusal, can still be removed', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-no-ns-stuck.txt`, { body: 'a' });
+        const user = await getUserById(ctx.alice.user.id);
+        const drive = await getSharedDrive(ctx.alice.user.id, user!);
+        const path = await drive.resolvePath(mountId, '/proppatch-no-ns-stuck.txt');
+        await drive.updatePathDetails(mountId, path!.id, {
+            ...(path!.details ?? {}),
+            webdavProps: [{ ns: '', name: 'getetag', value: 'stale' }],
+        });
+        expect((await deadProp('proppatch-no-ns-stuck.txt', 'getetag', ''))?.children).toEqual(['stale']);
+
+        const res = await proppatch(
+            'proppatch-no-ns-stuck.txt',
+            '<D:propertyupdate xmlns:D="DAV:"><D:remove><D:prop><getetag/></D:prop></D:remove></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        expect(await res.text()).toMatch(/<getetag xmlns=""\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 200 OK/);
+        expect(await deadProp('proppatch-no-ns-stuck.txt', 'getetag', '')).toBeUndefined();
+    });
+
+    test('a prop in the xml namespace is refused, and the PROPPATCH answer and its folder stay well-formed', async () => {
+        await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/proppatch-xml-ns`);
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-xml-ns/f.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-xml-ns/f.txt',
+            '<D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><xml:tag>red</xml:tag></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(parseXml(xml)).not.toBeNull();
+        expect(xml).toMatch(/<xml:tag\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 403 Forbidden/);
+
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/proppatch-xml-ns/`, {
+            headers: { Depth: '1' },
+        });
+        expect(find.status).toBe(207);
+        const listing = await find.text();
+        expect(parseXml(listing)).not.toBeNull();
+        expect(listing).not.toContain('>red<');
     });
 
     test('PROPPATCH whose root is not DAV:propertyupdate → 400, nothing persisted', async () => {

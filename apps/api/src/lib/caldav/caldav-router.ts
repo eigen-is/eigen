@@ -2,6 +2,7 @@ import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { EVENT_MAX_BYTES } from '../calendar/resource-store';
 import { requireSelf } from '../core/access';
+import { ApiError } from '../core/errors';
 import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
 import { parseCollectionPath } from '../dav/href';
 import { DAV_BODY_MAX_BYTES, parsePropfind, wantsBrief } from '../dav/propfind';
@@ -13,14 +14,23 @@ import { handleDeleteCalendar, handleMkcalendar, handleProppatch } from './propp
 import { handleReport } from './report';
 import { handleDelete, handleGet, handlePut } from './resource';
 
+// Discovery serves the same props whatever the body names, but a bad body is still a 400 (RFC 4918 § 9.1).
+async function checkPropfindBody(request: Request): Promise<void> {
+    const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
+    if (body === null) throw new ApiError(413, 'Payload Too Large');
+    parsePropfind(body);
+}
+
 export const caldavRouter = new Elysia({ name: 'caldav' })
     // PROPFIND /dav/ — discovery root
     .route('PROPFIND', '/dav', async ({ request }) => {
         const user = await authenticateBasic(request);
+        await checkPropfindBody(request);
         return handleRootPropfind(user.id);
     })
     .route('PROPFIND', '/dav/', async ({ request }) => {
         const user = await authenticateBasic(request);
+        await checkPropfindBody(request);
         return handleRootPropfind(user.id);
     })
 
@@ -28,11 +38,13 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/principals/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
+        await checkPropfindBody(request);
         return handlePrincipalPropfind(params.ownerId);
     })
     .route('PROPFIND', '/dav/principals/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
+        await checkPropfindBody(request);
         return handlePrincipalPropfind(params.ownerId);
     })
 

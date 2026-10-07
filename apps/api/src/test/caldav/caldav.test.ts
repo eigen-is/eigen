@@ -96,6 +96,29 @@ describe('CalDAV', () => {
         expect(xml).toContain('calendar-home-set');
     });
 
+    test('a discovery PROPFIND body that is malformed, carries a DOCTYPE or has another root is 400', async () => {
+        for (const path of ['/dav', '/dav/', `/dav/principals/${userId}`, `/dav/principals/${userId}/`]) {
+            for (const body of [
+                `<D:propfind xmlns:D="DAV:><D:prop><D:current-user-principal/></D:prop></D:propfind>`,
+                `<?xml version="1.0"?><!DOCTYPE D:propfind [<!ENTITY e "x">]><D:propfind xmlns:D="DAV:"><D:prop/></D:propfind>`,
+                `<X:propfind xmlns:X="urn:example:x"><X:prop/></X:propfind>`,
+            ]) {
+                const res = await davRequest('PROPFIND', path, {
+                    email: ctx.alice.user.email,
+                    headers: { Depth: '0' },
+                    body,
+                });
+                expect(res.status).toBe(400);
+            }
+            const res = await davRequest('PROPFIND', path, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body: `<D:propfind xmlns:D="DAV:"><D:prop><D:current-user-principal/></D:prop></D:propfind>`,
+            });
+            expect(res.status).toBe(207);
+        }
+    });
+
     test('PROPFIND calendar home lists calendars', async () => {
         const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
             email: ctx.alice.user.email,
@@ -1908,6 +1931,28 @@ describe('CalDAV', () => {
             const res = await query('<C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"/></C:comp-filter>');
             expect(res.status).toBe(207);
             expect(await res.text()).not.toContain('<D:response>');
+        });
+
+        test('a filter element in another namespace is 403 supported-filter, never every event', async () => {
+            expect(
+                (await putIcs('caldav-foreign-filter.ics', ics('caldav-foreign-filter@eigen', 'Foreign'))).status,
+            ).toBe(201);
+            const foreign = 'xmlns:X="urn:example:x"';
+            for (const res of [
+                await query(`<X:comp-filter ${foreign} name="VCALENDAR"/>`),
+                await query(
+                    `<C:comp-filter name="VCALENDAR"><X:comp-filter ${foreign} name="VEVENT"/></C:comp-filter>`,
+                ),
+                await query(
+                    `<C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><X:prop-filter ${foreign} name="UID"/></C:comp-filter></C:comp-filter>`,
+                ),
+                await report(
+                    `<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><X:filter ${foreign}><C:comp-filter name="VCALENDAR"/></X:filter></C:calendar-query>`,
+                ),
+            ]) {
+                expect(res.status).toBe(403);
+                expect(await res.text()).toContain('<C:supported-filter/>');
+            }
         });
 
         test('a VEVENT filter that says the component is not defined matches nothing', async () => {

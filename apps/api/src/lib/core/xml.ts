@@ -25,7 +25,7 @@ export class XmlError extends ApiError {
     }
 }
 
-const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+export const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 
 // Shared by every element without a prefixed attribute: one object each would cost a 1 MiB body of small elements 16 MB.

@@ -1,7 +1,7 @@
 import type { WebdavDeadProp } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { parseXml, serializeXmlChildren, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { parseXml, serializeXmlChildren, XML_NAMESPACE, xmlChildren, xmlElements, xmlText } from '../core/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -12,8 +12,9 @@ import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, resp
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
 // server. PROPPATCH on a live property must return 403 Forbidden inside propstat
-// rather than persisting an opaque copy that would shadow the real value. A prop of the same name in no namespace
-// is refused too: a client reading names alone would take it for the live one.
+// rather than persisting an opaque copy that would shadow the real value. A set of the same name in no namespace
+// is refused too, since a client reading names alone would take it for the live one; its remove runs, so a row
+// stored before the refusal can go.
 const PROTECTED_PROPS = new Set([
     'displayname',
     'getcontentlength',
@@ -72,8 +73,10 @@ export async function handleProppatch(args: {
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    const isProtected = (op: PropOp) =>
-        (op.prop.ns === 'DAV:' || op.prop.ns === '') && PROTECTED_PROPS.has(op.prop.name);
+    // The xml namespace takes no other prefix (Namespaces in XML § 3), so a prop in it could be stored but never listed.
+    const isProtected = ({ op, prop }: PropOp) =>
+        prop.ns === XML_NAMESPACE ||
+        (PROTECTED_PROPS.has(prop.name) && (prop.ns === 'DAV:' || (prop.ns === '' && op === 'set')));
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 
@@ -112,9 +115,11 @@ export async function handleProppatch(args: {
         const propEl =
             op.prop.ns === 'DAV:'
                 ? `<D:${safeName}/>`
-                : op.prop.ns === ''
-                  ? `<${safeName} xmlns=""/>`
-                  : `<X:${safeName} xmlns:X="${escapeXml(op.prop.ns)}"/>`;
+                : op.prop.ns === XML_NAMESPACE
+                  ? `<xml:${safeName}/>`
+                  : op.prop.ns === ''
+                    ? `<${safeName} xmlns=""/>`
+                    : `<X:${safeName} xmlns:X="${escapeXml(op.prop.ns)}"/>`;
         if (!refused) return propstatStatus(200, 'OK', [propEl]);
         return isProtected(op)
             ? propstatStatus(403, 'Forbidden', [propEl])

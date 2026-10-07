@@ -17,7 +17,13 @@ export type PropMap = Map<string, string>;
 
 const PREFIXES = new Map<string, string>(Object.entries(DAV_NAMESPACES).map(([prefix, uri]) => [uri, prefix]));
 
-export type PropfindRequest = { allprop: true } | { allprop: false; props: XmlElement[] };
+// Every unknown prop is echoed in every row, so the list a request may name is bounded.
+const MAX_PROPFIND_PROPS = 1000;
+
+// `notFound` holds the 404 propstat per set of found props, so rows of one shape share one string.
+export type PropfindRequest =
+    | { allprop: true }
+    | { allprop: false; props: XmlElement[]; notFound: Map<string, string> };
 
 // A blank body is allprop; any other must be a DAV:propfind.
 export function parsePropfind(body: Uint8Array): PropfindRequest {
@@ -29,7 +35,13 @@ export function parsePropfind(body: Uint8Array): PropfindRequest {
     // <allprop/> and <propname/> both land here as "no <prop>" → allprop. Treating <propname/> as allprop is a
     // lenient v1: we serve the values, not the names-only variant.
     if (!prop) return { allprop: true };
-    return { allprop: false, props: xmlElements(prop) };
+    const props = new Map<string, XmlElement>();
+    for (const element of xmlElements(prop)) {
+        const key = `${element.local} ${element.ns}`;
+        if (!props.has(key)) props.set(key, element);
+    }
+    if (props.size > MAX_PROPFIND_PROPS) throw new ApiError(400, 'Too many props');
+    return { allprop: false, props: [...props.values()], notFound: new Map() };
 }
 
 // RFC 4918 Brief:t and RFC 8144 Prefer:return=minimal both mean "drop the 404 propstat".
@@ -51,15 +63,24 @@ export function selectProps(available: PropMap, request: PropfindRequest, brief:
     if (request.allprop) return [propstatOk([...available.values()])];
 
     const found: string[] = [];
-    const missing: string[] = [];
-    for (const prop of request.props) {
+    const foundAt: number[] = [];
+    for (const [index, prop] of request.props.entries()) {
         const prefix = PREFIXES.get(prop.ns);
         const fragment = prefix === undefined ? undefined : available.get(`${prefix}:${prop.local}`);
-        if (fragment !== undefined) found.push(fragment);
-        else missing.push(echoMissing(prop));
+        if (fragment === undefined) continue;
+        found.push(fragment);
+        foundAt.push(index);
     }
 
     const propstats = [propstatOk(found)];
-    if (missing.length > 0 && !brief) propstats.push(propstatNotFound(missing));
+    if (found.length === request.props.length || brief) return propstats;
+    const key = foundAt.join(',');
+    let notFound = request.notFound.get(key);
+    if (notFound === undefined) {
+        const served = new Set(foundAt);
+        notFound = propstatNotFound(request.props.filter((_, index) => !served.has(index)).map(echoMissing));
+        request.notFound.set(key, notFound);
+    }
+    propstats.push(notFound);
     return propstats;
 }
