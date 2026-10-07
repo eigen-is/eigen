@@ -9,8 +9,7 @@ order: 90
 updated: 2026-10-07
 ---
 
-You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original
-document in Eigen stays exactly as it was.
+You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
 
 ## Export from inside the document
 
@@ -22,19 +21,15 @@ document in Eigen stays exactly as it was.
    - **PDF (.pdf)**: a fixed-layout version suitable for printing or sharing.
    - **Web Page (.html)**: a standalone HTML file with embedded fonts and images.
 
-A progress dialog appears while the file is being prepared. Your browser downloads the file
-automatically when it is ready. The file is named after your document.
+A progress dialog appears while the file is being prepared. Your browser downloads the file automatically when it is ready. The file is named after your document.
 
 ## Export from Drive
 
-You do not need to open the document to export it. In Drive, right-click the document (or click the
-**⋮** button next to it) and hover over **Download**. Choose the format you want. The same three
-formats are available.
+You do not need to open the document to export it. In Drive, right-click the document (or click the **⋮** button next to it) and hover over **Download**. Choose the format you want. The same three formats are available.
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images,
-code blocks, and other content. Comment threads are not included in the exported file.
+The exported file contains the document text and all formatting: headings, lists, tables, images, code blocks, and other content. Comment threads are not included in the exported file.
 
 A page break starts a new page in the PDF and the Word file. In the Word file, a page break inside a list, a quote, or a table is left out.
 
@@ -42,7 +37,6 @@ The PDF and the Word file use the same page as the editor: A4 with 2 cm margins.
 
 <div class="eigen-callout">
 
-PDF export requires WeasyPrint to be installed on your Eigen server. If the download fails when you
-choose PDF, ask your administrator to check the server setup.
+PDF export requires WeasyPrint to be installed on your Eigen server. If the download fails when you choose PDF, ask your administrator to check the server setup.
 
 </div>
