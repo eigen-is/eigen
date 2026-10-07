@@ -17,7 +17,7 @@ export async function handleReport(
     calendarId: string,
     collection: CalendarCollection,
     ownerId: string,
-    body: string,
+    body: Uint8Array,
 ): Promise<Response> {
     let report: ReportRequest;
     try {

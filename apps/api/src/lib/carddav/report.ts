@@ -18,7 +18,7 @@ import { type CardReportRequest, parseCardReport } from './xml-parser';
 const QUERY_RESULT_CAP = 1000;
 
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
-export async function handleCardReport(contacts: Contacts, ownerId: string, body: string): Promise<Response> {
+export async function handleCardReport(contacts: Contacts, ownerId: string, body: Uint8Array): Promise<Response> {
     let report: CardReportRequest;
     try {
         report = parseCardReport(body);

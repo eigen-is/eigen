@@ -69,6 +69,27 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect(body).toContain(token);
     });
 
+    test('the owner comes back as the XML the client sent, in the LOCK answer and in lockdiscovery', async () => {
+        const url = `${baseHref}/lock-owner-xml.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const lock = await lockRequest(url, { owner: 'Alice' });
+        expect(lock.status).toBe(200);
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', url, { headers: { Depth: '0' } });
+        for (const body of [await lock.text(), await find.text()]) {
+            expect(body).toMatch(/<D:owner><D:href[^>]*>mailto:Alice@example\.com<\/D:href><\/D:owner>/);
+        }
+    });
+
+    test('a LOCK body that is not well-formed → 400, and no lock is taken', async () => {
+        const url = `${baseHref}/lock-malformed.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+            body: '<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope>',
+        });
+        expect(res.status).toBe(400);
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'y' })).status).toBe(204);
+    });
+
     test('UNLOCK with mismatched token → 409', async () => {
         const { url } = await lockFile('lock-unlock-mismatch.txt');
         const res = await webdavRequest(ctx.alice.user.email, 'UNLOCK', url, {

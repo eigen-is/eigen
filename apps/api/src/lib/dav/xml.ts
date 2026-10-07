@@ -4,7 +4,18 @@ import type { PropMap } from './propfind';
 
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
-const NS = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/"`;
+// The prefix every served fragment is written with, bound once on the envelope.
+export const DAV_NAMESPACES = {
+    D: 'DAV:',
+    C: 'urn:ietf:params:xml:ns:caldav',
+    CARD: 'urn:ietf:params:xml:ns:carddav',
+    CS: 'http://calendarserver.org/ns/',
+    ICAL: 'http://apple.com/ns/ical/',
+} as const;
+
+const NS = Object.entries(DAV_NAMESPACES)
+    .map(([prefix, uri]) => `xmlns:${prefix}="${uri}"`)
+    .join(' ');
 
 function multistatus(responses: string[], extra?: string): string {
     return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;

@@ -406,7 +406,8 @@ export type ImageDimensions = {
     height: number;
 };
 
-export type WebdavDeadProp = { ns: string; name: string; value: string };
+// With `xml`, value is the client's element content serialized as XML; without it, value is text.
+export type WebdavDeadProp = { ns: string; name: string; value: string; xml?: true };
 
 export type DrivePathDetails =
     | ({

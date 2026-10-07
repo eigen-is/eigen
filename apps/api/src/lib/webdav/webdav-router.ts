@@ -1,7 +1,7 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import { readBoundedBody } from '../core/http';
+import { readBoundedBodyBytes } from '../core/http';
 import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
 import { decodeHref } from './path';
@@ -28,10 +28,10 @@ function pathStrFromParams(star: string | undefined): string {
 }
 
 // PROPFIND/PROPPATCH/LOCK bodies are short XML in any real client. Reject anything bigger up front (via the
-// shared bounded reader) so an authenticated user can't park megabytes of input on fast-xml-parser's
-// synchronous path; over-limit is a 413, WebDAV's long-standing behavior.
-async function readXmlBody(request: Request): Promise<string> {
-    const body = await readBoundedBody(request, MAX_XML_BODY_BYTES);
+// shared bounded reader) so an authenticated user can't park megabytes of input on the synchronous parse;
+// over-limit is a 413, WebDAV's long-standing behavior.
+async function readXmlBody(request: Request): Promise<Uint8Array> {
+    const body = await readBoundedBodyBytes(request, MAX_XML_BODY_BYTES);
     if (body === null) throw new ApiError(413, 'Payload Too Large');
     return body;
 }

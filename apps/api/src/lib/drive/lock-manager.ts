@@ -11,7 +11,8 @@ export type LockScope = 'exclusive' | 'shared';
 export type Lock = {
     token: string;
     pathId: string;
-    ownerHref?: string;
+    // The client's <D:owner> content, serialized XML written back as is.
+    owner?: string;
     depth: 0 | 'infinity';
     scope: LockScope;
     expiresAt: number;
@@ -41,7 +42,7 @@ export class LockManager {
         depth: 0 | 'infinity';
         scope: LockScope;
         userId: string;
-        ownerHref?: string;
+        owner?: string;
         ttlMs?: number;
         ifHeader?: string | null;
         ancestorPathIds?: string[];
@@ -69,7 +70,7 @@ export class LockManager {
         const lock: Lock = {
             token,
             pathId: args.pathId,
-            ownerHref: args.ownerHref,
+            owner: args.owner,
             depth: args.depth,
             scope: args.scope,
             userId: args.userId,

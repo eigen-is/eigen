@@ -1,31 +1,14 @@
 import { type DrivePath, isContainerType } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getMountQuotaState } from '../config/enforcement';
 import { ApiError } from '../core/errors';
+import { parsePropfind } from '../dav/propfind';
 import { davError } from '../dav/xml';
-import { asNode } from '../dav/xml-node';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { isHiddenName } from './container-overlay';
 import { encodeHref } from './path';
 import { buildXmlResponse, multistatus, propstatStatus, resourceProps, response } from './xml';
-
-const propfindParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
-
-// RFC 4918 §9.1: empty body is allowed (= allprop). A non-empty body must be a
-// well-formed XML document rooted at <propfind>. Anything else → 400.
-function validatePropfindBody(body: string): void {
-    const trimmed = body.trim();
-    if (!trimmed) return;
-    const validation = XMLValidator.validate(trimmed);
-    if (validation !== true) {
-        throw new ApiError(400, 'Malformed XML');
-    }
-    if (!('propfind' in asNode(propfindParser.parse(trimmed)))) {
-        throw new ApiError(400, 'Expected <propfind> root element');
-    }
-}
 
 function withTrailingSlash(p: string): string {
     return p.endsWith('/') ? p : `${p}/`;
@@ -35,7 +18,8 @@ function deadPropsXml(path: DrivePath): string[] {
     const deadProps = path.details?.webdavProps ?? [];
     return deadProps.map((dp) => {
         const safeName = escapeXml(dp.name);
-        const safeValue = escapeXml(dp.value);
+        // Element content was serialized from the client's XML when it was set; text is escaped here.
+        const safeValue = dp.xml ? dp.value : escapeXml(dp.value);
         if (dp.ns === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
         // Use a default-namespace declaration on the element rather than re-declaring a
         // shared prefix on every sibling. expat (used by neon-litmus) flags repeated
@@ -51,11 +35,12 @@ export async function handleResourcePropfind(args: {
     mountId: string;
     pathStr: string;
     depth: '0' | '1' | 'infinity';
-    body: string;
+    body: Uint8Array;
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, depth, body } = args;
 
-    validatePropfindBody(body);
+    // Checked, not read (RFC 4918 §9.1, a bad body is a 400): every row carries the same props whatever it names.
+    parsePropfind(body);
 
     if (depth === 'infinity') {
         return davError(403, '<D:propfind-finite-depth/>');

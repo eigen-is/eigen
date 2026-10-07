@@ -32,7 +32,7 @@ export function lockdiscoveryProp(locks: Lock[]): string {
     if (locks.length === 0) return '<D:lockdiscovery/>';
     const inner = locks
         .map((l) => {
-            const owner = l.ownerHref ? `<D:owner>${escapeXml(l.ownerHref)}</D:owner>` : '';
+            const owner = l.owner ? `<D:owner>${l.owner}</D:owner>` : '';
             const timeoutSeconds = Math.max(1, Math.floor((l.expiresAt - Date.now()) / 1000));
             const depth = `<D:depth>${l.depth === 0 ? '0' : 'infinity'}</D:depth>`;
             const scope = l.scope === 'shared' ? '<D:shared/>' : '<D:exclusive/>';

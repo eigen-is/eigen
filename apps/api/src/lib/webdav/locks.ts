@@ -1,5 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
+import { parseXml, serializeXmlChildren, type XmlElement, xmlChild } from '../core/xml';
 import { XML_CONTENT_TYPE } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
@@ -35,17 +36,16 @@ export function assertWritable(
     }
 }
 
-// Regex, not a parser: the owner element is opaque client XML we echo back verbatim (escaped), and a
-// structural parse would reshape it. RFC 4918 §14.17. Accept both prefixed (<D:owner>) and
-// default-namespace (<owner xmlns="DAV:">) shapes — curl's example bodies use the latter.
-function extractLockOwner(body: string): string | undefined {
-    const match = body.match(/<(?:[A-Za-z][\w]*:)?owner(?:\s[^>]*)?>([\s\S]*?)<\/(?:[A-Za-z][\w]*:)?owner>/i);
-    return match?.[1].trim() || undefined;
+// RFC 4918 §14.17: the owner is the client's own XML, echoed back as XML in every lockdiscovery.
+function readLockOwner(lockinfo: XmlElement): string | undefined {
+    const owner = xmlChild(lockinfo, 'DAV:', 'owner');
+    return (owner && serializeXmlChildren(owner).trim()) || undefined;
 }
 
 // Default to exclusive when the body omits <lockscope> entirely (RFC 4918 §9.10).
-function extractLockScope(body: string): LockScope {
-    return /<(?:[A-Za-z][\w]*:)?shared\s*\/?>/i.test(body) ? 'shared' : 'exclusive';
+function readLockScope(lockinfo: XmlElement): LockScope {
+    const scope = xmlChild(lockinfo, 'DAV:', 'lockscope');
+    return scope && xmlChild(scope, 'DAV:', 'shared') ? 'shared' : 'exclusive';
 }
 
 function buildLockResponse(lock: Lock): Response {
@@ -65,7 +65,7 @@ export async function handleLock(args: {
     ownerId: string;
     mountId: string;
     pathStr: string;
-    body: string;
+    body: Uint8Array;
     timeoutHeader: string | null;
     ifHeader: string | null;
     depthHeader: string | null;
@@ -77,9 +77,13 @@ export async function handleLock(args: {
 
     const ttlMs = parseTimeoutHeader(timeoutHeader);
     const depth: Lock['depth'] = depthHeader === '0' ? 0 : 'infinity';
+    const lockinfo = parseXml(body);
+    if (lockinfo && (lockinfo.ns !== 'DAV:' || lockinfo.local !== 'lockinfo')) {
+        throw new ApiError(400, 'Expected <lockinfo> root element');
+    }
 
     // RFC 4918 §9.10.2: empty body + If header refreshes an existing lock token.
-    if (!body.trim() && ifHeader) {
+    if (!lockinfo && ifHeader) {
         for (const token of parseIfHeaderTokens(ifHeader)) {
             const refreshed = drive.lockManager.refresh(token, ttlMs);
             if (refreshed) return buildLockResponse(refreshed);
@@ -93,16 +97,14 @@ export async function handleLock(args: {
         throw new ApiError(403, 'No write permission');
     }
 
-    const ownerHref = extractLockOwner(body);
-    const scope = extractLockScope(body);
     const breadcrumb = await drive.breadCrumb(mountId, path.id);
     const ancestorPathIds = breadcrumb.slice(0, -1).map((p) => p.id);
     const lock = drive.lockManager.acquire({
         pathId: path.id,
         depth,
-        scope,
+        scope: lockinfo ? readLockScope(lockinfo) : 'exclusive',
         userId: user.id,
-        ownerHref,
+        owner: lockinfo ? readLockOwner(lockinfo) : undefined,
         ttlMs,
         ifHeader,
         ancestorPathIds,
