@@ -6,11 +6,13 @@ import { readEigendocFromDoc } from '../../lib/document/doc';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { importDocxToEigendocUpdate } from '../../lib/import/doc/transform';
 import { importIntoDocument } from '../../lib/import/import-document';
 import { getUserById } from '../../lib/user';
 import { seedEigendoc } from '../fixtures/golden-documents';
 import {
+    buildDocxWithBody,
     buildGoldenDocx,
     GOLDEN_DOCX_HEADING,
     GOLDEN_DOCX_IMAGE_NAME,
@@ -323,5 +325,82 @@ describe('docx import resource guards', () => {
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(413);
         expect((error as ApiError).message).toBe('Document too large');
+    });
+});
+
+const PAGE_BREAK = '<w:br w:type="page"/>';
+const HEADING = '<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>';
+const ORDERED = '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>';
+const run = (text: string): string => `<w:r><w:t>${text}</w:t></w:r>`;
+const paragraph = (inner: string, properties = ''): string => `<w:p>${properties}${inner}</w:p>`;
+
+// Each top-level block as its type, a heading's level and its text; a list's items are joined by a slash.
+function blocks(json: JSONContent): string[] {
+    const textOf = (node: JSONContent): string =>
+        node.text ??
+        (node.content ?? []).map(textOf).join(node.type === 'paragraph' || node.type === 'heading' ? '' : '/');
+    return (json.content ?? []).map((node) => {
+        const name = node.type === 'heading' ? `heading${node.attrs?.['level']}` : (node.type ?? '');
+        const text = textOf(node);
+        return text ? `${name}(${text})` : name;
+    });
+}
+
+async function importBlocks(body: string): Promise<string[]> {
+    const { json } = await docxToPmJson(Buffer.from(await buildDocxWithBody(body)));
+    return blocks(json);
+}
+
+describe('docx import — page breaks', () => {
+    test('a break mid-paragraph, inside one run, splits the paragraph around a page break', async () => {
+        expect(await importBlocks(paragraph(`<w:r><w:t>Before</w:t>${PAGE_BREAK}<w:t>After</w:t></w:r>`))).toEqual([
+            'paragraph(Before)',
+            'pageBreak',
+            'paragraph(After)',
+        ]);
+    });
+
+    test('a break between runs splits the paragraph the same way', async () => {
+        expect(await importBlocks(paragraph(`${run('Before')}<w:r>${PAGE_BREAK}</w:r>${run('After')}`))).toEqual([
+            'paragraph(Before)',
+            'pageBreak',
+            'paragraph(After)',
+        ]);
+    });
+
+    test('a break at the start of a paragraph leaves no empty paragraph', async () => {
+        const body = `${paragraph(run('Before'))}${paragraph(`<w:r>${PAGE_BREAK}<w:t>After</w:t></w:r>`)}`;
+        expect(await importBlocks(body)).toEqual(['paragraph(Before)', 'pageBreak', 'paragraph(After)']);
+    });
+
+    test('a break in its own heading paragraph leaves no empty heading', async () => {
+        const body = `${paragraph(`<w:r>${PAGE_BREAK}</w:r>`, HEADING)}${paragraph(run('Chapter'), HEADING)}`;
+        expect(await importBlocks(body)).toEqual(['pageBreak', 'heading1(Chapter)']);
+    });
+
+    test('a break at the start of a heading goes before it', async () => {
+        expect(await importBlocks(paragraph(`<w:r>${PAGE_BREAK}<w:t>Heading</w:t></w:r>`, HEADING))).toEqual([
+            'pageBreak',
+            'heading1(Heading)',
+        ]);
+    });
+
+    test('a break mid-heading splits it into two headings', async () => {
+        expect(await importBlocks(paragraph(`${run('Head')}<w:r>${PAGE_BREAK}</w:r>${run('Ing')}`, HEADING))).toEqual([
+            'heading1(Head)',
+            'pageBreak',
+            'heading1(Ing)',
+        ]);
+    });
+
+    // Until the docx writer carries list numbering (PROPOSAL_DOCX phase 3), the second list numbers from 1 again.
+    test('a break in its own ordered item splits the list, which restarts its numbers', async () => {
+        const body = [run('One'), `<w:r>${PAGE_BREAK}</w:r>`, run('Two')].map((inner) => paragraph(inner, ORDERED));
+        expect(await importBlocks(body.join(''))).toEqual(['orderedList(One)', 'pageBreak', 'orderedList(Two)']);
+    });
+
+    test('a break mid list item splits the item and the list around a page break', async () => {
+        const body = `${paragraph(run('One'), ORDERED)}${paragraph(`${run('Before')}<w:r>${PAGE_BREAK}</w:r>${run('After')}`, ORDERED)}`;
+        expect(await importBlocks(body)).toEqual(['orderedList(One/Before)', 'pageBreak', 'orderedList(After)']);
     });
 });

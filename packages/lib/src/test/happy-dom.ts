@@ -33,6 +33,8 @@ export function installHappyDom(): Window {
     // both have to come from this window, because a happy-dom node is an instance of nothing else.
     borrow('DOMParser', window.DOMParser);
     borrow('Node', window.Node);
+    // Tiptap's keyboardShortcut command builds the event it presses.
+    borrow('KeyboardEvent', window.KeyboardEvent);
     borrow('IS_REACT_ACT_ENVIRONMENT', true);
 
     afterAll(async () => {

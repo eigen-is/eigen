@@ -757,9 +757,10 @@ describe('document transform (xlsx import)', () => {
 // They moved again when the export resolved the weight scale to values (headings 500, bold 600) and dropped the
 // editor-only search flash: those lines, and nothing else.
 // And again when the page box, @page and the print reset came from one page stylesheet: the same rules, reordered.
+// And again when the page break gained its dashed rule, its float clear and its print rule: those lines, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '828aef8ca3e02eae5093fb948b519df8d3755fb0b0b8d0ad9f648a2f3e016e3c';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '828aef8ca3e02eae5093fb948b519df8d3755fb0b0b8d0ad9f648a2f3e016e3c';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '85ab5cde6b84b68254d1f75f0f0947ed6f631b44a37c4aead6e3bc8bbfbc1bbc';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '85ab5cde6b84b68254d1f75f0f0947ed6f631b44a37c4aead6e3bc8bbfbc1bbc';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';

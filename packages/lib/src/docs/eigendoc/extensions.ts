@@ -11,6 +11,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { CommentMarkSchema } from './nodes/comment-mark';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
+import { PageBreakNode } from './nodes/page-break';
 import { SmallMark } from './nodes/small-mark';
 
 export function getDocExtensions(options?: { lowlight?: unknown; exclude?: string[] }) {
@@ -37,6 +38,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TaskItem.configure({ nested: true }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
         FigureNode,
+        PageBreakNode,
         Highlight.configure({ multicolor: true }),
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),
         Table,

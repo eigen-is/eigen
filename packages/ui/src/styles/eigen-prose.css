@@ -111,6 +111,7 @@
     h5,
     h6,
     hr,
+    .page-break,
     blockquote,
     pre,
     table,
@@ -164,6 +165,23 @@
         border: none;
         border-top: 1px solid #e0e0e6;
         margin: 1.5em 0;
+    }
+
+    /* Page break: a labelled dashed rule on screen, a new page in print */
+
+    .page-break {
+        border-top: 1px dashed var(--color-muted-foreground);
+        margin: 1.5em 0;
+    }
+
+    .page-break::after {
+        content: "Page break";
+        display: block;
+        font-size: 0.75rem;
+        line-height: 1;
+        color: var(--color-muted-foreground);
+        text-align: center;
+        padding-top: 0.25em;
     }
 
     /* Images */
@@ -496,5 +514,19 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 @media print {
     .tiptap .comment-highlight {
         background-color: transparent;
+    }
+}
+
+/* The page break's rule and label are screen chrome; on paper and in the PDF it starts the next page. */
+@media print {
+    .tiptap .page-break {
+        break-after: page;
+        margin: 0;
+        border: none;
+        height: 0;
+    }
+
+    .tiptap .page-break::after {
+        content: none;
     }
 }

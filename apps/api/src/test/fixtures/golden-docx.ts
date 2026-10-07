@@ -46,7 +46,9 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 const NUMBERING = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum>
+<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>
 <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+<w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
 </w:numbering>`;
 
 const listParagraphs = GOLDEN_DOCX_LIST.map(
@@ -54,21 +56,34 @@ const listParagraphs = GOLDEN_DOCX_LIST.map(
         `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>${item}</w:t></w:r></w:p>`,
 ).join('');
 
-const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+const documentXml = (body: string): string => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
 <w:body>
-<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${GOLDEN_DOCX_HEADING}</w:t></w:r></w:p>
-<w:p><w:r><w:t xml:space="preserve">Prepared by the </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>growth</w:t></w:r><w:r><w:t xml:space="preserve"> team, with </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>notes</w:t></w:r><w:r><w:t xml:space="preserve"> and a </w:t></w:r><w:hyperlink r:id="rId3"><w:r><w:t>reference</w:t></w:r></w:hyperlink><w:r><w:t>.</w:t></w:r></w:p>
-${listParagraphs}
-<w:p><w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="1" name="Picture 1" descr="A pixel"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="pixel.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+${body}
 </w:body>
 </w:document>`;
 
+const DOCUMENT =
+    documentXml(`<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${GOLDEN_DOCX_HEADING}</w:t></w:r></w:p>
+<w:p><w:r><w:t xml:space="preserve">Prepared by the </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>growth</w:t></w:r><w:r><w:t xml:space="preserve"> team, with </w:t></w:r><w:r><w:rPr><w:i/></w:rPr><w:t>notes</w:t></w:r><w:r><w:t xml:space="preserve"> and a </w:t></w:r><w:hyperlink r:id="rId3"><w:r><w:t>reference</w:t></w:r></w:hyperlink><w:r><w:t>.</w:t></w:r></w:p>
+${listParagraphs}
+<w:p><w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="1" name="Picture 1" descr="A pixel"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="pixel.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`);
+
 export async function buildGoldenDocx(imageBytes: Uint8Array): Promise<ArrayBuffer> {
+    return zipDocx(DOCUMENT, imageBytes);
+}
+
+// The golden package around a body of the caller's own: its Heading1 style, bullets as numId 1 and
+// decimal numbers as numId 2.
+export async function buildDocxWithBody(body: string): Promise<ArrayBuffer> {
+    return zipDocx(documentXml(body), new Uint8Array());
+}
+
+async function zipDocx(document: string, imageBytes: Uint8Array): Promise<ArrayBuffer> {
     const zip = new JSZip();
     zip.file('[Content_Types].xml', CONTENT_TYPES, { date: EPOCH });
     zip.file('_rels/.rels', PACKAGE_RELS, { date: EPOCH });
-    zip.file('word/document.xml', DOCUMENT, { date: EPOCH });
+    zip.file('word/document.xml', document, { date: EPOCH });
     zip.file('word/_rels/document.xml.rels', DOCUMENT_RELS, { date: EPOCH });
     zip.file('word/styles.xml', STYLES, { date: EPOCH });
     zip.file('word/numbering.xml', NUMBERING, { date: EPOCH });

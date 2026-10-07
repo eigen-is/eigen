@@ -743,8 +743,10 @@
 
 /* Selected-object chrome (shared: docs figure, slides, vector, and sheets' floating
    image (ImgBoxs), all via ObjectTransform): the ring around the object and the square
-   resize grips, one visual for every editor. */
-.eigen-selection-ring {
+   resize grips, one visual for every editor. A selected rule or page break in docs takes the ring too. */
+.eigen-selection-ring,
+.tiptap hr.ProseMirror-selectednode,
+.tiptap .page-break.ProseMirror-selectednode {
     outline: 1px solid var(--selection-handle);
     /* Excalidraw's breathing room: the ring floats off the object. */
     outline-offset: 4px;
@@ -894,6 +896,8 @@
     }
 
     .eigen-selection-ring,
+    .tiptap hr.ProseMirror-selectednode,
+    .tiptap .page-break.ProseMirror-selectednode,
     .eigen-search-ring,
     .eigen-search-ring-active {
         outline: none;
