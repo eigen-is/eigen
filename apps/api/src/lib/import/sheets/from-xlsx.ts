@@ -26,10 +26,26 @@ import {
     update,
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
-import he from 'he';
 import JSZip from 'jszip';
 import { ApiError } from '../../core/errors';
+import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
+
+// Transitional OOXML, then Strict, which exceljs reads as well. A part's root namespace tells the two apart;
+// both use one package relationships namespace.
+const OOXML_NAMESPACES = [
+    {
+        spreadsheetml: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+        relationships: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+        drawingml: 'http://schemas.openxmlformats.org/drawingml/2006/main',
+    },
+    {
+        spreadsheetml: 'http://purl.oclc.org/ooxml/spreadsheetml/main',
+        relationships: 'http://purl.oclc.org/ooxml/officeDocument/relationships',
+        drawingml: 'http://purl.oclc.org/ooxml/drawingml/main',
+    },
+] as const;
+const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -849,53 +865,56 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
 // (<hyperlink ref location=…> without a rel), so recover them straight from the
 // worksheet XML. Returns sheet name → (anchor cell ref → location target).
 // Reuses the zip loaded by xlsxToSheets — no second decompression pass.
-async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
+export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
     const bySheet = new Map<string, Map<string, string>>();
-    const workbookXml = await zip.file('xl/workbook.xml')?.async('string');
-    const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('string');
-    if (workbookXml == null || relsXml == null) return bySheet;
+    const workbook = await readPart(zip, 'xl/workbook.xml');
+    const rels = await readPart(zip, 'xl/_rels/workbook.xml.rels');
+    const namespaces = OOXML_NAMESPACES.find(({ spreadsheetml }) => spreadsheetml === workbook?.ns);
+    const sheets = namespaces && workbook && xmlChild(workbook, namespaces.spreadsheetml, 'sheets');
+    if (!namespaces || !sheets || !rels) return bySheet;
 
     const relTargets = new Map<string, string>();
-    for (const tag of relsXml.match(/<Relationship\b[^>]*>/g) ?? []) {
-        const id = xmlAttribute(tag, 'Id');
-        const target = xmlAttribute(tag, 'Target');
+    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS, 'Relationship')) {
+        const id = xmlAttr(rel, '', 'Id');
+        const target = xmlAttr(rel, '', 'Target');
         if (id != null && target != null) relTargets.set(id, target);
     }
 
-    for (const tag of workbookXml.match(/<sheet\b[^>]*>/g) ?? []) {
-        const name = xmlAttribute(tag, 'name');
-        const rId = xmlAttribute(tag, 'r:id');
+    for (const sheet of xmlChildren(sheets, namespaces.spreadsheetml, 'sheet')) {
+        const name = xmlAttr(sheet, '', 'name');
+        const rId = xmlAttr(sheet, namespaces.relationships, 'id');
         const target = rId != null ? relTargets.get(rId) : undefined;
         if (name == null || target == null) continue;
         // Workbook-rel targets are relative to xl/ unless rooted.
-        const path = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
-        const sheetXml = await zip.file(path)?.async('string');
-        if (sheetXml == null) continue;
-        const links = parseLocationHyperlinks(sheetXml);
+        const worksheet = await readPart(zip, target.startsWith('/') ? target.slice(1) : `xl/${target}`);
+        const hyperlinks = worksheet && xmlChild(worksheet, namespaces.spreadsheetml, 'hyperlinks');
+        if (!hyperlinks) continue;
+        const links = new Map<string, string>();
+        for (const hyperlink of xmlChildren(hyperlinks, namespaces.spreadsheetml, 'hyperlink')) {
+            const ref = xmlAttr(hyperlink, '', 'ref');
+            const location = xmlAttr(hyperlink, '', 'location');
+            // ref may span a range; the anchor cell carries the link.
+            if (ref != null && location != null) links.set(ref.split(':')[0], location);
+        }
         if (links.size > 0) bySheet.set(name, links);
     }
     return bySheet;
 }
 
-function parseLocationHyperlinks(sheetXml: string): Map<string, string> {
-    const links = new Map<string, string>();
-    const block = sheetXml.match(/<hyperlinks(?:\s[^>]*)?>([\s\S]*?)<\/hyperlinks>/);
-    if (!block) return links;
-    for (const tag of block[1].match(/<hyperlink\b[^>]*>/g) ?? []) {
-        const ref = xmlAttribute(tag, 'ref');
-        const location = xmlAttribute(tag, 'location');
-        if (ref == null || location == null) continue;
-        // ref may span a range; the anchor cell carries the link.
-        links.set(ref.split(':')[0], location);
-    }
-    return links;
+async function readPart(zip: JSZip, path: string): Promise<XmlElement | null> {
+    const bytes = await zip.file(path)?.async('uint8array');
+    return bytes ? parsePart(bytes) : null;
 }
 
-// OOXML attributes are double-quoted; entity decoding goes through `he` (already
-// the mail parser's decoder), which covers the XML named + numeric entities.
-function xmlAttribute(tag: string, name: string): string | null {
-    const match = tag.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`));
-    return match ? he.decode(match[1]) : null;
+// exceljs has read the workbook by now, so a part Bun refuses (malformed, a DOCTYPE) costs only what these reads
+// take from it: the location links or the theme colors, never the import.
+function parsePart(xml: string | Uint8Array): XmlElement | null {
+    try {
+        return parseXml(xml);
+    } catch (error) {
+        if (error instanceof XmlError) return null;
+        throw error;
+    }
 }
 
 function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boolean; display?: string } {
@@ -1274,21 +1293,19 @@ const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 function extractThemePalette(workbook: Workbook): ThemePalette {
     const themeXml = (workbook as unknown as { _themes?: Record<string, string> })._themes?.['theme1'];
-    if (!themeXml) return [];
-    const schemeMatch = themeXml.match(/<a:clrScheme[^>]*>([\s\S]*?)<\/a:clrScheme>/);
-    if (!schemeMatch) return [];
-    const scheme = schemeMatch[1];
+    const theme = themeXml ? parsePart(themeXml) : null;
+    const drawingml = OOXML_NAMESPACES.find((namespaces) => namespaces.drawingml === theme?.ns)?.drawingml;
+    const elements = drawingml && theme && xmlChild(theme, drawingml, 'themeElements');
+    const scheme = drawingml && elements && xmlChild(elements, drawingml, 'clrScheme');
+    if (!drawingml || !scheme) return [];
 
     const xmlColors: string[] = [];
     for (const el of CLR_SCHEME_ELEMENTS) {
-        const block = scheme.match(new RegExp(`<a:${el}>([\\s\\S]*?)</a:${el}>`));
-        if (!block) {
-            xmlColors.push('#000000');
-            continue;
-        }
-        const srgb = block[1].match(/srgbClr\s+val="([A-Fa-f0-9]{6})"/);
-        const sys = block[1].match(/sysClr[^>]*lastClr="([A-Fa-f0-9]{6})"/);
-        xmlColors.push(srgb ? `#${srgb[1].toUpperCase()}` : sys ? `#${sys[1].toUpperCase()}` : '#000000');
+        const slot = xmlChild(scheme, drawingml, el);
+        const srgb = slot && xmlChild(slot, drawingml, 'srgbClr');
+        const sys = slot && xmlChild(slot, drawingml, 'sysClr');
+        const hex = (srgb && xmlAttr(srgb, '', 'val')) ?? (sys && xmlAttr(sys, '', 'lastClr'));
+        xmlColors.push(hex && /^[A-Fa-f0-9]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : '#000000');
     }
 
     const palette: ThemePalette = [];

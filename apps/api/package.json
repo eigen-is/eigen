@@ -37,7 +37,6 @@
     "elysia-rate-limit": "^4.6.3",
     "exceljs": "^4.4.0",
     "exiftool-vendored": "^35.21.0",
-    "he": "^1.2.0",
     "heic-convert": "^2.1.0",
     "html-to-text": "^9.0.5",
     "ical.js": "^2.2.1",

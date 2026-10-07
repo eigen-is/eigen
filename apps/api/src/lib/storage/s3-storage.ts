@@ -1,8 +1,8 @@
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
-import { escapeXml } from '@workspace/lib/xml';
+import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { type BunFile, S3Client, type S3File } from 'bun';
-import { ApiError } from '../core';
+import { ApiError, parseXml, type XmlElement, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
 import { errnoOf, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
@@ -72,6 +72,11 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
         } else if (lifecycle === 'unknown') {
             reason ??= 'error';
             lifecycleNote = "Could not read the bucket's lifecycle configuration, so the cleanup rule was not applied.";
+        } else if (stripNonXmlChars(config.prefix) !== config.prefix) {
+            // The rule's <Prefix> would lose the character and cover another prefix's versions.
+            reason ??= 'error';
+            lifecycleNote =
+                "The prefix holds a character a lifecycle rule can't carry, so the cleanup rule was not applied.";
         } else if (lifecycle === 'none' || lifecycle.noncurrentDays !== noncurrentDays) {
             // S3 has no conditional PUT, so a foreign configuration written in the seconds between
             // the read above and this write is replaced. Accepted: the alternative is never writing.
@@ -128,7 +133,6 @@ function s3Endpoint(config: S3Config): string {
 }
 
 const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-const OUR_LIFECYCLE_RULE = new RegExp(`<ID>\\s*${S3_LIFECYCLE_RULE_ID}\\s*</ID>`);
 
 // SigV4-signed bucket-level request, path-style. Exported for the live-S3 suite, which creates and
 // drops its own throwaway buckets rather than mutating a shared one's configuration.
@@ -177,14 +181,35 @@ export async function signedS3Request(
     });
 }
 
+// Each child is read in its parent's namespace, so in the root's: whichever the provider answers in (AWS's, none,
+// GCS's). Trimmed, for a value that is a word or a number; a prefix keeps its whitespace.
+function s3Text(parent: XmlElement | undefined, local: string): string {
+    const child = parent && xmlChild(parent, parent.ns, local);
+    return child ? xmlText(child).trim() : '';
+}
+
+// As S3 decodes it, so it compares with the prefix as written. A rule scopes by its own <Prefix> (the legacy
+// form), its <Filter>'s, or the <And> inside its filter.
+function rulePrefix(rule: XmlElement): string {
+    const filter = xmlChild(rule, rule.ns, 'Filter');
+    const and = filter && xmlChild(filter, rule.ns, 'And');
+    const prefix =
+        xmlChild(rule, rule.ns, 'Prefix') ??
+        (filter && xmlChild(filter, rule.ns, 'Prefix')) ??
+        (and && xmlChild(and, rule.ns, 'Prefix'));
+    return prefix ? xmlText(prefix) : '';
+}
+
 async function checkS3Versioning(config: S3Config): Promise<S3VersioningState> {
     try {
         const res = await signedS3Request(config, { method: 'GET', query: 'versioning' });
         if (!res.ok) return 'unknown';
-        const body = await res.text();
-        const match = body.match(/<Status>\s*(Enabled|Suspended)\s*<\/Status>/);
-        if (match?.[1] === 'Enabled') return 'enabled';
-        if (match?.[1] === 'Suspended') return 'suspended';
+        const versioning = parseXml(await res.bytes());
+        if (!versioning) return 'disabled';
+        if (versioning.local !== 'VersioningConfiguration') return 'unknown';
+        const status = s3Text(versioning, 'Status');
+        if (status === 'Enabled') return 'enabled';
+        if (status === 'Suspended') return 'suspended';
         return 'disabled';
     } catch {
         return 'unknown';
@@ -196,24 +221,27 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
         const res = await signedS3Request(config, { method: 'GET', query: 'lifecycle' });
         if (res.status === 404) return 'none'; // NoSuchLifecycleConfiguration
         if (!res.ok) return 'unknown';
-        const body = await res.text();
-        const rules = body.split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
-        const expectedPrefix = config.prefix ? `${escapeXml(config.prefix)}/` : '';
+        // S3 and MinIO answer no configuration with the 404 above. An empty 200 is a store shaped otherwise,
+        // whose rules a PUT could replace.
+        const lifecycle = parseXml(await res.bytes());
+        if (lifecycle?.local !== 'LifecycleConfiguration') return 'unknown';
+        const expectedPrefix = config.prefix ? `${config.prefix}/` : '';
         let noncurrentDays: number | null = null;
-        for (const rule of rules) {
-            // One rule we didn't author makes the whole configuration foreign, because
-            // PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours
-            // stays ours even when hand-edited, so harden can repair it.
-            if (!OUR_LIFECYCLE_RULE.test(rule)) return 'foreign';
-            const days = rule.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
-            const prefix = rule.match(/<Prefix>\s*(.*?)\s*<\/Prefix>/)?.[1] ?? '';
+        for (const rule of xmlElements(lifecycle)) {
+            // One rule we didn't author, or any child we can't read as one, makes the whole configuration foreign,
+            // because PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours stays
+            // ours even when hand-edited, so harden can repair it.
+            if (rule.local !== 'Rule' || rule.ns !== lifecycle.ns || s3Text(rule, 'ID') !== S3_LIFECYCLE_RULE_ID) {
+                return 'foreign';
+            }
+            const days = s3Text(xmlChild(rule, rule.ns, 'NoncurrentVersionExpiration'), 'NoncurrentDays');
             if (
                 noncurrentDays === null &&
-                days &&
-                prefix === expectedPrefix &&
-                /<Status>\s*Enabled\s*<\/Status>/.test(rule)
+                /^\d+$/.test(days) &&
+                rulePrefix(rule) === expectedPrefix &&
+                s3Text(rule, 'Status') === 'Enabled'
             ) {
-                noncurrentDays = Number(days[1]);
+                noncurrentDays = Number(days);
             }
         }
         // No rules, or ours disabled, missing its expiry, or scoped to another prefix: it cleans up
@@ -230,15 +258,14 @@ export async function abortsIncompleteUploads(config: S3Config, keyPrefix: strin
     try {
         const res = await signedS3Request(config, { method: 'GET', query: 'lifecycle' });
         if (!res.ok) return false;
-        const rules = (await res.text()).split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
-        return rules.some((rule) => {
-            const prefix = rule.match(/<Prefix>\s*(.*?)\s*<\/Prefix>/)?.[1] ?? '';
-            return (
-                rule.includes('<AbortIncompleteMultipartUpload>') &&
-                /<Status>\s*Enabled\s*<\/Status>/.test(rule) &&
-                escapeXml(keyPrefix).startsWith(prefix)
-            );
-        });
+        const lifecycle = parseXml(await res.bytes());
+        if (lifecycle?.local !== 'LifecycleConfiguration') return false;
+        return xmlChildren(lifecycle, lifecycle.ns, 'Rule').some(
+            (rule) =>
+                xmlChild(rule, rule.ns, 'AbortIncompleteMultipartUpload') &&
+                s3Text(rule, 'Status') === 'Enabled' &&
+                keyPrefix.startsWith(rulePrefix(rule)),
+        );
     } catch {
         return false;
     }
