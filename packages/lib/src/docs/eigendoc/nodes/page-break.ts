@@ -15,11 +15,12 @@ export const PageBreakNode = Node.create({
 
     atom: true,
 
-    // Above StarterKit's hard break, whose Mod-Enter would otherwise win when it is listed later.
+    // Above StarterKit's hard break, whose Mod-Enter would otherwise win when it is listed later. Above the
+    // horizontal rule too, so the schema lists this node first and hr.page-break parses before its bare hr rule.
     priority: 101,
 
     parseHTML() {
-        return [{ tag: 'div[data-type="page-break"]' }, { tag: 'hr.page-break', priority: 51 }];
+        return [{ tag: 'div[data-type="page-break"]' }, { tag: 'hr.page-break' }];
     },
 
     renderHTML() {

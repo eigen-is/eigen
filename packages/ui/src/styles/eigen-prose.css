@@ -469,7 +469,8 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
 /* For shadow DOM usage: won't apply (correct — preview has its own white container) */
-.dark .eigen-prose {
+.dark .eigen-prose:not(.eigen-paper *) {
+    /* Not on the light-pinned paper (.eigen-paper in globals.css): the docs editor's page stays light. */
     color: #e4e4e7;
 
     blockquote {

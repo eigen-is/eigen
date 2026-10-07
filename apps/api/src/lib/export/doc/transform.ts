@@ -111,7 +111,7 @@ function flattenEigenProseCSS(raw: string): string {
     let css = raw.replace(/\.eigen-prose,\s*\n\s*\.tiptap\s*\{/g, '.eigen-prose {');
 
     // Drop .dark overrides (export is always light)
-    css = css.replace(/^\.dark\s+\.eigen-prose\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}/gm, '');
+    css = css.replace(/^\.dark\s+\.eigen-prose[^{]*\{[^}]*(?:\{[^}]*\}[^}]*)*\}/gm, '');
 
     // Flatten CSS nesting for all top-level blocks
     css = css.replace(/^(\.[a-zA-Z][\w-]*)\s*\{([\s\S]*?)^\}/gm, (_match, selector, body) => {
