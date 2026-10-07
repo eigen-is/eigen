@@ -24,6 +24,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuShortcut,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
@@ -64,6 +65,7 @@ import {
     Printer,
     Quote,
     RemoveFormatting,
+    SeparatorHorizontal,
     Strikethrough,
     Subscript,
     Superscript,
@@ -363,6 +365,10 @@ export const EditorToolbar = ({
                                     <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                                         <Minus className="h-4 w-4 mr-2" /> Horizontal rule
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
+                                        <SeparatorHorizontal className="h-4 w-4 mr-2" /> Page break
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() =>
                                             editor
@@ -632,6 +638,12 @@ export const EditorToolbar = ({
                                 tooltipText="Horizontal rule"
                                 preventFocusLoss
                                 onClick={() => editor.chain().focus().setHorizontalRule().run()}
+                            />
+                            <TooltipButton
+                                icon={SeparatorHorizontal}
+                                tooltipText={`Page break (${formatForDisplay('Mod+Enter')})`}
+                                preventFocusLoss
+                                onClick={() => editor.chain().focus().setPageBreak().run()}
                             />
 
                             <ToolbarSeparator />
