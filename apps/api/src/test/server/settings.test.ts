@@ -389,6 +389,29 @@ describe('Team Mount Management', () => {
         expect(updated.storageType).toBe('local-key');
     });
 
+    test('a team S3 mount refuses a prefix holding a control character', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            prefix: 'data\u0000',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'S3 Files', storageType: 's3', s3Config }),
+        });
+        expect(add.status).toBe(422);
+
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ s3Config }),
+        });
+        expect(update.status).toBe(422);
+    });
+
     test('updating nonexistent mount returns 404', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/nonexistent`, {
             method: 'PUT',
@@ -864,6 +887,29 @@ describe('S3 Config Persistence', () => {
         expect(after).toEqual(before);
     });
 
+    test('PUT /settings/s3config rejects a prefix holding a control character before reaching S3', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'checkS3Connection');
+
+        try {
+            const putRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: 'https://s3.example.com',
+                    bucket: 'eigen-test',
+                    prefix: 'data\u0000',
+                    accessKeyId: 'AKIAEXAMPLE',
+                    secretAccessKey: 'secret-example',
+                }),
+            });
+            expect(putRes.status).toBe(422);
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     test('non-admin cannot read or update S3 config', async () => {
         const getRes = await authedRequest(ctx.bob.user.sessionToken, '/settings/s3config');
         expect(getRes.status).toBe(403);
@@ -963,6 +1009,14 @@ describe('S3 Bucket Hardening', () => {
             const res = await harden(ctx.alice.user.sessionToken, { ...hardenBody, noncurrentDays });
             expect(res.status).toBe(422);
         }
+        expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('POST /settings/s3harden rejects a prefix holding a control character', async () => {
+        spy = spyOn(s3Storage, 'hardenS3Bucket');
+
+        const res = await harden(ctx.alice.user.sessionToken, { ...hardenBody, prefix: 'data\nother' });
+        expect(res.status).toBe(422);
         expect(spy).not.toHaveBeenCalled();
     });
 
