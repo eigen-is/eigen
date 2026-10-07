@@ -28,7 +28,7 @@ export class XmlError extends ApiError {
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 
-// Shared by every element without a prefixed attribute: an object each costs a 1 MiB body of small elements 16 MB.
+// Shared by every element without a prefixed attribute: one object each would cost a 1 MiB body of small elements 16 MB.
 const NO_ATTRIBUTE_NS: Readonly<Record<string, string>> = Object.freeze({});
 
 // Blank input is null rather than an error: an empty PROPFIND means allprop, an empty PROPPATCH does nothing.
@@ -95,7 +95,7 @@ function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     }
 }
 
-// Depth first on an explicit stack: recursion runs out below 2x Bun's deepest nesting, main thread and Worker alike.
+// Depth first on an explicit stack: recursion has only 1.4-1.7x Bun's deepest nesting to spare, less when the caller is deep.
 // One binding map serves the whole walk, each element's declarations undone on its way out, so a body costs its
 // declarations once rather than every binding in scope per declaring element. Undone by setting, never deleting: a
 // delete costs JSC's Map its size.
@@ -213,8 +213,8 @@ export function xmlAttr(element: XmlElement, ns: string, local: string): string 
 }
 
 // A binding is declared again on every child that uses it. Its prefix costs no more than the use, but a long URI used
-// by many children multiplies: the URIs the declarations add are capped at a whole DAV body.
-const MAX_DECLARED_URI_BYTES = 1_048_576;
+// by many children multiplies: the URI characters the declarations add are capped at a whole DAV body.
+const MAX_DECLARED_URI_CHARS = 1_048_576;
 
 // Client XML kept as XML (a LOCK owner, a dead property's value), to stand alone or sit inside any envelope: each
 // child element declares the namespaces its subtree takes from outside it, the default one included (`xmlns=""`
@@ -244,7 +244,7 @@ export function serializeXmlChildren(element: XmlElement): string {
                 if (prefix === 'xml' || inner.get(prefix) || Object.hasOwn(outer, declaration)) continue;
                 outer[declaration] = ns;
                 declaredUris += ns.length;
-                if (declaredUris > MAX_DECLARED_URI_BYTES) throw new XmlError('Too many namespace declarations');
+                if (declaredUris > MAX_DECLARED_URI_CHARS) throw new XmlError('Too many namespace declarations');
             }
             open.push({ children: node.children, next: 0, own });
         };
