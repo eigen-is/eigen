@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { escapeXml, escapeXmlText } from '../../core/xml';
+import { escapeXml, escapeXmlText, stripNonXmlChars } from '../../core/xml';
 
 const chars = (...codes: number[]) => codes.map((code) => String.fromCharCode(code));
 
@@ -63,5 +63,11 @@ describe('escapeXmlText', () => {
 
     test('escapes the five predefined entities and drops what XML cannot hold', () => {
         expect(escapeXmlText(`a&b<c>d"e'f${INVALID.join('')}`)).toBe('a&amp;b&lt;c&gt;d&quot;e&apos;f');
+    });
+});
+
+describe('stripNonXmlChars', () => {
+    test('drops what XML cannot hold and leaves markup, tab, LF and CR raw', () => {
+        expect(stripNonXmlChars(`<p a="1">x\ty\r\nz&amp;</p>${INVALID.join('')}`)).toBe('<p a="1">x\ty\r\nz&amp;</p>');
     });
 });

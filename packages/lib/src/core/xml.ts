@@ -17,8 +17,12 @@ const ENTITY: Record<string, string> = {
     '\r': '&#13;',
 };
 
+export function stripNonXmlChars(value: string): string {
+    return value.replace(NOT_XML_CHAR, '');
+}
+
 function xmlEscape(value: string, special: RegExp): string {
-    return value.replace(NOT_XML_CHAR, '').replace(special, (ch) => ENTITY[ch]);
+    return stripNonXmlChars(value).replace(special, (ch) => ENTITY[ch]);
 }
 
 // Text or attribute: tab, LF and CR become references, since an attribute reads them back as spaces.
