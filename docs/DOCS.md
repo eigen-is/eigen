@@ -2,7 +2,7 @@
 
 > **TLDR:** Docs is Eigen's word processor: rich text on an A4 page that several people edit at once. A doc is a `.eigendoc` collab document whose truth is ProseMirror content held in a Yjs fragment, and one schema defines that content for the editor and for every server renderer. The schema is `packages/lib/src/docs/eigendoc/`, and the editor is `apps/docs/src/components/docs/`.
 
-The editor is TipTap, a React wrapper around ProseMirror, the editing toolkit that models a document as a tree of nodes (paragraphs, headings, lists, tables, task lists, code blocks, images) carrying marks (bold, color, font, comment). An image is a `figure` node. The app around it is a Drive-style file list plus one editor route, `/doc/$ownerId/$mountId/$pathId`.
+The editor is TipTap, a React wrapper around ProseMirror, the editing toolkit that models a document as a tree of nodes (paragraphs, headings, lists, tables, task lists, code blocks, images, page breaks) carrying marks (bold, color, font, comment). An image is a `figure` node. The app around it is a Drive-style file list plus one editor route, `/doc/$ownerId/$mountId/$pathId`.
 
 On disk a doc is a container, a Drive folder named like a file (`Notes.eigendoc`), like every collab document ([COLLAB.md](COLLAB.md)). Its `data.db` holds the Yjs state, and the truth inside it is the `XmlFragment` named `default`, which y-prosemirror (the Yjs binding for ProseMirror) keeps in step with the editor. The same container holds the doc's images in `media/`, its comment threads in `chat/` and `comments.db` ([COMMENTS.md](COMMENTS.md)), and its version history.
 
@@ -10,11 +10,12 @@ The server never runs the editor, yet it renders the doc for the drive preview, 
 
 A figure names its image, and never holds bytes or a URL. The name is a file in the container's `media/` folder, resolved to a URL at render ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). A pending name, `pending:<uuid>`, stands in for an image whose upload has not landed yet. A panel is one of the right-side panes: comments, activity, and the figure and table properties.
 
-The sections cover the schema, figures, the page and its panels, comments, the clipboard, and what keeps content inside the page. Three things in them surprise people:
+The sections cover the schema, figures, the page and its panels, page breaks, comments, the clipboard, and what keeps content inside the page. Four things in them surprise people:
 
 - The side panels overlay the page instead of taking room from it, and the page slides and scales to stay clear ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
 - A figure stores its width in the page's own pixels, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
 - Undo reverts only this tab's edits ([§ Undo is the Yjs binding's](#undo-is-the-yjs-bindings-and-reverts-only-this-tabs-edits)).
+- A tab left open across a deploy that adds a node deletes that node for everyone ([§ A tab older than the schema](#a-tab-older-than-the-schema-deletes-the-nodes-it-does-not-know)).
 
 ## One schema serves the editor and every server renderer
 
@@ -23,6 +24,10 @@ The sections cover the schema, figures, the page and its panels, comments, the c
 The editor leaves out the schema's `figure` and `comment` and adds `Figure` and `CommentMark` (`apps/docs/src/components/docs/extensions/`), which extend the lib nodes with the node view and the click, menu and decoration behavior. The stored shape stays the lib's, because an extension adds behavior, not attributes.
 
 The code block exists only when the caller passes `lowlight`, the syntax highlighter. The preview and the export pass one. The docx importer passes none, so its schema has no code block, and a test fixture that writes a stored doc's code block must build its schema with `lowlight` too.
+
+## A tab older than the schema deletes the nodes it does not know
+
+The Yjs binding (`@tiptap/y-tiptap`, TipTap's fork of y-prosemirror) builds every element of the fragment with the tab's own schema. When that schema has no such node, `createNodeFromYElement` catches the error and deletes the element from the Yjs document. The delete syncs to the server and every peer like any other edit. Nothing tells an open tab that a new version is deployed, so a tab left open across a deploy that adds a node runs the old schema and deletes every instance of the new node it receives. Every schema addition carries this risk, the page break included. A reload prompt is a [ROADMAP](ROADMAP.md) row.
 
 ## Undo is the Yjs binding's and reverts only this tab's edits
 
@@ -45,6 +50,22 @@ Every doc is an A4 page with 2 cm margins. One `PageSetup` in millimetres descri
 On screen the margins are the page box's padding. On paper the `@page` rule draws them, so the page must drop its padding and width in print, or the margins print twice. `pageStylesheet(setup, selector)` holds all three rules: the `@page` rule, the selector's width and padding, and the print reset. The editor renders it for `[data-document]` in a `<style>`, which also matches the clone browser print makes, and the export embeds it for `.page`. Quick look and the thumbnail never print, so they keep `pageBoxStyle` inline.
 
 File → **Page setup…** shows the page in a dialog whose controls are all disabled. A doc carries no page of its own: page size and margins per document is a [ROADMAP](ROADMAP.md) row.
+
+## A page break is a dashed rule on screen and a new page on paper
+
+The `pageBreak` node (`packages/lib/src/docs/eigendoc/nodes/page-break.ts`) is an atomic block with no content. The toolbar button, the **Insert** menu of the narrow toolbar and Mod-Enter insert it the way the horizontal rule is inserted: the caret lands after it, on a new paragraph when the break ends the doc. StarterKit's hard break binds Mod-Enter too, so the node's shortcut runs at priority 101 to win. In a code block Mod-Enter still exits the block, and Shift-Enter stays the line break.
+
+Every screen surface draws it from `eigen-prose.css` as a dashed rule labeled "Page break": the editor, quick look, the Drive preview and the HTML download. Print and the PDF draw nothing and start a new page after it. That rule is a top-level `@media print` block, because the export's CSS flattener (`flattenEigenProseCSS`) expands only plain nesting and would break an `@media` nested in `.eigen-prose`. Its `.tiptap .page-break` selector weighs the same as the flattened `.eigen-prose .page-break` and comes after it, so it wins in the PDF too. A selected page break or horizontal rule takes the shared selection ring (`.eigen-selection-ring` in `globals.css`).
+
+## html-to-docx writes a page break only for a top-level `page-break` div
+
+A doc's docx is its export HTML fed to `@turbodocx/html-to-docx` ([EXPORT.md](EXPORT.md#every-format-but-xlsx-and-svg-is-one-html-document)). Version 1.22.2 writes a Word page break (`w:br w:type="page"`) for a `div` whose class string is exactly `page-break`. So `renderHTML` writes that one class and nothing beside it: a second class loses the break without an error. It reads that div only among the top-level blocks, so a page break in a list item, a quote or a table cell is dropped from the docx. `apps/api/src/test/export/doc-export.test.ts` pins both. The docx writer of [PROPOSAL_DOCX.md](proposals/PROPOSAL_DOCX.md) (phase 1), which replaces html-to-docx, is the fix for the nested case.
+
+## A Word page break splits its paragraph on import
+
+In Word a page break is a run inside a paragraph, and in a doc it is a block. So `from-docx.ts` gives mammoth a style map that turns Word's page break into `hr.page-break`, the carrier the node's second parse rule reads. That rule outranks the horizontal rule's own `hr` rule. Before that, a `transformDocument` pass splits each paragraph at its breaks. The halves keep the paragraph's style and numbering, and the break gets a plain paragraph of its own, so it stands between two headings or two lists instead of inside one. An empty half vanishes with mammoth's other empty paragraphs. The HTML parse then closes the paragraph around the `hr`, which leaves `<p></p><hr><p></p>`, and the importer removes those empty neighbors.
+
+A numbered list that a break splits comes back as two lists, and the second starts at 1 again: the import does not read Word's list numbers, which is phase 3 of [PROPOSAL_DOCX.md](proposals/PROPOSAL_DOCX.md). The cases are pinned in `apps/api/src/test/import/doc-import.test.ts`.
 
 ## The page keeps its width and slides, then scales, clear of a panel
 
