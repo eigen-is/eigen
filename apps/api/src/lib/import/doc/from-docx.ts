@@ -24,7 +24,17 @@ const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 // mammoth's document tree, as far as the page-break split reads it.
-type MammothElement = { type: string; breakType?: string; children?: MammothElement[] };
+type MammothElement = {
+    type: string;
+    breakType?: string;
+    numbering?: { level: string } | null;
+    children?: MammothElement[];
+};
+
+// The footnotes and endnotes sit beside the children; mammoth's HTML conversion fetches each one through resolve.
+type MammothDocument = MammothElement & {
+    notes: { resolve(reference: MammothElement): MammothElement & { body: MammothElement[] } };
+};
 
 // Unstyled and unnumbered, so the break stands between two lists or headings rather than inside one.
 const PAGE_BREAK_PARAGRAPH: MammothElement = { type: 'paragraph', children: [{ type: 'break', breakType: 'page' }] };
@@ -49,7 +59,7 @@ export async function docxToPmJson(buffer: Buffer): Promise<{ json: JSONContent;
         { buffer },
         {
             styleMap: ["br[type='page'] => hr.page-break"],
-            transformDocument: splitAtPageBreaks,
+            transformDocument: splitDocument,
             convertImage: mammoth.images.imgElement(async (image) => {
                 const data = await image.readAsBuffer();
                 const ext = extensionFromMime(image.contentType);
@@ -67,15 +77,30 @@ export async function docxToPmJson(buffer: Buffer): Promise<{ json: JSONContent;
     });
 
     const dom = new JSDOM(`<!DOCTYPE html><html><body>${sanitized}</body></html>`);
-    // A break's own paragraph parses as <p></p><hr><p></p>: an hr closes the paragraph it sits in.
+    // A break's own paragraph parses as <p></p><hr><p></p>: an hr closes the paragraph it sits in. A half
+    // holding only a bookmark or a checkbox, which the schema doesn't keep, stands one further out.
     for (const hr of dom.window.document.querySelectorAll('hr.page-break')) {
-        for (const sibling of [hr.previousElementSibling, hr.nextElementSibling]) {
-            if (sibling?.tagName === 'P' && !sibling.hasChildNodes()) sibling.remove();
-        }
+        while (isEmptyBlock(hr.previousElementSibling)) hr.previousElementSibling.remove();
+        while (isEmptyBlock(hr.nextElementSibling)) hr.nextElementSibling.remove();
     }
     const pmDoc = parser.parse(dom.window.document.body);
 
     return { json: pmDoc.toJSON(), images };
+}
+
+// A note isn't paged, so a break in one goes. mammoth reads a note's body through notes.resolve, out of
+// the split's reach, so the notes get a resolve that strips the breaks.
+function splitDocument(document: MammothDocument): MammothDocument {
+    const { notes } = document;
+    return {
+        ...splitAtPageBreaks(document),
+        notes: {
+            resolve: (reference) => {
+                const note = notes.resolve(reference);
+                return { ...note, body: note.body.map(withoutPageBreaks) };
+            },
+        },
+    };
 }
 
 // A Word page break sits in a paragraph's runs, the eigendoc one is a block. So a paragraph splits at each
@@ -92,6 +117,8 @@ function splitAtPageBreaks(element: MammothElement): MammothElement {
 }
 
 function splitParagraph(paragraph: MammothElement): MammothElement[] {
+    // A top-level break can't stand inside a nested list without cutting it apart, so there the break goes.
+    if (paragraph.numbering && paragraph.numbering.level !== '0') return [withoutPageBreaks(paragraph)];
     const [first = [], ...rest] = splitChildren(paragraph.children ?? []);
     return [
         { ...paragraph, children: first },
@@ -104,7 +131,7 @@ function splitChildren(children: MammothElement[]): MammothElement[][] {
     let current: MammothElement[] = [];
     const segments = [current];
     for (const child of children) {
-        if (child.type === 'break' && child.breakType === 'page') {
+        if (isPageBreak(child)) {
             current = [];
             segments.push(current);
         } else if (child.children) {
@@ -119,6 +146,23 @@ function splitChildren(children: MammothElement[]): MammothElement[][] {
         }
     }
     return segments;
+}
+
+function isEmptyBlock(element: Element | null): element is Element {
+    return (
+        !!element?.matches('p, h1, h2, h3, h4, h5, h6') &&
+        !element.textContent?.trim() &&
+        !element.querySelector('img, br')
+    );
+}
+
+function withoutPageBreaks(element: MammothElement): MammothElement {
+    if (!element.children) return element;
+    return { ...element, children: element.children.filter((child) => !isPageBreak(child)).map(withoutPageBreaks) };
+}
+
+function isPageBreak(element: MammothElement): boolean {
+    return element.type === 'break' && element.breakType === 'page';
 }
 
 function extensionFromMime(contentType: string): string {

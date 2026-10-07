@@ -16,6 +16,7 @@ import {
     buildGoldenDocx,
     GOLDEN_DOCX_HEADING,
     GOLDEN_DOCX_IMAGE_NAME,
+    GOLDEN_DOCX_IMAGE_RUN,
     GOLDEN_DOCX_LINK,
 } from '../fixtures/golden-docx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
@@ -331,6 +332,7 @@ describe('docx import resource guards', () => {
 const PAGE_BREAK = '<w:br w:type="page"/>';
 const HEADING = '<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>';
 const ORDERED = '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>';
+const NESTED = '<w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="2"/></w:numPr></w:pPr>';
 const run = (text: string): string => `<w:r><w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, properties = ''): string => `<w:p>${properties}${inner}</w:p>`;
 
@@ -346,9 +348,12 @@ function blocks(json: JSONContent): string[] {
     });
 }
 
-async function importBlocks(body: string): Promise<string[]> {
-    const { json } = await docxToPmJson(Buffer.from(await buildDocxWithBody(body)));
-    return blocks(json);
+async function importJson(body: string, footnotes = ''): Promise<JSONContent> {
+    return (await docxToPmJson(Buffer.from(await buildDocxWithBody(body, footnotes)))).json;
+}
+
+async function importBlocks(body: string, footnotes = ''): Promise<string[]> {
+    return blocks(await importJson(body, footnotes));
 }
 
 describe('docx import — page breaks', () => {
@@ -402,5 +407,71 @@ describe('docx import — page breaks', () => {
     test('a break mid list item splits the item and the list around a page break', async () => {
         const body = `${paragraph(run('One'), ORDERED)}${paragraph(`${run('Before')}<w:r>${PAGE_BREAK}</w:r>${run('After')}`, ORDERED)}`;
         expect(await importBlocks(body)).toEqual(['orderedList(One/Before)', 'pageBreak', 'orderedList(After)']);
+    });
+
+    test('a break in a nested list item is dropped and leaves the list whole', async () => {
+        const list = (inner: string): string =>
+            `${paragraph(run('One'), ORDERED)}${paragraph(inner, NESTED)}${paragraph(run('C'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
+        const json = await importJson(list(`${run('A')}<w:r>${PAGE_BREAK}</w:r>${run('B')}`));
+        expect(json).toEqual(await importJson(list(`${run('A')}${run('B')}`)));
+        expect(blocks(json)).toEqual(['orderedList(One/AB/C/Two)']);
+    });
+
+    test('a break in a footnote is dropped and leaves its paragraph whole', async () => {
+        const body = paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`);
+        const footnote = `<w:footnote w:id="1">${paragraph(`<w:r><w:t>fa</w:t>${PAGE_BREAK}<w:t>fb</w:t></w:r>`)}</w:footnote>`;
+        expect(await importBlocks(body, footnote)).toEqual(['paragraph(Text[1])', 'orderedList(fafb ↑)']);
+    });
+
+    test('a bookmark before a break in its own heading leaves no empty heading', async () => {
+        const body = `${paragraph(`<w:bookmarkStart w:id="0" w:name="_Toc1"/><w:r>${PAGE_BREAK}</w:r>`, HEADING)}${paragraph(run('Chapter'), HEADING)}`;
+        expect(await importBlocks(body)).toEqual(['pageBreak', 'heading1(Chapter)']);
+    });
+
+    // The schema has no inline checkbox, so the half holding only a checkbox content control parses empty.
+    test('a checkbox before a break leaves no empty paragraph', async () => {
+        const checkbox = `<w:sdt xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:sdtPr><w14:checkbox><w14:checked w14:val="0"/></w14:checkbox></w:sdtPr><w:sdtContent>${run('☐')}</w:sdtContent></w:sdt>`;
+        expect(await importBlocks(paragraph(`${checkbox}<w:r>${PAGE_BREAK}</w:r>${run('After')}`))).toEqual([
+            'pageBreak',
+            'paragraph(After)',
+        ]);
+    });
+
+    // The figure is inline, so its paragraph shows without text.
+    test('an image before a break keeps its paragraph', async () => {
+        expect(
+            await importBlocks(paragraph(`${GOLDEN_DOCX_IMAGE_RUN}<w:r>${PAGE_BREAK}</w:r>${run('After')}`)),
+        ).toEqual(['paragraph', 'pageBreak', 'paragraph(After)']);
+    });
+
+    test('a split keeps a bold run bold and a hyperlink linked on both sides', async () => {
+        const json = await importJson(
+            paragraph(
+                `<w:r><w:rPr><w:b/></w:rPr><w:t>Bo</w:t>${PAGE_BREAK}<w:t>ld</w:t></w:r><w:hyperlink r:id="rId3"><w:r><w:t>Li</w:t>${PAGE_BREAK}<w:t>nk</w:t></w:r></w:hyperlink>`,
+            ),
+        );
+        expect(blocks(json)).toEqual(['paragraph(Bo)', 'pageBreak', 'paragraph(ldLi)', 'pageBreak', 'paragraph(nk)']);
+        const marked = (json.content ?? []).map((block) =>
+            (block.content ?? []).map(
+                (text) => `${text.text}:${(text.marks ?? []).map((mark) => mark.attrs?.['href'] ?? mark.type).join()}`,
+            ),
+        );
+        expect(marked).toEqual([
+            ['Bo:bold'],
+            [],
+            ['ld:bold', `Li:${GOLDEN_DOCX_LINK}`],
+            [],
+            [`nk:${GOLDEN_DOCX_LINK}`],
+        ]);
+    });
+
+    // Today's docx export drops it again: html-to-docx writes a page break only among the top-level blocks.
+    test('a break in a table cell splits the cell paragraph around a page break inside the cell', async () => {
+        const json = await importJson(
+            `<w:tbl><w:tr><w:tc>${paragraph(`${run('Cell')}<w:r>${PAGE_BREAK}</w:r>${run('Two')}`)}</w:tc></w:tr></w:tbl>`,
+        );
+        const [cell] = json.content?.[0]?.content?.[0]?.content ?? [];
+        expect(blocks(json)).toEqual(['table(Cell//Two)']);
+        expect(blocks(cell ?? {})).toEqual(['paragraph(Cell)', 'pageBreak', 'paragraph(Two)']);
     });
 });
