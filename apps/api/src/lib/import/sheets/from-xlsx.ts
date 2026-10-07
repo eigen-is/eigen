@@ -141,7 +141,7 @@ type ThemePalette = string[];
 const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
-    // One JSZip pass, reused for the size guard AND the hyperlink read below. loadAsync
+    // One JSZip pass, reused for the size guard AND the theme and hyperlink reads below. loadAsync
     // reads the central directory without decompressing, so the guard can run BEFORE
     // exceljs's xlsx.load — the OOM a bomb triggers happens inside load() and is not
     // catchable, so a post-load check would never fire.
@@ -153,7 +153,8 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     await workbook.xlsx.load(buffer);
     assertCellCountWithinBounds(workbook);
 
-    const theme = extractThemePalette(workbook);
+    // One after the other, so their trees are never alive together.
+    const theme = await readThemePalette(zip);
     const locationLinks = await readLocationHyperlinks(zip);
 
     const sheets: Sheet[] = [];
@@ -351,7 +352,7 @@ const FORMULA_BACKED_CF_TYPES = new Set(['containsText', 'notContainsText', 'beg
 
 function convertConditionalFormats(worksheet: Worksheet, theme: ThemePalette): ConditionalFormatRule[] {
     // `conditionalFormattings` is a real Worksheet property (lib/doc/worksheet.js) missing
-    // from exceljs's typings — same situation as `workbook._themes` in extractThemePalette.
+    // from exceljs's typings.
     const blocks =
         (worksheet as unknown as { conditionalFormattings?: { ref: string; rules: XlsxCfRule[] }[] })
             .conditionalFormattings ?? [];
@@ -867,30 +868,16 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
 // Reuses the zip loaded by xlsxToSheets — no second decompression pass.
 export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
     const bySheet = new Map<string, Map<string, string>>();
-    const workbook = await readPart(zip, 'xl/workbook.xml');
-    const rels = await readPart(zip, 'xl/_rels/workbook.xml.rels');
-    const namespaces = OOXML_NAMESPACES.find(({ spreadsheetml }) => spreadsheetml === workbook?.ns);
-    const sheets = namespaces && workbook && xmlChild(workbook, namespaces.spreadsheetml, 'sheets');
-    if (!namespaces || !sheets || !rels) return bySheet;
+    const workbook = await readSheetPaths(zip);
+    if (!workbook) return bySheet;
 
-    const relTargets = new Map<string, string>();
-    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS, 'Relationship')) {
-        const id = xmlAttr(rel, '', 'Id');
-        const target = xmlAttr(rel, '', 'Target');
-        if (id != null && target != null) relTargets.set(id, target);
-    }
-
-    for (const sheet of xmlChildren(sheets, namespaces.spreadsheetml, 'sheet')) {
-        const name = xmlAttr(sheet, '', 'name');
-        const rId = xmlAttr(sheet, namespaces.relationships, 'id');
-        const target = rId != null ? relTargets.get(rId) : undefined;
-        if (name == null || target == null) continue;
-        // Workbook-rel targets are relative to xl/ unless rooted.
-        const worksheet = await readPart(zip, target.startsWith('/') ? target.slice(1) : `xl/${target}`);
-        const hyperlinks = worksheet && xmlChild(worksheet, namespaces.spreadsheetml, 'hyperlinks');
+    // One sheet at a time: each is decoded whole, and together they can reach the decompressed cap.
+    for (const { name, path } of workbook.sheets) {
+        const text = await zip.file(path)?.async('string');
+        const hyperlinks = text && readHyperlinksBlock(text, workbook.spreadsheetml);
         if (!hyperlinks) continue;
         const links = new Map<string, string>();
-        for (const hyperlink of xmlChildren(hyperlinks, namespaces.spreadsheetml, 'hyperlink')) {
+        for (const hyperlink of xmlChildren(hyperlinks, workbook.spreadsheetml, 'hyperlink')) {
             const ref = xmlAttr(hyperlink, '', 'ref');
             const location = xmlAttr(hyperlink, '', 'location');
             // ref may span a range; the anchor cell carries the link.
@@ -901,9 +888,91 @@ export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Ma
     return bySheet;
 }
 
+// Each sheet's name and part path, as plain values: the workbook and rels trees are gone before any sheet is read.
+async function readSheetPaths(
+    zip: JSZip,
+): Promise<{ spreadsheetml: string; sheets: { name: string; path: string }[] } | undefined> {
+    const workbook = await readPart(zip, 'xl/workbook.xml');
+    const rels = await readPart(zip, 'xl/_rels/workbook.xml.rels');
+    const namespaces = OOXML_NAMESPACES.find(({ spreadsheetml }) => spreadsheetml === workbook?.ns);
+    const sheets = namespaces && workbook && xmlChild(workbook, namespaces.spreadsheetml, 'sheets');
+    if (!namespaces || !sheets || !rels) return undefined;
+
+    const relTargets = new Map<string, string>();
+    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS, 'Relationship')) {
+        const id = xmlAttr(rel, '', 'Id');
+        const target = xmlAttr(rel, '', 'Target');
+        if (id != null && target != null) relTargets.set(id, target);
+    }
+    const paths: { name: string; path: string }[] = [];
+    for (const sheet of xmlChildren(sheets, namespaces.spreadsheetml, 'sheet')) {
+        const name = xmlAttr(sheet, '', 'name');
+        const rId = xmlAttr(sheet, namespaces.relationships, 'id');
+        const target = rId != null ? relTargets.get(rId) : undefined;
+        if (name == null || target == null) continue;
+        // Workbook-rel targets are relative to xl/ unless rooted.
+        paths.push({ name, path: target.startsWith('/') ? target.slice(1) : `xl/${target}` });
+    }
+    return { spreadsheetml: namespaces.spreadsheetml, sheets: paths };
+}
+
+// A tree costs ~260 bytes of heap a tag and ~350-600 an attribute however few bytes they take in the input, and a
+// long value or text 1x (ASCII bytes) to 4x (one non-latin1 character widens the input to UTF-16) its length. So what
+// is parsed is bounded by its length and by its `<` and `=` (a tag has one, an attribute one; one in a value or text
+// only counts extra). A part or block past any bound is skipped like a malformed one.
+type ParseBound = { length: number; tags: number; attributes: number };
+// Workbook, rels and theme run to a few KB and a few hundred tags in a real file. Length in bytes.
+const PART_BOUND: ParseBound = { length: 1024 * 1024, tags: 10_000, attributes: 100_000 };
+// Excel caps a sheet at 66,530 hyperlinks, each one tag of at most six attributes in ~130-300 characters, plus
+// slack. Length in UTF-16 code units: the block is a slice of the decoded sheet.
+const HYPERLINKS_BOUND: ParseBound = { length: 32 * 1024 * 1024, tags: 70_000, attributes: 490_000 };
+
+function withinParseBound(parts: (string | Uint8Array)[], bound: ParseBound): boolean {
+    if (parts.reduce((length, part) => length + part.length, 0) > bound.length) return false;
+    const left = { '<': bound.tags, '=': bound.attributes };
+    for (const part of parts) {
+        for (const char of ['<', '='] as const) {
+            const next = (from: number) =>
+                typeof part === 'string' ? part.indexOf(char, from) : part.indexOf(char.charCodeAt(0), from);
+            for (let at = next(0); at >= 0; at = next(at + 1)) {
+                if (--left[char] < 0) return false;
+            }
+        }
+    }
+    return true;
+}
+
+// The root's start tag (the prolog's `<?` and `<!` never match) and its name; an attribute value may hold `>`.
+const ROOT_START_TAG = /<([^\s?!/<>][^\s/<>]*)(?:\s+[^\s=/<>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*>/;
+// Global for their lastIndex: each search starts where the schema puts what it looks for.
+const SHEET_DATA_END = /<\/(?:[^\s/<>:]+:)?sheetData\s*>|<(?:[^\s/<>:]+:)?sheetData\s*\/>/g;
+const HYPERLINKS_START_TAG = /<((?:[^\s/<>:]+:)?hyperlinks)[\s/>]/g;
+
+// The rest of a sheet can be the whole decompressed cap, so only its hyperlinks block is parsed, behind the prolog
+// and the root's start tag so the namespaces bound there stay bound and a DOCTYPE is still refused. The schema puts
+// the block after the sheet data, so the search starts past it: past the bulk of the sheet, and past any opener a
+// comment there could hide.
+function readHyperlinksBlock(sheet: string, spreadsheetml: string): XmlElement | undefined {
+    const root = ROOT_START_TAG.exec(sheet);
+    if (!root) return undefined;
+    const head = sheet.slice(0, root.index + root[0].length);
+    SHEET_DATA_END.lastIndex = head.length;
+    HYPERLINKS_START_TAG.lastIndex = SHEET_DATA_END.exec(sheet) ? SHEET_DATA_END.lastIndex : head.length;
+    const open = HYPERLINKS_START_TAG.exec(sheet);
+    if (!open) return undefined;
+    // An end tag that doesn't match is Bun's to refuse.
+    const end = sheet.indexOf(`</${open[1]}`, open.index);
+    const close = end < 0 ? -1 : sheet.indexOf('>', end);
+    if (close < 0) return undefined;
+    const block = sheet.slice(open.index, close + 1);
+    if (!withinParseBound([head, block], HYPERLINKS_BOUND)) return undefined;
+    const wrapped = parsePart(`${head}${block}</${root[1]}>`);
+    return wrapped ? xmlChild(wrapped, spreadsheetml, 'hyperlinks') : undefined;
+}
+
 async function readPart(zip: JSZip, path: string): Promise<XmlElement | null> {
     const bytes = await zip.file(path)?.async('uint8array');
-    return bytes ? parsePart(bytes) : null;
+    return bytes && withinParseBound([bytes], PART_BOUND) ? parsePart(bytes) : null;
 }
 
 // exceljs has read the workbook by now, so a part Bun refuses (malformed, a DOCTYPE) costs only what these reads
@@ -1291,9 +1360,8 @@ const CLR_SCHEME_ELEMENTS = [
 ] as const;
 const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
-function extractThemePalette(workbook: Workbook): ThemePalette {
-    const themeXml = (workbook as unknown as { _themes?: Record<string, string> })._themes?.['theme1'];
-    const theme = themeXml ? parsePart(themeXml) : null;
+async function readThemePalette(zip: JSZip): Promise<ThemePalette> {
+    const theme = await readPart(zip, 'xl/theme/theme1.xml');
     const drawingml = OOXML_NAMESPACES.find((namespaces) => namespaces.drawingml === theme?.ns)?.drawingml;
     const elements = drawingml && theme && xmlChild(theme, drawingml, 'themeElements');
     const scheme = drawingml && elements && xmlChild(elements, drawingml, 'clrScheme');

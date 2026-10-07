@@ -263,7 +263,7 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
 
 // Network-free: a loopback stub S3 answering the bucket-config PUTs, to pin the reason mapping that
 // a live MinIO can only reach with a restricted user.
-function stubS3Endpoint(status: number, code: string) {
+function stubS3Endpoint(status: number, code: string, message = '') {
     return Bun.serve({
         port: 0,
         fetch(req) {
@@ -271,7 +271,7 @@ function stubS3Endpoint(status: number, code: string) {
                 if (new URL(req.url).search === '?lifecycle') return new Response(null, { status: 404 });
                 return new Response('<VersioningConfiguration></VersioningConfiguration>');
             }
-            return new Response(`<Error><Code>${code}</Code></Error>`, { status });
+            return new Response(`<Error><Code>${code}</Code><Message>${message}</Message></Error>`, { status });
         },
     });
 }
@@ -303,6 +303,25 @@ describe('hardenS3Bucket reason mapping', () => {
             expect(result.reason).toBe('not-supported');
         } finally {
             server.stop(true);
+        }
+    });
+
+    test('under another status the reason is the error code, not a word in the message', async () => {
+        for (const [code, message, reason] of [
+            ['AccessDenied', '', 'access-denied'],
+            ['NotImplemented', '', 'not-supported'],
+            ['InvalidRequest', 'AccessDenied NotImplemented', 'error'],
+        ] as const) {
+            const server = stubS3Endpoint(400, code, message);
+            try {
+                const result = await hardenS3Bucket(
+                    { ...s3Config, endpoint: `http://localhost:${server.port}`, bucket: 'stub', prefix: '' },
+                    30,
+                );
+                expect(result.reason).toBe(reason);
+            } finally {
+                server.stop(true);
+            }
         }
     });
 });

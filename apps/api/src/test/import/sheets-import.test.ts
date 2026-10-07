@@ -1650,6 +1650,86 @@ describe('Sheets xlsx conversion fidelity', () => {
         }
     });
 
+    test('location hyperlinks parse only the hyperlinks block of a sheet', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'Sheet1!B2' },
+        ]);
+        // A whole-sheet tree of these 4 MB costs ~280 MB.
+        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('</worksheet>', `<extLst><ext uri="x">${'<a/>'.repeat(1_000_000)}</ext></extLst></worksheet>`),
+        );
+        const zip = await JSZip.loadAsync(buffer);
+
+        Bun.gc(true);
+        const before = process.memoryUsage().heapUsed;
+        const links = await readLocationHyperlinks(zip);
+        const grown = process.memoryUsage().heapUsed - before;
+
+        expect(links).toEqual(new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]));
+        expect(grown).toBeLessThan(64 * 1024 * 1024);
+    });
+
+    test('a malformed hyperlinks block loses its own sheet its location hyperlinks, an oversized workbook all', async () => {
+        const zip = new JSZip();
+        zip.file(
+            'xl/workbook.xml',
+            `<workbook xmlns="${TRANSITIONAL.spreadsheetml}" xmlns:r="${TRANSITIONAL.relationships}"><sheets><sheet name="Broken" sheetId="1" r:id="rId1"/><sheet name="Kept" sheetId="2" r:id="rId2"/></sheets></workbook>`,
+        );
+        zip.file(
+            'xl/_rels/workbook.xml.rels',
+            `<Relationships xmlns="${PACKAGE_RELATIONSHIPS}"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.xml"/></Relationships>`,
+        );
+        zip.file(
+            'xl/worksheets/sheet1.xml',
+            `<worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="A1" location="Kept!A1"></hyperlinks></worksheet>`,
+        );
+        zip.file(
+            'xl/worksheets/sheet2.xml',
+            `<?xml version="1.0"?><worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="B2" location="Broken!A1"/></hyperlinks><extLst/></worksheet>`,
+        );
+
+        expect(await readLocationHyperlinks(zip)).toEqual(new Map([['Kept', new Map([['B2', 'Broken!A1']])]]));
+
+        const workbook = (await zip.file('xl/workbook.xml')?.async('string')) ?? '';
+        zip.file('xl/workbook.xml', `${workbook}${'<!---->'.repeat(10_000)}`);
+        expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+    });
+
+    test('location hyperlinks keep all of the 66,530 Excel allows a sheet', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
+        workbook.addWorksheet('Sheet 2');
+        const entries = Array.from(
+            { length: 66_530 },
+            (_, i) =>
+                `<hyperlink ref="A${i + 1}" location="'Sheet 2'!B${i + 1}" display="Row ${i + 1} of the second sheet, column B" tooltip="Open the second sheet"/>`,
+        ).join('');
+        const buffer = await replacePart(await workbookToBuffer(workbook), 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`),
+        );
+
+        const links = (await readLocationHyperlinks(await JSZip.loadAsync(buffer))).get('Sheet1');
+        expect(links?.size).toBe(66_530);
+        expect(links?.get('A66530')).toBe("'Sheet 2'!B66530");
+    });
+
+    test('a hyperlinks opener in a comment before the sheet data leaves the real block to be read', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'Sheet1!B2' },
+        ]);
+        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('<sheetData', '<!-- <hyperlinks> --><sheetData'),
+        );
+
+        expect(await readLocationHyperlinks(await JSZip.loadAsync(buffer))).toEqual(
+            new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]),
+        );
+    });
+
     test('convert imports a sheet whose part Bun refuses, without its location hyperlinks', async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Sheet1');
@@ -1703,6 +1783,72 @@ describe('Sheets xlsx conversion fidelity', () => {
 });
 
 describe('xlsxToSheets resource guards', () => {
+    // Bun's tree costs ~120x the markup it holds: 8 MB of `<a/>` builds a ~1 GB tree, two at once ~2 GB.
+    test('workbook, rels, theme and hyperlinks block of 8 or 16 MB of tags cost no tree', async () => {
+        for (const bytes of [8 * 1024 * 1024 - 4096, 8_000_000, 16_000_000]) {
+            const fill = '<a/>'.repeat(bytes / 4);
+            const workbook = new ExcelJS.Workbook();
+            workbook.addWorksheet('S').getCell('A1').value = 'link';
+            workbook.addWorksheet('T');
+            let buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+                { ref: 'A1', location: 'T!A1' },
+            ]);
+            buffer = await replacePart(buffer, 'xl/worksheets/sheet1.xml', (xml) =>
+                xml.replace('</hyperlinks>', `${fill}</hyperlinks>`),
+            );
+            buffer = await replacePart(buffer, 'xl/workbook.xml', (xml) =>
+                xml.replace('</workbook>', `<extLst><ext uri="x">${fill}</ext></extLst></workbook>`),
+            );
+            buffer = await replacePart(buffer, 'xl/theme/theme1.xml', (xml) =>
+                xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${fill}</a:ext></a:extLst></a:theme>`),
+            );
+
+            Bun.gc(true);
+            const before = process.memoryUsage().heapUsed;
+            const sheets = await xlsxToSheets(Buffer.from(buffer));
+            const grown = process.memoryUsage().heapUsed - before;
+
+            expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
+            expect(grown).toBeLessThan(128 * 1024 * 1024);
+
+            // exceljs refuses a rels part holding anything but relationships, so this one is read on its own.
+            const zip = await JSZip.loadAsync(buffer);
+            const rels = (await zip.file('xl/_rels/workbook.xml.rels')?.async('string')) ?? '';
+            zip.file('xl/_rels/workbook.xml.rels', rels.replace('</Relationships>', `${fill}</Relationships>`));
+            Bun.gc(true);
+            const relsBefore = process.memoryUsage().heapUsed;
+            expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(128 * 1024 * 1024);
+        }
+    });
+
+    // Past the length cap a part isn't parsed: a tree would cost 1x to 4x its text. Without the cap the link and the
+    // colours survive. The hyperlinks block is read straight from the zip, so exceljs never inflates the 34 MB sheet.
+    test('a hyperlinks block or theme past its length cap is not parsed and loses only its links or colors', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('S');
+        ws.getCell('A1').value = 'kept';
+        ws.getCell('A1').font = { color: { theme: 4 } };
+        workbook.addWorksheet('T');
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'T!A1' },
+        ]);
+
+        const longBlock = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('</hyperlinks>', `${'a'.repeat(34_000_000)}</hyperlinks>`),
+        );
+        expect(await readLocationHyperlinks(await JSZip.loadAsync(longBlock))).toEqual(new Map());
+
+        const longTheme = await replacePart(linked, 'xl/theme/theme1.xml', (xml) =>
+            xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${'a'.repeat(2_000_000)}</a:ext></a:extLst></a:theme>`),
+        );
+        const sheets = await xlsxToSheets(Buffer.from(longTheme));
+        const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('kept');
+        expect(a1?.v?.fc).toBeUndefined();
+        expect(sheets[0].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'T!A1' } });
+    });
+
     test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
         // The declared-size guard reads each entry's uncompressedSize straight from the zip
         // central directory and never decompresses, so it needs no real bomb payload — the
