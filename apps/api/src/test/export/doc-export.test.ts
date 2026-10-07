@@ -84,9 +84,7 @@ describe('doc export — the stylesheet', () => {
 describe('doc export — page breaks', () => {
     test.each(['html', 'pdf-html'] as const)('%s carries the page break div', async (format) => {
         const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', []);
-        expect(new TextDecoder().decode(data)).toContain(
-            '<p>Before</p><div class="page-break" data-type="page-break"></div><p>After</p>',
-        );
+        expect(new TextDecoder().decode(data)).toContain('<p>Before</p><div class="page-break"></div><p>After</p>');
     });
 
     test('docx writes a top-level page break as a Word page break', async () => {
