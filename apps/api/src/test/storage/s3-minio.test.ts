@@ -421,13 +421,14 @@ describe('bucket configuration reads (fake S3)', () => {
         });
     });
 
-    test("a rule outside the root's namespace is foreign, so harden does not PUT over it", async () => {
-        fake.lifecycle =
-            `<LifecycleConfiguration xmlns="${S3_XMLNS}"><Rule xmlns="">` +
-            '<ID>other-tenant</ID><Status>Enabled</Status></Rule></LifecycleConfiguration>';
-        const result = await hardenS3Bucket(bucket, 30);
-        expect(result).toMatchObject({ lifecycle: 'foreign', applied: { lifecycle: false } });
-        expect(fake.lifecyclePuts).toBe(0);
+    test("a rule outside the root's namespace, or not a Rule, is foreign even with our ID", async () => {
+        const ours = `<ID>${S3_LIFECYCLE_RULE_ID}</ID><Status>Enabled</Status>`;
+        for (const child of [`<Rule xmlns="">${ours}</Rule>`, `<Foo>${ours}</Foo>`]) {
+            fake.lifecycle = `<LifecycleConfiguration xmlns="${S3_XMLNS}">${child}</LifecycleConfiguration>`;
+            const result = await hardenS3Bucket(bucket, 30);
+            expect(result).toMatchObject({ lifecycle: 'foreign', applied: { lifecycle: false } });
+            expect(fake.lifecyclePuts).toBe(0);
+        }
     });
 
     test('a 200 answering with an error or another document is unknown', async () => {
