@@ -11,13 +11,12 @@ export type XmlElement = {
     // As written: `xmlns` declarations included, prefixed names unresolved (xmlAttr resolves them).
     attributes: Record<string, string>;
     children: XmlContent[];
-    // Prefix → namespace URI in scope here; '' is the default namespace.
-    scope: ReadonlyMap<string, string>;
 };
 
 export type XmlContent = string | XmlElement | XML.Comment | XML.ProcessingInstruction;
 
-// Every way parseXml refuses input (malformed, a DOCTYPE, too deep, an unbound prefix) is this one 400.
+// Every way parseXml refuses input (malformed, a DOCTYPE, too deep, a namespace rule broken) is this one 400, and so
+// is serializeXmlChildren's one refusal.
 export class XmlError extends ApiError {
     constructor(message: string, options?: ErrorOptions) {
         super(400, message, options);
@@ -25,7 +24,11 @@ export class XmlError extends ApiError {
 }
 
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
-const ROOT_SCOPE: ReadonlyMap<string, string> = new Map([['xml', XML_NAMESPACE]]);
+const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
+
+// Each prefixed attribute's namespace by its name as written, kept off XmlElement since only xmlAttr and the
+// serializer read it.
+const attributeNamespaces = new WeakMap<XmlElement, Map<string, string>>();
 
 // Blank input is null rather than an error: an empty PROPFIND means allprop, an empty PROPPATCH does nothing.
 export function parseXml(input: string | Uint8Array): XmlElement | null {
@@ -33,7 +36,7 @@ export function parseXml(input: string | Uint8Array): XmlElement | null {
         typeof input === 'string' ? scanProlog(input, input.charCodeAt(0) === 0xfeff ? 1 : 0, true) : scanBytes(input);
     if (prolog === 'blank') return null;
     try {
-        return resolve(XML.parse(input, { compact: false }), ROOT_SCOPE);
+        return resolve(XML.parse(input, { compact: false }));
     } catch (error) {
         if (error instanceof SyntaxError || error instanceof RangeError) {
             throw new XmlError('Malformed XML', { cause: error });
@@ -91,34 +94,82 @@ function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     }
 }
 
-function resolve(node: XML.Node, parentScope: ReadonlyMap<string, string>): XmlElement {
-    let own: Map<string, string> | undefined;
-    for (const [attribute, uri] of Object.entries(node.attributes)) {
-        if (attribute !== 'xmlns' && !attribute.startsWith('xmlns:')) continue;
-        const prefix = attribute === 'xmlns' ? '' : attribute.slice('xmlns:'.length);
-        if (attribute !== 'xmlns' && (prefix === '' || prefix.includes(':') || uri === '')) {
-            throw new XmlError(`Invalid namespace declaration: ${attribute}`);
+// Depth first on an explicit stack: Bun nests deeper than the JS stack has room for. One binding map serves the
+// whole walk, each element's declarations undone on its way out, so a body costs its declarations once rather than
+// every binding in scope per declaring element. Undone by setting, never deleting: a delete costs JSC's Map its size.
+function resolve(root: XML.Node): XmlElement {
+    const bindings = new Map<string, string | undefined>([['xml', XML_NAMESPACE]]);
+    const open: { content: XML.Node['children']; next: number; element: XmlElement; shadowed: [string, string?][] }[] =
+        [];
+    const enter = (node: XML.Node): XmlElement => {
+        const shadowed: [string, string?][] = [];
+        for (const [attribute, uri] of Object.entries(node.attributes)) {
+            const prefix = declaredPrefix(attribute);
+            if (prefix === undefined) continue;
+            // Namespaces in XML § 3: `xmlns` is never declared, `xml` only to its own namespace, and neither
+            // namespace goes to another prefix.
+            if (
+                (attribute !== 'xmlns' && (prefix === '' || prefix.includes(':') || uri === '')) ||
+                prefix === 'xmlns' ||
+                (prefix === 'xml') !== (uri === XML_NAMESPACE) ||
+                uri === XMLNS_NAMESPACE
+            ) {
+                throw new XmlError(`Invalid namespace declaration: ${attribute}`);
+            }
+            shadowed.push([prefix, bindings.get(prefix)]);
+            bindings.set(prefix, uri);
         }
-        own ??= new Map(parentScope);
-        own.set(prefix, uri);
-    }
-    const scope = own ?? parentScope;
-    for (const attribute of Object.keys(node.attributes)) {
-        if (attribute !== 'xmlns' && !attribute.startsWith('xmlns:')) qualify(attribute, scope, false);
-    }
-    return {
-        name: node.name,
-        ...qualify(node.name, scope, true),
-        attributes: node.attributes,
-        children: node.children.map((child) =>
-            typeof child === 'object' && 'name' in child ? resolve(child, scope) : child,
-        ),
-        scope,
+        let prefixed: Map<string, string> | undefined;
+        let expanded: Set<string> | undefined;
+        for (const attribute of Object.keys(node.attributes)) {
+            if (declaredPrefix(attribute) !== undefined || !attribute.includes(':')) continue;
+            const { ns, local } = qualify(attribute, bindings, false);
+            // A local name holds no space, so the key is unambiguous (§ 6.3: no two attributes share an expanded name).
+            const key = `${local} ${ns}`;
+            if (expanded?.has(key)) throw new XmlError(`Duplicate attribute: ${attribute}`);
+            (expanded ??= new Set()).add(key);
+            (prefixed ??= new Map()).set(attribute, ns);
+        }
+        const content = node.children;
+        // Sized up front: a pushed array keeps its growth slack, which a long child list makes megabytes.
+        const children = new Array<XmlContent>(content.length);
+        const element: XmlElement = {
+            name: node.name,
+            ...qualify(node.name, bindings, true),
+            attributes: node.attributes,
+            children,
+        };
+        if (prefixed) attributeNamespaces.set(element, prefixed);
+        open.push({ content, next: 0, element, shadowed });
+        return element;
     };
+    const element = enter(root);
+    while (open.length > 0) {
+        const frame = open[open.length - 1];
+        if (frame.next < frame.content.length) {
+            const index = frame.next++;
+            const child = frame.content[index];
+            frame.element.children[index] = typeof child === 'object' && 'name' in child ? enter(child) : child;
+            continue;
+        }
+        open.pop();
+        for (const [prefix, uri] of frame.shadowed) bindings.set(prefix, uri);
+    }
+    return element;
+}
+
+// '' is the default namespace; undefined means the attribute is no declaration.
+function declaredPrefix(attribute: string): string | undefined {
+    if (attribute === 'xmlns') return '';
+    return attribute.startsWith('xmlns:') ? attribute.slice('xmlns:'.length) : undefined;
 }
 
 // The default namespace applies to elements only (Namespaces in XML § 6.2).
-function qualify(name: string, scope: ReadonlyMap<string, string>, isElement: boolean): { ns: string; local: string } {
+function qualify(
+    name: string,
+    scope: ReadonlyMap<string, string | undefined>,
+    isElement: boolean,
+): { ns: string; local: string } {
     const colon = name.indexOf(':');
     if (colon < 0) return { ns: isElement ? (scope.get('') ?? '') : '', local: name };
     const prefix = name.slice(0, colon);
@@ -149,26 +200,82 @@ export function xmlText(element: XmlElement): string {
 }
 
 export function xmlAttr(element: XmlElement, ns: string, local: string): string | undefined {
-    for (const [name, value] of Object.entries(element.attributes)) {
-        if (name === 'xmlns' || name.startsWith('xmlns:')) continue;
-        const qualified = qualify(name, element.scope, false);
-        if (qualified.ns === ns && qualified.local === local) return value;
+    if (ns === '') {
+        return local === 'xmlns' || !Object.hasOwn(element.attributes, local) ? undefined : element.attributes[local];
+    }
+    for (const [name, attributeNs] of attributeNamespaces.get(element) ?? []) {
+        if (attributeNs === ns && name.endsWith(`:${local}`)) return element.attributes[name];
     }
     return undefined;
 }
 
-// Client XML kept as XML (a LOCK owner, a dead property's value). Each child element declares every namespace in
-// scope, so a prefix bound on an ancestor stays bound once the fragment stands alone; `xml` is bound everywhere.
+// Client XML kept as XML (a LOCK owner, a dead property's value), to stand alone or sit inside any envelope: each
+// child element declares the namespaces its subtree takes from outside it, the default one included (`xmlns=""`
+// too), so a prefix bound on an ancestor stays bound and an envelope's default doesn't leak in. `xml` is bound
+// everywhere.
 export function serializeXmlChildren(element: XmlElement): string {
-    const children = element.children.map((child) => {
-        if (!isXmlElement(child)) return child;
-        const declarations: Record<string, string> = {};
-        for (const [prefix, uri] of child.scope) {
-            if (prefix !== 'xml') declarations[prefix === '' ? 'xmlns' : `xmlns:${prefix}`] = uri;
+    let content = 0;
+    let declaredUris = 0;
+    const children = element.children.map((top) => {
+        if (typeof top === 'string') content += top.length;
+        if (!isXmlElement(top)) return top;
+        // Prefixes declared on the path inside the subtree (unset rather than deleted, as in resolve), and the
+        // bindings it takes from outside.
+        const inner = new Map<string, boolean>();
+        const outer: Record<string, string> = {};
+        // A copy in the shape Bun writes, on an explicit stack as in resolve.
+        const open: { source: XmlContent[]; next: number; copy: XmlCopy; own: string[] }[] = [];
+        const enter = (node: XmlElement): XmlCopy => {
+            const own: string[] = [];
+            for (const attribute of Object.keys(node.attributes)) {
+                const prefix = declaredPrefix(attribute);
+                if (prefix === undefined || inner.get(prefix)) continue;
+                own.push(prefix);
+                inner.set(prefix, true);
+            }
+            const uses: [string, string][] = [[prefixOf(node.name), node.ns]];
+            for (const [name, ns] of attributeNamespaces.get(node) ?? []) uses.push([prefixOf(name), ns]);
+            for (const [prefix, ns] of uses) {
+                const declaration = prefix === '' ? 'xmlns' : `xmlns:${prefix}`;
+                if (prefix === 'xml' || inner.get(prefix) || Object.hasOwn(outer, declaration)) continue;
+                outer[declaration] = ns;
+                declaredUris += ns.length;
+            }
+            content += node.name.length;
+            for (const [name, value] of Object.entries(node.attributes)) content += name.length + value.length;
+            const copy: XmlCopy = { name: node.name, attributes: node.attributes, children: [] };
+            open.push({ source: node.children, next: 0, copy, own });
+            return copy;
+        };
+        const copy = enter(top);
+        while (open.length > 0) {
+            const frame = open[open.length - 1];
+            if (frame.next < frame.source.length) {
+                const child = frame.source[frame.next++];
+                if (typeof child === 'string') content += child.length;
+                frame.copy.children.push(isXmlElement(child) ? enter(child) : child);
+                continue;
+            }
+            open.pop();
+            for (const prefix of frame.own) inner.set(prefix, false);
         }
-        return { name: child.name, attributes: { ...declarations, ...child.attributes }, children: child.children };
+        return { ...copy, attributes: { ...outer, ...copy.attributes } };
     });
+    // A binding is declared again on every child that uses it. Its prefix costs no more than the use, but a long URI
+    // used by many children would multiply.
+    if (declaredUris > content + 65_536) throw new XmlError('Namespace declarations outgrow the content');
     // One wrapper so Bun escapes the text children too; its tags come off again.
     const wrapped = XML.stringify({ name: 'x', children });
     return wrapped === '<x/>' ? '' : wrapped.slice('<x>'.length, -'</x>'.length);
+}
+
+type XmlCopy = {
+    name: string;
+    attributes: Record<string, string>;
+    children: (string | XmlCopy | XML.Comment | XML.ProcessingInstruction)[];
+};
+
+function prefixOf(name: string): string {
+    const colon = name.indexOf(':');
+    return colon < 0 ? '' : name.slice(0, colon);
 }

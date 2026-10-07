@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { XML } from 'bun';
 import {
     ApiError,
     parseXml,
@@ -13,6 +14,7 @@ import {
 } from '../../lib/core';
 
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
+const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
 const BOM = String.fromCharCode(0xfeff);
 
 function utf16(text: string, order: 'le' | 'be', bom: boolean): Uint8Array {
@@ -47,6 +49,33 @@ function expectXmlError(input: string | Uint8Array): XmlError {
         }
     }
     throw new Error('expected an XmlError');
+}
+
+// Bun's own limit, found rather than assumed: the deepest nesting Bun.XML parses. It is Bun's native stack, so a
+// call a few frames deeper gets a little less.
+function bunMaxDepth(): number {
+    let [low, high] = [1, 100_000];
+    while (low < high) {
+        const depth = Math.ceil((low + high) / 2);
+        try {
+            XML.parse(`${'<a>'.repeat(depth)}${'</a>'.repeat(depth)}`, { compact: false });
+            low = depth;
+        } catch {
+            high = depth - 1;
+        }
+    }
+    return low;
+}
+
+// What the tree keeps alive, counted after a full collection, so a cost shows up without a clock.
+function retainedBytes(read: () => unknown): number {
+    Bun.gc(true);
+    const before = process.memoryUsage().heapUsed;
+    const kept = read();
+    Bun.gc(true);
+    const retained = process.memoryUsage().heapUsed - before;
+    expect(kept).toBeDefined();
+    return retained;
 }
 
 // Bun applies ATTLIST defaults to every element without a cap: this body is the shape of the amplification
@@ -179,7 +208,7 @@ describe('parseXml errors', () => {
     });
 
     test('nesting deeper than Bun allows is an XmlError', () => {
-        const depth = 100_000;
+        const depth = bunMaxDepth() + 1;
         expectXmlError(`${'<a>'.repeat(depth)}${'</a>'.repeat(depth)}`);
     });
 });
@@ -214,6 +243,13 @@ describe('parseXml namespaces', () => {
         expect(xmlAttr(root, 'DAV:', 'y')).toBe('2');
     });
 
+    test('a declaration and an inherited property are not attributes', () => {
+        const root = parsed('<a xmlns="DAV:" xmlns:D="DAV:"/>');
+        expect(xmlAttr(root, '', 'xmlns')).toBeUndefined();
+        expect(xmlAttr(root, '', 'constructor')).toBeUndefined();
+        expect(xmlAttr(root, 'DAV:', 'D')).toBeUndefined();
+    });
+
     test('a redeclaration on a child shadows the ancestor, for its subtree only', () => {
         const root = parsed(
             '<D:a xmlns:D="DAV:" xmlns="urn:one"><D:b xmlns:D="urn:other"><D:c/></D:b><D:d/><e xmlns=""/><f/></D:a>',
@@ -237,6 +273,62 @@ describe('parseXml namespaces', () => {
         expectXmlError('<a:b:c xmlns:a="u"/>');
         expectXmlError('<:a/>');
         expectXmlError('<a xmlns:p=""/>');
+        expectXmlError('<a xmlns:="urn:u"/>');
+    });
+
+    test('the reserved prefixes and namespaces are not rebound (Namespaces in XML § 3)', () => {
+        expectXmlError('<a xmlns:xmlns="urn:x"/>');
+        expectXmlError('<a xmlns:xml="urn:evil" xml:lang="en"/>');
+        expectXmlError(`<a xmlns:p="${XML_NS}" p:lang="en"/>`);
+        expectXmlError(`<a xmlns="${XML_NS}"/>`);
+        expectXmlError(`<a xmlns:p="${XMLNS_NS}"/>`);
+        expectXmlError(`<a xmlns="${XMLNS_NS}"/>`);
+        expect(xmlAttr(parsed(`<a xmlns:xml="${XML_NS}" xml:lang="en"/>`), XML_NS, 'lang')).toBe('en');
+    });
+
+    test('two attributes with one expanded name are an error (Namespaces in XML § 6.3)', () => {
+        expectXmlError('<a xmlns:p="urn:u" xmlns:q="urn:u" p:x="1" q:x="2"/>');
+        const root = parsed('<a xmlns:p="urn:u" xmlns:q="urn:v" p:x="1" q:x="2" x="3"/>');
+        expect([xmlAttr(root, 'urn:u', 'x'), xmlAttr(root, 'urn:v', 'x'), xmlAttr(root, '', 'x')]).toEqual([
+            '1',
+            '2',
+            '3',
+        ]);
+    });
+
+    test('a body costs its declarations once, not every binding in scope per declaring element', () => {
+        const declarations = Array.from({ length: 500 }, (_, i) => `xmlns:p${i}="urn:${i}"`).join(' ');
+        const body = `<r ${declarations}>${'<b xmlns:q="urn:q" q:x="1"/>'.repeat(10_000)}</r>`;
+        let root: XmlElement | undefined;
+        expect(retainedBytes(() => (root = parsed(body)))).toBeLessThan(128 * body.length);
+        const last = root && xmlElements(root).at(-1);
+        expect(last && xmlAttr(last, 'urn:q', 'x')).toBe('1');
+    });
+
+    test('undoing a declaration costs the declaration, not the bindings in scope, in parse and serialize', () => {
+        // JSC's Map compacts on delete: undoing by deleting took this body seconds.
+        const declarations = Array.from({ length: 10_000 }, (_, i) => `xmlns:p${i}="urn:${i}"`).join(' ');
+        const body = `<w><r ${declarations}>${'<b xmlns:q="urn:q"/>'.repeat(40_000)}</r></w>`;
+        const start = performance.now();
+        expect(serializeXmlChildren(parsed(body)).length).toBeLessThan(2 * body.length);
+        expect(performance.now() - start).toBeLessThan(1000);
+    });
+
+    test('resolves at the deepest nesting Bun reads, every level declaring a prefix', () => {
+        const depth = bunMaxDepth() - 100;
+        const levels = Array.from({ length: depth }, (_, i) => i);
+        const body = `${levels.map((i) => `<p${i}:a xmlns:p${i}="urn:${i}">`).join('')}${levels
+            .toReversed()
+            .map((i) => `</p${i}:a>`)
+            .join('')}`;
+        let root: XmlElement | undefined;
+        expect(retainedBytes(() => (root = parsed(body)))).toBeLessThan(128 * body.length);
+        let deepest = root;
+        while (deepest && xmlElements(deepest).length > 0) deepest = xmlElements(deepest)[0];
+        expect(deepest).toMatchObject({ ns: `urn:${depth - 1}`, local: 'a' });
+        // Each level declares its own prefix, so the fragment is the body inside the root, the leaf written empty.
+        const inside = body.slice('<p0:a xmlns:p0="urn:0">'.length, -'</p0:a>'.length);
+        expect(root && serializeXmlChildren(root)).toBe(inside.replace(`></p${depth - 1}:a>`, '/>'));
     });
 
     test('xml: is bound without a declaration (xml:lang, xml:space)', () => {
@@ -302,8 +394,12 @@ describe('serializeXmlChildren', () => {
         return element;
     };
 
-    // The fragment stands alone in storage and inside our own envelope: it must parse there with the same names.
-    const reparsed = (fragment: string): XmlElement => parsed(`<wrap>${fragment}</wrap>`);
+    // The fragment stands alone in storage and inside our own envelope, whose bindings must not leak into it.
+    const reparsed = (fragment: string): XmlElement =>
+        parsed(`<wrap xmlns="urn:other" xmlns:D="urn:other" xmlns:Z="urn:other">${fragment}</wrap>`);
+
+    const expandedNames = (element: XmlElement): string[] =>
+        xmlElements(element).flatMap((child) => [`{${child.ns}}${child.local}`, ...expandedNames(child)]);
 
     test('a prefix bound on an ancestor stays bound', () => {
         const fragment = serializeXmlChildren(lockinfo('<D:href>http://example.org/~ejw/contact.html</D:href>'));
@@ -333,6 +429,43 @@ describe('serializeXmlChildren', () => {
         const owner = xmlChild(root, 'DAV:', 'owner');
         const href = owner && xmlChild(reparsed(serializeXmlChildren(owner)), 'DAV:', 'href');
         expect(href?.name).toBe('href');
+    });
+
+    test('inside an envelope every element keeps its expanded name, an unprefixed one included', () => {
+        for (const body of [
+            '<D:r xmlns:D="DAV:"><Z:p xmlns:Z="urn:z"><v>1</v><D:w><x/></D:w></Z:p></D:r>',
+            '<r xmlns="DAV:"><p><v/>t<Z:w xmlns:Z="urn:z"><x/><y xmlns=""><z/></y></Z:w></p></r>',
+            '<D:r xmlns:D="DAV:" xmlns="urn:d"><p><D:v><w xmlns="urn:e"><x/></w><y/></D:v>t<D:z/></p></D:r>',
+        ]) {
+            const element = xmlElements(parsed(body))[0];
+            expect(expandedNames(reparsed(serializeXmlChildren(element)))).toEqual(expandedNames(element));
+        }
+    });
+
+    test('a child declares only the bindings its subtree uses, an attribute prefix included', () => {
+        expect(serializeXmlChildren(lockinfo('<D:href>h</D:href>'))).toBe('<D:href xmlns:D="DAV:">h</D:href>');
+        const fragment = serializeXmlChildren(lockinfo('<D:href><D:x Z:a="1"/></D:href>'));
+        expect(fragment).toBe('<D:href xmlns:D="DAV:" xmlns:Z="urn:z"><D:x Z:a="1"/></D:href>');
+        const x = xmlElements(xmlElements(reparsed(fragment))[0])[0];
+        expect(xmlAttr(x, 'urn:z', 'a')).toBe('1');
+    });
+
+    test('output grows with the content, not with the bindings in scope', () => {
+        const declarations = Array.from({ length: 200 }, (_, i) => `xmlns:p${i}="urn:${i}"`).join(' ');
+        const body = `<D:prop xmlns:D="DAV:" ${declarations}><D:v>${'<D:a/>'.repeat(1000)}<a/></D:v></D:prop>`;
+        const value = xmlChild(parsed(body), 'DAV:', 'v');
+        expect(value && serializeXmlChildren(value).length).toBeLessThan(4 * body.length);
+        // Every child declares `xmlns=""`: more bytes than each child, still a constant factor.
+        const empty = `<D:v xmlns:D="DAV:">${'<a/>'.repeat(100_000)}</D:v>`;
+        expect(serializeXmlChildren(parsed(empty)).length).toBeLessThan(4 * empty.length);
+    });
+
+    test('a long namespace URI that many children would each declare is an error, not a copy per child', () => {
+        const uri = `urn:${'x'.repeat(20_000)}`;
+        const body = `<D:prop xmlns:D="DAV:" xmlns:p="${uri}"><D:v>${'<p:a/>'.repeat(1000)}</D:v></D:prop>`;
+        const value = xmlChild(parsed(body), 'DAV:', 'v');
+        expect(() => value && serializeXmlChildren(value)).toThrow(XmlError);
+        expect(serializeXmlChildren(parsed(`<D:v xmlns:D="DAV:" xmlns:p="${uri}"><p:a/><p:a/></D:v>`))).toContain(uri);
     });
 
     test('xml: is never declared', () => {
