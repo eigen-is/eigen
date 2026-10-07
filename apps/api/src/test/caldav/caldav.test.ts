@@ -1507,23 +1507,35 @@ describe('CalDAV', () => {
 
     test('MKCALENDAR and PROPPATCH whose root is another element are 400 and change nothing', async () => {
         const calId = 'wrong-root-cal';
-        const mkcol = `<D:mkcol xmlns:D="DAV:"><D:set><D:prop><D:displayname>Mkcol</D:displayname></D:prop></D:set></D:mkcol>`;
-        const created = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
-            email: ctx.alice.user.email,
-            headers: { 'Content-Type': 'application/xml' },
-            body: mkcol,
-        });
-        expect(created.status).toBe(400);
         const home = await getHome(userId);
-        expect(await home.calendar.getCalendarById(calId)).toBeNull();
+        const set = `<D:set><D:prop><D:displayname>Wrong Root</D:displayname></D:prop></D:set>`;
+        for (const body of [
+            `<D:mkcol xmlns:D="DAV:">${set}</D:mkcol>`,
+            `<D:mkcalendar xmlns:D="DAV:">${set}</D:mkcalendar>`,
+            `<C:mkcol xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:D="DAV:">${set}</C:mkcol>`,
+        ]) {
+            const created = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body,
+            });
+            expect(created.status).toBe(400);
+            expect(await home.calendar.getCalendarById(calId)).toBeNull();
+        }
 
-        const patched = await davRequest('PROPPATCH', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
-            email: ctx.alice.user.email,
-            headers: { 'Content-Type': 'application/xml' },
-            body: `<propertyupdate><set><prop><displayname>No Namespace</displayname></prop></set></propertyupdate>`,
-        });
-        expect(patched.status).toBe(400);
-        expect((await home.calendar.getCalendarById(defaultCalendarId))?.name).not.toBe('No Namespace');
+        for (const body of [
+            `<propertyupdate><set><prop><displayname>Wrong Root</displayname></prop></set></propertyupdate>`,
+            `<C:propertyupdate xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:D="DAV:">${set}</C:propertyupdate>`,
+            `<D:propertyupdat xmlns:D="DAV:">${set}</D:propertyupdat>`,
+        ]) {
+            const patched = await davRequest('PROPPATCH', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body,
+            });
+            expect(patched.status).toBe(400);
+            expect((await home.calendar.getCalendarById(defaultCalendarId))?.name).not.toBe('Wrong Root');
+        }
     });
 
     test('MKCALENDAR and PROPPATCH read every set, not only the first', async () => {
