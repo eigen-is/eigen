@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { connect } from 'node:net';
+import { constants, inflateRawSync } from 'node:zlib';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
@@ -140,4 +142,70 @@ describe('Collab WS payload limits (audit finding #5)', () => {
         expect(result.delivered).toBe(frame.byteLength);
         expect(result.closeCode).toBe(1000);
     }, 30_000);
+});
+
+// The first frame the server sends, read raw off a socket that offers permessage-deflate the way Safari does.
+async function firstServerFrame(port: number): Promise<{ rsv1: boolean; payload: Buffer }> {
+    const frame = await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        const socket = connect(port, '127.0.0.1', () => {
+            socket.write(
+                'GET / HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+                    'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n' +
+                    'Sec-WebSocket-Extensions: permessage-deflate\r\n\r\n',
+            );
+        });
+        socket.on('data', (chunk) => {
+            chunks.push(chunk);
+            const received = Buffer.concat(chunks);
+            const body = received.subarray(received.indexOf('\r\n\r\n') + 4);
+            if (body.length < 4) return;
+            const length = (body[1] & 0x7f) === 126 ? body.readUInt16BE(2) : body[1] & 0x7f;
+            const headerLength = (body[1] & 0x7f) === 126 ? 4 : 2;
+            if (body.length < headerLength + length) return;
+            socket.destroy();
+            resolve(body.subarray(0, headerLength + length));
+        });
+        socket.on('error', reject);
+    });
+    const headerLength = (frame[1] & 0x7f) === 126 ? 4 : 2;
+    return { rsv1: (frame[0] & 0x40) !== 0, payload: frame.subarray(headerLength) };
+}
+
+describe('Collab WS deflate output', () => {
+    // Bun's shared compressor (`perMessageDeflate: true`) deflates a small message into a whole stream with
+    // BFINAL set. RFC 7692 allows that, but Safari (macOS and iOS) delivers the message and then drops the
+    // connection, so a doc whose first sync frame lands in that window (a state vector past ~170 clients)
+    // never loads there.
+    test('a deflated frame leaves the deflate stream open', async () => {
+        const ctx: TestCtx = await getTestContext();
+        const appWsOptions = (ctx.app.config as { websocket?: Record<string, unknown> }).websocket ?? {};
+        const frame = sheetFlushFrame(2048);
+        const server = Bun.serve({
+            port: 0,
+            fetch(req, srv) {
+                if (srv.upgrade(req)) return;
+                return new Response(null, { status: 400 });
+            },
+            websocket: {
+                ...appWsOptions,
+                open(ws: { send: (d: Uint8Array, compress: boolean) => void }) {
+                    ws.send(frame, true);
+                },
+                message() {},
+            },
+        });
+        try {
+            const { rsv1, payload } = await firstServerFrame(Number(server.url.port));
+            expect(rsv1).toBe(true);
+            // Inflating on its own throws only when no block carried BFINAL.
+            expect(() => inflateRawSync(payload)).toThrow();
+            const inflated = inflateRawSync(Buffer.concat([payload, Buffer.from([0x00, 0x00, 0xff, 0xff])]), {
+                finishFlush: constants.Z_SYNC_FLUSH,
+            });
+            expect(inflated.equals(frame)).toBe(true);
+        } finally {
+            server.stop(true);
+        }
+    });
 });

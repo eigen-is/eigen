@@ -57,9 +57,11 @@ export const app = new Elysia({
     // options) only — `websocket` config set on a `.use()`d plugin (e.g.
     // collabRouter) is silently ignored. perMessageDeflate only negotiates the
     // extension; Bun deflates just the frames sent with compress=true
-    // (collabDocument's sendFrame).
+    // (collabDocument's sendFrame). A dedicated compressor, not `true`'s shared one: the shared one
+    // ends a small message's deflate stream with BFINAL, after which Safari drops the connection.
+    // 32KB is per socket and deflates a large sheet as well as the 256KB `dedicated`.
     websocket: {
-        perMessageDeflate: true,
+        perMessageDeflate: { compress: '32KB', decompress: 'shared' },
         // Bun's 16MB default is measured on the decoded frame — below the ~48MB
         // worst-case sheets snapshot sync, which would close the socket with code 1009.
         maxPayloadLength: 128 * 1024 * 1024,

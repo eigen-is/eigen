@@ -10,11 +10,12 @@ A browser opens one WebSocket per document, and the server keeps one `CollabDocu
 
 Access is Drive's. The socket checks read when it opens and write on every update ([ACL.md](ACL.md)). Nothing persists in the browser, so an edit the server has not acknowledged is lost on reload, and the tab warns before that happens.
 
-The sections follow the places where this picture needs care: big documents and slow links, hostile or stale peers, replacing a document under its editors, and the editor in the browser. Five things in them surprise people:
+The sections follow the places where this picture needs care: big documents and slow links, hostile or stale peers, replacing a document under its editors, and the editor in the browser. Six things in them surprise people:
 
 - The blobs in `data.db` are zstd on disk and raw on the wire, and the reader takes compressed and raw rows alike ([§ Yjs blobs](#yjs-blobs-are-zstd-on-disk-and-raw-on-the-wire)).
 - A read-only peer can still send awareness, so it is validated before it is applied ([§ Awareness frames](#awareness-frames-are-validated-before-apply)).
 - The route sends a heartbeat during a cold load, or the client would close the silent socket and retry forever ([§ The route speaks first](#the-route-speaks-first-during-a-cold-load)).
+- The WebSocket uses a dedicated deflate compressor, because Safari drops a connection after a frame from Bun's default one ([§ Deflated frames](#a-deflated-frame-never-ends-the-deflate-stream)).
 - A backup restore rotates the home's data epoch, an id that changes only when the home's data is replaced, so a reconnecting tab reloads instead of syncing its old state over the restored copy ([§ Home replacement](#home-replacement-closes-every-socket)).
 - The editor waits on a latched `loaded`, never on `synced`, so a short outage keeps it mounted ([§ The client gates on `loaded`](#the-client-gates-on-loaded-never-synced)).
 
@@ -40,6 +41,10 @@ The display name in the state is not checked. A user may label their own cursor 
 y-websocket hard-closes a connection that stays silent for 30 s (a hardcoded client constant) and reconnects on a ~2.5 s backoff, and every retry re-pays the full load. That spiral feeds itself and can degrade the whole server. So `apps/api/src/lib/collab/loading-heartbeat.ts` sends an empty awareness frame immediately and every 10 s until sync-step-1 takes over. Clients apply it as a no-op; it exists only to reset their silence timer.
 
 The same 30 s window bounds the whole-state sync reply, because a frame only counts once it has fully arrived. A large sheet's reply is 12 MB or more raw, which a slow link can't deliver in 30 s, so the socket loops open → silent → closed forever. `perMessageDeflate` in `app.ts` only negotiates the extension; Bun deflates just the frames sent with `compress=true`, so every `CollabDocument` send goes through `sendFrame`, which compresses frames of 1 KiB and up.
+
+## A deflated frame never ends the deflate stream
+
+Bun's default compressor (`perMessageDeflate: true`, shared by all sockets) deflates a message under ~9 KB into a complete deflate stream, with the final-block bit (BFINAL) set. RFC 7692 allows that, but Safari on macOS and iOS delivers such a frame and then drops the connection ("The network connection was lost", a 1006 close on the server). Chrome accepts it. A doc edited by more than ~170 Yjs clients has a state vector over 1 KiB, so its very first frame, sync step 1, is deflated and Safari never loads it: the socket loops open → dropped → retry. So `app.ts` sets the dedicated `32KB` compressor, which always ends a frame with a sync flush and leaves the stream open, as browsers do themselves. It costs 32 KB of zlib state per socket and deflates a large sheet as well as the 256 KB `dedicated` one. `collab-ws-payload.test.ts` reads a deflated frame off a raw socket under the app config and fails on BFINAL.
 
 ## The route refuses before it speaks
 
