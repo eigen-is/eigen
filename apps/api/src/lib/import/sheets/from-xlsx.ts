@@ -916,17 +916,19 @@ async function readSheetPaths(
     return { spreadsheetml: namespaces.spreadsheetml, sheets: paths };
 }
 
-// A tree costs ~260 bytes of heap a tag and ~100 an attribute however few bytes they take in the input, so what is
-// parsed is bounded by its `<` and `=` (a tag has one, an attribute one; one in a value or text only counts extra),
-// not by its length; a long value costs about its length. A part or block past either bound is skipped like a
-// malformed one.
-type MarkupBound = { tags: number; attributes: number };
-// Workbook, rels and theme run to a few hundred tags in a real file.
-const PART_MARKUP: MarkupBound = { tags: 10_000, attributes: 100_000 };
-// Excel caps a sheet at 66,530 hyperlinks, each one tag of at most six attributes, plus slack.
-const HYPERLINKS_MARKUP: MarkupBound = { tags: 70_000, attributes: 490_000 };
+// A tree costs ~260 bytes of heap a tag and ~350-600 an attribute however few bytes they take in the input, and a
+// long value or text 1x (ASCII bytes) to 4x (one non-latin1 character widens the input to UTF-16) its length. So what
+// is parsed is bounded by its length and by its `<` and `=` (a tag has one, an attribute one; one in a value or text
+// only counts extra). A part or block past any bound is skipped like a malformed one.
+type ParseBound = { length: number; tags: number; attributes: number };
+// Workbook, rels and theme run to a few KB and a few hundred tags in a real file. Length in bytes.
+const PART_BOUND: ParseBound = { length: 1024 * 1024, tags: 10_000, attributes: 100_000 };
+// Excel caps a sheet at 66,530 hyperlinks, each one tag of at most six attributes in ~130-300 characters, plus
+// slack. Length in UTF-16 code units: the block is a slice of the decoded sheet.
+const HYPERLINKS_BOUND: ParseBound = { length: 32 * 1024 * 1024, tags: 70_000, attributes: 490_000 };
 
-function withinMarkupBound(parts: (string | Uint8Array)[], bound: MarkupBound): boolean {
+function withinParseBound(parts: (string | Uint8Array)[], bound: ParseBound): boolean {
+    if (parts.reduce((length, part) => length + part.length, 0) > bound.length) return false;
     const left = { '<': bound.tags, '=': bound.attributes };
     for (const part of parts) {
         for (const char of ['<', '='] as const) {
@@ -963,14 +965,14 @@ function readHyperlinksBlock(sheet: string, spreadsheetml: string): XmlElement |
     const close = end < 0 ? -1 : sheet.indexOf('>', end);
     if (close < 0) return undefined;
     const block = sheet.slice(open.index, close + 1);
-    if (!withinMarkupBound([head, block], HYPERLINKS_MARKUP)) return undefined;
+    if (!withinParseBound([head, block], HYPERLINKS_BOUND)) return undefined;
     const wrapped = parsePart(`${head}${block}</${root[1]}>`);
     return wrapped ? xmlChild(wrapped, spreadsheetml, 'hyperlinks') : undefined;
 }
 
 async function readPart(zip: JSZip, path: string): Promise<XmlElement | null> {
     const bytes = await zip.file(path)?.async('uint8array');
-    return bytes && withinMarkupBound([bytes], PART_MARKUP) ? parsePart(bytes) : null;
+    return bytes && withinParseBound([bytes], PART_BOUND) ? parsePart(bytes) : null;
 }
 
 // exceljs has read the workbook by now, so a part Bun refuses (malformed, a DOCTYPE) costs only what these reads

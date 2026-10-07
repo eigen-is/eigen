@@ -1822,6 +1822,48 @@ describe('xlsxToSheets resource guards', () => {
         }
     });
 
+    // A long text costs 1x to 4x its length in the tree, 4x once one non-latin1 character widens it to UTF-16. Reading
+    // the padded part is ~450 MB of the growth here; a tree of the hyperlinks block doubles it.
+    test('a hyperlinks block or theme of 150 MB of text costs no tree and loses only its links or colors', async () => {
+        const pad = `€${'a'.repeat(150_000_000)}`;
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('S');
+        ws.getCell('A1').value = 'kept';
+        ws.getCell('A1').font = { color: { theme: 4 } };
+        workbook.addWorksheet('T');
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'T!A1' },
+        ]);
+        const link = { '0_0': { linkType: 'cellrange', linkAddress: 'T!A1' } };
+
+        for (const [path, edit, keeps] of [
+            [
+                'xl/worksheets/sheet1.xml',
+                (xml: string) => xml.replace('</hyperlinks>', `${pad}</hyperlinks>`),
+                { link: undefined, color: true },
+            ],
+            [
+                'xl/theme/theme1.xml',
+                (xml: string) =>
+                    xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${pad}</a:ext></a:extLst></a:theme>`),
+                { link, color: false },
+            ],
+        ] as const) {
+            const buffer = Buffer.from(await replacePart(linked, path, edit));
+
+            Bun.gc(true);
+            const before = process.memoryUsage().heapUsed;
+            const sheets = await xlsxToSheets(buffer);
+            const grown = process.memoryUsage().heapUsed - before;
+
+            const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+            expect(a1?.v?.v).toBe('kept');
+            expect(a1?.v?.fc !== undefined).toBe(keeps.color);
+            expect(sheets[0].hyperlink).toEqual(keeps.link);
+            expect(grown).toBeLessThan(640 * 1024 * 1024);
+        }
+    });
+
     test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
         // The declared-size guard reads each entry's uncompressedSize straight from the zip
         // central directory and never decompresses, so it needs no real bomb payload — the
