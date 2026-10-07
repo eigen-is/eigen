@@ -1,8 +1,8 @@
 import ICAL from 'ical.js';
+import { asciiLower } from '../carddav/query-filter';
 import { ApiError } from '../core/errors';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../core/xml';
 import { DAV_NAMESPACES } from '../dav/xml';
-import { asciiLower } from '../dav/xml-node';
 
 const CALDAV = DAV_NAMESPACES.C;
 

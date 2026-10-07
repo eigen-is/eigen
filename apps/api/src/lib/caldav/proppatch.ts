@@ -7,9 +7,9 @@ import { calendarHref } from './discovery';
 
 // displayname + calendar-color as the client set them, read identically by MKCALENDAR and PROPPATCH: every
 // <set> in order, so a later one wins. supported-calendar-component-set and the rest are ignored.
-function extractCalendarProps(update: XmlElement | null, ns: string, local: string): { name?: string; color?: string } {
+function extractCalendarProps(update: XmlElement | null): { name?: string; color?: string } {
     const out: { name?: string; color?: string } = {};
-    if (update?.ns !== ns || update.local !== local) return out;
+    if (!update) return out;
     const textOf = (element: XmlElement | undefined) => (element ? xmlText(element).trim() : '');
     for (const prop of xmlChildren(update, 'DAV:', 'set').flatMap((set) => xmlChildren(set, 'DAV:', 'prop'))) {
         // Truthiness, not null-checks: an empty <displayname/> means "not set", never an empty name.
@@ -31,7 +31,11 @@ export async function handleMkcalendar(
     const id = sanitizeCalendarId(calendarId);
     if (!id) return new Response('Bad Request', { status: 400 });
 
-    const props = extractCalendarProps(parseXml(body), DAV_NAMESPACES.C, 'mkcalendar');
+    const root = parseXml(body);
+    if (root && (root.ns !== DAV_NAMESPACES.C || root.local !== 'mkcalendar')) {
+        throw new ApiError(400, 'Expected <mkcalendar> root element');
+    }
+    const props = extractCalendarProps(root);
 
     try {
         await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
@@ -69,7 +73,11 @@ export async function handleProppatch(
     const calendarItem = await calendar.getCalendarById(calendarId);
     if (!calendarItem) return new Response('Not Found', { status: 404 });
 
-    const updates = extractCalendarProps(parseXml(body), 'DAV:', 'propertyupdate');
+    const root = parseXml(body);
+    if (root && (root.ns !== 'DAV:' || root.local !== 'propertyupdate')) {
+        throw new ApiError(400, 'Expected <propertyupdate> root element');
+    }
+    const updates = extractCalendarProps(root);
     const updatedProps: string[] = [];
     if (updates.name !== undefined) updatedProps.push('<D:displayname/>');
     if (updates.color !== undefined) updatedProps.push('<ICAL:calendar-color/>');

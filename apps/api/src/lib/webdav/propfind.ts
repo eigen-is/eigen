@@ -21,10 +21,7 @@ function deadPropsXml(path: DrivePath): string[] {
         // Element content was serialized from the client's XML when it was set; text is escaped here.
         const safeValue = dp.xml ? dp.value : escapeXml(dp.value);
         if (dp.ns === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
-        // Use a default-namespace declaration on the element rather than re-declaring a
-        // shared prefix on every sibling. expat (used by neon-litmus) flags repeated
-        // `xmlns:X="..."` declarations on adjacent siblings as "invalid namespace
-        // declaration", even though the values match. xmlns="..." sidesteps the issue.
+        // The prop's namespace is its default: no prefix to pick, and XML content declares its own bindings, xmlns="" too.
         return `<${safeName} xmlns="${escapeXml(dp.ns)}">${safeValue}</${safeName}>`;
     });
 }

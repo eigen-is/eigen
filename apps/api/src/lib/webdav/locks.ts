@@ -6,7 +6,7 @@ import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
 import type { User } from '../user';
-import { lockdiscoveryProp } from './xml';
+import { lockdiscoveryProp, MAX_XML_BODY_BYTES } from './xml';
 
 // Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
 // without a cap an authenticated client could pin in-memory lock state for years
@@ -36,10 +36,13 @@ export function assertWritable(
     }
 }
 
-// RFC 4918 §14.17: the owner is the client's own XML, echoed back as XML in every lockdiscovery.
+// RFC 4918 §14.17: the owner is the client's own XML, echoed back as XML in every lockdiscovery. Each child
+// declares the bindings it uses, so an owner can outgrow its body; it is held for the lock's life, under the dead props' cap.
 function readLockOwner(lockinfo: XmlElement): string | undefined {
-    const owner = xmlChild(lockinfo, 'DAV:', 'owner');
-    return (owner && serializeXmlChildren(owner).trim()) || undefined;
+    const element = xmlChild(lockinfo, 'DAV:', 'owner');
+    const owner = element && serializeXmlChildren(element).trim();
+    if (owner && Buffer.byteLength(owner) > MAX_XML_BODY_BYTES) throw new ApiError(400, 'Lock owner too large');
+    return owner || undefined;
 }
 
 // Default to exclusive when the body omits <lockscope> entirely (RFC 4918 §9.10).

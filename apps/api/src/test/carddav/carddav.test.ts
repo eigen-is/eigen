@@ -233,7 +233,6 @@ describe('CardDAV', () => {
             expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
         });
 
-        // fxp accepts tag names XML forbids; the echo guard must drop them, not emit broken multistatus XML.
         test('a requested prop with a non-well-formed name makes the body a 400', async () => {
             const res = await propfindCard(
                 `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/><a<b xmlns="urn:x"/></D:prop></D:propfind>`,
@@ -714,6 +713,17 @@ describe('CardDAV', () => {
         expect((await report(body)).status).toBe(400);
     });
 
+    test('a REPORT root outside its namespace is 400', async () => {
+        const href = `<D:href>${cardHref('any.vcf')}</D:href>`;
+        for (const body of [
+            `<F:addressbook-multiget xmlns:F="urn:foreign" xmlns:D="DAV:"><D:prop><D:getetag/></D:prop>${href}</F:addressbook-multiget>`,
+            `<F:addressbook-query xmlns:F="urn:foreign" xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav"><D:prop><D:getetag/></D:prop><CARD:filter><CARD:prop-filter name="FN"/></CARD:filter></F:addressbook-query>`,
+            `<F:sync-collection xmlns:F="urn:foreign" xmlns:D="DAV:"><D:sync-token/><D:prop><D:getetag/></D:prop></F:sync-collection>`,
+        ]) {
+            expect((await report(body)).status).toBe(400);
+        }
+    });
+
     test('sync-collection without a token lists all cards and a generation-stamped token', async () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
@@ -858,6 +868,29 @@ describe('CardDAV', () => {
         const res = await report(queryBody(`<CARD:prop-filter name="FN"/><CARD:not-a-real-filter/>`));
         expect(res.status).toBe(403);
         expect(await res.text()).toContain('supported-filter');
+    });
+
+    test('a filter child outside the CardDAV namespace is 403 supported-filter', async () => {
+        const res = await report(queryBody(`<D:prop-filter name="FN"/>`));
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('supported-filter');
+    });
+
+    test('a pretty-printed REPORT is read trimmed: href, text-match and sync-token', async () => {
+        const marker = `P${randomUUID().replace(/-/g, '')}`;
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const body = fnCard(uid, `Pretty ${marker}`);
+        expect((await putCard(uri, body, { 'If-None-Match': '*' })).status).toBe(201);
+
+        const multiget = await (await report(multigetBody([`\n    ${cardHref(uri)}\n  `]))).text();
+        expect(multiget).toContain(body);
+
+        const query = await (await report(queryBody(fnFilter(`\n    ${marker}\n  `)))).text();
+        expect(query).toContain(cardHref(uri));
+
+        const token = syncTokenOf(await (await report(syncBody())).text());
+        expect((await report(syncBody(`\n    ${token}\n  `))).status).toBe(207);
     });
 
     test('the limit element caps the number of responses', async () => {

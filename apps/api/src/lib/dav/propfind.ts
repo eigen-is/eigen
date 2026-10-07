@@ -11,9 +11,11 @@ import { DAV_NAMESPACES, propstatNotFound, propstatOk } from './xml';
 // each is a small prop list or href list, bounded before it reaches a parser.
 export const DAV_BODY_MAX_BYTES = 1_048_576;
 
-// Element local name → XML fragment written with a DAV_NAMESPACES prefix, in emission order; allprop and the
-// selector share it, so no list can drift.
+// XML fragment by the name it is written with (`D:getetag`), in emission order; allprop and the selector share it,
+// so no list can drift. Each DAV_NAMESPACES prefix stands for one namespace, so the key is namespace and local name.
 export type PropMap = Map<string, string>;
+
+const PREFIXES = new Map<string, string>(Object.entries(DAV_NAMESPACES).map(([prefix, uri]) => [uri, prefix]));
 
 export type PropfindRequest = { allprop: true } | { allprop: false; props: XmlElement[] };
 
@@ -36,11 +38,6 @@ export function wantsBrief(request: Request): boolean {
     return /(^|[\s,])return=minimal([\s,;]|$)/i.test(request.headers.get('Prefer') ?? '');
 }
 
-// A fragment's prefix names its namespace, so a prop of the same name in another one is not the fragment's.
-function isWrittenIn(fragment: string, ns: string): boolean {
-    return Object.entries(DAV_NAMESPACES).some(([prefix, uri]) => uri === ns && fragment.startsWith(`<${prefix}:`));
-}
-
 // An unknown prop echoed inside the 404 propstat by the name it was asked with, declaring its own namespace.
 function echoMissing(prop: XmlElement): string {
     const colon = prop.name.indexOf(':');
@@ -56,8 +53,9 @@ export function selectProps(available: PropMap, request: PropfindRequest, brief:
     const found: string[] = [];
     const missing: string[] = [];
     for (const prop of request.props) {
-        const fragment = available.get(prop.local);
-        if (fragment !== undefined && isWrittenIn(fragment, prop.ns)) found.push(fragment);
+        const prefix = PREFIXES.get(prop.ns);
+        const fragment = prefix === undefined ? undefined : available.get(`${prefix}:${prop.local}`);
+        if (fragment !== undefined) found.push(fragment);
         else missing.push(echoMissing(prop));
     }
 

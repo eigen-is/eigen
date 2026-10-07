@@ -12,7 +12,8 @@ import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, resp
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
 // server. PROPPATCH on a live property must return 403 Forbidden inside propstat
-// rather than persisting an opaque copy that would shadow the real value.
+// rather than persisting an opaque copy that would shadow the real value. A prop of the same name in no namespace
+// is refused too: a client reading names alone would take it for the live one.
 const PROTECTED_PROPS = new Set([
     'displayname',
     'getcontentlength',
@@ -32,7 +33,10 @@ type PropOp = { op: 'set' | 'remove'; prop: WebdavDeadProp };
 // RFC 4918 §9.2: set and remove run in document order, so a remove between two sets of one prop lands between them.
 function extractPropOps(body: Uint8Array): PropOp[] {
     const root = parseXml(body);
-    if (root?.ns !== 'DAV:' || root.local !== 'propertyupdate') return [];
+    if (!root) return [];
+    if (root.ns !== 'DAV:' || root.local !== 'propertyupdate') {
+        throw new ApiError(400, 'Expected <propertyupdate> root element');
+    }
     const ops: PropOp[] = [];
     for (const verb of xmlElements(root)) {
         if (verb.ns !== 'DAV:' || (verb.local !== 'set' && verb.local !== 'remove')) continue;
@@ -68,7 +72,8 @@ export async function handleProppatch(args: {
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    const isProtected = (op: PropOp) => op.prop.ns === 'DAV:' && PROTECTED_PROPS.has(op.prop.name);
+    const isProtected = (op: PropOp) =>
+        (op.prop.ns === 'DAV:' || op.prop.ns === '') && PROTECTED_PROPS.has(op.prop.name);
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 

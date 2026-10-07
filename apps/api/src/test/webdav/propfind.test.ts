@@ -41,6 +41,25 @@ describe('WebDAV resource PROPFIND', () => {
         expect(res.status).toBe(404);
     });
 
+    test('a PROPFIND body that is malformed or has another root → 400', async () => {
+        for (const body of [
+            '<D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop>',
+            '<propfind><prop><getetag/></prop></propfind>',
+            '<F:propfind xmlns:F="urn:foreign"><F:prop/></F:propfind>',
+        ]) {
+            const res = await webdavRequest(
+                ctx.alice.user.email,
+                'PROPFIND',
+                `/webdav/${ctx.alice.user.id}/${mountId}/`,
+                {
+                    headers: { Depth: '0' },
+                    body,
+                },
+            );
+            expect(res.status).toBe(400);
+        }
+    });
+
     test('Last-Modified is RFC 1123 UTC', async () => {
         const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/${mountId}/`, {
             headers: { Depth: '0' },

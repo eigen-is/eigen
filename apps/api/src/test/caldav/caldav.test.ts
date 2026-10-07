@@ -1276,7 +1276,7 @@ describe('CalDAV', () => {
         expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
     });
 
-    test('MKCALENDAR parses displayname and calendar-color given with element attributes (#text shape)', async () => {
+    test('MKCALENDAR reads a displayname and a calendar-color that carry attributes', async () => {
         const calId = 'attr-shape-cal';
         // Apple sends xml:lang, whose prefix is bound without a declaration.
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname xml:lang="en">Localized Name</D:displayname><ICAL:calendar-color symbolic-color="custom">#00ff00</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`;
@@ -1503,6 +1503,27 @@ describe('CalDAV', () => {
         expect(res.status).toBe(400);
         const home = await getHome(userId);
         expect(await home.calendar.getCalendarById(calId)).toBeNull();
+    });
+
+    test('MKCALENDAR and PROPPATCH whose root is another element are 400 and change nothing', async () => {
+        const calId = 'wrong-root-cal';
+        const mkcol = `<D:mkcol xmlns:D="DAV:"><D:set><D:prop><D:displayname>Mkcol</D:displayname></D:prop></D:set></D:mkcol>`;
+        const created = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: mkcol,
+        });
+        expect(created.status).toBe(400);
+        const home = await getHome(userId);
+        expect(await home.calendar.getCalendarById(calId)).toBeNull();
+
+        const patched = await davRequest('PROPPATCH', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: `<propertyupdate><set><prop><displayname>No Namespace</displayname></prop></set></propertyupdate>`,
+        });
+        expect(patched.status).toBe(400);
+        expect((await home.calendar.getCalendarById(defaultCalendarId))?.name).not.toBe('No Namespace');
     });
 
     test('MKCALENDAR and PROPPATCH read every set, not only the first', async () => {
@@ -1957,9 +1978,9 @@ describe('CalDAV', () => {
             }
         });
 
-        test('a pretty-printed multiget in the default namespace, as Thunderbird sends it, is served', async () => {
+        test('pretty-printed bodies, as Thunderbird sends them, are read trimmed: href, UID, sync-token, displayname', async () => {
             expect((await putIcs('caldav-pretty.ics', ics('caldav-pretty@eigen', 'Pretty Printed'))).status).toBe(201);
-            const res = await report(`<?xml version="1.0" encoding="UTF-8"?>
+            const multiget = await report(`<?xml version="1.0" encoding="UTF-8"?>
 <calendar-multiget xmlns:D="DAV:" xmlns="urn:ietf:params:xml:ns:caldav">
   <D:prop>
     <D:getetag/>
@@ -1970,10 +1991,73 @@ describe('CalDAV', () => {
   </D:href>
 </calendar-multiget>
 `);
-            expect(res.status).toBe(207);
-            const xml = await res.text();
-            expect(xml).toContain('Pretty Printed');
-            expect(xml).not.toContain('404 Not Found');
+            expect(multiget.status).toBe(207);
+            const multigetXml = await multiget.text();
+            expect(multigetXml).toContain('Pretty Printed');
+            expect(multigetXml).not.toContain('404 Not Found');
+
+            const query = await report(`<?xml version="1.0" encoding="UTF-8"?>
+<calendar-query xmlns:D="DAV:" xmlns="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <D:getetag/>
+  </D:prop>
+  <filter>
+    <comp-filter name="VCALENDAR">
+      <comp-filter name="VEVENT">
+        <prop-filter name="UID">
+          <text-match collation="i;octet">
+            caldav-pretty@eigen
+          </text-match>
+        </prop-filter>
+      </comp-filter>
+    </comp-filter>
+  </filter>
+</calendar-query>
+`);
+            expect(query.status).toBe(207);
+            expect(await query.text()).toContain('caldav-pretty.ics');
+
+            const initial = await report(
+                `<D:sync-collection xmlns:D="DAV:"><D:sync-token/><D:prop><D:getetag/></D:prop></D:sync-collection>`,
+            );
+            const token = (await initial.text()).match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+            const sync = await report(`<?xml version="1.0" encoding="UTF-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>
+    ${token}
+  </D:sync-token>
+  <D:prop>
+    <D:getetag/>
+  </D:prop>
+</D:sync-collection>
+`);
+            expect(sync.status).toBe(207);
+
+            const calId = 'pretty-cal';
+            const created = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body: `<?xml version="1.0" encoding="UTF-8"?>
+<mkcalendar xmlns:D="DAV:" xmlns="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/">
+  <D:set>
+    <D:prop>
+      <D:displayname>
+        Pretty Calendar
+      </D:displayname>
+      <ICAL:calendar-color>
+        #00ff00
+      </ICAL:calendar-color>
+    </D:prop>
+  </D:set>
+</mkcalendar>
+`,
+            });
+            expect(created.status).toBe(201);
+            const home = await getHome(userId);
+            expect(await home.calendar.getCalendarById(calId)).toMatchObject({
+                name: 'Pretty Calendar',
+                color: '#00ff00',
+            });
         });
 
         test('an identical re-PUT changes nothing: no ctag bump, no sync row, an ETag back', async () => {

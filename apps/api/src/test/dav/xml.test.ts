@@ -37,14 +37,14 @@ describe('member properties', () => {
 
     test('a PROPFIND row adds the empty resourcetype that marks a non-collection member', () => {
         expect([...memberRowProps('abc', 'text/calendar')]).toEqual([
-            ['getetag', '<D:getetag>"abc"</D:getetag>'],
-            ['getcontenttype', '<D:getcontenttype>text/calendar</D:getcontenttype>'],
-            ['resourcetype', '<D:resourcetype/>'],
+            ['D:getetag', '<D:getetag>"abc"</D:getetag>'],
+            ['D:getcontenttype', '<D:getcontenttype>text/calendar</D:getcontenttype>'],
+            ['D:resourcetype', '<D:resourcetype/>'],
         ]);
     });
 
     test('the two views spell one etag, escaped', () => {
-        expect(memberRowProps('a<b', 'text/vcard').get('getetag')).toBe(memberProps('a<b', 'text/vcard')[0]);
+        expect(memberRowProps('a<b', 'text/vcard').get('D:getetag')).toBe(memberProps('a<b', 'text/vcard')[0]);
         expect(memberProps('a<b', 'text/vcard')[0]).toBe('<D:getetag>"a&lt;b"</D:getetag>');
     });
 });

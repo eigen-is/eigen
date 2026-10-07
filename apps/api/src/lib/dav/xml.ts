@@ -29,12 +29,12 @@ export function multistatusResponse(responses: string[], extra?: string): Respon
     });
 }
 
-// DAV:error wrapping one precondition element (RFC 3253 § 1.6); the namespaces are inline so the body stands alone.
+// DAV:error wrapping one precondition element (RFC 3253 § 1.6), bound like the multistatus so the body stands alone.
 export function davError(status: number, element: string): Response {
-    return new Response(
-        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav">${element}</D:error>`,
-        { status, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-    );
+    return new Response(`<?xml version="1.0" encoding="utf-8"?><D:error ${NS}>${element}</D:error>`, {
+        status,
+        headers: { 'Content-Type': XML_CONTENT_TYPE },
+    });
 }
 
 export function response(href: string, propstats: string[]): string {
@@ -64,9 +64,9 @@ export function memberProps(etag: string, contentType: string): string[] {
 // The empty resourcetype is RFC 4918's discriminator for a non-collection.
 export function memberRowProps(etag: string, contentType: string): PropMap {
     return new Map([
-        ['getetag', getetag(etag)],
-        ['getcontenttype', getcontenttype(contentType)],
-        ['resourcetype', `<D:resourcetype/>`],
+        ['D:getetag', getetag(etag)],
+        ['D:getcontenttype', getcontenttype(contentType)],
+        ['D:resourcetype', `<D:resourcetype/>`],
     ]);
 }
 
@@ -89,9 +89,9 @@ export function principalProps(userId: string): string[] {
 export function ownershipEntries(ownerId: string): [string, string][] {
     return [
         [
-            'current-user-privilege-set',
+            'D:current-user-privilege-set',
             `<D:current-user-privilege-set><D:privilege><D:all/></D:privilege><D:privilege><D:read/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
         ],
-        ['owner', `<D:owner><D:href>${principalHref(ownerId)}</D:href></D:owner>`],
+        ['D:owner', `<D:owner><D:href>${principalHref(ownerId)}</D:href></D:owner>`],
     ];
 }
