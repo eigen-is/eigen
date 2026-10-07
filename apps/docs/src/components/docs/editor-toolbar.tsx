@@ -150,6 +150,12 @@ export const EditorToolbar = ({
         setLinkDialogOpen(false);
     };
 
+    // A menu item's editor command refocuses the editor a frame later; keep it there rather than let
+    // Radix restore focus to the menu trigger, which would swallow the next keystrokes.
+    const keepEditorFocus = (e: Event) => {
+        if (editor.isFocused) e.preventDefault();
+    };
+
     const clearFormatting = () => {
         editor.chain().focus().clearNodes().unsetAllMarks().run();
     };
@@ -206,7 +212,7 @@ export const EditorToolbar = ({
 
                         {isCompact && canWrite && (
                             <>
-                                <ToolbarMenu label="Format">
+                                <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger>
                                             <Type className="h-4 w-4 mr-2" /> Font
@@ -353,7 +359,12 @@ export const EditorToolbar = ({
                                     </DropdownMenuItem>
                                 </ToolbarMenu>
 
-                                <ToolbarMenu label="Insert" open={insertMenuOpen} onOpenChange={setInsertMenuOpen}>
+                                <ToolbarMenu
+                                    label="Insert"
+                                    open={insertMenuOpen}
+                                    onOpenChange={setInsertMenuOpen}
+                                    onCloseAutoFocus={keepEditorFocus}
+                                >
                                     <DropdownMenuItem onClick={handleLinkOperation}>
                                         <Link className="h-4 w-4 mr-2" /> Link
                                     </DropdownMenuItem>

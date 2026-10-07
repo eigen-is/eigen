@@ -16,8 +16,9 @@ function paragraph(text: string): JSONContent {
     return { type: 'paragraph', content: [{ type: 'text', text }] };
 }
 
-const brokenDoc = (): Y.Doc =>
-    seededDoc({ type: 'doc', content: [paragraph('Before'), { type: 'pageBreak' }, paragraph('After')] });
+function brokenDoc(): Y.Doc {
+    return seededDoc({ type: 'doc', content: [paragraph('Before'), { type: 'pageBreak' }, paragraph('After')] });
+}
 
 async function docxDocumentXml(doc: Y.Doc): Promise<string | undefined> {
     const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', []);
@@ -49,6 +50,11 @@ describe('doc export — the page', () => {
         const pgMar = xml?.match(/<w:pgMar\b[^>]*>/)?.[0];
         for (const side of ['top', 'right', 'bottom', 'left']) expect(pgMar).toContain(`w:${side}="1134"`);
     });
+
+    test('docx opens on the first paragraph, not an empty one', async () => {
+        const xml = await docxDocumentXml(seededDoc());
+        expect(xml?.match(/<w:body>[\s\S]*?<\/w:p>/)?.[0]).toContain('Hello');
+    });
 });
 
 describe('doc export — the stylesheet', () => {
@@ -61,6 +67,17 @@ describe('doc export — the stylesheet', () => {
         expect(css).toMatch(/h6 \{[^}]*font-weight: 500;/);
         expect(css).toMatch(/\.eigen-prose th \{[^}]*font-weight: 500;/);
         expect(css).toMatch(/strong \{ font-weight: 600; \}/);
+    });
+
+    test('the dark theme stays out, whole', async () => {
+        const css = await exportStyle('pdf-html');
+        expect(css).not.toMatch(/#3f3f46|#27272a/);
+        // A leftover closing brace would swallow the rule after it.
+        expect(css.split('}').length).toBe(css.split('{').length);
+    });
+
+    test('a page break starts the next page in print', async () => {
+        expect(await exportStyle('pdf-html')).toContain('break-after: page');
     });
 });
 

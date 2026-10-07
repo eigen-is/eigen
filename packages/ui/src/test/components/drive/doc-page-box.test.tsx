@@ -3,6 +3,7 @@
 import { expect, mock, test } from 'bun:test';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import { DRIVE_MIME_DOC, DRIVE_TYPE_DOC } from '@workspace/lib/types/drive';
+import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -14,10 +15,11 @@ installHappyDom({ onResizeObserver: (callback) => resizeCallbacks.push(callback)
 const session = { user: { id: 'owner-1' } };
 mock.module('@workspace/lib/auth', () => ({ useAuth: () => session, useIsGuest: () => false }));
 
+let textPreview: TextPreviewResult = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
 const realDrive = await import('@workspace/lib/drive');
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useTextPreview: () => ({ data: { mode: 'eigendoc', body: '<p>Quarterly report</p>' }, isLoading: false }),
+    useTextPreview: () => ({ data: textPreview, isLoading: false }),
 }));
 
 const { act, createElement } = await import('react');
@@ -39,9 +41,9 @@ function expectPageBox(el: HTMLElement | null | undefined, width: string) {
     expect(el?.style.padding).toBe('20mm');
 }
 
-test('quick look draws an eigendoc on the docs page', async () => {
+function renderQuickLook() {
     const subject = subjectFromPath(path);
-    const { container, unmount } = await renderInDocument(
+    return renderInDocument(
         createElement(
             PreviewContext.Provider,
             { value: preview },
@@ -54,8 +56,37 @@ test('quick look draws an eigendoc on the docs page', async () => {
             }),
         ),
     );
+}
+
+// The dark prose rules skip descendants of .eigen-paper, so the paper must sit above the prose, not on it.
+function expectProseOnPaper(container: HTMLElement, onPaper: boolean) {
+    const prose = container.querySelector('.eigen-prose');
+    expect(prose?.classList.contains('eigen-paper')).toBe(false);
+    expect(Boolean(prose?.parentElement?.closest('.eigen-paper'))).toBe(onPaper);
+}
+
+test('quick look draws an eigendoc on the docs page', async () => {
+    const { container, unmount } = await renderQuickLook();
     expectPageBox(container.querySelector<HTMLElement>('.eigen-prose')?.parentElement, '210mm');
     await unmount();
+});
+
+test.each([
+    ['eigendoc', true],
+    ['markdown', false],
+] as const)('quick look and the Drive thumbnail draw %s on the light paper: %p', async (mode, onPaper) => {
+    textPreview = { mode, body: '<p>Quarterly report</p>' };
+    try {
+        for (const rendered of [
+            await renderQuickLook(),
+            await renderInDocument(createElement(DrivePreview, { path })),
+        ]) {
+            expectProseOnPaper(rendered.container, onPaper);
+            await rendered.unmount();
+        }
+    } finally {
+        textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
+    }
 });
 
 test('the Drive thumbnail draws an eigendoc on the docs page', async () => {

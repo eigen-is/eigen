@@ -13,55 +13,7 @@
 
 /* ===== Docs-specific TipTap overrides ===== */
 /* Shared tiptap editor + prose rules are in @workspace/ui eigen-prose.css */
-/* Below: docs-only styles (dark mode canvas, table resize, comments, cursors) */
-
-/* The document canvas is always white (print fidelity). In dark mode, override theme
-   variables and prose styles back to their light values so content remains readable. */
-.dark [data-document] {
-    --primary: oklch(0.208 0.042 265.755);
-    --foreground: oklch(0.129 0.042 264.695);
-    --muted-foreground: oklch(0.554 0.046 257.417);
-    --selected: oklch(0.932 0.032 255);
-    --border: oklch(0.929 0.013 255.508);
-    --ring: oklch(0.704 0.04 256.788);
-}
-
-.dark [data-document] .eigen-prose {
-    color: #1a1a2e;
-}
-
-.dark [data-document] .eigen-prose a {
-    color: #2563eb;
-}
-
-.dark [data-document] .eigen-prose blockquote {
-    color: #6b7280;
-    border-color: #d1d5db;
-}
-
-.dark [data-document] .eigen-prose hr {
-    border-color: #e5e7eb;
-}
-
-.dark [data-document] .eigen-prose code {
-    background-color: #f9fafb;
-    color: #dc2626;
-}
-
-/* Code blocks are always dark (Catppuccin) — prevent the inline code override above from affecting them */
-.dark [data-document] .eigen-prose pre code {
-    background: none;
-    color: #cdd6f4;
-}
-
-.dark [data-document] .eigen-prose th,
-.dark [data-document] .eigen-prose td {
-    border-color: #e5e7eb;
-}
-
-.dark [data-document] .eigen-prose th {
-    background-color: #f9fafb;
-}
+/* Below: docs-only styles (table resize, comments, cursors) */
 
 /* Table column resize handle (docs-specific: resizable tables) */
 .tiptap table .column-resize-handle {
