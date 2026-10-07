@@ -1,6 +1,8 @@
 import { type CommandProps, canInsertNode, isNodeSelection, Node } from '@tiptap/core';
 import { GapCursor } from '@tiptap/pm/gapcursor';
+import { TextSelection } from '@tiptap/pm/state';
 import { CellSelection } from '@tiptap/pm/tables';
+import { StepMap } from '@tiptap/pm/transform';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -25,7 +27,13 @@ export const PageBreakNode = Node.create({
     priority: 101,
 
     parseHTML() {
-        return [{ tag: `.${PAGE_BREAK_CLASS}` }];
+        // Any other element carrying the class, or a div with text, parses as itself and keeps its content.
+        return [
+            {
+                tag: `div.${PAGE_BREAK_CLASS}, hr.${PAGE_BREAK_CLASS}`,
+                getAttrs: (node) => (node.textContent ? false : null),
+            },
+        ];
     },
 
     renderHTML() {
@@ -38,12 +46,14 @@ export const PageBreakNode = Node.create({
             // Before a table or a rule it waits in a gap cursor: selected, the block is one Backspace from deleted.
             setPageBreak:
                 () =>
-                ({ chain, state }: CommandProps) => {
+                ({ chain, state, tr }: CommandProps) => {
                     const { selection } = state;
                     if (selection instanceof CellSelection) return false;
                     // A figure is an inline atom, no place for a block: the break splits its paragraph after it.
+                    // On tr itself, since a dry run's setTextSelection leaves the figure selected and recurses forever.
                     if (isNodeSelection(selection) && selection.node.isInline) {
-                        return chain().setTextSelection(selection.to).setPageBreak().run();
+                        tr.setSelection(TextSelection.create(tr.doc, selection.to));
+                        return chain().setPageBreak().run();
                     }
                     if (!canInsertNode(state, state.schema.nodes[this.name])) return false;
                     const insert = isNodeSelection(selection)
@@ -54,7 +64,9 @@ export const PageBreakNode = Node.create({
                             const { $to } = tr.selection;
                             if (!$to.nodeAfter) return commands.insertContentAt($to.end(), { type: 'paragraph' });
                             if ($to.nodeAfter.isTextblock) return commands.setTextSelection($to.pos + 1);
-                            tr.setSelection(new GapCursor($to));
+                            // GapCursor.valid is untyped, but map applies it: a valid gap stays, anywhere else
+                            // Selection.near takes over, mid-paragraph the second half and before a list its first item.
+                            tr.setSelection(new GapCursor($to).map(tr.doc, StepMap.empty));
                             return true;
                         })
                         .scrollIntoView()

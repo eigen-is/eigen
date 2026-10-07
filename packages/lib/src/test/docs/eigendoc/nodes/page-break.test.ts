@@ -10,6 +10,7 @@ import {
 } from '@tiptap/core';
 import { GapCursor } from '@tiptap/pm/gapcursor';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { TextSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -75,6 +76,20 @@ describe('page break HTML', () => {
         ]);
     });
 
+    // Only an empty div or an hr is a page break: any other element carrying the class keeps its content.
+    test.each([
+        ['<h2 class="page-break">Heading</h2>', ['heading']],
+        ['<h2 class="page-break"></h2>', ['heading']],
+        ['<div class="page-break">Text</div>', ['paragraph']],
+        ['<table class="page-break"><tbody><tr><td><p>Cell</p></td></tr></tbody></table>', ['table']],
+        ['<ul><li class="page-break"><p>Item</p></li></ul>', ['bulletList']],
+        ['<p><span class="page-break">Text</span></p>', ['paragraph']],
+    ])('%s keeps its content', (html, types) => {
+        const doc = createDocument(html, schema);
+        expect(blockTypes(doc)).toEqual(types);
+        expect(doc.textContent).toBe(html.replace(/<[^>]+>/g, ''));
+    });
+
     test('a plain hr stays a horizontal rule', () => {
         expect(blockTypes(createDocument('<p>Before</p><hr><p>After</p>', schema))).toEqual([
             'paragraph',
@@ -111,6 +126,24 @@ describe('page break keys', () => {
         editor.destroy();
     });
 
+    test.each([
+        ['in the middle of', 4, ['paragraph', 'pageBreak', 'paragraph'], 'ore'],
+        ['at the start of', 1, ['pageBreak', 'paragraph'], 'Before'],
+    ])(
+        'Mod-Enter %s a paragraph leaves the caret at the start of the text after the break',
+        (_where, pos, types, after) => {
+            const editor = mount('<p>Before</p>');
+            editor.commands.setTextSelection(pos);
+            press(editor, MOD_ENTER);
+            const { selection, doc } = editor.state;
+            expect(blockTypes(doc)).toEqual(types);
+            expect(selection).toBeInstanceOf(TextSelection);
+            expect(selection.$from.parent.textContent).toBe(after);
+            expect(selection.$from.parentOffset).toBe(0);
+            editor.destroy();
+        },
+    );
+
     test('Mod-Enter in a code block exits it', () => {
         const editor = mount('<pre><code>let a</code></pre><p>After</p>');
         editor.commands.setTextSelection(6);
@@ -143,6 +176,29 @@ describe('page break keys', () => {
         expect(blockTypes(editor.state.doc)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
         const [before, , after] = editor.getJSON().content ?? [];
         expect([before?.content?.map((node) => node.type), after?.content?.map((node) => node.type)]).toEqual(halves);
+        // The caret waits at the start of the half after the break.
+        const { selection } = editor.state;
+        expect(selection).toBeInstanceOf(TextSelection);
+        expect([selection.$from.index(0), selection.$from.parentOffset]).toEqual([2, 0]);
+        editor.destroy();
+    });
+
+    test('a selected figure can take a page break', () => {
+        const editor = mount({ type: 'doc', content: [{ type: 'paragraph', content: [figure] }] });
+        editor.commands.setNodeSelection(1);
+        expect(editor.can().setPageBreak()).toBe(true);
+        editor.destroy();
+    });
+
+    // A gap cursor needs a closed block on both sides; a list opens on a paragraph.
+    test('Mod-Enter just before a list puts the caret in its first item', () => {
+        const editor = mount('<p>Before</p><ul><li><p>Item</p></li></ul><p>After</p>');
+        editor.commands.setTextSelection(7);
+        press(editor, MOD_ENTER);
+        expect(blockTypes(editor.state.doc)).toEqual(['paragraph', 'pageBreak', 'bulletList', 'paragraph']);
+        expect(editor.state.selection).toBeInstanceOf(TextSelection);
+        editor.commands.insertContent('x');
+        expect(editor.state.doc.child(2).textContent).toBe('xItem');
         editor.destroy();
     });
 
