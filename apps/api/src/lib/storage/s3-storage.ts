@@ -292,10 +292,15 @@ function setS3LifecycleRule(config: S3Config, noncurrentDays: number): Promise<R
     return signedS3Request(config, { method: 'PUT', query: 'lifecycle', body });
 }
 
+// A body that doesn't read as an S3 error has no code, and the status alone decides.
 async function failureReason(res: Response): Promise<'access-denied' | 'not-supported' | 'error'> {
-    const body = await res.text();
-    if (res.status === 403 || body.includes('AccessDenied')) return 'access-denied';
-    if (res.status === 501 || body.includes('NotImplemented')) return 'not-supported';
+    const error = await res
+        .bytes()
+        .then(parseXml)
+        .catch(() => null);
+    const code = error?.local === 'Error' ? s3Text(error, 'Code') : '';
+    if (res.status === 403 || code === 'AccessDenied') return 'access-denied';
+    if (res.status === 501 || code === 'NotImplemented') return 'not-supported';
     return 'error';
 }
 
