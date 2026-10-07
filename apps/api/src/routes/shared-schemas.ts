@@ -74,10 +74,16 @@ type _ImportFromDriveSchemaCoversSource =
 const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
 void _importFromDriveSchemaCheck;
 
+// Most control characters can't go into a lifecycle rule's <Prefix>: escaped out, the rule would cover another prefix.
+export const s3PrefixSchema = t.String({
+    pattern: NO_CONTROL_PATTERN,
+    error: 'The prefix cannot hold a control character',
+});
+
 export const s3ConfigBody = t.Object({
     endpoint: t.String({ minLength: 1 }),
     bucket: t.String({ minLength: 1 }),
-    prefix: t.Optional(t.String()),
+    prefix: t.Optional(s3PrefixSchema),
     accessKeyId: t.String({ minLength: 1 }),
     secretAccessKey: t.String({ minLength: 1 }),
     region: t.Optional(t.String()),
@@ -87,7 +93,7 @@ export const s3ConfigBody = t.Object({
 export const s3DestinationBody = t.Object({
     endpoint: t.Optional(t.String()),
     bucket: t.Optional(t.String()),
-    prefix: t.Optional(t.String()),
+    prefix: t.Optional(s3PrefixSchema),
     accessKeyId: t.Optional(t.String()),
     secretAccessKey: t.Optional(t.String()),
     region: t.Optional(t.String()),

@@ -257,6 +257,8 @@ describe('the /setup routes before setup', () => {
 
         const failed = await post('complete', { ...admin, storageType: 's3', setupToken: newer });
         expect(failed.status).toBe(400);
+        const badPrefix = await post('complete', { ...admin, storageType: 's3', s3Prefix: 'a\tb', setupToken: newer });
+        expect(badPrefix.status).toBe(422);
         const badName = await post('complete', { ...admin, adminUsername: 'ada lovelace', setupToken: newer });
         expect(badName.status).toBe(400);
         expect(await badName.text()).toContain('Username must be lowercase alphanumeric');

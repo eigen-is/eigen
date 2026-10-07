@@ -5,8 +5,8 @@ import type { StorageBackend } from '../lib/storage';
 import { DUMMY_S3 } from './fault-storage-helpers';
 
 // A local S3 for the real S3Storage: faults on the lazy S3File's HEAD, GET and DELETE, which FaultStorage never sees.
-// It lists what went in through it, takes multipart uploads, answers its `lifecycle`, and refuses an unsigned
-// request unless `publicRead`.
+// It lists what went in through it, takes multipart uploads, keeps its `versioning` and `lifecycle` configurations,
+// and refuses an unsigned request unless `publicRead`.
 
 // stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only;
 // fail-put: a 500 on PUT only, every part of a multipart upload included; slow-put: each PUT and part answered
@@ -37,8 +37,10 @@ export class FakeS3Server {
     abandoned = 0;
     // Answer a GET without a signature, as a bucket anyone may read does.
     publicRead = false;
-    // The bucket's lifecycle configuration as a GET ?lifecycle answers it; null is none.
+    // The bucket's configurations as a GET answers them and a PUT stores them; a null lifecycle is none.
+    versioning = '<VersioningConfiguration/>';
     lifecycle: string | null = null;
+    lifecyclePuts = 0;
     // Multipart uploads begun and neither completed nor aborted, by upload id.
     readonly openUploads = new Map<string, { key: string; parts: Map<number, Buffer> }>();
     abortedUploads = 0;
@@ -115,8 +117,19 @@ export class FakeS3Server {
             reply(socket, method, '403 Forbidden', 'AccessDenied');
             return;
         }
-        if (method === 'GET' && url.searchParams.has('lifecycle')) {
-            if (this.lifecycle === null) reply(socket, method, '404 Not Found', 'NoSuchLifecycleConfiguration');
+        if (url.searchParams.has('versioning')) {
+            if (method === 'PUT') {
+                this.versioning = body.toString();
+                reply(socket, method, '200 OK');
+            } else replyXml(socket, this.versioning);
+            return;
+        }
+        if (url.searchParams.has('lifecycle')) {
+            if (method === 'PUT') {
+                this.lifecycle = body.toString();
+                this.lifecyclePuts++;
+                reply(socket, method, '200 OK');
+            } else if (this.lifecycle === null) reply(socket, method, '404 Not Found', 'NoSuchLifecycleConfiguration');
             else replyXml(socket, this.lifecycle);
             return;
         }
