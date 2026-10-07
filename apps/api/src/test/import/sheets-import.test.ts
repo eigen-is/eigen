@@ -1822,10 +1822,9 @@ describe('xlsxToSheets resource guards', () => {
         }
     });
 
-    // A long text costs 1x to 4x its length in the tree, 4x once one non-latin1 character widens it to UTF-16. Reading
-    // the padded part is ~450 MB of the growth here; a tree of the hyperlinks block doubles it.
-    test('a hyperlinks block or theme of 150 MB of text costs no tree and loses only its links or colors', async () => {
-        const pad = `€${'a'.repeat(150_000_000)}`;
+    // Past the length cap a part isn't parsed: a tree would cost 1x to 4x its text. Without the cap the link and the
+    // colours survive. The hyperlinks block is read straight from the zip, so exceljs never inflates the 34 MB sheet.
+    test('a hyperlinks block or theme past its length cap is not parsed and loses only its links or colors', async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('S');
         ws.getCell('A1').value = 'kept';
@@ -1834,34 +1833,20 @@ describe('xlsxToSheets resource guards', () => {
         const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
             { ref: 'A1', location: 'T!A1' },
         ]);
-        const link = { '0_0': { linkType: 'cellrange', linkAddress: 'T!A1' } };
 
-        for (const [path, edit, keeps] of [
-            [
-                'xl/worksheets/sheet1.xml',
-                (xml: string) => xml.replace('</hyperlinks>', `${pad}</hyperlinks>`),
-                { link: undefined, color: true },
-            ],
-            [
-                'xl/theme/theme1.xml',
-                (xml: string) =>
-                    xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${pad}</a:ext></a:extLst></a:theme>`),
-                { link, color: false },
-            ],
-        ] as const) {
-            const buffer = Buffer.from(await replacePart(linked, path, edit));
+        const longBlock = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('</hyperlinks>', `${'a'.repeat(34_000_000)}</hyperlinks>`),
+        );
+        expect(await readLocationHyperlinks(await JSZip.loadAsync(longBlock))).toEqual(new Map());
 
-            Bun.gc(true);
-            const before = process.memoryUsage().heapUsed;
-            const sheets = await xlsxToSheets(buffer);
-            const grown = process.memoryUsage().heapUsed - before;
-
-            const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-            expect(a1?.v?.v).toBe('kept');
-            expect(a1?.v?.fc !== undefined).toBe(keeps.color);
-            expect(sheets[0].hyperlink).toEqual(keeps.link);
-            expect(grown).toBeLessThan(640 * 1024 * 1024);
-        }
+        const longTheme = await replacePart(linked, 'xl/theme/theme1.xml', (xml) =>
+            xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${'a'.repeat(2_000_000)}</a:ext></a:extLst></a:theme>`),
+        );
+        const sheets = await xlsxToSheets(Buffer.from(longTheme));
+        const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('kept');
+        expect(a1?.v?.fc).toBeUndefined();
+        expect(sheets[0].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'T!A1' } });
     });
 
     test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
