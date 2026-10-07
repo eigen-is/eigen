@@ -167,7 +167,7 @@
         margin: 1.5em 0;
     }
 
-    /* Page break: a labelled dashed rule on screen, a new page in print */
+    /* Page break */
 
     .page-break {
         border-top: 1px dashed var(--color-muted-foreground);
@@ -509,22 +509,18 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     filter: brightness(0.95);
 }
 
-/* Comment highlights are collaboration chrome, not content — keep print clean.
-   The doc export embeds this stylesheet and WeasyPrint renders print media, so
-   the same rule keeps PDF exports clean too. */
+/* Comment highlights and the page break's rule and label are screen chrome; print drops them and the
+   break starts the next page. The doc export embeds this stylesheet and WeasyPrint renders print media,
+   so these rules hold for the PDF too. */
 @media print {
     .tiptap .comment-highlight {
         background-color: transparent;
     }
-}
 
-/* The page break's rule and label are screen chrome; on paper and in the PDF it starts the next page. */
-@media print {
     .tiptap .page-break {
         break-after: page;
         margin: 0;
         border: none;
-        height: 0;
     }
 
     .tiptap .page-break::after {
