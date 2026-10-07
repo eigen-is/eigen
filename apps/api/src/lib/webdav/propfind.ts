@@ -1,5 +1,5 @@
-import { escapeXml } from '@workspace/lib/html';
 import { type DrivePath, isContainerType } from '@workspace/lib/types/drive';
+import { escapeXml } from '@workspace/lib/xml';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getMountQuotaState } from '../config/enforcement';
 import { ApiError } from '../core/errors';

@@ -1,4 +1,4 @@
-import { escapeXml } from '@workspace/lib/html';
+import { escapeXml } from '@workspace/lib/xml';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { ApiError } from '../core/errors';
 import { isNcName } from '../dav/propfind';

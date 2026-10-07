@@ -1,4 +1,3 @@
-import { escapeXml } from '@workspace/lib/html';
 import {
     BORDER_STYLES,
     type BorderSide,
@@ -15,6 +14,7 @@ import {
     type SingleRange,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { escapeXml } from '@workspace/lib/xml';
 import {
     columnIndexToLabel,
     iscelldata,

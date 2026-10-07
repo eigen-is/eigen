@@ -1,6 +1,6 @@
 import * as net from 'node:net';
-import { escapeXml } from '@workspace/lib/html';
 import type { S3Config } from '@workspace/lib/types';
+import { escapeXml } from '@workspace/lib/xml';
 import type { StorageBackend } from '../lib/storage';
 import { DUMMY_S3 } from './fault-storage-helpers';
 

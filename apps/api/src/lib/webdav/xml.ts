@@ -1,5 +1,5 @@
-import { escapeXml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { escapeXml } from '@workspace/lib/xml';
 import { computeEtag } from '../core/http';
 import { XML_CONTENT_TYPE } from '../dav/xml';
 import type { Lock } from '../drive/lock-manager';

@@ -1,4 +1,4 @@
-import { escapeXml } from '@workspace/lib/html';
+import { escapeXml } from '@workspace/lib/xml';
 import { XMLParser } from 'fast-xml-parser';
 import { propstatNotFound, propstatOk } from './xml';
 import { asNode, isXmlNode, type XmlNode } from './xml-node';

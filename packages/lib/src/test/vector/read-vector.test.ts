@@ -255,17 +255,18 @@ describe('readVectorFromDoc', () => {
         expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ type: 'freedraw', points: '[[0,0]]' });
     });
 
-    test('strips XML-invalid control chars from html and fontFamily (keeps tab/newline)', () => {
+    test('strips XML-invalid chars from html and fontFamily (keeps tab/newline)', () => {
+        const [nonChar, loneHigh] = [String.fromCharCode(0xfffe), String.fromCharCode(0xd800)];
         const doc = docWith((elements) => {
             writeElement(elements, 't', {
                 type: 'richtext',
                 index: 'a0',
-                html: `a\u0000b\u0007c\td\ne`,
+                html: `a\u0000b\u0007c\td\ne${nonChar}f${loneHigh}g`,
                 fontFamily: `Ex\u001Fcalifont`,
             });
         });
-        // U+0000/U+0007/U+001F stripped; the tab and newline survive.
-        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ html: 'abc\td\ne', fontFamily: 'Excalifont' });
+        // U+0000/U+0007/U+001F/U+FFFE and a lone surrogate stripped; the tab and newline survive.
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ html: 'abc\td\nefg', fontFamily: 'Excalifont' });
     });
 
     test('caps html at 64 KiB, truncating on a code-point boundary', () => {

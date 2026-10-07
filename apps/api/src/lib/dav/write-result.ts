@@ -1,4 +1,4 @@
-import { escapeXml } from '@workspace/lib/html';
+import { escapeXml } from '@workspace/lib/xml';
 import type { DeleteResourceResult, InvalidReason, PutResourceResult } from '../core';
 import { encodePathSegment } from './href';
 import { davError } from './xml';

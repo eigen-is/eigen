@@ -1,4 +1,4 @@
-import { escapeXml } from '@workspace/lib/html';
+import { escapeXml } from '@workspace/lib/xml';
 import { addressbookHomeHref, calendarHomeHref, principalHref } from './href';
 import type { PropMap } from './propfind';
 

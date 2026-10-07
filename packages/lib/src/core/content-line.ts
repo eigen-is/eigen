@@ -2,10 +2,8 @@
 // (carddav) serializers — the fold and escape algorithms are identical across both formats, so they live
 // here as the one source of truth.
 
-// A C0 control byte illegal in XML character data — below 0x20 except TAB, CR, LF. One such byte echoed into
-// a REPORT's address-data/calendar-data invalidates the XML client-side and wedges DAV sync. The serialize
-// seams below STRIP these; the vCard ingest parse REJECTS them (../vcard/ast.ts). A code-point check, not a
-// regex: biome rejects \x00-\x1F, and \p{Cc} would also hit the C1 controls, which are valid XML.
+// A C0 control other than TAB, CR, LF: not a content-line TEXT char (RFC 5545 § 3.1, RFC 6350 § 3.3). The
+// serialize seams below strip it; the vCard ingest parse rejects it (../vcard/ast.ts).
 export function isIllegalC0(code: number): boolean {
     return code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d;
 }

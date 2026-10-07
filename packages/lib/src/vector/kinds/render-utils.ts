@@ -4,7 +4,7 @@
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { svgGradientStops } from '../../background/gradient';
-import { escapeXml } from '../../core/html';
+import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { isClosedPath, type Point, round } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
