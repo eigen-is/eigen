@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1625 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1626 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -891,7 +891,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (770)
+## Utilities & constants (771)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1346,6 +1346,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VCARD_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `withoutSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `BACKUP_JOB_STATES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |

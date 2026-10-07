@@ -1,10 +1,21 @@
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
+import { keepsSavedSecret } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError, parseXml, type XmlElement, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
 import { errnoOf, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
+
+// A config as its form sends it, the browser never having had the secret: a blank one is the saved one where
+// keepsSavedSecret allows it.
+export function withSavedSecret(next: S3Config, saved: S3Config | undefined): S3Config {
+    if (next.secretAccessKey) return next;
+    if (!saved || !keepsSavedSecret(next, saved)) {
+        throw new ApiError(400, 'Enter the secret key that goes with this bucket and access key');
+    }
+    return { ...next, secretAccessKey: saved.secretAccessKey };
+}
 
 // `refusePublic` also fails a bucket that answers an unsigned GET of the probe: a backup bucket must be private.
 export async function checkS3Connection(

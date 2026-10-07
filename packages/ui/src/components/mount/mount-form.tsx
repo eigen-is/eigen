@@ -53,7 +53,9 @@ export function MountForm({
     const [submitting, setSubmitting] = useState(false);
 
     const isS3 = storageType === 's3';
-    const canSubmit = name.trim() && maxSizeMB >= 10 && (!isS3 || isS3ConfigValid(s3Config));
+    // A saved mount's secret comes back blank, and saving it blank keeps it.
+    const secretSaved = isEdit && !!initialValues?.s3Config;
+    const canSubmit = name.trim() && maxSizeMB >= 10 && (!isS3 || isS3ConfigValid(s3Config, secretSaved));
 
     const handleSubmit = async () => {
         if (!canSubmit) return;
@@ -120,6 +122,7 @@ export function MountForm({
                     onCheck={onS3Check}
                     onHarden={onS3Harden}
                     isEdit={isEdit}
+                    secretSaved={secretSaved}
                 />
             )}
 

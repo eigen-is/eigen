@@ -90,6 +90,9 @@ export const s3ConfigBody = t.Object({
     region: t.Optional(t.String()),
 });
 
+// An S3 config as its form saves it again: a blank secret, see withSavedSecret.
+export const s3ConfigUpdateBody = t.Object({ ...s3ConfigBody.properties, secretAccessKey: t.String() });
+
 // The backup bucket as the owner edits it: a field left out keeps the saved one; a blank secret, see keepsSavedSecret.
 export const s3DestinationBody = t.Object({
     endpoint: t.Optional(t.String()),

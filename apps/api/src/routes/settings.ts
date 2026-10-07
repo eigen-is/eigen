@@ -1,7 +1,7 @@
 import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
-import type { S3Config } from '@workspace/lib/types/mount';
+import { type S3Config, withoutSecret } from '@workspace/lib/types/mount';
 import type {
     HomeSizeResponse,
     S3CheckResult,
@@ -127,7 +127,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             if ((await getOrgRole(user.id)) === 'owner') return settings;
             const { s3Config } = settings.defaults.mount;
             const mount = s3Config
-                ? { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } }
+                ? { ...settings.defaults.mount, s3Config: withoutSecret(s3Config) }
                 : settings.defaults.mount;
             return { ...settings, defaults: { mount }, backups: DEFAULT_BACKUPS };
         },

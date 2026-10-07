@@ -1,4 +1,4 @@
-import { MOUNT_STORAGE_TYPES } from '@workspace/lib/types/mount';
+import { MOUNT_STORAGE_TYPES, withoutSecret } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
@@ -10,12 +10,16 @@ import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
-import { s3ConfigBody, toS3Config } from './shared-schemas';
+import { s3ConfigBody, s3ConfigUpdateBody, toS3Config } from './shared-schemas';
 
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type !== 'team') throw new ApiError(400, 'Invalid teamId format');
     return parsed.id;
+}
+
+function withoutMountSecret(mount: MountSettings): MountSettings {
+    return mount.s3Config ? { ...mount, s3Config: withoutSecret(mount.s3Config) } : mount;
 }
 
 export const teamRouter = new Elysia({ name: 'team' })
@@ -73,9 +77,10 @@ export const teamRouter = new Elysia({ name: 'team' })
     .get(
         '/team/:ownerId/mounts',
         async ({ params, user }): Promise<Record<string, MountSettings>> => {
-            await requireTeamAccess(user.id, teamId(params.ownerId));
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
-            return home.settings.get().mounts ?? {};
+            const mounts = Object.entries(home.settings.get().mounts ?? {});
+            return Object.fromEntries(mounts.map(([id, mount]) => [id, withoutMountSecret(mount)]));
         },
         { auth: true },
     )
@@ -85,7 +90,11 @@ export const teamRouter = new Elysia({ name: 'team' })
         async ({ params, body, user }): Promise<{ id: string } & MountSettings> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
-            return home.addMount({ ...body, s3Config: body.s3Config && toS3Config(body.s3Config) });
+            const { id, ...mount } = await home.addMount({
+                ...body,
+                s3Config: body.s3Config && toS3Config(body.s3Config),
+            });
+            return { id, ...withoutMountSecret(mount) };
         },
         {
             body: t.Object({
@@ -105,14 +114,18 @@ export const teamRouter = new Elysia({ name: 'team' })
             const home = await getTeamHome(params.ownerId);
             // A key set to undefined would replace the saved config.
             const { s3Config, ...update } = body;
-            return home.updateMount(params.mountId, s3Config ? { ...update, s3Config: toS3Config(s3Config) } : update);
+            const updated = await home.updateMount(
+                params.mountId,
+                s3Config ? { ...update, s3Config: toS3Config(s3Config) } : update,
+            );
+            return withoutMountSecret(updated);
         },
         {
             body: t.Object({
                 enabled: t.Optional(t.Boolean()),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                 name: t.Optional(t.String({ minLength: 1 })),
-                s3Config: t.Optional(s3ConfigBody),
+                s3Config: t.Optional(s3ConfigUpdateBody),
             }),
             auth: true,
         },

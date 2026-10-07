@@ -1,10 +1,10 @@
 import * as path from 'node:path';
-import { isS3ConfigValid, keepsSavedSecret, type S3Config } from '@workspace/lib/types/mount';
+import { isS3ConfigValid, type S3Config, withoutSecret } from '@workspace/lib/types/mount';
 import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
 import { getDomain } from '../config/server-config';
 import { getS3Config, getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
-import { abortsIncompleteUploads, checkS3Connection, S3Storage } from '../storage/s3-storage';
+import { abortsIncompleteUploads, checkS3Connection, S3Storage, withSavedSecret } from '../storage/s3-storage';
 import { listHomeMounts } from './enumerate-homes';
 import { BUCKET_PARTIAL_SUFFIX } from './paths';
 import { pruneBucketArchives } from './retention';
@@ -81,20 +81,15 @@ export function withoutBackupSecret(settings: ServerSettings): ServerSettings {
     const { upload } = settings.backups;
     return {
         ...settings,
-        backups: { ...settings.backups, upload: { ...upload, s3: { ...upload.s3, secretAccessKey: '' } } },
+        backups: { ...settings.backups, upload: { ...upload, s3: withoutSecret(upload.s3) } },
     };
 }
 
-// A destination as the owner sends it lies over the saved one, the browser never having had the secret: a field left
-// out keeps its saved value, a blank secret the saved one where keepsSavedSecret allows it.
-export function withSavedSecret(s3: Partial<S3Config>): S3Config {
+// A destination as the owner sends it lies over the saved one: a field left out keeps its saved value, and a secret
+// left out is a blank one, see withSavedSecret.
+export function withSavedBackupSecret(s3: Partial<S3Config>): S3Config {
     const saved = getServerSettings().backups.upload.s3;
-    const next = { ...saved, ...s3 };
-    if (s3.secretAccessKey) return next;
-    if (!keepsSavedSecret(next, saved)) {
-        throw new ApiError(400, 'Enter the secret key that goes with this bucket and access key');
-    }
-    return { ...next, secretAccessKey: saved.secretAccessKey };
+    return withSavedSecret({ ...saved, ...s3, secretAccessKey: s3.secretAccessKey ?? '' }, saved);
 }
 
 // The upload settings a save would store, checked when they are on. `notice` is what the owner must hear once,
@@ -105,7 +100,7 @@ export async function resolveBackupUpload(update: {
     keep?: number;
 }): Promise<{ upload: BackupUpload; notice?: string; warning?: string }> {
     const saved = getServerSettings().backups.upload;
-    const upload = { ...saved, ...update, s3: update.s3 ? withSavedSecret(update.s3) : saved.s3 };
+    const upload = { ...saved, ...update, s3: update.s3 ? withSavedBackupSecret(update.s3) : saved.s3 };
     if (upload.s3.bucket && !BUCKET_NAME.test(upload.s3.bucket)) throw new ApiError(400, BAD_BUCKET_NAME);
     let warning: string | undefined;
     if (upload.enabled) {
