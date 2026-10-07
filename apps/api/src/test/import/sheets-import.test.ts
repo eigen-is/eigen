@@ -12,7 +12,7 @@ import { ApiError } from '../../lib/core';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
-import { normalizeMonthMinuteTokens, xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { normalizeMonthMinuteTokens, readLocationHyperlinks, xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { getUserById } from '../../lib/user';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
@@ -27,6 +27,19 @@ import {
 } from '../setup';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+// Transitional OOXML, then Strict, which uses the same package relationships namespace.
+const TRANSITIONAL = {
+    spreadsheetml: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+    relationships: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+    drawingml: 'http://schemas.openxmlformats.org/drawingml/2006/main',
+};
+const STRICT = {
+    spreadsheetml: 'http://purl.oclc.org/ooxml/spreadsheetml/main',
+    relationships: 'http://purl.oclc.org/ooxml/officeDocument/relationships',
+    drawingml: 'http://purl.oclc.org/ooxml/drawingml/main',
+};
+const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 // exceljs's writeBuffer returns a Buffer view over a larger ArrayBuffer; copy into a
 // standalone ArrayBuffer so it can back a File body byte-exactly.
@@ -91,6 +104,20 @@ async function injectLocationHyperlinks(
         : xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`);
     zip.file(path, patched);
     return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+async function replacePart(buffer: ArrayBuffer, path: string, edit: (xml: string) => string): Promise<ArrayBuffer> {
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file(path)?.async('string');
+    if (xml == null) throw new Error(`${path} missing from workbook zip`);
+    zip.file(path, edit(xml));
+    return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+// dk1 and lt1 as system colours, the way Excel writes them; the slots left out read as black.
+function themeXml(prefix: string, ns: string): string {
+    const p = prefix ? `${prefix}:` : '';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><${p}theme ${prefix ? `xmlns:${prefix}` : 'xmlns'}="${ns}" name="Custom"><${p}themeElements><${p}clrScheme name="Custom"><${p}dk1><${p}sysClr val="windowText" lastClr="101010"/></${p}dk1><${p}lt1><${p}sysClr val="window" lastClr="fafafa"/></${p}lt1><${p}accent1><${p}srgbClr val="123456"/></${p}accent1></${p}clrScheme></${p}themeElements></${p}theme>`;
 }
 
 async function readSnapshot(ownerId: string, mountId: string, pathId: string): Promise<Sheet[]> {
@@ -806,6 +833,51 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:0')?.fc).toBe('#FF0000');
         expect(byCoord.get('0:0')?.bg).toBe('#0000FF');
         expect(byCoord.get('0:1')?.bg).toBeUndefined();
+    });
+
+    test('convert resolves theme colors from a theme part under any prefix, Transitional or Strict', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Themed');
+        ws.getCell('A1').value = 'accent1';
+        ws.getCell('A1').font = { color: { theme: 4 } };
+        ws.getCell('B1').value = 'dk1';
+        ws.getCell('B1').font = { color: { theme: 1 } };
+        ws.getCell('C1').value = 'lt1';
+        ws.getCell('C1').fill = { type: 'pattern', pattern: 'solid', fgColor: { theme: 0 } };
+        const buffer = await workbookToBuffer(workbook);
+
+        for (const [prefix, ns] of [
+            ['dml', TRANSITIONAL.drawingml],
+            ['', STRICT.drawingml],
+        ]) {
+            const sheets = await parseXlsx(
+                await replacePart(buffer, 'xl/theme/theme1.xml', () => themeXml(prefix, ns)),
+            );
+            const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+            expect(byCoord.get('0:0')?.fc).toBe('#123456');
+            expect(byCoord.get('0:1')?.fc).toBe('#101010');
+            expect(byCoord.get('0:2')?.bg).toBe('#FAFAFA');
+        }
+    });
+
+    test('convert imports the cells of a workbook whose theme part is malformed, without theme colors', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Themed');
+        ws.getCell('A1').value = 'kept';
+        ws.getCell('A1').font = { color: { theme: 4 } };
+        const buffer = await workbookToBuffer(workbook);
+        const valid = themeXml('a', TRANSITIONAL.drawingml);
+
+        for (const broken of [
+            valid.slice(0, valid.indexOf('</a:clrScheme>')),
+            valid.replace('<a:theme', '<!DOCTYPE a:theme [<!ENTITY x "y">]><a:theme'),
+            valid.replace('<a:theme', '<b:theme').replace('</a:theme>', '</b:theme>'),
+        ]) {
+            const sheets = await parseXlsx(await replacePart(buffer, 'xl/theme/theme1.xml', () => broken));
+            const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+            expect(a1?.v?.v).toBe('kept');
+            expect(a1?.v?.fc).toBeUndefined();
+        }
     });
 
     test('convert preserves text rotation and font family', async () => {
@@ -1526,6 +1598,73 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:0')?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
         expect(byCoord.get('2:0')?.v).toBe('range tail');
         expect(byCoord.get('6:1')?.hl).toEqual({ r: 6, c: 1, id: 'sheet-0' });
+    });
+
+    test('convert reads a prefixed hyperlinks block and decodes the references in its locations', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Sheet1');
+        workbook.addWorksheet('Q1 – "A" & B');
+        ws.getCell('A1').value = 'link';
+        const buffer = await replacePart(await workbookToBuffer(workbook), 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace(
+                '<pageMargins',
+                `<x:hyperlinks xmlns:x="${TRANSITIONAL.spreadsheetml}"><x:hyperlink ref="A1" location="&apos;Q1 &#x2013; &quot;A&quot; &amp; B&apos;!C3"/></x:hyperlinks><pageMargins`,
+            ),
+        );
+        const sheets = await parseXlsx(buffer);
+
+        expect(sheets[1].name).toBe('Q1 – "A" & B');
+        expect(sheets[0].hyperlink).toEqual({
+            '0_0': { linkType: 'cellrange', linkAddress: `'Q1 – "A" & B'!C3` },
+        });
+    });
+
+    test('location hyperlinks follow the workbook, its rels and the sheets by namespace, not by prefix', async () => {
+        for (const [prefixes, ns] of [
+            [{ sml: 'x:', r: 'rel', pr: 'pr:' }, TRANSITIONAL],
+            [{ sml: '', r: 'r', pr: '' }, STRICT],
+        ] as const) {
+            const { sml, r, pr } = prefixes;
+            const smlns = sml ? `xmlns:${sml.slice(0, -1)}` : 'xmlns';
+            const prns = pr ? `xmlns:${pr.slice(0, -1)}` : 'xmlns';
+            const zip = new JSZip();
+            // The decoy's `r:id` binds `r` to another namespace, so it names no relationship.
+            zip.file(
+                'xl/workbook.xml',
+                `<${sml}workbook ${smlns}="${ns.spreadsheetml}" xmlns:${r}="${ns.relationships}"><${sml}sheets><${sml}sheet name="Q1 &#x2013; &quot;A&quot; &amp; B" sheetId="1" ${r}:id="rId1"/><${sml}sheet xmlns:r="urn:decoy" name="Decoy" sheetId="2" r:id="rId2"/></${sml}sheets></${sml}workbook>`,
+            );
+            zip.file(
+                'xl/_rels/workbook.xml.rels',
+                `<${pr}Relationships ${prns}="${PACKAGE_RELATIONSHIPS}"><${pr}Relationship Id="rId1" Target="worksheets/sheet1.xml"/><${pr}Relationship Id="rId2" Target="worksheets/sheet2.xml"/></${pr}Relationships>`,
+            );
+            for (const path of ['xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml']) {
+                zip.file(
+                    path,
+                    `<${sml}worksheet ${smlns}="${ns.spreadsheetml}"><${sml}sheetData/><${sml}hyperlinks><${sml}hyperlink ref="B2:C3" location="Other!A1"/></${sml}hyperlinks></${sml}worksheet>`,
+                );
+            }
+
+            expect(await readLocationHyperlinks(zip)).toEqual(
+                new Map([['Q1 – "A" & B', new Map([['B2', 'Other!A1']])]]),
+            );
+        }
+    });
+
+    test('convert imports a sheet whose part Bun refuses, without its location hyperlinks', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Sheet1');
+        ws.getCell('A1').value = 'kept';
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'Sheet1!B2' },
+        ]);
+        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('<worksheet', '<!DOCTYPE worksheet><worksheet'),
+        );
+        const sheets = await parseXlsx(buffer);
+
+        const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
+        expect(a1?.v?.v).toBe('kept');
+        expect(sheets[0].hyperlink).toBeUndefined();
     });
 
     test('convert imports hyperlinks on rich-text cells with flattened display text', async () => {
