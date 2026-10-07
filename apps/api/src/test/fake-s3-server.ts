@@ -37,7 +37,8 @@ export class FakeS3Server {
     abandoned = 0;
     // Answer a GET without a signature, as a bucket anyone may read does.
     publicRead = false;
-    // The bucket's configurations as a GET answers them and a PUT stores them; a null lifecycle is none.
+    // The bucket's configurations as a GET answers them and a PUT stores them; a null lifecycle is a 404, an empty
+    // string an empty 200.
     versioning = '<VersioningConfiguration/>';
     lifecycle: string | null = null;
     lifecyclePuts = 0;
@@ -290,7 +291,7 @@ export class FakeS3Server {
 }
 
 function replyXml(socket: net.Socket, xml: string): void {
-    const payload = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>${xml}`);
+    const payload = Buffer.from(xml && `<?xml version="1.0" encoding="UTF-8"?>${xml}`);
     socket.write(`HTTP/1.1 200 OK\r\nContent-Type: application/xml\r\nContent-Length: ${payload.length}\r\n\r\n`);
     socket.write(payload);
 }

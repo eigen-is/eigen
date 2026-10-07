@@ -389,6 +389,29 @@ describe('Team Mount Management', () => {
         expect(updated.storageType).toBe('local-key');
     });
 
+    test('a team S3 mount refuses a prefix holding a control character', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            prefix: 'data\u0000',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'S3 Files', storageType: 's3', s3Config }),
+        });
+        expect(add.status).toBe(422);
+
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ s3Config }),
+        });
+        expect(update.status).toBe(422);
+    });
+
     test('updating nonexistent mount returns 404', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/nonexistent`, {
             method: 'PUT',

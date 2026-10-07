@@ -74,7 +74,8 @@ type _ImportFromDriveSchemaCoversSource =
 const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
 void _importFromDriveSchemaCheck;
 
-// Most control characters can't go into a lifecycle rule's <Prefix>: escaped out, the rule would cover another prefix.
+// Refused as input hygiene, and because a lifecycle rule's <Prefix> can't carry most of them: stripped, the rule
+// would cover another prefix.
 export const s3PrefixSchema = t.String({
     pattern: NO_CONTROL_PATTERN,
     error: 'The prefix cannot hold a control character',

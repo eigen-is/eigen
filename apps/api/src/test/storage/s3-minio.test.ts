@@ -13,6 +13,7 @@ import {
     checkS3Connection,
     hardenS3Bucket,
     S3Storage,
+    setS3LifecycleRule,
     signedS3Request,
 } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
@@ -308,8 +309,9 @@ describe('hardenS3Bucket reason mapping', () => {
 });
 
 // Network-free: the bucket-config reads against the fake S3, in the shapes providers answer them. AWS answers in the
-// S3 namespace, others in none, and Go's encoder (MinIO) writes an apostrophe as `&#39;`.
+// S3 namespace, others in none or their own (GCS), and Go's encoder (MinIO) writes an apostrophe as `&#39;`.
 const S3_XMLNS = 'http://s3.amazonaws.com/doc/2006-03-01/';
+const GCS_XMLNS = 'http://doc.s3.amazonaws.com/2006-03-01';
 const BUCKET_CONFIG_DIR = join(import.meta.dir, `../../../../../data-test/test-s3-bucket-config-${Date.now()}`);
 
 function ourRule(prefix: string, days = 30): string {
@@ -404,6 +406,62 @@ describe('bucket configuration reads (fake S3)', () => {
         expect(result.ok).toBe(false);
         expect(result.applied.lifecycle).toBe(false);
         expect(fake.lifecyclePuts).toBe(0);
+    });
+
+    test('the lifecycle writer itself refuses such a prefix, whoever calls it', async () => {
+        const res = await setS3LifecycleRule({ ...bucket, prefix: 'team￿data' }, 30);
+        expect(res.ok).toBe(false);
+        expect(fake.lifecyclePuts).toBe(0);
+    });
+
+    test("a configuration in another provider's namespace is read in it", async () => {
+        fake.versioning = `<VersioningConfiguration xmlns="${GCS_XMLNS}"><Status>Enabled</Status></VersioningConfiguration>`;
+        fake.lifecycle =
+            `<LifecycleConfiguration xmlns="${GCS_XMLNS}"><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +
+            '<Filter><Prefix>team-data/</Prefix></Filter><Status>Enabled</Status>' +
+            '<NoncurrentVersionExpiration><NoncurrentDays>30</NoncurrentDays></NoncurrentVersionExpiration>' +
+            '</Rule></LifecycleConfiguration>';
+        expect(await checkS3Connection(bucket)).toMatchObject({
+            versioning: 'enabled',
+            lifecycle: { noncurrentDays: 30 },
+        });
+    });
+
+    test('a 200 answering with an error or another document is unknown', async () => {
+        for (const body of ['<Error><Code>InternalError</Code></Error>', '<ListBucketResult/>']) {
+            fake.versioning = body;
+            fake.lifecycle = body;
+            expect(await checkS3Connection(bucket)).toMatchObject({ versioning: 'unknown', lifecycle: 'unknown' });
+        }
+    });
+
+    test('an empty 200 is unversioned, but an unknown lifecycle that harden does not overwrite', async () => {
+        fake.versioning = '';
+        fake.lifecycle = '';
+        const result = await hardenS3Bucket(bucket, 30);
+        expect(result).toMatchObject({
+            versioning: 'enabled',
+            lifecycle: 'unknown',
+            applied: { versioning: true, lifecycle: false },
+        });
+        expect(fake.lifecyclePuts).toBe(0);
+    });
+
+    test('our rule scoped to another prefix is re-PUT once', async () => {
+        fake.lifecycle = `<LifecycleConfiguration>${ourRule('other/')}</LifecycleConfiguration>`;
+        expect((await hardenS3Bucket(bucket, 30)).applied.lifecycle).toBe(true);
+        expect((await hardenS3Bucket(bucket, 30)).applied.lifecycle).toBe(false);
+        expect(fake.lifecyclePuts).toBe(1);
+    });
+
+    test('a prefix inside a filter And is read', async () => {
+        fake.lifecycle =
+            `<LifecycleConfiguration><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +
+            '<Filter><And><Prefix>team-data/</Prefix><Tag><Key>k</Key><Value>v</Value></Tag></And></Filter>' +
+            '<Status>Enabled</Status>' +
+            '<NoncurrentVersionExpiration><NoncurrentDays>21</NoncurrentDays></NoncurrentVersionExpiration>' +
+            '</Rule></LifecycleConfiguration>';
+        expect((await checkS3Connection(bucket)).lifecycle).toEqual({ noncurrentDays: 21 });
     });
 
     test('an abort rule is found in the S3 namespace, its prefix compared decoded', async () => {

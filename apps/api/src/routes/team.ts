@@ -10,6 +10,7 @@ import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
+import { s3PrefixSchema } from './shared-schemas';
 
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
@@ -95,7 +96,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                     t.Object({
                         endpoint: t.String(),
                         bucket: t.String(),
-                        prefix: t.String(),
+                        prefix: s3PrefixSchema,
                         accessKeyId: t.String(),
                         secretAccessKey: t.String(),
                         region: t.Optional(t.String()),
@@ -122,7 +123,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                     t.Object({
                         endpoint: t.String(),
                         bucket: t.String(),
-                        prefix: t.String(),
+                        prefix: s3PrefixSchema,
                         accessKeyId: t.String(),
                         secretAccessKey: t.String(),
                         region: t.Optional(t.String()),
