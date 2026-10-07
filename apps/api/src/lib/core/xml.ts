@@ -1,8 +1,8 @@
 import { XML } from 'bun';
 import { ApiError } from './errors';
 
-// Every XML read goes through Bun's tree shape, which keeps document order; the compact shape groups same-named
-// siblings and loses where text sat. Bun reports names as written, so the namespace resolution is ours.
+// Bun's tree shape keeps document order; namespaces are resolved here, since Bun reports names as written.
+// Callers bound their input: a tree costs about 100× the input in memory.
 
 export type XmlElement = {
     name: string;
@@ -15,7 +15,7 @@ export type XmlElement = {
     children: XmlContent[];
 };
 
-export type XmlContent = string | XmlElement | XML.Comment | XML.ProcessingInstruction;
+type XmlContent = string | XmlElement | XML.Comment | XML.ProcessingInstruction;
 
 // Every way parseXml refuses input (malformed, a DOCTYPE, too deep, a namespace rule broken) is this one 400, and so
 // is serializeXmlChildren's one refusal.
@@ -25,10 +25,10 @@ export class XmlError extends ApiError {
     }
 }
 
-const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
+export const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 
-// Shared by every element without a prefixed attribute: one object each would cost a 1 MiB body of small elements 16 MB.
+// Shared, so an element without a prefixed attribute costs no object of its own.
 const NO_ATTRIBUTE_NS: Readonly<Record<string, string>> = Object.freeze({});
 
 // Blank input is null rather than an error: an empty PROPFIND means allprop, an empty PROPPATCH does nothing.
@@ -46,10 +46,15 @@ export function parseXml(input: string | Uint8Array): XmlElement | null {
     }
 }
 
-// Bun caps entity expansion but not ATTLIST defaults, which it applies to every element (1 MiB of body costs
-// seconds and gigabytes), and an ATTLIST can also inject `xmlns`. Bun has no switch for either, so a DOCTYPE is
-// refused before Bun sees it. Only a prolog read the same way Bun reads it passes: whitespace, PIs, comments,
-// then the root; anything else is an error Bun would raise anyway. `undefined` asks for more of the prolog.
+// Blank is null as in parseXml; any other root than the method's is a 400 (RFC 4918 § 8.2).
+export function parseXmlRoot(input: Uint8Array, ns: string, local: string): XmlElement | null {
+    const root = parseXml(input);
+    if (root && (root.ns !== ns || root.local !== local)) throw new XmlError(`Expected <${local}> root element`);
+    return root;
+}
+
+// A DOCTYPE is refused before Bun sees it: Bun applies ATTLIST defaults to every element, uncapped, and they can
+// inject `xmlns`. `undefined` asks for more of the prolog.
 function scanProlog(text: string, from: number, complete: boolean): 'blank' | 'root' | undefined {
     let i = from;
     let markup = false;
@@ -76,9 +81,8 @@ function scanProlog(text: string, from: number, complete: boolean): 'blank' | 'r
     }
 }
 
-// XML 1.0 Appendix F narrowed to what Bun reads: a BOM, UTF-16 by its first `<` (Bun takes BOM-less UTF-16 when
-// it declares its encoding), else UTF-8 or ISO-8859-1, whose markup is the same ASCII bytes. Only the prolog is
-// decoded, a growing slice at a time; Bun decodes the body itself.
+// XML 1.0 Appendix F narrowed to what Bun reads: a BOM, UTF-16 by its first `<`, else an ASCII-compatible encoding.
+// Only the prolog is decoded; Bun decodes the body.
 function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     let encoding = 'latin1';
     let start = 0;
@@ -95,10 +99,8 @@ function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     }
 }
 
-// Depth first on an explicit stack: recursion has only 1.4-1.7x Bun's deepest nesting to spare, less when the caller is deep.
-// One binding map serves the whole walk, each element's declarations undone on its way out, so a body costs its
-// declarations once rather than every binding in scope per declaring element. Undone by setting, never deleting: a
-// delete costs JSC's Map its size.
+// An explicit stack, since recursion barely outlasts Bun's nesting limit. One binding map serves the whole walk, each
+// element's declarations undone on its way out by setting, never deleting: a delete costs JSC's Map its size.
 function resolve(root: XML.Node): XmlElement {
     const bindings = new Map<string, string | undefined>([['xml', XML_NAMESPACE]]);
     const open: { content: XML.Node['children']; next: number; element: XmlElement; shadowed: [string, string?][] }[] =
@@ -133,7 +135,7 @@ function resolve(root: XML.Node): XmlElement {
             (attributeNs ??= {})[attribute] = ns;
         }
         const content = node.children;
-        // Sized up front: a pushed array keeps its growth slack, which a long child list makes megabytes.
+        // Sized up front: a pushed array keeps its growth slack.
         const children = new Array<XmlContent>(content.length);
         const element: XmlElement = {
             name: node.name,
@@ -189,16 +191,25 @@ export function xmlElements(element: XmlElement): XmlElement[] {
 }
 
 export function xmlChildren(element: XmlElement, ns: string, local: string): XmlElement[] {
-    return xmlElements(element).filter((child) => child.ns === ns && child.local === local);
+    return element.children.filter(
+        (child): child is XmlElement => isXmlElement(child) && child.ns === ns && child.local === local,
+    );
 }
 
 export function xmlChild(element: XmlElement, ns: string, local: string): XmlElement | undefined {
-    return xmlElements(element).find((child) => child.ns === ns && child.local === local);
+    return element.children.find(
+        (child): child is XmlElement => isXmlElement(child) && child.ns === ns && child.local === local,
+    );
 }
 
 // As written: trimming is the caller's call.
 export function xmlText(element: XmlElement): string {
     return element.children.filter((child) => typeof child === 'string').join('');
+}
+
+// '' for an absent element. For what a client may indent: hrefs, tokens, names.
+export function xmlTrimmedText(element: XmlElement | undefined): string {
+    return element ? xmlText(element).trim() : '';
 }
 
 export function xmlAttr(element: XmlElement, ns: string, local: string): string | undefined {
@@ -212,20 +223,16 @@ export function xmlAttr(element: XmlElement, ns: string, local: string): string 
     return undefined;
 }
 
-// A binding is declared again on every child that uses it. Its prefix costs no more than the use, but a long URI used
-// by many children multiplies: the URI characters the declarations add are capped at a whole DAV body.
+// Every top-level child redeclares the URIs it uses, so a long one shared by many children multiplies: capped at a DAV body.
 const MAX_DECLARED_URI_CHARS = 1_048_576;
 
-// Client XML kept as XML (a LOCK owner, a dead property's value), to stand alone or sit inside any envelope: each
-// child element declares the namespaces its subtree takes from outside it, the default one included (`xmlns=""`
-// too), so a prefix bound on an ancestor stays bound and an envelope's default doesn't leak in. `xml` is bound
-// everywhere.
+// Client XML kept as XML (a LOCK owner, a dead prop's value): each child declares the bindings its subtree takes from
+// outside, the default one included (`xmlns=""` too), so it means the same inside any envelope.
 export function serializeXmlChildren(element: XmlElement): string {
     let declaredUris = 0;
     const children = element.children.map((top) => {
         if (!isXmlElement(top)) return top;
-        // Prefixes declared on the path inside the subtree (unset rather than deleted, as in resolve), and the
-        // bindings it takes from outside, found on an explicit stack as in resolve.
+        // Prefixes declared on the path inside the subtree, and the bindings it takes from outside, walked as in resolve.
         const inner = new Map<string, boolean>();
         const outer: Record<string, string> = {};
         const open: { children: XmlContent[]; next: number; own: string[] }[] = [];

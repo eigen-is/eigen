@@ -1,12 +1,14 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
-import { parseXml, serializeXmlChildren, type XmlElement, xmlChild } from '../core/xml';
-import { XML_CONTENT_TYPE } from '../dav/xml';
+import { parseXmlRoot, serializeXmlChildren, type XmlElement, xmlChild } from '../core/xml';
+import { DAV_NAMESPACES, XML_CONTENT_TYPE } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
-import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
+import type { Lock, LockManager } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
 import type { User } from '../user';
 import { lockdiscoveryProp, MAX_XML_BODY_BYTES } from './xml';
+
+const DAV = DAV_NAMESPACES.D;
 
 // Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
 // without a cap an authenticated client could pin in-memory lock state for years
@@ -39,16 +41,10 @@ export function assertWritable(
 // RFC 4918 §14.17: the owner is the client's own XML, echoed back as XML in every lockdiscovery. Each child
 // declares the bindings it uses, so an owner can outgrow its body; it is held for the lock's life, under the dead props' cap.
 function readLockOwner(lockinfo: XmlElement): string | undefined {
-    const element = xmlChild(lockinfo, 'DAV:', 'owner');
+    const element = xmlChild(lockinfo, DAV, 'owner');
     const owner = element && serializeXmlChildren(element).trim();
     if (owner && Buffer.byteLength(owner) > MAX_XML_BODY_BYTES) throw new ApiError(400, 'Lock owner too large');
     return owner || undefined;
-}
-
-// Default to exclusive when the body omits <lockscope> entirely (RFC 4918 §9.10).
-function readLockScope(lockinfo: XmlElement): LockScope {
-    const scope = xmlChild(lockinfo, 'DAV:', 'lockscope');
-    return scope && xmlChild(scope, 'DAV:', 'shared') ? 'shared' : 'exclusive';
 }
 
 function buildLockResponse(lock: Lock): Response {
@@ -80,10 +76,7 @@ export async function handleLock(args: {
 
     const ttlMs = parseTimeoutHeader(timeoutHeader);
     const depth: Lock['depth'] = depthHeader === '0' ? 0 : 'infinity';
-    const lockinfo = parseXml(body);
-    if (lockinfo && (lockinfo.ns !== 'DAV:' || lockinfo.local !== 'lockinfo')) {
-        throw new ApiError(400, 'Expected <lockinfo> root element');
-    }
+    const lockinfo = parseXmlRoot(body, DAV, 'lockinfo');
 
     // RFC 4918 §9.10.2: empty body + If header refreshes an existing lock token.
     if (!lockinfo && ifHeader) {
@@ -102,10 +95,12 @@ export async function handleLock(args: {
 
     const breadcrumb = await drive.breadCrumb(mountId, path.id);
     const ancestorPathIds = breadcrumb.slice(0, -1).map((p) => p.id);
+    // Exclusive unless the body asks for shared, an omitted <lockscope> included (RFC 4918 §9.10).
+    const lockscope = lockinfo && xmlChild(lockinfo, DAV, 'lockscope');
     const lock = drive.lockManager.acquire({
         pathId: path.id,
         depth,
-        scope: lockinfo ? readLockScope(lockinfo) : 'exclusive',
+        scope: lockscope && xmlChild(lockscope, DAV, 'shared') ? 'shared' : 'exclusive',
         userId: user.id,
         owner: lockinfo ? readLockOwner(lockinfo) : undefined,
         ttlMs,

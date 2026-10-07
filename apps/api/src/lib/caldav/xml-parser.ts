@@ -1,9 +1,11 @@
 import ICAL from 'ical.js';
 import { ApiError } from '../core/errors';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../core/xml';
+import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlTrimmedText } from '../core/xml';
 import { asciiLower } from '../dav/collation';
+import { readHrefs, readSyncToken, UnsupportedFilterError } from '../dav/report-request';
 import { DAV_NAMESPACES } from '../dav/xml';
 
+const DAV = DAV_NAMESPACES.D;
 const CALDAV = DAV_NAMESPACES.C;
 
 // <C:time-range> bounds are RFC 5545 BASIC format, which `new Date()` reads as Invalid Date and empties the REPORT; RFC 4791 makes them UTC either way.
@@ -27,7 +29,7 @@ function named(filters: XmlElement[], name: string): XmlElement | undefined {
 
 // RFC 4791 § 9.7.5: a substring match, i;ascii-casemap unless the client names i;octet. Another collation narrows nothing.
 function uidMatcher(textMatch: XmlElement): ((uid: string) => boolean) | null {
-    const text = xmlText(textMatch).trim();
+    const text = xmlTrimmedText(textMatch);
     const negate = xmlAttr(textMatch, '', 'negate-condition') === 'yes';
     const collation = xmlAttr(textMatch, '', 'collation') ?? 'i;ascii-casemap';
     if (collation === 'i;octet') return (uid) => uid.includes(text) !== negate;
@@ -70,6 +72,18 @@ function readFilter(filter: XmlElement | undefined): {
     };
 }
 
+// On a stack, as parseXml walks: the filter's depth is the client's.
+function hasForeignElement(filter: XmlElement): boolean {
+    const open = [filter];
+    for (let element = open.pop(); element; element = open.pop()) {
+        for (const child of xmlElements(element)) {
+            if (child.ns !== CALDAV) return true;
+            open.push(child);
+        }
+    }
+    return false;
+}
+
 export type ReportRequest =
     | {
           type: 'calendar-query';
@@ -87,22 +101,22 @@ export function parseReport(body: Uint8Array): ReportRequest {
     if (!root) throw new ApiError(400, 'Empty REPORT');
 
     // Decided once here so the three handlers cannot read one request differently.
-    const prop = xmlChild(root, 'DAV:', 'prop');
+    const prop = xmlChild(root, DAV, 'prop');
     const wantsData = prop !== undefined && xmlChild(prop, CALDAV, 'calendar-data') !== undefined;
 
     if (root.ns === CALDAV && root.local === 'calendar-multiget') {
-        // Trimmed: a client that indents its body indents inside the href too.
-        const hrefs = xmlChildren(root, 'DAV:', 'href').map((href) => xmlText(href).trim());
-        return { type: 'calendar-multiget', hrefs, wantsData };
+        return { type: 'calendar-multiget', hrefs: readHrefs(root), wantsData };
     }
-    if (root.ns === 'DAV:' && root.local === 'sync-collection') {
-        const token = xmlChild(root, 'DAV:', 'sync-token');
-        return { type: 'sync-collection', syncToken: (token && xmlText(token).trim()) || undefined, wantsData };
+    if (root.ns === DAV && root.local === 'sync-collection') {
+        return { type: 'sync-collection', syncToken: readSyncToken(root), wantsData };
     }
     if (root.ns === CALDAV && root.local === 'calendar-query') {
+        const filter = xmlChild(root, CALDAV, 'filter');
+        // A filter element in another namespace is no CalDAV filter: read past, it would answer every event.
+        const foreignFilter = xmlElements(root).some((child) => child.local === 'filter' && child.ns !== CALDAV);
+        if (foreignFilter || (filter && hasForeignElement(filter))) throw new UnsupportedFilterError();
         // A filter that names no UID matches every one.
-        const filter = readFilter(xmlChild(root, CALDAV, 'filter'));
-        return { type: 'calendar-query', matchesUid: () => true, ...filter, wantsData };
+        return { type: 'calendar-query', matchesUid: () => true, ...readFilter(filter), wantsData };
     }
     throw new ApiError(400, 'Unsupported REPORT type');
 }

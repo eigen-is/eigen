@@ -3,9 +3,10 @@ import { authenticateBasic } from '../auth/protocol-auth';
 import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
 import { resolveContacts } from '../contacts/get-contacts';
 import { requireSelf } from '../core/access';
-import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
+import { readBoundedBody } from '../core/http';
+import { DAV_BODY_MAX_BYTES, readDavBody } from '../dav/body';
 import { type CollectionPath, parseCollectionPath } from '../dav/href';
-import { DAV_BODY_MAX_BYTES, parsePropfind, wantsBrief } from '../dav/propfind';
+import { parsePropfind, wantsBrief } from '../dav/propfind';
 import { davError } from '../dav/xml';
 import {
     ADDRESSBOOK_ID,
@@ -45,8 +46,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .route('PROPFIND', '/dav/addressbooks/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         const contacts = await resolveContacts(user, params.ownerId);
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         const depth = request.headers.get('Depth') || '0';
         return handleAddressbookHomePropfind(
             params.ownerId,
@@ -64,8 +64,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
         const book = await contacts.getBook();
@@ -138,8 +137,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (!parsed.collection) return new Response('Bad Request', { status: 400 });
         if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         return handleCardReport(contacts, params.ownerId, body);
     })
 

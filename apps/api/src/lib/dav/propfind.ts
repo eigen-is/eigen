@@ -1,15 +1,12 @@
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { parseXml, type XmlElement, xmlChild, xmlElements } from '../core/xml';
+import { parseXmlRoot, type XmlElement, xmlChild, xmlElements } from '../core/xml';
 import { DAV_NAMESPACES, propstatNotFound, propstatOk } from './xml';
 
-// The shared PROPFIND core both DAV surfaces sit on (RFC 4918 § 9.1): parse the request body into the
-// requested prop list, then select per-row propstats from an ordered name→fragment map. One implementation so
-// CalDAV and CardDAV can't drift.
+// The shared PROPFIND core (RFC 4918 § 9.1): CalDAV and CardDAV parse the request body into the requested prop
+// list and select per-row propstats from an ordered name→fragment map; WebDAV only checks the body.
 
-// One ceiling for every XML request body both DAV surfaces read (PROPFIND, REPORT, MKCALENDAR, PROPPATCH):
-// each is a small prop list or href list, bounded before it reaches a parser.
-export const DAV_BODY_MAX_BYTES = 1_048_576;
+const DAV = DAV_NAMESPACES.D;
 
 // XML fragment by the name it is written with (`D:getetag`), in emission order; allprop and the selector share it,
 // so no list can drift. Each DAV_NAMESPACES prefix stands for one namespace, so the key is namespace and local name.
@@ -17,19 +14,36 @@ export type PropMap = Map<string, string>;
 
 const PREFIXES = new Map<string, string>(Object.entries(DAV_NAMESPACES).map(([prefix, uri]) => [uri, prefix]));
 
-export type PropfindRequest = { allprop: true } | { allprop: false; props: XmlElement[] };
+// Every unknown prop is echoed in every row, so the list a request may name is bounded.
+const MAX_PROPFIND_PROPS = 1000;
+// Each echoed prop repeats its namespace, so one long URI declared once would be written a thousand times per row.
+const MAX_PROPFIND_ECHO_LENGTH = 64 * 1024;
+
+// `notFound` holds the 404 propstat per set of found props, so rows of one shape share one string.
+export type PropfindRequest =
+    | { allprop: true }
+    | { allprop: false; props: XmlElement[]; notFound: Map<string, string> };
 
 // A blank body is allprop; any other must be a DAV:propfind.
 export function parsePropfind(body: Uint8Array): PropfindRequest {
-    const root = parseXml(body);
+    const root = parseXmlRoot(body, DAV, 'propfind');
     if (!root) return { allprop: true };
-    if (root.ns !== 'DAV:' || root.local !== 'propfind') throw new ApiError(400, 'Expected <propfind> root element');
 
-    const prop = xmlChild(root, 'DAV:', 'prop');
+    const prop = xmlChild(root, DAV, 'prop');
     // <allprop/> and <propname/> both land here as "no <prop>" → allprop. Treating <propname/> as allprop is a
     // lenient v1: we serve the values, not the names-only variant.
     if (!prop) return { allprop: true };
-    return { allprop: false, props: xmlElements(prop) };
+    const props = new Map<string, XmlElement>();
+    let echoLength = 0;
+    for (const element of xmlElements(prop)) {
+        const key = `${element.local} ${element.ns}`;
+        if (props.has(key)) continue;
+        props.set(key, element);
+        echoLength += echoMissing(element).length;
+    }
+    if (props.size > MAX_PROPFIND_PROPS) throw new ApiError(400, 'Too many props');
+    if (echoLength > MAX_PROPFIND_ECHO_LENGTH) throw new ApiError(400, 'Prop names too long');
+    return { allprop: false, props: [...props.values()], notFound: new Map() };
 }
 
 // RFC 4918 Brief:t and RFC 8144 Prefer:return=minimal both mean "drop the 404 propstat".
@@ -51,15 +65,24 @@ export function selectProps(available: PropMap, request: PropfindRequest, brief:
     if (request.allprop) return [propstatOk([...available.values()])];
 
     const found: string[] = [];
-    const missing: string[] = [];
-    for (const prop of request.props) {
+    const foundAt: number[] = [];
+    for (const [index, prop] of request.props.entries()) {
         const prefix = PREFIXES.get(prop.ns);
         const fragment = prefix === undefined ? undefined : available.get(`${prefix}:${prop.local}`);
-        if (fragment !== undefined) found.push(fragment);
-        else missing.push(echoMissing(prop));
+        if (fragment === undefined) continue;
+        found.push(fragment);
+        foundAt.push(index);
     }
 
     const propstats = [propstatOk(found)];
-    if (missing.length > 0 && !brief) propstats.push(propstatNotFound(missing));
+    if (found.length === request.props.length || brief) return propstats;
+    const key = foundAt.join(',');
+    let notFound = request.notFound.get(key);
+    if (notFound === undefined) {
+        const served = new Set(foundAt);
+        notFound = propstatNotFound(request.props.filter((_, index) => !served.has(index)).map(echoMissing));
+        request.notFound.set(key, notFound);
+    }
+    propstats.push(notFound);
     return propstats;
 }

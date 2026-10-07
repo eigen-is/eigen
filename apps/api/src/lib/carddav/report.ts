@@ -3,6 +3,7 @@ import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
 import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
+import { UnsupportedFilterError } from '../dav/report-request';
 import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { handleSyncCollection } from '../dav/sync-collection';
 import { davError, multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
@@ -10,7 +11,7 @@ import { parseVCardLines } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 import { projectAddressData } from './address-data';
 import { bookHref, cardHref } from './discovery';
-import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';
+import { matchCard, UnsupportedCollationError } from './query-filter';
 import { addressDataProp } from './xml-builder';
 import { type CardReportRequest, parseCardReport } from './xml-parser';
 
@@ -26,7 +27,7 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
         // RFC 6352 § 8.6 requires match-only responses, so an unevaluable filter is refused, never answered with a superset.
         if (e instanceof UnsupportedCollationError) return davError(403, '<CARD:supported-collation/>');
         if (e instanceof UnsupportedFilterError) return davError(403, '<CARD:supported-filter/>');
-        return new Response('Bad Request: invalid REPORT', { status: 400 });
+        throw e;
     }
 
     const budget = { left: REPORT_DATA_BUDGET_BYTES };

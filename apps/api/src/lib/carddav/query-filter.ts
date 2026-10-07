@@ -24,9 +24,6 @@ export type QueryFilter = { test: 'anyof' | 'allof'; propFilters: PropFilter[] }
 // A query naming a collation Eigen doesn't implement. RFC 6352 § 8.3 requires only the two case-map
 // collations; anything else is answered 403 with CARD:supported-collation, never silently downgraded.
 export class UnsupportedCollationError extends Error {}
-// A filter whose structure the parser can't map to the types above — an unknown child element, a construct
-// beyond RFC 6352 § 10.5. Answered 403 with CARD:supported-filter, never a full-set superset.
-export class UnsupportedFilterError extends Error {}
 
 // The one source of truth for which collations the server accepts (RFC 6352 § 8.3). i;unicode-casemap is the
 // default when the attribute is absent (§ 10.5.4). The parser validates each text-match against this set up

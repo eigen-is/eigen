@@ -1,7 +1,8 @@
 import type { WebdavDeadProp } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { parseXml, serializeXmlChildren, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { parseXmlRoot, serializeXmlChildren, XML_NAMESPACE, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { DAV_NAMESPACES } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -12,8 +13,9 @@ import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, resp
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
 // server. PROPPATCH on a live property must return 403 Forbidden inside propstat
-// rather than persisting an opaque copy that would shadow the real value. A prop of the same name in no namespace
-// is refused too: a client reading names alone would take it for the live one.
+// rather than persisting an opaque copy that would shadow the real value. A set of the same name in no namespace
+// is refused too, since a client reading names alone would take it for the live one; its remove runs, so a row
+// stored before the refusal can go.
 const PROTECTED_PROPS = new Set([
     'displayname',
     'getcontentlength',
@@ -28,19 +30,18 @@ const PROTECTED_PROPS = new Set([
     'supportedlock',
 ]);
 
+const DAV = DAV_NAMESPACES.D;
+
 type PropOp = { op: 'set' | 'remove'; prop: WebdavDeadProp };
 
 // RFC 4918 §9.2: set and remove run in document order, so a remove between two sets of one prop lands between them.
 function extractPropOps(body: Uint8Array): PropOp[] {
-    const root = parseXml(body);
+    const root = parseXmlRoot(body, DAV, 'propertyupdate');
     if (!root) return [];
-    if (root.ns !== 'DAV:' || root.local !== 'propertyupdate') {
-        throw new ApiError(400, 'Expected <propertyupdate> root element');
-    }
     const ops: PropOp[] = [];
     for (const verb of xmlElements(root)) {
-        if (verb.ns !== 'DAV:' || (verb.local !== 'set' && verb.local !== 'remove')) continue;
-        for (const element of xmlChildren(verb, 'DAV:', 'prop').flatMap(xmlElements)) {
+        if (verb.ns !== DAV || (verb.local !== 'set' && verb.local !== 'remove')) continue;
+        for (const element of xmlChildren(verb, DAV, 'prop').flatMap(xmlElements)) {
             const { ns, local: name } = element;
             // Element content stays XML; text is kept as written, whitespace included.
             const prop: WebdavDeadProp = xmlElements(element).length
@@ -72,8 +73,11 @@ export async function handleProppatch(args: {
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    const isProtected = (op: PropOp) =>
-        (op.prop.ns === 'DAV:' || op.prop.ns === '') && PROTECTED_PROPS.has(op.prop.name);
+    // The xml namespace is reserved to the xml prefix (Namespaces in XML § 3), not a client's to store props in; like a
+    // no-namespace live name, only its set is refused, so a row stored before can go.
+    const isProtected = ({ op, prop }: PropOp) =>
+        (PROTECTED_PROPS.has(prop.name) && prop.ns === DAV) ||
+        (op === 'set' && (prop.ns === XML_NAMESPACE || (prop.ns === '' && PROTECTED_PROPS.has(prop.name))));
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 
@@ -110,11 +114,13 @@ export async function handleProppatch(args: {
         const safeName = escapeXml(op.prop.name);
         // A prop in no namespace can't take a prefix.
         const propEl =
-            op.prop.ns === 'DAV:'
+            op.prop.ns === DAV
                 ? `<D:${safeName}/>`
-                : op.prop.ns === ''
-                  ? `<${safeName} xmlns=""/>`
-                  : `<X:${safeName} xmlns:X="${escapeXml(op.prop.ns)}"/>`;
+                : op.prop.ns === XML_NAMESPACE
+                  ? `<xml:${safeName}/>`
+                  : op.prop.ns === ''
+                    ? `<${safeName} xmlns=""/>`
+                    : `<X:${safeName} xmlns:X="${escapeXml(op.prop.ns)}"/>`;
         if (!refused) return propstatStatus(200, 'OK', [propEl]);
         return isProtected(op)
             ? propstatStatus(403, 'Forbidden', [propEl])
