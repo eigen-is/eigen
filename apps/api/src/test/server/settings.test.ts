@@ -8,6 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     HomeSizeResponse,
     MountResponse,
+    MountSettings,
     S3HardenResult,
     ServerSettings,
     TeamSettings,
@@ -410,6 +411,65 @@ describe('Team Mount Management', () => {
             body: JSON.stringify({ s3Config }),
         });
         expect(update.status).toBe(422);
+    });
+
+    test('a team S3 mount takes the S3 config every S3 route takes: no blank field, the prefix optional', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        for (const blank of ['endpoint', 'bucket', 'accessKeyId', 'secretAccessKey']) {
+            const body = JSON.stringify({
+                name: 'S3 Files',
+                storageType: 's3',
+                s3Config: { ...s3Config, prefix: 'data', [blank]: '' },
+            });
+            const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+            });
+            expect(add.status).toBe(422);
+            const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+            });
+            expect(update.status).toBe(422);
+        }
+
+        // Past validation, so the missing mount answers.
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ s3Config }),
+        });
+        expect(update.status).toBe(404);
+    });
+
+    test('a mount update without an S3 config keeps the saved one', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        // Not an S3 mount, so no connection check stands between the config and the settings.
+        const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'Keeps S3', storageType: 'local-key', s3Config }),
+        });
+        const { id } = await assertJson<MountResponse>(add);
+
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: false }),
+        });
+        expect((await assertJson<MountSettings>(update)).s3Config).toEqual({ ...s3Config, prefix: '' });
     });
 
     test('updating nonexistent mount returns 404', async () => {

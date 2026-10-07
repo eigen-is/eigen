@@ -10,16 +10,7 @@ import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
-import { s3PrefixSchema } from './shared-schemas';
-
-const s3ConfigSchema = t.Object({
-    endpoint: t.String(),
-    bucket: t.String(),
-    prefix: s3PrefixSchema,
-    accessKeyId: t.String(),
-    secretAccessKey: t.String(),
-    region: t.Optional(t.String()),
-});
+import { s3ConfigBody, toS3Config } from './shared-schemas';
 
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
@@ -94,14 +85,14 @@ export const teamRouter = new Elysia({ name: 'team' })
         async ({ params, body, user }): Promise<{ id: string } & MountSettings> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
-            return home.addMount(body);
+            return home.addMount({ ...body, s3Config: body.s3Config && toS3Config(body.s3Config) });
         },
         {
             body: t.Object({
                 name: t.String({ minLength: 1 }),
                 storageType: t.Optional(t.UnionEnum(MOUNT_STORAGE_TYPES)),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
-                s3Config: t.Optional(s3ConfigSchema),
+                s3Config: t.Optional(s3ConfigBody),
             }),
             auth: true,
         },
@@ -112,14 +103,16 @@ export const teamRouter = new Elysia({ name: 'team' })
         async ({ params, body, user }): Promise<MountSettings> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
-            return home.updateMount(params.mountId, body);
+            // A key set to undefined would replace the saved config.
+            const { s3Config, ...update } = body;
+            return home.updateMount(params.mountId, s3Config ? { ...update, s3Config: toS3Config(s3Config) } : update);
         },
         {
             body: t.Object({
                 enabled: t.Optional(t.Boolean()),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                 name: t.Optional(t.String({ minLength: 1 })),
-                s3Config: t.Optional(s3ConfigSchema),
+                s3Config: t.Optional(s3ConfigBody),
             }),
             auth: true,
         },
