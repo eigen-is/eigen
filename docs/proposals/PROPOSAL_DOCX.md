@@ -2,9 +2,9 @@
 
 This proposal replaces the docs app's docx export with a writer of our own, and extends the docx import so a document survives a trip through Word.
 
-**Status:** proposed. The page setup is built (`packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it. The phase 1 spike is done and its questions are decided (§ Decisions 9 to 14). The writer, the import additions and the page break are not built. [ROADMAP.md](../ROADMAP.md) keeps its row. What it says about the code was true on 2026-10-06, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it. The feature table below was measured that day: a doc using every schema feature, exported through the real code, unzipped, and imported again.
+**Status:** proposed. The page setup is built (`packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it. The phase 1 spike is done and its questions are decided (§ Decisions 9 to 14). The page break is built (phase 2: `packages/lib/src/docs/eigendoc/nodes/page-break.ts`, its import split in `apps/api/src/lib/import/doc/from-docx.ts`, [DOCS.md](../DOCS.md#a-page-break-is-a-dashed-rule-on-screen-and-a-new-page-on-paper)). The writer and the import additions are not built. [ROADMAP.md](../ROADMAP.md) keeps its row. What it says about the code was true on 2026-10-06, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it. The feature table below was measured that day: a doc using every schema feature, exported through the real code, unzipped, and imported again. Its page break row is from 2026-10-07, pinned by `doc-export.test.ts` and `doc-import.test.ts`.
 
-> **TLDR**: Today a doc's docx is the export HTML fed to `@turbodocx/html-to-docx`, and a docx import runs mammoth. The structure survives both ways (headings, bold, italic, links, nested lists, merged cells), but almost every visual property is lost, and the export has two bugs: its WebP images make the package invalid, and text marked small is deleted. The new writer closes both; they aren't fixed in today's exporter. This proposal writes the docx ourselves from the ProseMirror JSON, the way xlsx is already written from the workbook and not from HTML. The writer emits `document.xml`, `styles.xml`, `numbering.xml`, `comments.xml` and the image and font parts with JSZip, which the repo already uses. The document keeps Eigen's font names and embeds the fonts, so Word and LibreOffice show the editor's typography. Paper is A4 with 2 cm margins, as in the editor. Images go in as their original bytes. Open comment threads become Word comments. On import, mammoth stays, with a style map and a pass that reads what mammoth drops, so export, edit in Word, import again keeps everything Eigen can hold. The schema gains a page break. A corpus of real docx files, audited by a script, decides what else the schema should learn. html-to-docx (6.7 MB, and axios with it) leaves the Worker. No new API route, no database migration. About 15 to 20 working days.
+> **TLDR**: Today a doc's docx is the export HTML fed to `@turbodocx/html-to-docx`, and a docx import runs mammoth. The structure survives both ways (headings, bold, italic, links, nested lists, merged cells), but almost every visual property is lost, and the export has two bugs: its WebP images make the package invalid, and text marked small is deleted. The new writer closes both; they aren't fixed in today's exporter. This proposal writes the docx ourselves from the ProseMirror JSON, the way xlsx is already written from the workbook and not from HTML. The writer emits `document.xml`, `styles.xml`, `numbering.xml`, `comments.xml` and the image and font parts with JSZip, which the repo already uses. The document keeps Eigen's font names and embeds the fonts, so Word and LibreOffice show the editor's typography. Paper is A4 with 2 cm margins, as in the editor. Images go in as their original bytes. Open comment threads become Word comments. On import, mammoth gains a style map and a pass that reads what it drops, so export, edit in Word, import again keeps everything Eigen can hold. A spike at the start of phase 3 decides whether our own reader replaces mammoth (§ Import). The schema has a page break. A corpus of real docx files, audited by a script, decides what else the schema should learn. html-to-docx (6.7 MB, and axios with it) leaves the Worker. No new API route, no database migration. About 15 to 20 working days left.
 
 ## Goals
 
@@ -16,7 +16,7 @@ This proposal replaces the docs app's docx export with a writer of our own, and 
 
 ## Non-goals
 
-- Replacing mammoth. Word files from the wild are messy, and mammoth handles much of that. We add to it instead.
+- Replacing mammoth before phase 3. Word files from the wild are messy, and mammoth handles much of that. Whether our own reader replaces it is decided at the start of phase 3 (§ Import).
 - Importing Word comments as Eigen threads. A Word comment's author is a name, not an Eigen user, and that needs its own design. Later.
 - Headers, footers, footnotes, tables of contents, equations, tracked changes, sections. They go on the corpus list (§ The corpus), not into this proposal.
 - Font size, line spacing, indents and cell shading as schema features. Those are editor decisions. Until they exist, import keeps the text and drops the style.
@@ -70,7 +70,7 @@ P preserved, D degraded, L lost.
 | Horizontal rule | L | L |
 | Comments | L (the text stays) | L |
 | Page size and margins | P, from the page setup | L |
-| Page break | n/a | L, the words either side are glued together |
+| Page break | P at the top level; dropped in a list item, quote or table cell until the writer | P; dropped in a nested list item, an item directly above a nested one, or a note; a numbered list split by a break restarts at 1 |
 | Footnotes | n/a | D, a `[1]` link and a list at the end |
 | Equations, simple fields (TOC) | n/a | L, the text is dropped |
 
@@ -140,14 +140,17 @@ The PDF keeps the 2560 px cap: on A4 with 2 cm margins that is about 380 dpi acr
 
 ### Import: mammoth plus what it drops
 
-mammoth stays. Three additions:
+**Open: our own reader instead of mammoth.** Decided at the start of phase 3, once the writer works. Everything below adds to mammoth what it doesn't read. The writer will hold the eigendoc ↔ OOXML mapping both ways, so a reader from `document.xml` straight to ProseMirror JSON could replace the scanner, the carriers, the HTML pass and DOMPurify. Against it: mammoth's years of handling messy files (fields, tracked changes, alternate content, VML, text boxes), and a reader needs an XML parser that keeps mixed sibling order (`Bun.XML` doesn't; `fast-xml-parser` damaged runs with entity processing on). A spike of 1 to 2 days builds a reader for the schema's nodes and runs it beside mammoth plus the scanner on the corpus. The kept and lost counts decide. Until then, the plan below stands.
+
+With mammoth, three additions:
 
 1. **A style map.** `u => u`; `p[style-name='Title'] => h1:fresh`; `p[style-name='Subtitle'] => p:fresh`; `p[style-name='Quote'] => blockquote > p:fresh`; our own `Code Block` style back to a code block; `highlight => mark`; `br[type='page']` to the page break node. The importer's schema gets `lowlight`, so it has a code block. mammoth already turns a Word checkbox content control into `<input type="checkbox">`; the HTML pass turns that into a task item.
 2. **mammoth's document model.** `transformDocument` sees each paragraph and run before conversion, and mammoth 1.12.2 reads alignment, font, size and highlight into it. Those become class names the style map passes through, and a pass over the HTML turns the classes into the attributes the schema parses. No order matching. `mammoth.transforms.run` does not reach footnotes or comments (they live in `doc.notes` and `doc.comments`), so the pass walks them itself.
-3. **What mammoth doesn't read at all**: text color, column widths, image extents and anchors, list numbers. Lining up mammoth's output with the XML afterwards, by element order, is fragile. Rewriting `word/document.xml` before mammoth avoids it. The rewrite is a text scanner that inserts synthesized styles, declared in `styles.xml`, and changes nothing else; a style map built at runtime turns each into a class, the same path as step 2. It covers the footnote, comment and text-box parts as well. A full parse and rebuild is not an option: a damaged part makes mammoth drop runs without an error.
+3. **What mammoth doesn't read at all**: text color, column widths, image extents and anchors, list numbers, page break before. Lining up mammoth's output with the XML afterwards, by element order, is fragile. Rewriting `word/document.xml` before mammoth avoids it. The rewrite is a text scanner that inserts synthesized styles, declared in `styles.xml`, and changes nothing else; a style map built at runtime turns each into a class, the same path as step 2. It covers the footnote, comment and text-box parts as well. A full parse and rebuild is not an option: a damaged part makes mammoth drop runs without an error.
    - **Color.** A run with a `w:color` gets a synthesized character style. A run that already has a run style gets a composite style based on the original, and `transformDocument` splits it back into a colored outer run around the original, so a `<strong>` from the user's style survives. `auto` and theme-only colors are skipped, and paragraph-mark properties (`w:pPr/w:rPr`) are left alone.
    - **Column widths** ride a synthesized table style, `EigenTable_<twips>_<twips>…`, based on the table's own style, through `table[style-name=…] => table.ecw-…:fresh`. The HTML pass places the cells on the grid, colspan and rowspan honoured, and writes Tiptap's `colwidth`.
    - **List numbers** ride a synthesized paragraph style, `EigenListNum_<level>_<number>`, on every ordered item. The number is the one Word displays: the scanner emulates Word's counters, so a start override restarts and lists sharing a definition continue. It maps to `ol > li:fresh > span.eln-N`; a class on the `li` itself breaks nesting. The HTML pass sets `ol start` and splits a list where the numbers don't follow, which also stops adjacent lists merging. Numbering a paragraph inherits from its style is written out as an explicit `w:numPr`. mammoth reads no list start at all, and its list rules stop at 5 levels.
+   - **Page break before.** A paragraph with Word's "page break before" (`w:pageBreakBefore`, set on it or inherited from its style) gets a page break before it.
    - **Image extents and anchors** ride the drawing's `wp:docPr` `descr` beside the real alt text: mammoth hands `descr` to `convertImage` as `altText`, and the callback reads the values and restores the alt text.
 
 The spike ran the scanner on 42 files (31 Apache POI test files, 4 GOV.UK forms, 6 mammoth fixtures and one torture file) and on three of the owner's Word files. Removing its inserts gives back the original bytes in 42 of 42, and mammoth's HTML, messages and raw text are identical once our spans are stripped, in 42 of 42, with no run changed. It took 204 ms for all of them. `fast-xml-parser` with `preserveOrder` took 1,266 ms, changed the bytes of all 90 parts (semantically equal), and damaged 397 runs with entity processing on. Column widths and list numbers made the round trip on POI's numbering fixtures and two real government documents (15 of 15 and 105 of 105 items carried). One gap is open: in the owner's Meeting notes and Newsletter files, 28 and 16 colored runs became 24 and 13 color spans. Whether mammoth merged adjacent runs or the runs were empty is unexplained, and is checked when the import is built.
@@ -156,7 +159,7 @@ Eigen's own fonts map back by name through `EIGEN_FONTS`. A foreign font (Calibr
 
 ### Schema: a page break
 
-The one schema addition here. A block node `pageBreak`, inserted from the editor's Insert menu, drawn in the editor as a dashed rule with a label, rendered in the HTML and PDF export as `break-after: page`, written to docx as a page break, and read back from one. Additive; stored docs don't have it. No migration.
+Built (phase 2). A block node `pageBreak`, inserted from the toolbar, the narrow toolbar's Insert menu or Mod-Enter, drawn on screen as a labeled dashed rule, `break-after: page` in print and the PDF, a Word page break at the docx's top level, and read back from one. No migration.
 
 ### The corpus
 
@@ -177,9 +180,10 @@ To decide what else to support, we collect real docx files and audit them:
 | 1 | Original images with their sizes, large ones scaled down, the size warning, SVG with a fallback | 0.5–1 |
 | 1 | Embedded fonts: static files, obfuscation, font table | 1–1.5 |
 | 1 | Comments with replies: `readCards` carved out, the messages query, the index and user reads, the description as text, the parts in the Worker | 2–2.5 |
-| 2 | Page break node in the schema, editor, HTML/PDF and docx | 1–1.5 |
-| 3 | Import: style map, `transformDocument` with the notes and comments, the scanner and its carriers, the shared font map, image width | 2–3 |
+| 2 | Page break node in the schema, editor, HTML/PDF and docx | built |
 | 3 | Corpus, audit script, first table | 1 |
+| 3 | Decide: our own reader or mammoth plus the scanner, a spike on the corpus | 1–2 |
+| 3 | Import: style map, `transformDocument` with the notes and comments, the scanner and its carriers, the shared font map, image width (or the same on our own reader) | 2–3 |
 | all | Tests; EXPORT.md (its one-HTML-document rule); DOCS.md (the importer now passes `lowlight`); help center | 1 |
 
 Today's exporter keeps its two bugs (WebP parts, deleted small text) until phase 1 replaces it. Phase 1 ends with html-to-docx removed.

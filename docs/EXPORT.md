@@ -29,7 +29,7 @@ The response is silent while the job queues and its Worker runs. Queue wait plus
 
 ## Every format but xlsx and SVG is one HTML document
 
-`html` and `pdf-html` render the identical document, so WeasyPrint prints exactly what the HTML download serves. A doc's docx is that HTML fed to `@turbodocx/html-to-docx`. There is one document per type to get right, not one per format. A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
+`html` and `pdf-html` render the identical document, so WeasyPrint prints exactly what the HTML download serves. A doc's docx is that HTML fed to `@turbodocx/html-to-docx` without its doctype, because html-to-docx opens the body with an empty paragraph for one. It turns only a top-level page break into a Word page break ([DOCS.md](DOCS.md#html-to-docx-reads-our-page-break-only-as-a-top-level-page-break-div)). There is one document per type to get right, not one per format. A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
 
 A doc's page comes from its page setup ([DOCS.md](DOCS.md#one-page-setup-sizes-every-page-a-doc-is-drawn-on)): the HTML's screen page and the PDF's `@page` from `pageStylesheet` (in `PRINT_EXTRAS`, `export/doc/transform.ts`), and the docx's page size and margins from `pageTwips`. So all three match the editor's A4 page and its 2 cm margins.
 
@@ -100,7 +100,7 @@ The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later
 
 ## A docx import replaces the document
 
-`from-docx.ts` converts through mammoth, sanitizes with DOMPurify and parses with the eigendoc schema. `writeEigendocUpdateToYjs` clears the fragment first, so an import replaces rather than appends. The images are written after the commit under deterministic names (`image-0.png`, …), so a repeat import overwrites them instead of failing after the content committed.
+`from-docx.ts` converts through mammoth, sanitizes with DOMPurify and parses with the eigendoc schema. A Word page break splits its paragraph on the way in ([DOCS.md](DOCS.md#a-word-page-break-splits-its-paragraph-on-import)). `writeEigendocUpdateToYjs` clears the fragment first, so an import replaces rather than appends. The images are written after the commit under deterministic names (`image-0.png`, …), so a repeat import overwrites them instead of failing after the content committed.
 
 ## Contacts and calendar export splice stored bytes
 

@@ -42,8 +42,9 @@ export async function renderEigendocExport(
     media: TransformMedia[],
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const html = renderEigendocDocument(readEigendocFromDoc(doc), toDataUriMap(media), title);
-    if (format !== 'docx') return { data: toTransferableText(html), warnings: [] };
+    if (format !== 'docx') return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 
+    // Without the doctype: html-to-docx opens the body with an empty paragraph for it.
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
     const docx = await HTMLtoDOCX(html, undefined, {
         title: stripEigenExtension(title),
@@ -86,8 +87,7 @@ function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, strin
 }
 
 function wrapInDocument(title: string, bodyHtml: string): string {
-    return `<!DOCTYPE html>
-<html lang="en">
+    return `<html lang="en">
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
@@ -111,7 +111,7 @@ function flattenEigenProseCSS(raw: string): string {
     let css = raw.replace(/\.eigen-prose,\s*\n\s*\.tiptap\s*\{/g, '.eigen-prose {');
 
     // Drop .dark overrides (export is always light)
-    css = css.replace(/^\.dark\s+\.eigen-prose\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}/gm, '');
+    css = css.replace(/^\.dark\s+\.eigen-prose[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/gm, '');
 
     // Flatten CSS nesting for all top-level blocks
     css = css.replace(/^(\.[a-zA-Z][\w-]*)\s*\{([\s\S]*?)^\}/gm, (_match, selector, body) => {

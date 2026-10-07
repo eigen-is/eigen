@@ -111,6 +111,7 @@
     h5,
     h6,
     hr,
+    .page-break,
     blockquote,
     pre,
     table,
@@ -164,6 +165,23 @@
         border: none;
         border-top: 1px solid #e0e0e6;
         margin: 1.5em 0;
+    }
+
+    /* Page break */
+
+    .page-break {
+        border-top: 1px dashed var(--color-muted-foreground);
+        margin: 1.5em 0;
+    }
+
+    .page-break::after {
+        content: "Page break";
+        display: block;
+        font-size: 0.75rem;
+        line-height: 1;
+        color: var(--color-muted-foreground);
+        text-align: center;
+        padding-top: 0.25em;
     }
 
     /* Images */
@@ -451,7 +469,8 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
 /* For shadow DOM usage: won't apply (correct — preview has its own white container) */
-.dark .eigen-prose {
+.dark .eigen-prose:not(.eigen-paper *) {
+    /* Not on the light-pinned paper (.eigen-paper in globals.css): the docs editor's page stays light. */
     color: #e4e4e7;
 
     blockquote {
@@ -490,11 +509,21 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     filter: brightness(0.95);
 }
 
-/* Comment highlights are collaboration chrome, not content — keep print clean.
-   The doc export embeds this stylesheet and WeasyPrint renders print media, so
-   the same rule keeps PDF exports clean too. */
+/* Comment highlights and the page break's rule and label are screen chrome; print drops them and the
+   break starts the next page. The doc export embeds this stylesheet and WeasyPrint renders print media,
+   so these rules hold for the PDF too. */
 @media print {
     .tiptap .comment-highlight {
         background-color: transparent;
+    }
+
+    .tiptap .page-break {
+        break-after: page;
+        margin: 0;
+        border: none;
+    }
+
+    .tiptap .page-break::after {
+        content: none;
     }
 }
