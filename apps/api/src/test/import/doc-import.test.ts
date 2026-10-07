@@ -398,7 +398,7 @@ describe('docx import — page breaks', () => {
         ]);
     });
 
-    // Until the docx writer carries list numbering (PROPOSAL_DOCX phase 3), the second list numbers from 1 again.
+    // Until the import reads Word's list numbers (PROPOSAL_DOCX phase 3), the second list numbers from 1 again.
     test('a break in its own ordered item splits the list, which restarts its numbers', async () => {
         const body = [run('One'), `<w:r>${PAGE_BREAK}</w:r>`, run('Two')].map((inner) => paragraph(inner, ORDERED));
         expect(await importBlocks(body.join(''))).toEqual(['orderedList(One)', 'pageBreak', 'orderedList(Two)']);
@@ -411,10 +411,41 @@ describe('docx import — page breaks', () => {
 
     test('a break in a nested list item is dropped and leaves the list whole', async () => {
         const list = (inner: string): string =>
-            `${paragraph(run('One'), ORDERED)}${paragraph(inner, NESTED)}${paragraph(run('C'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
-        const json = await importJson(list(`${run('A')}<w:r>${PAGE_BREAK}</w:r>${run('B')}`));
-        expect(json).toEqual(await importJson(list(`${run('A')}${run('B')}`)));
-        expect(blocks(json)).toEqual(['orderedList(One/AB/C/Two)']);
+            `${paragraph(run('One'), ORDERED)}${paragraph(run('A'), NESTED)}${paragraph(inner, NESTED)}${paragraph(run('Two'), ORDERED)}`;
+        const json = await importJson(list(`${run('B')}<w:r>${PAGE_BREAK}</w:r>${run('C')}`));
+        expect(json).toEqual(await importJson(list(`${run('B')}${run('C')}`)));
+        expect(blocks(json)).toEqual(['orderedList(One/A/BC/Two)']);
+    });
+
+    // Split there, the nested item would open a list of its own under an empty bullet.
+    test.each([
+        ['ends a top-level item before its nested child', [`${run('One')}<w:r>${PAGE_BREAK}</w:r>`]],
+        ['stands as an item between a parent and its nested child', [run('One'), `<w:r>${PAGE_BREAK}</w:r>`]],
+    ])('a break that %s is dropped and leaves the list whole', async (_where, items) => {
+        const list = (top: string[]): string =>
+            `${top.map((inner) => paragraph(inner, ORDERED)).join('')}${paragraph(run('A'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
+        const json = await importJson(list(items));
+        expect(json).toEqual(await importJson(list([run('One')])));
+        expect(blocks(json)).toEqual(['orderedList(One/A/Two)']);
+    });
+
+    test('two breaks in a row keep both page breaks', async () => {
+        expect(
+            await importBlocks(paragraph(`${run('Before')}<w:r>${PAGE_BREAK}${PAGE_BREAK}</w:r>${run('After')}`)),
+        ).toEqual(['paragraph(Before)', 'pageBreak', 'pageBreak', 'paragraph(After)']);
+    });
+
+    test('a spacer paragraph holding a non-breaking space beside a break stays', async () => {
+        const body = ['Before', '\u00a0', '', '\u00a0', 'After'].map((text) =>
+            paragraph(text ? run(text) : `<w:r>${PAGE_BREAK}</w:r>`),
+        );
+        expect(await importBlocks(body.join(''))).toEqual([
+            'paragraph(Before)',
+            'paragraph(\u00a0)',
+            'pageBreak',
+            'paragraph(\u00a0)',
+            'paragraph(After)',
+        ]);
     });
 
     test('a break in a footnote is dropped and leaves its paragraph whole', async () => {
