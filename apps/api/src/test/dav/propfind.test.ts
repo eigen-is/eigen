@@ -12,6 +12,16 @@ const distinct = (count: number) => Array.from({ length: count }, (_, i) => `<X:
 
 const memberRow = (etag: string) => davXml.memberRowProps(etag, 'text/calendar');
 
+const refusal = (body: Uint8Array): number | undefined => {
+    try {
+        parsePropfind(body);
+    } catch (error) {
+        if (error instanceof ApiError) return error.status;
+        throw error;
+    }
+    return undefined;
+};
+
 describe('parsePropfind', () => {
     test('a prop asked for twice, under any prefix, is answered once', () => {
         const request = parsePropfind(propfind('<D:getetag/><X:a/><D:getetag/><y:getetag xmlns:y="DAV:"/><X:a/>'));
@@ -23,14 +33,20 @@ describe('parsePropfind', () => {
     test('1,000 distinct props are read, a 1,001st is a 400, and a repeat does not count', () => {
         expect(parsePropfind(propfind(distinct(1000))).allprop).toBe(false);
         expect(parsePropfind(propfind(`${distinct(1000)}<X:p0/>`)).allprop).toBe(false);
-        let refused: unknown;
-        try {
-            parsePropfind(propfind(distinct(1001)));
-        } catch (error) {
-            refused = error;
-        }
-        expect(refused).toBeInstanceOf(ApiError);
-        expect((refused as ApiError).status).toBe(400);
+        expect(refusal(propfind(distinct(1001)))).toBe(400);
+    });
+
+    test('a long namespace declared once, which the 404 echo would repeat per prop, is a 400', () => {
+        const body = `<D:propfind xmlns:D="DAV:" xmlns:X="urn:${'x'.repeat(100_000)}"><D:prop>${distinct(1000)}</D:prop></D:propfind>`;
+        expect(refusal(new TextEncoder().encode(body))).toBe(400);
+    });
+
+    test("a client's PROPFIND of 40 props in several namespaces is read", () => {
+        const namespaces = Object.values(davXml.DAV_NAMESPACES);
+        const props = Array.from({ length: 40 }, (_, i) => `<n${i % namespaces.length}:prop-${i}/>`).join('');
+        const declarations = namespaces.map((uri, i) => `xmlns:n${i}="${uri}"`).join(' ');
+        const body = `<D:propfind xmlns:D="DAV:" ${declarations}><D:prop>${props}</D:prop></D:propfind>`;
+        expect(refusal(new TextEncoder().encode(body))).toBeUndefined();
     });
 });
 

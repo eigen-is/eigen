@@ -113,9 +113,8 @@ export function parseReport(body: Uint8Array): ReportRequest {
     if (root.ns === CALDAV && root.local === 'calendar-query') {
         const filter = xmlChild(root, CALDAV, 'filter');
         // A filter element in another namespace is no CalDAV filter: read past, it would answer every event.
-        if (filter ? hasForeignElement(filter) : xmlElements(root).some((child) => child.local === 'filter')) {
-            throw new UnsupportedFilterError();
-        }
+        const foreignFilter = xmlElements(root).some((child) => child.local === 'filter' && child.ns !== CALDAV);
+        if (foreignFilter || (filter && hasForeignElement(filter))) throw new UnsupportedFilterError();
         // A filter that names no UID matches every one.
         return { type: 'calendar-query', matchesUid: () => true, ...readFilter(filter), wantsData };
     }

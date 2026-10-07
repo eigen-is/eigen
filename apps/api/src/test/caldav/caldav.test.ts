@@ -1949,6 +1949,9 @@ describe('CalDAV', () => {
                 await report(
                     `<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><X:filter ${foreign}><C:comp-filter name="VCALENDAR"/></X:filter></C:calendar-query>`,
                 ),
+                await report(
+                    `<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:prop><D:getetag/></D:prop><C:filter><C:comp-filter name="VCALENDAR"/></C:filter><X:filter ${foreign}><X:comp-filter name="VCALENDAR"/></X:filter></C:calendar-query>`,
+                ),
             ]) {
                 expect(res.status).toBe(403);
                 expect(await res.text()).toContain('<C:supported-filter/>');

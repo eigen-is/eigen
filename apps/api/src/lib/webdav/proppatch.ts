@@ -73,10 +73,11 @@ export async function handleProppatch(args: {
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    // The xml namespace takes no other prefix (Namespaces in XML § 3), so a prop in it could be stored but never listed.
+    // The xml namespace is reserved to the xml prefix (Namespaces in XML § 3), not a client's to store props in; like a
+    // no-namespace live name, only its set is refused, so a row stored before can go.
     const isProtected = ({ op, prop }: PropOp) =>
-        prop.ns === XML_NAMESPACE ||
-        (PROTECTED_PROPS.has(prop.name) && (prop.ns === DAV || (prop.ns === '' && op === 'set')));
+        (PROTECTED_PROPS.has(prop.name) && prop.ns === DAV) ||
+        (op === 'set' && (prop.ns === XML_NAMESPACE || (prop.ns === '' && PROTECTED_PROPS.has(prop.name))));
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 

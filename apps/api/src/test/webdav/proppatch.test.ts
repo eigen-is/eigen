@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { parseXml, type XmlElement, xmlChild } from '../../lib/core/xml';
+import { parseXml, XML_NAMESPACE, type XmlElement, xmlChild } from '../../lib/core/xml';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getUserById } from '../../lib/user';
 import { getTestContext, type TestContext } from '../setup';
@@ -226,6 +226,33 @@ describe('WebDAV PROPPATCH', () => {
         const listing = await find.text();
         expect(parseXml(listing)).not.toBeNull();
         expect(listing).not.toContain('>red<');
+    });
+
+    test('a prop in the xml namespace, stored before the refusal, lists as XML and can be removed', async () => {
+        await webdavRequest(ctx.alice.user.email, 'MKCOL', `${baseHref}/proppatch-xml-stuck`);
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-xml-stuck/f.txt`, { body: 'a' });
+        const user = await getUserById(ctx.alice.user.id);
+        const drive = await getSharedDrive(ctx.alice.user.id, user!);
+        const path = await drive.resolvePath(mountId, '/proppatch-xml-stuck/f.txt');
+        await drive.updatePathDetails(mountId, path!.id, {
+            ...(path!.details ?? {}),
+            webdavProps: [{ ns: XML_NAMESPACE, name: 'tag', value: 'red' }],
+        });
+
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/proppatch-xml-stuck/`, {
+            headers: { Depth: '1' },
+        });
+        expect(find.status).toBe(207);
+        expect(parseXml(await find.text())).not.toBeNull();
+        expect((await deadProp('proppatch-xml-stuck/f.txt', 'tag', XML_NAMESPACE))?.children).toEqual(['red']);
+
+        const res = await proppatch(
+            'proppatch-xml-stuck/f.txt',
+            '<D:propertyupdate xmlns:D="DAV:"><D:remove><D:prop><xml:tag/></D:prop></D:remove></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        expect(await res.text()).toMatch(/<xml:tag\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 200 OK/);
+        expect((await drive.resolvePath(mountId, '/proppatch-xml-stuck/f.txt'))?.details?.webdavProps).toBeUndefined();
     });
 
     test('PROPPATCH whose root is not DAV:propertyupdate → 400, nothing persisted', async () => {

@@ -16,6 +16,8 @@ const PREFIXES = new Map<string, string>(Object.entries(DAV_NAMESPACES).map(([pr
 
 // Every unknown prop is echoed in every row, so the list a request may name is bounded.
 const MAX_PROPFIND_PROPS = 1000;
+// Each echoed prop repeats its namespace, so one long URI declared once would be written a thousand times per row.
+const MAX_PROPFIND_ECHO_LENGTH = 64 * 1024;
 
 // `notFound` holds the 404 propstat per set of found props, so rows of one shape share one string.
 export type PropfindRequest =
@@ -32,11 +34,15 @@ export function parsePropfind(body: Uint8Array): PropfindRequest {
     // lenient v1: we serve the values, not the names-only variant.
     if (!prop) return { allprop: true };
     const props = new Map<string, XmlElement>();
+    let echoLength = 0;
     for (const element of xmlElements(prop)) {
         const key = `${element.local} ${element.ns}`;
-        if (!props.has(key)) props.set(key, element);
+        if (props.has(key)) continue;
+        props.set(key, element);
+        echoLength += echoMissing(element).length;
     }
     if (props.size > MAX_PROPFIND_PROPS) throw new ApiError(400, 'Too many props');
+    if (echoLength > MAX_PROPFIND_ECHO_LENGTH) throw new ApiError(400, 'Prop names too long');
     return { allprop: false, props: [...props.values()], notFound: new Map() };
 }
 
