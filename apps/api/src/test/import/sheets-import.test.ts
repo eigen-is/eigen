@@ -1693,8 +1693,41 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(await readLocationHyperlinks(zip)).toEqual(new Map([['Kept', new Map([['B2', 'Broken!A1']])]]));
 
         const workbook = (await zip.file('xl/workbook.xml')?.async('string')) ?? '';
-        zip.file('xl/workbook.xml', `${workbook}<!--${' '.repeat(8 * 1024 * 1024)}-->`);
+        zip.file('xl/workbook.xml', `${workbook}${'<!---->'.repeat(10_000)}`);
         expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+    });
+
+    test('location hyperlinks keep all of the 66,530 Excel allows a sheet', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
+        workbook.addWorksheet('Sheet 2');
+        const entries = Array.from(
+            { length: 66_530 },
+            (_, i) =>
+                `<hyperlink ref="A${i + 1}" location="'Sheet 2'!B${i + 1}" display="Row ${i + 1} of the second sheet, column B" tooltip="Open the second sheet"/>`,
+        ).join('');
+        const buffer = await replacePart(await workbookToBuffer(workbook), 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`),
+        );
+
+        const links = (await readLocationHyperlinks(await JSZip.loadAsync(buffer))).get('Sheet1');
+        expect(links?.size).toBe(66_530);
+        expect(links?.get('A66530')).toBe("'Sheet 2'!B66530");
+    });
+
+    test('a hyperlinks opener in a comment before the sheet data leaves the real block to be read', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'Sheet1!B2' },
+        ]);
+        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('<sheetData', '<!-- <hyperlinks> --><sheetData'),
+        );
+
+        expect(await readLocationHyperlinks(await JSZip.loadAsync(buffer))).toEqual(
+            new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]),
+        );
     });
 
     test('convert imports a sheet whose part Bun refuses, without its location hyperlinks', async () => {
@@ -1750,6 +1783,45 @@ describe('Sheets xlsx conversion fidelity', () => {
 });
 
 describe('xlsxToSheets resource guards', () => {
+    // Bun's tree costs ~120x the markup it holds: 8 MB of `<a/>` builds a ~1 GB tree, two at once ~2 GB.
+    test('workbook, rels, theme and hyperlinks block of 8 or 16 MB of tags cost no tree', async () => {
+        for (const bytes of [8 * 1024 * 1024 - 4096, 8_000_000, 16_000_000]) {
+            const fill = '<a/>'.repeat(bytes / 4);
+            const workbook = new ExcelJS.Workbook();
+            workbook.addWorksheet('S').getCell('A1').value = 'link';
+            workbook.addWorksheet('T');
+            let buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+                { ref: 'A1', location: 'T!A1' },
+            ]);
+            buffer = await replacePart(buffer, 'xl/worksheets/sheet1.xml', (xml) =>
+                xml.replace('</hyperlinks>', `${fill}</hyperlinks>`),
+            );
+            buffer = await replacePart(buffer, 'xl/workbook.xml', (xml) =>
+                xml.replace('</workbook>', `<extLst><ext uri="x">${fill}</ext></extLst></workbook>`),
+            );
+            buffer = await replacePart(buffer, 'xl/theme/theme1.xml', (xml) =>
+                xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${fill}</a:ext></a:extLst></a:theme>`),
+            );
+
+            Bun.gc(true);
+            const before = process.memoryUsage().heapUsed;
+            const sheets = await xlsxToSheets(Buffer.from(buffer));
+            const grown = process.memoryUsage().heapUsed - before;
+
+            expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
+            expect(grown).toBeLessThan(128 * 1024 * 1024);
+
+            // exceljs refuses a rels part holding anything but relationships, so this one is read on its own.
+            const zip = await JSZip.loadAsync(buffer);
+            const rels = (await zip.file('xl/_rels/workbook.xml.rels')?.async('string')) ?? '';
+            zip.file('xl/_rels/workbook.xml.rels', rels.replace('</Relationships>', `${fill}</Relationships>`));
+            Bun.gc(true);
+            const relsBefore = process.memoryUsage().heapUsed;
+            expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(128 * 1024 * 1024);
+        }
+    });
+
     test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
         // The declared-size guard reads each entry's uncompressedSize straight from the zip
         // central directory and never decompresses, so it needs no real bomb payload — the

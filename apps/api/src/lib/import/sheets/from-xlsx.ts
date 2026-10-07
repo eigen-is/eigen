@@ -153,7 +153,9 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     await workbook.xlsx.load(buffer);
     assertCellCountWithinBounds(workbook);
 
-    const [theme, locationLinks] = await Promise.all([readThemePalette(zip), readLocationHyperlinks(zip)]);
+    // One after the other, so their trees are never alive together.
+    const theme = await readThemePalette(zip);
+    const locationLinks = await readLocationHyperlinks(zip);
 
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
@@ -866,33 +868,16 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
 // Reuses the zip loaded by xlsxToSheets — no second decompression pass.
 export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
     const bySheet = new Map<string, Map<string, string>>();
-    const [workbook, rels] = await Promise.all([
-        readPart(zip, 'xl/workbook.xml'),
-        readPart(zip, 'xl/_rels/workbook.xml.rels'),
-    ]);
-    const namespaces = OOXML_NAMESPACES.find(({ spreadsheetml }) => spreadsheetml === workbook?.ns);
-    const sheets = namespaces && workbook && xmlChild(workbook, namespaces.spreadsheetml, 'sheets');
-    if (!namespaces || !sheets || !rels) return bySheet;
-
-    const relTargets = new Map<string, string>();
-    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS, 'Relationship')) {
-        const id = xmlAttr(rel, '', 'Id');
-        const target = xmlAttr(rel, '', 'Target');
-        if (id != null && target != null) relTargets.set(id, target);
-    }
+    const workbook = await readSheetPaths(zip);
+    if (!workbook) return bySheet;
 
     // One sheet at a time: each is decoded whole, and together they can reach the decompressed cap.
-    for (const sheet of xmlChildren(sheets, namespaces.spreadsheetml, 'sheet')) {
-        const name = xmlAttr(sheet, '', 'name');
-        const rId = xmlAttr(sheet, namespaces.relationships, 'id');
-        const target = rId != null ? relTargets.get(rId) : undefined;
-        if (name == null || target == null) continue;
-        // Workbook-rel targets are relative to xl/ unless rooted.
-        const text = await zip.file(target.startsWith('/') ? target.slice(1) : `xl/${target}`)?.async('string');
-        const hyperlinks = text && readHyperlinksBlock(text, namespaces.spreadsheetml);
+    for (const { name, path } of workbook.sheets) {
+        const text = await zip.file(path)?.async('string');
+        const hyperlinks = text && readHyperlinksBlock(text, workbook.spreadsheetml);
         if (!hyperlinks) continue;
         const links = new Map<string, string>();
-        for (const hyperlink of xmlChildren(hyperlinks, namespaces.spreadsheetml, 'hyperlink')) {
+        for (const hyperlink of xmlChildren(hyperlinks, workbook.spreadsheetml, 'hyperlink')) {
             const ref = xmlAttr(hyperlink, '', 'ref');
             const location = xmlAttr(hyperlink, '', 'location');
             // ref may span a range; the anchor cell carries the link.
@@ -903,32 +888,89 @@ export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Ma
     return bySheet;
 }
 
-// Workbook, rels, theme and a sheet's hyperlinks block are small in any real file (Excel's cap of 66,530 hyperlinks a
-// sheet fits), while a tree costs ~30-110x its input: a larger one is skipped like a malformed one.
-const MAX_PARSED_XML_LENGTH = 8 * 1024 * 1024;
+// Each sheet's name and part path, as plain values: the workbook and rels trees are gone before any sheet is read.
+async function readSheetPaths(
+    zip: JSZip,
+): Promise<{ spreadsheetml: string; sheets: { name: string; path: string }[] } | undefined> {
+    const workbook = await readPart(zip, 'xl/workbook.xml');
+    const rels = await readPart(zip, 'xl/_rels/workbook.xml.rels');
+    const namespaces = OOXML_NAMESPACES.find(({ spreadsheetml }) => spreadsheetml === workbook?.ns);
+    const sheets = namespaces && workbook && xmlChild(workbook, namespaces.spreadsheetml, 'sheets');
+    if (!namespaces || !sheets || !rels) return undefined;
+
+    const relTargets = new Map<string, string>();
+    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS, 'Relationship')) {
+        const id = xmlAttr(rel, '', 'Id');
+        const target = xmlAttr(rel, '', 'Target');
+        if (id != null && target != null) relTargets.set(id, target);
+    }
+    const paths: { name: string; path: string }[] = [];
+    for (const sheet of xmlChildren(sheets, namespaces.spreadsheetml, 'sheet')) {
+        const name = xmlAttr(sheet, '', 'name');
+        const rId = xmlAttr(sheet, namespaces.relationships, 'id');
+        const target = rId != null ? relTargets.get(rId) : undefined;
+        if (name == null || target == null) continue;
+        // Workbook-rel targets are relative to xl/ unless rooted.
+        paths.push({ name, path: target.startsWith('/') ? target.slice(1) : `xl/${target}` });
+    }
+    return { spreadsheetml: namespaces.spreadsheetml, sheets: paths };
+}
+
+// A tree costs ~260 bytes of heap a tag and ~100 an attribute however few bytes they take in the input, so what is
+// parsed is bounded by its `<` and `=` (a tag has one, an attribute one; one in a value or text only counts extra),
+// not by its length; a long value costs about its length. A part or block past either bound is skipped like a
+// malformed one.
+type MarkupBound = { tags: number; attributes: number };
+// Workbook, rels and theme run to a few hundred tags in a real file.
+const PART_MARKUP: MarkupBound = { tags: 10_000, attributes: 100_000 };
+// Excel caps a sheet at 66,530 hyperlinks, each one tag of at most six attributes, plus slack.
+const HYPERLINKS_MARKUP: MarkupBound = { tags: 70_000, attributes: 490_000 };
+
+function withinMarkupBound(parts: (string | Uint8Array)[], bound: MarkupBound): boolean {
+    const left = { '<': bound.tags, '=': bound.attributes };
+    for (const part of parts) {
+        for (const char of ['<', '='] as const) {
+            const next = (from: number) =>
+                typeof part === 'string' ? part.indexOf(char, from) : part.indexOf(char.charCodeAt(0), from);
+            for (let at = next(0); at >= 0; at = next(at + 1)) {
+                if (--left[char] < 0) return false;
+            }
+        }
+    }
+    return true;
+}
 
 // The root's start tag (the prolog's `<?` and `<!` never match) and its name; an attribute value may hold `>`.
 const ROOT_START_TAG = /<([^\s?!/<>][^\s/<>]*)(?:\s+[^\s=/<>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*>/;
-const HYPERLINKS_START_TAG = /<((?:[^\s/<>:]+:)?hyperlinks)[\s/>]/;
+// Global for their lastIndex: each search starts where the schema puts what it looks for.
+const SHEET_DATA_END = /<\/(?:[^\s/<>:]+:)?sheetData\s*>|<(?:[^\s/<>:]+:)?sheetData\s*\/>/g;
+const HYPERLINKS_START_TAG = /<((?:[^\s/<>:]+:)?hyperlinks)[\s/>]/g;
 
 // The rest of a sheet can be the whole decompressed cap, so only its hyperlinks block is parsed, behind the prolog
-// and the root's start tag so the namespaces bound there stay bound and a DOCTYPE is still refused.
+// and the root's start tag so the namespaces bound there stay bound and a DOCTYPE is still refused. The schema puts
+// the block after the sheet data, so the search starts past it: past the bulk of the sheet, and past any opener a
+// comment there could hide.
 function readHyperlinksBlock(sheet: string, spreadsheetml: string): XmlElement | undefined {
     const root = ROOT_START_TAG.exec(sheet);
+    if (!root) return undefined;
+    const head = sheet.slice(0, root.index + root[0].length);
+    SHEET_DATA_END.lastIndex = head.length;
+    HYPERLINKS_START_TAG.lastIndex = SHEET_DATA_END.exec(sheet) ? SHEET_DATA_END.lastIndex : head.length;
     const open = HYPERLINKS_START_TAG.exec(sheet);
-    if (!root || !open) return undefined;
+    if (!open) return undefined;
     // An end tag that doesn't match is Bun's to refuse.
     const end = sheet.indexOf(`</${open[1]}`, open.index);
     const close = end < 0 ? -1 : sheet.indexOf('>', end);
-    const head = sheet.slice(0, root.index + root[0].length);
-    if (close < 0 || head.length + close - open.index > MAX_PARSED_XML_LENGTH) return undefined;
-    const wrapped = parsePart(`${head}${sheet.slice(open.index, close + 1)}</${root[1]}>`);
+    if (close < 0) return undefined;
+    const block = sheet.slice(open.index, close + 1);
+    if (!withinMarkupBound([head, block], HYPERLINKS_MARKUP)) return undefined;
+    const wrapped = parsePart(`${head}${block}</${root[1]}>`);
     return wrapped ? xmlChild(wrapped, spreadsheetml, 'hyperlinks') : undefined;
 }
 
 async function readPart(zip: JSZip, path: string): Promise<XmlElement | null> {
     const bytes = await zip.file(path)?.async('uint8array');
-    return bytes && bytes.length <= MAX_PARSED_XML_LENGTH ? parsePart(bytes) : null;
+    return bytes && withinMarkupBound([bytes], PART_MARKUP) ? parsePart(bytes) : null;
 }
 
 // exceljs has read the workbook by now, so a part Bun refuses (malformed, a DOCTYPE) costs only what these reads
