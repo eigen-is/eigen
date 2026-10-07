@@ -23,7 +23,7 @@ import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../..
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
-import { assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
+import { addMember, assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
 
 describe('Server Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -470,6 +470,19 @@ describe('Team Mount Management', () => {
             body: JSON.stringify({ enabled: false }),
         });
         expect((await assertJson<MountSettings>(update)).s3Config).toEqual({ ...s3Config, prefix: '' });
+    });
+
+    test('only a team admin lists the mounts, S3 secret included', async () => {
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        const members = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/members`);
+        expect(members.status).toBe(200);
+        const denied = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
+        expect(denied.status).toBe(403);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
+        const mounts = await assertJson<Record<string, MountSettings>>(res);
+        const keeps = Object.values(mounts).find((m) => m.name === 'Keeps S3');
+        expect(keeps?.s3Config?.secretAccessKey).toBe('secret-example');
     });
 
     test('updating nonexistent mount returns 404', async () => {

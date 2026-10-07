@@ -73,7 +73,7 @@ export const teamRouter = new Elysia({ name: 'team' })
     .get(
         '/team/:ownerId/mounts',
         async ({ params, user }): Promise<Record<string, MountSettings>> => {
-            await requireTeamAccess(user.id, teamId(params.ownerId));
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
             return home.settings.get().mounts ?? {};
         },
