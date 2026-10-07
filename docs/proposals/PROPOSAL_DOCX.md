@@ -4,7 +4,7 @@ This proposal replaces the docs app's docx export with a writer of our own, and 
 
 **Status:** proposed. The page setup is built (`packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it. The phase 1 spike is done and its questions are decided (§ Decisions 9 to 14). The page break is built (phase 2: `packages/lib/src/docs/eigendoc/nodes/page-break.ts`, its import split in `apps/api/src/lib/import/doc/from-docx.ts`, [DOCS.md](../DOCS.md#a-page-break-is-a-dashed-rule-on-screen-and-a-new-page-on-paper)). The writer and the import additions are not built. [ROADMAP.md](../ROADMAP.md) keeps its row. What it says about the code was true on 2026-10-06, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it. The feature table below was measured that day: a doc using every schema feature, exported through the real code, unzipped, and imported again. Its page break row is from 2026-10-07, pinned by `doc-export.test.ts` and `doc-import.test.ts`.
 
-> **TLDR**: Today a doc's docx is the export HTML fed to `@turbodocx/html-to-docx`, and a docx import runs mammoth. The structure survives both ways (headings, bold, italic, links, nested lists, merged cells), but almost every visual property is lost, and the export has two bugs: its WebP images make the package invalid, and text marked small is deleted. The new writer closes both; they aren't fixed in today's exporter. This proposal writes the docx ourselves from the ProseMirror JSON, the way xlsx is already written from the workbook and not from HTML. The writer emits `document.xml`, `styles.xml`, `numbering.xml`, `comments.xml` and the image and font parts with JSZip, which the repo already uses. The document keeps Eigen's font names and embeds the fonts, so Word and LibreOffice show the editor's typography. Paper is A4 with 2 cm margins, as in the editor. Images go in as their original bytes. Open comment threads become Word comments. On import, mammoth stays unless a spike at the start of phase 3 shows our own reader does better (§ Import), with a style map and a pass that reads what mammoth drops, so export, edit in Word, import again keeps everything Eigen can hold. The schema gains a page break. A corpus of real docx files, audited by a script, decides what else the schema should learn. html-to-docx (6.7 MB, and axios with it) leaves the Worker. No new API route, no database migration. About 15 to 21 working days left.
+> **TLDR**: Today a doc's docx is the export HTML fed to `@turbodocx/html-to-docx`, and a docx import runs mammoth. The structure survives both ways (headings, bold, italic, links, nested lists, merged cells), but almost every visual property is lost, and the export has two bugs: its WebP images make the package invalid, and text marked small is deleted. The new writer closes both; they aren't fixed in today's exporter. This proposal writes the docx ourselves from the ProseMirror JSON, the way xlsx is already written from the workbook and not from HTML. The writer emits `document.xml`, `styles.xml`, `numbering.xml`, `comments.xml` and the image and font parts with JSZip, which the repo already uses. The document keeps Eigen's font names and embeds the fonts, so Word and LibreOffice show the editor's typography. Paper is A4 with 2 cm margins, as in the editor. Images go in as their original bytes. Open comment threads become Word comments. On import, mammoth gains a style map and a pass that reads what it drops, so export, edit in Word, import again keeps everything Eigen can hold. A spike at the start of phase 3 decides whether our own reader replaces mammoth (§ Import). The schema has a page break. A corpus of real docx files, audited by a script, decides what else the schema should learn. html-to-docx (6.7 MB, and axios with it) leaves the Worker. No new API route, no database migration. About 15 to 20 working days left.
 
 ## Goals
 
@@ -70,7 +70,7 @@ P preserved, D degraded, L lost.
 | Horizontal rule | L | L |
 | Comments | L (the text stays) | L |
 | Page size and margins | P, from the page setup | L |
-| Page break | P at the top level; dropped in a list item, quote or table cell until the writer | P; a numbered list split by a break restarts at 1 |
+| Page break | P at the top level; dropped in a list item, quote or table cell until the writer | P; dropped in a nested list item, an item directly above a nested one, or a note; a numbered list split by a break restarts at 1 |
 | Footnotes | n/a | D, a `[1]` link and a list at the end |
 | Equations, simple fields (TOC) | n/a | L, the text is dropped |
 
@@ -159,7 +159,7 @@ Eigen's own fonts map back by name through `EIGEN_FONTS`. A foreign font (Calibr
 
 ### Schema: a page break
 
-The one schema addition here. A block node `pageBreak`, inserted from the editor's Insert menu, drawn in the editor as a dashed rule with a label, rendered in the HTML and PDF export as `break-after: page`, written to docx as a page break, and read back from one. Additive; stored docs don't have it. No migration.
+Built (phase 2). A block node `pageBreak`, inserted from the toolbar, the narrow toolbar's Insert menu or Mod-Enter, drawn on screen as a labeled dashed rule, `break-after: page` in print and the PDF, a Word page break at the docx's top level, and read back from one. No migration.
 
 ### The corpus
 
@@ -188,7 +188,7 @@ To decide what else to support, we collect real docx files and audit them:
 
 Today's exporter keeps its two bugs (WebP parts, deleted small text) until phase 1 replaces it. Phase 1 ends with html-to-docx removed.
 
-About 15 to 21 days left.
+About 15 to 20 days left.
 
 The tests: the round trip (export, import, compare the ProseMirror JSON) for a doc with every feature; XML assertions on the generated parts; imports of Word-, LibreOffice- and Google-Docs-made fixtures; the schema-coverage test. A docx can't be opened in Word on CI, so the browser-verification pass opens the exports in LibreOffice headless and, by hand, in Word, and reads the result.
 
