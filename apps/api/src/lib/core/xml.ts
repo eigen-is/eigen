@@ -8,8 +8,10 @@ export type XmlElement = {
     name: string;
     ns: string;
     local: string;
-    // As written: `xmlns` declarations included, prefixed names unresolved (xmlAttr resolves them).
+    // As written: `xmlns` declarations included, prefixed names unresolved.
     attributes: Record<string, string>;
+    // Each prefixed attribute's namespace, by its name as written; declarations aren't in it.
+    attributeNs: Readonly<Record<string, string>>;
     children: XmlContent[];
 };
 
@@ -26,9 +28,8 @@ export class XmlError extends ApiError {
 const XML_NAMESPACE = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 
-// Each prefixed attribute's namespace by its name as written, kept off XmlElement since only xmlAttr and the
-// serializer read it.
-const attributeNamespaces = new WeakMap<XmlElement, Map<string, string>>();
+// Shared by every element without a prefixed attribute: an object each costs a 1 MiB body of small elements 16 MB.
+const NO_ATTRIBUTE_NS: Readonly<Record<string, string>> = Object.freeze({});
 
 // Blank input is null rather than an error: an empty PROPFIND means allprop, an empty PROPPATCH does nothing.
 export function parseXml(input: string | Uint8Array): XmlElement | null {
@@ -94,9 +95,10 @@ function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     }
 }
 
-// Depth first on an explicit stack: Bun nests deeper than the JS stack has room for. One binding map serves the
-// whole walk, each element's declarations undone on its way out, so a body costs its declarations once rather than
-// every binding in scope per declaring element. Undone by setting, never deleting: a delete costs JSC's Map its size.
+// Depth first on an explicit stack: recursion runs out below 2x Bun's deepest nesting, main thread and Worker alike.
+// One binding map serves the whole walk, each element's declarations undone on its way out, so a body costs its
+// declarations once rather than every binding in scope per declaring element. Undone by setting, never deleting: a
+// delete costs JSC's Map its size.
 function resolve(root: XML.Node): XmlElement {
     const bindings = new Map<string, string | undefined>([['xml', XML_NAMESPACE]]);
     const open: { content: XML.Node['children']; next: number; element: XmlElement; shadowed: [string, string?][] }[] =
@@ -119,7 +121,7 @@ function resolve(root: XML.Node): XmlElement {
             shadowed.push([prefix, bindings.get(prefix)]);
             bindings.set(prefix, uri);
         }
-        let prefixed: Map<string, string> | undefined;
+        let attributeNs: Record<string, string> | undefined;
         let expanded: Set<string> | undefined;
         for (const attribute of Object.keys(node.attributes)) {
             if (declaredPrefix(attribute) !== undefined || !attribute.includes(':')) continue;
@@ -128,7 +130,7 @@ function resolve(root: XML.Node): XmlElement {
             const key = `${local} ${ns}`;
             if (expanded?.has(key)) throw new XmlError(`Duplicate attribute: ${attribute}`);
             (expanded ??= new Set()).add(key);
-            (prefixed ??= new Map()).set(attribute, ns);
+            (attributeNs ??= {})[attribute] = ns;
         }
         const content = node.children;
         // Sized up front: a pushed array keeps its growth slack, which a long child list makes megabytes.
@@ -137,9 +139,9 @@ function resolve(root: XML.Node): XmlElement {
             name: node.name,
             ...qualify(node.name, bindings, true),
             attributes: node.attributes,
+            attributeNs: attributeNs ?? NO_ATTRIBUTE_NS,
             children,
         };
-        if (prefixed) attributeNamespaces.set(element, prefixed);
         open.push({ content, next: 0, element, shadowed });
         return element;
     };
@@ -200,32 +202,34 @@ export function xmlText(element: XmlElement): string {
 }
 
 export function xmlAttr(element: XmlElement, ns: string, local: string): string | undefined {
+    if (local.includes(':')) return undefined;
     if (ns === '') {
         return local === 'xmlns' || !Object.hasOwn(element.attributes, local) ? undefined : element.attributes[local];
     }
-    for (const [name, attributeNs] of attributeNamespaces.get(element) ?? []) {
+    for (const [name, attributeNs] of Object.entries(element.attributeNs)) {
         if (attributeNs === ns && name.endsWith(`:${local}`)) return element.attributes[name];
     }
     return undefined;
 }
+
+// A binding is declared again on every child that uses it. Its prefix costs no more than the use, but a long URI used
+// by many children multiplies: the URIs the declarations add are capped at a whole DAV body.
+const MAX_DECLARED_URI_BYTES = 1_048_576;
 
 // Client XML kept as XML (a LOCK owner, a dead property's value), to stand alone or sit inside any envelope: each
 // child element declares the namespaces its subtree takes from outside it, the default one included (`xmlns=""`
 // too), so a prefix bound on an ancestor stays bound and an envelope's default doesn't leak in. `xml` is bound
 // everywhere.
 export function serializeXmlChildren(element: XmlElement): string {
-    let content = 0;
     let declaredUris = 0;
     const children = element.children.map((top) => {
-        if (typeof top === 'string') content += top.length;
         if (!isXmlElement(top)) return top;
         // Prefixes declared on the path inside the subtree (unset rather than deleted, as in resolve), and the
-        // bindings it takes from outside.
+        // bindings it takes from outside, found on an explicit stack as in resolve.
         const inner = new Map<string, boolean>();
         const outer: Record<string, string> = {};
-        // A copy in the shape Bun writes, on an explicit stack as in resolve.
-        const open: { source: XmlContent[]; next: number; copy: XmlCopy; own: string[] }[] = [];
-        const enter = (node: XmlElement): XmlCopy => {
+        const open: { children: XmlContent[]; next: number; own: string[] }[] = [];
+        const enter = (node: XmlElement) => {
             const own: string[] = [];
             for (const attribute of Object.keys(node.attributes)) {
                 const prefix = declaredPrefix(attribute);
@@ -234,46 +238,34 @@ export function serializeXmlChildren(element: XmlElement): string {
                 inner.set(prefix, true);
             }
             const uses: [string, string][] = [[prefixOf(node.name), node.ns]];
-            for (const [name, ns] of attributeNamespaces.get(node) ?? []) uses.push([prefixOf(name), ns]);
+            for (const [name, ns] of Object.entries(node.attributeNs)) uses.push([prefixOf(name), ns]);
             for (const [prefix, ns] of uses) {
                 const declaration = prefix === '' ? 'xmlns' : `xmlns:${prefix}`;
                 if (prefix === 'xml' || inner.get(prefix) || Object.hasOwn(outer, declaration)) continue;
                 outer[declaration] = ns;
                 declaredUris += ns.length;
+                if (declaredUris > MAX_DECLARED_URI_BYTES) throw new XmlError('Too many namespace declarations');
             }
-            content += node.name.length;
-            for (const [name, value] of Object.entries(node.attributes)) content += name.length + value.length;
-            const copy: XmlCopy = { name: node.name, attributes: node.attributes, children: [] };
-            open.push({ source: node.children, next: 0, copy, own });
-            return copy;
+            open.push({ children: node.children, next: 0, own });
         };
-        const copy = enter(top);
+        enter(top);
         while (open.length > 0) {
             const frame = open[open.length - 1];
-            if (frame.next < frame.source.length) {
-                const child = frame.source[frame.next++];
-                if (typeof child === 'string') content += child.length;
-                frame.copy.children.push(isXmlElement(child) ? enter(child) : child);
+            if (frame.next < frame.children.length) {
+                const child = frame.children[frame.next++];
+                if (isXmlElement(child)) enter(child);
                 continue;
             }
             open.pop();
             for (const prefix of frame.own) inner.set(prefix, false);
         }
-        return { ...copy, attributes: { ...outer, ...copy.attributes } };
+        // Bun writes only name, attributes and children, so the subtree goes in as it is.
+        return { ...top, attributes: { ...outer, ...top.attributes } };
     });
-    // A binding is declared again on every child that uses it. Its prefix costs no more than the use, but a long URI
-    // used by many children would multiply.
-    if (declaredUris > content + 65_536) throw new XmlError('Namespace declarations outgrow the content');
     // One wrapper so Bun escapes the text children too; its tags come off again.
     const wrapped = XML.stringify({ name: 'x', children });
     return wrapped === '<x/>' ? '' : wrapped.slice('<x>'.length, -'</x>'.length);
 }
-
-type XmlCopy = {
-    name: string;
-    attributes: Record<string, string>;
-    children: (string | XmlCopy | XML.Comment | XML.ProcessingInstruction)[];
-};
 
 function prefixOf(name: string): string {
     const colon = name.indexOf(':');

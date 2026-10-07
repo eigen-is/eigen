@@ -243,9 +243,12 @@ describe('parseXml namespaces', () => {
         expect(xmlAttr(root, 'DAV:', 'y')).toBe('2');
     });
 
-    test('a declaration and an inherited property are not attributes', () => {
-        const root = parsed('<a xmlns="DAV:" xmlns:D="DAV:"/>');
+    test('a declaration, a prefixed name and an inherited property are not attributes', () => {
+        const root = parsed('<a xmlns="DAV:" xmlns:D="DAV:" D:x="1"/>');
         expect(xmlAttr(root, '', 'xmlns')).toBeUndefined();
+        expect(xmlAttr(root, '', 'xmlns:D')).toBeUndefined();
+        expect(xmlAttr(root, '', 'D:x')).toBeUndefined();
+        expect(xmlAttr(root, 'DAV:', 'D:x')).toBeUndefined();
         expect(xmlAttr(root, '', 'constructor')).toBeUndefined();
         expect(xmlAttr(root, 'DAV:', 'D')).toBeUndefined();
     });
@@ -306,12 +309,17 @@ describe('parseXml namespaces', () => {
     });
 
     test('undoing a declaration costs the declaration, not the bindings in scope, in parse and serialize', () => {
-        // JSC's Map compacts on delete: undoing by deleting took this body seconds.
+        // Against the same body without the root's bindings, so an undo that pays per binding in scope shows as a
+        // multiple rather than as a clock this machine may or may not beat.
+        const timed = (declarations: string): number => {
+            const body = `<w><r ${declarations}>${'<b xmlns:q="urn:q"/>'.repeat(40_000)}</r></w>`;
+            const start = performance.now();
+            expect(serializeXmlChildren(parsed(body)).length).toBeLessThan(2 * body.length);
+            return performance.now() - start;
+        };
+        const base = timed('');
         const declarations = Array.from({ length: 10_000 }, (_, i) => `xmlns:p${i}="urn:${i}"`).join(' ');
-        const body = `<w><r ${declarations}>${'<b xmlns:q="urn:q"/>'.repeat(40_000)}</r></w>`;
-        const start = performance.now();
-        expect(serializeXmlChildren(parsed(body)).length).toBeLessThan(2 * body.length);
-        expect(performance.now() - start).toBeLessThan(1000);
+        expect(timed(declarations) / base).toBeLessThan(5);
     });
 
     test('resolves at the deepest nesting Bun reads, every level declaring a prefix', () => {
@@ -339,6 +347,14 @@ describe('parseXml namespaces', () => {
         expect(xmlAttr(name, XML_NS, 'lang')).toBe('en');
         expect(xmlAttr(run, XML_NS, 'space')).toBe('preserve');
         expect(xmlText(run)).toBe(' x ');
+    });
+
+    test('a copied element keeps its attribute namespaces', () => {
+        const root = parsed('<D:x xmlns:D="DAV:" D:a="1" xml:lang="en"/>');
+        for (const copy of [{ ...root }, structuredClone(root)]) {
+            expect(xmlAttr(copy, 'DAV:', 'a')).toBe('1');
+            expect(xmlAttr(copy, XML_NS, 'lang')).toBe('en');
+        }
     });
 
     test('a prefixed attribute resolves (an xlsx r:id)', () => {
@@ -461,11 +477,18 @@ describe('serializeXmlChildren', () => {
     });
 
     test('a long namespace URI that many children would each declare is an error, not a copy per child', () => {
-        const uri = `urn:${'x'.repeat(20_000)}`;
-        const body = `<D:prop xmlns:D="DAV:" xmlns:p="${uri}"><D:v>${'<p:a/>'.repeat(1000)}</D:v></D:prop>`;
+        const uri = `urn:${'x'.repeat(500_000)}`;
+        const body = `<D:prop xmlns:D="DAV:" xmlns:p="${uri}"><D:v>${'<p:a/>'.repeat(10)}</D:v></D:prop>`;
         const value = xmlChild(parsed(body), 'DAV:', 'v');
         expect(() => value && serializeXmlChildren(value)).toThrow(XmlError);
         expect(serializeXmlChildren(parsed(`<D:v xmlns:D="DAV:" xmlns:p="${uri}"><p:a/><p:a/></D:v>`))).toContain(uri);
+    });
+
+    test('a short URI that every one of many small children declares is no error', () => {
+        const uri = `urn:${'x'.repeat(31)}`;
+        const body = `<D:v xmlns:D="DAV:" xmlns:Z="${uri}">${'<Z:i>1</Z:i>'.repeat(3000)}</D:v>`;
+        const fragment = serializeXmlChildren(parsed(body));
+        expect(fragment.split(`<Z:i xmlns:Z="${uri}">1</Z:i>`)).toHaveLength(3001);
     });
 
     test('xml: is never declared', () => {
