@@ -1,6 +1,4 @@
-// Escaping for everything that writes XML by hand: the SVG the canvas kinds serialize, the API's WebDAV/CalDAV/
-// CardDAV response builders, S3 bucket-configuration bodies and the sitemap. Not escapeHtml from ./html: XML's
-// five predefined entities include `&apos;`, where HTML wants `&#39;`.
+// Not escapeHtml from ./html: XML's five predefined entities include `&apos;`, where HTML wants `&#39;`.
 
 // XML 1.0 § 2.2 Char, negated. The u flag reads a lone surrogate as one code point outside every range, so it
 // goes, while a valid pair is one code point above U+FFFF and stays.
