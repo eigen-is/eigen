@@ -1650,6 +1650,53 @@ describe('Sheets xlsx conversion fidelity', () => {
         }
     });
 
+    test('location hyperlinks parse only the hyperlinks block of a sheet', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'Sheet1!B2' },
+        ]);
+        // A whole-sheet tree of these 4 MB costs ~280 MB.
+        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('</worksheet>', `<extLst><ext uri="x">${'<a/>'.repeat(1_000_000)}</ext></extLst></worksheet>`),
+        );
+        const zip = await JSZip.loadAsync(buffer);
+
+        Bun.gc(true);
+        const before = process.memoryUsage().heapUsed;
+        const links = await readLocationHyperlinks(zip);
+        const grown = process.memoryUsage().heapUsed - before;
+
+        expect(links).toEqual(new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]));
+        expect(grown).toBeLessThan(64 * 1024 * 1024);
+    });
+
+    test('a malformed hyperlinks block loses its own sheet its location hyperlinks, an oversized workbook all', async () => {
+        const zip = new JSZip();
+        zip.file(
+            'xl/workbook.xml',
+            `<workbook xmlns="${TRANSITIONAL.spreadsheetml}" xmlns:r="${TRANSITIONAL.relationships}"><sheets><sheet name="Broken" sheetId="1" r:id="rId1"/><sheet name="Kept" sheetId="2" r:id="rId2"/></sheets></workbook>`,
+        );
+        zip.file(
+            'xl/_rels/workbook.xml.rels',
+            `<Relationships xmlns="${PACKAGE_RELATIONSHIPS}"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.xml"/></Relationships>`,
+        );
+        zip.file(
+            'xl/worksheets/sheet1.xml',
+            `<worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="A1" location="Kept!A1"></hyperlinks></worksheet>`,
+        );
+        zip.file(
+            'xl/worksheets/sheet2.xml',
+            `<?xml version="1.0"?><worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="B2" location="Broken!A1"/></hyperlinks><extLst/></worksheet>`,
+        );
+
+        expect(await readLocationHyperlinks(zip)).toEqual(new Map([['Kept', new Map([['B2', 'Broken!A1']])]]));
+
+        const workbook = (await zip.file('xl/workbook.xml')?.async('string')) ?? '';
+        zip.file('xl/workbook.xml', `${workbook}<!--${' '.repeat(8 * 1024 * 1024)}-->`);
+        expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+    });
+
     test('convert imports a sheet whose part Bun refuses, without its location hyperlinks', async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Sheet1');
