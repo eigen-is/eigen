@@ -31,7 +31,7 @@ The book's segment is `contacts` and its displayname "Contacts". Any other book 
 
 ## Apple needs write privileges on the book
 
-Apple Contacts reads editability from `current-user-privilege-set` and `owner`. Without them it treats every card as read-only. macOS then saves each edit as a new card with a fresh UID, so the server fills with duplicates while the Mac shows one contact. `ownershipEntries` (`lib/dav/xml.ts`) serves both props on the home and the book, for CardDAV and CalDAV alike. The privileges are truthful, because only the owner ever reaches the book. `carddav/carddav.test.ts` pins them.
+Apple Contacts reads editability from `current-user-privilege-set` and `owner`. Without them it treats every card as read-only. macOS then saves each edit as a new card with a fresh UID, so the server fills with duplicates while the Mac shows one contact. `ownershipProps` (`lib/dav/xml.ts`) serves both props on the home and the book, for CardDAV and CalDAV alike. The privileges are truthful, because only the owner ever reaches the book. `carddav/carddav.test.ts` pins them.
 
 ## The book is vCard 3.0, so a 4.0 PUT is transcoded
 
