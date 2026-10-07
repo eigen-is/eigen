@@ -4,7 +4,23 @@ import type { PropMap } from './propfind';
 
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
-const NS = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/"`;
+// The prefix every served fragment is written with, bound once on the envelope.
+export const DAV_NAMESPACES = {
+    D: 'DAV:',
+    C: 'urn:ietf:params:xml:ns:caldav',
+    CARD: 'urn:ietf:params:xml:ns:carddav',
+    CS: 'http://calendarserver.org/ns/',
+    ICAL: 'http://apple.com/ns/ical/',
+} as const;
+
+const NS = Object.entries(DAV_NAMESPACES)
+    .map(([prefix, uri]) => `xmlns:${prefix}="${uri}"`)
+    .join(' ');
+
+// Each fragment keyed by the name it opens with (`D:getetag`), so a key cannot disagree with its tag.
+export function propMap(fragments: string[]): PropMap {
+    return new Map(fragments.map((fragment) => [fragment.slice(1, fragment.search(/[\s/>]/)), fragment]));
+}
 
 function multistatus(responses: string[], extra?: string): string {
     return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;
@@ -18,12 +34,12 @@ export function multistatusResponse(responses: string[], extra?: string): Respon
     });
 }
 
-// DAV:error wrapping one precondition element (RFC 3253 § 1.6); the namespaces are inline so the body stands alone.
+// DAV:error wrapping one precondition element (RFC 3253 § 1.6), bound like the multistatus so the body stands alone.
 export function davError(status: number, element: string): Response {
-    return new Response(
-        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav">${element}</D:error>`,
-        { status, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-    );
+    return new Response(`<?xml version="1.0" encoding="utf-8"?><D:error ${NS}>${element}</D:error>`, {
+        status,
+        headers: { 'Content-Type': XML_CONTENT_TYPE },
+    });
 }
 
 export function response(href: string, propstats: string[]): string {
@@ -52,11 +68,7 @@ export function memberProps(etag: string, contentType: string): string[] {
 
 // The empty resourcetype is RFC 4918's discriminator for a non-collection.
 export function memberRowProps(etag: string, contentType: string): PropMap {
-    return new Map([
-        ['getetag', getetag(etag)],
-        ['getcontenttype', getcontenttype(contentType)],
-        ['resourcetype', `<D:resourcetype/>`],
-    ]);
+    return propMap([getetag(etag), getcontenttype(contentType), `<D:resourcetype/>`]);
 }
 
 // The one property a client asks /dav/ for before it knows anything else.
@@ -75,12 +87,9 @@ export function principalProps(userId: string): string[] {
 }
 
 // Apple's AddressBook and Calendar read editability from these props: a server that omits them is read-only, and every edit lands as a new resource with a fresh UID.
-export function ownershipEntries(ownerId: string): [string, string][] {
+export function ownershipProps(ownerId: string): string[] {
     return [
-        [
-            'current-user-privilege-set',
-            `<D:current-user-privilege-set><D:privilege><D:all/></D:privilege><D:privilege><D:read/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
-        ],
-        ['owner', `<D:owner><D:href>${principalHref(ownerId)}</D:href></D:owner>`],
+        `<D:current-user-privilege-set><D:privilege><D:all/></D:privilege><D:privilege><D:read/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
+        `<D:owner><D:href>${principalHref(ownerId)}</D:href></D:owner>`,
     ];
 }

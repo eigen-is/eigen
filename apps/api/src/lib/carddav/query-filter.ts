@@ -1,7 +1,7 @@
 // The addressbook-query filter engine (RFC 6352 § 8.6 / § 10.5). Matching runs in-memory over a card's
 // content-line AST — books are small and queries rare, so this stays off every hot path. The parser
 // (xml-parser.ts) builds a QueryFilter from the REPORT body; matchCard evaluates one card against it.
-import { asciiLower } from '../dav/xml-node';
+import { asciiLower } from '../dav/collation';
 import { unescapeText } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 

@@ -86,7 +86,7 @@ export async function readBoundedBodyBytes(request: Request, maxBytes: number): 
     return new Uint8Array(Bun.concatArrayBuffers(chunks));
 }
 
-// Lenient UTF-8 decode, which is what an XML body wants; a caller holding a user's file decodes it itself.
+// Lenient UTF-8 decode. An XML body stays bytes for parseXml, which reads the encoding it declares.
 export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
     const bytes = await readBoundedBodyBytes(request, maxBytes);
     return bytes === null ? null : new TextDecoder().decode(bytes);

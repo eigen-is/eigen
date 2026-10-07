@@ -1,8 +1,7 @@
+import type { WebdavDeadProp } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { ApiError } from '../core/errors';
-import { isNcName } from '../dav/propfind';
-import { asNode, isXmlNode } from '../dav/xml-node';
+import { parseXml, serializeXmlChildren, xmlChildren, xmlElements, xmlText } from '../core/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -13,7 +12,8 @@ import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, resp
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
 // server. PROPPATCH on a live property must return 403 Forbidden inside propstat
-// rather than persisting an opaque copy that would shadow the real value.
+// rather than persisting an opaque copy that would shadow the real value. A prop of the same name in no namespace
+// is refused too: a client reading names alone would take it for the live one.
 const PROTECTED_PROPS = new Set([
     'displayname',
     'getcontentlength',
@@ -28,103 +28,25 @@ const PROTECTED_PROPS = new Set([
     'supportedlock',
 ]);
 
-// Keep namespace prefixes in tag names so we can distinguish DAV: from custom
-// namespaces (Z:Win32CreationTime, etc.) — fast-xml-parser's removeNSPrefix
-// would collapse them all into bare local names. `htmlEntities: true` gates
-// numeric character reference decoding for codepoints > U+FF — without it,
-// `&#65536;` is left as a literal string instead of becoming 𐀀 (RFC 4918
-// expects round-trip fidelity for XML character references in dead props).
-const parser = new XMLParser({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    removeNSPrefix: false,
-    parseTagValue: false,
-    trimValues: false,
-    processEntities: true,
-    htmlEntities: true,
-});
+type PropOp = { op: 'set' | 'remove'; prop: WebdavDeadProp };
 
-type PropOp = { op: 'set' | 'remove'; namespace: string; name: string; value: string };
-
-function stripPrefix(tag: string): { prefix: string; local: string } {
-    const i = tag.indexOf(':');
-    return i === -1 ? { prefix: '', local: tag } : { prefix: tag.slice(0, i), local: tag.slice(i + 1) };
-}
-
-// Resolve an element's namespace from its prefix using the xmlns declarations
-// captured on the propertyupdate root and on the element itself. Bare elements
-// fall back to the document's default xmlns or DAV: (the implicit default for
-// PROPPATCH bodies served by Finder/curl/cadaver).
-function resolveNamespace(prefix: string, attrs: Record<string, string>, defaultDav: string): string {
-    if (!prefix) return attrs['@_xmlns'] ?? defaultDav;
-    const declared = attrs[`@_xmlns:${prefix}`];
-    if (declared) return declared;
-    if (prefix === 'D') return 'DAV:';
-    return '';
-}
-
-function* iterPropChildren(
-    propBlock: unknown,
-): IterableIterator<{ tag: string; value: string; attrs: Record<string, string> }> {
-    if (!isXmlNode(propBlock)) return;
-    for (const [tag, raw] of Object.entries(propBlock)) {
-        if (tag.startsWith('@_') || tag === '#text') continue;
-        const entries = Array.isArray(raw) ? raw : [raw];
-        for (const entry of entries) {
-            if (entry === null || entry === undefined) {
-                yield { tag, value: '', attrs: {} };
-                continue;
-            }
-            if (!isXmlNode(entry)) {
-                yield { tag, value: String(entry), attrs: {} };
-                continue;
-            }
-            const attrs: Record<string, string> = {};
-            for (const [k, v] of Object.entries(entry)) {
-                if (k.startsWith('@_')) attrs[k] = String(v);
-            }
-            const value = '#text' in entry ? String(entry['#text']) : '';
-            yield { tag, value, attrs };
-        }
+// RFC 4918 §9.2: set and remove run in document order, so a remove between two sets of one prop lands between them.
+function extractPropOps(body: Uint8Array): PropOp[] {
+    const root = parseXml(body);
+    if (!root) return [];
+    if (root.ns !== 'DAV:' || root.local !== 'propertyupdate') {
+        throw new ApiError(400, 'Expected <propertyupdate> root element');
     }
-}
-
-function extractPropOps(body: string): PropOp[] {
-    const trimmed = body.trim();
-    if (!trimmed) return [];
-    // fxp is lenient: a truncated body still yields ops. Validate first, like PROPFIND does.
-    if (XMLValidator.validate(trimmed) !== true) throw new ApiError(400, 'Malformed XML');
-    const parsed = asNode(parser.parse(trimmed));
-    const rootKey = Object.keys(parsed).find((k) => stripPrefix(k).local === 'propertyupdate');
-    if (!rootKey) return [];
-    const root = asNode(parsed[rootKey]);
-
-    const docAttrs: Record<string, string> = {};
-    for (const [k, v] of Object.entries(root)) {
-        if (k.startsWith('@_')) docAttrs[k] = String(v);
-    }
-
-    // RFC 4918 §9.2: PROPPATCH operations MUST be processed in document order.
-    // Object.entries preserves XML document order, but we must NOT separate set/remove
-    // into two passes — that breaks `<remove/>` followed by `<set/>` on the same prop.
-    // fast-xml-parser collapses repeated <set>/<remove> children into arrays, which
-    // also preserves their original order.
     const ops: PropOp[] = [];
-    for (const [k, raw] of Object.entries(root)) {
-        const verb = stripPrefix(k).local;
-        if (verb !== 'set' && verb !== 'remove') continue;
-        const entries = Array.isArray(raw) ? raw : [raw];
-        for (const entry of entries) {
-            if (!isXmlNode(entry)) continue;
-            const propKey = Object.keys(entry).find((pk) => stripPrefix(pk).local === 'prop');
-            if (!propKey) continue;
-            for (const child of iterPropChildren(entry[propKey])) {
-                const { prefix, local } = stripPrefix(child.tag);
-                // The name is persisted and echoed as an element; fxp accepts names XML forbids.
-                if (!isNcName(local)) throw new ApiError(400, `Invalid property name: ${local}`);
-                const namespace = resolveNamespace(prefix, { ...docAttrs, ...child.attrs }, 'DAV:');
-                ops.push({ op: verb, namespace, name: local, value: child.value });
-            }
+    for (const verb of xmlElements(root)) {
+        if (verb.ns !== 'DAV:' || (verb.local !== 'set' && verb.local !== 'remove')) continue;
+        for (const element of xmlChildren(verb, 'DAV:', 'prop').flatMap(xmlElements)) {
+            const { ns, local: name } = element;
+            // Element content stays XML; text is kept as written, whitespace included.
+            const prop: WebdavDeadProp = xmlElements(element).length
+                ? { ns, name, value: serializeXmlChildren(element), xml: true }
+                : { ns, name, value: xmlText(element) };
+            ops.push({ op: verb.local, prop });
         }
     }
     return ops;
@@ -135,7 +57,7 @@ export async function handleProppatch(args: {
     ownerId: string;
     mountId: string;
     pathStr: string;
-    body: string;
+    body: Uint8Array;
     ifHeader: string | null;
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, body, ifHeader } = args;
@@ -150,7 +72,8 @@ export async function handleProppatch(args: {
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    const isProtected = (op: PropOp) => op.namespace === 'DAV:' && PROTECTED_PROPS.has(op.name);
+    const isProtected = (op: PropOp) =>
+        (op.prop.ns === 'DAV:' || op.prop.ns === '') && PROTECTED_PROPS.has(op.prop.name);
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 
@@ -161,11 +84,10 @@ export async function handleProppatch(args: {
         let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
         let mutated = false;
         for (const op of ops) {
-            const idx = webdavProps.findIndex((p) => p.ns === op.namespace && p.name === op.name);
+            const idx = webdavProps.findIndex((p) => p.ns === op.prop.ns && p.name === op.prop.name);
             if (op.op === 'set') {
-                const next = { ns: op.namespace, name: op.name, value: op.value };
-                if (idx === -1) webdavProps.push(next);
-                else webdavProps = webdavProps.map((p, i) => (i === idx ? next : p));
+                if (idx === -1) webdavProps.push(op.prop);
+                else webdavProps = webdavProps.map((p, i) => (i === idx ? op.prop : p));
                 mutated = true;
             } else if (idx !== -1) {
                 webdavProps = webdavProps.filter((_, i) => i !== idx);
@@ -185,9 +107,14 @@ export async function handleProppatch(args: {
     }
 
     const propstats = ops.map((op) => {
-        const safeName = escapeXml(op.name);
+        const safeName = escapeXml(op.prop.name);
+        // A prop in no namespace can't take a prefix.
         const propEl =
-            op.namespace === 'DAV:' ? `<D:${safeName}/>` : `<X:${safeName} xmlns:X="${escapeXml(op.namespace)}"/>`;
+            op.prop.ns === 'DAV:'
+                ? `<D:${safeName}/>`
+                : op.prop.ns === ''
+                  ? `<${safeName} xmlns=""/>`
+                  : `<X:${safeName} xmlns:X="${escapeXml(op.prop.ns)}"/>`;
         if (!refused) return propstatStatus(200, 'OK', [propEl]);
         return isProtected(op)
             ? propstatStatus(403, 'Forbidden', [propEl])

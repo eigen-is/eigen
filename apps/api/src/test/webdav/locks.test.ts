@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { parseXml, xmlChild } from '../../lib/core/xml';
 import { getTestContext, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
@@ -67,6 +68,75 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect(refresh.status).toBe(200);
         const body = await refresh.text();
         expect(body).toContain(token);
+    });
+
+    test('the owner comes back as the XML the client sent, in the LOCK answer and in lockdiscovery', async () => {
+        const url = `${baseHref}/lock-owner-xml.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const lock = await lockRequest(url, { owner: 'Alice' });
+        expect(lock.status).toBe(200);
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', url, { headers: { Depth: '0' } });
+        for (const body of [await lock.text(), await find.text()]) {
+            expect(body).toMatch(/<D:owner><D:href[^>]*>mailto:Alice@example\.com<\/D:href><\/D:owner>/);
+        }
+    });
+
+    test('a LOCK body that is not well-formed → 400, and no lock is taken', async () => {
+        const url = `${baseHref}/lock-malformed.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+            body: '<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope>',
+        });
+        expect(res.status).toBe(400);
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'y' })).status).toBe(204);
+    });
+
+    test('a LOCK whose root is not DAV:lockinfo → 400, and no lock is taken', async () => {
+        const url = `${baseHref}/lock-root.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        for (const body of [
+            '<lockinfo><lockscope><exclusive/></lockscope><locktype><write/></locktype></lockinfo>',
+            '<F:lockinfo xmlns:F="urn:foreign" xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></F:lockinfo>',
+        ]) {
+            expect((await webdavRequest(ctx.alice.user.email, 'LOCK', url, { body })).status).toBe(400);
+        }
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'y' })).status).toBe(204);
+    });
+
+    test('a text-only owner comes back as text, character references decoded', async () => {
+        const url = `${baseHref}/lock-owner-text.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+            body: '<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype><D:owner>Alice &#65536; &lt;a&gt;</D:owner></D:lockinfo>',
+        });
+        expect(res.status).toBe(200);
+        const prop = parseXml(await res.text());
+        const lockdiscovery = prop && xmlChild(prop, 'DAV:', 'lockdiscovery');
+        const activelock = lockdiscovery && xmlChild(lockdiscovery, 'DAV:', 'activelock');
+        const owner = activelock && xmlChild(activelock, 'DAV:', 'owner');
+        expect(owner?.children).toEqual(['Alice \u{10000} <a>']);
+    });
+
+    test('a shared lockscope under another prefix for DAV: is shared', async () => {
+        const url = `${baseHref}/lock-shared-prefix.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const body =
+            '<x:lockinfo xmlns:x="DAV:"><x:lockscope><x:shared/></x:lockscope><x:locktype><x:write/></x:locktype></x:lockinfo>';
+        const first = await webdavRequest(ctx.alice.user.email, 'LOCK', url, { body });
+        expect(first.status).toBe(200);
+        expect(await first.text()).toContain('<D:lockscope><D:shared/></D:lockscope>');
+        expect((await webdavRequest(ctx.alice.user.email, 'LOCK', url, { body })).status).toBe(200);
+    });
+
+    // Every child re-declares the long URI it uses, so a body under the cap serializes to an owner many times its size.
+    test('an owner that serializes past the body cap → 400, and no lock is taken', async () => {
+        const url = `${baseHref}/lock-owner-big.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const uri = `urn:${'a'.repeat(30_000)}`;
+        const body = `<D:lockinfo xmlns:D="DAV:" xmlns:a="${uri}"><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype><D:owner>${'<a:x/>'.repeat(34)}</D:owner></D:lockinfo>`;
+        expect(body.length).toBeLessThan(65_536);
+        expect((await webdavRequest(ctx.alice.user.email, 'LOCK', url, { body })).status).toBe(400);
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'y' })).status).toBe(204);
     });
 
     test('UNLOCK with mismatched token → 409', async () => {

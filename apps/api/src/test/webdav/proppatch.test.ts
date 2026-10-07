@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { XMLValidator } from 'fast-xml-parser';
+import { parseXml, type XmlElement, xmlChild } from '../../lib/core/xml';
 import { getTestContext, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
@@ -140,6 +140,134 @@ describe('WebDAV PROPPATCH', () => {
         const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/proppatch-name.txt`, {
             headers: { Depth: '0' },
         });
-        expect(XMLValidator.validate(await find.text())).toBe(true);
+        expect(parseXml(await find.text())).not.toBeNull();
+    });
+
+    const proppatch = (name: string, body: BodyInit) =>
+        webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/${name}`, {
+            body,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        });
+
+    // The one row's 200 prop, read as XML so a test sees elements and namespaces rather than bytes.
+    async function deadProp(name: string, local: string, ns = 'urn:eigen-test'): Promise<XmlElement | undefined> {
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/${name}`, {
+            headers: { Depth: '0' },
+        });
+        const multistatus = parseXml(await res.text());
+        const row = multistatus && xmlChild(multistatus, 'DAV:', 'response');
+        const propstat = row && xmlChild(row, 'DAV:', 'propstat');
+        const prop = propstat && xmlChild(propstat, 'DAV:', 'prop');
+        return prop ? xmlChild(prop, ns, local) : undefined;
+    }
+
+    test('a dead property in no namespace stays in no namespace, never DAV:', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-no-ns.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-no-ns.txt',
+            '<D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><Tag>kept</Tag></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(parseXml(xml)).not.toBeNull();
+        expect(xml).toMatch(/<Tag xmlns=""\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 200 OK/);
+        expect((await deadProp('proppatch-no-ns.txt', 'Tag', ''))?.children).toEqual(['kept']);
+    });
+
+    test('a prop in no namespace named like a live one is refused as the live one is', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-no-ns-live.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-no-ns-live.txt',
+            '<D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><getetag>forged</getetag></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        expect(await res.text()).toMatch(/<getetag xmlns=""\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 403 Forbidden/);
+        expect(await deadProp('proppatch-no-ns-live.txt', 'getetag', '')).toBeUndefined();
+    });
+
+    test('PROPPATCH whose root is not DAV:propertyupdate → 400, nothing persisted', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-root.txt`, { body: 'a' });
+        for (const body of [
+            '<propertyupdate><set><prop><Z:x xmlns:Z="urn:eigen-test">1</Z:x></prop></set></propertyupdate>',
+            '<F:propertyupdate xmlns:F="urn:foreign" xmlns:D="DAV:"><D:set><D:prop><Z:x xmlns:Z="urn:eigen-test">1</Z:x></D:prop></D:set></F:propertyupdate>',
+        ]) {
+            expect((await proppatch('proppatch-root.txt', body)).status).toBe(400);
+        }
+        expect(await deadProp('proppatch-root.txt', 'x')).toBeUndefined();
+    });
+
+    test('PROPPATCH runs set, remove, set in document order: the last set stays', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-order.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-order.txt',
+            '<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:p>one</Z:p></D:prop></D:set><D:remove><D:prop><Z:p/></D:prop></D:remove><D:set><D:prop><Z:p>two</Z:p></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        expect((await deadProp('proppatch-order.txt', 'p'))?.children).toEqual(['two']);
+    });
+
+    test('a dead property with element content comes back as elements in their namespace', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-mixed.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-mixed.txt',
+            '<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:a>pre<Z:b>1</Z:b>post</Z:a></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        const [pre, b, post] = (await deadProp('proppatch-mixed.txt', 'a'))?.children ?? [];
+        expect(pre).toBe('pre');
+        expect(b).toMatchObject({ ns: 'urn:eigen-test', local: 'b', children: ['1'] });
+        expect(post).toBe('post');
+    });
+
+    test('a text dead property keeps markup characters as text', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-text.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-text.txt',
+            '<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:t>&lt;b&gt;</Z:t></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        expect((await deadProp('proppatch-text.txt', 't'))?.children).toEqual(['<b>']);
+    });
+
+    test('element content under a DAV: dead prop keeps its own D prefix binding', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-dav-xml.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-dav-xml.txt',
+            '<x:propertyupdate xmlns:x="DAV:" xmlns:D="urn:not-dav"><x:set><x:prop><x:myprop><D:href>h</D:href></x:myprop></x:prop></x:set></x:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        const [href] = (await deadProp('proppatch-dav-xml.txt', 'myprop', 'DAV:'))?.children ?? [];
+        expect(href).toMatchObject({ ns: 'urn:not-dav', local: 'href', children: ['h'] });
+    });
+
+    test('unprefixed children keep their namespace, the inherited default or none', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-unprefixed.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-unprefixed.txt',
+            '<D:propertyupdate xmlns:D="DAV:" xmlns="urn:default" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:p><a>1</a><b xmlns="">2</b></Z:p></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(207);
+        const [a, b] = (await deadProp('proppatch-unprefixed.txt', 'p'))?.children ?? [];
+        expect(a).toMatchObject({ ns: 'urn:default', local: 'a', children: ['1'] });
+        expect(b).toMatchObject({ ns: '', local: 'b', children: ['2'] });
+    });
+
+    test('PROPPATCH with a DOCTYPE → 400, nothing persisted', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-doctype.txt`, { body: 'a' });
+        const res = await proppatch(
+            'proppatch-doctype.txt',
+            '<?xml version="1.0"?><!DOCTYPE D:propertyupdate [<!ENTITY e "x">]><D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:x>&e;</Z:x></D:prop></D:set></D:propertyupdate>',
+        );
+        expect(res.status).toBe(400);
+        expect(await deadProp('proppatch-doctype.txt', 'x')).toBeUndefined();
+    });
+
+    test('PROPPATCH in UTF-16 with a BOM is read', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-utf16.txt`, { body: 'a' });
+        const xml =
+            '<?xml version="1.0" encoding="UTF-16"?><D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test"><D:set><D:prop><Z:u>één</Z:u></D:prop></D:set></D:propertyupdate>';
+        const bytes = new Uint8Array(Buffer.from(`﻿${xml}`, 'utf16le'));
+        expect((await proppatch('proppatch-utf16.txt', bytes)).status).toBe(207);
+        expect((await deadProp('proppatch-utf16.txt', 'u'))?.children).toEqual(['één']);
     });
 });

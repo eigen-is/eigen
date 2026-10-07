@@ -3,7 +3,7 @@ import { authenticateBasic } from '../auth/protocol-auth';
 import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
 import { resolveContacts } from '../contacts/get-contacts';
 import { requireSelf } from '../core/access';
-import { readBoundedBody } from '../core/http';
+import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
 import { type CollectionPath, parseCollectionPath } from '../dav/href';
 import { DAV_BODY_MAX_BYTES, parsePropfind, wantsBrief } from '../dav/propfind';
 import { davError } from '../dav/xml';
@@ -45,7 +45,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .route('PROPFIND', '/dav/addressbooks/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         const contacts = await resolveContacts(user, params.ownerId);
-        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const depth = request.headers.get('Depth') || '0';
         return handleAddressbookHomePropfind(
@@ -64,7 +64,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
-        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
@@ -138,7 +138,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (!parsed.collection) return new Response('Bad Request', { status: 400 });
         if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
-        const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleCardReport(contacts, params.ownerId, body);
     })

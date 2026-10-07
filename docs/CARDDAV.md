@@ -61,7 +61,7 @@ A metadata-only answer, like a `PROPFIND` Depth 1 or a plain `sync-collection`, 
 - **`addressbook-query`** filters in memory over every card, group cards included (`query-filter.ts`). RFC 6352 is match-only: clients treat every returned card as a match. So an unsupported collation or filter is a 403, never a superset. Results stop at the client's limit or 1000.
 - **Partial `address-data`** serves only the asked properties plus the skeleton the RFC requires (`address-data.ts`).
 
-A REPORT body is capped at 1 MiB before it reaches the XML parser. The card data one REPORT serves has CalDAV's byte budget, and a card past it still gets its row ([CALDAV.md § A REPORT past its byte budget still lists every resource](CALDAV.md#a-report-past-its-byte-budget-still-lists-every-resource)).
+A REPORT body is capped at 1 MiB before it reaches the XML parser, which reads it as CalDAV's are read: by namespace, with a malformed body a 400 ([CALDAV.md § A request body is read by namespace](CALDAV.md#a-request-body-is-read-by-namespace-and-a-malformed-one-is-a-400)). A filter element outside the CardDAV namespace is one Eigen can't map, so it is a 403 `supported-filter`. The card data one REPORT serves has CalDAV's byte budget, and a card past it still gets its row ([CALDAV.md § A REPORT past its byte budget still lists every resource](CALDAV.md#a-report-past-its-byte-budget-still-lists-every-resource)).
 
 ## A refused self-delete lists the card again
 
