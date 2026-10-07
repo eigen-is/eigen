@@ -52,7 +52,7 @@ An overwrite trashes the target first. So a request whose source and destination
 - The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state for years.
 - One path holds at most 32 locks. Shared locks stack without conflict, so past that a LOCK is a 423 and a client can't grow the table without bound.
 - DELETE and an overwrite release the replaced path's locks.
-- LOCK reads its two elements (`owner`, `lockscope`) by regex, not a parser: the owner is opaque client XML that must echo back as sent.
+- The `owner` a LOCK names is the client's own XML (RFC 4918 §14.17), often an `href`. The lock keeps it serialized and every lockdiscovery writes it back as XML, never escaped into text, so the client reads back the element it sent.
 
 ## PUT stages the body before the row
 
@@ -70,9 +70,11 @@ GET honors `If-Match` before `If-None-Match` (RFC 7232 §6), through the same `m
 
 PROPFIND serves Depth 0 and 1. Depth infinity, which is also what a missing `Depth` header means, is a 403 with `propfind-finite-depth`. Every row carries a fixed set of properties, whatever the body asks for ([ROADMAP.md](ROADMAP.md)). `getlastmodified` is always UTC, which Apple's `webdavfs` assumes. The requested folder also carries the mount's `quota-used-bytes` and `quota-available-bytes`, and its children don't.
 
-PROPPATCH answers a 207. A live property (`getetag`, `getcontentlength`, `displayname` and the rest) is a 403 in its propstat, since a stored copy would shadow the real value. A PROPPATCH is all or nothing (RFC 4918 §9.2), so one 403 saves none of the request and answers every other op 424. Any other property persists in `DrivePath.details.webdavProps`, such as Finder's tags or Office's `Win32CreationTime`. One path stores at most 64 KB of them, the same cap as a request body. A PROPPATCH that would pass it is a 507 and saves nothing. A property name that is not an XML name is a 400 before anything persists, because every later PROPFIND echoes it as an element.
+PROPPATCH answers a 207. A live property (`getetag`, `getcontentlength`, `displayname` and the rest) is a 403 in its propstat, since a stored copy would shadow the real value. A PROPPATCH is all or nothing (RFC 4918 §9.2), so one 403 saves none of the request and answers every other op 424. Any other property persists in `DrivePath.details.webdavProps`, such as Finder's tags or Office's `Win32CreationTime`. One path stores at most 64 KB of them, the same cap as a request body. A PROPPATCH that would pass it is a 507 and saves nothing.
 
-PROPFIND, PROPPATCH and LOCK bodies are capped at 64 KB (413 over it), which keeps an authenticated user from parking megabytes on `fast-xml-parser`'s synchronous path. PROPFIND and PROPPATCH validate the body with `XMLValidator` first, since the parser still yields ops from a truncated body.
+PROPPATCH runs its `set` and `remove` ops in document order (RFC 4918 §9.2), so `set`, `remove`, `set` on one property leaves the last value. A property is keyed by its namespace and local name, whatever prefix the client wrote. A value with element content is stored as serialized XML, `xml: true` on `WebdavDeadProp` (`packages/lib/src/types/drive.ts`), each element declaring the namespaces it uses, and PROPFIND writes it back raw. Litmus sets a namespaced XML value and checks that it reads back as elements. A text value is stored as text and escaped on the way out.
+
+PROPFIND, PROPPATCH and LOCK bodies are capped at 64 KB (413 over it), which keeps an authenticated user from parking megabytes on the synchronous parse. Each goes to `parseXml` (`apps/api/src/lib/core/xml.ts`) as bytes, as CalDAV's do ([CALDAV.md § A request body is read by namespace](CALDAV.md#a-request-body-is-read-by-namespace-and-a-malformed-one-is-a-400)): a body that is not well-formed, binds no prefix or carries a DOCTYPE is a 400 before anything persists, and so is a PROPFIND or LOCK whose root is not `DAV:propfind` or `DAV:lockinfo`. A blank body is allprop for PROPFIND, a lock refresh for LOCK with an `If` header, and nothing for PROPPATCH.
 
 ## Client junk files are accepted and hidden
 
@@ -88,7 +90,7 @@ Names are stored in NFC. Lookups normalize to NFC too, so a Finder path in NFD f
 
 ## The multistatus builders are WebDAV's own
 
-WebDAV shares a few pieces with CalDAV and CardDAV from `apps/api/src/lib/dav/`: `XML_CONTENT_TYPE` and `davError`, `isNcName`, and the `fast-xml-parser` narrowing `asNode` and `isXmlNode`. The multistatus builders stay its own in `webdav/xml.ts`. The dav ones declare the CalDAV and CardDAV namespaces and emit no newlines, and switching changes every multistatus, which needs a round of real clients first ([ROADMAP.md](ROADMAP.md)).
+WebDAV shares a few pieces with CalDAV and CardDAV from `apps/api/src/lib/dav/`: `XML_CONTENT_TYPE`, `davError`, and `parsePropfind`, which WebDAV runs only to check the body, since every row carries the same props. The multistatus builders stay its own in `webdav/xml.ts`. The dav ones declare the CalDAV and CardDAV namespaces and emit no newlines, and switching changes every multistatus, which needs a round of real clients first ([ROADMAP.md](ROADMAP.md)).
 
 ## Real clients set the bar
 

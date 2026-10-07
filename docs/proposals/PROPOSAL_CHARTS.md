@@ -194,7 +194,7 @@ The canvas engine got its design by porting Excalidraw's rules with their tests,
 
 ### xlsx import
 
-The importer reads charts straight from the zip it already holds, in the same Worker, after ExcelJS has produced the sheets (so sheet ids exist and names resolve). It parses the drawing and chart parts with `fast-xml-parser`, already an `apps/api` dependency (WebDAV, CardDAV), because chart XML is nested far deeper than the flat tags the hyperlink regex handles. The path is: sheet rels → drawing part → each anchor's `graphicFrame` → drawing rels → chart part. The same walk also finds `xdr:pic` anchors; importing floating images through `worksheet.getImages()` belongs next to it and should ship in the same phase.
+The importer reads charts straight from the zip it already holds, in the same Worker, after ExcelJS has produced the sheets (so sheet ids exist and names resolve). It parses the drawing and chart parts with `parseXml` (`apps/api/src/lib/core/xml.ts`, the reader every XML input goes through), matching elements by namespace, because chart XML is nested far deeper than the flat tags the hyperlink regex handles. The path is: sheet rels → drawing part → each anchor's `graphicFrame` → drawing rels → chart part. The same walk also finds `xdr:pic` anchors; importing floating images through `worksheet.getImages()` belongs next to it and should ship in the same phase.
 
 | DrawingML | Maps to | Notes |
 |---|---|---|
