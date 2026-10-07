@@ -4,7 +4,7 @@ This proposal replaces the docs app's docx export with a writer of our own, and 
 
 **Status:** proposed. The page setup is built (`packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it. The phase 1 spike is done and its questions are decided (§ Decisions 9 to 14). The page break is built (phase 2: `packages/lib/src/docs/eigendoc/nodes/page-break.ts`, its import split in `apps/api/src/lib/import/doc/from-docx.ts`, [DOCS.md](../DOCS.md#a-page-break-is-a-dashed-rule-on-screen-and-a-new-page-on-paper)). The writer and the import additions are not built. [ROADMAP.md](../ROADMAP.md) keeps its row. What it says about the code was true on 2026-10-06, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it. The feature table below was measured that day: a doc using every schema feature, exported through the real code, unzipped, and imported again. Its page break row is from 2026-10-07, pinned by `doc-export.test.ts` and `doc-import.test.ts`.
 
-> **TLDR**: Today a doc's docx is the export HTML fed to `@turbodocx/html-to-docx`, and a docx import runs mammoth. The structure survives both ways (headings, bold, italic, links, nested lists, merged cells), but almost every visual property is lost, and the export has two bugs: its WebP images make the package invalid, and text marked small is deleted. The new writer closes both; they aren't fixed in today's exporter. This proposal writes the docx ourselves from the ProseMirror JSON, the way xlsx is already written from the workbook and not from HTML. The writer emits `document.xml`, `styles.xml`, `numbering.xml`, `comments.xml` and the image and font parts with JSZip, which the repo already uses. The document keeps Eigen's font names and embeds the fonts, so Word and LibreOffice show the editor's typography. Paper is A4 with 2 cm margins, as in the editor. Images go in as their original bytes. Open comment threads become Word comments. On import, mammoth stays, with a style map and a pass that reads what mammoth drops, so export, edit in Word, import again keeps everything Eigen can hold. The schema gains a page break. A corpus of real docx files, audited by a script, decides what else the schema should learn. html-to-docx (6.7 MB, and axios with it) leaves the Worker. No new API route, no database migration. About 14 to 19 working days left.
+> **TLDR**: Today a doc's docx is the export HTML fed to `@turbodocx/html-to-docx`, and a docx import runs mammoth. The structure survives both ways (headings, bold, italic, links, nested lists, merged cells), but almost every visual property is lost, and the export has two bugs: its WebP images make the package invalid, and text marked small is deleted. The new writer closes both; they aren't fixed in today's exporter. This proposal writes the docx ourselves from the ProseMirror JSON, the way xlsx is already written from the workbook and not from HTML. The writer emits `document.xml`, `styles.xml`, `numbering.xml`, `comments.xml` and the image and font parts with JSZip, which the repo already uses. The document keeps Eigen's font names and embeds the fonts, so Word and LibreOffice show the editor's typography. Paper is A4 with 2 cm margins, as in the editor. Images go in as their original bytes. Open comment threads become Word comments. On import, mammoth stays unless a spike at the start of phase 3 shows our own reader does better (§ Import), with a style map and a pass that reads what mammoth drops, so export, edit in Word, import again keeps everything Eigen can hold. The schema gains a page break. A corpus of real docx files, audited by a script, decides what else the schema should learn. html-to-docx (6.7 MB, and axios with it) leaves the Worker. No new API route, no database migration. About 15 to 21 working days left.
 
 ## Goals
 
@@ -16,7 +16,7 @@ This proposal replaces the docs app's docx export with a writer of our own, and 
 
 ## Non-goals
 
-- Replacing mammoth. Word files from the wild are messy, and mammoth handles much of that. We add to it instead.
+- Replacing mammoth before phase 3. Word files from the wild are messy, and mammoth handles much of that. Whether our own reader replaces it is decided at the start of phase 3 (§ Import).
 - Importing Word comments as Eigen threads. A Word comment's author is a name, not an Eigen user, and that needs its own design. Later.
 - Headers, footers, footnotes, tables of contents, equations, tracked changes, sections. They go on the corpus list (§ The corpus), not into this proposal.
 - Font size, line spacing, indents and cell shading as schema features. Those are editor decisions. Until they exist, import keeps the text and drops the style.
@@ -140,7 +140,9 @@ The PDF keeps the 2560 px cap: on A4 with 2 cm margins that is about 380 dpi acr
 
 ### Import: mammoth plus what it drops
 
-mammoth stays. Three additions:
+**Open: our own reader instead of mammoth.** Decided at the start of phase 3, once the writer works. Everything below adds to mammoth what it doesn't read. The writer will hold the eigendoc ↔ OOXML mapping both ways, so a reader from `document.xml` straight to ProseMirror JSON could replace the scanner, the carriers, the HTML pass and DOMPurify. Against it: mammoth's years of handling messy files (fields, tracked changes, alternate content, VML, text boxes), and a reader needs an XML parser that keeps mixed sibling order (`Bun.XML` doesn't; `fast-xml-parser` damaged runs with entity processing on). A spike of 1 to 2 days builds a reader for the schema's nodes and runs it beside mammoth plus the scanner on the corpus. The kept and lost counts decide. Until then, the plan below stands.
+
+With mammoth, three additions:
 
 1. **A style map.** `u => u`; `p[style-name='Title'] => h1:fresh`; `p[style-name='Subtitle'] => p:fresh`; `p[style-name='Quote'] => blockquote > p:fresh`; our own `Code Block` style back to a code block; `highlight => mark`; `br[type='page']` to the page break node. The importer's schema gets `lowlight`, so it has a code block. mammoth already turns a Word checkbox content control into `<input type="checkbox">`; the HTML pass turns that into a task item.
 2. **mammoth's document model.** `transformDocument` sees each paragraph and run before conversion, and mammoth 1.12.2 reads alignment, font, size and highlight into it. Those become class names the style map passes through, and a pass over the HTML turns the classes into the attributes the schema parses. No order matching. `mammoth.transforms.run` does not reach footnotes or comments (they live in `doc.notes` and `doc.comments`), so the pass walks them itself.
@@ -179,13 +181,14 @@ To decide what else to support, we collect real docx files and audit them:
 | 1 | Embedded fonts: static files, obfuscation, font table | 1–1.5 |
 | 1 | Comments with replies: `readCards` carved out, the messages query, the index and user reads, the description as text, the parts in the Worker | 2–2.5 |
 | 2 | Page break node in the schema, editor, HTML/PDF and docx | built |
-| 3 | Import: style map, `transformDocument` with the notes and comments, the scanner and its carriers, the shared font map, image width | 2–3 |
 | 3 | Corpus, audit script, first table | 1 |
+| 3 | Decide: our own reader or mammoth plus the scanner, a spike on the corpus | 1–2 |
+| 3 | Import: style map, `transformDocument` with the notes and comments, the scanner and its carriers, the shared font map, image width (or the same on our own reader) | 2–3 |
 | all | Tests; EXPORT.md (its one-HTML-document rule); DOCS.md (the importer now passes `lowlight`); help center | 1 |
 
 Today's exporter keeps its two bugs (WebP parts, deleted small text) until phase 1 replaces it. Phase 1 ends with html-to-docx removed.
 
-About 14 to 19 days left.
+About 15 to 21 days left.
 
 The tests: the round trip (export, import, compare the ProseMirror JSON) for a doc with every feature; XML assertions on the generated parts; imports of Word-, LibreOffice- and Google-Docs-made fixtures; the schema-coverage test. A docx can't be opened in Word on CI, so the browser-verification pass opens the exports in LibreOffice headless and, by hand, in Word, and reads the result.
 
