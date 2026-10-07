@@ -39,6 +39,9 @@ type MammothDocument = MammothElement & {
 // rather than inside one.
 const PAGE_BREAK: MammothElement = { type: 'break', breakType: 'page' };
 
+// Not a non-breaking space: that's a spacer.
+const ASCII_WHITESPACE = /[ \t\r\n]/g;
+
 const extensions = getDocExtensions();
 const schema = getSchema(extensions);
 const parser = PmDOMParser.fromSchema(schema);
@@ -114,8 +117,11 @@ function splitAtPageBreaks(element: MammothElement): MammothElement {
             // A top-level break can't stand inside a nested list without cutting it apart, so there the break goes.
             if (isNestedItem(child)) return [withoutPageBreaks(child)];
             const [first, ...rest] = splitElement(child);
-            // Nor between an item and its nested items: the breaks that trail the item's text go.
-            if (child.numbering && isNestedItem(children[index + 1])) rest.splice(rest.findLastIndex(hasContent) + 1);
+            // Nor between an item and its nested items: the breaks that trail the item's text go, not what they split off.
+            if (child.numbering && isNestedItem(children[index + 1])) {
+                const trailing = rest.splice(rest.findLastIndex(hasContent) + 1);
+                (rest.at(-1) ?? first).children?.push(...trailing.flatMap((part) => part.children ?? []));
+            }
             return [first, ...rest.flatMap((part) => [PAGE_BREAK, part])];
         }),
     };
@@ -142,18 +148,19 @@ function splitElement(element: MammothElement): [MammothElement, ...MammothEleme
     return parts;
 }
 
-// ASCII whitespace only: a non-breaking space is a spacer.
 function isEmptyBlock(element: Element | null): element is Element {
     return (
         !!element?.matches('p, h1, h2, h3, h4, h5, h6') &&
-        !element.textContent?.replace(/[ \t\r\n]/g, '') &&
+        !element.textContent?.replace(ASCII_WHITESPACE, '') &&
         !element.querySelector('img, br')
     );
 }
 
 function hasContent(element: MammothElement): boolean {
     return (
-        element.type === 'image' || (element.type === 'text' && !!element.value) || !!element.children?.some(hasContent)
+        element.type === 'image' ||
+        (element.type === 'text' && !!element.value?.replace(ASCII_WHITESPACE, '')) ||
+        !!element.children?.some(hasContent)
     );
 }
 

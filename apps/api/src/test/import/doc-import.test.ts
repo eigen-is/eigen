@@ -335,6 +335,10 @@ const ORDERED = '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numP
 const NESTED = '<w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="2"/></w:numPr></w:pPr>';
 const run = (text: string): string => `<w:r><w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, properties = ''): string => `<w:p>${properties}${inner}</w:p>`;
+const nestedList = (inner: string): string =>
+    `${paragraph(inner, ORDERED)}${paragraph(run('A'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
+const FOOTNOTE_REFERENCE = '<w:r><w:footnoteReference w:id="1"/></w:r>';
+const FOOTNOTE = `<w:footnote w:id="1">${paragraph(run('Note'))}</w:footnote>`;
 
 // Each top-level block as its type, a heading's level and its text; a list's items are joined by a slash.
 function blocks(json: JSONContent): string[] {
@@ -430,6 +434,16 @@ describe('docx import — page breaks', () => {
         expect(blocks(json)).toEqual(['orderedList(One/A/Two)']);
     });
 
+    test.each([
+        ['a footnote reference', FOOTNOTE_REFERENCE, ['orderedList(One[1]/A/Two)', 'orderedList(Note ↑)']],
+        ['a line break', '<w:r><w:br/></w:r>', ['orderedList(One/A/Two)']],
+        ['a space', '<w:r><w:t xml:space="preserve"> </w:t></w:r>', ['orderedList(One/A/Two)']],
+    ])('a break that trails a top-level item before %s goes without it', async (_what, after, expected) => {
+        const json = await importJson(nestedList(`${run('One')}<w:r>${PAGE_BREAK}</w:r>${after}`), FOOTNOTE);
+        expect(json).toEqual(await importJson(nestedList(`${run('One')}${after}`), FOOTNOTE));
+        expect(blocks(json)).toEqual(expected);
+    });
+
     // Only a break that trails the item's text cuts it off from its nested items.
     test.each([
         [
@@ -448,8 +462,22 @@ describe('docx import — page breaks', () => {
             ['orderedList(One)', 'pageBreak', 'orderedList(/A/Two)'],
         ],
     ])('a break that %s stays a page break', async (_where, item, expected) => {
-        const body = `${paragraph(item, ORDERED)}${paragraph(run('A'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
-        expect(await importBlocks(body)).toEqual(expected);
+        expect(await importBlocks(nestedList(item))).toEqual(expected);
+    });
+
+    test('a second break that trails a split top-level item goes without what follows it', async () => {
+        const json = await importJson(
+            nestedList(
+                `${run('One')}<w:r>${PAGE_BREAK}</w:r>${run('Half')}<w:r>${PAGE_BREAK}</w:r>${FOOTNOTE_REFERENCE}`,
+            ),
+            FOOTNOTE,
+        );
+        expect(blocks(json)).toEqual([
+            'orderedList(One)',
+            'pageBreak',
+            'orderedList(Half[1]/A/Two)',
+            'orderedList(Note ↑)',
+        ]);
     });
 
     test('two breaks in a row keep both page breaks', async () => {
