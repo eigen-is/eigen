@@ -420,6 +420,7 @@ describe('docx import — page breaks', () => {
     // Split there, the nested item would open a list of its own under an empty bullet.
     test.each([
         ['ends a top-level item before its nested child', [`${run('One')}<w:r>${PAGE_BREAK}</w:r>`]],
+        ['trails a top-level item before an empty run', [`${run('One')}<w:r>${PAGE_BREAK}<w:t></w:t></w:r>`]],
         ['stands as an item between a parent and its nested child', [run('One'), `<w:r>${PAGE_BREAK}</w:r>`]],
     ])('a break that %s is dropped and leaves the list whole', async (_where, items) => {
         const list = (top: string[]): string =>
@@ -429,10 +430,38 @@ describe('docx import — page breaks', () => {
         expect(blocks(json)).toEqual(['orderedList(One/A/Two)']);
     });
 
+    // Only a break that trails the item's text cuts it off from its nested items.
+    test.each([
+        [
+            'starts a top-level item above a nested child',
+            `<w:r>${PAGE_BREAK}</w:r>${run('One')}`,
+            ['pageBreak', 'orderedList(One/A/Two)'],
+        ],
+        [
+            'splits a top-level item above a nested child',
+            `${run('One')}<w:r>${PAGE_BREAK}</w:r>${run('Half')}`,
+            ['orderedList(One)', 'pageBreak', 'orderedList(Half/A/Two)'],
+        ],
+        [
+            'puts an image after a top-level item above a nested child',
+            `${run('One')}<w:r>${PAGE_BREAK}</w:r>${GOLDEN_DOCX_IMAGE_RUN}`,
+            ['orderedList(One)', 'pageBreak', 'orderedList(/A/Two)'],
+        ],
+    ])('a break that %s stays a page break', async (_where, item, expected) => {
+        const body = `${paragraph(item, ORDERED)}${paragraph(run('A'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
+        expect(await importBlocks(body)).toEqual(expected);
+    });
+
     test('two breaks in a row keep both page breaks', async () => {
         expect(
             await importBlocks(paragraph(`${run('Before')}<w:r>${PAGE_BREAK}${PAGE_BREAK}</w:r>${run('After')}`)),
         ).toEqual(['paragraph(Before)', 'pageBreak', 'pageBreak', 'paragraph(After)']);
+    });
+
+    test('a half holding only spaces beside a break leaves no empty paragraph', async () => {
+        const spaces = (text: string): string => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+        const body = `${paragraph(run('Before'))}${paragraph(`${spaces(' ')}<w:r>${PAGE_BREAK}</w:r>${spaces('  ')}`)}${paragraph(run('After'))}`;
+        expect(await importBlocks(body)).toEqual(['paragraph(Before)', 'pageBreak', 'paragraph(After)']);
     });
 
     test('a spacer paragraph holding a non-breaking space beside a break stays', async () => {

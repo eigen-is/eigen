@@ -25,6 +25,7 @@ const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
 
 type MammothElement = {
     type: string;
+    value?: string;
     breakType?: string;
     numbering?: { level: string } | null;
     children?: MammothElement[];
@@ -110,12 +111,11 @@ function splitAtPageBreaks(element: MammothElement): MammothElement {
         ...element,
         children: children.flatMap((child, index) => {
             if (child.type !== 'paragraph') return [splitAtPageBreaks(child)];
-            // A top-level break can't stand inside a nested list, or between an item and its nested items,
-            // without cutting the list apart, so there the break goes.
-            if (isNestedItem(child) || (child.numbering && isNestedItem(children[index + 1]))) {
-                return [withoutPageBreaks(child)];
-            }
+            // A top-level break can't stand inside a nested list without cutting it apart, so there the break goes.
+            if (isNestedItem(child)) return [withoutPageBreaks(child)];
             const [first, ...rest] = splitElement(child);
+            // Nor between an item and its nested items: the breaks that trail the item's text go.
+            if (child.numbering && isNestedItem(children[index + 1])) rest.splice(rest.findLastIndex(hasContent) + 1);
             return [first, ...rest.flatMap((part) => [PAGE_BREAK, part])];
         }),
     };
@@ -142,8 +142,19 @@ function splitElement(element: MammothElement): [MammothElement, ...MammothEleme
     return parts;
 }
 
+// ASCII whitespace only: a non-breaking space is a spacer.
 function isEmptyBlock(element: Element | null): element is Element {
-    return !!element?.matches('p, h1, h2, h3, h4, h5, h6') && !element.textContent && !element.querySelector('img, br');
+    return (
+        !!element?.matches('p, h1, h2, h3, h4, h5, h6') &&
+        !element.textContent?.replace(/[ \t\r\n]/g, '') &&
+        !element.querySelector('img, br')
+    );
+}
+
+function hasContent(element: MammothElement): boolean {
+    return (
+        element.type === 'image' || (element.type === 'text' && !!element.value) || !!element.children?.some(hasContent)
+    );
 }
 
 function withoutPageBreaks(element: MammothElement): MammothElement {
