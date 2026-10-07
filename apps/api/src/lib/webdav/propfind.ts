@@ -3,7 +3,7 @@ import { escapeXml } from '@workspace/lib/xml';
 import { getMountQuotaState } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { parsePropfind } from '../dav/propfind';
-import { davError } from '../dav/xml';
+import { DAV_NAMESPACES, davError } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { isHiddenName } from './container-overlay';
@@ -20,7 +20,7 @@ function deadPropsXml(path: DrivePath): string[] {
         const safeName = escapeXml(dp.name);
         // Element content was serialized from the client's XML when it was set; text is escaped here.
         const safeValue = dp.xml ? dp.value : escapeXml(dp.value);
-        if (dp.ns === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
+        if (dp.ns === DAV_NAMESPACES.D) return `<D:${safeName}>${safeValue}</D:${safeName}>`;
         // The prop's namespace is its default: no prefix to pick, and XML content declares its own bindings, xmlns="" too.
         return `<${safeName} xmlns="${escapeXml(dp.ns)}">${safeValue}</${safeName}>`;
     });

@@ -1,7 +1,8 @@
 import type { WebdavDeadProp } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { parseXml, serializeXmlChildren, XML_NAMESPACE, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { parseXmlRoot, serializeXmlChildren, XML_NAMESPACE, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { DAV_NAMESPACES } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
@@ -29,19 +30,18 @@ const PROTECTED_PROPS = new Set([
     'supportedlock',
 ]);
 
+const DAV = DAV_NAMESPACES.D;
+
 type PropOp = { op: 'set' | 'remove'; prop: WebdavDeadProp };
 
 // RFC 4918 §9.2: set and remove run in document order, so a remove between two sets of one prop lands between them.
 function extractPropOps(body: Uint8Array): PropOp[] {
-    const root = parseXml(body);
+    const root = parseXmlRoot(body, DAV, 'propertyupdate');
     if (!root) return [];
-    if (root.ns !== 'DAV:' || root.local !== 'propertyupdate') {
-        throw new ApiError(400, 'Expected <propertyupdate> root element');
-    }
     const ops: PropOp[] = [];
     for (const verb of xmlElements(root)) {
-        if (verb.ns !== 'DAV:' || (verb.local !== 'set' && verb.local !== 'remove')) continue;
-        for (const element of xmlChildren(verb, 'DAV:', 'prop').flatMap(xmlElements)) {
+        if (verb.ns !== DAV || (verb.local !== 'set' && verb.local !== 'remove')) continue;
+        for (const element of xmlChildren(verb, DAV, 'prop').flatMap(xmlElements)) {
             const { ns, local: name } = element;
             // Element content stays XML; text is kept as written, whitespace included.
             const prop: WebdavDeadProp = xmlElements(element).length
@@ -76,7 +76,7 @@ export async function handleProppatch(args: {
     // The xml namespace takes no other prefix (Namespaces in XML § 3), so a prop in it could be stored but never listed.
     const isProtected = ({ op, prop }: PropOp) =>
         prop.ns === XML_NAMESPACE ||
-        (PROTECTED_PROPS.has(prop.name) && (prop.ns === 'DAV:' || (prop.ns === '' && op === 'set')));
+        (PROTECTED_PROPS.has(prop.name) && (prop.ns === DAV || (prop.ns === '' && op === 'set')));
     // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
     const refused = ops.some(isProtected);
 
@@ -113,7 +113,7 @@ export async function handleProppatch(args: {
         const safeName = escapeXml(op.prop.name);
         // A prop in no namespace can't take a prefix.
         const propEl =
-            op.prop.ns === 'DAV:'
+            op.prop.ns === DAV
                 ? `<D:${safeName}/>`
                 : op.prop.ns === XML_NAMESPACE
                   ? `<xml:${safeName}/>`

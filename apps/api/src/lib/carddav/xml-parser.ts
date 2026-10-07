@@ -1,6 +1,15 @@
 import { ApiError } from '../core/errors';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
-import { UnsupportedFilterError } from '../dav/report-request';
+import {
+    parseXml,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+    xmlTrimmedText,
+} from '../core/xml';
+import { readHrefs, readSyncToken, UnsupportedFilterError } from '../dav/report-request';
 import { DAV_NAMESPACES } from '../dav/xml';
 import {
     assertSupportedCollation,
@@ -10,6 +19,7 @@ import {
     type TextMatch,
 } from './query-filter';
 
+const DAV = DAV_NAMESPACES.D;
 const CARDDAV = DAV_NAMESPACES.CARD;
 
 export type CardReportRequest =
@@ -23,18 +33,16 @@ export type CardReportRequest =
       }
     | { type: 'sync-collection'; syncToken: string | undefined; wantsData: boolean };
 
-const attr = (node: XmlElement, name: string): string | null => xmlAttr(node, '', name) ?? null;
-
 // The requested <D:prop> container: whether address-data was asked for at all, and the CARD:prop name list
 // under it (the partial-retrieval subset) when present. Full retrieval — <CARD:address-data/> with no
 // children — leaves partialProps null, which is the handler's "serve the stored bytes whole" signal.
 function readProps(root: XmlElement): { wantsData: boolean; partialProps: string[] | null } {
-    const prop = xmlChild(root, 'DAV:', 'prop');
+    const prop = xmlChild(root, DAV, 'prop');
     const addressData = prop && xmlChild(prop, CARDDAV, 'address-data');
     const names = addressData
         ? xmlChildren(addressData, CARDDAV, 'prop')
-              .map((p) => attr(p, 'name'))
-              .filter((n) => n !== null)
+              .map((p) => xmlAttr(p, '', 'name'))
+              .filter((n) => n !== undefined)
         : [];
     return { wantsData: addressData !== undefined, partialProps: names.length ? names : null };
 }
@@ -57,15 +65,15 @@ const PARAM_FILTER_CHILDREN = new Set(['is-not-defined', 'text-match']);
 // an unsupported one is a book-independent 403.
 function parseTextMatch(node: XmlElement): TextMatch {
     assertOnlyChildren(node, new Set());
-    const collation = attr(node, 'collation');
+    const collation = xmlAttr(node, '', 'collation') ?? null;
     assertSupportedCollation(collation);
-    const matchTypeAttr = attr(node, 'match-type');
-    const matchType = matchTypeAttr !== null && isMatchType(matchTypeAttr) ? matchTypeAttr : 'contains';
+    const matchTypeAttr = xmlAttr(node, '', 'match-type');
+    const matchType = matchTypeAttr !== undefined && isMatchType(matchTypeAttr) ? matchTypeAttr : 'contains';
     return {
         collation,
         matchType,
-        negate: attr(node, 'negate-condition') === 'yes',
-        value: xmlText(node).trim(),
+        negate: xmlAttr(node, '', 'negate-condition') === 'yes',
+        value: xmlTrimmedText(node),
     };
 }
 
@@ -74,7 +82,7 @@ function parseParamFilter(node: XmlElement): ParamFilter {
     const isNotDefined = xmlChild(node, CARDDAV, 'is-not-defined') !== undefined;
     const textMatch = xmlChild(node, CARDDAV, 'text-match');
     return {
-        name: (attr(node, 'name') ?? '').toUpperCase(),
+        name: (xmlAttr(node, '', 'name') ?? '').toUpperCase(),
         isNotDefined,
         textMatch: isNotDefined || !textMatch ? null : parseTextMatch(textMatch),
     };
@@ -84,8 +92,8 @@ function parsePropFilter(node: XmlElement): PropFilter {
     assertOnlyChildren(node, PROP_FILTER_CHILDREN);
     const isNotDefined = xmlChild(node, CARDDAV, 'is-not-defined') !== undefined;
     return {
-        name: (attr(node, 'name') ?? '').toUpperCase(),
-        test: attr(node, 'test') === 'allof' ? 'allof' : 'anyof',
+        name: (xmlAttr(node, '', 'name') ?? '').toUpperCase(),
+        test: xmlAttr(node, '', 'test') === 'allof' ? 'allof' : 'anyof',
         isNotDefined,
         // is-not-defined and text-match/param-filter are mutually exclusive (§ 10.5.1); is-not-defined wins.
         textMatches: isNotDefined ? [] : xmlChildren(node, CARDDAV, 'text-match').map(parseTextMatch),
@@ -96,24 +104,21 @@ function parsePropFilter(node: XmlElement): PropFilter {
 function parseFilter(node: XmlElement): QueryFilter {
     assertOnlyChildren(node, FILTER_CHILDREN);
     return {
-        test: attr(node, 'test') === 'allof' ? 'allof' : 'anyof',
+        test: xmlAttr(node, '', 'test') === 'allof' ? 'allof' : 'anyof',
         propFilters: xmlChildren(node, CARDDAV, 'prop-filter').map(parsePropFilter),
     };
 }
 
 // Parse a CardDAV REPORT body into one of the three request shapes. A blank body, an unrecognised root or
-// unparseable XML throws so the handler answers 400 (the caldav report.ts contract). An addressbook-query filter
-// that names an unsupported collation or an unmappable element throws the two typed errors above, which the
-// handler maps to their 403 preconditions.
+// unparseable XML is a 400, as in CalDAV. An addressbook-query filter that names an unsupported collation or an
+// unmappable element throws the two typed errors, which the handler maps to their 403 preconditions.
 export function parseCardReport(body: Uint8Array): CardReportRequest {
     const root = parseXml(body);
     if (!root) throw new ApiError(400, 'Empty REPORT');
 
     if (root.ns === CARDDAV && root.local === 'addressbook-multiget') {
         const { wantsData, partialProps } = readProps(root);
-        // Trimmed: a client that indents its body indents inside the href too.
-        const hrefs = xmlChildren(root, 'DAV:', 'href').map((href) => xmlText(href).trim());
-        return { type: 'addressbook-multiget', hrefs, wantsData, partialProps };
+        return { type: 'addressbook-multiget', hrefs: readHrefs(root), wantsData, partialProps };
     }
     if (root.ns === CARDDAV && root.local === 'addressbook-query') {
         const { wantsData, partialProps } = readProps(root);
@@ -127,11 +132,9 @@ export function parseCardReport(body: Uint8Array): CardReportRequest {
         const filter = filterNode ? parseFilter(filterNode) : null;
         return { type: 'addressbook-query', filter, limit, wantsData, partialProps };
     }
-    if (root.ns === 'DAV:' && root.local === 'sync-collection') {
+    if (root.ns === DAV && root.local === 'sync-collection') {
         const { wantsData } = readProps(root);
-        // An empty <D:sync-token/> is the initial-full-sync signal (same as caldav/xml-parser.ts).
-        const token = xmlChild(root, 'DAV:', 'sync-token');
-        return { type: 'sync-collection', syncToken: (token && xmlText(token).trim()) || undefined, wantsData };
+        return { type: 'sync-collection', syncToken: readSyncToken(root), wantsData };
     }
     throw new ApiError(400, 'Unsupported REPORT type');
 }

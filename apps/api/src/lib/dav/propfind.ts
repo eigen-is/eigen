@@ -1,15 +1,12 @@
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { parseXml, type XmlElement, xmlChild, xmlElements } from '../core/xml';
+import { parseXmlRoot, type XmlElement, xmlChild, xmlElements } from '../core/xml';
 import { DAV_NAMESPACES, propstatNotFound, propstatOk } from './xml';
 
-// The shared PROPFIND core both DAV surfaces sit on (RFC 4918 § 9.1): parse the request body into the
-// requested prop list, then select per-row propstats from an ordered name→fragment map. One implementation so
-// CalDAV and CardDAV can't drift.
+// The shared PROPFIND core (RFC 4918 § 9.1): CalDAV and CardDAV parse the request body into the requested prop
+// list and select per-row propstats from an ordered name→fragment map; WebDAV only checks the body.
 
-// One ceiling for every XML request body both DAV surfaces read (PROPFIND, REPORT, MKCALENDAR, PROPPATCH):
-// each is a small prop list or href list, bounded before it reaches a parser.
-export const DAV_BODY_MAX_BYTES = 1_048_576;
+const DAV = DAV_NAMESPACES.D;
 
 // XML fragment by the name it is written with (`D:getetag`), in emission order; allprop and the selector share it,
 // so no list can drift. Each DAV_NAMESPACES prefix stands for one namespace, so the key is namespace and local name.
@@ -27,11 +24,10 @@ export type PropfindRequest =
 
 // A blank body is allprop; any other must be a DAV:propfind.
 export function parsePropfind(body: Uint8Array): PropfindRequest {
-    const root = parseXml(body);
+    const root = parseXmlRoot(body, DAV, 'propfind');
     if (!root) return { allprop: true };
-    if (root.ns !== 'DAV:' || root.local !== 'propfind') throw new ApiError(400, 'Expected <propfind> root element');
 
-    const prop = xmlChild(root, 'DAV:', 'prop');
+    const prop = xmlChild(root, DAV, 'prop');
     // <allprop/> and <propname/> both land here as "no <prop>" → allprop. Treating <propname/> as allprop is a
     // lenient v1: we serve the values, not the names-only variant.
     if (!prop) return { allprop: true };

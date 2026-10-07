@@ -1,7 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
-import { ApiError } from '../core/errors';
-import { readBoundedBodyBytes } from '../core/http';
+import { readDavBody } from '../dav/body';
 import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
 import { decodeHref } from './path';
@@ -27,15 +26,6 @@ function pathStrFromParams(star: string | undefined): string {
     return rest.length === 0 ? '/' : `/${decodeHref(rest)}`;
 }
 
-// PROPFIND/PROPPATCH/LOCK bodies are short XML in any real client. Reject anything bigger up front (via the
-// shared bounded reader) so an authenticated user can't park megabytes of input on the synchronous parse;
-// over-limit is a 413, WebDAV's long-standing behavior.
-async function readXmlBody(request: Request): Promise<Uint8Array> {
-    const body = await readBoundedBodyBytes(request, MAX_XML_BODY_BYTES);
-    if (body === null) throw new ApiError(413, 'Payload Too Large');
-    return body;
-}
-
 // The mount URL is /webdav/<ownerId>/<mountId>/. Levels above (/webdav/, /webdav/<ownerId>/)
 // are intentionally not exposed: there is no auto-discovery API, and any client that
 // navigates "up" from a mounted URL gets 404. Each accessible mount's URL is listed in
@@ -50,7 +40,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: '/',
             depth,
-            body: await readXmlBody(request),
+            body: await readDavBody(request, MAX_XML_BODY_BYTES),
         });
     })
     .route('PROPFIND', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -62,7 +52,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: pathStrFromParams(params['*']),
             depth,
-            body: await readXmlBody(request),
+            body: await readDavBody(request, MAX_XML_BODY_BYTES),
         });
     })
     .route('GET', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -164,7 +154,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ownerId: params.ownerId,
             mountId: params.mountId,
             pathStr: pathStrFromParams(params['*']),
-            body: await readXmlBody(request),
+            body: await readDavBody(request, MAX_XML_BODY_BYTES),
             ifHeader: request.headers.get('If'),
         });
     })
@@ -175,7 +165,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ownerId: params.ownerId,
             mountId: params.mountId,
             pathStr: pathStrFromParams(params['*']),
-            body: await readXmlBody(request),
+            body: await readDavBody(request, MAX_XML_BODY_BYTES),
             timeoutHeader: request.headers.get('Timeout'),
             ifHeader: request.headers.get('If'),
             depthHeader: request.headers.get('Depth'),

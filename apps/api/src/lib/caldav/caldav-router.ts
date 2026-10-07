@@ -2,10 +2,10 @@ import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { EVENT_MAX_BYTES } from '../calendar/resource-store';
 import { requireSelf } from '../core/access';
-import { ApiError } from '../core/errors';
-import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
+import { readBoundedBody } from '../core/http';
+import { DAV_BODY_MAX_BYTES, readDavBody } from '../dav/body';
 import { parseCollectionPath } from '../dav/href';
-import { DAV_BODY_MAX_BYTES, parsePropfind, wantsBrief } from '../dav/propfind';
+import { parsePropfind, wantsBrief } from '../dav/propfind';
 import { davError } from '../dav/xml';
 import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
@@ -14,23 +14,17 @@ import { handleDeleteCalendar, handleMkcalendar, handleProppatch } from './propp
 import { handleReport } from './report';
 import { handleDelete, handleGet, handlePut } from './resource';
 
-// Discovery serves the same props whatever the body names, but a bad body is still a 400 (RFC 4918 § 9.1).
-async function checkPropfindBody(request: Request): Promise<void> {
-    const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-    if (body === null) throw new ApiError(413, 'Payload Too Large');
-    parsePropfind(body);
-}
-
 export const caldavRouter = new Elysia({ name: 'caldav' })
     // PROPFIND /dav/ — discovery root
     .route('PROPFIND', '/dav', async ({ request }) => {
         const user = await authenticateBasic(request);
-        await checkPropfindBody(request);
+        // Discovery serves its props whatever the body names, but a bad body is still a 400 (RFC 4918 § 9.1).
+        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
         return handleRootPropfind(user.id);
     })
     .route('PROPFIND', '/dav/', async ({ request }) => {
         const user = await authenticateBasic(request);
-        await checkPropfindBody(request);
+        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
         return handleRootPropfind(user.id);
     })
 
@@ -38,13 +32,13 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/principals/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        await checkPropfindBody(request);
+        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
         return handlePrincipalPropfind(params.ownerId);
     })
     .route('PROPFIND', '/dav/principals/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        await checkPropfindBody(request);
+        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
         return handlePrincipalPropfind(params.ownerId);
     })
 
@@ -52,8 +46,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/calendars/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         const home = await getHome(params.ownerId);
         const calendars = await home.calendar.getCollections();
         const depth = request.headers.get('Depth') || '0';
@@ -67,8 +60,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
         const home = await getHome(params.ownerId);
@@ -165,8 +157,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const collection = await home.calendar.getCollection(parsed.collection);
         if (!collection) return new Response('Not Found', { status: 404 });
 
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         return handleReport(home.calendar, parsed.collection, collection, params.ownerId, body);
     })
 
@@ -178,8 +169,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.collection || parsed.resource) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         return handleMkcalendar(home.calendar, params.ownerId, parsed.collection, body);
     })
 
@@ -191,7 +181,6 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.collection) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
-        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
         return handleProppatch(home.calendar, parsed.collection, params.ownerId, body);
     });
