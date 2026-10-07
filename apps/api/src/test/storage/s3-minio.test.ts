@@ -13,7 +13,6 @@ import {
     checkS3Connection,
     hardenS3Bucket,
     S3Storage,
-    setS3LifecycleRule,
     signedS3Request,
 } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
@@ -404,13 +403,8 @@ describe('bucket configuration reads (fake S3)', () => {
     test('a prefix holding a character XML cannot carry gets no rule, which would scope another prefix', async () => {
         const result = await hardenS3Bucket({ ...bucket, prefix: 'team￿data' }, 30);
         expect(result.ok).toBe(false);
+        expect(result.message).toContain("The prefix holds a character a lifecycle rule can't carry");
         expect(result.applied.lifecycle).toBe(false);
-        expect(fake.lifecyclePuts).toBe(0);
-    });
-
-    test('the lifecycle writer itself refuses such a prefix, whoever calls it', async () => {
-        const res = await setS3LifecycleRule({ ...bucket, prefix: 'team￿data' }, 30);
-        expect(res.ok).toBe(false);
         expect(fake.lifecyclePuts).toBe(0);
     });
 
@@ -425,6 +419,15 @@ describe('bucket configuration reads (fake S3)', () => {
             versioning: 'enabled',
             lifecycle: { noncurrentDays: 30 },
         });
+    });
+
+    test("a rule outside the root's namespace is foreign, so harden does not PUT over it", async () => {
+        fake.lifecycle =
+            `<LifecycleConfiguration xmlns="${S3_XMLNS}"><Rule xmlns="">` +
+            '<ID>other-tenant</ID><Status>Enabled</Status></Rule></LifecycleConfiguration>';
+        const result = await hardenS3Bucket(bucket, 30);
+        expect(result).toMatchObject({ lifecycle: 'foreign', applied: { lifecycle: false } });
+        expect(fake.lifecyclePuts).toBe(0);
     });
 
     test('a 200 answering with an error or another document is unknown', async () => {

@@ -2,7 +2,7 @@ import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspac
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { type BunFile, S3Client, type S3File } from 'bun';
-import { ApiError, parseXml, type XmlElement, xmlChild, xmlChildren, xmlText } from '../core';
+import { ApiError, parseXml, type XmlElement, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
 import { errnoOf, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
@@ -72,6 +72,11 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
         } else if (lifecycle === 'unknown') {
             reason ??= 'error';
             lifecycleNote = "Could not read the bucket's lifecycle configuration, so the cleanup rule was not applied.";
+        } else if (stripNonXmlChars(config.prefix) !== config.prefix) {
+            // The rule's <Prefix> would lose the character and cover another prefix's versions.
+            reason ??= 'error';
+            lifecycleNote =
+                "The prefix holds a character a lifecycle rule can't carry, so the cleanup rule was not applied.";
         } else if (lifecycle === 'none' || lifecycle.noncurrentDays !== noncurrentDays) {
             // S3 has no conditional PUT, so a foreign configuration written in the seconds between
             // the read above and this write is replaced. Accepted: the alternative is never writing.
@@ -222,11 +227,13 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
         if (lifecycle?.local !== 'LifecycleConfiguration') return 'unknown';
         const expectedPrefix = config.prefix ? `${config.prefix}/` : '';
         let noncurrentDays: number | null = null;
-        for (const rule of xmlChildren(lifecycle, lifecycle.ns, 'Rule')) {
-            // One rule we didn't author makes the whole configuration foreign, because
-            // PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours
-            // stays ours even when hand-edited, so harden can repair it.
-            if (s3Text(rule, 'ID') !== S3_LIFECYCLE_RULE_ID) return 'foreign';
+        for (const rule of xmlElements(lifecycle)) {
+            // One rule we didn't author, or any child we can't read as one, makes the whole configuration foreign,
+            // because PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours stays
+            // ours even when hand-edited, so harden can repair it.
+            if (rule.local !== 'Rule' || rule.ns !== lifecycle.ns || s3Text(rule, 'ID') !== S3_LIFECYCLE_RULE_ID) {
+                return 'foreign';
+            }
             const days = s3Text(xmlChild(rule, rule.ns, 'NoncurrentVersionExpiration'), 'NoncurrentDays');
             if (
                 noncurrentDays === null &&
@@ -272,11 +279,8 @@ function setS3Versioning(config: S3Config): Promise<Response> {
     });
 }
 
-// Exported for the fake-S3 suite, which pins the refusal below on the writer itself.
-export async function setS3LifecycleRule(config: S3Config, noncurrentDays: number): Promise<Response> {
-    // Prefix-scoped when the mount has one, so Eigen never expires another tenant's versions. A character XML can't
-    // carry would drop out of <Prefix> and scope the rule to another prefix: refused, as S3 refuses a bad request.
-    if (stripNonXmlChars(config.prefix) !== config.prefix) return new Response(null, { status: 400 });
+function setS3LifecycleRule(config: S3Config, noncurrentDays: number): Promise<Response> {
+    // Prefix-scoped when the mount has one, so Eigen never expires another tenant's versions.
     const prefix = config.prefix ? `<Prefix>${escapeXml(config.prefix)}/</Prefix>` : '';
     const body =
         `<LifecycleConfiguration><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +

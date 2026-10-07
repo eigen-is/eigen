@@ -12,6 +12,15 @@ import { getTeamExists, getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
 import { s3PrefixSchema } from './shared-schemas';
 
+const s3ConfigSchema = t.Object({
+    endpoint: t.String(),
+    bucket: t.String(),
+    prefix: s3PrefixSchema,
+    accessKeyId: t.String(),
+    secretAccessKey: t.String(),
+    region: t.Optional(t.String()),
+});
+
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type !== 'team') throw new ApiError(400, 'Invalid teamId format');
@@ -92,16 +101,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 name: t.String({ minLength: 1 }),
                 storageType: t.Optional(t.UnionEnum(MOUNT_STORAGE_TYPES)),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
-                s3Config: t.Optional(
-                    t.Object({
-                        endpoint: t.String(),
-                        bucket: t.String(),
-                        prefix: s3PrefixSchema,
-                        accessKeyId: t.String(),
-                        secretAccessKey: t.String(),
-                        region: t.Optional(t.String()),
-                    }),
-                ),
+                s3Config: t.Optional(s3ConfigSchema),
             }),
             auth: true,
         },
@@ -119,16 +119,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 enabled: t.Optional(t.Boolean()),
                 maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                 name: t.Optional(t.String({ minLength: 1 })),
-                s3Config: t.Optional(
-                    t.Object({
-                        endpoint: t.String(),
-                        bucket: t.String(),
-                        prefix: s3PrefixSchema,
-                        accessKeyId: t.String(),
-                        secretAccessKey: t.String(),
-                        region: t.Optional(t.String()),
-                    }),
-                ),
+                s3Config: t.Optional(s3ConfigSchema),
             }),
             auth: true,
         },
