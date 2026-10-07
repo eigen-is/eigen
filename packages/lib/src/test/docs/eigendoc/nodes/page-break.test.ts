@@ -1,10 +1,23 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
-import { getDocExtensions, PageBreakNode } from '../../../../docs/eigendoc';
+import {
+    type Content,
+    createDocument,
+    Editor,
+    generateHTML,
+    getSchema,
+    type JSONContent,
+    type SingleCommands,
+} from '@tiptap/core';
+import { GapCursor } from '@tiptap/pm/gapcursor';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { getDocExtensions } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 // prosemirror-keymap resolved Mod from bun's navigator when the imports above loaded it; happy-dom's says Linux.
-const MOD: KeyboardEventInit = /Mac|iP(hone|[oa]d)/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
+const MOD_ENTER: KeyboardEventInit = {
+    key: 'Enter',
+    ...(/Mac|iP(hone|[oa]d)/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true }),
+};
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser, the editor mounts in the window.
 installHappyDom();
@@ -27,42 +40,47 @@ const brokenDoc: JSONContent = {
     ],
 };
 
-const blockTypes = (html: string): string[] => {
-    const types: string[] = [];
-    createDocument(html, schema).forEach((node) => {
-        types.push(node.type.name);
-    });
-    return types;
-};
+const blockTypes = (doc: ProseMirrorNode): string[] => doc.children.map((node) => node.type.name);
 
 // Through the view's key handling, as a browser presses it: tiptap's keyboardShortcut command re-applies the
 // captured steps and throws on the paragraph this insert appends.
-function pressInEditor(html: string, caret: number, key: KeyboardEventInit, editorExtensions = extensions): Editor {
-    const editor = new Editor({ element: document.createElement('div'), extensions: editorExtensions, content: html });
-    editor.commands.setTextSelection(caret);
-    const event = new KeyboardEvent('keydown', { key: 'Enter', ...key });
-    editor.view.someProp('handleKeyDown', (handle) => handle(editor.view, event));
-    return editor;
+function press(editor: Editor, key: KeyboardEventInit): boolean {
+    const event = new KeyboardEvent('keydown', key);
+    return !!editor.view.someProp('handleKeyDown', (handle) => handle(editor.view, event));
 }
+
+const mount = (content: Content, editorExtensions = extensions): Editor =>
+    new Editor({ element: document.createElement('div'), extensions: editorExtensions, content });
+
+const figure: JSONContent = { type: 'figure', attrs: { mediaName: 'a.png' } };
+const table = '<table><tbody><tr><td><p>A</p></td><td><p>B</p></td></tr></tbody></table>';
 
 describe('page break HTML', () => {
     // html-to-docx turns exactly this class into a Word page break.
     test('a page break renders as a div with the exact page-break class', () => {
         expect(generateHTML(brokenDoc, extensions)).toContain(
-            '<p>Before</p><div class="page-break" data-type="page-break"></div><p>After</p>',
+            '<p>Before</p><div class="page-break"></div><p>After</p>',
         );
     });
 
     test.each([
-        '<div class="page-break" data-type="page-break"></div>',
+        '<div class="page-break"></div>',
         // The docx import's carrier.
         '<hr class="page-break">',
     ])('%s parses as a page break', (html) => {
-        expect(blockTypes(`<p>Before</p>${html}<p>After</p>`)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+        expect(blockTypes(createDocument(`<p>Before</p>${html}<p>After</p>`, schema))).toEqual([
+            'paragraph',
+            'pageBreak',
+            'paragraph',
+        ]);
     });
 
     test('a plain hr stays a horizontal rule', () => {
-        expect(blockTypes('<p>Before</p><hr><p>After</p>')).toEqual(['paragraph', 'horizontalRule', 'paragraph']);
+        expect(blockTypes(createDocument('<p>Before</p><hr><p>After</p>', schema))).toEqual([
+            'paragraph',
+            'horizontalRule',
+            'paragraph',
+        ]);
     });
 
     test('a page break survives the HTML round-trip', () => {
@@ -76,25 +94,97 @@ describe('page break keys', () => {
     // The page break listed first proves its priority, not its place in the list, beats StarterKit's hard break.
     test.each([
         ['after', extensions],
-        ['before', [PageBreakNode, ...extensions.filter((extension) => extension.name !== 'pageBreak')]],
+        [
+            'before',
+            [
+                ...extensions.filter(({ name }) => name === 'pageBreak'),
+                ...extensions.filter(({ name }) => name !== 'pageBreak'),
+            ],
+        ],
     ])('Mod-Enter in a paragraph inserts a page break, listed %s StarterKit', (_order, editorExtensions) => {
-        const editor = pressInEditor('<p>Before</p>', 7, MOD, editorExtensions);
-        expect(editor.getJSON().content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+        const editor = mount('<p>Before</p>', editorExtensions);
+        editor.commands.setTextSelection(7);
+        press(editor, MOD_ENTER);
+        expect(blockTypes(editor.state.doc)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
         // The caret waits in the paragraph appended after the break.
         expect(editor.state.selection.from).toBe(10);
         editor.destroy();
     });
 
     test('Mod-Enter in a code block exits it', () => {
-        const editor = pressInEditor('<pre><code>let a</code></pre><p>After</p>', 6, MOD);
-        expect(editor.getJSON().content?.map((node) => node.type)).toEqual(['codeBlock', 'paragraph', 'paragraph']);
+        const editor = mount('<pre><code>let a</code></pre><p>After</p>');
+        editor.commands.setTextSelection(6);
+        press(editor, MOD_ENTER);
+        expect(blockTypes(editor.state.doc)).toEqual(['codeBlock', 'paragraph', 'paragraph']);
         expect(editor.state.selection.$from.parent.textContent).toBe('');
         editor.destroy();
     });
 
     test('Shift-Enter is still a hard break', () => {
-        const editor = pressInEditor('<p>Before</p>', 4, { shiftKey: true });
+        const editor = mount('<p>Before</p>');
+        editor.commands.setTextSelection(4);
+        press(editor, { key: 'Enter', shiftKey: true });
         expect(editor.getJSON().content?.[0]?.content?.map((node) => node.type)).toEqual(['text', 'hardBreak', 'text']);
+        editor.destroy();
+    });
+
+    test.each([
+        ['alone in its paragraph', [figure], 1, [['figure'], undefined]],
+        [
+            'mid-paragraph',
+            [{ type: 'text', text: 'A' }, figure, { type: 'text', text: 'B' }],
+            2,
+            [['text', 'figure'], ['text']],
+        ],
+    ])('Mod-Enter on a selected figure %s breaks the paragraph after it', (_where, inline, figurePos, halves) => {
+        const editor = mount({ type: 'doc', content: [{ type: 'paragraph', content: inline }] });
+        editor.commands.setNodeSelection(figurePos);
+        press(editor, MOD_ENTER);
+        expect(blockTypes(editor.state.doc)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+        const [before, , after] = editor.getJSON().content ?? [];
+        expect([before?.content?.map((node) => node.type), after?.content?.map((node) => node.type)]).toEqual(halves);
+        editor.destroy();
+    });
+
+    // A node selection on the table would turn into a cell selection of all of it, which one Backspace deletes.
+    test.each([
+        ['a table', table, 'table'],
+        ['a horizontal rule', '<hr>', 'horizontalRule'],
+    ])(
+        'Mod-Enter just before %s leaves a gap cursor, and Backspace removes the break, not the block',
+        (_block, html, type) => {
+            const editor = mount(`<p>Before</p><p></p>${html}<p>After</p>`);
+            editor.commands.setTextSelection(9);
+            press(editor, MOD_ENTER);
+            expect(blockTypes(editor.state.doc)).toEqual(['paragraph', 'pageBreak', type, 'paragraph']);
+            expect(editor.state.selection).toBeInstanceOf(GapCursor);
+            // The first press selects the break, the second deletes it.
+            press(editor, { key: 'Backspace' });
+            press(editor, { key: 'Backspace' });
+            expect(blockTypes(editor.state.doc)).toEqual(['paragraph', type, 'paragraph']);
+            editor.destroy();
+        },
+    );
+
+    // Where no page break fits, HardBreak's Mod-Enter would empty a cell or replace the selected node.
+    test.each([
+        [
+            'selected cells',
+            `<p>Before</p>${table}`,
+            (commands: SingleCommands) => commands.setCellSelection({ anchorCell: 10, headCell: 15 }),
+        ],
+        [
+            'a selected list item',
+            '<ul><li><p>A</p></li><li><p>B</p></li></ul>',
+            (commands: SingleCommands) => commands.setNodeSelection(1),
+        ],
+    ])('Mod-Enter on %s is swallowed and leaves the document as it is', (_selection, html, select) => {
+        const editor = mount(html);
+        select(editor.commands);
+        const before = editor.getJSON();
+        expect(editor.can().setPageBreak()).toBe(false);
+        expect(press(editor, MOD_ENTER)).toBe(true);
+        expect(editor.getJSON()).toEqual(before);
         editor.destroy();
     });
 });
