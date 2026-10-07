@@ -20,10 +20,10 @@ import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { atHome, getTeamHome } from '../../lib/home/get-home';
+import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
-import { addMember, assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
+import { assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
 
 describe('Server Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -437,8 +437,7 @@ describe('Team Mount Management', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body,
             });
-            // A blank secret on an update keeps the saved one, so it gets past validation to the missing mount.
-            expect(update.status).toBe(blank === 'secretAccessKey' ? 404 : 422);
+            expect(update.status).toBe(422);
         }
 
         // Past validation, so the missing mount answers.
@@ -448,55 +447,6 @@ describe('Team Mount Management', () => {
             body: JSON.stringify({ s3Config }),
         });
         expect(update.status).toBe(404);
-    });
-
-    test('a team member who is not an admin cannot list the mounts', async () => {
-        await addMember(ctx, teamId, ctx.bob.user.id);
-        const members = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/members`);
-        expect(members.status).toBe(200);
-
-        const res = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        expect(res.status).toBe(403);
-    });
-
-    test('a mount S3 secret reaches no browser, and a blank one on an update keeps the saved one', async () => {
-        const s3Config = {
-            endpoint: 'https://s3.example.com',
-            bucket: 'eigen-test',
-            prefix: '',
-            accessKeyId: 'AKIAEXAMPLE',
-            secretAccessKey: 'secret-example',
-        };
-        // Not an S3 mount, so no connection check stands between the config and the settings.
-        const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'Secret S3', storageType: 'local-key', s3Config }),
-        });
-        const { id, s3Config: added } = await assertJson<{ id: string } & MountSettings>(add);
-        expect(added?.secretAccessKey).toBe('');
-
-        const list = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        const mounts = await assertJson<Record<string, MountSettings>>(list);
-        expect(mounts[id].s3Config).toEqual({ ...s3Config, secretAccessKey: '' });
-
-        const put = (body: object) =>
-            authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-        const update = await put({ s3Config: { ...s3Config, prefix: 'moved', secretAccessKey: '' } });
-        expect((await assertJson<MountSettings>(update)).s3Config?.secretAccessKey).toBe('');
-        const home = await getTeamHome(teamOwnerId(teamId));
-        expect(home.settings.get().mounts?.[id]?.s3Config).toEqual({ ...s3Config, prefix: 'moved' });
-
-        // Sent to another endpoint, the saved secret would reach whoever runs it.
-        const elsewhere = await put({
-            s3Config: { ...s3Config, endpoint: 'https://evil.example.com', secretAccessKey: '' },
-        });
-        expect(elsewhere.status).toBe(400);
-        expect(home.settings.get().mounts?.[id]?.s3Config).toEqual({ ...s3Config, prefix: 'moved' });
     });
 
     test('a mount update without an S3 config keeps the saved one', async () => {
@@ -519,9 +469,7 @@ describe('Team Mount Management', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled: false }),
         });
-        expect(update.status).toBe(200);
-        const home = await getTeamHome(teamOwnerId(teamId));
-        expect(home.settings.get().mounts?.[id]?.s3Config).toEqual({ ...s3Config, prefix: '' });
+        expect((await assertJson<MountSettings>(update)).s3Config).toEqual({ ...s3Config, prefix: '' });
     });
 
     test('updating nonexistent mount returns 404', async () => {

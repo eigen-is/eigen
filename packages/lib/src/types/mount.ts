@@ -18,12 +18,7 @@ export function isS3ConfigValid(config: S3Config, secretSaved = false): boolean 
     return !!(config.endpoint && config.bucket && config.accessKeyId && (config.secretAccessKey || secretSaved));
 }
 
-// An S3 config as a browser gets it: the secret stays on the server.
-export function withoutSecret(config: S3Config): S3Config {
-    return { ...config, secretAccessKey: '' };
-}
-
-// A secret that reaches no browser comes back from its form blank. That keeps the saved one only for the
+// The backup bucket's secret reaches no browser, so its form sends it blank. That keeps the saved one only for the
 // same key, endpoint and bucket: sent anywhere else, it would reach whoever runs that endpoint.
 export function keepsSavedSecret(next: S3Config, saved: S3Config): boolean {
     return next.accessKeyId === saved.accessKeyId && next.endpoint === saved.endpoint && next.bucket === saved.bucket;

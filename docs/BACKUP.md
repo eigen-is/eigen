@@ -278,7 +278,7 @@ A verified scheduled or manual archive goes to the backup bucket as an upload jo
 
 It warns, without refusing, when no lifecycle rule aborts incomplete multipart uploads under the server's folder, since the parts of an upload cut off halfway stay and cost money.
 
-The backup bucket's secret reaches no browser, the owner's included. An admin who is not the owner reads the backup settings at their defaults, so neither the destination nor the schedule reaches them. A blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `apps/api/src/lib/backup/upload.ts`, beside `withoutBackupSecret` and `withSavedBackupSecret`) to keep them somewhere off the server. A restore on a new machine starts from them.
+The backup bucket's secret reaches no browser, the owner's included. An admin who is not the owner reads the backup settings at their defaults, so neither the destination nor the schedule reaches them. A blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `apps/api/src/lib/backup/upload.ts`, beside `withoutBackupSecret` and `withSavedSecret`) to keep them somewhere off the server. A restore on a new machine starts from them.
 
 ## The bucket keeps its own count, and always the newest complete archive
 

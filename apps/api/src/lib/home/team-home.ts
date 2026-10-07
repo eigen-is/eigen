@@ -8,7 +8,7 @@ import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { ApiError, JsonStore, LocalFilesystem, PATHS } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
-import { checkS3Connection, withSavedSecret } from '../storage/s3-storage';
+import { checkS3Connection } from '../storage/s3-storage';
 import { makeSyntheticUser, type User } from '../user';
 import { Home } from './home';
 
@@ -85,16 +85,15 @@ export class TeamHome extends Home {
     ): Promise<MountSettings> {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
-        const s3Config = update.s3Config && withSavedSecret(update.s3Config, existing.s3Config);
 
         // Same gate as addMount — a typo'd s3Config would tear down the working live backend and
         // pile every write into the upload queue's retry loop against a dead destination.
-        if (existing.storageType === 's3' && s3Config) {
-            const s3Result = await checkS3Connection(s3Config);
+        if (existing.storageType === 's3' && update.s3Config) {
+            const s3Result = await checkS3Connection(update.s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
-        const updated = { ...existing, ...update, ...(s3Config && { s3Config }) };
+        const updated = { ...existing, ...update };
         await this.settings.set({ mounts: { [mountId]: updated } });
         // Persisting alone leaves the already-built Drive on a stale config until the Home is evicted;
         // push the change onto the live mount so quota/name/enabled apply immediately.

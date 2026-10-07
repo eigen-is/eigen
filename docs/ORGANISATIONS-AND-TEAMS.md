@@ -36,7 +36,7 @@ Every org admin also holds better-auth's `user.role: 'admin'`, which lets the ad
 
 A team serves two purposes: an ACL group (share with `team_{id}` instead of emails) and the owner of shared drives. A team member row has no role, so every member is equal. Adding a member runs `reconcileSharesForNewTeamMember`, which delivers the shares already made to the team.
 
-Team routes (`apps/api/src/routes/team.ts`) use two guards from `apps/api/src/lib/core/access.ts`. `requireTeamAccess` lets an org admin or owner in without membership and otherwise demands membership of that team; members may read the team's members and settings. `requireTeamAdmin` demands org admin or owner, so only they list the team's mounts and change team settings, mounts, calendar and avatar. A mount's S3 secret reaches no browser: the mount routes answer it blank (`withoutSecret`), and an update with a blank secret keeps the saved one unless the endpoint, bucket or access key changed (`withSavedSecret`).
+Team routes (`apps/api/src/routes/team.ts`) use two guards from `apps/api/src/lib/core/access.ts`. `requireTeamAccess` lets an org admin or owner in without membership and otherwise demands membership of that team; members may read the team's members, settings and mounts. `requireTeamAdmin` demands org admin or owner, so only they change team settings, mounts, calendar and avatar.
 
 ## Every team route takes the prefixed team id
 

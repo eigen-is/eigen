@@ -5,7 +5,7 @@ import { Elysia, t } from 'elysia';
 import { hasS3Mounts } from '../lib/backup/enumerate-homes';
 import { deleteServerArchive, listServerArchives } from '../lib/backup/server-archives';
 import { startArchiveUpload, startServerBackup } from '../lib/backup/server-job';
-import { checkBackupDestination, withSavedBackupSecret } from '../lib/backup/upload';
+import { checkBackupDestination, withSavedSecret } from '../lib/backup/upload';
 import { requireOwner } from '../lib/core/access';
 import { betterAuth } from './auth';
 import { s3DestinationBody } from './shared-schemas';
@@ -60,7 +60,7 @@ export const serverBackupRouter = new Elysia({ name: 'server-backup' })
         '/admin/server-backup/destination/check',
         async ({ body, user }): Promise<S3CheckResult> => {
             await requireOwner(user.id);
-            return checkBackupDestination(withSavedBackupSecret(body));
+            return checkBackupDestination(withSavedSecret(body));
         },
         { auth: true, body: s3DestinationBody },
     );
