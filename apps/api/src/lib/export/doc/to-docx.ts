@@ -650,10 +650,10 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const cell = { node, content: [...(node.content ?? [])], column, colspan, rowspan };
             for (let k = 0; k < colspan; k++) {
                 const width: unknown = Array.isArray(colwidth) ? colwidth[k] : undefined;
-                // The column at most, so 63 of them sum to a number.
+                // At most MAX_COLWIDTH_PX, so 63 of them sum to a number and the ratios between them stay.
                 widths[column + k] ??=
                     typeof width === 'number' && Number.isFinite(width) && width > 0
-                        ? Math.min(width, Math.floor(columnPx))
+                        ? Math.min(width, MAX_COLWIDTH_PX)
                         : undefined;
                 carry[column + k] = rowspan;
                 holders[column + k] = cell;
@@ -712,6 +712,9 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
         { table: `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid>${tblGrid}</w:tblGrid>${rowsXml.join('')}</w:tbl>` },
     ];
 }
+
+// Far above any real table; a sum of MAX_TABLE_COLUMNS of them stays finite.
+const MAX_COLWIDTH_PX = 1e6;
 
 // As TableWidthClamp scales the editor's: the known columns scale down to the column, none under the floor; the
 // unknown ones share what the known leave, as table { width: 100% } does.

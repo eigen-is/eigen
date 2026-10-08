@@ -12,10 +12,15 @@ export function cssColorToHex(color: string): string | undefined {
     return channels.map((channel) => channel.toString(16).padStart(2, '0').toUpperCase()).join('');
 }
 
-// The two spellings a browser's style gives a color that shows nothing: the keyword and an rgba() of alpha 0.
+// The spellings of a color that shows nothing: the keyword, and rgb(), hsl() or a hex with alpha 0, though
+// cssColorToHex has no hex for the hsl() and the alpha hex. An empty string is no color, not a transparent one.
 export function isTransparentCssColor(color: string): boolean {
     const value = color.trim();
-    return /^transparent$/i.test(value) || Number(value.match(RGB)?.[4] ?? 1) === 0;
+    if (/^transparent$/i.test(value)) return true;
+    if (/^#(?:[0-9a-f]{3}0|[0-9a-f]{6}00)$/i.test(value)) return true;
+    return Number((value.match(RGB) ?? value.match(HSL))?.[4] ?? 1) === 0;
 }
 
 const RGB = /^rgba?\((\d{1,3})[,\s]+(\d{1,3})[,\s]+(\d{1,3})(?:\s*[,/]\s*([\d.]+)%?)?\s*\)$/i;
+const HSL =
+    /^hsla?\((\d+(?:\.\d+)?)(?:deg)?[,\s]+(\d+(?:\.\d+)?)%[,\s]+(\d+(?:\.\d+)?)%(?:\s*[,/]\s*([\d.]+)%?)?\s*\)$/i;

@@ -1133,7 +1133,12 @@ describe('docx writer — tables', () => {
         expect(descendants(tbl, W, 'tcW').map((tcW) => w(tcW, 'w'))).toEqual(['9630', '375']);
     });
 
-    test('colwidths whose sum is past any number are each the column at most, so the grid stays whole twips', async () => {
+    test('known colwidths past the column keep their ratio, scaled to the column', async () => {
+        const tbl = only(await tablesIn(doc(table(tr(td({ colwidth: [2000] }, p()), td({ colwidth: [1000] }, p()))))));
+        expect(gridOf(tbl)).toEqual([6420, 3210]);
+    });
+
+    test('colwidths whose sum is past any number are each capped, so the grid stays whole twips', async () => {
         const huge = { colwidth: [1.7e308] };
         const tbl = only(await tablesIn(doc(table(tr(td(huge, p()), td(huge, p()), td({ colwidth: null }, p()))))));
         expect(gridOf(tbl)).toEqual([4815, 4815, 375]);
