@@ -1252,12 +1252,12 @@ describe('docx writer — code blocks', () => {
     test('two adjacent code blocks are kept apart by a Spacer, or readers draw one box', async () => {
         const paragraphs = await paragraphsOf(doc(code('a', 'plaintext'), code('b', 'plaintext'), p(text('c'))));
         expect(paragraphs.map((paragraph) => paragraph.includes('CodeBlock'))).toEqual([true, false, true, false]);
-        expect(paragraphs[1]).toBe(SPACER_XML);
+        expect(paragraphs[1]).toContain('<w:pStyle w:val="Spacer"/>');
         const inItem = await paragraphsOf(doc(ul(li(p(text('x')), code('a', 'plaintext'), code('b', 'plaintext')))));
-        expect(inItem[2]).toBe(SPACER_XML);
-        expect(await paragraphsOf(doc(code('a', 'plaintext'), p(text('b')), code('c', 'plaintext')))).not.toContain(
-            SPACER_XML,
-        );
+        expect(inItem[2]).toContain('<w:pStyle w:val="Spacer"/>');
+        expect(
+            (await paragraphsOf(doc(code('a', 'plaintext'), p(text('b')), code('c', 'plaintext')))).join(''),
+        ).not.toContain('Spacer');
     });
 
     test("a code block in a list item moves its box to the item's text", async () => {
@@ -1292,13 +1292,23 @@ describe('docx writer — quotes', () => {
         ]);
     });
 
-    test('two adjacent quotes are kept apart by a Spacer, or readers draw one bar', async () => {
-        expect(await paragraphsOf(doc(quote(p(text('one'))), quote(p(text('two')))))).toEqual([
-            quoted(run('one'), '<w:spacing w:after="220"/>'),
-            SPACER_XML,
-            quoted(run('two'), '<w:spacing w:after="220"/>'),
-        ]);
-        expect(await paragraphsOf(doc(quote(p(text('one'))), code('x', 'plaintext')))).not.toContain(SPACER_XML);
+    // The editor's margins collapse to the larger, 0.75em below a code block, 1em below a quote, none above one; the
+    // Spacer's 1 pt line is part of the gap. Word runs a quote's bar through its after, so the gap is the Spacer's.
+    const codeLine = (value: string, spacing: string) =>
+        `<w:p><w:pPr><w:pStyle w:val="CodeBlock"/>${spacing}</w:pPr>${run(value)}</w:p>`;
+    const spacer = (before: number) =>
+        `<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="${before}"/></w:pPr></w:p>`;
+
+    test.each([
+        ['code', 'code', code('a', 'plaintext'), codeLine('a', '<w:spacing w:after="0"/>'), 165],
+        ['quote', 'quote', quote(p(text('a'))), quoted(run('a'), '<w:spacing w:after="0"/>'), 220],
+        ['quote', 'code', quote(p(text('a'))), quoted(run('a'), '<w:spacing w:after="0"/>'), 220],
+        ['code', 'quote', code('a', 'plaintext'), codeLine('a', '<w:spacing w:after="0"/>'), 165],
+    ])('a %s and a %s are a Spacer apart, the gap the collapsed margin', async (_a, b, first, firstXml, gap) => {
+        const second = b === 'code' ? code('b', 'plaintext') : quote(p(text('b')));
+        const secondXml =
+            b === 'code' ? codeLine('b', '<w:spacing w:before="0"/>') : quoted(run('b'), '<w:spacing w:after="220"/>');
+        expect(await paragraphsOf(doc(first, second))).toEqual([firstXml, spacer(gap - 20), secondXml]);
     });
 
     test('a nested quote adds its indent', async () => {

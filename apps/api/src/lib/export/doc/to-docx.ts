@@ -395,11 +395,11 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
-        // Word and LibreOffice draw two adjacent boxes or bars as one (R35).
-        if (BOXED.has(node.type ?? '') && nodes[index - 1]?.type === node.type) blocks.push(SPACER);
+        const written = write(node, { ...context, first: !textblock && index === 0, headingPt: undefined });
+        if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? ''))
+            keepApart(blocks, written, context.pkg);
         // A loop, not a spread: a code block of a million lines is a million arguments.
-        for (const block of write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }))
-            blocks.push(block);
+        for (const block of written) blocks.push(block);
     }
     if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
     else if (textblock && blocks.every((block) => 'float' in block)) blocks.push({ props, runs: '', emptied: true });
@@ -409,6 +409,26 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
 const BOXED = new Set(['codeBlock', 'blockquote']);
 
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
+
+// Word and LibreOffice draw two adjacent boxes or bars as one (R35), so a Spacer stands between them, and it holds the
+// gap: the larger of the margins, as they collapse in the editor. Word runs a quote's bar through its after.
+function keepApart(blocks: Block[], next: Block[], pkg: Package): void {
+    const last = blocks.at(-1);
+    const first = next[0];
+    if (!last || !first || 'table' in last || 'table' in first) {
+        blocks.push(SPACER);
+        return;
+    }
+    const after = last.props.spacing?.after ?? styleSpacing(last.props.style, 'after', pkg);
+    const before = first.props.spacing?.before ?? styleSpacing(first.props.style, 'before', pkg);
+    if (after > 0)
+        blocks[blocks.length - 1] = { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after: 0 } } };
+    if (before > 0) next[0] = { ...first, props: { ...first.props, spacing: { ...first.props.spacing, before: 0 } } };
+    blocks.push({
+        props: { style: 'Spacer', spacing: { before: Math.max(0, after - HAIRLINE_TWIPS, before - HAIRLINE_TWIPS) } },
+        runs: '',
+    });
+}
 
 // Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
 // no paragraph does. The block after an in-flow table takes the table's margin below as its before.
@@ -1188,8 +1208,10 @@ function styleXml(style: StyleDef): string {
 }
 
 // A 1 pt line for paragraphs that hold no text of their own: a bare one is a full Normal line.
+const HAIRLINE_TWIPS = 20;
+
 const HAIRLINE: Pick<StyleDef, 'pPr' | 'rPr'> = {
-    pPr: { spacing: { before: 0, after: 0, line: 20, exact: true } },
+    pPr: { spacing: { before: 0, after: 0, line: HAIRLINE_TWIPS, exact: true } },
     rPr: { size: 2 },
 };
 
