@@ -22,7 +22,7 @@ declare module '@tiptap/core' {
     }
 }
 
-// A figure element's or the export's span.figure's attributes, one without an img no figure; layout and width parse on their own.
+// Attributes of a `<figure>` or the export's `span.figure`; no img, no figure. Layout and width parse on their own.
 function figureAttrsOf(dom: HTMLElement): FigureAttrs | false {
     const img = dom.querySelector('img');
     if (!img) return false;
