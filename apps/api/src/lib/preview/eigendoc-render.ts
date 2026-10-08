@@ -3,7 +3,13 @@ import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
 import type { TransformWarning } from '../document/transform/protocol';
-import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
+import {
+    lowlight,
+    renderCodeBlockNode,
+    renderFigureNode,
+    renderTaskItemNode,
+    withTrailingBreaks,
+} from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
@@ -34,7 +40,7 @@ export function renderEigendocPreviewBody(
     const content = truncated ? { ...json, content: blocks.slice(0, PREVIEW_MAX_BLOCKS) } : json;
 
     const html = renderToHTMLString({
-        content,
+        content: withTrailingBreaks(content),
         extensions,
         options: {
             nodeMapping: {

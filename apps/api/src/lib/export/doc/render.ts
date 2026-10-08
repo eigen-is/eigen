@@ -1,3 +1,4 @@
+import type { JSONContent } from '@tiptap/core';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { common, createLowlight } from 'lowlight';
@@ -87,4 +88,14 @@ export function renderFigureNode(
     const layout = escapeHtml(String(attrs.layout || 'block'));
     const alignment = escapeHtml(String(attrs.alignment || 'center'));
     return `<span class="figure" data-layout="${layout}" data-alignment="${alignment}">${img}${cap}</span>`;
+}
+
+// ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
+// with a <br> that holds its last line, so the export writes that <br> too.
+export function withTrailingBreaks(node: JSONContent): JSONContent {
+    const content = node.content?.map(withTrailingBreaks);
+    if (node.type !== 'paragraph' && node.type !== 'heading') return content ? { ...node, content } : node;
+    const last = content?.at(-1);
+    if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
+    return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }

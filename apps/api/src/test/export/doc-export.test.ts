@@ -142,6 +142,52 @@ describe('doc export — figures', () => {
     });
 });
 
+// The editor's ProseMirror ends a textblock with a <br> wherever its last line would otherwise collapse (addTextblockHacks).
+describe('doc export — trailing breaks', () => {
+    async function bodyOf(...content: JSONContent[]): Promise<string> {
+        const { data } = await renderEigendocExport(
+            seededDoc({ type: 'doc', content }),
+            'html',
+            'Report.eigendoc',
+            [],
+            undefined,
+        );
+        const html = new TextDecoder().decode(data);
+        return html.slice(html.indexOf('<article'), html.indexOf('</article>'));
+    }
+
+    test('an empty paragraph or heading keeps its line', async () => {
+        expect(await bodyOf({ type: 'paragraph' }, { type: 'heading', attrs: { level: 2 } })).toContain(
+            '<p><br></p><h2><br></h2>',
+        );
+    });
+
+    test('a textblock ending in an inline node or a newline gets the break, one ending in text none', async () => {
+        const body = await bodyOf(
+            { type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'hardBreak' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'b\n' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'c', marks: [{ type: 'bold' }] }] },
+            { type: 'heading', attrs: { level: 3 }, content: [{ type: 'figure', attrs: { caption: 'x' } }] },
+        );
+        expect(body).toContain('<p>a<br><br></p><p>b\n<br></p><p><strong>c</strong></p>');
+        expect(body).toContain(
+            '<h3><span class="figure" data-layout="block" data-alignment="center"><span class="figcaption">x</span></span><br></h3>',
+        );
+    });
+
+    test('a paragraph in a list item, a quote or a cell gets it too', async () => {
+        const empty = { type: 'paragraph' };
+        const body = await bodyOf(
+            { type: 'bulletList', content: [{ type: 'listItem', content: [empty] }] },
+            { type: 'blockquote', content: [empty] },
+            { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [empty] }] }] },
+        );
+        expect(body).toContain('<li><p><br></p></li>');
+        expect(body).toContain('<blockquote><p><br></p></blockquote>');
+        expect(body).toMatch(/<td[^>]*><p><br><\/p><\/td>/);
+    });
+});
+
 describe('doc export — page breaks', () => {
     test.each(['html', 'pdf-html'] as const)('%s carries the page break div', async (format) => {
         const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', [], undefined);
