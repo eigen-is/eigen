@@ -93,6 +93,13 @@ describe('doc export — the stylesheet', () => {
     test('a page break starts the next page in print', async () => {
         expect(await exportStyle('pdf-html')).toContain('break-after: page');
     });
+
+    test('a table or quote holding a page break may split, and the figure box stays whole', async () => {
+        const css = await exportStyle('pdf-html');
+
+        expect(css).toContain('.figure, table, pre, blockquote { page-break-inside: avoid; }');
+        expect(css).toContain('table:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
+    });
 });
 
 describe('doc export — figures', () => {

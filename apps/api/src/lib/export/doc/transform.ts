@@ -1,6 +1,12 @@
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { DEFAULT_PAGE_SETUP, type FigureAttrs, getDocExtensions, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    type FigureAttrs,
+    getDocExtensions,
+    PAGE_BREAK_CLASS,
+    pageStylesheet,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
@@ -146,7 +152,9 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
     overflow-wrap: anywhere;
 }
 
-figure, table, pre, blockquote { page-break-inside: avoid; }
+/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway */
+.figure, table, pre, blockquote { page-break-inside: avoid; }
+table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
 
