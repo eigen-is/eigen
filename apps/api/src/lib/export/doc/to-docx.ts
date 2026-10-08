@@ -913,7 +913,8 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const drawing = drawingXml(
         image,
         cx,
-        Math.round((cx * image.height) / image.width),
+        // Word floors the height to whole twips and refits the width to the image's ratio, so the height is whole already.
+        Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
         typeof alt === 'string' ? alt : '',
         context.pkg,
     );
