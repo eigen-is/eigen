@@ -385,7 +385,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();
-            blocks.push(...figure);
+            for (const block of figure) blocks.push(block);
             continue;
         }
         if (Object.hasOwn(INLINES, node.type ?? '')) {
@@ -397,7 +397,9 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
         // Word and LibreOffice draw two adjacent boxes or bars as one (R35).
         if (BOXED.has(node.type ?? '') && nodes[index - 1]?.type === node.type) blocks.push(SPACER);
-        blocks.push(...write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }));
+        // A loop, not a spread: a code block of a million lines is a million arguments.
+        for (const block of write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }))
+            blocks.push(block);
     }
     if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
     else if (textblock && blocks.every((block) => 'float' in block)) blocks.push({ props, runs: '', emptied: true });
@@ -487,20 +489,25 @@ const LIST_FORMATS = new Map([
     ['I', 'upperRoman'],
 ]);
 
-// A task list has no numbering. Only the last paragraph of a list in no other list takes the list's margin.
+// A task list, and a list without items, has no numbering. Only the last paragraph of a list in no other list takes
+// the list's margin.
 function listOf(
     node: JSONContent,
     context: Context,
     tag: 'ul' | 'ol',
     numbering: Omit<List, 'base'> | undefined,
 ): Block[] {
-    const ilvl = Math.min(context.depth, 8);
-    const list = numbering && {
-        numId: context.pkg.lists.push({ ...numbering, base: context.indent - listLevel() * ilvl }),
-        ilvl,
-    };
+    const ilvl = Math.min(context.depth, LIST_LEVELS - 1);
+    const content = node.content ?? [];
+    const list =
+        numbering && content.some((item) => item.type === 'listItem')
+            ? {
+                  numId: context.pkg.lists.push({ ...numbering, base: itemIndent(context) - listLevel() * (ilvl + 1) }),
+                  ilvl,
+              }
+            : undefined;
     const items = { ...context, list };
-    const blocks = blocksOf(node.content ?? [], textProps({}, items), items, false);
+    const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
     return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'), context.pkg);
 }
@@ -514,7 +521,7 @@ function itemOf(
 ): Block[] {
     const inner = {
         ...context,
-        indent: context.indent + listLevel(),
+        indent: itemIndent(context),
         depth: context.depth + 1,
         after,
         list: undefined,
@@ -532,11 +539,18 @@ function listLevel(): number {
     return proseTwips('.eigen-prose ul', 'padding-left');
 }
 
+// Word's nine levels; a list deeper still indents no further.
+const LIST_LEVELS = 9;
+
+function itemIndent(context: Context): number {
+    return context.indent + (context.depth < LIST_LEVELS ? listLevel() : 0);
+}
+
 function numberingXml(lists: List[]): string {
     const level = listLevel();
     const abstractNums = lists.map(({ format, start, base }, index) => {
         const levels = Array.from(
-            { length: 9 },
+            { length: LIST_LEVELS },
             (_, ilvl) =>
                 `<w:lvl w:ilvl="${ilvl}"><w:start w:val="${start}"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === 'bullet' ? '•' : `%${ilvl + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr>${pPrXml({ ind: { left: base + level * (ilvl + 1), hanging: level } })}</w:pPr></w:lvl>`,
         );
@@ -1008,8 +1022,9 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
 
 function hyperlinkTarget(href: unknown, publicOrigin: string | undefined): string | undefined {
     if (typeof href !== 'string') return undefined;
-    // Gated after the strip, or a character XML can't hold could hide a scheme from isAllowedUri.
-    const kept = stripNonXmlChars(href);
+    // Gated after the strip, or a character XML can't hold could hide a scheme from isAllowedUri; the ends trimmed as a
+    // URL parser trims them, of what C0 the strip leaves (tab, LF, CR) and spaces.
+    const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
     // Outside Eigen a root-relative href means nothing.
     const absolute = kept.startsWith('//')

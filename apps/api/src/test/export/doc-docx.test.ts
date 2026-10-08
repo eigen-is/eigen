@@ -316,6 +316,46 @@ describe('docx writer — package', () => {
         expect(new Set(docPrIds).size).toBe(docPrIds.length);
     });
 
+    test('every part declares the namespaces its root and attributes use, and marks w14 ignorable', async () => {
+        const zip = await unzip(buildAllFeaturesDocJson());
+        const roots = await Promise.all(
+            PARTS.map(async (path) => {
+                const { name, attributes } = await part(zip, path);
+                return [path, name, attributes];
+            }),
+        );
+        const wml = { 'xmlns:w': W };
+        const document = {
+            'xmlns:w': W,
+            'xmlns:r': R,
+            'xmlns:wp': WP,
+            'xmlns:a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
+            'xmlns:pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture',
+            'xmlns:w14': 'http://schemas.microsoft.com/office/word/2010/wordml',
+            'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+            'mc:Ignorable': 'w14',
+        };
+        expect(roots).toEqual([
+            ['[Content_Types].xml', 'Types', { xmlns: CONTENT_TYPES }],
+            ['_rels/.rels', 'Relationships', { xmlns: RELS }],
+            [
+                'docProps/core.xml',
+                'cp:coreProperties',
+                {
+                    'xmlns:cp': 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
+                    'xmlns:dc': 'http://purl.org/dc/elements/1.1/',
+                },
+            ],
+            ['word/document.xml', 'w:document', document],
+            ['word/_rels/document.xml.rels', 'Relationships', { xmlns: RELS }],
+            ['word/styles.xml', 'w:styles', wml],
+            ['word/numbering.xml', 'w:numbering', wml],
+            ['word/settings.xml', 'w:settings', wml],
+            ['word/fontTable.xml', 'w:fonts', wml],
+            ['word/_rels/fontTable.xml.rels', 'Relationships', { xmlns: RELS }],
+        ]);
+    });
+
     test('the same doc exports to the same bytes', async () => {
         const [first, second] = await Promise.all([docx(buildAllFeaturesDocJson()), docx(buildAllFeaturesDocJson())]);
         expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
@@ -662,15 +702,18 @@ describe('docx writer — links', () => {
         expect(rels.filter((rel) => xmlAttr(rel, '', 'TargetMode') === 'External')).toHaveLength(1);
     });
 
-    test.each(['javascript:alert(1)', `java${NONCHARACTER}script:alert(1)`, '\u0001', ''])(
-        'a refused href %j leaves the text unlinked and unstyled',
-        async (href) => {
-            const body = await bodyOf(linked(href));
-            expect(descendants(body, W, 'hyperlink')).toEqual([]);
-            expect(descendants(body, W, 'rStyle')).toEqual([]);
-            expect(texts(body)).toBe('before link after');
-        },
-    );
+    test.each([
+        'javascript:alert(1)',
+        `java${NONCHARACTER}script:alert(1)`,
+        '\u0001',
+        '',
+        ' \u0001javascript:alert(1)',
+    ])('a refused href %j leaves the text unlinked and unstyled', async (href) => {
+        const body = await bodyOf(linked(href));
+        expect(descendants(body, W, 'hyperlink')).toEqual([]);
+        expect(descendants(body, W, 'rStyle')).toEqual([]);
+        expect(texts(body)).toBe('before link after');
+    });
 
     test.each([
         ['https://example.com', 'https://example.com'],
@@ -684,6 +727,9 @@ describe('docx writer — links', () => {
         ['https://example.com/a%20b/caf%C3%A9?q=x%7Cy&n=1%', 'https://example.com/a%20b/caf%C3%A9?q=x%7Cy&n=1%'],
         ['https://example.com/{a}|^`\\<b>', 'https://example.com/%7Ba%7D%7C%5E%60%5C%3Cb%3E'],
         ['/contacts/team/x?contactId=a%40b', '/contacts/team/x?contactId=a%40b'],
+        // Spaces and C0 controls at either end go, as a URL parser drops them.
+        [' https://example.com/x \n', 'https://example.com/x'],
+        ['\u0001\t https://example.com', 'https://example.com'],
     ])('%s is written as %s without a public origin', async (href, target) => {
         expect(await targetOf(href)).toBe(target);
     });
@@ -694,6 +740,7 @@ describe('docx writer — links', () => {
         ['//host/x', 'https://host/x'],
         ['#frag', '#frag'],
         ['foo/bar', 'foo/bar'],
+        [' /p/x', 'https://eigen.example/p/x'],
     ])('%s is written as %s with the public origin', async (href, target) => {
         expect(await targetOf(href, 'https://eigen.example')).toBe(target);
     });
@@ -809,6 +856,27 @@ describe('docx writer — lists', () => {
             `<w:p><w:pPr><w:spacing w:after="55"/><w:ind w:left="330"/></w:pPr>${run('second')}</w:p>`,
             numbered(0, 1, 220, run('next')),
         ]);
+    });
+
+    test('a list without items registers no numbering', async () => {
+        const json = doc(ul(), ol({}), { type: 'taskList' }, ul(li(p(text('x')))));
+        expect(xmlChildren(await numberingOf(json), W, 'abstractNum')).toHaveLength(1);
+        expect(descendants(await bodyOf(json), W, 'numId').map((numId) => w(numId, 'val'))).toEqual(['1']);
+    });
+
+    test('lists past the ninth level indent no further, numbered or not', async () => {
+        let list = ul(li(p(text('deepest')), p(text('its second paragraph'))));
+        for (let depth = 0; depth < 11; depth++) list = ul(li(p(text(`level ${depth}`)), list));
+        const json = doc(list);
+        const indents = [
+            ...descendants(await numberingOf(json), W, 'ind'),
+            ...descendants(await bodyOf(json), W, 'ind'),
+        ];
+        expect(Math.max(...indents.map((ind) => Number(w(ind, 'left'))))).toBe(2970);
+        const deepest = descendants(await numberingOf(json), W, 'abstractNum').at(-1);
+        const level8 = deepest && xmlChildren(deepest, W, 'lvl')[8];
+        expect(w(child(child(level8, 'pPr'), 'ind'), 'left')).toBe('2970');
+        expect(w(child(child(xmlChildren(await bodyOf(json), W, 'p').at(-1), 'pPr'), 'ind'), 'left')).toBe('2970');
     });
 
     test('an empty list item keeps its number', async () => {
@@ -1803,7 +1871,8 @@ describe('docx writer — bounds', () => {
         return sizes.reduce((sum, size) => sum + size, 0);
     }
 
-    // What the walk amplifies: a row of wide cells widens the grid every later row is filled to.
+    // What the walk amplifies: a row of wide cells widens the grid every later row is filled to, and every list
+    // registers its numbering.
     function hostile(rows: number): JSONContent {
         const cell = (attrs: Record<string, unknown>) => td(attrs, p(text('x')));
         return doc(
@@ -1811,12 +1880,20 @@ describe('docx writer — bounds', () => {
                 tr(...Array.from({ length: rows }, () => cell({ colspan: 63 }))),
                 ...Array.from({ length: rows }, () => tr(cell({}))),
             ),
+            ...Array.from({ length: rows * 20 }, () => ul()),
         );
     }
 
     test('the output grows linearly with a hostile doc, within a bounded factor of its JSON', async () => {
         const [small, large] = await Promise.all([xmlBytes(hostile(50)), xmlBytes(hostile(100))]);
         expect(large / small).toBeLessThan(2.2);
-        expect(large).toBeLessThan(100 * JSON.stringify(hostile(100)).length);
+        expect(large).toBeLessThan(25 * JSON.stringify(hostile(100)).length);
+    });
+
+    test('a block of more blocks than a call takes arguments exports', async () => {
+        const lines = 'x\n'.repeat(1_100_000);
+        const zip = await JSZip.loadAsync(await docx(doc(code(lines, 'plaintext'))));
+        const document = (await zip.file('word/document.xml')?.async('string')) ?? '';
+        expect(document.split('w:val="CodeBlock"').length - 1).toBe(1_100_001);
     });
 });
