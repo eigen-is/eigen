@@ -1,4 +1,5 @@
 import { ApiError } from '../core/errors';
+import { isEnoent } from '../core/local-filesystem';
 import renderScript from './weasyprint-render.py' with { type: 'file' };
 
 // The largest @page side an export asks WeasyPrint for: 200 inches, the PDF page limit. A page sized from
@@ -13,18 +14,23 @@ type WeasyPrintProbe = { python: string } | { python: null; found: string | null
 
 let cachedProbe: Promise<WeasyPrintProbe> | null = null;
 
+// The interpreter a launcher's shebang names: `#!/usr/bin/python3`, `#!/usr/bin/env python3`, `#!/usr/bin/env -S
+// python3 -X utf8`. pip writes `#!/bin/sh` and an exec line for a long or spaced venv path, so a shebang that names no
+// python is no answer.
+export function shebangPython(launcherHead: string): string | null {
+    const [program, ...args] = (launcherHead.match(/^#!(.*)/)?.[1] ?? '').trim().split(/[ \t]+/);
+    const named = program.endsWith('/env') ? args.find((arg) => !arg.startsWith('-') && !arg.includes('=')) : program;
+    return named && /^python[\d.]*$/.test(named.slice(named.lastIndexOf('/') + 1)) ? named : null;
+}
+
 // The Python that imports a WeasyPrint of at least MIN_WEASYPRINT_MAJOR: the one the `weasyprint` launcher names (a pip
 // venv's, Homebrew's own), else python3. `-I` keeps the cwd and the environment off its module path. Else the version
 // it found, which the 501 names.
 async function probeWeasyPrint(): Promise<WeasyPrintProbe> {
     const launcher = Bun.which('weasyprint');
-    const shebang = launcher
-        ? (await Bun.file(launcher).slice(0, 512).text()).match(/^#![ \t]*(\S+)(?:[ \t]+(\S+))?/)
-        : null;
-    const named = shebang?.[1].endsWith('/env') ? shebang[2] : shebang?.[1];
+    const named = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
     let found: string | null = null;
-    for (const python of new Set([named, 'python3'])) {
-        if (!python) continue;
+    for (const python of new Set([named ?? 'python3', 'python3'])) {
         try {
             const proc = Bun.spawn([python, '-I', '-c', 'import weasyprint; print(weasyprint.__version__)'], {
                 stdout: 'pipe',
@@ -47,25 +53,38 @@ export async function isWeasyPrintAvailable(): Promise<boolean> {
     return (await weasyPrint()).python !== null;
 }
 
+// A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
+// once more. The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.
+async function spawnRender() {
+    const spawn = async () => {
+        const probe = await weasyPrint();
+        if (probe.python === null) {
+            throw new ApiError(
+                501,
+                `PDF export requires WeasyPrint ${MIN_WEASYPRINT_MAJOR} or later${probe.found ? `, not ${probe.found}` : ''}. ` +
+                    'Install it with Homebrew (brew install weasyprint) or with pip in a venv, not pip install --user.',
+            );
+        }
+        return Bun.spawn([probe.python, '-I', renderScript], {
+            stdin: 'pipe',
+            stdout: 'pipe',
+            stderr: 'pipe',
+            timeout: 60_000,
+        });
+    };
+    try {
+        return await spawn();
+    } catch (error) {
+        if (!isEnoent(error)) throw error;
+        cachedProbe = null;
+        return spawn();
+    }
+}
+
 // Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
 // Bun's stdin sink writes both, and the render script reads stdin as UTF-8.
 export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
-    const probe = await weasyPrint();
-    if (!probe.python) {
-        throw new ApiError(
-            501,
-            `PDF export requires WeasyPrint ${MIN_WEASYPRINT_MAJOR} or later${probe.found ? `, not ${probe.found}` : ''}. ` +
-                'Install it with Homebrew (brew install weasyprint) or with pip in a venv, not pip install --user.',
-        );
-    }
-
-    // The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.
-    const proc = Bun.spawn([probe.python, '-I', renderScript], {
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'pipe',
-        timeout: 60_000,
-    });
+    const proc = await spawnRender();
 
     // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
     // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
