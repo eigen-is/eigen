@@ -1579,6 +1579,15 @@ describe('docx writer — figures', () => {
         ]);
     });
 
+    test("a block figure in a heading leaves the pieces after it the heading's look, out of the navigator", async () => {
+        const json = doc(p(text('x')), heading(2, text('Before '), figure({ ...CHART, width: 100 }), text(' after')));
+        expect((await blocksOf(json)).slice(1)).toEqual([
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>${run('Before ')}</w:p>`,
+            imageParagraph(chart(100)),
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:outlineLvl w:val="9"/></w:pPr>${run(' after')}</w:p>`,
+        ]);
+    });
+
     test('a wrapped figure is a borderless floating one-cell table before its paragraph, the row kept whole', async () => {
         const cell = floatingImage(chart(220)) + floatingCaption('Wrapped');
         expect(

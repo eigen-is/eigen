@@ -501,11 +501,16 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
+    let pieces = 0;
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
         const line = familyLine(props.style, useFace(context.pkg, {}, props.style), faces);
-        blocks.push({ props: line === undefined ? props : { ...props, spacing: { ...props.spacing, line } }, runs });
+        let own = line === undefined ? props : { ...props, spacing: { ...props.spacing, line } };
+        // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
+        if (pieces++ > 0 && STYLES.get(props.style ?? '')?.pPr?.outlineLvl !== undefined)
+            own = { ...own, outlineLvl: 9 };
+        blocks.push({ props: own, runs });
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
