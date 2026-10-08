@@ -35,7 +35,7 @@ export async function eigendocToDocx(
         images: new Map(),
         files: [],
         drawings: 0,
-        // A Spacer's, a figure's and a holder's mark draw in the body's Regular.
+        // A Spacer's and a figure's mark draw in the body's Regular.
         faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
     const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
@@ -523,7 +523,10 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         for (const block of written) blocks.push(block);
     }
     if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
-    else if (textblock && blocks.every((block) => 'float' in block)) blocks.push({ props, runs: '', emptied: true });
+    else if (textblock && blocks.every((block) => 'float' in block)) {
+        useFace(context.pkg, {}, props.style);
+        blocks.push({ props, runs: '', emptied: true });
+    }
     return blocks;
 }
 

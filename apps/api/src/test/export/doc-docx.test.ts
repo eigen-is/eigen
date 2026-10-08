@@ -2098,6 +2098,10 @@ describe('docx writer — fonts', () => {
                 ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
             ],
             [doc(quote(p())), ['Inter Regular', 'Inter Italic']],
+            [
+                doc(quote(ul(li(p(figure({ mediaName: 'chart.png', width: 100, layout: 'wrap-left' })))))),
+                ['Inter Regular', 'Inter Italic'],
+            ],
         ];
         for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
     });
