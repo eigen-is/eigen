@@ -1,5 +1,6 @@
 import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
 import type { VectorScene } from '@workspace/lib/vector';
+import { stripNonXmlChars } from '@workspace/lib/xml';
 import DOMPurify from 'isomorphic-dompurify';
 import { JSDOM } from 'jsdom';
 import { type ExportMedia, toTransferableText } from '../document/transform/protocol';
@@ -99,30 +100,32 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
 // or a named entity is a fatal parse error that renders the whole drawing as nothing. DOMPurify hands
 // back HTML serialization, so take its markup through the DOM once more and serialize it as XML. The
 // literal xmlns attributes go first — the serializer writes the namespace declarations itself, and a
-// second one on the same element is a duplicate attribute.
-export function toXmlDocument(svg: string): string {
+// second one on the same element is a duplicate attribute. The serializer also writes the control characters the HTML
+// parser kept, which no XML reader accepts. Null when there is no <svg> to serialize.
+export function toXmlDocument(svg: string): string | null {
     const dom = new JSDOM(svg, { contentType: 'text/html' });
     const root = dom.window.document.querySelector('svg');
-    if (!root) return svg;
+    if (!root) return null;
     for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
-    return new dom.window.XMLSerializer().serializeToString(root);
+    return stripNonXmlChars(new dom.window.XMLSerializer().serializeToString(root));
 }
 
 // An SVG figure's media: the data-only pass every export body gets, written as XML, which a docx part must be and an
 // .svg data: URI is read as (DOMPurify writes `&nbsp;` and other HTML-only forms).
-export function sanitizeSvgMedia(svg: string): string {
+export function sanitizeSvgMedia(svg: string): string | null {
     return toXmlDocument(sanitizeExportHtml(svg));
 }
 
 // SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. Embedded
 // as a data: URI it still reaches WeasyPrint's fetcher (a nested `<image href>` is the same SSRF the assembled document
-// closes), so every export arm takes it through sanitizeSvgMedia here, off the event loop.
+// closes), so every export arm takes it through sanitizeSvgMedia here, off the event loop. One with no <svg> in it is
+// no drawing, and is dropped like a failed preview.
 export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
-    return media.map((item) =>
-        item.contentType === 'image/svg+xml'
-            ? { ...item, data: toTransferableText(sanitizeSvgMedia(Buffer.from(item.data).toString('utf8'))) }
-            : item,
-    );
+    return media.flatMap((item) => {
+        if (item.contentType !== 'image/svg+xml') return [item];
+        const svg = sanitizeSvgMedia(Buffer.from(item.data).toString('utf8'));
+        return svg === null ? [] : [{ ...item, data: toTransferableText(svg) }];
+    });
 }
 
 // A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the

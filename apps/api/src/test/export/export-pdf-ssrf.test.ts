@@ -231,6 +231,26 @@ describe('export sanitize — SVG media', () => {
         expect(text(svg.data)).not.toContain('evil.test');
         expect(png.data).toBe(raster);
     });
+    test('a character XML cannot hold leaves the text and the attributes it was in', () => {
+        const [svg] = sanitizeExportMedia([
+            {
+                name: 'a.svg',
+                contentType: 'image/svg+xml',
+                data: toTransferableText(
+                    `<svg xmlns="http://www.w3.org/2000/svg"><text id="t\u0002">a\u0001b</text></svg>`,
+                ),
+            },
+        ]);
+        expect(parseXml(text(svg.data))?.local).toBe('svg');
+        expect(text(svg.data)).toContain('>ab</text>');
+    });
+
+    test('a file typed SVG with no <svg> in it is dropped, not passed through', () => {
+        const media = sanitizeExportMedia([
+            { name: 'a.svg', contentType: 'image/svg+xml', data: toTransferableText('hello <b>x</b>') },
+        ]);
+        expect(media).toEqual([]);
+    });
 });
 
 const wp = await isWeasyPrintAvailable();
