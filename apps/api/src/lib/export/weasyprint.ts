@@ -92,7 +92,7 @@ export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
         proc.stdin.write(html);
         await proc.stdin.end();
     } catch {
-        // Early stdin close is surfaced by the exitCode/stderr check below.
+        // Early stdin close is surfaced by the exitCode check below.
     }
 
     const [exitCode, stdoutResponse, stderrResponse] = await Promise.all([
@@ -106,8 +106,10 @@ export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
         throw new ApiError(504, 'PDF export timed out');
     }
 
+    // The traceback names the install and the checkout, so it stays in the log.
     if (exitCode !== 0) {
-        throw new ApiError(500, `PDF generation failed: ${stderrResponse || `exit code ${exitCode}`}`);
+        console.error(`[export] WeasyPrint exited with code ${exitCode}:`, stderrResponse);
+        throw new ApiError(500, 'PDF generation failed');
     }
 
     return Buffer.from(stdoutResponse);
