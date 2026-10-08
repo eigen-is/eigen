@@ -1,22 +1,14 @@
-/// <reference path="../modules.d.ts" />
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import {
-    DEFAULT_PAGE_SETUP,
-    type FigureAttrs,
-    getDocExtensions,
-    pageStylesheet,
-    pageTwips,
-} from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, type FigureAttrs, getDocExtensions, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { toDataUriMap } from '../../document/media';
 import {
     type EigendocExportFormat,
-    type TransformMedia,
+    type ExportMedia,
     type TransformWarning,
     toTransferableBuffer,
     toTransferableText,
@@ -31,26 +23,23 @@ import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './ren
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
-// Every format renders the same document by design: WeasyPrint and Turbodocx both
-// consume exactly what the HTML download serves. Turbodocx loads lazily — it is an
-// externalized dependency, and an HTML export must not evaluate it.
+// HTML and PDF render the same document by design: WeasyPrint consumes exactly what the
+// HTML download serves. The docx is written from the JSON by to-docx.ts, which loads
+// lazily so an HTML export never evaluates it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
     title: string,
-    media: TransformMedia[],
+    media: ExportMedia[],
+    publicOrigin: string | undefined,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
-    const html = renderEigendocDocument(readEigendocFromDoc(doc), toDataUriMap(media), title);
-    if (format !== 'docx') return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
-
-    // Without the doctype: html-to-docx opens the body with an empty paragraph for it.
-    const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
-    const docx = await HTMLtoDOCX(html, undefined, {
-        title: stripEigenExtension(title),
-        pageSize: { width: PAGE_TWIPS.width, height: PAGE_TWIPS.height },
-        margins: PAGE_TWIPS.margin,
-    });
-    return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
+    const json = readEigendocFromDoc(doc);
+    if (format === 'docx') {
+        const { eigendocToDocx } = await import('./to-docx');
+        return { data: toTransferableBuffer(await eigendocToDocx(json, media, title, publicOrigin)), warnings: [] };
+    }
+    const html = renderEigendocDocument(json, toDataUriMap(media), title);
+    return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 }
 
 const lowlight = createLowlight(common);
@@ -87,8 +76,6 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 </body>
 </html>`;
 }
-
-const PAGE_TWIPS = pageTwips(DEFAULT_PAGE_SETUP);
 
 const PRINT_EXTRAS = `
 /* The docs page as the editor draws it; on paper @page draws the margins */

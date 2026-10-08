@@ -21,12 +21,12 @@ function brokenDoc(): Y.Doc {
 }
 
 async function docxDocumentXml(doc: Y.Doc): Promise<string | undefined> {
-    const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', []);
+    const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
     return (await JSZip.loadAsync(data)).file('word/document.xml')?.async('string');
 }
 
 async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
-    const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', []);
+    const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', [], undefined);
     return new TextDecoder().decode(data).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
 }
 
@@ -95,7 +95,7 @@ describe('doc export — figures', () => {
         });
         const media = [{ name: 'chart.png', contentType: 'image/png', data: new ArrayBuffer(1) }];
         const doc = seededDoc({ type: 'doc', content: [figure('wrap-left'), figure('wrap-right')] });
-        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', media);
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', media, undefined);
         const html = new TextDecoder().decode(data);
         expect(html).toContain('float: left; margin: 0.25em 1em 0.5em 0');
         expect(html).toContain('float: right; margin: 0.25em 0 0.5em 1em');
@@ -104,7 +104,7 @@ describe('doc export — figures', () => {
 
 describe('doc export — page breaks', () => {
     test.each(['html', 'pdf-html'] as const)('%s carries the page break div', async (format) => {
-        const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', []);
+        const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', [], undefined);
         expect(new TextDecoder().decode(data)).toContain('<p>Before</p><div class="page-break"></div><p>After</p>');
     });
 
@@ -112,9 +112,7 @@ describe('doc export — page breaks', () => {
         expect(await docxDocumentXml(brokenDoc())).toContain('<w:br w:type="page"/>');
     });
 
-    // html-to-docx only turns a top-level page-break div into a break; the phase 1 docx writer
-    // (PROPOSAL_DOCX.md) replaces it and should carry this one too.
-    test('docx drops a page break nested in a list item', async () => {
+    test('docx keeps a page break nested in a list item', async () => {
         const nested = seededDoc({
             type: 'doc',
             content: [
@@ -124,11 +122,11 @@ describe('doc export — page breaks', () => {
                 },
             ],
         });
-        expect(await docxDocumentXml(nested)).not.toContain('w:type="page"');
+        expect(await docxDocumentXml(nested)).toContain('<w:br w:type="page"/>');
     });
 
     test('a docx export imports back to the same blocks', async () => {
-        const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', []);
+        const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
         const { json } = await docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
     });
@@ -139,7 +137,7 @@ describe('doc export — whitespace', () => {
         '%s keeps repeated spaces and prints no whitespace around the body',
         async (format) => {
             const doc = seededDoc({ type: 'doc', content: [paragraph('a  b')] });
-            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', []);
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
             const html = new TextDecoder().decode(data);
             expect(html).toContain('<p>a  b</p>');
             expect(html).toMatch(/<article class="eigen-prose tiptap"><p>/);

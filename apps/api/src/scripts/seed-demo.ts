@@ -4,8 +4,8 @@
 // runs first-run setup, creates a ~20-persona crew in one org + team, and fills a lived-in
 // workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site-plan
 // drawing, mail, calendar, chat and contacts — driving the REAL product surfaces as the personas so
-// activity panels, file history and notifications populate for free. Docs dogfood the shipped .docx
-// importer; the budget sheet and the stickies board are byte-copied fixture containers; the sponsor deck
+// activity panels, file history and notifications populate for free. Docs are written as HTML and parsed
+// by the editor's schema straight into their Y.Docs; the budget sheet and the stickies board are byte-copied fixture containers; the sponsor deck
 // and the site plan are built into their Y.Docs from typed specs (demo/deck-build.ts, vector-build.ts).
 //
 // A host-level reset script wipes the data root hourly and re-runs this, so every timestamp
@@ -22,12 +22,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { prosemirrorJSONToYDoc, yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { DOMParser as PmDOMParser, type Schema } from '@tiptap/pm/model';
+import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
-import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
@@ -41,8 +41,10 @@ import {
     VCARD_MIMES,
 } from '@workspace/lib/types/drive';
 import { type AttachmentReference, toAttachmentReference } from '@workspace/lib/types/drive-reference';
+import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
+import type { Drive } from '../lib/drive';
 import type { User } from '../lib/user';
 import {
     ADMIN_AVATAR,
@@ -185,6 +187,12 @@ function injectCommentMark(json: JSONContent, anchor: string, cardId: string): b
     return false;
 }
 
+// The demo docs are written as HTML; the editor's schema parses them into the JSON a doc stores.
+function htmlToDocJson(schema: Schema, html: string): JSONContent {
+    const { document } = new JSDOM(`<!DOCTYPE html><html><body>${html}</body></html>`).window;
+    return PmDOMParser.fromSchema(schema).parse(document.body).toJSON();
+}
+
 // The comments panel renders from the doc's `comments` Y.Map. Mirrors the FE's writeCardToDoc
 // (packages/lib .../use-create-comment-card.ts), which lives in a React hooks module the API
 // must not pull into its module graph.
@@ -228,14 +236,12 @@ async function main(): Promise<void> {
     const { getUserByEmail } = await import('../lib/user');
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
-    const { convertToDocument } = await import('../lib/import/import-document');
     const { writeEigendocUpdateToYjs } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/import/doc/from-docx');
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/core/mail-template');
     const { createVCard } = await import('../lib/vcard');
-    const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home
     // is created — a user home fixes its mount type on first init. No welcome mail: every persona's
@@ -440,6 +446,23 @@ async function main(): Promise<void> {
         );
     }
 
+    // A new eigendoc holding the JSON, written as one update to its live collab doc.
+    const createDoc = async (
+        drive: Drive,
+        mountId: string,
+        parentId: string,
+        name: string,
+        json: JSONContent,
+        author: User,
+    ): Promise<DrivePath> => {
+        const docPath = await drive.create(mountId, parentId, name, 'doc', author);
+        const collab = await drive.getCollabDocument(mountId, docPath.id);
+        const update = prosemirrorJSONToYDoc(docSchema, json, 'default');
+        writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(update));
+        update.destroy();
+        return docPath;
+    };
+
     // --- Volunteer roster: a doc in volunteers/ listing every crew member with a link to their team
     // contact card. Built here (not in content.ts) so the links carry the runtime team id + emails.
     // The team id is shared by every persona, so one URL works for every visitor. Links are
@@ -455,45 +478,31 @@ async function main(): Promise<void> {
             '<p>Everyone helping to run the festival this edition. Click a name to open their contact card.</p>',
             `<ul>${rosterItems}</ul>`,
         ].join('');
-        const docxBytes = Buffer.from(await htmlToDocx(rosterHtml));
-        const upload = await teamDrive.createFileFromData(
+        const docPath = await createDoc(
+            teamDrive,
             teamMountId,
             folderId.get('volunteers')!,
-            'crew roster.docx',
-            DOCX_MIME,
-            docxBytes,
+            'crew roster',
+            htmlToDocJson(docSchema, rosterHtml),
             author,
         );
-        const { mount: docMount, path: docSource } = await teamDrive.resolveFile(teamMountId, upload.id);
-        const docPath = await convertToDocument(teamDrive, docMount, docSource, 'eigendoc', author);
-        await teamDrive.deletePath(teamMountId, upload.id, author); // trash the raw upload
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
         teamDocs.set('crew roster', docPath);
     }
 
-    // --- Docs: HTML -> .docx -> shipped converter -> eigendoc; comment threads as nested chats. ---
+    // --- Docs: HTML -> eigendoc, the comment marks anchored before the one write; comment threads as nested
+    // chats. The container comes first: its chat/ subfolder holds the threads the marks point at. ---
     for (const doc of DOCS) {
         const author = userForRole(doc.author);
         const parentId = folderId.get(doc.folder)!;
-        const docxBytes = Buffer.from(await htmlToDocx(doc.html));
-        const upload = await teamDrive.createFileFromData(
-            teamMountId,
-            parentId,
-            `${doc.name}.docx`,
-            DOCX_MIME,
-            docxBytes,
-            author,
-        );
-        const { mount: docMount, path: docSource } = await teamDrive.resolveFile(teamMountId, upload.id);
-        const docPath = await convertToDocument(teamDrive, docMount, docSource, 'eigendoc', author);
-        await teamDrive.deletePath(teamMountId, upload.id, author); // trash the raw upload
+        const docPath = await teamDrive.create(teamMountId, parentId, doc.name, 'doc', author);
         teamDocs.set(doc.name, docPath);
 
         // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const collab = await teamDrive.getCollabDocument(teamMountId, docPath.id);
-        const docJson = yXmlFragmentToProsemirrorJSON(collab.doc.getXmlFragment('default')) as JSONContent;
+        const docJson = htmlToDocJson(docSchema, doc.html);
         const cards: { spec: (typeof doc.comments)[number]; card: CommentCard }[] = [];
         for (const comment of doc.comments) {
             const commentAuthor = userByKey.get(comment.author)!;
@@ -518,7 +527,7 @@ async function main(): Promise<void> {
             }
             cards.push({ spec: comment, card });
         }
-        // One fragment rebuild with the anchored marks; cards land in the comments Y.Map the
+        // The doc's one write, with the anchored marks; cards land in the comments Y.Map the
         // panel renders from. Both persist through the live collab doc.
         const marked = prosemirrorJSONToYDoc(docSchema, docJson, 'default');
         writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(marked));
@@ -938,25 +947,14 @@ async function main(): Promise<void> {
     }
 
     // --- Personal notes: a private "my notes" eigendoc in every persona's own drive (same cozy
-    // content for all). Dogfoods the .docx importer like the team docs; the docx is built once and
-    // converted per persona into their own home drive. ---
-    const notesDocx = Buffer.from(await htmlToDocx(NOTES.html));
+    // content for all). The JSON is built once and written into each persona's own home drive. ---
+    const notesJson = htmlToDocJson(docSchema, NOTES.html);
     for (const persona of PERSONAS) {
         const owner = userByKey.get(persona.key)!;
         const ownerHome = await getHome(owner.id);
         const ownerRoot = await ownerHome.drive.getRootFolder('default');
         if (!ownerRoot) throw new Error(`Root missing for ${owner.email}`);
-        const upload = await ownerHome.drive.createFileFromData(
-            'default',
-            ownerRoot.id,
-            `${NOTES.name}.docx`,
-            DOCX_MIME,
-            notesDocx,
-            owner,
-        );
-        const { mount: notesMount, path: notesSource } = await ownerHome.drive.resolveFile('default', upload.id);
-        await convertToDocument(ownerHome.drive, notesMount, notesSource, 'eigendoc', owner);
-        await ownerHome.drive.deletePath('default', upload.id, owner); // trash the raw upload
+        await createDoc(ownerHome.drive, 'default', ownerRoot.id, NOTES.name, notesJson, owner);
     }
 
     // Clean exit: drain fire-and-forget fan-outs, checkpoint + close every home, then exit.
