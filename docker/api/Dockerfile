@@ -17,12 +17,22 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libvips \
     libimage-exiftool-perl \
-    weasyprint \
+    python3-venv \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz-subset0 \
     ffmpeg \
     make \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# WeasyPrint from PyPI, pinned, so the image renders a PDF with the engine development does. Debian's 62 has no
+# URLFetcher for weasyprint-render.py and draws a centred figure left-aligned. Its wheels need no compiler.
+RUN python3 -m venv /opt/weasyprint \
+    && /opt/weasyprint/bin/pip install --no-cache-dir weasyprint==70.0 \
+    && /opt/weasyprint/bin/pip uninstall --yes pip \
+    && ln -s /opt/weasyprint/bin/weasyprint /usr/local/bin/weasyprint
 
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
 
