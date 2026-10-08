@@ -22,7 +22,14 @@ import {
 } from '../../../auth-schema';
 import { isTest } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
-import { getAuthSecret, getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
+import {
+    getAuthSecret,
+    getDomain,
+    getOrgName,
+    getPublicOrigin,
+    getServerConfig,
+    isRoleAddress,
+} from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -30,7 +37,7 @@ import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../s
 import { getTeamExists } from '../team';
 import { getOrgRole, type User } from '../user';
 
-const deploymentDomain = getDomain();
+const publicOrigin = getPublicOrigin();
 export const trustedOrigins = [
     'http://localhost',
     'https://localhost',
@@ -49,7 +56,7 @@ export const trustedOrigins = [
     'http://localhost:3012',
     'http://localhost:3013',
     'http://localhost:3014',
-    ...(deploymentDomain !== 'localhost' ? [`https://${deploymentDomain}`] : []),
+    ...(publicOrigin ? [publicOrigin] : []),
 ];
 
 // users3.db has no versioned-migration system (setup.ts only creates tables once), so
