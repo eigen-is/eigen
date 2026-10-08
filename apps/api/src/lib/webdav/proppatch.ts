@@ -13,9 +13,7 @@ import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, resp
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
 // server. PROPPATCH on a live property must return 403 Forbidden inside propstat
-// rather than persisting an opaque copy that would shadow the real value. A set of the same name in no namespace
-// is refused too, since a client reading names alone would take it for the live one; its remove runs, so a row
-// stored before the refusal can go.
+// rather than persisting an opaque copy that would shadow the real value.
 const PROTECTED_PROPS = new Set([
     'displayname',
     'getcontentlength',
@@ -73,8 +71,7 @@ export async function handleProppatch(args: {
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     const ops = extractPropOps(body);
-    // The xml namespace is reserved to the xml prefix (Namespaces in XML § 3), not a client's to store props in; like a
-    // no-namespace live name, only its set is refused, so a row stored before can go.
+    // Only a set is refused in the xml namespace (reserved) or on a no-namespace live name (read as the live one); a remove runs, so a stored row can go.
     const isProtected = ({ op, prop }: PropOp) =>
         (PROTECTED_PROPS.has(prop.name) && prop.ns === DAV) ||
         (op === 'set' && (prop.ns === XML_NAMESPACE || (prop.ns === '' && PROTECTED_PROPS.has(prop.name))));
