@@ -43,6 +43,18 @@ const REF_ATTRS = ['src', 'poster', 'background'];
 const isAllowedRef = (value: string, allowed: ReadonlySet<string>): boolean =>
     /^[\t\n\f\r ]*data:/i.test(value) || allowed.has(value);
 
+// The elements whose href points into their own document. On another (an image, feImage) WeasyPrint resolves a
+// fragment against its base and opens file://<cwd>/; SVG 2 gives clipPath and mask no href. Lowercase, as compared.
+const FRAGMENT_REF_TAGS = new Set([
+    'use',
+    'lineargradient',
+    'radialgradient',
+    'pattern',
+    'filter',
+    'textpath',
+    'mpath',
+]);
+
 // A reference into the same document (a gradient, a clip, a <use> glyph) fetches nothing.
 const isFragmentRef = (value: string): boolean => /^[\t\n\f\r ]*#\S*[\t\n\f\r ]*$/.test(value);
 
@@ -108,10 +120,14 @@ function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
     // SVG <image>/<use> reference through href (and legacy xlink:href), which DOMPurify
     // keeps by default and WeasyPrint fetches server-side — the same SSRF as <img src>,
     // through a different attribute. jsdom names an SVG <a> in lowercase, an HTML one in upper.
-    if (node.tagName.toLowerCase() === 'a') return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'a') return;
+    const references = FRAGMENT_REF_TAGS.has(tag);
     for (const attr of ['href', 'xlink:href']) {
         const value = node.getAttribute(attr);
-        if (value != null && !isAllowedRef(value, allowed) && !isFragmentRef(value)) node.removeAttribute(attr);
+        if (value != null && !isAllowedRef(value, allowed) && !(references && isFragmentRef(value))) {
+            node.removeAttribute(attr);
+        }
     }
 }
 

@@ -378,6 +378,31 @@ describe('export sanitize — same-document SVG references', () => {
         expect(out).not.toContain('evil.test');
     });
 
+    test.each(['use', 'linearGradient', 'radialGradient', 'pattern', 'filter', 'textPath', 'mpath'])(
+        'a fragment href stays on <%s>, which references with it',
+        (tag) => {
+            expect(svg(`<${tag} href="#glyph"></${tag}>`)).toContain(`<${tag} href="#glyph">`);
+        },
+    );
+
+    // WeasyPrint resolves a fragment on an image against its base and opens file://<cwd>/. SVG 2 gives clipPath and
+    // mask no href.
+    test.each(['image', 'feImage', 'clipPath', 'mask'])('a fragment href goes from <%s>, in both spellings', (tag) => {
+        for (const attr of ['href', 'xlink:href']) {
+            expect(svg(`<${tag} ${attr}="#g"></${tag}>`)).toContain(`<${tag}></${tag}>`);
+            const [media] = sanitizeExportMedia([
+                {
+                    name: 'a.svg',
+                    contentType: 'image/svg+xml',
+                    data: toTransferableText(
+                        `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><${tag} ${attr}="#g"/></svg>`,
+                    ),
+                },
+            ]);
+            expect(Buffer.from(media.data).toString('utf8')).not.toContain('#g');
+        }
+    });
+
     test('an xml:base cannot turn a kept fragment into a remote reference', () => {
         const out = svg('<image xml:base="http://evil.test/" href="#g"></image>');
         expect(out).not.toContain('evil.test');
