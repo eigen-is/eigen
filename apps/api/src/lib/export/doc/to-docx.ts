@@ -548,8 +548,13 @@ function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps):
         const first = order === 0;
         const last = order === pieces.length - 1;
         const own: Spacing = {};
-        if (piece.inset ? first : !first && before > 0) own.before = first ? before : 0;
-        if (piece.inset ? last : !last && after > 0) own.after = last ? after : 0;
+        if (piece.inset) {
+            if (first) own.before = before;
+            if (last) own.after = after;
+        } else {
+            if (!first && before > 0) own.before = 0;
+            if (!last && after > 0) own.after = 0;
+        }
         if (own.before !== undefined || own.after !== undefined)
             blocks[index] = { ...piece, props: { ...piece.props, spacing: { ...piece.props.spacing, ...own } } };
     }
@@ -631,11 +636,16 @@ function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, contex
     const style = own.style ?? context.style;
     return {
         style,
-        pBdr: own.style && context.style === 'Quote' ? { left: QUOTE_LOOK.border } : undefined,
+        pBdr: quoteBar(style, context),
         spacing: own.spacing ?? (own.style || context.after === undefined ? undefined : { after: context.after }),
         ind: indentOf(style, context),
         jc: own.jc ?? context.align,
     };
+}
+
+// In a quote, a paragraph of another style draws the quote's bar itself, so the bar runs on past it.
+function quoteBar(style: string | undefined, context: Context): ParagraphProps['pBdr'] {
+    return context.quotes > 0 && style !== 'Quote' ? { left: QUOTE_LOOK.border } : undefined;
 }
 
 // Direct only where the style's own indent isn't the container's.
@@ -749,8 +759,16 @@ function itemOf(
             ? blocks.with(index, open(first, inner))
             : blocks.toSpliced(index, 0, open({ props, runs: '' }, inner));
     // The editor's item contains its floats: a clearing break starts the next item below them, on a single-spaced hairline.
-    if (!blocks.some((block) => 'table' in block && block.float)) return opened;
-    return [...opened, { props: { style: 'Spacer', spacing: { after, line: 240 } }, runs: CLEAR_FLOATS }];
+    // A nested item clears its own, so only a float after the last clearing break is this item's to clear.
+    const cleared = opened.findLastIndex((block) => !('table' in block) && block.runs === CLEAR_FLOATS);
+    if (!opened.slice(cleared + 1).some((block) => 'table' in block && block.float)) return opened;
+    const clearing = {
+        style: 'Spacer',
+        pBdr: quoteBar('Spacer', context),
+        spacing: { after, line: 240 },
+        ind: indentOf('Spacer', context),
+    };
+    return [...opened, { props: clearing, runs: CLEAR_FLOATS }];
 }
 
 const CLEAR_FLOATS = '<w:r><w:br w:type="textWrapping" w:clear="all"/></w:r>';
@@ -963,7 +981,13 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const bottom = twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt));
     const captionBefore = styleSpacing('Caption', 'before');
     const captionParagraph = (before: number, inset: Inset): Paragraph => ({
-        props: { style: 'Caption', spacing: { before, after: 0 }, ind: indentOf('Caption', context), jc },
+        props: {
+            style: 'Caption',
+            pBdr: quoteBar('Caption', context),
+            spacing: { before, after: 0 },
+            ind: indentOf('Caption', context),
+            jc,
+        },
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
@@ -990,7 +1014,8 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         const spacing = { before: 0, after: 0, line: 240 };
         // The caption takes the figure's margin below.
         const inset = { top, bottom: captionRuns ? 0 : bottom };
-        const figure: Block[] = [{ props: { spacing, ind: indentOf(undefined, context), jc }, runs: drawing, inset }];
+        const props = { pBdr: quoteBar(undefined, context), spacing, ind: indentOf(undefined, context), jc };
+        const figure: Block[] = [{ props, runs: drawing, inset }];
         if (captionRuns) figure.push(captionParagraph(captionBefore, { top: 0, bottom }));
         return figure;
     }

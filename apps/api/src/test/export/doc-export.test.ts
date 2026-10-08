@@ -186,6 +186,18 @@ describe('doc export — trailing breaks', () => {
         expect(body).toContain('<blockquote><p><br></p></blockquote>');
         expect(body).toMatch(/<td[^>]*><p><br><\/p><\/td>/);
     });
+
+    test('an empty code block or one ending in a newline keeps its last line, one ending in text gets none', async () => {
+        const code = (text?: string) => ({
+            type: 'codeBlock',
+            attrs: { language: 'plaintext' },
+            content: text === undefined ? undefined : [{ type: 'text', text }],
+        });
+        const body = await bodyOf(code(), code('a\n'), code('b'));
+        expect(body).toContain(
+            '<pre><code class="hljs language-plaintext"><br></code></pre><pre><code class="hljs language-plaintext">a\n<br></code></pre><pre><code class="hljs language-plaintext">b</code></pre>',
+        );
+    });
 });
 
 describe('doc export — page breaks', () => {

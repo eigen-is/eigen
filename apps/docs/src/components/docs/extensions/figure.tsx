@@ -1,4 +1,5 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
@@ -268,6 +269,29 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
 export const Figure = FigureNode.extend<FigureOptions>({
     addOptions() {
         return { onContextMenu: () => {}, onOpenComment: () => {} };
+    },
+    addProseMirrorPlugins() {
+        const name = this.name;
+        return [
+            new Plugin({
+                key: new PluginKey('figureClickBeside'),
+                props: {
+                    // A block figure's box is the column's width, so a click in the empty space beside the image lands
+                    // on the box: it puts the caret on that side, where ProseMirror would select the node.
+                    handleClickOn(view, _pos, node, nodePos, event, direct) {
+                        const box = view.nodeDOM(nodePos)?.firstChild;
+                        if (!direct || node.type.name !== name || event.target !== box || !(box instanceof Element))
+                            return false;
+                        const image = box.firstElementChild?.getBoundingClientRect();
+                        if (!image) return false;
+                        const at = event.clientX < image.left + image.width / 2 ? nodePos : nodePos + node.nodeSize;
+                        view.focus();
+                        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)));
+                        return true;
+                    },
+                },
+            }),
+        ];
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color
