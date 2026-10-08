@@ -18,9 +18,9 @@ const NONCHARACTER = String.fromCharCode(0xfffe);
 
 const schema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
 
-// The nodes U2b (tables) and U2c (figures) map. Each throws until its mapping lands and leaves this set; the writer is
-// whole when it is empty.
-const PENDING_NODES = new Set(['table', 'tableRow', 'tableCell', 'tableHeader', 'figure']);
+// The node U2c (figures) maps. It throws until its mapping lands and leaves this set; the writer is whole when it is
+// empty.
+const PENDING_NODES = new Set(['figure']);
 
 function docx(json: JSONContent, publicOrigin?: string): Promise<Uint8Array> {
     return eigendocToDocx(json, 'Report.eigendoc', publicOrigin);
@@ -86,7 +86,8 @@ function shape(element: XmlElement): string[] {
 
 // An element as XML, names as written and namespace declarations left out: the exact-XML oracle. WordprocessingML
 // holds text only in leaves, so text before elements loses nothing.
-function xmlOf(element: XmlElement): string {
+function xmlOf(element: XmlElement | undefined): string {
+    if (!element) return '';
     const attributes = Object.entries(element.attributes)
         .filter(([name]) => name !== 'xmlns' && !name.startsWith('xmlns:'))
         .map(([name, value]) => ` ${name}="${value}"`)
@@ -145,6 +146,22 @@ function code(value: string, language: string | null = null): JSONContent {
 
 function heading(level: number, ...content: JSONContent[]): JSONContent {
     return { type: 'heading', attrs: { level }, content };
+}
+
+function table(...rows: JSONContent[]): JSONContent {
+    return { type: 'table', content: rows };
+}
+
+function tr(...cells: JSONContent[]): JSONContent {
+    return { type: 'tableRow', content: cells };
+}
+
+function td(attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent {
+    return { type: 'tableCell', attrs, content };
+}
+
+function th(attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent {
+    return { type: 'tableHeader', attrs, content };
 }
 
 const RULE: JSONContent = { type: 'horizontalRule' };
@@ -368,9 +385,10 @@ describe('docx writer — page breaks', () => {
         ['a list item', (...content: JSONContent[]) => ul(li(...content))],
         ['a task item', (...content: JSONContent[]) => tasks(task(false, ...content))],
         ['a quote', (...content: JSONContent[]) => quote(...content)],
+        ['a table cell', (...content: JSONContent[]) => table(tr(td({}, ...content)))],
     ])('a page break in %s is the same unnumbered paragraph, at its place', async (_where, wrap) => {
         const body = await bodyOf(doc(wrap(p(text('before')), PAGE_BREAK, p(text('after')))));
-        const [before, pageBreak, after, ...rest] = xmlChildren(body, W, 'p');
+        const [before, pageBreak, after, ...rest] = xmlChildren(descendants(body, W, 'tc')[0] ?? body, W, 'p');
         expect(rest).toEqual([]);
         expect(texts(before ?? body)).toEndWith('before');
         expect(xmlOf(pageBreak ?? body)).toBe(PAGE_BREAK_XML);
@@ -858,6 +876,209 @@ describe('docx writer — task lists', () => {
     });
 });
 
+describe('docx writer — tables', () => {
+    const tablesIn = async (json: JSONContent) => xmlChildren(await bodyOf(json), W, 'tbl');
+    const cell = (width: number, runs: string, tcPr = '', pPr = '<w:spacing w:after="0"/>') =>
+        `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${tcPr}</w:tcPr><w:p><w:pPr>${pPr}</w:pPr>${runs}</w:p></w:tc>`;
+    const SHADED = '<w:shd w:val="clear" w:color="auto" w:fill="F9FAFB"/>';
+    const SPACER = '<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="165"/></w:pPr></w:p>';
+    const gridOf = (tbl: XmlElement | undefined) => {
+        const grid = child(tbl, 'tblGrid');
+        return grid ? xmlChildren(grid, W, 'gridCol').map((gridCol) => Number(w(gridCol, 'w'))) : [];
+    };
+
+    test("every column known is a fixed table that wide, with the editor's borders and cell padding", async () => {
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(th({ colwidth: [120] }, p(text('A'))), th({ colwidth: [160] }, p(text('B')))),
+                        tr(td({ colwidth: [120] }, p(text('a'))), td({ colwidth: [160] }, p(text('b')))),
+                    ),
+                ),
+            ),
+        );
+        const border = (side: string) => `<w:${side} w:val="single" w:sz="6" w:space="0" w:color="D1D5DB"/>`;
+        const margin = (side: string, width: number) => `<w:${side} w:w="${width}" w:type="dxa"/>`;
+        expect(xmlOf(child(tbl, 'tblPr'))).toBe(
+            `<w:tblPr><w:tblW w:w="4200" w:type="dxa"/><w:tblInd w:w="0" w:type="dxa"/><w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(border).join('')}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>${margin('top', 88)}${margin('left', 176)}${margin('bottom', 88)}${margin('right', 176)}</w:tblCellMar></w:tblPr>`,
+        );
+        expect(xmlOf(child(tbl, 'tblGrid'))).toBe(
+            '<w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="2400"/></w:tblGrid>',
+        );
+        expect(xmlChildren(tbl, W, 'tr').map(xmlOf)).toEqual([
+            `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(1800, run('A'), SHADED)}${cell(2400, run('B'), SHADED)}</w:tr>`,
+            `<w:tr>${cell(1800, run('a'))}${cell(2400, run('b'))}</w:tr>`,
+        ]);
+    });
+
+    test('colwidths past the text column are scaled to it, none narrower than 25 px', async () => {
+        const widths = [400, 400, 400, 10].map((width) => td({ colwidth: [width] }, p(text('x'))));
+        const tbl = only(await tablesIn(doc(table(tr(...widths)))));
+        expect(gridOf(tbl)).toEqual([3180, 3180, 3180, 375]);
+        expect(w(child(child(tbl, 'tblPr'), 'tblW'), 'w')).toBe('9915');
+    });
+
+    test('a column without a colwidth shares what the known ones leave, and the table fills the column', async () => {
+        const [shared, floored] = await tablesIn(
+            doc(
+                table(tr(td({ colwidth: [100] }, p()), td({}, p()), td({ colwidth: null }, p()))),
+                table(tr(td({ colwidth: [640] }, p()), td({ colwidth: [0] }, p()))),
+            ),
+        );
+        expect(gridOf(shared)).toEqual([1500, 4065, 4065]);
+        expect(gridOf(floored)).toEqual([9600, 375]);
+        const tblPr = child(shared, 'tblPr');
+        expect(xmlOf(child(tblPr, 'tblW'))).toBe('<w:tblW w:w="5000" w:type="pct"/>');
+        expect(child(tblPr, 'tblLayout')).toBeUndefined();
+    });
+
+    test("a colspan spans its columns' widths, a rowspan restarts a vertical merge its covered cells continue", async () => {
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(...['a', 'b', 'c'].map((value) => td({ colwidth: [100] }, p(text(value))))),
+                        tr(
+                            td({ colspan: 2, colwidth: [100, 100] }, p(text('wide'))),
+                            td({ rowspan: 2, colwidth: [100] }, p(text('tall'))),
+                        ),
+                        tr(td({ colwidth: [100] }, p(text('d'))), td({ colwidth: [100] }, p(text('e')))),
+                    ),
+                ),
+            ),
+        );
+        const [, second, third] = xmlChildren(tbl, W, 'tr').map(xmlOf);
+        expect(second).toBe(
+            `<w:tr>${cell(3000, run('wide'), '<w:gridSpan w:val="2"/>')}${cell(1500, run('tall'), '<w:vMerge w:val="restart"/>')}</w:tr>`,
+        );
+        expect(third).toBe(
+            `<w:tr>${cell(1500, run('d'))}${cell(1500, run('e'))}<w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/></w:tcPr><w:p/></w:tc></w:tr>`,
+        );
+    });
+
+    test('a covered cell sits at its column, before the cells right of it, and spans as its merge does', async () => {
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(
+                            td({ colspan: 2, rowspan: 2, colwidth: [100, 100] }, p(text('x'))),
+                            td({ colwidth: [100] }, p(text('y'))),
+                        ),
+                        tr(td({ colwidth: [100] }, p(text('z')))),
+                    ),
+                ),
+            ),
+        );
+        expect(xmlOf(xmlChildren(tbl, W, 'tr')[1])).toBe(
+            `<w:tr><w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/><w:gridSpan w:val="2"/><w:vMerge/></w:tcPr><w:p/></w:tc>${cell(1500, run('z'))}</w:tr>`,
+        );
+    });
+
+    test('a short row is filled with empty cells', async () => {
+        const tbl = only(
+            await tablesIn(doc(table(tr(td({}, p(text('a'))), td({}, p(text('b')))), tr(td({}, p(text('c'))))))),
+        );
+        expect(xmlOf(xmlChildren(tbl, W, 'tr')[1])).toBe(
+            `<w:tr>${cell(4815, run('c'))}<w:tc><w:tcPr><w:tcW w:w="4815" w:type="dxa"/></w:tcPr><w:p/></w:tc></w:tr>`,
+        );
+    });
+
+    test('only a row of header cells repeats as a header; a header column is only shaded; no tblHeader is off', async () => {
+        const body = await bodyOf(
+            doc(
+                table(tr(th({}, p(text('A'))), th({}, p(text('B')))), tr(th({}, p(text('row'))), td({}, p(text('x'))))),
+            ),
+        );
+        const [header, row] = descendants(body, W, 'tr');
+        expect(shape(header ?? body)).toEqual(['trPr', 'tc', 'tc']);
+        expect(shape(row ?? body)).toEqual(['tc', 'tc']);
+        expect(descendants(row ?? body, W, 'shd').map((shd) => w(shd, 'fill'))).toEqual(['F9FAFB']);
+        for (const tblHeader of descendants(body, W, 'tblHeader')) expect(tblHeader.attributes).toEqual({});
+    });
+
+    test("a cell's align is the jc of each paragraph in it without its own", async () => {
+        const body = await bodyOf(
+            doc(
+                table(
+                    tr(
+                        td(
+                            { align: 'center' },
+                            p(text('a')),
+                            { type: 'paragraph', attrs: { textAlign: 'right' }, content: [text('b')] },
+                            quote(p(text('c'))),
+                        ),
+                        td({ align: 'sideways' }, p(text('d'))),
+                    ),
+                ),
+            ),
+        );
+        expect(descendants(body, W, 'jc').map((jc) => w(jc, 'val'))).toEqual(['center', 'right', 'center']);
+    });
+
+    test('spans past the grid or the rows are clamped, and ones of the wrong type are 1', async () => {
+        const tbl = only(
+            await tablesIn(
+                doc(table(tr(td({ colspan: 1000, rowspan: 9 }, p(text('x'))), td({ colspan: 'two' }, p())))),
+            ),
+        );
+        expect(gridOf(tbl)).toHaveLength(64);
+        expect(descendants(tbl, W, 'gridSpan').map((gridSpan) => w(gridSpan, 'val'))).toEqual(['63']);
+        expect(descendants(tbl, W, 'vMerge')).toEqual([]);
+    });
+
+    test('a table that ends the body or a cell is followed by a Spacer, and two tables are kept apart by one', async () => {
+        const one = table(tr(td({}, p(text('x')))));
+        const body = await bodyOf(doc(one, one, p(text('after')), one));
+        expect(shape(body)).toEqual(['tbl', 'p', 'tbl', 'p', 'tbl', 'p', 'sectPr']);
+        const [, between, , after, , last] = xmlElements(body).map(xmlOf);
+        expect([between, last]).toEqual([SPACER, SPACER]);
+        expect(after).toBe(`<w:p><w:pPr><w:spacing w:before="165"/></w:pPr>${run('after')}</w:p>`);
+
+        const [tc] = descendants(await bodyOf(doc(table(tr(td({}, p(text('x')), one, one))))), W, 'tc');
+        expect(tc && shape(tc)).toEqual(['tcPr', 'p', 'tbl', 'p', 'tbl', 'p']);
+        expect(tc && xmlChildren(tc, W, 'p').slice(1).map(xmlOf)).toEqual([SPACER, SPACER]);
+    });
+
+    test('the block after a table keeps a larger margin of its own above, and takes the margin in a list too', async () => {
+        const one = table(tr(td({}, p(text('x')))));
+        const [, afterHeading] = xmlElements(await bodyOf(doc(one, heading(1, text('h')))));
+        expect(xmlOf(child(afterHeading, 'pPr'))).toBe('<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>');
+
+        const body = await bodyOf(doc(ul(li(p(text('x')), one), li(p(text('y'))))));
+        expect(w(child(child(child(body, 'tbl'), 'tblPr'), 'tblInd'), 'w')).toBe('330');
+        const next = xmlChildren(body, W, 'p')[1];
+        expect(xmlOf(child(child(next, 'pPr'), 'spacing'))).toBe('<w:spacing w:before="165" w:after="220"/>');
+    });
+
+    test('a table in a list item is scaled to what its indent leaves, a nested table to its cell', async () => {
+        const wide = table(tr(td({ colwidth: [700] }, p(text('x')))));
+        expect(gridOf((await tablesIn(doc(ul(li(p(text('x')), wide)))))[0])).toEqual([9300]);
+        const nested = table(tr(td({ colwidth: [300] }, wide)));
+        const [outer] = await tablesIn(doc(nested));
+        expect(gridOf(child(child(child(outer, 'tr'), 'tc'), 'tbl'))).toEqual([4140]);
+    });
+
+    test('an empty cell is one paragraph, and a table with no cells writes nothing', async () => {
+        const tbl = only(await tablesIn(doc(table(tr(td({}))))));
+        expect(xmlOf(only(descendants(tbl, W, 'p')))).toBe('<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>');
+        expect(shape(await bodyOf(doc(table(), table(tr()))))).toEqual(['sectPr']);
+    });
+
+    test('a row or cell outside a table, and content outside a row or cell, still export, in a table', async () => {
+        const body = await bodyOf(
+            doc(
+                { type: 'tableRow', content: [td({}, p(text('row')))] },
+                th({}, p(text('cell'))),
+                { type: 'table', content: [p(text('stray'))] },
+                table({ type: 'tableRow', content: [p(text('loose'))] }),
+            ),
+        );
+        expect(descendants(body, W, 'tbl').map(texts)).toEqual(['row', 'cell', 'stray', 'loose']);
+    });
+});
+
 describe('docx writer — code blocks', () => {
     // Each line's runs as text, color and italic.
     async function codeLines(json: JSONContent): Promise<(string | undefined)[][][]> {
@@ -1010,6 +1231,25 @@ const SEQUENCES: Record<string, string[]> = {
     ],
     docDefaults: ['rPrDefault', 'pPrDefault'],
     pBdr: ['top', 'left', 'bottom', 'right', 'between', 'bar'],
+    tbl: ['tblPr', 'tblGrid', 'tr'],
+    tblPr: [
+        ...['tblStyle', 'tblpPr', 'tblOverlap', 'bidiVisual', 'tblStyleRowBandSize', 'tblStyleColBandSize', 'tblW'],
+        ...['jc', 'tblCellSpacing', 'tblInd', 'tblBorders', 'shd', 'tblLayout', 'tblCellMar', 'tblLook'],
+        ...['tblCaption', 'tblDescription', 'tblPrChange'],
+    ],
+    tblBorders: ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'],
+    tblCellMar: ['top', 'left', 'bottom', 'right'],
+    tblGrid: ['gridCol', 'tblGridChange'],
+    tr: ['tblPrEx', 'trPr', 'tc'],
+    trPr: [
+        ...['cnfStyle', 'divId', 'gridBefore', 'gridAfter', 'wBefore', 'wAfter', 'cantSplit', 'trHeight'],
+        ...['tblHeader', 'tblCellSpacing', 'jc', 'hidden', 'ins', 'del', 'trPrChange'],
+    ],
+    tcPr: [
+        ...['cnfStyle', 'tcW', 'gridSpan', 'hMerge', 'vMerge', 'tcBorders', 'shd', 'noWrap', 'tcMar'],
+        ...['textDirection', 'tcFitText', 'vAlign', 'hideMark', 'headers', 'cellIns', 'cellDel', 'cellMerge'],
+        ...['tcPrChange'],
+    ],
     numPr: ['ilvl', 'numId', 'numberingChange', 'ins'],
     numbering: ['numPicBullet', 'abstractNum', 'num', 'numIdMacAtCleanup'],
     abstractNum: ['nsid', 'multiLevelType', 'tmpl', 'name', 'styleLink', 'numStyleLink', 'lvl'],
@@ -1050,7 +1290,7 @@ const SEQUENCES: Record<string, string[]> = {
 };
 
 // The children a sequence may repeat in a row.
-const REPEATED = new Set(['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride']);
+const REPEATED = new Set(['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol']);
 
 describe('docx writer — property order', () => {
     test('every property list writes its children in the ECMA sequence', async () => {

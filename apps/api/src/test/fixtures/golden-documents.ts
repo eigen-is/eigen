@@ -217,6 +217,16 @@ function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSON
 // to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
     const link = { type: 'link', attrs: { href: 'https://example.com/a b', title: 'Example' } };
+    const cell = (type: string, attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
+        type,
+        attrs,
+        content,
+    });
+    const row = (...cells: JSONContent[]): JSONContent => ({ type: 'tableRow', content: cells });
+    const small = (label: string): JSONContent => ({
+        type: 'table',
+        content: [row(cell('tableCell', { colwidth: [150] }, paragraph(label)))],
+    });
     const headings = [1, 2, 3, 4, 5, 6].map((level) => ({
         type: 'heading',
         attrs: { level, textAlign: level === 3 ? 'center' : null },
@@ -375,6 +385,41 @@ export function buildAllFeaturesDocJson(): JSONContent {
             },
             { type: 'horizontalRule' },
             paragraph('After the rule.'),
+            {
+                type: 'table',
+                content: [
+                    row(
+                        ...['Region', 'Q1', 'Q2', 'Note'].map((label, index) =>
+                            cell('tableHeader', { colwidth: [index % 3 === 0 ? 120 : 160] }, paragraph(label)),
+                        ),
+                    ),
+                    row(
+                        cell('tableHeader', { colwidth: [120] }, paragraph('North')),
+                        cell('tableCell', { colspan: 2, colwidth: [160, 160] }, paragraph('Spans two columns')),
+                        cell('tableCell', { rowspan: 2, colwidth: [120] }, paragraph('Spans two rows')),
+                    ),
+                    row(
+                        cell('tableHeader', { colwidth: [120] }, paragraph('South')),
+                        cell('tableCell', { align: 'center', colwidth: [160] }, paragraph('centred')),
+                        cell('tableCell', { align: 'right', colwidth: [160] }, paragraph('right')),
+                    ),
+                    row(
+                        cell(
+                            'tableCell',
+                            { colspan: 2, colwidth: [120, 160] },
+                            paragraph('Before a break in the cell'),
+                            { type: 'pageBreak' },
+                            paragraph('After it, a table that ends the cell'),
+                            small('Nested'),
+                        ),
+                        cell('tableCell', { colwidth: [160] }, { type: 'paragraph' }),
+                        cell('tableCell', { colwidth: null }, paragraph('No width')),
+                    ),
+                ],
+            },
+            small('One of two tables in a row'),
+            small('Two of two'),
+            paragraph('After the tables.'),
         ],
     };
 }

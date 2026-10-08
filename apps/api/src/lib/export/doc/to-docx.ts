@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
@@ -31,9 +31,8 @@ export async function eigendocToDocx(
         lists: [],
         checkboxes: false,
     };
-    const body = paragraphsOf(json.content ?? [], {}, { pkg, first: false, indent: 0, depth: 0 }, false)
-        .map(paragraphXml)
-        .join('');
+    const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0 };
+    const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg);
 
     const parts: [path: string, xml: string, contentType?: string][] = [
         ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
@@ -122,21 +121,26 @@ type Package = {
     checkboxes: boolean;
 };
 
-// The walk's surroundings. A flow's first block drops a heading's margin above; indent is the twips the enclosing lists
-// and quotes move the text in, depth the lists around it; style and after are what a plain paragraph takes in its
-// container; list is the numbering an item takes; a heading scales its inline code.
+// The walk's surroundings. A flow (the body, a cell) is column twips wide and its first block drops a heading's margin
+// above; indent is the twips the enclosing lists and quotes move the text in, depth the lists around it; style, after
+// and align are what a plain paragraph takes in its container; list is the numbering an item takes; a heading scales
+// its inline code.
 type Context = {
     pkg: Package;
     first: boolean;
+    column: number;
     indent: number;
     depth: number;
     style?: string;
     after?: number;
+    align?: string;
     list?: NumberingRef;
     headingPt?: number;
 };
 
 const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
+
+const TEXT_COLUMN = PAGE.width - PAGE.margin.left - PAGE.margin.right;
 
 const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(709, PAGE.margin.top)}" w:footer="${Math.min(709, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
@@ -206,6 +210,9 @@ type RunProps = {
 
 type Paragraph = { props: ParagraphProps; runs: string };
 
+// A table is written whole; the flow around it adds the paragraphs Word needs beside it.
+type Block = Paragraph | { table: string };
+
 function pPrXml(props: ParagraphProps): string {
     const { style, keepNext, keepLines, numPr, pBdr, shading, spacing, ind, contextualSpacing, jc, outlineLvl } = props;
     return [
@@ -267,11 +274,10 @@ function paragraphXml({ props, runs }: Paragraph): string {
 
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragraph[]>([
+const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>([
     [
         'paragraph',
-        (node, context) =>
-            paragraphsOf(node.content ?? [], textProps({ jc: justification(node) }, context), context, true),
+        (node, context) => blocksOf(node.content ?? [], textProps({ jc: justification(node) }, context), context, true),
     ],
     [
         'heading',
@@ -289,7 +295,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragrap
                 },
                 context,
             );
-            return paragraphsOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
+            return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
         },
     ],
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
@@ -303,8 +309,8 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragrap
         'blockquote',
         (node, context) => {
             const quote = { ...context, indent: context.indent + quoteLook().indent, style: 'Quote', after: undefined };
-            const paragraphs = paragraphsOf(node.content ?? [], textProps({}, quote), quote, false);
-            return withAfter(paragraphs, proseTwips('.eigen-prose blockquote', 'margin-bottom'), context.pkg);
+            const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote, false);
+            return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'), context.pkg);
         },
     ],
     [
@@ -327,6 +333,10 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragrap
         },
     ],
     ['taskList', (node, context) => listOf(node, context, 'ul', undefined)],
+    ['table', (node, context) => tableOf(node.content ?? [], context)],
+    ['tableRow', (node, context) => tableOf([node], context)],
+    ['tableCell', (node, context) => tableOf([{ type: 'tableRow', content: [node] }], context)],
+    ['tableHeader', (node, context) => tableOf([{ type: 'tableRow', content: [node] }], context)],
     [
         'listItem',
         (node, context) =>
@@ -350,11 +360,11 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragrap
 ]);
 
 // Never fails on structure: inline content where a block belongs is wrapped in a paragraph, a nested block hoisted out.
-function paragraphsOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Paragraph[] {
-    const paragraphs: Paragraph[] = [];
+function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
+    const blocks: Block[] = [];
     let inline: JSONContent[] = [];
     const flush = () => {
-        paragraphs.push({ props, runs: runsXml(inline, context) });
+        blocks.push({ props, runs: runsXml(inline, context) });
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
@@ -365,10 +375,24 @@ function paragraphsOf(nodes: JSONContent[], props: ParagraphProps, context: Cont
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
-        paragraphs.push(...write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }));
+        blocks.push(...write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }));
     }
-    if (inline.length > 0 || (textblock && paragraphs.length === 0)) flush();
-    return paragraphs;
+    if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
+    return blocks;
+}
+
+// Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
+// no paragraph does. The block after a table takes the table's margin below as its before.
+function blocksXml(blocks: Block[], pkg: Package): string {
+    const margin = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), bodyPt()));
+    const spacer = paragraphXml({ props: { style: 'Spacer', spacing: { before: margin } }, runs: '' });
+    return blocks
+        .map((block, index) => {
+            const afterTable = index > 0 && 'table' in (blocks[index - 1] ?? block);
+            if (!('table' in block)) return paragraphXml(afterTable ? withBefore(block, margin, pkg) : block);
+            return `${afterTable ? spacer : ''}${block.table}${index === blocks.length - 1 ? spacer : ''}`;
+        })
+        .join('');
 }
 
 // A paragraph or heading where it stands: a plain one takes its container's style and spacing; a heading in a quote
@@ -380,7 +404,7 @@ function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, contex
         pBdr: own.style && context.style === 'Quote' ? { left: quoteLook().border } : undefined,
         spacing: own.spacing ?? (own.style || context.after === undefined ? undefined : { after: context.after }),
         ind: indentOf(style, context),
-        jc: own.jc,
+        jc: own.jc ?? context.align,
     };
 }
 
@@ -391,15 +415,18 @@ function indentOf(style: string | undefined, context: Context): ParagraphProps['
 }
 
 // A container's bottom margin on its last paragraph, the larger of the two as margins collapse. A hairline keeps its
-// 1 pt.
-function withAfter(paragraphs: Paragraph[], after: number, pkg: Package): Paragraph[] {
-    const last = paragraphs.at(-1);
-    if (!last || last.props.style === 'PageBreak' || last.props.style === 'Spacer') return paragraphs;
-    if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after', pkg))) return paragraphs;
-    return [
-        ...paragraphs.slice(0, -1),
-        { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } },
-    ];
+// 1 pt; after a table the next block takes the table's margin.
+function withAfter(blocks: Block[], after: number, pkg: Package): Block[] {
+    const last = blocks.at(-1);
+    if (!last || 'table' in last || last.props.style === 'PageBreak' || last.props.style === 'Spacer') return blocks;
+    if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after', pkg))) return blocks;
+    return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
+}
+
+function withBefore(paragraph: Paragraph, before: number, pkg: Package): Paragraph {
+    const { props } = paragraph;
+    if (before <= (props.spacing?.before ?? styleSpacing(props.style, 'before', pkg))) return paragraph;
+    return { ...paragraph, props: { ...props, spacing: { ...props.spacing, before } } };
 }
 
 // What the style chain gives a paragraph: its own style, what that is based on, Normal for none.
@@ -435,16 +462,16 @@ function listOf(
     context: Context,
     tag: 'ul' | 'ol',
     numbering: Omit<List, 'base'> | undefined,
-): Paragraph[] {
+): Block[] {
     const ilvl = Math.min(context.depth, 8);
     const list = numbering && {
         numId: context.pkg.lists.push({ ...numbering, base: context.indent - listLevel() * ilvl }),
         ilvl,
     };
     const items = { ...context, list };
-    const paragraphs = paragraphsOf(node.content ?? [], textProps({}, items), items, false);
-    if (context.depth > 0) return paragraphs;
-    return withAfter(paragraphs, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'), context.pkg);
+    const blocks = blocksOf(node.content ?? [], textProps({}, items), items, false);
+    if (context.depth > 0) return blocks;
+    return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'), context.pkg);
 }
 
 // The item's text is a level in; only its first paragraph opens with the number or checkbox.
@@ -453,7 +480,7 @@ function itemOf(
     context: Context,
     after: number,
     open: (first: Paragraph, inner: Context) => Paragraph,
-): Paragraph[] {
+): Block[] {
     const inner = {
         ...context,
         indent: context.indent + listLevel(),
@@ -461,9 +488,9 @@ function itemOf(
         after,
         list: undefined,
     };
-    const [first, ...rest] = paragraphsOf(node.content ?? [], textProps({}, inner), inner, false);
+    const [first, ...rest] = blocksOf(node.content ?? [], textProps({}, inner), inner, false);
     if (!first) return [];
-    return [first.props.style === inner.style ? open(first, inner) : first, ...rest];
+    return ['table' in first || first.props.style !== inner.style ? first : open(first, inner), ...rest];
 }
 
 function listLevel(): number {
@@ -496,6 +523,138 @@ function checkboxXml(checked: boolean): string {
         `<w:sdtContent><w:r><w:rPr>${rPrXml({ font: CHECKBOX_FONT, strike: false })}</w:rPr><w:t>${checked ? '☒' : '☐'}</w:t></w:r></w:sdtContent></w:sdt>`,
         `<w:r><w:rPr>${rPrXml({ strike: false })}</w:rPr><w:tab/></w:r>`,
     ].join('');
+}
+
+// ── Tables: the grid as the editor lays it out ─────────────────────────────────────────────────────────────────────
+
+// Word's widest table; a wider colspan comes from no editor.
+const MAX_TABLE_COLUMNS = 63;
+
+const CELL_TYPES = new Set(['tableCell', 'tableHeader']);
+
+const TABLE_BORDER_SIDES = [...BORDER_SIDES, 'insideH', 'insideV'] as const;
+
+type GridCell = { node: JSONContent; column: number; colspan: number; rowspan: number };
+
+// A rowspan holds its columns in the rows below, a colspan takes one colwidth per column. Content outside a row or a
+// cell is put in one.
+function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
+    const rows = rowNodes.map((row) =>
+        (row.type === 'tableRow' ? (row.content ?? []) : [row]).map((cell) =>
+            CELL_TYPES.has(cell.type ?? '') ? cell : { type: 'tableCell', content: [cell] },
+        ),
+    );
+    const carry: number[] = [];
+    const widths: (number | undefined)[] = [];
+    const grid = rows.map((cells, rowIndex) => {
+        let column = 0;
+        const placed = cells.map((node): GridCell => {
+            while ((carry[column] ?? 0) > 0) column++;
+            const colspan = clampInt(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS, 1);
+            const rowspan = clampInt(node.attrs?.['rowspan'], 1, rows.length - rowIndex, 1);
+            const colwidth = node.attrs?.['colwidth'];
+            for (let k = 0; k < colspan; k++) {
+                const width: unknown = Array.isArray(colwidth) ? colwidth[k] : undefined;
+                widths[column + k] ??=
+                    typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : undefined;
+                carry[column + k] = rowspan;
+            }
+            column += colspan;
+            return { node, column: column - colspan, colspan, rowspan };
+        });
+        for (const [index, rowsLeft] of carry.entries()) carry[index] = Math.max(0, rowsLeft - 1);
+        return placed;
+    });
+    if (widths.length === 0) return [];
+
+    const look = tableLook();
+    const { dxa, fixed } = gridWidths(widths, (context.column - context.indent) / 15);
+    const spanWidth = (column: number, colspan: number) =>
+        dxa.slice(column, column + colspan).reduce((sum, width) => sum + width, 0);
+    const covered = new Map<string, number>();
+    for (const [rowIndex, cells] of grid.entries()) {
+        for (const { column, colspan, rowspan } of cells) {
+            for (let k = 1; k < rowspan; k++) covered.set(`${rowIndex + k}:${column}`, colspan);
+        }
+    }
+    const rowsXml = grid.map((cells, rowIndex) => {
+        const byColumn = new Map(cells.map((cell) => [cell.column, cell]));
+        const tcs: string[] = [];
+        for (let column = 0; column < dxa.length; ) {
+            const cell = byColumn.get(column);
+            const coveredSpan = covered.get(`${rowIndex}:${column}`);
+            const colspan = cell?.colspan ?? coveredSpan ?? 1;
+            const width = spanWidth(column, colspan);
+            const tcPr = (merge: string) =>
+                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${cell?.node.type === 'tableHeader' ? `<w:shd w:val="clear" w:color="auto" w:fill="${look.headerFill}"/>` : ''}</w:tcPr>`;
+            if (cell) {
+                const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
+                tcs.push(
+                    `<w:tc>${tcPr(merge)}${cellXml(cell.node, width - 2 * look.padding.horizontal, context.pkg)}</w:tc>`,
+                );
+            } else tcs.push(`<w:tc>${tcPr(coveredSpan === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
+            column += colspan;
+        }
+        // Only an all-header row repeats; a reader may take an explicit off as on.
+        const header = cells.length > 0 && cells.every((cell) => cell.node.type === 'tableHeader');
+        return `<w:tr>${header ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${tcs.join('')}</w:tr>`;
+    });
+
+    const border = look.border;
+    const margin = (side: string, width: number) => `<w:${side} w:w="${width}" w:type="dxa"/>`;
+    const tblPr = [
+        fixed ? `<w:tblW w:w="${spanWidth(0, dxa.length)}" w:type="dxa"/>` : '<w:tblW w:w="5000" w:type="pct"/>',
+        `<w:tblInd w:w="${context.indent}" w:type="dxa"/>`,
+        `<w:tblBorders>${bordersXml(TABLE_BORDER_SIDES, { top: border, left: border, bottom: border, right: border, insideH: border, insideV: border })}</w:tblBorders>`,
+        fixed ? '<w:tblLayout w:type="fixed"/>' : '',
+        `<w:tblCellMar>${margin('top', look.padding.vertical)}${margin('left', look.padding.horizontal)}${margin('bottom', look.padding.vertical)}${margin('right', look.padding.horizontal)}</w:tblCellMar>`,
+    ].join('');
+    const tblGrid = dxa.map((width) => `<w:gridCol w:w="${width}"/>`).join('');
+    return [
+        { table: `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid>${tblGrid}</w:tblGrid>${rowsXml.join('')}</w:tbl>` },
+    ];
+}
+
+// As TableWidthClamp scales the editor's: every column known scales down to the column, none under the floor; else the
+// unknown columns share what the known leave, as table { width: 100% } does.
+function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: number[]; fixed: boolean } {
+    const known = widths.filter((width) => width !== undefined);
+    const sum = known.reduce((total, width) => total + width, 0);
+    const fixed = known.length === widths.length;
+    const scale = fixed && sum > columnPx ? columnPx / sum : 1;
+    const share = Math.max(MIN_TABLE_COLUMN_PX, Math.floor((columnPx - sum) / (widths.length - known.length)));
+    const px = widths.map((width) =>
+        width === undefined ? share : scale < 1 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(width * scale)) : width,
+    );
+    return { dxa: px.map((width) => Math.round(width * 15)), fixed };
+}
+
+// A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is.
+function cellXml(node: JSONContent, column: number, pkg: Package): string {
+    const align = node.attrs?.['align'];
+    const cell: Context = {
+        pkg,
+        first: false,
+        column,
+        indent: 0,
+        depth: 0,
+        after: 0,
+        align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
+    };
+    const blocks = blocksOf(node.content ?? [], textProps({}, cell), cell, false);
+    return blocks.length > 0 ? blocksXml(blocks, pkg) : paragraphXml({ props: textProps({}, cell), runs: '' });
+}
+
+function tableLook() {
+    const padding = proseValue('.eigen-prose td', 'padding');
+    return {
+        border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
+        padding: {
+            vertical: twips(cssPt(boxSide(padding, 'top'), bodyPt())),
+            horizontal: twips(cssPt(boxSide(padding, 'left'), bodyPt())),
+        },
+        headerFill: proseColor('.eigen-prose th', 'background-color'),
+    };
 }
 
 // ── Code blocks: one paragraph per line, lowlight's tokens as runs ─────────────────────────────────────────────────
