@@ -69,10 +69,9 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath, docx: b
     if (result.contentType !== 'image/svg+xml') {
         return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
     }
-    // The file's own bytes, its siblings inlined: the transform Worker sanitizes them (sanitizeExportMedia), seconds of
-    // jsdom for a big drawing, and draws a docx's PNG from the result. The inliner caps only what it builds, so a drawing
-    // with nothing to inline gets its cap here.
-    if (result.data.byteLength > SVG_INLINE_MAX_BYTES) return null;
+    // The file's own bytes, its siblings inlined: the transform Worker sanitizes them (sanitizeExportMedia) and draws a
+    // docx's PNG from the result. The inliner caps only what it builds, so a docx caps a drawing with nothing to inline.
+    if (docx && result.data.byteLength > SVG_INLINE_MAX_BYTES) return null;
     return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
 }
 

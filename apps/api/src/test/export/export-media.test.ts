@@ -268,13 +268,9 @@ describe('collectExportMedia', () => {
         expect(names).not.toContain('clip.mp4');
     }, 60_000);
 
-    test.each(['docx', 'html'] as const)(
-        '%s hands no SVG past SVG_INLINE_MAX_BYTES to the Worker',
-        async (format) => {
-            expect((await collect(format)).map((item) => item.name)).not.toContain('huge.svg');
-        },
-        60_000,
-    );
+    test('a docx hands no SVG past SVG_INLINE_MAX_BYTES to the Worker', async () => {
+        expect((await collect('docx')).map((item) => item.name)).not.toContain('huge.svg');
+    }, 60_000);
 
     test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
         const names = (await collect('docx')).map((item) => item.name);
@@ -293,6 +289,7 @@ describe('collectExportMedia', () => {
                     ['clear.webp', 'image/webp'],
                     ['drawing.svg', 'image/svg+xml'],
                     ['html.svg', 'image/svg+xml'],
+                    ['huge.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
                     ['photo.avif', 'image/webp'],
