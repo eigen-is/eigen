@@ -13,7 +13,7 @@ FROM oven/bun:${BUN_VERSION}-slim
 
 WORKDIR /app
 
-# Runtime deps. No compiler: the install runs no scripts, and sharp ships its own binary.
+# Runtime deps + build tools for native modules (sharp, etc.)
 RUN apt-get update && apt-get install -y \
     libvips \
     libimage-exiftool-perl \
@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y \
     libpangoft2-1.0-0 \
     libharfbuzz-subset0 \
     ffmpeg \
+    make \
+    g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
