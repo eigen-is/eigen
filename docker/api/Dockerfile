@@ -27,12 +27,16 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# WeasyPrint from PyPI, pinned, so the image renders a PDF with the engine development does. Debian's 62 has no
-# URLFetcher for weasyprint-render.py and draws a centred figure left-aligned. Its wheels need no compiler.
+# WeasyPrint from PyPI, pinned with every dependency by hash, so the image renders a PDF with the engine development
+# does. Debian's 62 has no URLFetcher for weasyprint-render.py and draws a centred figure left-aligned. Wheels only, so
+# no compiler.
+COPY docker/api/weasyprint-requirements.txt /tmp/
 RUN python3 -m venv /opt/weasyprint \
-    && /opt/weasyprint/bin/pip install --no-cache-dir weasyprint==70.0 \
+    && /opt/weasyprint/bin/pip install --no-cache-dir --require-hashes --only-binary :all: \
+        -r /tmp/weasyprint-requirements.txt \
     && /opt/weasyprint/bin/pip uninstall --yes pip \
-    && ln -s /opt/weasyprint/bin/weasyprint /usr/local/bin/weasyprint
+    && ln -s /opt/weasyprint/bin/weasyprint /usr/local/bin/weasyprint \
+    && rm /tmp/weasyprint-requirements.txt
 
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
 
