@@ -221,6 +221,23 @@ describe('export sanitize — url() is refused on its token', () => {
     });
 });
 
+// A collaborator's string sizes the scan, so every token pattern runs in one pass. A whitespace run after `url(` cost
+// its square in the allowed-ref read (3.8 s for 100 KB) and a run of backslashes the escape check's (2.1 s); 256 KB of
+// either takes milliseconds now, so the bound is far from both, whatever the machine's load.
+describe('export sanitize — a long crafted value costs one pass', () => {
+    const LONG = 256 * 1024;
+    test.each([
+        ['spaces after url( in a style attribute', `<p style="url(${' '.repeat(LONG)}x">a</p>`],
+        ['spaces after url( in a style element', `<style>.a{b:url(${' '.repeat(LONG)}x}</style>`],
+        ['spaces after url( in a presentation attribute', `<svg><rect fill="url(${' '.repeat(LONG)}x"></rect></svg>`],
+        ['backslashes in a presentation attribute', `<svg><rect fill="${'\\'.repeat(LONG)}"></rect></svg>`],
+    ])('%s', (_, html) => {
+        const start = performance.now();
+        sanitizeExportHtml(html);
+        expect(performance.now() - start).toBeLessThan(1000);
+    });
+});
+
 // `src` is not an <img>-only attribute, and it is not the only attribute that fetches: srcset
 // candidate lists, <video poster> and the legacy `background` all resolve with no click. DOMPurify
 // keeps every one of them, so the restriction is on the attribute, not the tag.

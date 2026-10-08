@@ -24,12 +24,11 @@ export type AttrNode = {
 // never a url()/quote pair, so no paren or quote inside the URL ends a match early. CSS whitespace only: a
 // non-breaking space is part of the URL, which then is a relative path.
 const CSS_URL = /url\((?![\t\n\f\r ]*(?:['"][\t\n\f\r ]*)?(?:data:|#))/gi;
-// One of the exact allowed refs as a whole url(); none holds a quote, a paren or whitespace.
-const CSS_ALLOWED_URL = /^url\([\t\n\f\r ]*(['"]?)([^'"()\s]*)\1[\t\n\f\r ]*\)/i;
+// One of the exact allowed refs as a whole url(), read where CSS_URL matched; none holds a quote, a paren or whitespace.
+// The ref is never empty, so no two whitespace runs can trade characters: a long run costs one pass, not its square.
+const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy;
 // What fetches without a url(): @import's string form and the image functions that take a string.
 const CSS_STRING_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(/i;
-// An escape can spell `url(` in any attribute a CSS parser reads (`fill="\75 rl(…)"`).
-const ESCAPED_FUNCTION = /\\[^(]*\(/;
 const NO_REFS: ReadonlySet<string> = new Set();
 
 // The element hook types its node as a bare Node.
@@ -62,10 +61,17 @@ const isFragmentRef = (value: string): boolean => /^[\t\n\f\r ]*#\S*[\t\n\f\r ]*
 // data: URI, so it fails the lookahead.
 function urlFetches(text: string, allowed: ReadonlySet<string>): boolean {
     for (const { index } of text.matchAll(CSS_URL)) {
-        const ref = CSS_ALLOWED_URL.exec(text.slice(index))?.[2];
+        CSS_ALLOWED_URL.lastIndex = index;
+        const ref = CSS_ALLOWED_URL.exec(text)?.[2];
         if (!ref || !allowed.has(ref)) return true;
     }
     return false;
+}
+
+// An escape can spell `url(` in any attribute a CSS parser reads (`fill="\75 rl(…)"`): a backslash before a `(`.
+function escapesFunction(value: string): boolean {
+    const backslash = value.indexOf('\\');
+    return backslash >= 0 && value.includes('(', backslash);
 }
 
 const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
@@ -106,7 +112,7 @@ function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
             const scanned = value.replace(/\\/g, '');
             if (cssFetches(scanned, allowed)) node.removeAttribute(name);
             else if (scanned !== value) node.setAttribute(name, scanned);
-        } else if (urlFetches(value, allowed) || ESCAPED_FUNCTION.test(value)) {
+        } else if (urlFetches(value, allowed) || escapesFunction(value)) {
             node.removeAttribute(name);
         }
     }
