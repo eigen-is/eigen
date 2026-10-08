@@ -46,12 +46,9 @@ export function renderEigenvectorExport(
 
     if (format === 'svg') {
         // A collaborator can put arbitrary strings in the schemaless scene, so the assembled SVG runs
-        // through the shared sanitizer (the documented SSRF closure) exactly like slides/sheets and
+        // through the shared sanitizer (the documented data-only rule) exactly like slides/sheets and
         // the preview.
-        const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), {
-            ...RICH_TEXT_TAGS,
-            allowedRefs: new Set(dataUriMap.values()),
-        });
+        const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), RICH_TEXT_TAGS);
         return { data: toTransferableText(toXmlDocument(svg)), warnings: [] };
     }
 
@@ -65,13 +62,7 @@ export function renderEigenvectorExport(
     if (!page) throw new ApiError(400, 'The drawing is empty');
     // The shared canvas document sanitizes the assembled body and owns the @page rule, the fonts and
     // the reset — a deck's pages and a drawing's single page leave through the same wrapper.
-    const html = canvasHtmlDocument({
-        title,
-        pages: [page],
-        scale: 1,
-        mode: 'pdf',
-        allowedRefs: new Set(dataUriMap.values()),
-    });
+    const html = canvasHtmlDocument({ title, pages: [page], scale: 1, mode: 'pdf' });
     return { data: toTransferableText(html), warnings: [] };
 }
 

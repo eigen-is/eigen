@@ -33,10 +33,8 @@ export function canvasHtmlDocument(opts: {
     scale: number;
     mode: 'screen' | 'pdf';
     resolveMedia?: MediaResolver;
-    // The data: URIs of the export's own media, which the Worker sanitized before any page embedded them.
-    allowedRefs?: ReadonlySet<string>;
 }): string {
-    const { title, pages, scale, mode, resolveMedia, allowedRefs } = opts;
+    const { title, pages, scale, mode, resolveMedia } = opts;
     // The screen document wraps each fixed-size page in the shared fit box, so a downloaded deck reads
     // on a phone; the layers inside stay in scene pixels because that is what packages/lib authors.
     // The PDF document has no viewport to be responsive to — WeasyPrint gives each page a sheet — so
@@ -50,9 +48,9 @@ export function canvasHtmlDocument(opts: {
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
     // A collaborator can put arbitrary strings in a schemaless scene, so the assembled body runs
-    // through the shared sanitizer (the documented SSRF closure); a rich-text box's raw HTML was
+    // through the shared sanitizer (the documented data-only rule); a rich-text box's raw HTML was
     // filtered at the scene. No ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
-    const body = sanitizeExportHtml(rendered.join(''), { allowedRefs });
+    const body = sanitizeExportHtml(rendered.join(''));
     const css = mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
     return `<!DOCTYPE html>
 <html lang="en">
@@ -88,7 +86,6 @@ export function renderEigenslidesExport(
         scale: DECK_SCALE,
         mode: format === 'pdf-html' ? 'pdf' : 'screen',
         resolveMedia,
-        allowedRefs: new Set(dataUriMap.values()),
     });
     return { data: toTransferableText(html), warnings: [] };
 }

@@ -170,7 +170,7 @@ describe('Sheets HTML export — class-based styles', () => {
     // Every value below is a schemaless CRDT string a collaborator (or a crafted xlsx)
     // can set. In a style attribute they were inert; in stylesheet text `</style>` ends
     // the element and whatever follows is live markup — DOMPurify keeps an
-    // <svg><image href>, and WeasyPrint fetches it server-side while rendering the PDF.
+    // <svg><image href>, and a browser opening the HTML download fetches it.
     // Assert on the assembled, sanitized document: the pre-sanitize strings can't show
     // whether the breakout survived.
     const BREAKOUT = '1px}</style><svg><image href=http://169.254.169.254/latest/meta-data/></svg><style>.z{a:b';
