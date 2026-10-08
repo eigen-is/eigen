@@ -863,11 +863,13 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
     return blocks.length > 0 ? blocksXml(blocks) : paragraphXml({ props: textProps({}, cell), runs: '' });
 }
 
+const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
+
 const TABLE_LOOK = {
     border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
     padding: {
-        vertical: twips(cssPt(boxSide(proseValue('.eigen-prose td', 'padding'), 'top'), BODY.sizePt)),
-        horizontal: twips(cssPt(boxSide(proseValue('.eigen-prose td', 'padding'), 'left'), BODY.sizePt)),
+        vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
+        horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
     },
     headerFill: proseColor('.eigen-prose th', 'background-color'),
     margin: twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt)),
