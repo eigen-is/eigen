@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -24,6 +24,7 @@ import {
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
 import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -420,8 +421,55 @@ export function buildAllFeaturesDocJson(): JSONContent {
             small('One of two tables in a row'),
             small('Two of two'),
             paragraph('After the tables.'),
+            figure({ mediaName: 'chart.png', width: 320, alignment: 'left', caption: 'A chart, left', alt: 'Chart' }),
+            figure({ mediaName: 'photo.jpeg', width: null, alt: 'A photo at its own size' }),
+            figure({ mediaName: 'diagram.svg', width: 200, caption: 'An SVG', commentCardId: 'card-2' }),
+            figure({ mediaName: 'chart.png', width: 220, layout: 'wrap-left', caption: 'Wrapped left' }),
+            {
+                type: 'paragraph',
+                content: [
+                    figureNode({ mediaName: 'photo.jpeg', width: 220, layout: 'wrap-right', caption: 'Wrapped right' }),
+                    {
+                        type: 'text',
+                        text: `Text between the wrapped figures. ${'It runs on beside both. '.repeat(30)}`,
+                    },
+                ],
+            },
         ],
     };
+}
+
+function figureNode(attrs: FigureAttrs): JSONContent {
+    return { type: 'figure', attrs };
+}
+
+function figure(attrs: FigureAttrs): JSONContent {
+    return { type: 'paragraph', content: [figureNode(attrs)] };
+}
+
+// The all-features doc's media as the docx prep hands it over: sizes from the thumbnail Worker, an SVG beside its PNG.
+// The writer never decodes a raster, so marker bytes stand in for the PNG and the JPEG.
+export function buildAllFeaturesDocMedia(): ExportMedia[] {
+    return [
+        { name: 'chart.png', contentType: 'image/png', data: toTransferableText('chart png'), width: 800, height: 500 },
+        {
+            name: 'photo.jpeg',
+            contentType: 'image/jpeg',
+            data: toTransferableText('photo jpeg'),
+            width: 4000,
+            height: 3000,
+        },
+        {
+            name: 'diagram.svg',
+            contentType: 'image/svg+xml',
+            data: toTransferableText(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>',
+            ),
+            png: toTransferableText('diagram png'),
+            width: 300,
+            height: 150,
+        },
+    ];
 }
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {

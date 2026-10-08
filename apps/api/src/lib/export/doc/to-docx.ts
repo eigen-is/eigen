@@ -6,9 +6,10 @@ import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
 import { common, createLowlight } from 'lowlight';
+import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex } from '../colors';
 import { proseValue, proseValueIfSet } from './prose-css';
-import { type HastNode, highlightCode } from './render';
+import { FIGURE_WRAP_MARGIN_EM, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> docx bytes, WordprocessingML written by hand. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module must not reach the Mount or the
@@ -16,6 +17,7 @@ import { type HastNode, highlightCode } from './render';
 // and the JSON comes off a CRDT no schema checked, so attrs are validated at use and the structure normalized.
 export async function eigendocToDocx(
     json: JSONContent,
+    media: ExportMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
@@ -30,6 +32,10 @@ export async function eigendocToDocx(
         styles: new Map(styles.map((style) => [style.id, style])),
         lists: [],
         checkboxes: false,
+        media: new Map(media.map((item) => [item.name, item])),
+        images: new Map(),
+        files: [],
+        drawings: 0,
     };
     const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg);
@@ -61,6 +67,7 @@ export async function eigendocToDocx(
     const options = { date: ZIP_DATE, compression: 'DEFLATE', createFolders: false } as const;
     zip.file('[Content_Types].xml', `${XML_DECLARATION}<Types ${CONTENT_TYPES}${overrides.join('')}</Types>`, options);
     for (const [path, xml] of parts) zip.file(path, `${XML_DECLARATION}${xml}`, options);
+    for (const [path, data] of pkg.files) zip.file(path, data, { ...options, compression: 'STORE' });
     return zip.generateAsync({ type: 'uint8array' });
 }
 
@@ -110,8 +117,8 @@ function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.join('')}</Relationships>`;
 }
 
-// What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target, and its
-// lists; the styles the walk reads its own spacing from.
+// What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target and image,
+// its lists, the media parts and the drawings counted for their ids; the styles the walk reads its own spacing from.
 type Package = {
     relationships: Relationship[];
     hyperlinks: Map<string, string>;
@@ -119,6 +126,10 @@ type Package = {
     styles: Map<string, StyleDef>;
     lists: List[];
     checkboxes: boolean;
+    media: Map<string, ExportMedia>;
+    images: Map<string, Image>;
+    files: [path: string, data: ArrayBuffer][];
+    drawings: number;
 };
 
 // The walk's surroundings. A flow (the body, a cell) is column twips wide and its first block drops a heading's margin
@@ -210,8 +221,9 @@ type RunProps = {
 
 type Paragraph = { props: ParagraphProps; runs: string };
 
-// A table is written whole; the flow around it adds the paragraphs Word needs beside it.
-type Block = Paragraph | { table: string };
+// A table is written whole; the flow around it adds the paragraphs Word needs beside it. A floating one holds a
+// wrapped figure and keeps no margin.
+type Block = Paragraph | { table: string; float?: true };
 
 function pPrXml(props: ParagraphProps): string {
     const { style, keepNext, keepLines, numPr, pBdr, shading, spacing, ind, contextualSpacing, jc, outlineLvl } = props;
@@ -368,6 +380,13 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
+        if (node.type === 'figure') {
+            // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
+            const figure = figureOf(node, context);
+            if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();
+            blocks.push(...figure);
+            continue;
+        }
         if (Object.hasOwn(INLINES, node.type ?? '')) {
             inline.push(node);
             continue;
@@ -388,15 +407,18 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
 // Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
-// no paragraph does. The block after a table takes the table's margin below as its before.
+// no paragraph does. The block after an in-flow table takes the table's margin below as its before.
 function blocksXml(blocks: Block[], pkg: Package): string {
     const margin = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), bodyPt()));
-    const spacer = paragraphXml({ props: { style: 'Spacer', spacing: { before: margin } }, runs: '' });
+    const spacer = (afterTable: boolean) =>
+        paragraphXml(afterTable ? { props: { style: 'Spacer', spacing: { before: margin } }, runs: '' } : SPACER);
     return blocks
         .map((block, index) => {
-            const afterTable = index > 0 && 'table' in (blocks[index - 1] ?? block);
+            const previous = blocks[index - 1];
+            const afterTable = previous !== undefined && 'table' in previous && !previous.float;
             if (!('table' in block)) return paragraphXml(afterTable ? withBefore(block, margin, pkg) : block);
-            return `${afterTable ? spacer : ''}${block.table}${index === blocks.length - 1 ? spacer : ''}`;
+            const between = previous !== undefined && 'table' in previous ? spacer(afterTable) : '';
+            return `${between}${block.table}${index === blocks.length - 1 ? spacer(!block.float) : ''}`;
         })
         .join('');
 }
@@ -494,9 +516,12 @@ function itemOf(
         after,
         list: undefined,
     };
-    const [first, ...rest] = blocksOf(node.content ?? [], textProps({}, inner), inner, false);
-    if (!first) return [];
-    return ['table' in first || first.props.style !== inner.style ? first : open(first, inner), ...rest];
+    const blocks = blocksOf(node.content ?? [], textProps({}, inner), inner, false);
+    // A figure that floats before the item's first paragraph leaves the number on that paragraph.
+    const index = blocks.findIndex((block) => !('float' in block));
+    const first = blocks[index];
+    if (!first || 'table' in first || first.props.style !== inner.style) return blocks;
+    return blocks.with(index, open(first, inner));
 }
 
 function listLevel(): number {
@@ -661,6 +686,143 @@ function tableLook() {
         },
         headerFill: proseColor('.eigen-prose th', 'background-color'),
     };
+}
+
+// ── Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback ─────────────────────────────────
+
+// One image part and relationship per media name; an SVG's PNG is its blip, the SVG its extension.
+type Image = { rId: string; svgRId?: string; part: string; width: number; height: number };
+
+const RASTER_EXTENSIONS = new Map([
+    ['image/png', 'png'],
+    ['image/jpeg', 'jpeg'],
+]);
+
+const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
+
+// Missing media, an external src (a docx fetches nothing) and media without a size or a fallback write nothing.
+// Commented figures get their anchor with the comments part.
+function figureOf(node: JSONContent, context: Context): Block[] {
+    const attrs = node.attrs ?? {};
+    const mediaName = attrs['mediaName'];
+    const image = typeof mediaName === 'string' ? imageOf(mediaName, context.pkg) : undefined;
+    if (!image) return [];
+    const layout = attrs['layout'];
+    const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
+    const columnPx = Math.floor((context.column - context.indent) / 15);
+    const width = attrs['width'];
+    const set = typeof width === 'number' && Number.isFinite(width) ? Math.round(width) : 0;
+    const natural = Math.min(image.width, side ? Math.floor(columnPx / 2) : columnPx);
+    const cx = Math.max(1, Math.round(set > 0 ? Math.min(set, columnPx) : natural)) * EMU_PER_PX;
+    const alt = attrs['alt'];
+    const drawing = drawingXml(
+        image,
+        cx,
+        Math.round((cx * image.height) / image.width),
+        typeof alt === 'string' ? alt : '',
+        context.pkg,
+    );
+    const caption = attrs['caption'];
+    const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
+    const margin = proseValue('.eigen-prose figure', 'margin');
+    if (!side) {
+        const alignment = attrs['alignment'];
+        const jc = typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
+        const spacing = {
+            before: twips(cssPt(boxSide(margin, 'top'), bodyPt())),
+            // The caption takes the figure's margin below.
+            after: captionRuns ? 0 : twips(cssPt(boxSide(margin, 'bottom'), bodyPt())),
+            // Single, or LibreOffice adds 5 pt above every image.
+            line: 240,
+        };
+        const figure: Block[] = [{ props: { spacing, ind: indentOf(undefined, context), jc }, runs: drawing }];
+        if (captionRuns)
+            figure.push({
+                props: { style: 'Caption', ind: indentOf('Caption', context), jc },
+                runs: `<w:r>${captionRuns}</w:r>`,
+            });
+        return figure;
+    }
+    // A borderless floating one-cell table: the one wrap that keeps the caption under the image in LibreOffice, Word and
+    // Google Docs. The row doesn't split, or Google Docs puts the caption on the next page.
+    const em = (value: number) => twips(value * bodyPt());
+    const sideMargin = em(FIGURE_WRAP_MARGIN_EM.side);
+    const tw = cx / EMU_PER_TWIP;
+    const nil = TABLE_BORDER_SIDES.map((edge) => `<w:${edge} w:val="nil"/>`).join('');
+    const unpadded = BORDER_SIDES.map((edge) => `<w:${edge} w:w="0" w:type="dxa"/>`).join('');
+    const tblPr = [
+        `<w:tblpPr w:leftFromText="${side === 'right' ? sideMargin : 0}" w:rightFromText="${side === 'left' ? sideMargin : 0}" w:topFromText="${em(FIGURE_WRAP_MARGIN_EM.top)}" w:bottomFromText="${em(FIGURE_WRAP_MARGIN_EM.bottom)}" w:vertAnchor="text" w:horzAnchor="margin" w:tblpXSpec="${side}" w:tblpY="1"/>`,
+        '<w:tblOverlap w:val="never"/>',
+        `<w:tblW w:w="${tw}" w:type="dxa"/>`,
+        `<w:tblBorders>${nil}</w:tblBorders>`,
+        '<w:tblLayout w:type="fixed"/>',
+        `<w:tblCellMar>${unpadded}</w:tblCellMar>`,
+    ].join('');
+    const cell = [
+        paragraphXml({ props: { spacing: { before: 0, after: 0, line: 240 }, jc: 'center' }, runs: drawing }),
+        captionRuns &&
+            paragraphXml({
+                props: {
+                    style: 'Caption',
+                    spacing: { before: styleSpacing('Caption', 'before', context.pkg), after: 0 },
+                    jc: 'center',
+                },
+                runs: `<w:r>${captionRuns}</w:r>`,
+            }),
+    ].join('');
+    const row = `<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr>`;
+    return [
+        {
+            table: `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid><w:gridCol w:w="${tw}"/></w:tblGrid>${row}</w:tbl>`,
+            float: true,
+        },
+    ];
+}
+
+const EMU_PER_PX = 9525;
+
+const EMU_PER_TWIP = 635;
+
+// The first figure that shows a media name adds its parts; a size that isn't positive, an SVG without its PNG and any
+// other type leave the media absent.
+function imageOf(name: string, pkg: Package): Image | undefined {
+    const known = pkg.images.get(name);
+    if (known) return known;
+    const media = pkg.media.get(name);
+    const { width, height } = media ?? {};
+    if (!media || !isPositive(width) || !isPositive(height)) return undefined;
+    const raster = media.contentType === 'image/svg+xml' ? media.png : media.data;
+    const extension = media.contentType === 'image/svg+xml' ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
+    if (!raster || !extension) return undefined;
+    const n = pkg.images.size + 1;
+    const add = (file: string, data: ArrayBuffer) => {
+        pkg.files.push([`word/media/${file}`, data]);
+        return `rId${pkg.relationships.push({ type: `${R_NS}/image`, target: `media/${file}` })}`;
+    };
+    const part = `image${n}.${extension}`;
+    const image: Image = { rId: add(part, raster), part, width, height };
+    if (media.contentType === 'image/svg+xml') image.svgRId = add(`image${n}.svg`, media.data);
+    pkg.images.set(name, image);
+    return image;
+}
+
+function isPositive(value: number | undefined): value is number {
+    return value !== undefined && Number.isFinite(value) && value > 0;
+}
+
+// The SVG blip extension Word reads; every other reader draws the PNG.
+function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Package): string {
+    const n = ++pkg.drawings;
+    const descr = escapeXml(alt);
+    const blip = image.svgRId
+        ? `<a:blip r:embed="${image.rId}"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="${image.svgRId}"/></a:ext></a:extLst></a:blip>`
+        : `<a:blip r:embed="${image.rId}"/>`;
+    return [
+        `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`,
+        `<wp:docPr id="${n}" name="Picture ${n}" descr="${descr}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`,
+        `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${n}" name="${image.part}" descr="${descr}"/><pic:cNvPicPr/></pic:nvPicPr>`,
+        `<pic:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+    ].join('');
 }
 
 // ── Code blocks: one paragraph per line, lowlight's tokens as runs ─────────────────────────────────────────────────

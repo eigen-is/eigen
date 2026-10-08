@@ -64,6 +64,10 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
+// A wrapped figure's distance from the text around it, in em of the body text; side is the text's side, the margin's
+// side is 0. The docx writer floats its figures by the same.
+export const FIGURE_WRAP_MARGIN_EM = { top: 0.25, bottom: 0.5, side: 1 };
+
 // `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
 export function renderFigureNode(
     attrs: FigureAttrs,
@@ -89,9 +93,11 @@ export function renderFigureNode(
 
     const layout = attrs.layout || 'block';
 
-    if (layout === 'wrap-left') return `<figure style="float: left; margin: 0.25em 1em 0.5em 0">${img}${cap}</figure>`;
+    const { top, bottom, side } = FIGURE_WRAP_MARGIN_EM;
+    if (layout === 'wrap-left')
+        return `<figure style="float: left; margin: ${top}em ${side}em ${bottom}em 0">${img}${cap}</figure>`;
     if (layout === 'wrap-right')
-        return `<figure style="float: right; margin: 0.25em 0 0.5em 1em">${img}${cap}</figure>`;
+        return `<figure style="float: right; margin: ${top}em 0 ${bottom}em ${side}em">${img}${cap}</figure>`;
 
     const align = alignment || 'center';
     const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';

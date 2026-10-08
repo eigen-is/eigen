@@ -4,30 +4,29 @@ import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import JSZip from 'jszip';
 import { common, createLowlight } from 'lowlight';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
+import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import * as proseCss from '../../lib/export/doc/prose-css';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
-import { buildAllFeaturesDocJson } from '../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const RELS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const CONTENT_TYPES = 'http://schemas.openxmlformats.org/package/2006/content-types';
+const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
 
 // U+FFFE, which XML can't hold; the formatter would unescape it into an invisible literal.
 const NONCHARACTER = String.fromCharCode(0xfffe);
 
 const schema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
 
-// The node U2c (figures) maps. It throws until its mapping lands and leaves this set; the writer is whole when it is
-// empty.
-const PENDING_NODES = new Set(['figure']);
-
-function docx(json: JSONContent, publicOrigin?: string): Promise<Uint8Array> {
-    return eigendocToDocx(json, 'Report.eigendoc', publicOrigin);
+// Every doc gets the all-features media; the writer embeds only what a figure shows.
+function docx(json: JSONContent, publicOrigin?: string, media = buildAllFeaturesDocMedia()): Promise<Uint8Array> {
+    return eigendocToDocx(json, media, 'Report.eigendoc', publicOrigin);
 }
 
-async function unzip(json: JSONContent, publicOrigin?: string): Promise<JSZip> {
-    return JSZip.loadAsync(await docx(json, publicOrigin));
+async function unzip(json: JSONContent, publicOrigin?: string, media?: ExportMedia[]): Promise<JSZip> {
+    return JSZip.loadAsync(await docx(json, publicOrigin, media));
 }
 
 async function part(zip: JSZip, path: string): Promise<XmlElement> {
@@ -37,8 +36,8 @@ async function part(zip: JSZip, path: string): Promise<XmlElement> {
     return root;
 }
 
-async function bodyOf(json: JSONContent, publicOrigin?: string): Promise<XmlElement> {
-    const body = xmlChild(await part(await unzip(json, publicOrigin), 'word/document.xml'), W, 'body');
+async function bodyOf(json: JSONContent, publicOrigin?: string, media?: ExportMedia[]): Promise<XmlElement> {
+    const body = xmlChild(await part(await unzip(json, publicOrigin, media), 'word/document.xml'), W, 'body');
     if (!body) throw new Error('no w:body');
     return body;
 }
@@ -98,6 +97,13 @@ function xmlOf(element: XmlElement | undefined): string {
 
 async function paragraphsOf(json: JSONContent): Promise<string[]> {
     return xmlChildren(await bodyOf(json), W, 'p').map(xmlOf);
+}
+
+// The body's blocks as exact XML, the section properties left out.
+async function blocksOf(json: JSONContent, media?: ExportMedia[]): Promise<string[]> {
+    return xmlElements(await bodyOf(json, undefined, media))
+        .filter((element) => element.local !== 'sectPr')
+        .map(xmlOf);
 }
 
 async function numberingOf(json: JSONContent): Promise<XmlElement> {
@@ -193,26 +199,17 @@ function style(all: Map<string, XmlElement>, id: string): XmlElement {
 }
 
 describe('docx writer — schema coverage', () => {
-    test('the all-features doc is a valid doc holding every node and mark the writer maps', () => {
+    test('the all-features doc is a valid doc holding every node and mark of the schema', () => {
         const json = buildAllFeaturesDocJson();
         schema.nodeFromJSON(json).check();
         const { nodes, marks } = typesIn(json);
 
-        expect([...nodes].sort()).toEqual(
-            Object.keys(schema.nodes)
-                .filter((type) => !PENDING_NODES.has(type))
-                .sort(),
-        );
+        expect([...nodes].sort()).toEqual(Object.keys(schema.nodes).sort());
         expect([...marks].sort()).toEqual(Object.keys(schema.marks).sort());
-        for (const type of PENDING_NODES) expect(schema.nodes[type]).toBeDefined();
     });
 
     test('the all-features doc exports', async () => {
         expect((await docx(buildAllFeaturesDocJson())).byteLength).toBeGreaterThan(0);
-    });
-
-    test.each([...PENDING_NODES])('%s has no mapping yet, so it throws', async (type) => {
-        await expect(docx(doc({ type }))).rejects.toThrow(`no docx mapping for ${type}`);
     });
 
     test('an unknown node or mark throws, as the HTML export does', async () => {
@@ -234,11 +231,13 @@ describe('docx writer — package', () => {
         'word/fontTable.xml',
         'word/_rels/fontTable.xml.rels',
     ];
+    // The all-features doc's chart, photo and SVG, numbered as the figures first show them.
+    const MEDIA_PARTS = ['word/media/image1.png', 'word/media/image2.jpeg', 'word/media/image3.png'];
 
     test('every part is written, parses and has a content type', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
         const paths = Object.keys(zip.files);
-        expect(paths.sort()).toEqual([...PARTS].sort());
+        expect(paths.sort()).toEqual([...PARTS, ...MEDIA_PARTS, 'word/media/image3.svg'].sort());
 
         const types = await part(zip, '[Content_Types].xml');
         const defaults = new Set(xmlChildren(types, CONTENT_TYPES, 'Default').map((d) => xmlAttr(d, '', 'Extension')));
@@ -250,7 +249,7 @@ describe('docx writer — package', () => {
         );
         expect([...defaults].sort()).toEqual(['jpeg', 'odttf', 'png', 'rels', 'svg', 'xml']);
         for (const path of paths) {
-            await part(zip, path);
+            if (!MEDIA_PARTS.includes(path)) await part(zip, path);
             expect(overrides.has(`/${path}`) || defaults.has(path.split('.').pop())).toBe(true);
         }
         const wml = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
@@ -1229,6 +1228,271 @@ describe('docx writer — horizontal rules', () => {
     });
 });
 
+function figure(attrs: Record<string, unknown>): JSONContent {
+    return { type: 'figure', attrs };
+}
+
+describe('docx writer — figures', () => {
+    // The fixture's media: chart.png 800 × 500, photo.jpeg 4000 × 3000, diagram.svg 300 × 150 beside its PNG.
+    const CHART = { mediaName: 'chart.png' };
+    // The A4 text column less 2 cm margins, 9638 twips, in whole px.
+    const COLUMN_PX = 642;
+    const IMAGE_REL = `${R}/image`;
+
+    // The drawing exactly as § 3.4 writes it; the namespace declaration on svgBlip is left out by xmlOf.
+    function drawing(o: {
+        id: number;
+        px: number;
+        ratio: number;
+        part: string;
+        embed: string;
+        descr?: string;
+        svg?: string;
+    }) {
+        const cx = o.px * 9525;
+        const cy = Math.round(cx * o.ratio);
+        const descr = o.descr ?? '';
+        const blip = o.svg
+            ? `<a:blip r:embed="${o.embed}"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip r:embed="${o.svg}"/></a:ext></a:extLst></a:blip>`
+            : `<a:blip r:embed="${o.embed}"/>`;
+        return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${o.id}" name="Picture ${o.id}" descr="${descr}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${o.id}" name="${o.part}" descr="${descr}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+    }
+
+    const chart = (px: number, id = 1) => drawing({ id, px, ratio: 500 / 800, part: 'image1.png', embed: 'rId5' });
+
+    const imageParagraph = (runs: string, jc = 'center', after = 165, ind = '') =>
+        `<w:p><w:pPr><w:spacing w:before="165" w:after="${after}" w:line="240" w:lineRule="auto"/>${ind}<w:jc w:val="${jc}"/></w:pPr>${runs}</w:p>`;
+
+    // The width of each figure's extent, in px.
+    async function widthsOf(json: JSONContent): Promise<number[]> {
+        return descendants(await bodyOf(json), WP, 'extent').map((extent) => Number(xmlAttr(extent, '', 'cx')) / 9525);
+    }
+
+    async function relationshipsOf(zip: JSZip) {
+        return xmlChildren(await part(zip, 'word/_rels/document.xml.rels'), RELS, 'Relationship').map((rel) => [
+            xmlAttr(rel, '', 'Id'),
+            xmlAttr(rel, '', 'Type'),
+            xmlAttr(rel, '', 'Target'),
+        ]);
+    }
+
+    function floating(side: 'left' | 'right', px: number, cell: string) {
+        const tw = px * 15;
+        const nil = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
+            .map((b) => `<w:${b} w:val="nil"/>`)
+            .join('');
+        const flush = ['top', 'left', 'bottom', 'right'].map((b) => `<w:${b} w:w="0" w:type="dxa"/>`).join('');
+        return `<w:tbl><w:tblPr><w:tblpPr w:leftFromText="${side === 'right' ? 220 : 0}" w:rightFromText="${side === 'left' ? 220 : 0}" w:topFromText="55" w:bottomFromText="110" w:vertAnchor="text" w:horzAnchor="margin" w:tblpXSpec="${side}" w:tblpY="1"/><w:tblOverlap w:val="never"/><w:tblW w:w="${tw}" w:type="dxa"/><w:tblBorders>${nil}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>${flush}</w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${tw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr></w:tbl>`;
+    }
+
+    const floatingImage = (runs: string) =>
+        `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>${runs}</w:p>`;
+    const floatingCaption = (value: string) =>
+        `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="0"/><w:jc w:val="center"/></w:pPr>${run(value)}</w:p>`;
+
+    test('a block figure is an inline drawing in a single-spaced paragraph, its extent from the width and the ratio', async () => {
+        expect(await blocksOf(doc(p(figure({ ...CHART, width: 320, alt: 'A chart' }))))).toEqual([
+            imageParagraph(
+                drawing({ id: 1, px: 320, ratio: 500 / 800, part: 'image1.png', embed: 'rId5', descr: 'A chart' }),
+            ),
+        ]);
+    });
+
+    test('a caption follows in the Caption style, both aligned as the figure, and takes the margin below', async () => {
+        expect(
+            await blocksOf(doc(p(figure({ ...CHART, width: 320, alignment: 'right', caption: 'Figure 1\tchart' })))),
+        ).toEqual([
+            imageParagraph(chart(320), 'right', 0),
+            '<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">Figure 1</w:t><w:tab/><w:t xml:space="preserve">chart</w:t></w:r></w:p>',
+        ]);
+    });
+
+    test.each([
+        ['left', 'left'],
+        ['center', 'center'],
+        ['right', 'right'],
+        ['sideways', 'center'],
+        [null, 'center'],
+    ])('alignment %p is w:jc %s', async (alignment, jc) => {
+        const [image] = xmlChildren(await bodyOf(doc(p(figure({ ...CHART, width: 100, alignment })))), W, 'p');
+        expect(w(child(child(image, 'pPr'), 'jc'), 'val')).toBe(jc);
+    });
+
+    test.each([
+        [2000, COLUMN_PX],
+        [320.4, 320],
+        [null, COLUMN_PX],
+        [0, COLUMN_PX],
+        [-50, COLUMN_PX],
+        [Number.NaN, COLUMN_PX],
+        ['300', COLUMN_PX],
+    ])('width %p shows %p px wide, inside the column', async (width, px) => {
+        expect(await widthsOf(doc(p(figure({ ...CHART, width }))))).toEqual([px]);
+    });
+
+    test('without a width a figure is its natural size, capped at the column, half of it when wrapped', async () => {
+        const natural = await widthsOf(
+            doc(
+                p(figure({ mediaName: 'diagram.svg' })),
+                p(figure({ mediaName: 'photo.jpeg' })),
+                p(figure({ ...CHART, layout: 'wrap-left' })),
+                p(figure({ ...CHART, layout: 'wrap-right', width: 500 })),
+            ),
+        );
+        expect(natural).toEqual([300, COLUMN_PX, 321, 500]);
+        const extent = only(descendants(await bodyOf(doc(p(figure({ mediaName: 'photo.jpeg' })))), WP, 'extent'));
+        expect([xmlAttr(extent, '', 'cx'), xmlAttr(extent, '', 'cy')]).toEqual(['6115050', '4586288']);
+    });
+
+    test("a figure in a list item is indented to the item's text and capped at what the indent leaves", async () => {
+        const body = await bodyOf(doc(ul(li(p(text('x')), p(figure({ ...CHART, width: 2000 }))))));
+        const image = xmlChildren(body, W, 'p')[1];
+        expect(w(child(child(image, 'pPr'), 'ind'), 'left')).toBe('330');
+        expect(descendants(body, WP, 'extent').map((extent) => Number(xmlAttr(extent, '', 'cx')) / 9525)).toEqual([
+            620,
+        ]);
+    });
+
+    test('a block figure breaks the paragraph that holds it, the text on both sides kept', async () => {
+        expect(await blocksOf(doc(p(text('before '), figure({ ...CHART, width: 100 }), text(' after'))))).toEqual([
+            `<w:p>${run('before ')}</w:p>`,
+            imageParagraph(chart(100)),
+            `<w:p>${run(' after')}</w:p>`,
+        ]);
+    });
+
+    test('a wrapped figure is a borderless floating one-cell table before its paragraph, the row kept whole', async () => {
+        const cell = floatingImage(chart(220)) + floatingCaption('Wrapped');
+        expect(
+            await blocksOf(
+                doc(
+                    p(
+                        text('before '),
+                        figure({ ...CHART, width: 220, layout: 'wrap-left', caption: 'Wrapped' }),
+                        text('after'),
+                    ),
+                ),
+            ),
+        ).toEqual([floating('left', 220, cell), `<w:p>${run('before ')}${run('after')}</w:p>`]);
+        const [right] = await blocksOf(doc(p(figure({ ...CHART, width: 220, layout: 'wrap-right' })), p(text('x'))));
+        expect(right).toBe(floating('right', 220, floatingImage(chart(220))));
+    });
+
+    test('two floating figures keep a Spacer between their tables; an emptied holder goes, the last one is a Spacer', async () => {
+        const left = figure({ ...CHART, width: 100, layout: 'wrap-left' });
+        const right = figure({ ...CHART, width: 100, layout: 'wrap-right' });
+        const blocks = await blocksOf(doc(p(left), p(right, text('flows'))));
+        expect(blocks.map((block) => block.slice(0, 6))).toEqual(['<w:tbl', '<w:p><', '<w:tbl', '<w:p><']);
+        expect(blocks[1]).toBe(SPACER_XML);
+        expect(blocks[3]).toBe(`<w:p>${run('flows')}</w:p>`);
+        expect((await blocksOf(doc(p(text('x')), p(left)))).slice(1).map((block) => block.slice(0, 6))).toEqual([
+            '<w:tbl',
+            '<w:p><',
+        ]);
+        expect((await blocksOf(doc(p(left))))[1]).toBe(SPACER_XML);
+    });
+
+    test('a floating figure keeps no table margin, and stays apart from an in-flow table', async () => {
+        const left = figure({ ...CHART, width: 100, layout: 'wrap-left' });
+        const blocks = await blocksOf(doc(table(tr(td({}, p(text('cell'))))), p(left, text('next'))));
+        expect(blocks.map((block) => block.slice(0, 6))).toEqual(['<w:tbl', '<w:p><', '<w:tbl', '<w:p><']);
+        expect(blocks[1]).toBe('<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="165"/></w:pPr></w:p>');
+        expect(blocks[3]).toBe(`<w:p>${run('next')}</w:p>`);
+    });
+
+    test("a wrapped figure in an item's first paragraph leaves the number on its text", async () => {
+        const body = await bodyOf(doc(ul(li(p(figure({ ...CHART, width: 100, layout: 'wrap-left' }), text('item'))))));
+        expect(shape(body)).toEqual(['tbl', 'p', 'sectPr']);
+        expect(w(child(child(child(xmlChildren(body, W, 'p')[0], 'pPr'), 'numPr'), 'numId'), 'val')).toBe('1');
+    });
+
+    test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {
+        const json = doc(p(figure({ mediaName: 'diagram.svg', width: 200 })));
+        const zip = await unzip(json);
+        expect(await blocksOf(json)).toEqual([
+            imageParagraph(
+                drawing({ id: 1, px: 200, ratio: 150 / 300, part: 'image1.png', embed: 'rId5', svg: 'rId6' }),
+            ),
+        ]);
+        const svgNs = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
+        const svgBlip = only(descendants(await part(zip, 'word/document.xml'), svgNs, 'svgBlip'));
+        expect(xmlAttr(svgBlip, R, 'embed')).toBe('rId6');
+        expect((await relationshipsOf(zip)).slice(4)).toEqual([
+            ['rId5', IMAGE_REL, 'media/image1.png'],
+            ['rId6', IMAGE_REL, 'media/image1.svg'],
+        ]);
+        expect((await part(zip, 'word/media/image1.svg')).local).toBe('svg');
+        expect(await zip.file('word/media/image1.png')?.async('string')).toBe('diagram png');
+    });
+
+    test('a raster is its PNG or JPEG part as prepared, and no WebP type is declared', async () => {
+        const zip = await unzip(doc(p(figure({ mediaName: 'photo.jpeg' })), p(figure(CHART))));
+        expect((await relationshipsOf(zip)).slice(4)).toEqual([
+            ['rId5', IMAGE_REL, 'media/image1.jpeg'],
+            ['rId6', IMAGE_REL, 'media/image2.png'],
+        ]);
+        expect(await zip.file('word/media/image1.jpeg')?.async('string')).toBe('photo jpeg');
+        // Stored, not deflated: the bytes stand in the zip as prepared.
+        const bytes = await docx(doc(p(figure({ mediaName: 'photo.jpeg' }))));
+        expect(Buffer.from(bytes).includes('photo jpeg')).toBe(true);
+        const types = await part(zip, '[Content_Types].xml');
+        const extensions = xmlChildren(types, CONTENT_TYPES, 'Default').map((d) => xmlAttr(d, '', 'Extension'));
+        expect(extensions).not.toContain('webp');
+        expect(extensions).toEqual(expect.arrayContaining(['png', 'jpeg', 'svg']));
+    });
+
+    test('media one doc shows twice is one part and one relationship, and every drawing has its own id', async () => {
+        const zip = await unzip(
+            doc(p(figure({ ...CHART, width: 100 })), p(figure({ ...CHART, width: 200, layout: 'wrap-left' }))),
+        );
+        expect((await relationshipsOf(zip)).slice(4)).toEqual([['rId5', IMAGE_REL, 'media/image1.png']]);
+        expect(Object.keys(zip.files).filter((path) => path.startsWith('word/media/'))).toEqual([
+            'word/media/image1.png',
+        ]);
+        const document = await part(zip, 'word/document.xml');
+        expect(descendants(document, WP, 'docPr').map((docPr) => xmlAttr(docPr, '', 'id'))).toEqual(['1', '2']);
+        expect(
+            descendants(document, 'http://schemas.openxmlformats.org/drawingml/2006/picture', 'cNvPr').map((cNvPr) =>
+                xmlAttr(cNvPr, '', 'id'),
+            ),
+        ).toEqual(['1', '2']);
+    });
+
+    test('alt text is escaped into both descriptions, and a comment on the figure adds nothing yet', async () => {
+        const plain = await blocksOf(doc(p(figure({ ...CHART, width: 100, alt: 'a < b & "c"' }))));
+        const docPr = only(descendants(await bodyOf(doc(p(figure({ ...CHART, alt: 'a < b & "c"' })))), WP, 'docPr'));
+        expect(xmlAttr(docPr, '', 'descr')).toBe('a < b & "c"');
+        expect(
+            await blocksOf(doc(p(figure({ ...CHART, width: 100, alt: 'a < b & "c"', commentCardId: 'card-1' })))),
+        ).toEqual(plain);
+    });
+
+    // A PNG named x as the prep would hand it over, but for what each case changes.
+    const media = (over: Partial<ExportMedia>): ExportMedia[] => [
+        { name: 'x', contentType: 'image/png', data: toTransferableText('x'), width: 10, height: 10, ...over },
+    ];
+
+    test.each([
+        ['missing media', { mediaName: 'gone' }, media({})],
+        ['an external src', { src: 'https://example.com/x.png' }, media({})],
+        ['a WebP', { mediaName: 'x' }, media({ contentType: 'image/webp' })],
+        ['an SVG without its PNG', { mediaName: 'x' }, media({ contentType: 'image/svg+xml' })],
+        ['no width', { mediaName: 'x' }, media({ width: undefined })],
+        ['a zero height', { mediaName: 'x' }, media({ height: 0 })],
+        ['an infinite width', { mediaName: 'x' }, media({ width: Number.POSITIVE_INFINITY })],
+    ])('a figure with %s writes nothing, and its paragraph keeps its text', async (_case, attrs, prepared) => {
+        const json = doc(p(text('a'), figure(attrs), text('b')), p(figure(attrs)));
+        expect(await blocksOf(json, prepared)).toEqual([`<w:p>${run('a')}${run('b')}</w:p>`, '<w:p/>']);
+        const zip = await unzip(json, undefined, prepared);
+        expect(Object.keys(zip.files).filter((path) => path.startsWith('word/media/'))).toEqual([]);
+        expect((await relationshipsOf(zip)).map(([, type]) => type)).not.toContain(IMAGE_REL);
+        const plain = await unzip(json, undefined, media({}));
+        expect(Object.keys(plain.files).filter((path) => path.startsWith('word/media/'))).toEqual(
+            'mediaName' in attrs && attrs.mediaName === 'x' ? ['word/media/image1.png'] : [],
+        );
+    });
+});
+
 // ECMA-376 sequence orders, the test's own oracle: Word calls a file with a child out of order unreadable. A child
 // missing from its list fails too, so a writer that starts emitting it extends the list here.
 const SEQUENCES: Record<string, string[]> = {
@@ -1310,8 +1574,25 @@ const SEQUENCES: Record<string, string[]> = {
     ],
 };
 
+// The drawing's sequences (CT_Inline, CT_Picture and the DrawingML they hold), by the names the writer gives them.
+const DRAWING_SEQUENCES: Record<string, string[]> = {
+    'wp:inline': ['wp:extent', 'wp:effectExtent', 'wp:docPr', 'wp:cNvGraphicFramePr', 'a:graphic'],
+    'wp:cNvGraphicFramePr': ['a:graphicFrameLocks', 'a:extLst'],
+    'a:graphic': ['a:graphicData'],
+    'a:graphicData': ['pic:pic'],
+    'pic:pic': ['pic:nvPicPr', 'pic:blipFill', 'pic:spPr', 'pic:style', 'pic:extLst'],
+    'pic:nvPicPr': ['pic:cNvPr', 'pic:cNvPicPr', 'pic:nvPr'],
+    'pic:blipFill': ['a:blip', 'a:srcRect', 'a:tile', 'a:stretch'],
+    'a:blip': ['a:extLst'],
+    'a:extLst': ['a:ext'],
+    'a:stretch': ['a:fillRect'],
+    'pic:spPr': ['a:xfrm', 'a:custGeom', 'a:prstGeom', 'a:noFill', 'a:ln', 'a:effectLst', 'a:extLst'],
+    'a:xfrm': ['a:off', 'a:ext'],
+    'a:prstGeom': ['a:avLst'],
+};
+
 // The children a sequence may repeat in a row.
-const REPEATED = new Set(['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol']);
+const REPEATED = new Set(['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol', 'a:ext']);
 
 describe('docx writer — property order', () => {
     test('every property list writes its children in the ECMA sequence', async () => {
@@ -1321,14 +1602,17 @@ describe('docx writer — property order', () => {
         const paths = ['document', 'styles', 'numbering', 'settings', 'fontTable'].map((name) => `word/${name}.xml`);
         for (const path of paths) {
             for (const element of elementsOf(await part(zip, path))) {
-                const sequence = element.ns === W ? SEQUENCES[element.local] : undefined;
+                const wml = element.ns === W;
+                const key = wml ? element.local : element.name;
+                const sequence = wml ? SEQUENCES[key] : DRAWING_SEQUENCES[key];
                 if (!sequence) continue;
-                seen.add(element.local);
+                seen.add(key);
                 const children = xmlElements(element);
-                const order = children.map((c) => (c.ns === W ? sequence.indexOf(c.local) : -1));
+                const names = children.map((c) => (wml ? (c.ns === W ? c.local : '') : c.name));
+                const order = names.map((name) => sequence.indexOf(name));
                 const misplaced = (index: number, i: number) => {
                     const previous = order[i - 1] ?? -1;
-                    return index < previous || (index === previous && !REPEATED.has(children[i]?.local ?? ''));
+                    return index < previous || (index === previous && !REPEATED.has(names[i] ?? ''));
                 };
                 if (order.some((index, i) => index < 0 || misplaced(index, i))) {
                     outOfOrder.push(`${path} ${element.local}: ${shape(element).join(' ')}`);
@@ -1336,7 +1620,7 @@ describe('docx writer — property order', () => {
             }
         }
         expect(outOfOrder).toEqual([]);
-        expect([...seen].sort()).toEqual(Object.keys(SEQUENCES).sort());
+        expect([...seen].sort()).toEqual([...Object.keys(SEQUENCES), ...Object.keys(DRAWING_SEQUENCES)].sort());
     });
 });
 
