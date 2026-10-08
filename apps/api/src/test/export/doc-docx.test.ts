@@ -565,6 +565,31 @@ describe('docx writer — paragraphs and headings', () => {
         expect(w(child(child(heading, 'pPr'), 'pStyle'), 'val')).toBe('Heading3');
         expect(bare?.children).toEqual([]);
     });
+
+    test("a paragraph all in one other family keeps the editor's pitch, its line scaled by that family's line height", async () => {
+        const family = (fontFamily: string) => ({ type: 'textStyle', attrs: { fontFamily } });
+        const serif = family('Source Serif 4');
+        const body = await bodyOf(
+            doc(
+                p(text('a', serif), text('b', serif, { type: 'bold' })),
+                p(text('c', family('JetBrains Mono'))),
+                p(text('d', family('Excalifont'))),
+                heading(1, text('e', serif)),
+                p(text('f', serif), text('g')),
+                p(text('h', { type: 'code' })),
+            ),
+        );
+        // 337 is 1.7 × 11 pt at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
+        // Mixed families keep the style's; inline code is smaller, so the mark's Inter stays the tallest.
+        expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
+            '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="309" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="324" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:line="210" w:lineRule="auto"/></w:pPr>',
+            '',
+            '',
+        ]);
+    });
 });
 
 describe('docx writer — marks', () => {

@@ -250,32 +250,51 @@ function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
     return { embeds, relationships, files };
 }
 
+// A run's family and size in half-points, which the height of its line follows.
+type RunFace = { family: string; size: number };
+
 // The face a run draws in, as Word resolves it: the run's own font and toggles over its character style's over its
 // paragraph style's, where a style's toggle flips the one below it. A slot its family has no file for is synthesized
 // from the Regular.
-function useFace(pkg: Package, run: RunProps, paragraphStyle: string | undefined): void {
+function useFace(pkg: Package, run: RunProps, paragraphStyle: string | undefined): RunFace {
     const character = styleFace(run.style);
     const paragraph = styleFace(paragraphStyle ?? 'Normal');
     const family = run.font ?? character.font ?? paragraph.font ?? BODY.font;
+    const size = run.size ?? character.size ?? paragraph.size ?? halfPoints(BODY.sizePt);
     const files = DOCX_FONT_FILES.get(family);
-    if (!files) return;
-    const bold = run.bold ?? character.bold !== paragraph.bold;
-    const italic = run.italic ?? character.italic !== paragraph.italic;
-    const slot = bold ? (italic ? 'BoldItalic' : 'Bold') : italic ? 'Italic' : 'Regular';
-    pkg.faces.set(family, (pkg.faces.get(family) ?? new Set()).add(files[slot] ? slot : 'Regular'));
+    if (files) {
+        const bold = run.bold ?? character.bold !== paragraph.bold;
+        const italic = run.italic ?? character.italic !== paragraph.italic;
+        const slot = bold ? (italic ? 'BoldItalic' : 'Bold') : italic ? 'Italic' : 'Regular';
+        pkg.faces.set(family, (pkg.faces.get(family) ?? new Set()).add(files[slot] ? slot : 'Regular'));
+    }
+    return { family, size };
 }
 
 // The nearest definition of each face property along a style's chain.
-function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 'italic'> {
-    const face: Pick<RunProps, 'font' | 'bold' | 'italic'> = {};
+function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
+    const face: Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> = {};
     for (let id = style; id !== undefined; ) {
         const definition = STYLES.get(id);
         face.font ??= definition?.rPr?.font;
         face.bold ??= definition?.rPr?.bold;
         face.italic ??= definition?.rPr?.italic;
+        face.size ??= definition?.rPr?.size;
         id = definition?.basedOn;
     }
     return face;
+}
+
+// Word's auto line is a multiple of the tallest face's line height, the editor's pitch the paragraph's: a paragraph all
+// in one family takes the multiple that keeps it, unless its mark, in the style's face, stands as tall.
+function familyLine(style: string | undefined, faces: RunFace[]): number | undefined {
+    const family = faces[0]?.family;
+    if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
+    const paragraph = styleFace(style ?? 'Normal');
+    const mark = fontLineHeight(paragraph.font ?? BODY.font) * (paragraph.size ?? halfPoints(BODY.sizePt));
+    let tallest = mark;
+    for (const face of faces) tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
+    return tallest === mark ? undefined : Math.round((styleSpacing(style, 'line') * mark) / tallest);
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -479,7 +498,10 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
     const flush = () => {
-        blocks.push({ props, runs: runsXml(inline, context, props.style) });
+        const faces: RunFace[] = [];
+        const runs = runsXml(inline, context, props.style, faces);
+        const line = familyLine(props.style, faces);
+        blocks.push({ props: line === undefined ? props : { ...props, spacing: { ...props.spacing, line } }, runs });
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
@@ -592,7 +614,7 @@ function withBefore(paragraph: Paragraph, before: number): Paragraph {
 }
 
 // What the style chain gives a paragraph: its own style, what that is based on, Normal for none.
-function styleSpacing(style: string | undefined, side: 'before' | 'after'): number {
+function styleSpacing(style: string | undefined, side: 'before' | 'after' | 'line'): number {
     for (let id = style ?? 'Normal'; ; ) {
         const definition = STYLES.get(id);
         const value = definition?.pPr?.spacing?.[side];
@@ -1050,15 +1072,15 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 // A run is written in its paragraph's style.
 const INLINES = new Map<
     string,
-    (node: JSONContent, linked: boolean, context: Context, style: string | undefined) => string
+    (node: JSONContent, linked: boolean, context: Context, style: string | undefined, faces: RunFace[]) => string
 >([
     [
         'text',
-        (node, linked, context, style) => {
+        (node, linked, context, style, faces) => {
             const content = textXml(node.text ?? '');
             if (!content) return '';
             const props = runProps(node.marks ?? [], linked, context);
-            useFace(context.pkg, props, style);
+            faces.push(useFace(context.pkg, props, style));
             const rPr = rPrXml(props);
             return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
         },
@@ -1067,13 +1089,13 @@ const INLINES = new Map<
 ]);
 
 // Runs that share a link share one w:hyperlink.
-function runsXml(nodes: JSONContent[], context: Context, style: string | undefined): string {
+function runsXml(nodes: JSONContent[], context: Context, style: string | undefined, faces: RunFace[]): string {
     const links = nodes.map((node) => hyperlinkOf(node, context.pkg.publicOrigin));
     let xml = '';
     for (let i = 0; i < nodes.length; ) {
         const link = links[i];
         let runs = '';
-        do runs += INLINES.get(nodes[i].type ?? '')?.(nodes[i], link !== undefined, context, style) ?? '';
+        do runs += INLINES.get(nodes[i].type ?? '')?.(nodes[i], link !== undefined, context, style, faces) ?? '';
         while (++i < nodes.length && links[i]?.target === link?.target && links[i]?.tooltip === link?.tooltip);
         if (!link) {
             xml += runs;
@@ -1216,9 +1238,13 @@ function halfPoints(pt: number): number {
 
 // A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
 function autoLine(linePt: number, sizePt: number, font: string): number {
-    const fontLineHeight = FONT_LINE_HEIGHT.get(font);
-    if (fontLineHeight === undefined) throw new Error(`no line height for ${font}`);
-    return Math.round((240 * linePt) / (sizePt * fontLineHeight));
+    return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
+}
+
+function fontLineHeight(font: string): number {
+    const lineHeight = FONT_LINE_HEIGHT.get(font);
+    if (lineHeight === undefined) throw new Error(`no line height for ${font}`);
+    return lineHeight;
 }
 
 function proseColor(selector: string, property: string): string {
