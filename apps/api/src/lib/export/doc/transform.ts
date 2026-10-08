@@ -10,8 +10,6 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
-import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
@@ -26,6 +24,7 @@ import {
 import { FONT_STACK_MONO, FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
+import { PROSE_CSS } from './prose-css';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
@@ -57,16 +56,6 @@ export async function renderEigendocExport(
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
-// The app's weight scale, rounded: WeasyPrint drops any font-weight that is not a multiple of 100.
-const FONT_WEIGHTS = new Map(
-    [...fontWeightsCSSRaw.matchAll(/(--font-weight-[\w-]+):\s*(\d+);/g)].map(([, name, weight]) => [
-        name,
-        String(Math.round(Number(weight) / 100) * 100),
-    ]),
-);
-
-const proseCSS = flattenEigenProseCSS(eigenProseCSSRaw);
-
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
         content: json,
@@ -91,7 +80,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${proseCSS}${PRINT_EXTRAS}</style>
+    <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
 </head>
 <body>
     <div class="page">
@@ -101,84 +90,6 @@ function wrapInDocument(title: string, bodyHtml: string): string {
     </div>
 </body>
 </html>`;
-}
-
-// ── CSS flattening ──────────────────────────────────────────────────────────
-// The source eigen-prose.css uses modern CSS nesting (.eigen-prose { h1 { … } }).
-// Standalone HTML and WeasyPrint need flat CSS, so we rewrite at init time.
-
-function flattenEigenProseCSS(raw: string): string {
-    let css = raw.replace(/\.eigen-prose,\s*\n\s*\.tiptap\s*\{/g, '.eigen-prose {');
-
-    // Drop .dark overrides (export is always light)
-    css = css.replace(/^\.dark\s+\.eigen-prose[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/gm, '');
-
-    // Flatten CSS nesting for all top-level blocks
-    css = css.replace(/^(\.[a-zA-Z][\w-]*)\s*\{([\s\S]*?)^\}/gm, (_match, selector, body) => {
-        if (body.includes('{')) {
-            return flattenNestedBlock(selector, body);
-        }
-        return `${selector} {${body}}`;
-    });
-
-    // Resolve CSS variables to concrete values
-    css = css
-        .replace(/var\(--font-sans\)/g, FONT_STACK_SANS)
-        .replace(/var\(--font-mono\)/g, FONT_STACK_MONO)
-        .replace(/var\(--color-muted-foreground\)/g, '#6b7280')
-        .replace(/var\(--color-primary\)/g, '#2563eb')
-        .replace(/var\(--color-link,\s*#2563eb\)/g, '#2563eb')
-        .replace(/var\(--color-selected\)/g, '#bfdbfe')
-        .replace(/var\((--font-weight-[\w-]+)\)/g, (match, name: string) => FONT_WEIGHTS.get(name) ?? match);
-
-    return css;
-}
-
-function flattenNestedBlock(parentSelector: string, body: string): string {
-    const results: string[] = [];
-    let depth = 0;
-    let current = '';
-    let inNested = false;
-    let nestedSelector = '';
-
-    for (let i = 0; i < body.length; i++) {
-        const ch = body[i];
-        if (ch === '{') {
-            if (depth === 0) {
-                nestedSelector = current.trim();
-                current = '';
-                inNested = true;
-            } else {
-                current += ch;
-            }
-            depth++;
-        } else if (ch === '}') {
-            depth--;
-            if (depth === 0 && inNested) {
-                const nestedBody = current.trim();
-                if (nestedSelector.startsWith('&')) {
-                    const expanded = nestedSelector.replace(/&/g, parentSelector);
-                    results.push(`${expanded} { ${nestedBody} }`);
-                } else {
-                    results.push(`${parentSelector} ${nestedSelector} { ${nestedBody} }`);
-                }
-                current = '';
-                inNested = false;
-                nestedSelector = '';
-            } else {
-                current += ch;
-            }
-        } else {
-            current += ch;
-        }
-    }
-
-    const topLevelProps = current.trim();
-    if (topLevelProps) {
-        results.unshift(`${parentSelector} { ${topLevelProps} }`);
-    }
-
-    return results.join('\n');
 }
 
 const PAGE_TWIPS = pageTwips(DEFAULT_PAGE_SETUP);
@@ -194,11 +105,10 @@ img, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; color: inherit; background-color: transparent; border-radius: 0; }
 a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
+h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 
 body {
     font-family: ${FONT_STACK_SANS};
-    font-size: 11pt;
-    line-height: 1.5;
     color: #1a1a2e;
     margin: 0;
     padding: 0;

@@ -69,6 +69,12 @@ describe('doc export — the stylesheet', () => {
         expect(css).toMatch(/strong \{ font-weight: 600; \}/);
     });
 
+    test('h5 and h6 print at the body size, which only eigen-prose sets', async () => {
+        const css = await exportStyle('pdf-html');
+        expect(css).toContain('h1, h2, h3, h4, h5, h6 { font-size: inherit; }');
+        expect(css.match(/font-size: 11pt/g)).toHaveLength(1);
+    });
+
     test('the dark theme stays out, whole', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/#3f3f46|#27272a/);
