@@ -552,13 +552,16 @@ function itemOf(
         after,
         list: undefined,
     };
-    const blocks = blocksOf(node.content ?? [], textProps({}, inner), inner, false);
+    const props = textProps({}, inner);
+    const blocks = blocksOf(node.content ?? [], props, inner, false);
     // A figure that floats before the item's first paragraph leaves the number on that paragraph, or the holder it
-    // emptied.
-    const index = blocks.findIndex((block) => !('float' in block));
+    // emptied; a first block of another style (a missing figure's caption, a table) gets an empty holder above it.
+    const found = blocks.findIndex((block) => !('float' in block));
+    const index = found === -1 ? blocks.length : found;
     const first = blocks[index];
-    if (!first || 'table' in first || first.props.style !== inner.style) return blocks;
-    return blocks.with(index, open({ props: first.props, runs: first.runs }, inner));
+    if (first && !('table' in first) && first.props.style === inner.style)
+        return blocks.with(index, open({ props: first.props, runs: first.runs }, inner));
+    return blocks.toSpliced(index, 0, open({ props, runs: '' }, inner));
 }
 
 const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');

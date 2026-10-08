@@ -1529,6 +1529,25 @@ describe('docx writer — figures', () => {
         expect(shape(only(xmlChildren(checklist, W, 'p')))).toEqual(['pPr', 'sdt', 'r']);
     });
 
+    test("an item that opens with a missing figure's caption keeps its number or checkbox on a holder above it", async () => {
+        const caption = `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:ind w:left="330"/><w:jc w:val="center"/></w:pPr>${run('Cap')}</w:p>`;
+        const numbered = (after: number, runs: string) =>
+            `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
+        for (const layout of [undefined, 'wrap-left']) {
+            const missing = p(figure({ mediaName: 'gone', caption: 'Cap', layout }));
+            expect(await paragraphsOf(doc(ol({}, li(missing), li(p(text('two'))))))).toEqual([
+                numbered(55, ''),
+                caption,
+                numbered(220, run('two')),
+            ]);
+            const checklist = xmlChildren(await bodyOf(doc(tasks(task(false, missing)))), W, 'p');
+            expect(checklist.map(shape)).toEqual([
+                ['pPr', 'sdt', 'r'],
+                ['pPr', 'r'],
+            ]);
+        }
+    });
+
     test('a figure whose media is missing writes its caption, as the HTML does, aligned as the figure', async () => {
         const caption = (jc: string) =>
             `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="${jc}"/></w:pPr>${run('Lost')}</w:p>`;
