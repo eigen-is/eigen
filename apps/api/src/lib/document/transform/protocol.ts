@@ -1,3 +1,4 @@
+import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 
 // Closed request/response unions crossing the document-transform Worker boundary.
@@ -20,6 +21,9 @@ export type VectorExportFormat = 'svg' | 'pdf-html';
 // (Mount I/O + screen previews), extracted from the upload by a docx import. The
 // bytes always ride as transferred buffers.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
+
+// An export's media; only a docx's carries the thumbnail Worker's width and height, and an SVG's PNG fallback in png.
+export type ExportMedia = TransformMedia & Partial<ImageDimensions> & { png?: ArrayBuffer };
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
@@ -49,7 +53,15 @@ export type ExportTransformJob =
           title: string;
           media: TransformMedia[];
       }
-    | { kind: 'export'; documentType: 'eigendoc'; format: EigendocExportFormat; title: string; media: TransformMedia[] }
+    | {
+          kind: 'export';
+          documentType: 'eigendoc';
+          format: EigendocExportFormat;
+          title: string;
+          media: ExportMedia[];
+          // The docx absolutizes root-relative links with it; the Worker reads no config.
+          publicOrigin: string | undefined;
+      }
     | {
           kind: 'export';
           documentType: 'eigenslides';
@@ -154,7 +166,10 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
     if (request.source.snapshot) buffers.push(request.source.snapshot.data);
     for (const update of request.source.updates) buffers.push(update.data);
     if (request.kind === 'export') {
-        for (const item of request.media) buffers.push(item.data);
+        for (const item of request.media) {
+            buffers.push(item.data);
+            if ('png' in item && item.png) buffers.push(item.png);
+        }
     }
     return buffers;
 }

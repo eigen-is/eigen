@@ -1,6 +1,7 @@
 import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
 import type { VectorScene } from '@workspace/lib/vector';
 import DOMPurify from 'isomorphic-dompurify';
+import { JSDOM } from 'jsdom';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 
@@ -91,6 +92,25 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
         DOMPurify.removeHook('afterSanitizeAttributes');
         DOMPurify.removeHook('uponSanitizeElement');
     }
+}
+
+// An .svg file is read by an XML parser, and a rich-text box's HTML is not XML: an unclosed <br>/<img>
+// or a named entity is a fatal parse error that renders the whole drawing as nothing. DOMPurify hands
+// back HTML serialization, so take its markup through the DOM once more and serialize it as XML. The
+// literal xmlns attributes go first — the serializer writes the namespace declarations itself, and a
+// second one on the same element is a duplicate attribute.
+export function toXmlDocument(svg: string): string {
+    const dom = new JSDOM(svg, { contentType: 'text/html' });
+    const root = dom.window.document.querySelector('svg');
+    if (!root) return svg;
+    for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
+    return new dom.window.XMLSerializer().serializeToString(root);
+}
+
+// An SVG figure's media: the data-only pass every export body gets, written as XML, which a docx part must be and an
+// .svg data: URI is read as (DOMPurify writes `&nbsp;` and other HTML-only forms).
+export function sanitizeSvgMedia(svg: string): string {
+    return toXmlDocument(sanitizeExportHtml(svg));
 }
 
 // A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the

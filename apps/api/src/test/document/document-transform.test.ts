@@ -886,7 +886,7 @@ describe('document transform (eigendoc)', () => {
 
     test('export media crosses the boundary as transferred buffers', async () => {
         const { mount, path } = golden;
-        const media = await collectExportMedia(mount, path);
+        const media = await collectExportMedia(mount, path, 'html');
         expect(media).toHaveLength(1);
         expect(media[0].name).toBe(GOLDEN_MEDIA_NAME);
 
@@ -897,6 +897,7 @@ describe('document transform (eigendoc)', () => {
                 format: 'html',
                 title: path.name,
                 media,
+                publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
             EXPORT_OPTIONS,
@@ -914,7 +915,8 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'docx',
                 title: path.name,
-                media: await collectExportMedia(mount, path),
+                media: await collectExportMedia(mount, path, 'docx'),
+                publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
             EXPORT_OPTIONS,
@@ -1003,7 +1005,7 @@ describe('document transform (eigenslides)', () => {
                     documentType: 'eigenslides',
                     format: 'html',
                     title: stripEigenExtension(path.name),
-                    media: await collectExportMedia(mount, path),
+                    media: await collectExportMedia(mount, path, 'html'),
                     source: await captureCollabSource(mount, path),
                 },
                 EXPORT_OPTIONS,

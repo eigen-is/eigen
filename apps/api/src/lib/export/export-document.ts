@@ -1,10 +1,12 @@
 import { DOCX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { getDomain } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import type {
     DocumentExportFormat,
     EigendocExportFormat,
+    ExportTransformJob,
     SheetExportFormat,
     VectorExportFormat,
 } from '../document/transform/protocol';
@@ -129,10 +131,21 @@ export async function runDocumentExport(
     // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
     // cells alone.
     const prepStart = performance.now();
-    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path);
+    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
-    // docx document property carries the stripped one, applied in the Worker.
-    const title = job.documentType === 'eigendoc' ? path.name : stripEigenExtension(path.name);
-    return runTransformToBytes(mount, path, { kind: 'export', ...job, title, media }, { prepMs, signal });
+    // docx document property carries the stripped one, applied in the Worker. A docx
+    // absolutizes root-relative links with the public origin, none on a checkout's dev server.
+    const domain = getDomain();
+    const request: ExportTransformJob =
+        job.documentType === 'eigendoc'
+            ? {
+                  kind: 'export',
+                  ...job,
+                  title: path.name,
+                  media,
+                  publicOrigin: domain === 'localhost' ? undefined : `https://${domain}`,
+              }
+            : { kind: 'export', ...job, title: stripEigenExtension(path.name), media };
+    return runTransformToBytes(mount, path, request, { prepMs, signal });
 }

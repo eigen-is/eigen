@@ -46,6 +46,7 @@ function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]):
         format: 'html',
         title: 'runner-test',
         media: media.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data })),
+        publicOrigin: undefined,
         source: { snapshot: null, updates: [] },
         test: directive,
     };
