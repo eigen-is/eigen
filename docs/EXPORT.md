@@ -37,6 +37,18 @@ The document is self-contained, because WeasyPrint and a downloaded file have no
 
 The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview. The module holds the backend's one lowlight, so the main thread imports it lazily. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. So a figure with only an external `src` exports empty, with no warning, an open [ROADMAP](ROADMAP.md) row. A task item is rendered by hand, because the static renderer drops `checked`.
 
+## The doc renderers write the DOM the editor holds
+
+A figure is an inline node, so it renders as a `span.figure` with a `span.figcaption`, which a paragraph can hold. A `<figure>` inside a `<p>` closes it in every HTML parser, the sanitizer's and WeasyPrint's, and the paragraph split around it gains margins the editor never draws. `span.figure` parses back with its caption and layout; the old `<figure>` rule stays. Both draw from the shared `.figure` box ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
+
+`withTrailingBreaks` (`export/doc/render.ts`) gives every paragraph and heading the `<br>` ProseMirror's `addTextblockHacks` gives it in the editor: one that is empty, or ends in a non-text node or a newline. Without it an empty paragraph is 0 px tall in the export and a line tall in the editor. The export and the preview both run it.
+
+## The docx writes a figure's margin inside its paragraph's spacing
+
+In the editor a paragraph's own margins collapse with its neighbours', and a figure's 0.75em margin sits inside the paragraph and never collapses. Word and LibreOffice collapse adjacent spacing to the larger, as CSS does, and have no inside margin. So `to-docx.ts` carries the figure's margin as an inset on its paragraphs, and `withInsets` writes the whole gap on the inset paragraph's side: the neighbour's inset, the two spacings collapsed, its own inset. The pieces a figure splits a paragraph into share its margins, the first taking the one above and the last the one below. A paragraph that holds only a wrapped figure keeps its line, as the editor's trailing break does.
+
+A list item that holds a wrapped figure ends in a clearing break (`w:br w:clear="all"`) on a single-spaced Spacer paragraph, so the next item starts below the float, as in the editor. On an exact-height Spacer, LibreOffice ignores the clear. The cases are pinned in `apps/api/src/test/export/doc-docx.test.ts`.
+
 ## The sanitizer keeps only data: references, because WeasyPrint fetches
 
 `sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url(`, every `src`, `poster` and `background`, and every SVG `href` must open a `data:` URI. A `url(` may also be fragment-only (`#id`), a reference into the same document, and so may an `href` on the elements that reference with one: `use`, the gradients, `pattern`, `filter`, `textPath` and `mpath`. On an `image` or `feImage` WeasyPrint resolves a fragment against its base and opens `file://<cwd>/`. `srcset` is dropped. A `url(` that opens anything else costs the whole attribute it is in, and in a `<style>` element the statement it is in; so do `@import` and the string forms of `image-set()`, `image()`, `cross-fade()` and `element()`, which fetch with no `url(`.

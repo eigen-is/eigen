@@ -39,6 +39,14 @@ A figure is an inline, atomic node (`packages/lib/src/docs/eigendoc/nodes/figure
 
 A figure stores its width and never its height, so the height always follows the image's own ratio. The width is in the page's layout pixels, measured with `clientWidth` on the page element, which a CSS `scale()` does not change. So a doc edited on a narrow, scaled-down page stores the same width as on a wide one. The node view (`apps/docs/src/components/docs/extensions/figure.tsx`) sets the width on the image's first load, capped at the text column (half of it for a wrapped image), and resizing clamps between 100 px and that cap.
 
+## The node view and the export draw one figure box
+
+The editor, quick look and the HTML and PDF exports lay a doc out the same, block for block. A figure gets that from one box: the `.figure` rules in `packages/ui/src/styles/eigen-prose.css`, which the node view's wrapper span and the export's `span.figure` both carry, with `data-layout` and `data-alignment`. A block figure is a full-width `inline-flex` at the bottom of its line, because the node is inline. A wrapped figure takes its float and its only margin from the same rules.
+
+ProseMirror ends a textblock that is empty, or ends in a non-text node, with a `<br class="ProseMirror-trailingBreak">` (`addTextblockHacks` in prosemirror-view). It holds the caret: hidden, ArrowRight skips past the figure and typed text lands in the next block. So the box keeps that break on its own line instead, and the export writes the same `<br>` (`withTrailingBreaks`, [EXPORT.md](EXPORT.md#the-doc-renderers-write-the-dom-the-editor-holds)). A block-level wrapper would push the break onto a line of its own, an empty line under every figure.
+
+A list item that holds a wrapped figure is its own formatting context (`display: flow-root list-item`), so the next item starts below the float instead of drawing its number over it. WebKit reads no `flow-root list-item`, so it gets `contain: layout`. A task item keeps its flex, which contains a float already.
+
 ## An image renders from a pending name until its upload lands
 
 An insert, a drop or a pasted image file writes the figure with the pending name `startUpload` returns, so the image shows on the next frame. When the upload settles, `swapFigureMediaName` rewrites every figure still holding that name to the real one, or removes the figure if the upload failed. A figure whose name never resolves shows `ImagePlaceholder`. The mechanics, and the sweep that clears a pending name a closed tab left behind, are in [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md#a-new-upload-renders-from-a-pending-name).
