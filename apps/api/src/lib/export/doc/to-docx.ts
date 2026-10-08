@@ -375,11 +375,17 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
+        // Word and LibreOffice draw two adjacent boxes or bars as one (R35).
+        if (BOXED.has(node.type ?? '') && nodes[index - 1]?.type === node.type) blocks.push(SPACER);
         blocks.push(...write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }));
     }
     if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
     return blocks;
 }
+
+const BOXED = new Set(['codeBlock', 'blockquote']);
+
+const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
 // Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
 // no paragraph does. The block after a table takes the table's margin below as its before.

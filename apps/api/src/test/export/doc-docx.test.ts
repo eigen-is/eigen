@@ -167,6 +167,7 @@ function th(attrs: Record<string, unknown>, ...content: JSONContent[]): JSONCont
 const RULE: JSONContent = { type: 'horizontalRule' };
 const PAGE_BREAK: JSONContent = { type: 'pageBreak' };
 const PAGE_BREAK_XML = '<w:p><w:pPr><w:pStyle w:val="PageBreak"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>';
+const SPACER_XML = '<w:p><w:pPr><w:pStyle w:val="Spacer"/></w:pPr></w:p>';
 
 // The run one plain text writes.
 function run(value: string): string {
@@ -1149,6 +1150,17 @@ describe('docx writer — code blocks', () => {
         );
     });
 
+    test('two adjacent code blocks are kept apart by a Spacer, or readers draw one box', async () => {
+        const paragraphs = await paragraphsOf(doc(code('a', 'plaintext'), code('b', 'plaintext'), p(text('c'))));
+        expect(paragraphs.map((paragraph) => paragraph.includes('CodeBlock'))).toEqual([true, false, true, false]);
+        expect(paragraphs[1]).toBe(SPACER_XML);
+        const inItem = await paragraphsOf(doc(ul(li(p(text('x')), code('a', 'plaintext'), code('b', 'plaintext')))));
+        expect(inItem[2]).toBe(SPACER_XML);
+        expect(await paragraphsOf(doc(code('a', 'plaintext'), p(text('b')), code('c', 'plaintext')))).not.toContain(
+            SPACER_XML,
+        );
+    });
+
     test("a code block in a list item moves its box to the item's text", async () => {
         const paragraphs = await paragraphsOf(doc(ul(li(p(text('x')), code('a', 'plaintext')), li(p(text('y'))))));
         expect(paragraphs[1]).toBe(
@@ -1179,6 +1191,15 @@ describe('docx writer — quotes', () => {
             `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="11" w:color="D1D5DB"/></w:pBdr><w:spacing w:before="0"/><w:ind w:left="265"/></w:pPr>${run('quoted')}</w:p>`,
             quoted(run('body'), '<w:spacing w:after="220"/>'),
         ]);
+    });
+
+    test('two adjacent quotes are kept apart by a Spacer, or readers draw one bar', async () => {
+        expect(await paragraphsOf(doc(quote(p(text('one'))), quote(p(text('two')))))).toEqual([
+            quoted(run('one'), '<w:spacing w:after="220"/>'),
+            SPACER_XML,
+            quoted(run('two'), '<w:spacing w:after="220"/>'),
+        ]);
+        expect(await paragraphsOf(doc(quote(p(text('one'))), code('x', 'plaintext')))).not.toContain(SPACER_XML);
     });
 
     test('a nested quote adds its indent', async () => {
