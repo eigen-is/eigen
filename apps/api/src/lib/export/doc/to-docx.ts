@@ -548,8 +548,13 @@ function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps):
         const first = order === 0;
         const last = order === pieces.length - 1;
         const own: Spacing = {};
-        if (piece.inset ? first : !first && before > 0) own.before = first ? before : 0;
-        if (piece.inset ? last : !last && after > 0) own.after = last ? after : 0;
+        if (piece.inset) {
+            if (first) own.before = before;
+            if (last) own.after = after;
+        } else {
+            if (!first && before > 0) own.before = 0;
+            if (!last && after > 0) own.after = 0;
+        }
         if (own.before !== undefined || own.after !== undefined)
             blocks[index] = { ...piece, props: { ...piece.props, spacing: { ...piece.props.spacing, ...own } } };
     }
