@@ -35,7 +35,7 @@ The schema turns TipTap's own undo off (`undoRedo: false`), and y-prosemirror's 
 
 ## A figure stores a media name and a width in page pixels
 
-A figure is an inline, atomic node (`packages/lib/src/docs/eigendoc/nodes/figure.ts`): it sits in a paragraph, its contents are not editable, and it can be dragged. Its durable reference is `mediaName`. `src` is only for an external image, and the export strips that ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches)). The other attributes are `alt`, `caption`, `alignment`, `layout` (block, or wrapped left or right), `commentCardId` and `width`.
+A figure is an inline, atomic node (`packages/lib/src/docs/eigendoc/nodes/figure.ts`): it sits in a paragraph, its contents are not editable, and it can be dragged. Its durable reference is `mediaName`. `src` is only for an external image, and the export strips that ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)). The other attributes are `alt`, `caption`, `alignment`, `layout` (block, or wrapped left or right), `commentCardId` and `width`.
 
 A figure stores its width and never its height, so the height always follows the image's own ratio. The width is in the page's layout pixels, measured with `clientWidth` on the page element, which a CSS `scale()` does not change. So a doc edited on a narrow, scaled-down page stores the same width as on a wide one. The node view (`apps/docs/src/components/docs/extensions/figure.tsx`) sets the width on the image's first load, capped at the text column (half of it for a wrapped image), and resizing clamps between 100 px and that cap.
 
