@@ -566,8 +566,8 @@ const base64Svg = (svg: string, header = 'data:image/svg+xml;base64') =>
     `${header},${Buffer.from(svg).toString('base64')}`;
 const percentSvg = (svg: string, header = 'data:image/svg+xml') => `${header},${encodeURIComponent(svg)}`;
 
-// A data: URI is kept as it came, whatever its type or payload: no browser fetches from an SVG drawn as an image,
-// librsvg draws one from its bytes, and WeasyPrint's fetcher opens nothing but data: URIs.
+// A data: URI with no fragment is kept as it came, whatever its type or payload: no browser fetches from an SVG drawn
+// as an image, librsvg draws one from its bytes, and WeasyPrint's fetcher opens nothing but data: URIs.
 describe('export sanitize — a data: URI passes as it is', () => {
     test.each([
         ['a PNG', DATA_PNG],
