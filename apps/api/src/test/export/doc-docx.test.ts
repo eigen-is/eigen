@@ -1729,6 +1729,36 @@ describe('docx writer — figures', () => {
         expect(blocks[3]).toBe(`<w:p>${run('next')}</w:p>`);
     });
 
+    // The Quote style draws the bar on the quote's text; a paragraph of any other style draws it directly, or it breaks.
+    test("in a quote a figure, its caption, an item's clearing break and a done task draw the quote's bar", async () => {
+        const bar = '<w:pBdr><w:left w:val="single" w:sz="18" w:space="11" w:color="D1D5DB"/></w:pBdr>';
+        const paragraphs = await paragraphsOf(
+            doc(
+                quote(
+                    p(text('quoted')),
+                    p(figure({ ...CHART, width: 100 })),
+                    p(figure({ mediaName: 'gone', caption: 'Cap' })),
+                    ol({}, li(p(figure({ ...CHART, width: 100, layout: 'wrap-left' }), text('beside')))),
+                    tasks(task(true, p(text('done')))),
+                ),
+            ),
+        );
+        expect(
+            paragraphs.map((paragraph) => [
+                paragraph.match(/<w:pStyle w:val="(\w+)"\/>/)?.[1],
+                paragraph.includes(bar),
+                paragraph.match(/<w:ind w:left="(\d+)"/)?.[1],
+            ]),
+        ).toEqual([
+            ['Quote', false, undefined],
+            [undefined, true, '265'],
+            ['Caption', true, '265'],
+            ['Quote', false, undefined],
+            ['Spacer', true, '265'],
+            ['TaskDone', true, '595'],
+        ]);
+    });
+
     test("a wrapped figure in an item's first paragraph leaves the number on its text", async () => {
         const body = await bodyOf(doc(ul(li(p(figure({ ...CHART, width: 100, layout: 'wrap-left' }), text('item'))))));
         expect(shape(body)).toEqual(['tbl', 'p', 'p', 'sectPr']);
