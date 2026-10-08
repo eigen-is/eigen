@@ -38,7 +38,7 @@ export async function eigendocToDocx(
         images: new Map(),
         files: [],
         drawings: 0,
-        // Every paragraph mark draws in the body's Regular.
+        // A Spacer's, a figure's and a holder's mark draw in the body's Regular.
         faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
     const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
@@ -290,11 +290,10 @@ function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 
 
 // Word's auto line is a multiple of the tallest face's line height, the editor's pitch the paragraph's: a paragraph all
 // in one family takes the multiple that keeps it, unless its mark, in the style's face, stands as tall.
-function familyLine(style: string | undefined, faces: RunFace[]): number | undefined {
+function familyLine(style: string | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
-    const paragraph = styleFace(style ?? 'Normal');
-    const mark = fontLineHeight(paragraph.font ?? BODY.font) * (paragraph.size ?? halfPoints(BODY.sizePt));
+    const mark = fontLineHeight(markFace.family) * markFace.size;
     let tallest = mark;
     for (const face of faces) tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
     return tallest === mark ? undefined : Math.round((styleSpacing(style, 'line') * mark) / tallest);
@@ -455,6 +454,8 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         (node, context) => {
             const language = node.attrs?.['language'];
             const tree = highlightCode(typeof language === 'string' ? language : '', textOf(node), lowlight);
+            // The mark of an empty or comment-only line draws in the style's Regular.
+            useFace(context.pkg, {}, 'CodeBlock');
             const { indent } = CODE_BLOCK_LOOK;
             const ind = context.indent === 0 ? undefined : { left: context.indent + indent, right: indent };
             return codeLines(tree, context.pkg).map((runs) => ({ props: { style: 'CodeBlock', ind }, runs }));
@@ -503,7 +504,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
-        const line = familyLine(props.style, faces);
+        const line = familyLine(props.style, useFace(context.pkg, {}, props.style), faces);
         blocks.push({ props: line === undefined ? props : { ...props, spacing: { ...props.spacing, line } }, runs });
         inline = [];
     };

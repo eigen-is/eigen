@@ -2060,7 +2060,7 @@ describe('docx writer — fonts', () => {
             [doc(p(text('x', bold, italic))), ['Inter Regular', 'Inter BoldItalic']],
             [doc(quote(p(text('x')))), ['Inter Regular', 'Inter Italic']],
             [doc(p(text('x', { type: 'code' }))), ['Inter Regular', 'JetBrains Mono Regular']],
-            [doc(quote(p(text('x', { type: 'code' })))), ['Inter Regular', 'JetBrains Mono Italic']],
+            [doc(quote(p(text('x', { type: 'code' })))), ['Inter Regular', 'Inter Italic', 'JetBrains Mono Italic']],
             [
                 doc(code('let a = 1;\n// says hello', 'javascript')),
                 ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
@@ -2069,6 +2069,18 @@ describe('docx writer — fonts', () => {
                 doc(p(text('x', serif), text('y', serif, bold))),
                 ['Inter Regular', 'Source Serif 4 Regular', 'Source Serif 4 Bold'],
             ],
+        ];
+        for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
+    });
+
+    test("a paragraph mark draws in its style's face, so an empty or comment-only code block and an empty quote embed it", async () => {
+        const cases: [JSONContent, string[]][] = [
+            [doc({ type: 'codeBlock', attrs: { language: null } }), ['Inter Regular', 'JetBrains Mono Regular']],
+            [
+                doc(code('// says hello', 'javascript')),
+                ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
+            ],
+            [doc(quote(p())), ['Inter Regular', 'Inter Italic']],
         ];
         for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
     });
