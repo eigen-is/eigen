@@ -1662,6 +1662,14 @@ describe('docx writer — figures', () => {
             `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
         expect(xmlChildren(body, W, 'p').map(xmlOf)).toEqual([numbered(55, ''), numbered(220, run('two'))]);
 
+        // The text after the figure starts below the number, unnumbered, as the editor and the PDF draw it.
+        const item = await bodyOf(doc(ol({}, li(wrapped, p(text('text'))))));
+        expect(shape(item)).toEqual(['tbl', 'p', 'p', 'sectPr']);
+        expect(xmlChildren(item, W, 'p').map(xmlOf)).toEqual([
+            numbered(55, ''),
+            `<w:p><w:pPr><w:spacing w:after="220"/><w:ind w:left="330"/></w:pPr>${run('text')}</w:p>`,
+        ]);
+
         const checklist = await bodyOf(doc(tasks(task(false, wrapped))));
         expect(shape(checklist)).toEqual(['tbl', 'p', 'sectPr']);
         expect(shape(only(xmlChildren(checklist, W, 'p')))).toEqual(['pPr', 'sdt', 'r']);
