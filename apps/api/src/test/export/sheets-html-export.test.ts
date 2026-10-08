@@ -701,7 +701,7 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         }
     });
 
-    test.each(['#ff0000', '#F00', 'rgb(255, 0, 0)', 'rgba(0, 0, 255, 0.5)', 'transparent'])(
+    test.each(['#ff0000', '#F00', 'rgb(255, 0, 0)', 'rgba(0, 0, 255, 0.5)', 'transparent', 'red'])(
         'a cell keeps the color %s',
         (color) => {
             const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: color, bg: color } }])], NO_MEDIA);

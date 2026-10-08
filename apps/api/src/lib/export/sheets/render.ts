@@ -511,8 +511,12 @@ function overlayBox(table: string, overlay: string, width: number, styles?: Styl
 
 // Cell, border and rule colors are schemaless strings a collaborator sets, so only one the color parser reads reaches the
 // CSS: `red;position:fixed;inset:0` would add declarations of its own to the export and the drive hero.
+// A bare keyword (a named color) can't add a declaration, so it passes as CSS reads it.
 function cssColor(color: string | null | undefined): string | undefined {
-    return color && (cssColorToHex(color) !== undefined || isTransparentCssColor(color)) ? color : undefined;
+    if (!color) return undefined;
+    return cssColorToHex(color) !== undefined || isTransparentCssColor(color) || /^[a-z]+$/i.test(color)
+        ? color
+        : undefined;
 }
 
 function buildCellStyle(
