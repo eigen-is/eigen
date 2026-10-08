@@ -26,7 +26,7 @@ Errors come back as a small typed code plus an optional HTTP status, never a clo
 
 A module the Worker imports must never statically reach `preview/preview-cache.ts`. That would drag sharp and the sheet engine into every Worker, and it is why `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread) are separate files. sharp itself loads lazily, only for a docx with an SVG to draw its PNG fallback from.
 
-Inside the Worker graph `ApiError` comes from `core/errors`, never the `core` barrel. The barrel pulls auth, the home relay and ExifTool into the Worker bundle: 10.3 MB against 4.7 MB. `buildfordocker` (`apps/api/package.json`) bundles each Worker entry, and that bundle is how purity is checked. Production runs `src/index.ts` directly, and ExcelJS, Turbodocx and mammoth stay external in `node_modules`.
+Inside the Worker graph `ApiError` comes from `core/errors`, never the `core` barrel. The barrel pulls auth, the home relay and ExifTool into the Worker bundle: 10.3 MB against 4.7 MB. `buildfordocker` (`apps/api/package.json`) bundles each Worker entry, and that bundle is how purity is checked. Production runs `src/index.ts` directly, and ExcelJS, JSZip and mammoth stay external in `node_modules`.
 
 ## A capture is always the whole document
 

@@ -62,7 +62,7 @@ Eigen is one API server (`apps/api`) and a set of web apps (`apps/*`), which sha
 | **Trash** | `apps/api/src/lib/mount/trash.ts` + `apps/api/src/lib/drive/trash.ts` | A delete moves an item to trash and revokes its shares; a restore brings them back. See [SOFT-DELETE.md](SOFT-DELETE.md) |
 | **Comments** | `apps/api/src/lib/chat/` | A comment is a card in the Y.Doc, a chat thread in the container's `chat/` folder and a row in its `comments.db`; the server writes status and assignee. See [COMMENTS.md](COMMENTS.md) |
 | **Mail store** | `apps/api/src/lib/mail/` | A per-user Maildir++ that Dovecot serves too; the files are the truth and `mail.db` an index a sync rebuilds. See [MAIL.md](MAIL.md) and [IMAP.md](IMAP.md) |
-| **Export + import** | `apps/api/src/lib/export/` + `apps/api/src/lib/import/` | Every format but xlsx and SVG is one HTML document, and PDF is that document through WeasyPrint; an import writes nothing until its Worker succeeds. See [EXPORT.md](EXPORT.md) |
+| **Export + import** | `apps/api/src/lib/export/` + `apps/api/src/lib/import/` | Every format but xlsx, docx and SVG is one HTML document, and PDF is that document through WeasyPrint; xlsx and docx have writers of their own; an import writes nothing until its Worker succeeds. See [EXPORT.md](EXPORT.md) |
 
 ### Drive Architecture
 
