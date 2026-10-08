@@ -80,6 +80,8 @@ describe('collectExportMedia', () => {
             ['lossy.webp', await gradient(320, 200).webp({ quality: 80 }).toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
             ['broken.png', Buffer.from('not a png')],
+            // A PDF wearing an Illustrator name, which the thumbnail Worker would read through exiftool.
+            ['art.ai', await gradient(40, 40).png().toBuffer()],
             // A real video, from which the thumbnail Worker would take a frame.
             [
                 'clip.mp4',
@@ -93,6 +95,7 @@ describe('collectExportMedia', () => {
             webp: 'image/webp',
             svg: 'image/svg+xml',
             mp4: 'video/mp4',
+            ai: 'application/pdf',
         };
         for (const [name, bytes] of sources) {
             const mime = mimes[name.split('.').pop() ?? ''] ?? '';
@@ -170,6 +173,11 @@ describe('collectExportMedia', () => {
         const names = (await collect('docx')).map((item) => item.name);
         expect(names).not.toContain('broken.png');
         expect(names).not.toContain('clip.mp4');
+    }, 60_000);
+
+    test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
+        const names = (await collect('docx')).map((item) => item.name);
+        expect(names).not.toContain('art.ai');
     }, 60_000);
 
     test.each(['html', 'pdf-html'] as const)(

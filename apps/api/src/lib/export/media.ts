@@ -3,7 +3,7 @@ import { listDocumentMedia } from '../document/media';
 import { type ExportMedia, type ExportTransformJob, toTransferableBuffer } from '../document/transform/protocol';
 import type { Mount } from '../mount';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
-import { getScreenPreview } from '../preview/preview-cache';
+import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
 import { generateImagePreview } from '../shared/thumbnails';
 import { sanitizeSvgMedia } from './sanitize';
 
@@ -35,8 +35,8 @@ async function prepareMedia(
 ): Promise<ExportMedia | null> {
     const mime = file.mimeType || '';
     if (format === 'docx' && mime !== 'image/svg+xml') {
-        // getScreenPreview's image rule: video, audio and PDF media show no image.
-        if (!isExiftoolCandidate(mime, file.name)) return null;
+        // What getScreenPreview shows as an image, and nothing else.
+        if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
         const source = await mount.readFile(file.id);
         if (!source) return null;
         // From the source, never the lossy WebP preview; sharp's re-encode drops the EXIF, GPS included.
