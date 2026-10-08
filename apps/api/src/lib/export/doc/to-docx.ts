@@ -186,20 +186,26 @@ const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfie
 
 type FontSlot = (typeof FONT_SLOTS)[number];
 
-// Each family's panose and Unicode and code page signature, read once from its Regular file's OS/2 table.
+// Each family's panose, Unicode and code page signature and Word's line height, (usWinAscent + usWinDescent) /
+// unitsPerEm, read once from its Regular file. The text fonts' hhea and typo agree, so it is every reader's.
 const FONT_ENTRIES = EIGEN_FONTS.map(({ name, category }) => {
     const files = DOCX_FONT_FILES.get(name);
-    const os2 = files && sfntTables(fs.readFileSync(files.Regular)).get('OS/2');
-    if (!os2) throw new Error(`no OS/2 table for ${name}`);
+    const tables = files && sfntTables(fs.readFileSync(files.Regular));
+    const os2 = tables?.get('OS/2');
+    const head = tables?.get('head');
+    if (!os2 || !head) throw new Error(`no OS/2 or head table for ${name}`);
     const hex32 = (offset: number) => os2.readUInt32BE(offset).toString(16).toUpperCase().padStart(8, '0');
     const sig = Object.entries({ usb0: 42, usb1: 46, usb2: 50, usb3: 54, csb0: 78, csb1: 82 }).map(
         ([field, offset]) => `w:${field}="${hex32(offset)}"`,
     );
     return {
         name,
+        lineHeight: (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18),
         properties: `<w:panose1 w:val="${os2.subarray(32, 42).toString('hex').toUpperCase()}"/><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/><w:sig ${sig.join(' ')}/>`,
     };
 });
+
+const FONT_LINE_HEIGHT = new Map(FONT_ENTRIES.map(({ name, lineHeight }) => [name, lineHeight]));
 
 // MS Gothic draws the checkbox glyphs.
 function fontTableXml(checkboxes: boolean, embeds: Map<string, string>): string {
@@ -1186,13 +1192,6 @@ function hyperlinkTarget(href: unknown, publicOrigin: string | undefined): strin
 }
 
 // ── Styles, every value from eigen-prose.css ────────────────────────────────────────────────────────────────────
-
-// (usWinAscent + usWinDescent) / unitsPerEm, Word's line height; for Inter and JetBrains Mono hhea and typo agree, so
-// every reader does.
-const FONT_LINE_HEIGHT = new Map([
-    ['Inter', 1.21],
-    ['JetBrains Mono', 1.32],
-]);
 
 // rem against the 16 px root, px at 96 dpi, em against the element's own size.
 function cssPt(length: string, emPt: number): number {
