@@ -1438,6 +1438,32 @@ describe('docx writer — figures', () => {
         expect(w(child(child(child(xmlChildren(body, W, 'p')[0], 'pPr'), 'numPr'), 'numId'), 'val')).toBe('1');
     });
 
+    test('an item whose first paragraph holds only a wrapped figure keeps its number or checkbox on the emptied holder', async () => {
+        const wrapped = p(figure({ ...CHART, width: 100, layout: 'wrap-left' }));
+        const body = await bodyOf(doc(ol({}, li(wrapped), li(p(text('two'))))));
+        expect(shape(body)).toEqual(['tbl', 'p', 'p', 'sectPr']);
+        const numbered = (after: number, runs: string) =>
+            `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
+        expect(xmlChildren(body, W, 'p').map(xmlOf)).toEqual([numbered(55, ''), numbered(220, run('two'))]);
+
+        const checklist = await bodyOf(doc(tasks(task(false, wrapped))));
+        expect(shape(checklist)).toEqual(['tbl', 'p', 'sectPr']);
+        expect(shape(only(xmlChildren(checklist, W, 'p')))).toEqual(['pPr', 'sdt', 'r']);
+    });
+
+    test('a figure whose media is missing writes its caption, as the HTML does, aligned as the figure', async () => {
+        const caption = (jc: string) =>
+            `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="${jc}"/></w:pPr>${run('Lost')}</w:p>`;
+        expect(
+            await blocksOf(
+                doc(
+                    p(text('a'), figure({ mediaName: 'gone', caption: 'Lost', alignment: 'right' }), text('b')),
+                    p(figure({ mediaName: 'gone', caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+                ),
+            ),
+        ).toEqual([`<w:p>${run('a')}</w:p>`, caption('right'), `<w:p>${run('b')}</w:p>`, caption('center')]);
+    });
+
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {
         const json = doc(p(figure({ mediaName: 'diagram.svg', width: 200 })));
         const zip = await unzip(json);

@@ -219,7 +219,8 @@ type RunProps = {
     vertAlign?: 'subscript' | 'superscript';
 };
 
-type Paragraph = { props: ParagraphProps; runs: string };
+// A paragraph its wrapped figures emptied is only a holder: an item opens it, every other flow drops it.
+type Paragraph = { props: ParagraphProps; runs: string; emptied?: true };
 
 // A table is written whole; the flow around it adds the paragraphs Word needs beside it. A floating one holds a
 // wrapped figure and keeps no margin.
@@ -399,6 +400,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         blocks.push(...write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }));
     }
     if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
+    else if (textblock && blocks.every((block) => 'float' in block)) blocks.push({ props, runs: '', emptied: true });
     return blocks;
 }
 
@@ -408,10 +410,11 @@ const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
 // Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
 // no paragraph does. The block after an in-flow table takes the table's margin below as its before.
-function blocksXml(blocks: Block[], pkg: Package): string {
+function blocksXml(written: Block[], pkg: Package): string {
     const margin = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), bodyPt()));
     const spacer = (afterTable: boolean) =>
         paragraphXml(afterTable ? { props: { style: 'Spacer', spacing: { before: margin } }, runs: '' } : SPACER);
+    const blocks = written.filter((block) => 'table' in block || !block.emptied);
     return blocks
         .map((block, index) => {
             const previous = blocks[index - 1];
@@ -517,11 +520,12 @@ function itemOf(
         list: undefined,
     };
     const blocks = blocksOf(node.content ?? [], textProps({}, inner), inner, false);
-    // A figure that floats before the item's first paragraph leaves the number on that paragraph.
+    // A figure that floats before the item's first paragraph leaves the number on that paragraph, or the holder it
+    // emptied.
     const index = blocks.findIndex((block) => !('float' in block));
     const first = blocks[index];
     if (!first || 'table' in first || first.props.style !== inner.style) return blocks;
-    return blocks.with(index, open(first, inner));
+    return blocks.with(index, open({ props: first.props, runs: first.runs }, inner));
 }
 
 function listLevel(): number {
@@ -709,15 +713,23 @@ const RASTER_EXTENSIONS = new Map([
 
 const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
 
-// Missing media, an external src (a docx fetches nothing) and media without a size or a fallback write nothing.
-// Commented figures get their anchor with the comments part.
+// Missing media, an external src (a docx fetches nothing) and media without a size or a fallback write only the
+// caption, as the HTML does. Commented figures get their anchor with the comments part.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
-    const mediaName = attrs['mediaName'];
-    const image = typeof mediaName === 'string' ? imageOf(mediaName, context.pkg) : undefined;
-    if (!image) return [];
     const layout = attrs['layout'];
     const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
+    const alignment = attrs['alignment'];
+    const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
+    const caption = attrs['caption'];
+    const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
+    const captionParagraph = {
+        props: { style: 'Caption', ind: indentOf('Caption', context), jc },
+        runs: `<w:r>${captionRuns}</w:r>`,
+    };
+    const mediaName = attrs['mediaName'];
+    const image = typeof mediaName === 'string' ? imageOf(mediaName, context.pkg) : undefined;
+    if (!image) return captionRuns ? [captionParagraph] : [];
     const columnPx = Math.floor((context.column - context.indent) / 15);
     const width = attrs['width'];
     const set = typeof width === 'number' && Number.isFinite(width) ? Math.round(width) : 0;
@@ -731,12 +743,8 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         typeof alt === 'string' ? alt : '',
         context.pkg,
     );
-    const caption = attrs['caption'];
-    const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
     const margin = proseValue('.eigen-prose figure', 'margin');
     if (!side) {
-        const alignment = attrs['alignment'];
-        const jc = typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
         const spacing = {
             before: twips(cssPt(boxSide(margin, 'top'), bodyPt())),
             // The caption takes the figure's margin below.
@@ -745,11 +753,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
             line: 240,
         };
         const figure: Block[] = [{ props: { spacing, ind: indentOf(undefined, context), jc }, runs: drawing }];
-        if (captionRuns)
-            figure.push({
-                props: { style: 'Caption', ind: indentOf('Caption', context), jc },
-                runs: `<w:r>${captionRuns}</w:r>`,
-            });
+        if (captionRuns) figure.push(captionParagraph);
         return figure;
     }
     // A borderless floating one-cell table: the one wrap that keeps the caption under the image in LibreOffice, Word and
