@@ -59,18 +59,33 @@ async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
             continue;
         }
         try {
-            const image = sharp(Buffer.from(item.data));
-            const { width, height } = await image.metadata();
+            const svg = Buffer.from(item.data);
+            const image = sharp(svg);
+            const { width = 0, height = 0 } = await image.metadata();
             const png = await image
                 .resize(SVG_FALLBACK_MAX_SIZE, SVG_FALLBACK_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
                 .toBuffer();
-            prepared.push({ ...item, png: toTransferableBuffer(png), width, height });
+            prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
         } catch {
             // One librsvg can't read leaves the docx, as an image no reader draws.
         }
     }
     return prepared;
+}
+
+const PHYSICAL_LENGTH = /^\s*[\d.e+-]+\s*(in|cm|mm|pt|pc)\s*$/i;
+
+// sharp reads an SVG's physical units at 72 dpi and CSS at 96, so a 4in drawing is 288 px to it and 384 in the HTML
+// export. Scaled per side, read off the root's start tag; a side the root leaves out follows the other, as sharp derives
+// it from the viewBox.
+function cssSize(svg: Buffer, width: number, height: number): { width: number; height: number } {
+    const root = svg.toString('utf8', 0, svg.indexOf('>') + 1);
+    const scale = (value: string | undefined) =>
+        value === undefined ? undefined : PHYSICAL_LENGTH.test(value) ? 96 / 72 : 1;
+    const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
+    const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
+    return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
 const lowlight = createLowlight(common);

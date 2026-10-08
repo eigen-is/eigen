@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import JSZip from 'jszip';
 import * as Y from 'yjs';
+import { toTransferableText } from '../../lib/document/transform/protocol';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { seedEigendoc } from '../fixtures/golden-documents';
@@ -144,4 +145,40 @@ describe('doc export — whitespace', () => {
             expect(html).toContain('</p></article>');
         },
     );
+});
+
+// A docx sizes an SVG figure as the HTML export draws it: CSS at 96 dpi, where sharp reads physical units at 72.
+describe('doc export — docx SVG size', () => {
+    const svg = (attrs: string) =>
+        `<svg xmlns="http://www.w3.org/2000/svg" ${attrs}><rect width="100%" height="100%" fill="#2563eb"/></svg>`;
+
+    async function extentPx(attrs: string): Promise<[number, number]> {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'd.svg' } }] }],
+        });
+        const media = [{ name: 'd.svg', contentType: 'image/svg+xml', data: toTransferableText(svg(attrs)) }];
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
+        const xml = (await (await JSZip.loadAsync(data)).file('word/document.xml')?.async('string')) ?? '';
+        const [, cx = '0', cy = '0'] = xml.match(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/) ?? [];
+        return [Number(cx) / 9525, Number(cy) / 9525];
+    }
+
+    test.each([
+        ['width="4in" height="2in"', 384, 192],
+        ['width="10cm" height="5cm"', 377.95, 188.98],
+        ['width="100mm" height="50mm"', 377.95, 188.98],
+        ['width="200pt" height="100pt"', 266.67, 133.33],
+        ['width="20pc" height="10pc"', 320, 160],
+        ['width="4in" viewBox="0 0 200 100"', 384, 192],
+        ['height="2in" viewBox="0 0 200 100"', 384, 192],
+        ['width="4in" height="100"', 384, 100],
+        ['width="300" height="150"', 300, 150],
+        ['width="300px" height="150px"', 300, 150],
+        ['viewBox="0 0 300 150"', 300, 150],
+    ])('%s draws at %d by %d px', async (attrs, width, height) => {
+        const [cx, cy] = await extentPx(attrs);
+        expect(Math.abs(cx - width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(cy - height)).toBeLessThanOrEqual(1);
+    });
 });
