@@ -16,9 +16,12 @@ export function renderCodeBlockNode(node: {
     content?: unknown;
 }): string {
     const language = node.attrs.language || '';
-    const highlighted = hastToHtml(highlightCode(language, node.textContent ?? ''));
+    const code = node.textContent ?? '';
+    const highlighted = hastToHtml(highlightCode(language, code));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
-    return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;
+    // withTrailingBreaks' rule: a code block holds only text, so it ends open when empty or in a newline.
+    const trailingBreak = code === '' || code.endsWith('\n') ? '<br>' : '';
+    return `<pre><code class="hljs${langClass}">${highlighted}${trailingBreak}</code></pre>`;
 }
 
 // The HTML and the docx code blocks highlight alike. Users rarely set a language, so highlightAuto is where nearly all
@@ -91,7 +94,7 @@ export function renderFigureNode(
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
-// with a <br> that holds its last line, so the export writes that <br> too.
+// with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
 export function withTrailingBreaks(node: JSONContent): JSONContent {
     const content = node.content?.map(withTrailingBreaks);
     if (node.type !== 'paragraph' && node.type !== 'heading') return content ? { ...node, content } : node;

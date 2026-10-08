@@ -41,7 +41,7 @@ The doc node renderers (`export/doc/render.ts`) are pure and shared with the pre
 
 A figure is an inline node, so it renders as a `span.figure` with a `span.figcaption`, which a paragraph can hold. A `<figure>` inside a `<p>` closes it in every HTML parser, the sanitizer's and WeasyPrint's, and the paragraph split around it gains margins the editor never draws. `span.figure` parses back with its caption and layout; the old `<figure>` rule stays. Both draw from the shared `.figure` box ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
-`withTrailingBreaks` (`export/doc/render.ts`) gives every paragraph and heading the `<br>` ProseMirror's `addTextblockHacks` gives it in the editor: one that is empty, or ends in a non-text node or a newline. Without it an empty paragraph is 0 px tall in the export and a line tall in the editor. The export and the preview both run it.
+`withTrailingBreaks` (`export/doc/render.ts`) gives every paragraph and heading the `<br>` ProseMirror's `addTextblockHacks` gives it in the editor: one that is empty, or ends in a non-text node or a newline. `renderCodeBlockNode` writes the same `<br>` into a code block that is empty or ends in a newline, since a code block is a textblock too. Without it an empty paragraph is 0 px tall in the export and a line tall in the editor. The export and the preview both run it.
 
 ## The docx writes a figure's margin inside its paragraph's spacing
 
