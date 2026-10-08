@@ -20,18 +20,28 @@ export type AttrNode = {
     removeAttribute(name: string): void;
 };
 
-const CSS_URL = /url\(\s*(['"]?)([^)'"]*)\1\s*\)/gi;
+// CSS whitespace only: a non-breaking space is part of the URL, which then is a relative path.
+const CSS_URL = /url\([\t\n\f\r ]*(['"]?)([^)'"]*)\1[\t\n\f\r ]*\)/gi;
 const NO_REFS: ReadonlySet<string> = new Set();
+
+// The element hook types its node as a bare Node.
+const isElement = (node: Node): node is Element => node.nodeType === 1;
 
 // Fetched without a click, on any element DOMPurify keeps: `src` (img, video, audio, source,
 // input type=image), `poster`, and the legacy `background`. `srcset` is handled separately.
 const REF_ATTRS = ['src', 'poster', 'background'];
 
+// Only the whitespace a URL parser trims: a leading non-breaking space makes a relative path of the rest.
 const isAllowedRef = (value: string, allowed: ReadonlySet<string>): boolean =>
-    /^\s*data:/i.test(value) || allowed.has(value);
+    /^[\t\n\f\r ]*data:/i.test(value) || allowed.has(value);
+
+// A reference into the same document (a gradient, a clip, a <use> glyph) fetches nothing.
+const isFragmentRef = (value: string): boolean => /^[\t\n\f\r ]*#\S*[\t\n\f\r ]*$/.test(value);
 
 function restrictCssUrls(css: string, allowed: ReadonlySet<string>): string {
-    return css.replace(CSS_URL, (match, _quote, url: string) => (isAllowedRef(url, allowed) ? match : 'url()'));
+    return css.replace(CSS_URL, (match, _quote, url: string) =>
+        isAllowedRef(url, allowed) || isFragmentRef(url) ? match : 'url()',
+    );
 }
 
 // Every export resource is embedded as a data: URI (fonts + images) and every preview resource is one
@@ -60,11 +70,18 @@ function restrictToDataRefs(node: AttrNode, allowed: ReadonlySet<string>): void 
     }
     // SVG <image>/<use> reference through href (and legacy xlink:href), which DOMPurify
     // keeps by default and WeasyPrint fetches server-side — the same SSRF as <img src>,
-    // through a different attribute.
+    // through a different attribute. jsdom names an SVG <a> in lowercase, an HTML one in upper.
+    if (node.tagName?.toLowerCase() === 'a') return;
     for (const attr of ['href', 'xlink:href']) {
         const value = node.getAttribute(attr);
-        if (value != null && !isAllowedRef(value, allowed) && node.tagName !== 'A') node.removeAttribute(attr);
+        if (value != null && !isAllowedRef(value, allowed) && !isFragmentRef(value)) node.removeAttribute(attr);
     }
+}
+
+// DOMPurify's default profile drops every <use>; one that draws a glyph from its own document fetches nothing.
+function isSameDocumentUse(node: AttrNode): boolean {
+    const refs = [node.getAttribute('href'), node.getAttribute('xlink:href')].filter((ref) => ref !== null);
+    return refs.length > 0 && refs.every(isFragmentRef);
 }
 
 // Same restriction for CSS text inside <style> elements (the sheets export emits its class
@@ -87,6 +104,10 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
     DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
         if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs);
+        // Decided per element, and only in a profile that admits SVG at all.
+        if (data.tagName === 'use' && data.allowedTags['svg']) {
+            data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
+        }
     });
     try {
         return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config }) as string;

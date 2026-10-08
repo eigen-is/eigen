@@ -39,12 +39,14 @@ The doc node renderers (`export/doc/render.ts`) are pure and shared with the pre
 
 ## The sanitizer keeps only data: references, because WeasyPrint fetches
 
-`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url()` in a `style` attribute or `<style>` element, every `src`, `poster` and `background`, and every SVG `href` must be a `data:` URI. Anything else is stripped, `srcset` is dropped and `@import` is removed from style text.
+`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url()` in a `style` attribute or `<style>` element, every `src`, `poster` and `background`, and every SVG `href` must be a `data:` URI. A `url()` or `href` may also be fragment-only (`#id`), a reference into the same document. Anything else is stripped, `srcset` is dropped and `@import` is removed from style text.
 
 Export embeds every resource it needs, so any other reference came from a collaborator's CRDT string: a text box's HTML, a sheet cell. WeasyPrint fetches such references while it renders, from the API host, and its CLI cannot restrict protocols. So the restriction runs inside the Worker on every assembled body, and docx and PDF inherit it.
 
 - Backslashes go before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches.
-- `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links.
+- `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links. jsdom names an SVG `<a>` in lowercase and an HTML one in uppercase, so the check ignores case.
+- DOMPurify drops every `<use>`. A profile that admits `<svg>` keeps one whose every `href` is fragment-only, because matplotlib draws its text with `<use href="#glyph">`; any other `<use>` goes.
+- Only the whitespace a URL or CSS parser trims counts as whitespace. A non-breaking space before `#` or `data:` makes a relative path of the rest.
 - The hooks are added and removed around each synchronous call, so they never leak to another DOMPurify user.
 - A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML, without the characters XML can't hold; a file with no `<svg>` in it is dropped. The main thread hands over the inlined bytes as they are, capped at `SVG_INLINE_MAX_BYTES`: sanitizing a big drawing holds jsdom for seconds. A docx's PNG fallback is drawn from those same bytes in the thumbnail Worker, where librsvg fetches nothing from a buffer, so an SVG no XML reader can read leaves the docx.
 
@@ -76,7 +78,7 @@ The `pdf` arm is a single compositor page sized to the content plus 10 px on eac
 
 ## WeasyPrint dictates how a layer references its paint
 
-A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. The sanitizer rewrites a non-`data:` `url()` in CSS to `url()`, so a gradient moved into a style stops painting. And WeasyPrint resolves `url(#id)` only within the same `<svg>`.
+A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. WeasyPrint resolves `url(#id)` only within the same `<svg>`.
 
 An arrow's shaft is hidden under its label by a `<mask>`, because WeasyPrint ignores `clip-rule="evenodd"`. WeasyPrint applies a mask after drawing a node's children, so the reference goes on each shaft `<path>`, never a wrapping `<g>`. See `labelMask` and `maskShaft` in `packages/lib/src/vector/kinds/arrow-render.ts`.
 
