@@ -40,7 +40,7 @@ const FONT_FILES = [
     { family: 'Excalifont', path: fontExcalifont, weight: '400', style: 'normal' },
 ] as const;
 
-type DocxFontFiles = { Regular: string; Italic?: string; Bold?: string; BoldItalic?: string };
+export type DocxFontFiles = { Regular: string; Italic?: string; Bold?: string; BoldItalic?: string };
 
 // Inter's and JetBrains Mono's Bold slots hold their 600s renamed Bold, the weight the editor draws bold in.
 const DOCX_FONT_FILES_BY_CATEGORY: Record<EigenFont['category'], DocxFontFiles> = {
@@ -59,6 +59,19 @@ const DOCX_FONT_FILES_BY_CATEGORY: Record<EigenFont['category'], DocxFontFiles> 
 export const DOCX_FONT_FILES: ReadonlyMap<string, DocxFontFiles> = new Map(
     EIGEN_FONTS.map((font) => [font.name, DOCX_FONT_FILES_BY_CATEGORY[font.category]]),
 );
+
+// A bounded read of the sfnt table directory: a table past the end of the file throws instead of reading short.
+export function sfntTables(bytes: Buffer): Map<string, Buffer> {
+    const tables = new Map<string, Buffer>();
+    for (let i = 0; i < bytes.readUInt16BE(4); i++) {
+        const record = 12 + i * 16;
+        const offset = bytes.readUInt32BE(record + 8);
+        const end = offset + bytes.readUInt32BE(record + 12);
+        if (end > bytes.length) throw new Error(`table ${i} ends past the file`);
+        tables.set(bytes.toString('latin1', record, record + 4), bytes.subarray(offset, end));
+    }
+    return tables;
+}
 
 let _fontCSS: string | undefined;
 

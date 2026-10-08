@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@workspace/lib/constants/fonts';
@@ -8,6 +10,7 @@ import JSZip from 'jszip';
 import { common, createLowlight } from 'lowlight';
 import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex, isTransparentCssColor } from '../colors';
+import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { proseValue, proseValueIfSet } from './prose-css';
 import { FIGURE_WRAP_MARGIN_EM, type HastNode, highlightCode } from './render';
 
@@ -34,9 +37,12 @@ export async function eigendocToDocx(
         images: new Map(),
         files: [],
         drawings: 0,
+        // Every paragraph mark draws in the body's Regular.
+        faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
     const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
+    const fonts = embeddedFonts(pkg.faces);
 
     const parts: [path: string, xml: string, contentType?: string][] = [
         ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
@@ -54,8 +60,8 @@ export async function eigendocToDocx(
         ['word/styles.xml', stylesXml(), `${WML}.styles+xml`],
         ['word/numbering.xml', numberingXml(pkg.lists), `${WML}.numbering+xml`],
         ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
-        ['word/fontTable.xml', fontTableXml(pkg.checkboxes), `${WML}.fontTable+xml`],
-        ['word/_rels/fontTable.xml.rels', relationshipsXml([])],
+        ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
+        ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
     ];
     const overrides = parts.map(([path, , contentType]) =>
         contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
@@ -69,6 +75,7 @@ export async function eigendocToDocx(
         options,
     );
     for (const [path, xml] of parts) zip.file(path, `${XML_DECLARATION}${xml}`, options);
+    for (const [path, data] of fonts.files) zip.file(path, data, options);
     for (const [path, data] of pkg.files) zip.file(path, data, { ...options, compression: 'STORE' });
     return zip.generateAsync({ type: 'uint8array' });
 }
@@ -119,7 +126,7 @@ function relationshipsXml(relationships: Relationship[]): string {
 }
 
 // What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target and image,
-// its lists, the media parts and the drawings counted for their ids.
+// its lists, the media parts, the drawings counted for their ids and the font faces its runs draw in.
 type Package = {
     relationships: Relationship[];
     hyperlinks: Map<string, string>;
@@ -130,6 +137,7 @@ type Package = {
     images: Map<string, Image>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
+    faces: Map<string, Set<FontSlot>>;
 };
 
 // The walk's surroundings. A flow (the body, a cell) is column twips wide and its first block drops a heading's margin
@@ -163,8 +171,8 @@ const BODY = {
 
 const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(709, PAGE.margin.top)}" w:footer="${Math.min(709, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
-// Without the compatibility mode Word opens the file in Compatibility Mode.
-const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
+// Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
+const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
 
 const FONT_FAMILY: Record<EigenFont['category'], string> = {
     'sans-serif': 'swiss',
@@ -173,17 +181,95 @@ const FONT_FAMILY: Record<EigenFont['category'], string> = {
     'hand-drawn': 'script',
 };
 
+// The ECMA-376 order of a font's embed elements.
+const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfies readonly (keyof DocxFontFiles)[];
+
+type FontSlot = (typeof FONT_SLOTS)[number];
+
+// Each family's panose and Unicode and code page signature, read once from its Regular file's OS/2 table.
+const FONT_ENTRIES = EIGEN_FONTS.map(({ name, category }) => {
+    const files = DOCX_FONT_FILES.get(name);
+    const os2 = files && sfntTables(fs.readFileSync(files.Regular)).get('OS/2');
+    if (!os2) throw new Error(`no OS/2 table for ${name}`);
+    const hex32 = (offset: number) => os2.readUInt32BE(offset).toString(16).toUpperCase().padStart(8, '0');
+    const sig = Object.entries({ usb0: 42, usb1: 46, usb2: 50, usb3: 54, csb0: 78, csb1: 82 }).map(
+        ([field, offset]) => `w:${field}="${hex32(offset)}"`,
+    );
+    return {
+        name,
+        properties: `<w:panose1 w:val="${os2.subarray(32, 42).toString('hex').toUpperCase()}"/><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/><w:sig ${sig.join(' ')}/>`,
+    };
+});
+
 // MS Gothic draws the checkbox glyphs.
-function fontTableXml(checkboxes: boolean): string {
-    const fonts = EIGEN_FONTS.map(
-        ({ name, category }) =>
-            `<w:font w:name="${escapeXml(name)}"><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/></w:font>`,
+function fontTableXml(checkboxes: boolean, embeds: Map<string, string>): string {
+    const fonts = FONT_ENTRIES.map(
+        ({ name, properties }) => `<w:font w:name="${escapeXml(name)}">${properties}${embeds.get(name) ?? ''}</w:font>`,
     );
     if (checkboxes)
         fonts.push(
             `<w:font w:name="${CHECKBOX_FONT}"><w:charset w:val="80"/><w:family w:val="modern"/><w:pitch w:val="fixed"/></w:font>`,
         );
-    return `<w:fonts xmlns:w="${W_NS}">${fonts.join('')}</w:fonts>`;
+    return `<w:fonts xmlns:w="${W_NS}" xmlns:r="${R_NS}">${fonts.join('')}</w:fonts>`;
+}
+
+// Each face whole, obfuscated per ECMA-376 Part 1 § 17.8.1: its first 32 bytes XORed with the key its GUID spells
+// from the last hex digit back. The GUID is a hash of the face, so one doc always exports to the same bytes.
+function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
+    embeds: Map<string, string>;
+    relationships: Relationship[];
+    files: [path: string, data: Uint8Array][];
+} {
+    const embeds = new Map<string, string>();
+    const relationships: Relationship[] = [];
+    const files: [path: string, data: Uint8Array][] = [];
+    for (const [family, slots] of DOCX_FONT_FILES) {
+        let xml = '';
+        for (const slot of FONT_SLOTS) {
+            const file = slots[slot];
+            if (!file || !faces.get(family)?.has(slot)) continue;
+            const hash = createHash('sha256').update(`${family}/${slot}`).digest('hex').toUpperCase();
+            const key = `{${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}}`;
+            const digits = key.replace(/[{}-]/g, '');
+            const data = new Uint8Array(fs.readFileSync(file));
+            for (let i = 0; i < 32; i++)
+                data[i] ^= Number.parseInt(digits.slice(30 - 2 * (i % 16), 32 - 2 * (i % 16)), 16);
+            const part = `fonts/font${files.length + 1}.odttf`;
+            files.push([`word/${part}`, data]);
+            const rId = relationships.push({ type: `${R_NS}/font`, target: part });
+            xml += `<w:embed${slot} r:id="rId${rId}" w:fontKey="${key}"/>`;
+        }
+        if (xml) embeds.set(family, xml);
+    }
+    return { embeds, relationships, files };
+}
+
+// The face a run draws in, as Word resolves it: the run's own font and toggles over its character style's over its
+// paragraph style's, where a style's toggle flips the one below it. A slot its family has no file for is synthesized
+// from the Regular.
+function useFace(pkg: Package, run: RunProps, paragraphStyle: string | undefined): void {
+    const character = styleFace(run.style);
+    const paragraph = styleFace(paragraphStyle ?? 'Normal');
+    const family = run.font ?? character.font ?? paragraph.font ?? BODY.font;
+    const files = DOCX_FONT_FILES.get(family);
+    if (!files) return;
+    const bold = run.bold ?? character.bold !== paragraph.bold;
+    const italic = run.italic ?? character.italic !== paragraph.italic;
+    const slot = bold ? (italic ? 'BoldItalic' : 'Bold') : italic ? 'Italic' : 'Regular';
+    pkg.faces.set(family, (pkg.faces.get(family) ?? new Set()).add(files[slot] ? slot : 'Regular'));
+}
+
+// The nearest definition of each face property along a style's chain.
+function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 'italic'> {
+    const face: Pick<RunProps, 'font' | 'bold' | 'italic'> = {};
+    for (let id = style; id !== undefined; ) {
+        const definition = STYLES.get(id);
+        face.font ??= definition?.rPr?.font;
+        face.bold ??= definition?.rPr?.bold;
+        face.italic ??= definition?.rPr?.italic;
+        id = definition?.basedOn;
+    }
+    return face;
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -343,7 +429,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             const tree = highlightCode(typeof language === 'string' ? language : '', textOf(node), lowlight);
             const { indent } = CODE_BLOCK_LOOK;
             const ind = context.indent === 0 ? undefined : { left: context.indent + indent, right: indent };
-            return codeLines(tree).map((runs) => ({ props: { style: 'CodeBlock', ind }, runs }));
+            return codeLines(tree, context.pkg).map((runs) => ({ props: { style: 'CodeBlock', ind }, runs }));
         },
     ],
     ['bulletList', (node, context) => listOf(node, context, 'ul', { format: 'bullet', start: 1 })],
@@ -387,7 +473,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
     const flush = () => {
-        blocks.push({ props, runs: runsXml(inline, context) });
+        blocks.push({ props, runs: runsXml(inline, context, props.style) });
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
@@ -784,6 +870,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
     const caption = attrs['caption'];
     const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
+    if (captionRuns) useFace(context.pkg, {}, 'Caption');
     const captionParagraph = {
         props: { style: 'Caption', ind: indentOf('Caption', context), jc },
         runs: `<w:r>${captionRuns}</w:r>`,
@@ -904,15 +991,17 @@ function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Pack
 const lowlight = createLowlight(common);
 
 // A token that spans lines is split at each break and keeps its color and italic on every line.
-function codeLines(tree: HastNode): string[] {
+function codeLines(tree: HastNode, pkg: Package): string[] {
     const lines = [''];
     const walk = (node: HastNode, props: RunProps) => {
         if (node.type === 'text') {
             for (const [index, segment] of (node.value ?? '').split(LINE_BREAK).entries()) {
                 if (index > 0) lines.push('');
                 const content = textXml(segment);
+                if (!content) continue;
+                useFace(pkg, props, 'CodeBlock');
                 const rPr = rPrXml(props);
-                if (content) lines[lines.length - 1] += `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
+                lines[lines.length - 1] += `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
             }
             return;
         }
@@ -952,13 +1041,19 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 
 // ── Inline content: one run per text node ───────────────────────────────────────────────────────────────────────
 
-const INLINES = new Map<string, (node: JSONContent, linked: boolean, context: Context) => string>([
+// A run is written in its paragraph's style.
+const INLINES = new Map<
+    string,
+    (node: JSONContent, linked: boolean, context: Context, style: string | undefined) => string
+>([
     [
         'text',
-        (node, linked, context) => {
+        (node, linked, context, style) => {
             const content = textXml(node.text ?? '');
             if (!content) return '';
-            const rPr = rPrXml(runProps(node.marks ?? [], linked, context));
+            const props = runProps(node.marks ?? [], linked, context);
+            useFace(context.pkg, props, style);
+            const rPr = rPrXml(props);
             return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
         },
     ],
@@ -966,13 +1061,13 @@ const INLINES = new Map<string, (node: JSONContent, linked: boolean, context: Co
 ]);
 
 // Runs that share a link share one w:hyperlink.
-function runsXml(nodes: JSONContent[], context: Context): string {
+function runsXml(nodes: JSONContent[], context: Context, style: string | undefined): string {
     const links = nodes.map((node) => hyperlinkOf(node, context.pkg.publicOrigin));
     let xml = '';
     for (let i = 0; i < nodes.length; ) {
         const link = links[i];
         let runs = '';
-        do runs += INLINES.get(nodes[i].type ?? '')?.(nodes[i], link !== undefined, context) ?? '';
+        do runs += INLINES.get(nodes[i].type ?? '')?.(nodes[i], link !== undefined, context, style) ?? '';
         while (++i < nodes.length && links[i]?.target === link?.target && links[i]?.tooltip === link?.tooltip);
         if (!link) {
             xml += runs;

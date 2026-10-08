@@ -263,6 +263,7 @@ export function buildAllFeaturesDocJson(): JSONContent {
                         type: 'textStyle',
                         attrs: { color: '#c00000', fontFamily: 'Source Serif 4' },
                     }),
+                    marked(' hand-drawn', { type: 'textStyle', attrs: { fontFamily: 'Excalifont' } }),
                     marked(' highlighted', { type: 'highlight', attrs: { color: '#fef08a' } }),
                     marked(' marked', { type: 'highlight', attrs: { color: null } }),
                     marked(' commented', { type: 'comment', attrs: { cardId: 'card-1' } }),

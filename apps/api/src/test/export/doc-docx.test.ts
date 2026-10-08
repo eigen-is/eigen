@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { getSchema, type JSONContent } from '@tiptap/core';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import JSZip from 'jszip';
@@ -7,6 +8,7 @@ import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements,
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import { proseValue, proseValueIfSet } from '../../lib/export/doc/prose-css';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -233,11 +235,13 @@ describe('docx writer — package', () => {
     ];
     // The all-features doc's chart, photo and SVG, numbered as the figures first show them.
     const MEDIA_PARTS = ['word/media/image1.png', 'word/media/image2.jpeg', 'word/media/image3.png'];
+    // The eight faces its runs draw in.
+    const FONT_PARTS = Array.from({ length: 8 }, (_, i) => `word/fonts/font${i + 1}.odttf`);
 
     test('every part is written, parses and has a content type', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
         const paths = Object.keys(zip.files);
-        expect(paths.sort()).toEqual([...PARTS, ...MEDIA_PARTS, 'word/media/image3.svg'].sort());
+        expect(paths.sort()).toEqual([...PARTS, ...MEDIA_PARTS, 'word/media/image3.svg', ...FONT_PARTS].sort());
 
         const types = await part(zip, '[Content_Types].xml');
         const defaults = new Set(xmlChildren(types, CONTENT_TYPES, 'Default').map((d) => xmlAttr(d, '', 'Extension')));
@@ -249,7 +253,7 @@ describe('docx writer — package', () => {
         );
         expect([...defaults].sort()).toEqual(['jpeg', 'odttf', 'png', 'rels', 'svg', 'xml']);
         for (const path of paths) {
-            if (!MEDIA_PARTS.includes(path)) await part(zip, path);
+            if (!MEDIA_PARTS.includes(path) && !FONT_PARTS.includes(path)) await part(zip, path);
             expect(overrides.has(`/${path}`) || defaults.has(path.split('.').pop())).toBe(true);
         }
         const wml = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
@@ -351,7 +355,7 @@ describe('docx writer — package', () => {
             ['word/styles.xml', 'w:styles', wml],
             ['word/numbering.xml', 'w:numbering', wml],
             ['word/settings.xml', 'w:settings', wml],
-            ['word/fontTable.xml', 'w:fonts', wml],
+            ['word/fontTable.xml', 'w:fonts', { 'xmlns:w': W, 'xmlns:r': R }],
             ['word/_rels/fontTable.xml.rels', 'Relationships', { xmlns: RELS }],
         ]);
     });
@@ -369,9 +373,10 @@ describe('docx writer — package', () => {
         expect(xmlText(only(xmlChildren(core, 'http://purl.org/dc/elements/1.1/', 'title')))).toBe('Report');
     });
 
-    test('settings open the file in Word 2013+ mode, and the font table lists the Eigen fonts', async () => {
+    test('settings open the file in Word 2013+ mode with its fonts, whole, and the font table lists the Eigen fonts', async () => {
         const zip = await unzip(doc(p(text('x'))));
         const settings = await part(zip, 'word/settings.xml');
+        expect(shape(settings)).toEqual(['embedTrueTypeFonts', 'defaultTabStop', 'compat']);
         expect(w(child(settings, 'defaultTabStop'), 'val')).toBe('720');
         const compat = only(descendants(settings, W, 'compatSetting'));
         expect([w(compat, 'name'), w(compat, 'val')]).toEqual(['compatibilityMode', '15']);
@@ -1934,12 +1939,145 @@ describe('docx writer — styles from the CSS', () => {
     });
 });
 
+describe('docx writer — fonts', () => {
+    const SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const;
+
+    function embeds(font: XmlElement): XmlElement[] {
+        return xmlElements(font).filter((element) => element.local.startsWith('embed'));
+    }
+
+    // The faces a doc embeds, `${family} ${slot}` in font table order.
+    async function embeddedFaces(json: JSONContent): Promise<string[]> {
+        const fonts = xmlChildren(await part(await unzip(json), 'word/fontTable.xml'), W, 'font');
+        return fonts.flatMap((font) =>
+            embeds(font).map((embed) => `${w(font, 'name')} ${embed.local.slice('embed'.length)}`),
+        );
+    }
+
+    const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
+    const bold = { type: 'bold' };
+    const italic = { type: 'italic' };
+
+    test('a plain doc embeds Inter Regular only: a heading is medium, so no Bold without bold', async () => {
+        expect(await embeddedFaces(doc(heading(1, text('Title')), p(text('x'))))).toEqual(['Inter Regular']);
+    });
+
+    test('each face a run draws in is embedded, its italic from a style too', async () => {
+        const cases: [JSONContent, string[]][] = [
+            [doc(p(text('x', bold))), ['Inter Regular', 'Inter Bold']],
+            [doc(p(text('x', italic))), ['Inter Regular', 'Inter Italic']],
+            [doc(p(text('x', bold, italic))), ['Inter Regular', 'Inter BoldItalic']],
+            [doc(quote(p(text('x')))), ['Inter Regular', 'Inter Italic']],
+            [doc(p(text('x', { type: 'code' }))), ['Inter Regular', 'JetBrains Mono Regular']],
+            [doc(quote(p(text('x', { type: 'code' })))), ['Inter Regular', 'JetBrains Mono Italic']],
+            [
+                doc(code('let a = 1;\n// says hello', 'javascript')),
+                ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
+            ],
+            [
+                doc(p(text('x', serif), text('y', serif, bold))),
+                ['Inter Regular', 'Source Serif 4 Regular', 'Source Serif 4 Bold'],
+            ],
+        ];
+        for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
+    });
+
+    test('a slot a family has no file for is drawn from its Regular', async () => {
+        const hand = { type: 'textStyle', attrs: { fontFamily: 'Excalifont' } };
+        expect(await embeddedFaces(doc(p(text('x', hand, bold, italic))))).toEqual([
+            'Inter Regular',
+            'Excalifont Regular',
+        ]);
+    });
+
+    test('the all-features doc embeds the faces its runs draw in', async () => {
+        expect(await embeddedFaces(buildAllFeaturesDocJson())).toEqual([
+            'Inter Regular',
+            'Inter Bold',
+            'Inter Italic',
+            'Source Serif 4 Regular',
+            'JetBrains Mono Regular',
+            'JetBrains Mono Italic',
+            'JetBrains Mono BoldItalic',
+            'Excalifont Regular',
+        ]);
+    });
+
+    test('an embedded face is its bundled file whole, obfuscated with the key its GUID spells', async () => {
+        const zip = await unzip(buildAllFeaturesDocJson());
+        const relationships = new Map(
+            xmlChildren(await part(zip, 'word/_rels/fontTable.xml.rels'), RELS, 'Relationship').map((rel) => [
+                xmlAttr(rel, '', 'Id'),
+                rel,
+            ]),
+        );
+        const keys: string[] = [];
+        for (const font of xmlChildren(await part(zip, 'word/fontTable.xml'), W, 'font')) {
+            const files = DOCX_FONT_FILES.get(w(font, 'name') ?? '');
+            for (const embed of embeds(font)) {
+                const slot = SLOTS.find((name) => embed.local === `embed${name}`);
+                const file = slot && files?.[slot];
+                if (!file) throw new Error(`no file for ${embed.local}`);
+                const rel = relationships.get(xmlAttr(embed, R, 'id'));
+                expect(rel && xmlAttr(rel, '', 'Type')).toBe(`${R}/font`);
+                const target = (rel && xmlAttr(rel, '', 'Target')) ?? '';
+                expect(target).toMatch(/^fonts\/font\d+\.odttf$/);
+                const key = w(embed, 'fontKey') ?? '';
+                expect(key).toMatch(/^\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}$/);
+                keys.push(key);
+
+                // ECMA-376 Part 1 § 17.8.1: the GUID's 32 hex digits read from the end, two at a time, XORed over the
+                // first 32 bytes.
+                const hex = key.replace(/[{}-]/g, '');
+                const xor = Array.from({ length: 16 }, (_, i) =>
+                    Number.parseInt(hex.slice(30 - 2 * i, 32 - 2 * i), 16),
+                );
+                const stored = (await zip.file(`word/${target}`)?.async('nodebuffer')) ?? Buffer.alloc(0);
+                const original = fs.readFileSync(file);
+                expect(stored.equals(original)).toBe(false);
+                const restored = Buffer.from(stored.map((byte, i) => (i < 32 ? byte ^ (xor[i % 16] ?? 0) : byte)));
+                expect(restored.equals(original)).toBe(true);
+            }
+        }
+        expect(keys).toHaveLength(8);
+        expect(new Set(keys).size).toBe(keys.length);
+    });
+
+    test("each family's font table entry carries its Regular file's panose and signature", async () => {
+        const fonts = xmlChildren(await part(await unzip(doc(p(text('x')))), 'word/fontTable.xml'), W, 'font');
+        const inter = fonts.find((font) => w(font, 'name') === 'Inter');
+        const sig = child(inter, 'sig');
+        expect(w(child(inter, 'panose1'), 'val')).toBe('02000503000000020004');
+        expect(['usb0', 'usb1', 'usb2', 'usb3', 'csb0', 'csb1'].map((name) => w(sig, name))).toEqual([
+            'E0000AFF',
+            '5200A1FF',
+            '00000021',
+            '00000000',
+            '0000019F',
+            '00000000',
+        ]);
+        for (const [family, files] of DOCX_FONT_FILES) {
+            const os2 = sfntTables(fs.readFileSync(files.Regular)).get('OS/2');
+            if (!os2) throw new Error(`${family} has no OS/2 table`);
+            const hex32 = (offset: number) => os2.readUInt32BE(offset).toString(16).toUpperCase().padStart(8, '0');
+            const font = fonts.find((candidate) => w(candidate, 'name') === family);
+            expect([w(child(font, 'panose1'), 'val'), w(child(font, 'charset'), 'val')]).toEqual([
+                os2.subarray(32, 42).toString('hex').toUpperCase(),
+                '00',
+            ]);
+            expect(['usb0', 'usb1', 'usb2', 'usb3', 'csb0', 'csb1'].map((name) => w(child(font, 'sig'), name))).toEqual(
+                [42, 46, 50, 54, 78, 82].map(hex32),
+            );
+        }
+    });
+});
+
 describe('docx writer — bounds', () => {
     async function xmlBytes(json: JSONContent): Promise<number> {
         const zip = await unzip(json);
-        const sizes = await Promise.all(
-            Object.values(zip.files).map(async (file) => (await file.async('string')).length),
-        );
+        // The embedded fonts are whole files, the same for every doc.
+        const parts = Object.values(zip.files).filter((file) => !file.name.endsWith('.odttf'));
+        const sizes = await Promise.all(parts.map(async (file) => (await file.async('string')).length));
         return sizes.reduce((sum, size) => sum + size, 0);
     }
 

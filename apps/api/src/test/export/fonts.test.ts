@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
-import { DOCX_FONT_FILES, getFontCSS } from '../../lib/export/fonts';
+import { DOCX_FONT_FILES, getFontCSS, sfntTables } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
 
@@ -29,19 +29,6 @@ test('the export fonts are the faces the apps load', () => {
     expect(appFaces).toHaveLength(6);
     expect(exportFaces).toEqual(appFaces);
 });
-
-// A bounded read of the sfnt table directory: a table past the end of the file throws instead of reading short.
-function sfntTables(bytes: Buffer): Map<string, Buffer> {
-    const tables = new Map<string, Buffer>();
-    for (let i = 0; i < bytes.readUInt16BE(4); i++) {
-        const record = 12 + i * 16;
-        const offset = bytes.readUInt32BE(record + 8);
-        const end = offset + bytes.readUInt32BE(record + 12);
-        if (end > bytes.length) throw new Error(`table ${i} ends past the file`);
-        tables.set(bytes.toString('latin1', record, record + 4), bytes.subarray(offset, end));
-    }
-    return tables;
-}
 
 function nameRecords(name: Buffer): string[] {
     const strings = name.readUInt16BE(4);
