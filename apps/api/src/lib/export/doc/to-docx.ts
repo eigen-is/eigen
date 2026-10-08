@@ -7,7 +7,6 @@ import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/l
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
-import { common, createLowlight } from 'lowlight';
 import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
@@ -453,7 +452,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'codeBlock',
         (node, context) => {
             const language = node.attrs?.['language'];
-            const tree = highlightCode(typeof language === 'string' ? language : '', textOf(node), lowlight);
+            const tree = highlightCode(typeof language === 'string' ? language : '', textOf(node));
             // The mark of an empty or comment-only line draws in the style's Regular.
             useFace(context.pkg, {}, 'CodeBlock');
             const { indent } = CODE_BLOCK_LOOK;
@@ -1039,8 +1038,6 @@ function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Pack
 }
 
 // ── Code blocks: one paragraph per line, lowlight's tokens as runs ─────────────────────────────────────────────────
-
-const lowlight = createLowlight(common);
 
 // A token that spans lines is split at each break and keeps its color and italic on every line.
 function codeLines(tree: HastNode, pkg: Package): string[] {
