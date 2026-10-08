@@ -955,8 +955,10 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const tw = cx / EMU_PER_TWIP;
     const nil = TABLE_BORDER_SIDES.map((edge) => `<w:${edge} w:val="nil"/>`).join('');
     const unpadded = BORDER_SIDES.map((edge) => `<w:${edge} w:w="0" w:type="dxa"/>`).join('');
+    // A list or quote indents only the left, so a right float keeps the margin's edge.
+    const x = side === 'left' && context.indent > 0 ? `w:tblpX="${context.indent}"` : `w:tblpXSpec="${side}"`;
     const tblPr = [
-        `<w:tblpPr w:leftFromText="${side === 'right' ? sideMargin : 0}" w:rightFromText="${side === 'left' ? sideMargin : 0}" w:topFromText="${em(FIGURE_WRAP_MARGIN_EM.top)}" w:bottomFromText="${em(FIGURE_WRAP_MARGIN_EM.bottom)}" w:vertAnchor="text" w:horzAnchor="margin" w:tblpXSpec="${side}" w:tblpY="1"/>`,
+        `<w:tblpPr w:leftFromText="${side === 'right' ? sideMargin : 0}" w:rightFromText="${side === 'left' ? sideMargin : 0}" w:topFromText="${em(FIGURE_WRAP_MARGIN_EM.top)}" w:bottomFromText="${em(FIGURE_WRAP_MARGIN_EM.bottom)}" w:vertAnchor="text" w:horzAnchor="margin" ${x} w:tblpY="1"/>`,
         '<w:tblOverlap w:val="never"/>',
         `<w:tblW w:w="${tw}" w:type="dxa"/>`,
         `<w:tblBorders>${nil}</w:tblBorders>`,

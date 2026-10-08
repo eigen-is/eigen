@@ -1494,13 +1494,13 @@ describe('docx writer — figures', () => {
         ]);
     }
 
-    function floating(side: 'left' | 'right', px: number, cell: string) {
+    function floating(side: 'left' | 'right', px: number, cell: string, x?: number) {
         const tw = px * 15;
         const nil = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
             .map((b) => `<w:${b} w:val="nil"/>`)
             .join('');
         const flush = ['top', 'left', 'bottom', 'right'].map((b) => `<w:${b} w:w="0" w:type="dxa"/>`).join('');
-        return `<w:tbl><w:tblPr><w:tblpPr w:leftFromText="${side === 'right' ? 220 : 0}" w:rightFromText="${side === 'left' ? 220 : 0}" w:topFromText="55" w:bottomFromText="110" w:vertAnchor="text" w:horzAnchor="margin" w:tblpXSpec="${side}" w:tblpY="1"/><w:tblOverlap w:val="never"/><w:tblW w:w="${tw}" w:type="dxa"/><w:tblBorders>${nil}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>${flush}</w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${tw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr></w:tbl>`;
+        return `<w:tbl><w:tblPr><w:tblpPr w:leftFromText="${side === 'right' ? 220 : 0}" w:rightFromText="${side === 'left' ? 220 : 0}" w:topFromText="55" w:bottomFromText="110" w:vertAnchor="text" w:horzAnchor="margin" ${x === undefined ? `w:tblpXSpec="${side}"` : `w:tblpX="${x}"`} w:tblpY="1"/><w:tblOverlap w:val="never"/><w:tblW w:w="${tw}" w:type="dxa"/><w:tblBorders>${nil}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>${flush}</w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${tw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr></w:tbl>`;
     }
 
     const floatingImage = (runs: string) =>
@@ -1594,6 +1594,27 @@ describe('docx writer — figures', () => {
         ).toEqual([floating('left', 220, cell), `<w:p>${run('before ')}${run('after')}</w:p>`]);
         const [right] = await blocksOf(doc(p(figure({ ...CHART, width: 220, layout: 'wrap-right' })), p(text('x'))));
         expect(right).toBe(floating('right', 220, floatingImage(chart(220))));
+    });
+
+    test("a wrapped figure in a list item or quote floats from its container's text edge, clear of the bullet and bar", async () => {
+        const wrapped = (layout: string) => p(figure({ ...CHART, width: 100, layout }), text('beside'));
+        const tables = xmlChildren(
+            await bodyOf(
+                doc(
+                    ul(li(p(text('item')), wrapped('wrap-left'), ul(li(p(text('inner')), wrapped('wrap-left'))))),
+                    quote(wrapped('wrap-left'), wrapped('wrap-right')),
+                ),
+            ),
+            W,
+            'tbl',
+        ).map(xmlOf);
+        const image = (id: number) => floatingImage(chart(100, id).replace('cy="2976563"', 'cy="595313"'));
+        expect(tables).toEqual([
+            floating('left', 100, image(1), 330),
+            floating('left', 100, image(2), 660),
+            floating('left', 100, image(3), 265),
+            floating('right', 100, image(4)),
+        ]);
     });
 
     test('two floating figures keep a Spacer between their tables; an emptied holder goes, the last one is a Spacer', async () => {
