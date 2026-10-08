@@ -558,17 +558,17 @@ function checkboxXml(checked: boolean): string {
 
 // ── Tables: the grid as the editor lays it out ─────────────────────────────────────────────────────────────────────
 
-// Word's widest table; a wider colspan comes from no editor.
+// Word's widest table. The cap keeps the grid, which every row is filled to, from growing with the doc.
 const MAX_TABLE_COLUMNS = 63;
 
 const CELL_TYPES = new Set(['tableCell', 'tableHeader']);
 
 const TABLE_BORDER_SIDES = [...BORDER_SIDES, 'insideH', 'insideV'] as const;
 
-type GridCell = { node: JSONContent; column: number; colspan: number; rowspan: number };
+type GridCell = { node: JSONContent; content: JSONContent[]; column: number; colspan: number; rowspan: number };
 
 // A rowspan holds its columns in the rows below, a colspan takes one colwidth per column. Content outside a row or a
-// cell is put in one.
+// cell is put in one; a cell past the last column joins the cell that holds it, so no text is lost.
 function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const rows = rowNodes.map((row) =>
         (row.type === 'tableRow' ? (row.content ?? []) : [row]).map((cell) =>
@@ -576,23 +576,32 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
         ),
     );
     const carry: number[] = [];
+    const holders: GridCell[] = [];
     const widths: (number | undefined)[] = [];
     const grid = rows.map((cells, rowIndex) => {
         let column = 0;
-        const placed = cells.map((node): GridCell => {
+        const placed: GridCell[] = [];
+        for (const node of cells) {
             while ((carry[column] ?? 0) > 0) column++;
-            const colspan = clampInt(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS, 1);
+            const last = holders[MAX_TABLE_COLUMNS - 1];
+            if (column >= MAX_TABLE_COLUMNS && last) {
+                for (const block of node.content ?? []) last.content.push(block);
+                continue;
+            }
+            const colspan = clampInt(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS - column, 1);
             const rowspan = clampInt(node.attrs?.['rowspan'], 1, rows.length - rowIndex, 1);
             const colwidth = node.attrs?.['colwidth'];
+            const cell = { node, content: [...(node.content ?? [])], column, colspan, rowspan };
             for (let k = 0; k < colspan; k++) {
                 const width: unknown = Array.isArray(colwidth) ? colwidth[k] : undefined;
                 widths[column + k] ??=
                     typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : undefined;
                 carry[column + k] = rowspan;
+                holders[column + k] = cell;
             }
             column += colspan;
-            return { node, column: column - colspan, colspan, rowspan };
-        });
+            placed.push(cell);
+        }
         for (const [index, rowsLeft] of carry.entries()) carry[index] = Math.max(0, rowsLeft - 1);
         return placed;
     });
@@ -621,7 +630,7 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
                 tcs.push(
-                    `<w:tc>${tcPr(merge)}${cellXml(cell.node, width - 2 * look.padding.horizontal, context.pkg)}</w:tc>`,
+                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * look.padding.horizontal, context.pkg)}</w:tc>`,
                 );
             } else tcs.push(`<w:tc>${tcPr(coveredSpan === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
             column += colspan;
@@ -646,22 +655,22 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     ];
 }
 
-// As TableWidthClamp scales the editor's: every column known scales down to the column, none under the floor; else the
-// unknown columns share what the known leave, as table { width: 100% } does.
+// As TableWidthClamp scales the editor's: the known columns scale down to the column, none under the floor; the
+// unknown ones share what the known leave, as table { width: 100% } does.
 function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: number[]; fixed: boolean } {
     const known = widths.filter((width) => width !== undefined);
     const sum = known.reduce((total, width) => total + width, 0);
-    const fixed = known.length === widths.length;
-    const scale = fixed && sum > columnPx ? columnPx / sum : 1;
-    const share = Math.max(MIN_TABLE_COLUMN_PX, Math.floor((columnPx - sum) / (widths.length - known.length)));
+    const unknown = widths.length - known.length;
+    const scale = sum > columnPx ? columnPx / sum : 1;
+    const share = unknown > 0 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor((columnPx - sum * scale) / unknown)) : 0;
     const px = widths.map((width) =>
         width === undefined ? share : scale < 1 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(width * scale)) : width,
     );
-    return { dxa: px.map((width) => Math.round(width * 15)), fixed };
+    return { dxa: px.map((width) => Math.round(width * 15)), fixed: unknown === 0 };
 }
 
 // A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is.
-function cellXml(node: JSONContent, column: number, pkg: Package): string {
+function cellXml({ node, content }: GridCell, column: number, pkg: Package): string {
     const align = node.attrs?.['align'];
     const cell: Context = {
         pkg,
@@ -672,7 +681,7 @@ function cellXml(node: JSONContent, column: number, pkg: Package): string {
         after: 0,
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
     };
-    const blocks = blocksOf(node.content ?? [], textProps({}, cell), cell, false);
+    const blocks = blocksOf(content, textProps({}, cell), cell, false);
     return blocks.length > 0 ? blocksXml(blocks, pkg) : paragraphXml({ props: textProps({}, cell), runs: '' });
 }
 

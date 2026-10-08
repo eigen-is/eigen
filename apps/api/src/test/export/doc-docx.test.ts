@@ -1021,12 +1021,43 @@ describe('docx writer — tables', () => {
     test('spans past the grid or the rows are clamped, and ones of the wrong type are 1', async () => {
         const tbl = only(
             await tablesIn(
-                doc(table(tr(td({ colspan: 1000, rowspan: 9 }, p(text('x'))), td({ colspan: 'two' }, p())))),
+                doc(table(tr(td({ colspan: 1000, rowspan: 9 }, p(text('x'))), td({ colspan: 'two' }, p(text('y')))))),
             ),
         );
-        expect(gridOf(tbl)).toHaveLength(64);
+        expect(gridOf(tbl)).toHaveLength(63);
         expect(descendants(tbl, W, 'gridSpan').map((gridSpan) => w(gridSpan, 'val'))).toEqual(['63']);
         expect(descendants(tbl, W, 'vMerge')).toEqual([]);
+    });
+
+    test("the grid stops at Word's 63 columns: a colspan takes what is left, a cell past it joins the row's last cell", async () => {
+        const wide = (value: string) => td({ colspan: 30 }, p(text(value)));
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(wide('a'), wide('b'), wide('c'), td({}, p(text('d'))), td({}, p(text('e')))),
+                        tr(td({ colspan: 63, rowspan: 2 }, p(text('f')))),
+                        tr(td({}, p(text('g')))),
+                    ),
+                ),
+            ),
+        );
+        expect(gridOf(tbl)).toHaveLength(63);
+        const [first, second, third] = xmlChildren(tbl, W, 'tr');
+        expect(descendants(first ?? tbl, W, 'gridSpan').map((gridSpan) => w(gridSpan, 'val'))).toEqual([
+            '30',
+            '30',
+            '3',
+        ]);
+        expect(xmlChildren(first ?? tbl, W, 'tc').map(texts)).toEqual(['a', 'b', 'cde']);
+        expect(xmlChildren(second ?? tbl, W, 'tc').map(texts)).toEqual(['fg']);
+        expect(xmlChildren(third ?? tbl, W, 'tc').map(texts)).toEqual(['']);
+    });
+
+    test('a known colwidth past the column is scaled beside an unknown one, in whole twips', async () => {
+        const tbl = only(await tablesIn(doc(table(tr(td({ colwidth: [1e20] }, p()), td({ colwidth: null }, p()))))));
+        expect(gridOf(tbl)).toEqual([9630, 375]);
+        expect(descendants(tbl, W, 'tcW').map((tcW) => w(tcW, 'w'))).toEqual(['9630', '375']);
     });
 
     test('a table that ends the body or a cell is followed by a Spacer, and two tables are kept apart by one', async () => {
@@ -1734,5 +1765,32 @@ describe('docx writer — styles from the CSS', () => {
         } finally {
             mock.module('../../lib/export/doc/prose-css', () => original);
         }
+    });
+});
+
+describe('docx writer — bounds', () => {
+    async function xmlBytes(json: JSONContent): Promise<number> {
+        const zip = await unzip(json);
+        const sizes = await Promise.all(
+            Object.values(zip.files).map(async (file) => (await file.async('string')).length),
+        );
+        return sizes.reduce((sum, size) => sum + size, 0);
+    }
+
+    // What the walk amplifies: a row of wide cells widens the grid every later row is filled to.
+    function hostile(rows: number): JSONContent {
+        const cell = (attrs: Record<string, unknown>) => td(attrs, p(text('x')));
+        return doc(
+            table(
+                tr(...Array.from({ length: rows }, () => cell({ colspan: 63 }))),
+                ...Array.from({ length: rows }, () => tr(cell({}))),
+            ),
+        );
+    }
+
+    test('the output grows linearly with a hostile doc, within a bounded factor of its JSON', async () => {
+        const [small, large] = await Promise.all([xmlBytes(hostile(50)), xmlBytes(hostile(100))]);
+        expect(large / small).toBeLessThan(2.2);
+        expect(large).toBeLessThan(100 * JSON.stringify(hostile(100)).length);
     });
 });
