@@ -22,7 +22,8 @@ export type VectorExportFormat = 'svg' | 'pdf-html';
 // bytes always ride as transferred buffers.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media; only a docx's carries the thumbnail Worker's width and height, and an SVG's PNG fallback in png.
+// An export's media; only a docx's raster carries the thumbnail Worker's width and height. The docx arm adds an SVG's
+// size and its PNG fallback inside the Worker.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions> & { png?: ArrayBuffer };
 
 // A job is everything a caller decides; the shared main-thread orchestration
@@ -166,10 +167,7 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
     if (request.source.snapshot) buffers.push(request.source.snapshot.data);
     for (const update of request.source.updates) buffers.push(update.data);
     if (request.kind === 'export') {
-        for (const item of request.media) {
-            buffers.push(item.data);
-            if (item.png) buffers.push(item.png);
-        }
+        for (const item of request.media) buffers.push(item.data);
     }
     return buffers;
 }

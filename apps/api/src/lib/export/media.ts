@@ -70,25 +70,10 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath, docx: b
         return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
     }
     // The file's own bytes, its siblings inlined: the transform Worker sanitizes them (sanitizeExportMedia), seconds of
-    // jsdom for a big drawing. The inliner caps only what it builds, so a drawing with nothing to inline gets its cap here.
+    // jsdom for a big drawing, and draws a docx's PNG from the result. The inliner caps only what it builds, so a drawing
+    // with nothing to inline gets its cap here.
     if (result.data.byteLength > SVG_INLINE_MAX_BYTES) return null;
-    const data = toTransferableBuffer(result.data);
-    if (!docx) return { name, contentType: result.contentType, data };
-    // The PNG every reader but Word draws, at the SVG's own size. librsvg fetches no reference from a buffer, which has no
-    // base URI, so the unsanitized bytes draw only what they inline.
-    const fallback = await generateImagePreview(result.data, result.contentType, file.name, '', file.id, {
-        format: 'png',
-        maxSize: DOCX_MAX_SIZE,
-    });
-    if (!fallback) return null;
-    return {
-        name,
-        contentType: result.contentType,
-        data,
-        png: workerBuffer(fallback.data),
-        width: fallback.width,
-        height: fallback.height,
-    };
+    return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
 }
 
 // Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha

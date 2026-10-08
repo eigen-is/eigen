@@ -65,6 +65,9 @@ export const EML_FORMAT = 'eml-f5';
 // ics-f2: `dropped` is the unreadable masters alone, and an event counts its `remainingAttendees`.
 export const ICS_FORMAT = 'ics-f2';
 
+// The largest side of an image's screen preview.
+export const SCREEN_PREVIEW_MAX_SIZE = 2560;
+
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
 }
@@ -358,7 +361,7 @@ export async function getScreenPreview(
                 const file = await mount.readFile(drivePath.id);
                 if (!file) return null;
                 const result = await generateImagePreview(file, mime, drivePath.name, mount.previewsDir, drivePath.id, {
-                    maxSize: 2560,
+                    maxSize: SCREEN_PREVIEW_MAX_SIZE,
                     quality: 85,
                 });
                 return result?.data ?? null;

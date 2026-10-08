@@ -13,6 +13,7 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import type { SCREEN_PREVIEW_MAX_SIZE } from '../../preview/preview-cache';
 import { FONT_STACK_MONO, FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
@@ -36,10 +37,40 @@ export async function renderEigendocExport(
     const json = readEigendocFromDoc(doc);
     if (format === 'docx') {
         const { eigendocToDocx } = await import('./to-docx');
-        return { data: toTransferableBuffer(await eigendocToDocx(json, media, title, publicOrigin)), warnings: [] };
+        const docxMedia = await withSvgFallbacks(media);
+        return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
     const html = renderEigendocDocument(json, toDataUriMap(media), title);
     return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
+}
+
+// The screen preview's largest side. The Worker never loads preview-cache, so its type pins the value.
+const SVG_FALLBACK_MAX_SIZE: typeof SCREEN_PREVIEW_MAX_SIZE = 2560;
+
+// The PNG every reader but Word draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
+// time, for one decode's memory; sharp loads only for an SVG.
+async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { default: sharp } = await import('sharp');
+    const prepared: ExportMedia[] = [];
+    for (const item of media) {
+        if (item.contentType !== 'image/svg+xml') {
+            prepared.push(item);
+            continue;
+        }
+        try {
+            const image = sharp(Buffer.from(item.data));
+            const { width, height } = await image.metadata();
+            const png = await image
+                .resize(SVG_FALLBACK_MAX_SIZE, SVG_FALLBACK_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
+                .png()
+                .toBuffer();
+            prepared.push({ ...item, png: toTransferableBuffer(png), width, height });
+        } catch {
+            // One librsvg can't read leaves the docx, as an image no reader draws.
+        }
+    }
+    return prepared;
 }
 
 const lowlight = createLowlight(common);
