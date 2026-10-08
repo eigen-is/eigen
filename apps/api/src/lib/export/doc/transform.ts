@@ -46,7 +46,7 @@ export async function renderEigendocExport(
 // The screen preview's largest side. The Worker never loads preview-cache, so its type pins the value.
 const SVG_FALLBACK_MAX_SIZE: typeof SCREEN_PREVIEW_MAX_SIZE = 2560;
 
-// The PNG every reader but Word draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
+// The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
 async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;

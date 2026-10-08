@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, type FigureLayout, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
@@ -13,10 +13,8 @@ import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { proseValue, proseValueIfSet } from './prose-css';
 import { FIGURE_WRAP_MARGIN_EM, type HastNode, highlightCode } from './render';
 
-// ProseMirror JSON -> docx bytes, WordprocessingML written by hand. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread orchestration lives in export-document.ts). This module must not reach the Mount or the
-// preview cache — the Worker imports it. Every size, spacing and color comes from eigen-prose.css through proseValue,
-// and the JSON comes off a CRDT no schema checked, so attrs are validated at use and the structure normalized.
+// ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
+// preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
     media: ExportMedia[],
@@ -125,9 +123,7 @@ function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.join('')}</Relationships>`;
 }
 
-// What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target and image,
-// its lists and the numId each bullet indent shares, the media parts, the drawings counted for their ids and the font
-// faces its runs draw in.
+// What one export accumulates as it walks, each hyperlink target, image, shared bullet numbering and face once.
 type Package = {
     relationships: Relationship[];
     hyperlinks: Map<string, string>;
@@ -142,10 +138,7 @@ type Package = {
     faces: Map<string, Set<FontSlot>>;
 };
 
-// The walk's surroundings. A flow (the body, a cell) is column twips wide and its first block drops a heading's margin
-// above; indent is the twips the enclosing lists and quotes move the text in, depth and quotes how many of each;
-// style, after and align are what a plain paragraph takes in its container; list is the numbering an item takes; a
-// heading scales its inline code.
+// The walk's surroundings: a flow's column and its lists' and quotes' indent in twips, what a plain paragraph takes.
 type Context = {
     pkg: Package;
     first: boolean;
@@ -171,7 +164,10 @@ const BODY = {
     color: proseColor('.eigen-prose', 'color'),
 };
 
-const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(709, PAGE.margin.top)}" w:footer="${Math.min(709, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
+// Word's default 1.25 cm from the page edge, inside a smaller margin.
+const HEADER_DISTANCE = 709;
+
+const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(HEADER_DISTANCE, PAGE.margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
 const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
@@ -188,8 +184,7 @@ const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfie
 
 type FontSlot = (typeof FONT_SLOTS)[number];
 
-// Each family's panose, Unicode and code page signature and Word's line height, (usWinAscent + usWinDescent) /
-// unitsPerEm, read once from its Regular file. The text fonts' hhea and typo agree, so it is every reader's.
+// Each family's font table entry and Word's line height, (usWinAscent + usWinDescent) / unitsPerEm, from its Regular.
 const FONT_ENTRIES = EIGEN_FONTS.map(({ name, category }) => {
     const files = DOCX_FONT_FILES.get(name);
     const tables = files && sfntTables(fs.readFileSync(files.Regular));
@@ -221,8 +216,7 @@ function fontTableXml(checkboxes: boolean, embeds: Map<string, string>): string 
     return `<w:fonts xmlns:w="${W_NS}" xmlns:r="${R_NS}">${fonts.join('')}</w:fonts>`;
 }
 
-// Each face whole, obfuscated per ECMA-376 Part 1 § 17.8.1: its first 32 bytes XORed with the key its GUID spells
-// from the last hex digit back. The GUID is a hash of the face, so one doc always exports to the same bytes.
+// Each face whole, obfuscated per ECMA-376 Part 1 § 17.8.1 by a GUID hashed from the face, so the bytes are stable.
 function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
     embeds: Map<string, string>;
     relationships: Relationship[];
@@ -255,9 +249,7 @@ function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
 // A run's family and size in half-points, which the height of its line follows.
 type RunFace = { family: string; size: number };
 
-// The face a run draws in, as Word resolves it: the run's own font and toggles over its character style's over its
-// paragraph style's, where a style's toggle flips the one below it. A slot its family has no file for is synthesized
-// from the Regular.
+// As Word resolves a face: the run over its character style over its paragraph style, whose toggles flip each other.
 function useFace(pkg: Package, run: RunProps, paragraphStyle: string | undefined): RunFace {
     const character = styleFace(run.style);
     const paragraph = styleFace(paragraphStyle ?? 'Normal');
@@ -268,6 +260,7 @@ function useFace(pkg: Package, run: RunProps, paragraphStyle: string | undefined
         const bold = run.bold ?? character.bold !== paragraph.bold;
         const italic = run.italic ?? character.italic !== paragraph.italic;
         const slot = bold ? (italic ? 'BoldItalic' : 'Bold') : italic ? 'Italic' : 'Regular';
+        // Word synthesizes a slot without a file from the Regular.
         pkg.faces.set(family, (pkg.faces.get(family) ?? new Set()).add(files[slot] ? slot : 'Regular'));
     }
     return { family, size };
@@ -287,8 +280,7 @@ function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 
     return face;
 }
 
-// Word's auto line is a multiple of the tallest face's line height, the editor's pitch the paragraph's: a paragraph all
-// in one family takes the multiple that keeps it, unless its mark, in the style's face, stands as tall.
+// Word's auto line scales with the tallest face, CSS's doesn't: one other family rescales it, unless the mark's taller.
 function familyLine(style: string | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
@@ -342,9 +334,7 @@ type RunProps = {
 // A paragraph its wrapped figures emptied is only a holder: an item opens it, every other flow drops it.
 type Paragraph = { props: ParagraphProps; runs: string; emptied?: true };
 
-// A table is written whole; the flow around it adds the paragraphs Word needs beside it, and the block after it takes
-// its after: the table's margin, or its container's larger one. A floating one holds a wrapped figure and keeps no
-// margin.
+// The block after an in-flow table takes its after; a floating one holds a wrapped figure and keeps no margin.
 type Block = Paragraph | { table: string; after?: number; float?: true };
 
 function pPrXml(props: ParagraphProps): string {
@@ -541,9 +531,7 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
-// Word and LibreOffice draw two adjacent boxes or bars as one (R35), so a Spacer stands between them, and it holds the
-// gap: the larger of the margins, as they collapse in the editor. Word runs a quote's bar through its after. A table
-// draws no box: blocksXml gives the block after it the larger margin, and the paragraph before one keeps its after.
+// Readers draw adjacent boxes or bars as one, so a Spacer holds the collapsed gap a quote's bar would run through.
 function keepApart(blocks: Block[], next: Block[]): void {
     const last = blocks.at(-1);
     const first = next[0];
@@ -563,8 +551,7 @@ function keepApart(blocks: Block[], next: Block[]): void {
     });
 }
 
-// Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
-// no paragraph does. The block after an in-flow table takes the table's after as its before.
+// Word merges adjacent tables and needs a paragraph after a flow's last one, so a Spacer stands where none does.
 function blocksXml(written: Block[]): string {
     const below = (block: Block | undefined) =>
         block && 'table' in block && !block.float ? (block.after ?? TABLE_LOOK.margin) : undefined;
@@ -582,8 +569,7 @@ function blocksXml(written: Block[]): string {
         .join('');
 }
 
-// A paragraph or heading where it stands: a plain one takes its container's style and spacing; a heading in a quote
-// takes the quote's bar directly.
+// A plain paragraph takes its container's style and spacing; a heading in a quote takes the quote's bar directly.
 function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, context: Context): ParagraphProps {
     const style = own.style ?? context.style;
     return {
@@ -601,8 +587,7 @@ function indentOf(style: string | undefined, context: Context): ParagraphProps['
     return context.indent === own ? undefined : { left: context.indent };
 }
 
-// A container's bottom margin on its last block, the larger of the two as margins collapse. A hairline keeps its 1 pt,
-// a floating figure no margin.
+// A container's bottom margin on its last block, collapsed with its own; a hairline and a floating figure keep theirs.
 function withAfter(blocks: Block[], after: number): Block[] {
     const last = blocks.at(-1);
     if (!last || ('table' in last && last.float)) return blocks;
@@ -648,8 +633,7 @@ const LIST_FORMATS = new Map([
     ['I', 'upperRoman'],
 ]);
 
-// A task list, and a list without items, has no numbering. Only the last paragraph of a list in no other list takes
-// the list's margin.
+// Only an outermost list's last paragraph takes the list's margin; a task list and an empty one number nothing.
 function listOf(
     node: JSONContent,
     context: Context,
@@ -698,8 +682,7 @@ function itemOf(
     };
     const props = textProps({}, inner);
     const blocks = blocksOf(node.content ?? [], props, inner, false);
-    // A figure that floats before the item's first paragraph leaves the number on that paragraph, or the holder it
-    // emptied; a first block of another style (a missing figure's caption, a table) gets an empty holder above it.
+    // The first block past the floats takes the number, or an empty holder above it when it is no plain paragraph.
     const found = blocks.findIndex((block) => !('float' in block));
     const index = found === -1 ? blocks.length : found;
     const first = blocks[index];
@@ -733,8 +716,7 @@ function numberingXml(lists: List[]): string {
 
 const CHECKBOX_FONT = 'MS Gothic';
 
-// Word's checkbox control. Inter has no ballot box; MS Gothic is what Word writes and readers fall back to by glyph.
-// The tab run opts out of Task Done's strike too, or the line would start before the text.
+// Word's checkbox in MS Gothic, as Inter has no ballot box; the tab is unstruck, so Task Done's line starts at text.
 function checkboxXml(checked: boolean): string {
     const state = (name: string, glyph: string) => `<w14:${name} w14:val="${glyph}" w14:font="${CHECKBOX_FONT}"/>`;
     return [
@@ -755,15 +737,14 @@ const TABLE_BORDER_SIDES = [...BORDER_SIDES, 'insideH', 'insideV'] as const;
 
 type GridCell = { node: JSONContent; content: JSONContent[]; column: number; colspan: number; rowspan: number };
 
-// A rowspan holds its columns in the rows below, a colspan takes one colwidth per column. Content outside a row or a
-// cell is put in one; a cell past the last column joins the cell that holds it, so no text is lost.
+// Spans hold their columns; stray content gets a cell, one past the last column joins the cell there: no text is lost.
 function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const rows = rowNodes.map((row) =>
         (row.type === 'tableRow' ? (row.content ?? []) : [row]).map((cell) =>
             CELL_TYPES.has(cell.type ?? '') ? cell : { type: 'tableCell', content: [cell] },
         ),
     );
-    const columnPx = (context.column - context.indent) / 15;
+    const columnPx = (context.column - context.indent) / TWIPS_PER_PX;
     const carry: number[] = [];
     const holders: GridCell[] = [];
     const widths: (number | undefined)[] = [];
@@ -851,8 +832,7 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
 // Far above any real table; a sum of MAX_TABLE_COLUMNS of them stays finite.
 const MAX_COLWIDTH_PX = 1e6;
 
-// As TableWidthClamp scales the editor's: the known columns scale down to the column, none under the floor; the
-// unknown ones share what the known leave, as table { width: 100% } does.
+// As TableWidthClamp: known columns scale down to the column, floored; unknown ones share the rest, as width: 100%.
 function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: number[]; fixed: boolean } {
     const known = widths.filter((width) => width !== undefined);
     const sum = known.reduce((total, width) => total + width, 0);
@@ -862,7 +842,7 @@ function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: nu
     const px = widths.map((width) =>
         width === undefined ? share : scale < 1 ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(width * scale)) : width,
     );
-    return { dxa: px.map((width) => Math.round(width * 15)), fixed: unknown === 0 };
+    return { dxa: px.map((width) => Math.round(width * TWIPS_PER_PX)), fixed: unknown === 0 };
 }
 
 // A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is.
@@ -882,20 +862,15 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
     return blocks.length > 0 ? blocksXml(blocks) : paragraphXml({ props: textProps({}, cell), runs: '' });
 }
 
-function tableLook() {
-    const padding = proseValue('.eigen-prose td', 'padding');
-    return {
-        border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
-        padding: {
-            vertical: twips(cssPt(boxSide(padding, 'top'), BODY.sizePt)),
-            horizontal: twips(cssPt(boxSide(padding, 'left'), BODY.sizePt)),
-        },
-        headerFill: proseColor('.eigen-prose th', 'background-color'),
-        margin: twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt)),
-    };
-}
-
-const TABLE_LOOK = tableLook();
+const TABLE_LOOK = {
+    border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
+    padding: {
+        vertical: twips(cssPt(boxSide(proseValue('.eigen-prose td', 'padding'), 'top'), BODY.sizePt)),
+        horizontal: twips(cssPt(boxSide(proseValue('.eigen-prose td', 'padding'), 'left'), BODY.sizePt)),
+    },
+    headerFill: proseColor('.eigen-prose th', 'background-color'),
+    margin: twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt)),
+};
 
 // ── Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback ─────────────────────────────────
 
@@ -909,12 +884,15 @@ const RASTER_EXTENSIONS = new Map([
 
 const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
 
-// Missing media, an external src (a docx fetches nothing) and media without a size or a fallback write only the
-// caption, as the HTML does. Commented figures get their anchor with the comments part.
+const WRAP_SIDES = new Map<string, 'left' | 'right'>([
+    ['wrap-left', 'left'],
+    ['wrap-right', 'right'],
+] satisfies [FigureLayout, 'left' | 'right'][]);
+
+// Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
-    const layout = attrs['layout'];
-    const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
+    const side = WRAP_SIDES.get(attrs['layout']);
     const alignment = attrs['alignment'];
     const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
     const caption = attrs['caption'];
@@ -927,7 +905,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const mediaName = attrs['mediaName'];
     const image = typeof mediaName === 'string' ? imageOf(mediaName, context.pkg) : undefined;
     if (!image) return captionRuns ? [captionParagraph] : [];
-    const columnPx = Math.floor((context.column - context.indent) / 15);
+    const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);
     const width = attrs['width'];
     const set = typeof width === 'number' && Number.isFinite(width) ? Math.round(width) : 0;
     const natural = Math.min(image.width, side ? Math.floor(columnPx / 2) : columnPx);
@@ -953,8 +931,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         if (captionRuns) figure.push(captionParagraph);
         return figure;
     }
-    // A borderless floating one-cell table: the one wrap that keeps the caption under the image in LibreOffice, Word and
-    // Google Docs. The row doesn't split, or Google Docs puts the caption on the next page.
+    // A borderless floating one-cell table, the one wrap that keeps the caption under the image in every reader.
     const em = (value: number) => twips(value * BODY.sizePt);
     const sideMargin = em(FIGURE_WRAP_MARGIN_EM.side);
     const tw = cx / EMU_PER_TWIP;
@@ -982,6 +959,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
                 runs: `<w:r>${captionRuns}</w:r>`,
             }),
     ].join('');
+    // Unsplit, or Google Docs moves the caption to the next page.
     const row = `<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr>`;
     return [
         {
@@ -993,10 +971,11 @@ function figureOf(node: JSONContent, context: Context): Block[] {
 
 const EMU_PER_PX = 9525;
 
+const TWIPS_PER_PX = 15;
+
 const EMU_PER_TWIP = 635;
 
-// The first figure that shows a media name adds its parts; a size that isn't positive, an SVG without its PNG and any
-// other type leave the media absent.
+// The first figure to show a media name adds its parts; no positive size, an SVG without PNG or another type adds none.
 function imageOf(name: string, pkg: Package): Image | undefined {
     const known = pkg.images.get(name);
     if (known) return known;
@@ -1022,7 +1001,7 @@ function isPositive(value: number | undefined): value is number {
     return value !== undefined && Number.isFinite(value) && value > 0;
 }
 
-// The SVG blip extension Word reads; every other reader draws the PNG.
+// Word and LibreOffice draw the svgBlip; a reader without SVG draws the PNG.
 function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Package): string {
     const n = ++pkg.drawings;
     const descr = escapeXml(alt);
@@ -1177,7 +1156,13 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
                     : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), headingPt)),
         }),
     ],
-    ['textStyle', (attrs) => ({ color: colorOf(attrs['color']), font: fontOf(attrs['fontFamily']) })],
+    [
+        'textStyle',
+        ({ color, fontFamily }) => {
+            const name = typeof fontFamily === 'string' ? getFontName(fontFamily) : undefined;
+            return { color: colorOf(color), font: name && EIGEN_FONT_NAMES.includes(name) ? name : undefined };
+        },
+    ],
     // A transparent color shades nothing; no color, or one Office can't spell (a named one), is the UA's yellow <mark>.
     [
         'highlight',
@@ -1186,7 +1171,7 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ],
     // The w:hyperlink around the runs carries it.
     ['link', () => ({})],
-    // Nothing until the comments part exists.
+    // A comment writes nothing; its text stays.
     ['comment', () => ({})],
 ]);
 
@@ -1204,24 +1189,13 @@ function colorOf(value: unknown): string | undefined {
     return typeof value === 'string' ? cssColorToHex(value) : undefined;
 }
 
-function fontOf(value: unknown): string | undefined {
-    const name = typeof value === 'string' ? getFontName(value) : undefined;
-    return name && EIGEN_FONT_NAMES.includes(name) ? name : undefined;
-}
-
 type Hyperlink = { target: string; tooltip: string | undefined };
 
 function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyperlink | undefined {
     const attrs = node.marks?.find((mark) => mark.type === 'link')?.attrs;
-    const target = hyperlinkTarget(attrs?.['href'], publicOrigin);
-    const title = attrs?.['title'];
-    return target ? { target, tooltip: typeof title === 'string' && title ? title : undefined } : undefined;
-}
-
-function hyperlinkTarget(href: unknown, publicOrigin: string | undefined): string | undefined {
+    const href = attrs?.['href'];
     if (typeof href !== 'string') return undefined;
-    // Gated after the strip, or a character XML can't hold could hide a scheme from isAllowedUri; the ends trimmed as a
-    // URL parser trims them, of what C0 the strip leaves (tab, LF, CR) and spaces.
+    // Gated after the strip, or a character XML can't hold could hide a scheme; trimmed as a URL parser trims.
     const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
     // Outside Eigen a root-relative href means nothing.
@@ -1231,7 +1205,11 @@ function hyperlinkTarget(href: unknown, publicOrigin: string | undefined): strin
           ? `${publicOrigin}${kept}`
           : kept;
     // What a URI reference can't hold; `%` stays, so an encoded href encodes no further.
-    return absolute.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) => encodeURIComponent(character));
+    const target = absolute.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
+        encodeURIComponent(character),
+    );
+    const title = attrs?.['title'];
+    return { target, tooltip: typeof title === 'string' && title ? title : undefined };
 }
 
 // ── Styles, every value from eigen-prose.css ────────────────────────────────────────────────────────────────────
@@ -1314,8 +1292,7 @@ const QUOTE_LOOK = quoteLook();
 
 const CODE_BORDER_EIGHTHS = 4;
 
-// Paragraph shading stops at the borders, so borders in the fill's color carry it over the padding. The indent
-// compensates the side padding and border, so the box's outer edge sits on the text column (ruling R32).
+// Shading stops at borders, so borders in the fill carry it over the padding; the indent sets the box on the column.
 function codeBlockLook() {
     const padding = proseValue('.eigen-prose pre', 'padding');
     const fill = proseColor('.eigen-prose pre', 'background-color');
@@ -1427,7 +1404,7 @@ function styleDefinitions(): StyleDef[] {
             rPr: { spacing: tracking, size: halfPoints(sizePt) },
         };
     });
-    const styles: StyleDef[] = [
+    return [
         {
             type: 'paragraph',
             id: 'Normal',
@@ -1572,7 +1549,6 @@ function styleDefinitions(): StyleDef[] {
             },
         },
     ];
-    return styles;
 }
 
 const STYLES = new Map(styleDefinitions().map((style) => [style.id, style]));
