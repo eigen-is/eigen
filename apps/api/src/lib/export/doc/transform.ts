@@ -77,8 +77,8 @@ async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
 const PHYSICAL_LENGTH = /^\s*[\d.e+-]+\s*(in|cm|mm|pt|pc)\s*$/i;
 
 // sharp reads an SVG's physical units at 72 dpi and CSS at 96, so a 4in drawing is 288 px to it and 384 in the HTML
-// export. Scaled per side, read off the root's start tag; a side the root leaves out follows the other, as sharp derives
-// it from the viewBox.
+// export. Scaled per side, read off the root's start tag; a side the root leaves out follows the other, as sharp
+// derives it from the viewBox.
 function cssSize(svg: Buffer, width: number, height: number): { width: number; height: number } {
     const root = svg.toString('utf8', 0, svg.indexOf('>') + 1);
     const scale = (value: string | undefined) =>

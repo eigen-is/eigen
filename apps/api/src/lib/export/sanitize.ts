@@ -117,35 +117,26 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
     }
 }
 
-// An .svg file is read by an XML parser, and a rich-text box's HTML is not XML: an unclosed <br>/<img>
-// or a named entity is a fatal parse error that renders the whole drawing as nothing. DOMPurify hands
-// back HTML serialization, so take its markup through the DOM once more and serialize it as XML. The
-// literal xmlns attributes go first — the serializer writes the namespace declarations itself, and a
-// second one on the same element is a duplicate attribute. The serializer also writes the control characters the HTML
-// parser kept, which no XML reader accepts. Null when there is no <svg> to serialize.
-export function toXmlDocument(svg: string): string | null {
+// An .svg is read as XML, where DOMPurify's HTML (an unclosed <br>, an &nbsp;) blanks the drawing. Empty with no <svg>.
+export function toXmlDocument(svg: string): string {
     const dom = new JSDOM(svg, { contentType: 'text/html' });
     const root = dom.window.document.querySelector('svg');
-    if (!root) return null;
+    if (!root) return '';
+    // The serializer declares the namespaces itself, and a second xmlns is a duplicate attribute.
     for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
     return stripNonXmlChars(new dom.window.XMLSerializer().serializeToString(root));
 }
 
-// An SVG figure's media: the data-only pass every export body gets, written as XML, which a docx part must be and an
-// .svg data: URI is read as (DOMPurify writes `&nbsp;` and other HTML-only forms).
-export function sanitizeSvgMedia(svg: string): string | null {
-    return toXmlDocument(sanitizeExportHtml(svg));
-}
-
 // SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. Embedded
 // as a data: URI it still reaches WeasyPrint's fetcher (a nested `<image href>` is the same SSRF the assembled document
-// closes), so every export arm takes it through sanitizeSvgMedia here, off the event loop. One with no <svg> in it is
-// no drawing, and is dropped like a failed preview.
+// closes), so every export arm takes it through the data-only pass here, off the event loop, written as XML, which a
+// docx part must be and an .svg data: URI is read as. One with no <svg> in it is no drawing, and is dropped like a
+// failed preview.
 export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
     return media.flatMap((item) => {
         if (item.contentType !== 'image/svg+xml') return [item];
-        const svg = sanitizeSvgMedia(Buffer.from(item.data).toString('utf8'));
-        return svg === null ? [] : [{ ...item, data: toTransferableText(svg) }];
+        const svg = toXmlDocument(sanitizeExportHtml(Buffer.from(item.data).toString('utf8')));
+        return svg ? [{ ...item, data: toTransferableText(svg) }] : [];
     });
 }
 
