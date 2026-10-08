@@ -569,6 +569,7 @@ describe('docx writer — marks', () => {
     test('a highlight is a shading fill, yellow without a color', async () => {
         expect(await runProps({ type: 'highlight', attrs: { color: '#fef08a' } })).toEqual([['shd', 'FEF08A']]);
         expect(await runProps({ type: 'highlight', attrs: { color: null } })).toEqual([['shd', 'FFFF00']]);
+        expect(await runProps({ type: 'highlight', attrs: { color: 'rgba(0, 0, 0, 0)' } })).toEqual([]);
         const shd = only(descendants(await bodyOf(doc(p(text('x', { type: 'highlight' })))), W, 'shd'));
         expect([w(shd, 'val'), w(shd, 'color')]).toEqual(['clear', 'auto']);
     });

@@ -957,8 +957,8 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
         }),
     ],
     ['textStyle', (attrs) => ({ color: colorOf(attrs['color']), font: fontOf(attrs['fontFamily']) })],
-    // No color is the UA's yellow <mark>.
-    ['highlight', (attrs) => ({ shading: colorOf(attrs['color']) ?? 'FFFF00' })],
+    // No color is the UA's yellow <mark>; a transparent one shades nothing.
+    ['highlight', (attrs) => ({ shading: attrs['color'] == null ? 'FFFF00' : colorOf(attrs['color']) })],
     // The w:hyperlink around the runs carries it.
     ['link', () => ({})],
     // Nothing until the comments part exists.
