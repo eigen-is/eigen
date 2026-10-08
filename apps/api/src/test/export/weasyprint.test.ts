@@ -39,6 +39,75 @@ describe('shebangPython', () => {
     });
 });
 
+// A fresh process, since the probe is cached, with only a stub on PATH: a `weasyprint` launcher whose shebang names a
+// stub python. Not python3, which the probe would try next. Its `probe` answers the version probe and its `render` a
+// render; each export's outcome comes back.
+async function exportWithStubPython(probe: string, render: string, exports = 1) {
+    const dir = mkdtempSync(join(tmpdir(), 'stub-weasyprint-'));
+    const python = join(dir, 'python3.13');
+    writeFileSync(python, `#!/bin/sh\nif [ "$2" = -c ]; then\n${probe}\nfi\n/bin/cat > /dev/null\n${render}\n`, {
+        mode: 0o755,
+    });
+    writeFileSync(join(dir, 'weasyprint'), `#!${python}\n`, { mode: 0o755 });
+    try {
+        const module = JSON.stringify(Bun.resolveSync('../../lib/export/weasyprint', import.meta.dir));
+        const proc = Bun.spawn(
+            [
+                process.execPath,
+                '-e',
+                `const { htmlToPdf } = await import(${module});
+                const outcomes = [];
+                for (let i = 0; i < ${exports}; i++) {
+                    outcomes.push(await htmlToPdf(${JSON.stringify(HTML)}).then(
+                        (pdf) => ({ pdf: pdf.toString() }),
+                        ({ status, message }) => ({ status, message }),
+                    ));
+                }
+                process.stdout.write(JSON.stringify(outcomes));`,
+            ],
+            { env: { ...process.env, PATH: dir }, stdout: 'pipe', stderr: 'pipe' },
+        );
+        const [stdout, stderr] = await Promise.all([
+            new Response(proc.stdout).text(),
+            new Response(proc.stderr).text(),
+        ]);
+        return { outcomes: JSON.parse(stdout), stderr };
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+describe('htmlToPdf with a stub WeasyPrint', () => {
+    test('one older than 68 answers 501 naming what it found and the minimum', async () => {
+        const { outcomes } = await exportWithStubPython('echo 62.3; exit 0', "printf '%%PDF-'");
+        expect(outcomes).toEqual([
+            { status: 501, message: expect.stringContaining('WeasyPrint 68 or later, not 62.3') },
+        ]);
+    });
+
+    test('a crash answers a bare 500 and logs the traceback', async () => {
+        const { outcomes, stderr } = await exportWithStubPython(
+            'echo 70.0; exit 0',
+            "echo 'Traceback (most recent call last):' >&2; exit 1",
+        );
+        expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
+        expect(stderr).toContain('Traceback');
+    });
+
+    // `exec`, so the timeout kills the sleep itself and nothing holds the probe's stdout open.
+    test('a probe that hangs answers 501 and the next export probes again', async () => {
+        const { outcomes } = await exportWithStubPython(
+            `if [ ! -e "$0.hung" ]; then : > "$0.hung"; exec /bin/sleep 30; fi\necho 70.0; exit 0`,
+            "printf '%%PDF-'",
+            2,
+        );
+        expect(outcomes).toEqual([
+            { status: 501, message: expect.stringContaining('WeasyPrint 68 or later.') },
+            { pdf: '%PDF-' },
+        ]);
+    }, 15_000);
+});
+
 suite('htmlToPdf', () => {
     test('a render killed by the timeout is a 504, not a failed render', async () => {
         const spawn = spyOn(Bun, 'spawn');
@@ -70,19 +139,6 @@ suite('htmlToPdf', () => {
             expect(spawn.mock.calls.slice(1).some(([cmd]) => cmd.includes('-c'))).toBe(true);
         } finally {
             spawn.mockRestore();
-        }
-    });
-
-    // WeasyPrint fails the whole render on attr(… url), which the sanitizer refuses before any export gets here.
-    test('a crash answers a bare 500 and logs the traceback', async () => {
-        const log = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            await expect(
-                htmlToPdf('<html><body><div title="x" style="background-image: attr(title url)">x</div></body></html>'),
-            ).rejects.toMatchObject({ status: 500, message: 'PDF generation failed' });
-            expect(String(log.mock.calls[0]?.[1])).toContain('Traceback');
-        } finally {
-            log.mockRestore();
         }
     });
 

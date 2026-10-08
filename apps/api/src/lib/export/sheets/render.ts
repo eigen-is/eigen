@@ -28,6 +28,7 @@ import {
     FormulaEngine,
     withCfRanges,
 } from '@workspace/sheet/engine';
+import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
@@ -441,9 +442,8 @@ function getCellDisplay(v: Cell | null): string {
 // inherited here for visual parity. Diverging would mean the export differs from what
 // users see on screen.
 function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): string {
-    // Bar colors come from the schemaless rule format — escape like every other cell color.
-    const from = escapeHtml(bar.format[0]);
-    const to = bar.format.length > 1 ? escapeHtml(bar.format[1]) : '';
+    const from = cssColor(bar.format[0]) ?? 'transparent';
+    const to = cssColor(bar.format[1]) ?? 'transparent';
     let left: number;
     let width: number;
     let fill: string;
@@ -509,6 +509,16 @@ function overlayBox(table: string, overlay: string, width: number, styles?: Styl
     return `<div ${styleAttr(styles, `position:relative;width:${width}px`)}>${table}${overlay}</div>`;
 }
 
+// Cell, border and rule colors are schemaless strings a collaborator sets, so only one the color parser reads reaches the
+// CSS: `red;position:fixed;inset:0` would add declarations of its own to the export and the drive hero.
+// A bare keyword (a named color) can't add a declaration, so it passes as CSS reads it.
+function cssColor(color: string | null | undefined): string | undefined {
+    if (!color) return undefined;
+    return cssColorToHex(color) !== undefined || isTransparentCssColor(color) || /^[a-z]+$/i.test(color)
+        ? color
+        : undefined;
+}
+
 function buildCellStyle(
     v: Cell | null,
     borders: CellBorderSides | undefined,
@@ -535,19 +545,11 @@ function buildCellStyle(
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
-        // CF colors override the static `fc`/`bg` fields, matching the canvas painter. Every
-        // color is escaped (like font-family above) — schemaless cell strings must not break
-        // out of the style="…" attribute.
-        if (cfStyle?.textColor) {
-            parts.push(`color:${escapeHtml(cfStyle.textColor)}`);
-        } else if (v.fc) {
-            parts.push(`color:${escapeHtml(v.fc)}`);
-        }
-        if (cfStyle?.cellColor) {
-            parts.push(`background:${escapeHtml(cfStyle.cellColor)}`);
-        } else if (v.bg) {
-            parts.push(`background:${escapeHtml(v.bg)}`);
-        }
+        // CF colors override the static `fc`/`bg` fields, matching the canvas painter.
+        const textColor = cssColor(cfStyle?.textColor || v.fc);
+        if (textColor) parts.push(`color:${textColor}`);
+        const cellColor = cssColor(cfStyle?.cellColor || v.bg);
+        if (cellColor) parts.push(`background:${cellColor}`);
         // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
         // cell (see wrapForRotation) so neither alignment property has anything to act
         // on. Non-rotated cells emit text-align if the user picked one, plus a single
@@ -568,13 +570,15 @@ function buildCellStyle(
     } else if (cfStyle) {
         // CF can land on a cell with no `v` (engine still emits an entry for empty cells in some
         // rules); render its color overrides without dragging in the v-block defaults.
-        if (cfStyle.textColor) parts.push(`color:${escapeHtml(cfStyle.textColor)}`);
-        if (cfStyle.cellColor) parts.push(`background:${escapeHtml(cfStyle.cellColor)}`);
+        const textColor = cssColor(cfStyle.textColor);
+        if (textColor) parts.push(`color:${textColor}`);
+        const cellColor = cssColor(cfStyle.cellColor);
+        if (cellColor) parts.push(`background:${cellColor}`);
     }
 
     if (borders) {
         // CSS has no diagonal border, so the slash side `s` is not rendered.
-        parts.push(...borderSidesToCss(borders, escapeHtml));
+        parts.push(...borderSidesToCss(borders, (color) => cssColor(color) ?? 'transparent'));
     } else if (showGrid) {
         parts.push('border:1px solid #d4d4d4');
     }

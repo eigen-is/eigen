@@ -25,7 +25,8 @@ export function shebangPython(launcherHead: string): string | null {
 
 // The Python that imports a WeasyPrint of at least MIN_WEASYPRINT_MAJOR: the one the `weasyprint` launcher names (a pip
 // venv's, Homebrew's own), else python3. `-I` keeps the cwd and the environment off its module path. Else the version
-// it found, which the 501 names.
+// it found, which the 501 names. An import that hangs is killed, since the export routes set no request timeout, and
+// not cached, so the next export probes again.
 async function probeWeasyPrint(): Promise<WeasyPrintProbe> {
     const launcher = Bun.which('weasyprint');
     const named = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
@@ -35,8 +36,10 @@ async function probeWeasyPrint(): Promise<WeasyPrintProbe> {
             const proc = Bun.spawn([python, '-I', '-c', 'import weasyprint; print(weasyprint.__version__)'], {
                 stdout: 'pipe',
                 stderr: 'ignore',
+                timeout: 5_000,
             });
             const [exitCode, version] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
+            if (proc.signalCode === 'SIGTERM') cachedProbe = null;
             if (exitCode !== 0) continue;
             found = version.trim();
             if (Number.parseInt(found, 10) >= MIN_WEASYPRINT_MAJOR) return { python };
