@@ -9,7 +9,6 @@ import {
 import type { Mount } from '../mount';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
-import { SVG_INLINE_MAX_BYTES } from '../preview/svg-media-inline';
 import { generateImagePreview } from '../shared/thumbnails';
 
 // Main-thread media preparation for doc/slides exports: the screen-res preview of
@@ -60,11 +59,7 @@ const WEBP_SCAN_BYTES = 64 * 1024;
 
 async function prepareDocxMedia(mount: Mount, name: string, file: DrivePath): Promise<ExportMedia | null> {
     const mime = file.mimeType || '';
-    if (mime === 'image/svg+xml') {
-        const item = await prepareMedia(mount, name, file);
-        // The Worker also decodes it for the PNG fallback, and the inliner caps only what it builds.
-        return item && item.data.byteLength <= SVG_INLINE_MAX_BYTES ? item : null;
-    }
+    if (mime === 'image/svg+xml') return prepareMedia(mount, name, file);
     // What getScreenPreview shows as an image, and nothing else.
     if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
     const source = await mount.readFile(file.id);

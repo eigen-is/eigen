@@ -272,8 +272,9 @@ describe('collectExportMedia', () => {
         expect(names).not.toContain('clip.mp4');
     }, 60_000);
 
-    test('a docx hands no SVG past SVG_INLINE_MAX_BYTES to the Worker', async () => {
-        expect((await collect('docx')).map((item) => item.name)).not.toContain('huge.svg');
+    // One rule for every format: the export deadline, sharp's pixel limit and the fallback's timeout bound the work.
+    test('a docx hands an SVG past SVG_INLINE_MAX_BYTES to the Worker, as HTML and PDF do', async () => {
+        expect(find(await collect('docx'), 'huge.svg').contentType).toBe('image/svg+xml');
     }, 60_000);
 
     test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
