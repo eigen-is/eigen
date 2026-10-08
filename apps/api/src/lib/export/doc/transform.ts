@@ -6,18 +6,19 @@ import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { toDataUriMap } from '../../document/media';
 import {
+    DOCX_IMAGE_MAX_SIZE,
     type EigendocExportFormat,
     type ExportMedia,
     type TransformWarning,
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import type { SCREEN_PREVIEW_MAX_SIZE } from '../../preview/preview-cache';
 import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
 import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
+import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
@@ -43,15 +44,19 @@ export async function renderEigendocExport(
     return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 }
 
-// The screen preview's largest side. The Worker never loads preview-cache, so its type pins the value.
-const SVG_FALLBACK_MAX_SIZE: typeof SCREEN_PREVIEW_MAX_SIZE = 2560;
+// The thumbnail Worker's per-image timeout (shared/thumbnails.ts), which the Worker graph cannot import. Worker.terminate()
+// does not stop libvips, so this is what frees the one transform slot from a filter librsvg grinds through for minutes.
+const SVG_FALLBACK_TIMEOUT_SECONDS = 30;
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
-async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
+export async function withSvgFallbacks(
+    media: ExportMedia[],
+    timeoutSeconds = SVG_FALLBACK_TIMEOUT_SECONDS,
+): Promise<DocxMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
     const { default: sharp } = await import('sharp');
-    const prepared: ExportMedia[] = [];
+    const prepared: DocxMedia[] = [];
     for (const item of media) {
         if (item.contentType !== 'image/svg+xml') {
             prepared.push(item);
@@ -62,12 +67,13 @@ async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
             const image = sharp(svg);
             const { width = 0, height = 0 } = await image.metadata();
             const png = await image
-                .resize(SVG_FALLBACK_MAX_SIZE, SVG_FALLBACK_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
+                .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
+                .timeout({ seconds: timeoutSeconds })
                 .toBuffer();
             prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
         } catch {
-            // One librsvg can't read leaves the docx, as an image no reader draws.
+            // One librsvg can't read, or not in time, leaves the docx; its caption stays.
         }
     }
     return prepared;

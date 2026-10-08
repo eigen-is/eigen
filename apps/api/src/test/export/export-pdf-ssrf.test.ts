@@ -135,6 +135,85 @@ describe('export sanitize — style elements', () => {
     });
 });
 
+// A url() is refused on its token, never parsed as a pair: a quote or a paren inside the URL ends no match early,
+// and the CSS parser reads `URL(` as `url(`. WeasyPrint fetched every one of these past the pair regex.
+describe('export sanitize — url() is refused on its token', () => {
+    const EVIL = 'http://evil.test';
+
+    test.each([
+        ['a single-quoted URL holding a paren', `url('${EVIL}/a)')`],
+        ['a double-quoted URL holding a paren', `url("${EVIL}/b)")`],
+        ['a single-quoted URL holding a quote', `url('${EVIL}/e'')`],
+        ['an uppercase URL(', `URL(${EVIL}/upper)`],
+        ['a mixed-case uRl(', `uRl(${EVIL}/mixed)`],
+        ['a newline before the paren', `url(${EVIL}/nl\n)`],
+        ['a comment before the URL', `url(/*x*/${EVIL}/cm)`],
+        ['a fragment and a remote URL in one value', `url(#g) url(${EVIL}/two)`],
+        ['a fragment holding a paren, then a remote URL', `url('#g)') url(${EVIL}/after)`],
+        ['image-set() with a string', `image-set('${EVIL}/set' 1x)`],
+        ['-webkit-image-set() with a string', `-webkit-image-set('${EVIL}/wset' 1x)`],
+        ['image() with a string', `image('${EVIL}/img')`],
+        ['cross-fade() with a string', `cross-fade('${EVIL}/cf', '${EVIL}/cf2', 50%)`],
+    ])('%s goes from a style attribute and a style element', (_, css) => {
+        const attr = sanitizeExportHtml(
+            `<div style="color:red;background-image:${css.replaceAll('"', '&quot;')}">x</div>`,
+        );
+        expect(attr).not.toContain('evil.test');
+        const sheet = sanitizeExportHtml(`<style>.a{background-image:${css}}.b{color:red}</style>`);
+        expect(sheet).not.toContain('evil.test');
+        expect(sheet).toContain('.b{color:red}');
+    });
+
+    test('an @font-face src holding a paren goes, and the rule beside it stays', () => {
+        const out = sanitizeExportHtml(
+            `<style>@font-face{font-family:Z;src:url("${EVIL}/d)")} p{font-family:Z}</style>`,
+        );
+        expect(out).not.toContain('evil.test');
+        expect(out).toContain('p{font-family:Z}');
+    });
+
+    test('@namespace url() and a spaced @import url() go', () => {
+        const out = sanitizeExportHtml(
+            `<style>@namespace url(${EVIL}/ns); @import url( ${EVIL}/imp );.b{color:red}</style>`,
+        );
+        expect(out).not.toContain('evil.test');
+        expect(out).toContain('.b{color:red}');
+    });
+
+    test('a URL a CSS escape spells after the backslashes go is refused too', () => {
+        expect(sanitizeExportHtml(`<div style="background:u\\rl(${EVIL}/esc)">x</div>`)).not.toContain('evil.test');
+        expect(sanitizeExportHtml(`<style>.a{background:u\\rl(${EVIL}/esc)}</style>`)).not.toContain('evil.test');
+    });
+
+    test.each(['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end'])(
+        'a remote url() in an SVG %s attribute goes, inline and in SVG media',
+        (attr) => {
+            for (const value of [`url(${EVIL}/p.svg#x)`, `URL('${EVIL}/q.svg#x)')`, `\\75 rl(${EVIL}/r.svg#x)`]) {
+                expect(sanitizeExportHtml(`<svg><rect ${attr}="${value}"></rect></svg>`)).not.toContain('evil.test');
+                const [media] = sanitizeExportMedia([
+                    {
+                        name: 'a.svg',
+                        contentType: 'image/svg+xml',
+                        data: toTransferableText(
+                            `<svg xmlns="http://www.w3.org/2000/svg"><rect ${attr}="${value}"/></svg>`,
+                        ),
+                    },
+                ]);
+                expect(Buffer.from(media.data).toString('utf8')).not.toContain('evil.test');
+            }
+        },
+    );
+
+    test('a fragment url() in a presentation attribute keeps its target', () => {
+        const out = sanitizeExportHtml(
+            `<svg><rect fill="url(#g)" mask="url('#m')" clip-path="URL( #c )"></rect></svg>`,
+        );
+        expect(out).toContain('fill="url(#g)"');
+        expect(out).toContain(`mask="url('#m')"`);
+        expect(out).toContain('clip-path="URL( #c )"');
+    });
+});
+
 // `src` is not an <img>-only attribute, and it is not the only attribute that fetches: srcset
 // candidate lists, <video poster> and the legacy `background` all resolve with no click. DOMPurify
 // keeps every one of them, so the restriction is on the attribute, not the tag.
@@ -189,6 +268,14 @@ describe('export sanitize — allowed refs', () => {
         const out = sanitizeExportHtml('<img src="http://localhost:8000/admin/secret">', { allowedRefs });
         expect(out).not.toContain('/admin/secret');
     });
+
+    test('an allowed media URL is no pass for a remote url() beside it', () => {
+        const out = sanitizeExportHtml(
+            `<div style="background-image:url(${MEDIA_URL}), url('http://evil.test/a)')">x</div>`,
+            { allowedRefs },
+        );
+        expect(out).not.toContain('evil.test');
+    });
 });
 
 // The url()/img-src rule left SVG's own reference attributes open. DOMPurify keeps
@@ -241,14 +328,14 @@ describe('export sanitize — same-document SVG references', () => {
         ['javascript:', 'javascript:alert(1)'],
         ['non-breaking space before the hash, a relative path to a URL parser', ' #g'],
         ['CSS-escaped hash, an unknown token once the backslash goes', '\\23 g'],
-    ])('a %s url() is stripped', (_, ref) => {
-        expect(svg(`<rect style="fill:url(${ref})"></rect>`)).toContain('fill:url()');
-        expect(svg(`<style>.a{fill:url(${ref})}</style>`)).toContain('fill:url()');
+    ])('a %s url() takes its declarations with it', (_, ref) => {
+        expect(svg(`<rect style="fill:url(${ref})"></rect>`)).toContain('<rect></rect>');
+        expect(svg(`<style>.a{fill:url(${ref})}</style>`)).not.toContain('url(');
     });
 
     // An HTML <style> is raw text, so its entity is a relative path; an SVG one is parsed, so it is the hash.
     test('an entity-spelled hash is what the CSS parser will read', () => {
-        expect(sanitizeExportHtml('<style>.a{fill:url(&#35;g)}</style>')).toContain('fill:url()');
+        expect(sanitizeExportHtml('<style>.a{fill:url(&#35;g)}</style>')).not.toContain('url(');
         expect(svg('<style>.a{fill:url(&#35;g)}</style>')).toContain('fill:url(#g)');
     });
 
@@ -289,6 +376,31 @@ describe('export sanitize — same-document SVG references', () => {
         const out = svg('<linearGradient id="h" xlink:href="http://evil.test/s.svg#g"></linearGradient>');
         expect(out).toContain('<linearGradient id="h">');
         expect(out).not.toContain('evil.test');
+    });
+
+    test.each(['use', 'linearGradient', 'radialGradient', 'pattern', 'filter', 'textPath', 'mpath'])(
+        'a fragment href stays on <%s>, which references with it',
+        (tag) => {
+            expect(svg(`<${tag} href="#glyph"></${tag}>`)).toContain(`<${tag} href="#glyph">`);
+        },
+    );
+
+    // WeasyPrint resolves a fragment on an image against its base and opens file://<cwd>/. SVG 2 gives clipPath and
+    // mask no href.
+    test.each(['image', 'feImage', 'clipPath', 'mask'])('a fragment href goes from <%s>, in both spellings', (tag) => {
+        for (const attr of ['href', 'xlink:href']) {
+            expect(svg(`<${tag} ${attr}="#g"></${tag}>`)).toContain(`<${tag}></${tag}>`);
+            const [media] = sanitizeExportMedia([
+                {
+                    name: 'a.svg',
+                    contentType: 'image/svg+xml',
+                    data: toTransferableText(
+                        `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><${tag} ${attr}="#g"/></svg>`,
+                    ),
+                },
+            ]);
+            expect(Buffer.from(media.data).toString('utf8')).not.toContain('#g');
+        }
     });
 
     test('an xml:base cannot turn a kept fragment into a remote reference', () => {
@@ -349,44 +461,150 @@ describe('export sanitize — SVG media', () => {
     });
 });
 
+// Each <use> draws its target once per reference, so nested ones multiply: 1.2 KB of 6 levels × 10 ran WeasyPrint
+// into its kill. Only a <use> whose target holds none stays, the one level matplotlib's glyphs need.
+describe('export sanitize — SVG media <use> depth', () => {
+    const sanitized = (svg: string) => {
+        const [item] = sanitizeExportMedia([
+            {
+                name: 'a.svg',
+                contentType: 'image/svg+xml',
+                data: toTransferableText(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${svg}</svg>`),
+            },
+        ]);
+        return Buffer.from(item.data).toString('utf8');
+    };
+    const uses = (xml: string): string[] => [...xml.matchAll(/<use\b[^>]*>/g)].map(([use]) => use);
+
+    test('a 6 × 10 fan-out keeps only the uses whose target holds no <use>', () => {
+        let levels = '<g id="l0"><rect width="1" height="1"/></g>';
+        for (let i = 1; i <= 6; i++) {
+            levels += `<g id="l${i}">${Array.from({ length: 10 }, () => `<use href="#l${i - 1}"/>`).join('')}</g>`;
+        }
+        const out = sanitized(`<defs>${levels}</defs><use href="#l6"/>`);
+        expect(uses(out)).toEqual(Array(10).fill('<use href="#l0"/>'));
+    });
+
+    test('a glyph <use> survives, in both spellings', () => {
+        const out = sanitized(
+            '<defs><path id="g" d="M0 0h1v1z"/></defs><use href="#g" x="1"/><use xlink:href="#g" x="2" xmlns:xlink="http://www.w3.org/1999/xlink"/>',
+        );
+        expect(uses(out)).toHaveLength(2);
+    });
+
+    const XLINK = 'xmlns:xlink="http://www.w3.org/1999/xlink"';
+    test.each([
+        ['a self-referencing <use>', '<use id="a" href="#a"/>', []],
+        [
+            'two groups using each other',
+            '<defs><g id="a"><use href="#b"/></g><g id="b"><use href="#a"/></g></defs><use href="#a"/>',
+            [],
+        ],
+        [
+            'a <use> of a <use>',
+            '<defs><path id="p" d="M0 0"/><use id="u" href="#p"/></defs><use href="#u"/>',
+            ['<use id="u" href="#p"/>'],
+        ],
+        ['a <use> with a missing target', '<use href="#nowhere"/>', []],
+        [
+            'a <use> whose second spelling targets a nested one',
+            `<defs><path id="p" d="M0 0"/><g id="g"><use href="#p"/></g></defs><use href="#p" xlink:href="#g" ${XLINK}/>`,
+            ['<use href="#p"/>'],
+        ],
+        // A reader may decode the escape and land on another id than the one looked up.
+        ['a percent-encoded target', '<defs><g id="l%31"><path d="M0 0"/></g></defs><use href="#l%31"/>', []],
+    ])('%s goes', (_, svg, kept) => {
+        expect(uses(sanitized(svg))).toEqual(kept);
+    });
+});
+
 const wp = await isWeasyPrintAvailable();
 const suite = wp ? describe : describe.skip;
 
-suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
-    test('a sanitized body with an injected remote url() triggers no network fetch', async () => {
-        let connections = 0;
-        const server = Bun.listen({
-            hostname: '127.0.0.1',
-            port: 0,
-            socket: {
-                open(socket) {
-                    connections++;
-                    socket.end();
-                },
-                data() {},
-                close() {},
+// Renders the sanitized body to PDF against a local listener, and counts the connections WeasyPrint opened to it.
+async function connectionsWhileRendering(body: (u: (name: string) => string) => string): Promise<number> {
+    let connections = 0;
+    const server = Bun.listen({
+        hostname: '127.0.0.1',
+        port: 0,
+        socket: {
+            open(socket) {
+                connections++;
+                socket.end();
             },
-        });
-        try {
-            // Mirror an export path: sanitize the assembled body, then render — as every
-            // caller does. One body carrying every known vector: plain and CSS-escaped
-            // url()/@import in both a style element and a style attribute, and an SVG
-            // image and <use> reference through href and xlink:href.
-            const u = (name: string) => `http://127.0.0.1:${server.port}/${name}`;
-            const body = sanitizeExportHtml(
+            data() {},
+            close() {},
+        },
+    });
+    try {
+        const html = body((name) => `http://127.0.0.1:${server.port}/${name}`);
+        await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`);
+        await Bun.sleep(250); // let any async fetch land before asserting
+        return connections;
+    } finally {
+        server.stop(true);
+    }
+}
+
+suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
+    // Mirror an export path: sanitize the assembled body, then render — as every caller does. One body carrying every
+    // known vector: plain and CSS-escaped url()/@import in both a style element and a style attribute, and an SVG image
+    // and <use> reference through href and xlink:href.
+    test('a sanitized body with an injected remote url() triggers no network fetch', async () => {
+        const connections = await connectionsWhileRendering((u) =>
+            sanitizeExportHtml(
                 `<style>.pwn{background:url(${u('a.css')})}@import "${u('b.css')}";` +
                     `@\\69 mport "${u('c.css')}";.pwn2{background:\\75 rl(${u('d.png')})}</style>` +
                     `<div class="pwn" style="width:200px;height:100px;background-image:url(${u('e.png')})">x</div>` +
                     `<div style="background:\\75 rl(${u('f.png')})">y</div>` +
                     `<svg><image href="${u('g.png')}"></image><image xlink:href="${u('h.png')}"></image>` +
                     `<use href="${u('i.svg#g')}"></use><use xlink:href="${u('j.svg#g')}"></use></svg>`,
+            ),
+        );
+        expect(connections).toBe(0);
+    });
+
+    // Each of these reached the listener past the url()/quote pair regex: a paren in a quoted URL, in a style
+    // attribute, an &quot; string, a <style> rule and an @font-face src, and an uppercase URL(.
+    test('a url() whose quoted URL holds a paren, or spelled URL(, triggers no network fetch', async () => {
+        const box = 'width:50px;height:50px';
+        const connections = await connectionsWhileRendering((u) =>
+            sanitizeExportHtml(
+                `<div style="${box};background-image:url('${u('a)')}')">a</div>` +
+                    `<div style="${box};background-image:url(&quot;${u('b)')}&quot;)">b</div>` +
+                    `<style>.c{${box};background-image:url('${u('c)')}')}</style><div class="c">c</div>` +
+                    `<style>@font-face{font-family:Z;src:url("${u('d)')}")} p{font-family:Z}</style><p>d</p>` +
+                    `<div style="${box};background-image:url('${u("e'")}')">e</div>` +
+                    `<div style="${box};background-image:URL(${u('upper')})">f</div>` +
+                    `<style>.g{${box};background-image:Url("${u('g)')}")}</style><div class="g">g</div>`,
+            ),
+        );
+        expect(connections).toBe(0);
+    });
+
+    // No renderer here fetches a paint server today; the sanitizer is what keeps it that way.
+    test('a remote url() in an SVG presentation attribute triggers no network fetch, inline or as media', async () => {
+        const connections = await connectionsWhileRendering((u) => {
+            const paint = (prefix: string) =>
+                ['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end']
+                    .map((attr) => `${attr}="url(${u(`${prefix}-${attr}.svg#x`)})"`)
+                    .join(' ');
+            const [media] = sanitizeExportMedia([
+                {
+                    name: 'a.svg',
+                    contentType: 'image/svg+xml',
+                    data: toTransferableText(
+                        `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M0 0h10v10z" ${paint('m')}/></svg>`,
+                    ),
+                },
+            ]);
+            const uri = `data:image/svg+xml;base64,${Buffer.from(media.data).toString('base64')}`;
+            return (
+                `<img src="${uri}">` +
+                sanitizeExportHtml(`<svg width="20" height="20"><path d="M0 0h10v10z" ${paint('i')}></path></svg>`)
             );
-            await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`);
-            await Bun.sleep(250); // let any async fetch land before asserting
-            expect(connections).toBe(0);
-        } finally {
-            server.stop(true);
-        }
+        });
+        expect(connections).toBe(0);
     });
 
     test('an embedded data: image still renders (legit resources unaffected)', async () => {

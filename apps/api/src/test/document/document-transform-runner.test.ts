@@ -256,6 +256,22 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    // The media prep spends from the deadline (run-transform.ts), and a spent one leaves no time for a Worker.
+    test.each([0, -50])('a deadline of %d ms times out without spawning a worker', async (deadlineMs) => {
+        const runner = makeRunner();
+        const media = [new Uint8Array([1, 2, 3]).buffer];
+        const response = await runner.run(makeMediaExportRequest({ behavior: 'export-echo-media' }, media), {
+            ...EXPORT_OPTIONS,
+            deadlineMs,
+        });
+        expect(response).toEqual({ ok: false, error: { code: 'timeout', message: 'Document transform timed out' } });
+        expect(media[0].byteLength).toBe(3); // never posted, so never detached
+
+        const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+        expect(next.ok).toBe(true);
+        await runner.close();
+    });
+
     test('a crashing worker resolves a structured error and releases the slot', async () => {
         const runner = makeRunner();
         const crashed = await runner.run(makeRequest({ behavior: 'crash' }), PREVIEW_OPTIONS);

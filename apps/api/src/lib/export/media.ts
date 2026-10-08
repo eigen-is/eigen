@@ -1,10 +1,14 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { listDocumentMedia } from '../document/media';
-import { type ExportMedia, type ExportTransformJob, toTransferableBuffer } from '../document/transform/protocol';
+import {
+    DOCX_IMAGE_MAX_SIZE,
+    type ExportMedia,
+    type ExportTransformJob,
+    toTransferableBuffer,
+} from '../document/transform/protocol';
 import type { Mount } from '../mount';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
-import { getScreenPreview, isScreenPreviewRedirect, SCREEN_PREVIEW_MAX_SIZE } from '../preview/preview-cache';
-import { SVG_INLINE_MAX_BYTES } from '../preview/svg-media-inline';
+import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
 import { generateImagePreview } from '../shared/thumbnails';
 
 // Main-thread media preparation for doc/slides exports: the screen-res preview of
@@ -55,11 +59,7 @@ const WEBP_SCAN_BYTES = 64 * 1024;
 
 async function prepareDocxMedia(mount: Mount, name: string, file: DrivePath): Promise<ExportMedia | null> {
     const mime = file.mimeType || '';
-    if (mime === 'image/svg+xml') {
-        const item = await prepareMedia(mount, name, file);
-        // The Worker also decodes it for the PNG fallback, and the inliner caps only what it builds.
-        return item && item.data.byteLength <= SVG_INLINE_MAX_BYTES ? item : null;
-    }
+    if (mime === 'image/svg+xml') return prepareMedia(mount, name, file);
     // What getScreenPreview shows as an image, and nothing else.
     if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
     const source = await mount.readFile(file.id);
@@ -78,7 +78,7 @@ async function prepareDocxMedia(mount: Mount, name: string, file: DrivePath): Pr
     }
     // From the source, never the lossy WebP preview; sharp's re-encode drops the EXIF, GPS included.
     const encode = (format: 'png' | 'jpeg') =>
-        generateImagePreview(source, mime, file.name, '', file.id, { format, maxSize: SCREEN_PREVIEW_MAX_SIZE });
+        generateImagePreview(source, mime, file.name, '', file.id, { format, maxSize: DOCX_IMAGE_MAX_SIZE });
     let result = await encode(format);
     // JPEG has no alpha: a source that holds one (a VP8X WebP, an AVIF, a PNG stored as JPEG) takes PNG.
     if (result?.hasAlpha && format === 'jpeg') {

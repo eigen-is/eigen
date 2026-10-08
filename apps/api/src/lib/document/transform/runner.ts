@@ -84,6 +84,8 @@ function errorResponse(code: TransformError['code'], message: string): DocumentT
     return { ok: false, error: { code, message } };
 }
 
+const timedOut = (): DocumentTransformResponse => errorResponse('timeout', 'Document transform timed out');
+
 // Each arm of the closed warning union carries exactly one payload field; settle()
 // renders them after the job left `active`, so an unknown code or a missing payload
 // has to be refused here rather than throw with nobody left to settle the request.
@@ -208,6 +210,11 @@ export class DocumentTransformRunner {
                 resolve(errorResponse('canceled', 'Request was canceled'));
                 return;
             }
+            // The caller's prep spent the whole deadline: a Worker spawned now would only be killed.
+            if (opts.deadlineMs <= 0) {
+                resolve(timedOut());
+                return;
+            }
             const job: Job = {
                 id: this.nextJobId++,
                 request,
@@ -297,10 +304,7 @@ export class DocumentTransformRunner {
         };
         this.active.set(job.id, { settle, admissionCostMs: job.admissionCostMs });
 
-        const timer = setTimeout(
-            () => settle(errorResponse('timeout', 'Document transform timed out')),
-            job.deadlineMs,
-        );
+        const timer = setTimeout(() => settle(timedOut()), job.deadlineMs);
         // Spawning and posting can throw synchronously (a failed spawn under resource
         // exhaustion, a DataCloneError on a detached transfer buffer). Unhandled, that
         // holds the only Worker slot until the deadline and escapes into run()'s

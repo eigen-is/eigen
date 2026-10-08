@@ -40,7 +40,8 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // f4: merges and conditional formatting clip to the render window (spans, window-scoped
 //     aggregates, formula-rule ceiling).
 // f5: a deck previews as canvas compositor pages, not slide divs.
-export const TEXT_FORMAT = 'f5';
+// f6: CSS is refused on the `url(` token in every attribute, so a cached body predates that sanitizer fix.
+export const TEXT_FORMAT = 'f6';
 
 // The three typed previews below are each a different artifact for the same path — contact cards, a
 // message, a calendar's events, never a rendered body — so each carries its own format and none of them
@@ -66,7 +67,7 @@ export const EML_FORMAT = 'eml-f5';
 export const ICS_FORMAT = 'ics-f2';
 
 // The largest side of an image's screen preview.
-export const SCREEN_PREVIEW_MAX_SIZE = 2560;
+const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;

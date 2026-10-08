@@ -13,11 +13,14 @@ import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { proseValue, proseValueIfSet } from './prose-css';
 import { FIGURE_WRAP_MARGIN_EM, type HastNode, highlightCode } from './render';
 
+// An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
+export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
+
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
-    media: ExportMedia[],
+    media: DocxMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
@@ -131,7 +134,7 @@ type Package = {
     lists: List[];
     bullets: Map<number, number>;
     checkboxes: boolean;
-    media: Map<string, ExportMedia>;
+    media: Map<string, DocxMedia>;
     images: Map<string, Image>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;

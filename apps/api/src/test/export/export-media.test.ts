@@ -261,12 +261,7 @@ describe('collectExportMedia', () => {
 
     test('an SVG is its own bytes, which the transform Worker sanitizes and draws its PNG from', async () => {
         const svg = find(await collect('docx'), 'drawing.svg');
-        expect([svg.contentType, svg.width, svg.height, svg.png]).toEqual([
-            'image/svg+xml',
-            undefined,
-            undefined,
-            undefined,
-        ]);
+        expect([svg.contentType, svg.width, svg.height]).toEqual(['image/svg+xml', undefined, undefined]);
         expect(Buffer.from(svg.data).toString('utf8')).toBe(SVG);
         expect(find(await collect('docx'), 'html.svg').contentType).toBe('image/svg+xml');
     }, 60_000);
@@ -277,8 +272,9 @@ describe('collectExportMedia', () => {
         expect(names).not.toContain('clip.mp4');
     }, 60_000);
 
-    test('a docx hands no SVG past SVG_INLINE_MAX_BYTES to the Worker', async () => {
-        expect((await collect('docx')).map((item) => item.name)).not.toContain('huge.svg');
+    // One rule for every format: the export deadline, sharp's pixel limit and the fallback's timeout bound the work.
+    test('a docx hands an SVG past SVG_INLINE_MAX_BYTES to the Worker, as HTML and PDF do', async () => {
+        expect(find(await collect('docx'), 'huge.svg').contentType).toBe('image/svg+xml');
     }, 60_000);
 
     test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
@@ -287,7 +283,7 @@ describe('collectExportMedia', () => {
     }, 60_000);
 
     test.each(['html', 'pdf-html'] as const)(
-        '%s keeps the screen preview: WebP rasters, the SVG as its own bytes, no size and no PNG',
+        '%s keeps the screen preview: WebP rasters, the SVG as its own bytes, no size',
         async (format) => {
             const media = await collect(format);
             expect(media.map((item) => [item.name, item.contentType]).sort()).toEqual(
@@ -310,7 +306,7 @@ describe('collectExportMedia', () => {
                 ].sort(),
             );
             for (const item of media) {
-                expect([item.width, item.height, item.png]).toEqual([undefined, undefined, undefined]);
+                expect([item.width, item.height]).toEqual([undefined, undefined]);
             }
             expect(Buffer.from(find(media, 'drawing.svg').data).toString('utf8')).toBe(SVG);
         },
