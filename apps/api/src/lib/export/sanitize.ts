@@ -20,10 +20,13 @@ export type AttrNode = {
     removeAttribute(name: string): void;
 };
 
-// `url(` as the CSS parser reads it, in any case, unless a data: URI or a same-document fragment follows. A token,
-// never a url()/quote pair, so no paren or quote inside the URL ends a match early. CSS whitespace only: a
-// non-breaking space is part of the URL, which then is a relative path.
-const CSS_URL = /url\((?![\t\n\f\r ]*(?:['"][\t\n\f\r ]*)?(?:data:|#))/gi;
+// `url(` as the CSS parser reads it, in any case, unless a same-document fragment or a data: URI with no fragment
+// follows: Firefox loads a data: SVG named with one (`mask:url(data:…#m)`) as a document and fetches its @import. A
+// token, never a url()/quote pair, so no paren or quote inside the URL ends a match early. An unquoted URL ends at
+// whitespace, a quote or a paren, a quoted one at its quote. CSS whitespace only: a non-breaking space is part of the
+// URL, which then is a relative path.
+const CSS_URL =
+    /url\((?![\t\n\f\r ]*(?:#|data:[^\t\n\f\r '"()#]*(?:[\t\n\f\r '"()]|$)|'[\t\n\f\r ]*(?:#|data:[^'#]*')|"[\t\n\f\r ]*(?:#|data:[^"#]*")))/gi;
 // One of the exact allowed refs as a whole url(), read where CSS_URL matched; none holds a quote, a paren or whitespace.
 // The ref is never empty, so no two whitespace runs can trade characters: a long run costs one pass, not its square.
 const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy;
@@ -39,9 +42,10 @@ const isElement = (node: Node): node is Element => node.nodeType === 1;
 // input type=image), `poster`, and the legacy `background`. `srcset` is handled separately.
 const REF_ATTRS = ['src', 'poster', 'background'];
 
-// Only the whitespace a URL parser trims: a leading non-breaking space makes a relative path of the rest.
+// Only the whitespace a URL parser trims: a leading non-breaking space makes a relative path of the rest. A fragment
+// makes Firefox load a data: SVG as a document, as in a url().
 const isAllowedRef = (value: string, allowed: ReadonlySet<string>): boolean =>
-    /^[\t\n\f\r ]*data:/i.test(value) || allowed.has(value);
+    /^[\t\n\f\r ]*data:[^#]*$/i.test(value) || allowed.has(value);
 
 // The elements whose href points into their own document. On another (an image, feImage) a fragment resolves against
 // the document's URL, which is then fetched; SVG 2 gives clipPath and mask no href. Lowercase, as compared.
@@ -69,11 +73,9 @@ function urlFetches(text: string, allowed: ReadonlySet<string>): boolean {
     return false;
 }
 
-// An escape can spell `url(` in any attribute a CSS parser reads (`fill="\75 rl(…)"`): a backslash before a `(`.
-function escapesFunction(value: string): boolean {
-    const backslash = value.indexOf('\\');
-    return backslash >= 0 && value.includes('(', backslash);
-}
+// An escape can hide a fetch in any attribute a CSS parser reads: `fill="\75 rl(…)"` spells `url(`, and
+// `url(data:…\23 p)` a fragment. Every fetch needs a function, and no escape spells the `(` that opens one.
+const escapesCss = (value: string): boolean => value.includes('\\') && value.includes('(');
 
 const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
     CSS_OTHER_FETCHES.test(css) || urlFetches(css, allowed);
@@ -113,7 +115,7 @@ function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
             const scanned = value.replace(/\\/g, '');
             if (cssFetches(scanned, allowed)) node.removeAttribute(name);
             else if (scanned !== value) node.setAttribute(name, scanned);
-        } else if (urlFetches(value, allowed) || escapesFunction(value)) {
+        } else if (urlFetches(value, allowed) || escapesCss(value)) {
             node.removeAttribute(name);
         }
     }

@@ -167,6 +167,17 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
     });
 
+    // Firefox fetches the @import of a data: SVG it loads as a mask, from the HTML download and the drive hero.
+    test('a data: SVG mask in a cell background is stripped from the document and the preview', () => {
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(http://evil.test/i);</style></svg>';
+        const bg = `red;mask:url(data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}#m)`;
+        const sheets = [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg } }])];
+        const preview = sanitizeExportHtml(renderSheetsPreviewHtml(sheets, NO_MEDIA).html, { allowedRefs: new Set() });
+        for (const html of [renderSheetsExportDocument(sheets, 'T', NO_MEDIA), preview]) {
+            expect(html).not.toContain('mask:');
+        }
+    });
+
     // Every value below is a schemaless CRDT string a collaborator (or a crafted xlsx)
     // can set. In a style attribute they were inert; in stylesheet text `</style>` ends
     // the element and whatever follows is live markup — DOMPurify keeps an
