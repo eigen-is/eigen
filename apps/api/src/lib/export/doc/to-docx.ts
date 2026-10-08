@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, type FigureLayout, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
@@ -887,15 +887,11 @@ const RASTER_EXTENSIONS = new Map([
 
 const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
 
-const WRAP_SIDES = new Map<string, 'left' | 'right'>([
-    ['wrap-left', 'left'],
-    ['wrap-right', 'right'],
-] satisfies [FigureLayout, 'left' | 'right'][]);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
-    const side = WRAP_SIDES.get(attrs['layout']);
+    const layout = attrs['layout'];
+    const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
     const alignment = attrs['alignment'];
     const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
     const caption = attrs['caption'];
