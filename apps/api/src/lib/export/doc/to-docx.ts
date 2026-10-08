@@ -817,10 +817,8 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
 
     const border = TABLE_LOOK.border;
     const margin = (side: string, width: number) => `<w:${side} w:w="${width}" w:type="dxa"/>`;
-    // A pct is of the whole column, which tblInd doesn't narrow; 5000 is all of it.
-    const pct = Math.round((5000 * (context.column - context.indent)) / context.column);
     const tblPr = [
-        fixed ? `<w:tblW w:w="${spanWidth(0, dxa.length)}" w:type="dxa"/>` : `<w:tblW w:w="${pct}" w:type="pct"/>`,
+        `<w:tblW w:w="${spanWidth(0, dxa.length)}" w:type="dxa"/>`,
         `<w:tblInd w:w="${context.indent}" w:type="dxa"/>`,
         `<w:tblBorders>${bordersXml(TABLE_BORDER_SIDES, { top: border, left: border, bottom: border, right: border, insideH: border, insideV: border })}</w:tblBorders>`,
         fixed ? '<w:tblLayout w:type="fixed"/>' : '',

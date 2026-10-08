@@ -1063,7 +1063,7 @@ describe('docx writer — tables', () => {
         expect(gridOf(shared)).toEqual([1500, 4065, 4065]);
         expect(gridOf(floored)).toEqual([9600, 375]);
         const tblPr = child(shared, 'tblPr');
-        expect(xmlOf(child(tblPr, 'tblW'))).toBe('<w:tblW w:w="5000" w:type="pct"/>');
+        expect(xmlOf(child(tblPr, 'tblW'))).toBe('<w:tblW w:w="9630" w:type="dxa"/>');
         expect(child(tblPr, 'tblLayout')).toBeUndefined();
     });
 
@@ -1246,9 +1246,9 @@ describe('docx writer — tables', () => {
             ]);
         // 9638 twips of column: 330 in for an item, 265 for a quote.
         expect(await widths(doc(open, ul(li(p(text('x')), open)), quote(open)))).toEqual([
-            ['<w:tblW w:w="5000" w:type="pct"/>', '<w:tblInd w:w="0" w:type="dxa"/>'],
-            ['<w:tblW w:w="4829" w:type="pct"/>', '<w:tblInd w:w="330" w:type="dxa"/>'],
-            ['<w:tblW w:w="4863" w:type="pct"/>', '<w:tblInd w:w="265" w:type="dxa"/>'],
+            ['<w:tblW w:w="9630" w:type="dxa"/>', '<w:tblInd w:w="0" w:type="dxa"/>'],
+            ['<w:tblW w:w="9300" w:type="dxa"/>', '<w:tblInd w:w="330" w:type="dxa"/>'],
+            ['<w:tblW w:w="9360" w:type="dxa"/>', '<w:tblInd w:w="265" w:type="dxa"/>'],
         ]);
     });
 
