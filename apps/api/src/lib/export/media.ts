@@ -40,15 +40,18 @@ async function prepareMedia(
         const source = await mount.readFile(file.id);
         if (!source) return null;
         // From the source, never the lossy WebP preview; sharp's re-encode drops the EXIF, GPS included.
-        const lossless = mime === 'image/png' || mime === 'image/gif' || (await isLosslessWebp(mount, file));
-        const result = await generateImagePreview(source, mime, file.name, '', file.id, {
-            format: lossless ? 'png' : 'jpeg',
-            maxSize: DOCX_MAX_SIZE,
-        });
+        const encode = (format: 'png' | 'jpeg') =>
+            generateImagePreview(source, mime, file.name, '', file.id, { format, maxSize: DOCX_MAX_SIZE });
+        let format: 'png' | 'jpeg' = (await takesJpeg(mount, file, mime)) ? 'jpeg' : 'png';
+        let result = await encode(format);
+        // JPEG has no alpha: a photo's type that holds one anyway (a PNG stored as JPEG, a HEIF with alpha) takes PNG.
+        if (result?.hasAlpha && format === 'jpeg') {
+            format = 'png';
+            result = await encode(format);
+        }
         if (!result) return null;
         const { data, width, height } = result;
-        const contentType = lossless ? 'image/png' : 'image/jpeg';
-        return { name, contentType, data: toTransferableBuffer(data), width, height };
+        return { name, contentType: `image/${format}`, data: workerBuffer(data), width, height };
     }
 
     // Empty embedUrl: only the redirect branch reads it, and the next line drops redirects.
@@ -74,15 +77,26 @@ async function prepareMedia(
         name,
         contentType: result.contentType,
         data: toTransferableBuffer(svg),
-        png: toTransferableBuffer(fallback.data),
+        png: workerBuffer(fallback.data),
         width: fallback.width,
         height: fallback.height,
     };
 }
 
-// A WebP's first chunk names its coding: VP8L is lossless; VP8 and VP8X take the photo's JPEG (R31).
-async function isLosslessWebp(mount: Mount, file: DrivePath): Promise<boolean> {
-    if (file.mimeType !== 'image/webp') return false;
+// Lossy codings, which JPEG keeps as they are. Every other type takes PNG, which keeps alpha and every pixel.
+const JPEG_SOURCES = new Set(['image/jpeg', 'image/heic', 'image/heif']);
+
+// A WebP's first chunk names its coding, which the thumbnail Worker doesn't report: only a plain lossy VP8 is a
+// photo; VP8L is lossless and VP8X carries alpha, animation or ICC.
+async function takesJpeg(mount: Mount, file: DrivePath, mime: string): Promise<boolean> {
+    if (JPEG_SOURCES.has(mime)) return true;
+    if (mime !== 'image/webp') return false;
     const header = await mount.readBytes(file.id, 16);
-    return header !== null && Buffer.from(header).toString('latin1', 12, 16) === 'VP8L';
+    return header !== null && Buffer.from(header).toString('latin1', 12, 16) === 'VP8 ';
+}
+
+// The thumbnail Worker's Buffer wraps exactly the ArrayBuffer it transferred back, so it is handed on uncopied.
+function workerBuffer(data: Buffer): ArrayBuffer {
+    const { buffer } = data;
+    return buffer instanceof ArrayBuffer && buffer.byteLength === data.byteLength ? buffer : toTransferableBuffer(data);
 }

@@ -22,6 +22,10 @@ function createGetLocalDatabase(baseDir: string) {
     };
 }
 
+// Fully transparent, so a JPEG's black would show in the first pixel.
+const clear = () =>
+    sharp({ create: { width: 64, height: 32, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 0 } } });
+
 // A gradient, so a lossy step would show in the pixels.
 function gradient(width: number, height: number): Sharp {
     const pixels = Buffer.alloc(width * height * 3);
@@ -79,6 +83,11 @@ describe('collectExportMedia', () => {
             ['lossless.webp', await gradient(320, 200).webp({ lossless: true }).toBuffer()],
             ['lossy.webp', await gradient(320, 200).webp({ quality: 80 }).toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
+            // VP8X: a lossy WebP with alpha.
+            ['clear.webp', await clear().webp({ quality: 80 }).toBuffer()],
+            ['clear.tiff', await clear().tiff({ compression: 'lzw' }).toBuffer()],
+            // A PNG whose stored type says JPEG.
+            ['clear.jpg', await clear().png().toBuffer()],
             ['broken.png', Buffer.from('not a png')],
             // A PDF wearing an Illustrator name, which the thumbnail Worker would read through exiftool.
             ['art.ai', await gradient(40, 40).png().toBuffer()],
@@ -93,6 +102,7 @@ describe('collectExportMedia', () => {
             gif: 'image/gif',
             jpg: 'image/jpeg',
             webp: 'image/webp',
+            tiff: 'image/tiff',
             svg: 'image/svg+xml',
             mp4: 'video/mp4',
             ai: 'application/pdf',
@@ -127,10 +137,26 @@ describe('collectExportMedia', () => {
         for (const item of media) expect(item.png === undefined).toBe(item.contentType !== 'image/svg+xml');
     }, 60_000);
 
-    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy', () => {
+    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with alpha', () => {
         const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
-        expect([chunk('lossless.webp'), chunk('lossy.webp')]).toEqual(['VP8L', 'VP8 ']);
+        expect([chunk('lossless.webp'), chunk('lossy.webp'), chunk('clear.webp')]).toEqual(['VP8L', 'VP8 ', 'VP8X']);
     });
+
+    test('a transparent image stays a transparent PNG, whatever its type or stored MIME says', async () => {
+        const media = await collect('docx');
+        for (const name of ['clear.webp', 'clear.tiff', 'clear.jpg']) {
+            const { contentType, data, width, height } = find(media, name);
+            const alpha = (await sharp(Buffer.from(data)).ensureAlpha().raw().toBuffer())[3];
+            expect([name, contentType, signatureOf(data), width, height, alpha]).toEqual([
+                name,
+                'image/png',
+                PNG_SIGNATURE,
+                64,
+                32,
+                0,
+            ]);
+        }
+    }, 60_000);
 
     test('a PNG comes from the source, pixel for pixel, never the lossy preview', async () => {
         const chart = find(await collect('docx'), 'chart.png');
@@ -187,6 +213,9 @@ describe('collectExportMedia', () => {
             expect(media.map((item) => [item.name, item.contentType]).sort()).toEqual(
                 [
                     ['chart.png', 'image/webp'],
+                    ['clear.jpg', 'image/webp'],
+                    ['clear.tiff', 'image/webp'],
+                    ['clear.webp', 'image/webp'],
                     ['drawing.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
