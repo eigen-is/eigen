@@ -1,6 +1,7 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '../document/media';
+import { MAX_SVG_INLINE_DEPTH, SVG_INLINE_MAX_BYTES } from '../document/transform/protocol';
 import { getFontFaceCSSForFamilies } from '../export/fonts';
 import type { Mount } from '../mount';
 
@@ -20,14 +21,6 @@ import type { Mount } from '../mount';
 // The result rides the existing `{pathId}-{updatedAt}.screen.svg` cache key, so every display surface
 // and the export path (export/media.ts prepareMedia calls getScreenPreview too) get it for free.
 // A sibling edit, rename or delete leaves the svg's updatedAt alone: a cached preview outlives it until the svg changes.
-
-// ~16MB served-output ceiling. base64 inflates ~1.37x, so a few MB of siblings fit; a hostile blow-up
-// (one big sibling referenced many times, or deep nesting) trips this and degrades to a stripped svg.
-export const SVG_INLINE_MAX_BYTES = 16 * 1024 * 1024;
-
-// svg-in-svg recursion ceiling: the served svg is depth 0, a referenced sibling svg is depth 1. A
-// sibling svg deeper than this is stripped rather than inlined.
-export const MAX_SVG_INLINE_DEPTH = 3;
 
 // Sniffed on the raw bytes so a plain drawing with no refs never pays a utf8 decode.
 const SNIFF = Buffer.from(EIGEN_MEDIA_SCHEME);
