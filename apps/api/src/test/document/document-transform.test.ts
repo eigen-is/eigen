@@ -768,11 +768,12 @@ describe('document transform (xlsx import)', () => {
 // And again when the dark-drop stopped leaving the dark theme's tail and a stray brace, and the two print blocks merged: those lines, and nothing else.
 // And again when the flattener dropped the CSS comments and prefixed every item of a comma list, the body stopped repeating the prose size and line height, and headings inherit the font size: those lines, and nothing else.
 // And again when the flattener kept declarations that precede a nested rule on their own rule, so the editor's .tiptap block reaches the export (repeated spaces kept, ligatures off), and the page wrapper lost its whitespace: those lines, and nothing else.
+// And again when the print extras stopped repeating the body font and color eigen-prose sets: that rule, and nothing else.
 // The docx hash is the writer's own output (to-docx.ts) with its embedded fonts; its image is the thumbnail
 // Worker's PNG of the source, so a writer, font or encoder change moves it.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '98ee4243a435ccd111a7523b1db78b709f61e27c7f37a6dbdd1c85f772707bff';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '98ee4243a435ccd111a7523b1db78b709f61e27c7f37a6dbdd1c85f772707bff';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '768861141c05b1869948f8dc4095667c37239bdc6728d1a294f5a0fcddf49f7d';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '768861141c05b1869948f8dc4095667c37239bdc6728d1a294f5a0fcddf49f7d';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fba4c2c2eac52a27ff87ba30a2b35661ac3058926a0cd87711a3a8fcc404bfb6';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';

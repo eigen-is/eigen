@@ -1,14 +1,12 @@
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
 import type { TransformWarning } from '../document/transform/protocol';
-import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
+import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
-const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
 const PREVIEW_MAX_BLOCKS = 20;
@@ -40,7 +38,7 @@ export function renderEigendocPreviewBody(
         extensions,
         options: {
             nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
+                codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(

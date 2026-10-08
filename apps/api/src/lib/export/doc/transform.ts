@@ -2,7 +2,6 @@ import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { DEFAULT_PAGE_SETUP, type FigureAttrs, getDocExtensions, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { toDataUriMap } from '../../document/media';
@@ -14,11 +13,11 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import type { SCREEN_PREVIEW_MAX_SIZE } from '../../preview/preview-cache';
-import { FONT_STACK_MONO, FONT_STACK_SANS } from '../font-stacks';
+import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
-import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
+import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
@@ -47,7 +46,7 @@ export async function renderEigendocExport(
 // The screen preview's largest side. The Worker never loads preview-cache, so its type pins the value.
 const SVG_FALLBACK_MAX_SIZE: typeof SCREEN_PREVIEW_MAX_SIZE = 2560;
 
-// The PNG every reader but Word draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
+// The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
 async function withSvgFallbacks(media: ExportMedia[]): Promise<ExportMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
@@ -88,7 +87,6 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
-const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
@@ -97,7 +95,7 @@ function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, strin
         extensions,
         options: {
             nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
+                codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(node.attrs, (mediaName, src) =>
@@ -135,13 +133,6 @@ input, button, textarea, select { font: inherit; color: inherit; background-colo
 a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
 h1, h2, h3, h4, h5, h6 { font-size: inherit; }
-
-body {
-    font-family: ${FONT_STACK_SANS};
-    color: #1a1a2e;
-    margin: 0;
-    padding: 0;
-}
 
 .page {
     max-width: 100%;

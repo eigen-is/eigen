@@ -1,30 +1,28 @@
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
+import { common, createLowlight } from 'lowlight';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
 type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
 
-type Lowlight = {
-    registered(lang: string): boolean;
-    highlight(lang: string, code: string): HastNode;
-    highlightAuto(code: string): HastNode;
-};
+// The backend's one highlighter; the main thread imports this module lazily, so its grammars load only to highlight.
+export const lowlight = createLowlight(common);
 
-// The caller passes its lowlight instance so this module stays side-effect-free.
-export function renderCodeBlockNode(
-    node: { attrs: { language?: string | null }; textContent?: string; content?: unknown },
-    lowlight: Lowlight,
-): string {
+export function renderCodeBlockNode(node: {
+    attrs: { language?: string | null };
+    textContent?: string;
+    content?: unknown;
+}): string {
     const language = node.attrs.language || '';
-    const highlighted = hastToHtml(highlightCode(language, node.textContent ?? '', lowlight));
+    const highlighted = hastToHtml(highlightCode(language, node.textContent ?? ''));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
     return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;
 }
 
 // The HTML and the docx code blocks highlight alike. Users rarely set a language, so highlightAuto is where nearly all
 // export highlighting comes from.
-export function highlightCode(language: string, code: string, lowlight: Lowlight): HastNode {
+export function highlightCode(language: string, code: string): HastNode {
     return language && lowlight.registered(language)
         ? lowlight.highlight(language, code)
         : lowlight.highlightAuto(code);

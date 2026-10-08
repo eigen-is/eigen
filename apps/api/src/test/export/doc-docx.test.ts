@@ -565,6 +565,31 @@ describe('docx writer — paragraphs and headings', () => {
         expect(w(child(child(heading, 'pPr'), 'pStyle'), 'val')).toBe('Heading3');
         expect(bare?.children).toEqual([]);
     });
+
+    test("a paragraph all in one other family keeps the editor's pitch, its line scaled by that family's line height", async () => {
+        const family = (fontFamily: string) => ({ type: 'textStyle', attrs: { fontFamily } });
+        const serif = family('Source Serif 4');
+        const body = await bodyOf(
+            doc(
+                p(text('a', serif), text('b', serif, { type: 'bold' })),
+                p(text('c', family('JetBrains Mono'))),
+                p(text('d', family('Excalifont'))),
+                heading(1, text('e', serif)),
+                p(text('f', serif), text('g')),
+                p(text('h', { type: 'code' })),
+            ),
+        );
+        // 337 is 1.7 × 11 pt at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
+        // Mixed families keep the style's; inline code is smaller, so the mark's Inter stays the tallest.
+        expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
+            '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="309" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="324" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:line="210" w:lineRule="auto"/></w:pPr>',
+            '',
+            '',
+        ]);
+    });
 });
 
 describe('docx writer — marks', () => {
@@ -851,8 +876,38 @@ describe('docx writer — lists', () => {
         expect(nums.map((num) => w(child(num, 'abstractNumId'), 'val'))).toEqual(['0', '1']);
     });
 
+    test('bullet lists of one indent share one abstractNum and num, a nested one a level in; ordered ones keep their own', async () => {
+        const json = doc(
+            ul(li(p(text('a')), ul(li(p(text('b')))))),
+            ul(li(p(text('c')))),
+            ol({}, li(p(text('d')))),
+            ol({}, li(p(text('e')))),
+            quote(ul(li(p(text('f'))))),
+        );
+        const body = await bodyOf(json);
+        expect(descendants(body, W, 'numPr').map(xmlOf)).toEqual(
+            [
+                [0, 1],
+                [1, 1],
+                [0, 1],
+                [0, 2],
+                [0, 3],
+                [0, 4],
+            ].map(([ilvl, numId]) => `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`),
+        );
+        const numbering = await numberingOf(json);
+        expect(
+            xmlChildren(numbering, W, 'abstractNum').map((list) => w(child(child(list, 'lvl'), 'numFmt'), 'val')),
+        ).toEqual(['bullet', 'decimal', 'decimal', 'bullet']);
+        expect(xmlChildren(numbering, W, 'num').map(xmlOf)).toEqual(
+            [0, 1, 2, 3].map((index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`),
+        );
+    });
+
     test('every abstractNum has an nsid of its own, 8 hex digits, and all abstractNums come before the nums', async () => {
-        const numbering = await numberingOf(doc(ul(li(p(text('a')), ul(li(p(text('b')))))), ol({}, li(p(text('c'))))));
+        const numbering = await numberingOf(
+            doc(ul(li(p(text('a')), ol({}, li(p(text('b')))))), ol({}, li(p(text('c'))))),
+        );
         const nsids = descendants(numbering, W, 'nsid').map((nsid) => w(nsid, 'val') ?? '');
         expect(nsids).toHaveLength(3);
         expect(new Set(nsids).size).toBe(3);
@@ -1182,6 +1237,21 @@ describe('docx writer — tables', () => {
         expect(gridOf(child(child(child(outer, 'tr'), 'tc'), 'tbl'))).toEqual([4140]);
     });
 
+    test('a table without every colwidth in a list item or quote fills what its indent leaves of the column', async () => {
+        const open = table(tr(td({}, p(text('x'))), td({}, p(text('y')))));
+        const widths = async (json: JSONContent) =>
+            (await tablesIn(json)).map((tbl) => [
+                xmlOf(child(child(tbl, 'tblPr'), 'tblW')),
+                xmlOf(child(child(tbl, 'tblPr'), 'tblInd')),
+            ]);
+        // 9638 twips of column: 330 in for an item, 265 for a quote.
+        expect(await widths(doc(open, ul(li(p(text('x')), open)), quote(open)))).toEqual([
+            ['<w:tblW w:w="5000" w:type="pct"/>', '<w:tblInd w:w="0" w:type="dxa"/>'],
+            ['<w:tblW w:w="4829" w:type="pct"/>', '<w:tblInd w:w="330" w:type="dxa"/>'],
+            ['<w:tblW w:w="4863" w:type="pct"/>', '<w:tblInd w:w="265" w:type="dxa"/>'],
+        ]);
+    });
+
     test('an empty cell is one paragraph, and a table with no cells writes nothing', async () => {
         const tbl = only(await tablesIn(doc(table(tr(td({}))))));
         expect(xmlOf(only(descendants(tbl, W, 'p')))).toBe('<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>');
@@ -1424,13 +1494,13 @@ describe('docx writer — figures', () => {
         ]);
     }
 
-    function floating(side: 'left' | 'right', px: number, cell: string) {
+    function floating(side: 'left' | 'right', px: number, cell: string, x?: number) {
         const tw = px * 15;
         const nil = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
             .map((b) => `<w:${b} w:val="nil"/>`)
             .join('');
         const flush = ['top', 'left', 'bottom', 'right'].map((b) => `<w:${b} w:w="0" w:type="dxa"/>`).join('');
-        return `<w:tbl><w:tblPr><w:tblpPr w:leftFromText="${side === 'right' ? 220 : 0}" w:rightFromText="${side === 'left' ? 220 : 0}" w:topFromText="55" w:bottomFromText="110" w:vertAnchor="text" w:horzAnchor="margin" w:tblpXSpec="${side}" w:tblpY="1"/><w:tblOverlap w:val="never"/><w:tblW w:w="${tw}" w:type="dxa"/><w:tblBorders>${nil}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>${flush}</w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${tw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr></w:tbl>`;
+        return `<w:tbl><w:tblPr><w:tblpPr w:leftFromText="${side === 'right' ? 220 : 0}" w:rightFromText="${side === 'left' ? 220 : 0}" w:topFromText="55" w:bottomFromText="110" w:vertAnchor="text" w:horzAnchor="margin" ${x === undefined ? `w:tblpXSpec="${side}"` : `w:tblpX="${x}"`} w:tblpY="1"/><w:tblOverlap w:val="never"/><w:tblW w:w="${tw}" w:type="dxa"/><w:tblBorders>${nil}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>${flush}</w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${tw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tw}" w:type="dxa"/></w:tcPr>${cell}</w:tc></w:tr></w:tbl>`;
     }
 
     const floatingImage = (runs: string) =>
@@ -1509,6 +1579,15 @@ describe('docx writer — figures', () => {
         ]);
     });
 
+    test("a block figure in a heading leaves the pieces after it the heading's look, out of the navigator", async () => {
+        const json = doc(p(text('x')), heading(2, text('Before '), figure({ ...CHART, width: 100 }), text(' after')));
+        expect((await blocksOf(json)).slice(1)).toEqual([
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>${run('Before ')}</w:p>`,
+            imageParagraph(chart(100)),
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:outlineLvl w:val="9"/></w:pPr>${run(' after')}</w:p>`,
+        ]);
+    });
+
     test('a wrapped figure is a borderless floating one-cell table before its paragraph, the row kept whole', async () => {
         const cell = floatingImage(chart(220)) + floatingCaption('Wrapped');
         expect(
@@ -1524,6 +1603,27 @@ describe('docx writer — figures', () => {
         ).toEqual([floating('left', 220, cell), `<w:p>${run('before ')}${run('after')}</w:p>`]);
         const [right] = await blocksOf(doc(p(figure({ ...CHART, width: 220, layout: 'wrap-right' })), p(text('x'))));
         expect(right).toBe(floating('right', 220, floatingImage(chart(220))));
+    });
+
+    test("a wrapped figure in a list item or quote floats from its container's text edge, clear of the bullet and bar", async () => {
+        const wrapped = (layout: string) => p(figure({ ...CHART, width: 100, layout }), text('beside'));
+        const tables = xmlChildren(
+            await bodyOf(
+                doc(
+                    ul(li(p(text('item')), wrapped('wrap-left'), ul(li(p(text('inner')), wrapped('wrap-left'))))),
+                    quote(wrapped('wrap-left'), wrapped('wrap-right')),
+                ),
+            ),
+            W,
+            'tbl',
+        ).map(xmlOf);
+        const image = (id: number) => floatingImage(chart(100, id).replace('cy="2976563"', 'cy="595313"'));
+        expect(tables).toEqual([
+            floating('left', 100, image(1), 330),
+            floating('left', 100, image(2), 660),
+            floating('left', 100, image(3), 265),
+            floating('right', 100, image(4)),
+        ]);
     });
 
     test('two floating figures keep a Spacer between their tables; an emptied holder goes, the last one is a Spacer', async () => {
@@ -1561,6 +1661,14 @@ describe('docx writer — figures', () => {
         const numbered = (after: number, runs: string) =>
             `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
         expect(xmlChildren(body, W, 'p').map(xmlOf)).toEqual([numbered(55, ''), numbered(220, run('two'))]);
+
+        // The text after the figure starts below the number, unnumbered, as the editor and the PDF draw it.
+        const item = await bodyOf(doc(ol({}, li(wrapped, p(text('text'))))));
+        expect(shape(item)).toEqual(['tbl', 'p', 'p', 'sectPr']);
+        expect(xmlChildren(item, W, 'p').map(xmlOf)).toEqual([
+            numbered(55, ''),
+            `<w:p><w:pPr><w:spacing w:after="220"/><w:ind w:left="330"/></w:pPr>${run('text')}</w:p>`,
+        ]);
 
         const checklist = await bodyOf(doc(tasks(task(false, wrapped))));
         expect(shape(checklist)).toEqual(['tbl', 'p', 'sectPr']);
@@ -1969,7 +2077,7 @@ describe('docx writer — fonts', () => {
             [doc(p(text('x', bold, italic))), ['Inter Regular', 'Inter BoldItalic']],
             [doc(quote(p(text('x')))), ['Inter Regular', 'Inter Italic']],
             [doc(p(text('x', { type: 'code' }))), ['Inter Regular', 'JetBrains Mono Regular']],
-            [doc(quote(p(text('x', { type: 'code' })))), ['Inter Regular', 'JetBrains Mono Italic']],
+            [doc(quote(p(text('x', { type: 'code' })))), ['Inter Regular', 'Inter Italic', 'JetBrains Mono Italic']],
             [
                 doc(code('let a = 1;\n// says hello', 'javascript')),
                 ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
@@ -1978,6 +2086,18 @@ describe('docx writer — fonts', () => {
                 doc(p(text('x', serif), text('y', serif, bold))),
                 ['Inter Regular', 'Source Serif 4 Regular', 'Source Serif 4 Bold'],
             ],
+        ];
+        for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
+    });
+
+    test("a paragraph mark draws in its style's face, so an empty or comment-only code block and an empty quote embed it", async () => {
+        const cases: [JSONContent, string[]][] = [
+            [doc({ type: 'codeBlock', attrs: { language: null } }), ['Inter Regular', 'JetBrains Mono Regular']],
+            [
+                doc(code('// says hello', 'javascript')),
+                ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
+            ],
+            [doc(quote(p())), ['Inter Regular', 'Inter Italic']],
         ];
         for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
     });
