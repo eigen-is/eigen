@@ -1,11 +1,11 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { getSchema, type JSONContent } from '@tiptap/core';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import JSZip from 'jszip';
 import { common, createLowlight } from 'lowlight';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
-import * as proseCss from '../../lib/export/doc/prose-css';
+import { proseValue, proseValueIfSet } from '../../lib/export/doc/prose-css';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
@@ -1846,29 +1846,39 @@ describe('docx writer — styles from the CSS', () => {
         expect(sizeOf(spacer)).toEqual(['2', '2']);
     });
 
-    test('a heading size follows the CSS', async () => {
-        const original = { ...proseCss };
-        const proseValueIfSet = (selector: string, property: string) =>
-            selector === '.eigen-prose h1' && property === 'font-size'
-                ? '2rem'
-                : original.proseValueIfSet(selector, property);
-        mock.module('../../lib/export/doc/prose-css', () => ({
-            ...original,
-            proseValueIfSet,
-            proseValue: (selector: string, property: string) =>
-                proseValueIfSet(selector, property) ?? original.proseValue(selector, property),
-        }));
-        try {
-            const heading = style(await styles(), 'Heading1');
-            expect([...sizeOf(heading), ...spacingOf(heading)]).toEqual(['48', '48', '720', '240', '238', 'auto']);
-            expect(w(child(child(heading, 'rPr'), 'spacing'), 'val')).toBe('-10');
-            const body = await bodyOf(
-                doc({ type: 'heading', attrs: { level: 1 }, content: [text('x', { type: 'code' })] }),
+    test('every heading style is derived from the CSS values', async () => {
+        // rem against the 16 px root, em against the heading's own size, as the CSS reads them.
+        const pt = (length: string, emPt: number) => {
+            const [, value, unit] = length.match(/^(-?[\d.]+)(rem|em|pt)$/) ?? [];
+            if (value === undefined) throw new Error(`no oracle for ${length}`);
+            return Number(value) * (unit === 'rem' ? 12 : unit === 'em' ? emPt : 1);
+        };
+        const bodyPt = pt(proseValue('.eigen-prose', 'font-size'), 12);
+        const all = await styles();
+        for (const level of [1, 2, 3, 4, 5, 6]) {
+            const selector = `.eigen-prose h${level}`;
+            const sizePt = pt(
+                proseValueIfSet(selector, 'font-size') ?? proseValue('.eigen-prose', 'font-size'),
+                bodyPt,
             );
-            expect(w(only(descendants(body, W, 'sz')), 'val')).toBe('43');
-        } finally {
-            mock.module('../../lib/export/doc/prose-css', () => original);
+            const tracking = proseValueIfSet(selector, 'letter-spacing');
+            const heading = style(all, `Heading${level}`);
+            const size = String(Math.round(sizePt * 2));
+            const [before, after] = ['margin-top', 'margin-bottom'].map((side) =>
+                String(Math.round(pt(proseValue(selector, side), sizePt) * 20)),
+            );
+            expect([...sizeOf(heading), ...spacingOf(heading).slice(0, 2)]).toEqual([size, size, before, after]);
+            expect(w(child(child(heading, 'rPr'), 'spacing'), 'val')).toBe(
+                tracking === undefined ? undefined : String(Math.round(pt(tracking, sizePt) * 20)),
+            );
         }
+        const h1Pt = pt(proseValue('.eigen-prose h1', 'font-size'), bodyPt);
+        const body = await bodyOf(
+            doc({ type: 'heading', attrs: { level: 1 }, content: [text('x', { type: 'code' })] }),
+        );
+        expect(w(only(descendants(body, W, 'sz')), 'val')).toBe(
+            String(Math.round(pt(proseValue('.eigen-prose code', 'font-size'), h1Pt) * 2)),
+        );
     });
 });
 
