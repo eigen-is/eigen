@@ -46,6 +46,11 @@ RUN bun install --frozen-lockfile --ignore-scripts
 
 COPY . .
 
+# A system library WeasyPrint needs and the image lacks fails the build here, not a PDF export.
+RUN printf '<p>x</p>' | /opt/weasyprint/bin/python3 -I apps/api/src/lib/export/weasyprint-render.py > /tmp/smoke.pdf \
+    && head -c 5 /tmp/smoke.pdf | grep -qx '%PDF-' \
+    && rm /tmp/smoke.pdf
+
 # /run/eigen keeps the control socket out of data/ and away from host users.
 RUN mkdir -p /app/data/home /app/data/server /app/backups /run/eigen \
     && chown 1000:1000 /run/eigen \
