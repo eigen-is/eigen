@@ -96,7 +96,7 @@ Developing Eigen? See [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#
 
 ### Development
 
-Needs [Bun](https://bun.sh) at the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`) and [Git](https://git-scm.com). PDF export needs `weasyprint` on your PATH and video thumbnails need `ffmpeg`. Everything else works without them.
+Needs [Bun](https://bun.sh) at the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`) and [Git](https://git-scm.com). PDF export needs WeasyPrint 68 or later, from Homebrew (`brew install weasyprint`) or pip in a venv, with its `weasyprint` launcher on your PATH: the Python the launcher names must run `python3 -I -c 'import weasyprint'`, so `pip install --user` won't do. Video thumbnails need `ffmpeg`. Everything else works without them.
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git

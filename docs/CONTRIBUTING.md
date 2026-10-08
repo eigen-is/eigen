@@ -88,7 +88,7 @@ A simple rule:
 
 - [Bun](https://bun.sh) at the version in `.bun-version`, the one CI and the Docker image run: `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`. `bun run serve` warns when yours differs.
 - [Git](https://git-scm.com)
-- Optional: `weasyprint` on your PATH for PDF export, `ffmpeg` for video thumbnails. Everything else works without them.
+- Optional: WeasyPrint 68 or later for PDF export, `ffmpeg` for video thumbnails. Everything else works without them. Install WeasyPrint from Homebrew (`brew install weasyprint`) or with pip in a venv, and put its `weasyprint` launcher on your PATH. The Python the launcher names must run `python3 -I -c 'import weasyprint'`, so `pip install --user` won't do.
 
 ### Run it
 

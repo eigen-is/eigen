@@ -18,8 +18,8 @@ The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materiali
 
 | Outcome | Status |
 |---|---|
-| WeasyPrint not installed (PDF only) | 501 with install instructions |
-| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or 500 with its stderr |
+| WeasyPrint not installed or older than 68 (PDF only) | 501 naming the minimum and how to install it |
+| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log |
 | Transform runner saturated | 503, never a main-thread fallback |
 | Empty deck or empty drawing | 400 |
 
@@ -53,9 +53,10 @@ A list item that holds a wrapped figure ends in a clearing break (`w:br w:clear=
 
 PDF is the HTML document through WeasyPrint, run by `export/weasyprint-render.py` through its Python API rather than its CLI. That script hands WeasyPrint a URL fetcher that opens `data:` URIs and refuses everything else: http(s), `file:`, a plain or relative path, any other scheme. Export embeds every resource it needs as a `data:` URI, so any other reference came from a collaborator's CRDT string, and WeasyPrint would fetch it from the API host while it renders. WeasyPrint's default fetcher opens every one, from a nested `<image href>` in a `data:` SVG to an `<a rel="attachment">`, whose response, or the server file a plain path names, it embeds in the PDF. The fetcher is the boundary for the PDF; the sanitizer is not relied on for it, and `export-pdf-ssrf.test.ts` renders raw hostile bodies to prove it.
 
-- `htmlToPdf` runs the script with the Python that imports `weasyprint`: the one the `weasyprint` launcher's shebang names (Debian's `/usr/bin/python3`, a pip venv's, Homebrew's own), else `python3`. When neither imports it, a PDF export answers 501.
+- `htmlToPdf` runs the script with the Python that imports WeasyPrint 68 or later: the one the `weasyprint` launcher's shebang names (a pip venv's, Homebrew's own, through `env` or `env -S` too), else `python3`. A pip launcher whose venv path is long or holds a space starts `#!/bin/sh`, so it counts as naming none. When neither imports a recent enough one, a PDF export answers 501. The probe is cached; a spawn that finds the cached interpreter gone, as after a Homebrew upgrade, probes once more.
 - It runs under `python -I`, so a module in the working directory or on `PYTHONPATH` cannot load in its place. That also drops the user site, so a `pip install --user` WeasyPrint is not found: install it system-wide, in a venv or from the OS package.
-- WeasyPrint 68 replaced `default_url_fetcher` with the `URLFetcher` class, and 69 takes only a fetcher of that class, so the script subclasses it where it exists and wraps the function before 68. Debian 13 ships 62.
+- The script subclasses `URLFetcher`, which WeasyPrint 68 introduced, rather than pass `allowed_protocols={'data'}`: 68.0 takes the text before `://` as the scheme, so it refuses every `data:` URI.
+- The Docker image pins WeasyPrint 70.0 from PyPI in a venv at `/opt/weasyprint`, so it renders with the engine development does. Debian 13 ships 62.3, which ignores flex `align-items` and width on the `.figure` box and prints a centred figure left-aligned, its caption squeezed beside it.
 - The document has no base URL, so a relative link stays relative in the PDF instead of becoming a `file://` URL of the server's working directory.
 
 ## The sanitizer keeps only data: references, because a browser fetches
