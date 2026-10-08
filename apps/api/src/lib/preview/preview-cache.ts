@@ -67,7 +67,7 @@ export const EML_FORMAT = 'eml-f5';
 export const ICS_FORMAT = 'ics-f2';
 
 // The largest side of an image's screen preview.
-export const SCREEN_PREVIEW_MAX_SIZE = 2560;
+const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;

@@ -261,12 +261,7 @@ describe('collectExportMedia', () => {
 
     test('an SVG is its own bytes, which the transform Worker sanitizes and draws its PNG from', async () => {
         const svg = find(await collect('docx'), 'drawing.svg');
-        expect([svg.contentType, svg.width, svg.height, svg.png]).toEqual([
-            'image/svg+xml',
-            undefined,
-            undefined,
-            undefined,
-        ]);
+        expect([svg.contentType, svg.width, svg.height]).toEqual(['image/svg+xml', undefined, undefined]);
         expect(Buffer.from(svg.data).toString('utf8')).toBe(SVG);
         expect(find(await collect('docx'), 'html.svg').contentType).toBe('image/svg+xml');
     }, 60_000);
@@ -287,7 +282,7 @@ describe('collectExportMedia', () => {
     }, 60_000);
 
     test.each(['html', 'pdf-html'] as const)(
-        '%s keeps the screen preview: WebP rasters, the SVG as its own bytes, no size and no PNG',
+        '%s keeps the screen preview: WebP rasters, the SVG as its own bytes, no size',
         async (format) => {
             const media = await collect(format);
             expect(media.map((item) => [item.name, item.contentType]).sort()).toEqual(
@@ -310,7 +305,7 @@ describe('collectExportMedia', () => {
                 ].sort(),
             );
             for (const item of media) {
-                expect([item.width, item.height, item.png]).toEqual([undefined, undefined, undefined]);
+                expect([item.width, item.height]).toEqual([undefined, undefined]);
             }
             expect(Buffer.from(find(media, 'drawing.svg').data).toString('utf8')).toBe(SVG);
         },

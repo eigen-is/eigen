@@ -23,8 +23,11 @@ export type VectorExportFormat = 'svg' | 'pdf-html';
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
 // An export's media; only a docx's raster carries the thumbnail Worker's width and height. The docx arm adds an SVG's
-// size and its PNG fallback inside the Worker.
-export type ExportMedia = TransformMedia & Partial<ImageDimensions> & { png?: ArrayBuffer };
+// size inside the Worker.
+export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
+
+// A docx image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to in the Worker.
+export const DOCX_IMAGE_MAX_SIZE = 2560;
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
