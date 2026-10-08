@@ -84,6 +84,15 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
             { status: 501, message: expect.stringContaining('WeasyPrint 68 or later, not 62.3') },
         ]);
     });
+
+    test('a crash answers a bare 500 and logs the traceback', async () => {
+        const { outcomes, stderr } = await exportWithStubPython(
+            'echo 70.0; exit 0',
+            "echo 'Traceback (most recent call last):' >&2; exit 1",
+        );
+        expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
+        expect(stderr).toContain('Traceback');
+    });
 });
 
 suite('htmlToPdf', () => {
@@ -117,19 +126,6 @@ suite('htmlToPdf', () => {
             expect(spawn.mock.calls.slice(1).some(([cmd]) => cmd.includes('-c'))).toBe(true);
         } finally {
             spawn.mockRestore();
-        }
-    });
-
-    // WeasyPrint fails the whole render on attr(… url), which the sanitizer refuses before any export gets here.
-    test('a crash answers a bare 500 and logs the traceback', async () => {
-        const log = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            await expect(
-                htmlToPdf('<html><body><div title="x" style="background-image: attr(title url)">x</div></body></html>'),
-            ).rejects.toMatchObject({ status: 500, message: 'PDF generation failed' });
-            expect(String(log.mock.calls[0]?.[1])).toContain('Traceback');
-        } finally {
-            log.mockRestore();
         }
     });
 
