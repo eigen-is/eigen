@@ -1,10 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import * as Y from 'yjs';
 import { parseXml } from '../../lib/core/xml';
 import { SVG_INLINE_MAX_BYTES, toTransferableText } from '../../lib/document/transform/protocol';
 import { renderEigenslidesExport } from '../../lib/export/canvas/transform';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
+import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 import { sanitizeExportHtml, sanitizeExportMedia } from '../../lib/export/sanitize';
 import { renderSheetsExportDocument, renderSheetsPdfDocument } from '../../lib/export/sheets/render';
 import { renderEigenvectorExport } from '../../lib/export/vector/transform';
@@ -18,12 +22,10 @@ import {
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 
-// SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a
-// schemaless slide/sheet color or text. It lands in CSS the server-side PDF renderer would
-// otherwise fetch (SSRF from the API host). All legit export resources are embedded as `data:`
-// URIs, so sanitizeExportHtml — run by every export path before htmlToPdf — strips every non-data
-// ref. That layer is tested unconditionally (WeasyPrint's CLI can't restrict protocols, so the
-// strip must not depend on the renderer being present); the end-to-end run is skipped where absent.
+// SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a schemaless slide/sheet
+// color or text. WeasyPrint renders through a fetcher that opens only data: URIs, the boundary the last suite tests with
+// the sanitizer bypassed. sanitizeExportHtml strips every non-data ref as well, which keeps the HTML downloads and the
+// preview DOM from fetching: that layer is tested unconditionally, the renderer only where it is installed.
 
 // 1x1 PNG — the only legitimate resource shape exports embed (fonts/images are data: URIs).
 const DATA_PNG =
@@ -802,8 +804,12 @@ describe('export sanitize — every arm embeds its own media as sanitized', () =
 const wp = await isWeasyPrintAvailable();
 const suite = wp ? describe : describe.skip;
 
-// Renders the sanitized body to PDF against a local listener, and counts the connections WeasyPrint opened to it.
-async function connectionsWhileRendering(body: (u: (name: string) => string) => string): Promise<number> {
+const page = (body: string) => `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`;
+
+// Renders the HTML to PDF against a local listener, and counts the connections WeasyPrint opened to it.
+async function renderAgainstListener(
+    html: (u: (name: string) => string) => string | Promise<string>,
+): Promise<{ connections: number; pdf: Buffer }> {
     let connections = 0;
     const server = Bun.listen({
         hostname: '127.0.0.1',
@@ -818,13 +824,28 @@ async function connectionsWhileRendering(body: (u: (name: string) => string) => 
         },
     });
     try {
-        const html = body((name) => `http://127.0.0.1:${server.port}/${name}`);
-        await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`);
+        const pdf = await htmlToPdf(await html((name) => `http://127.0.0.1:${server.port}/${name}`));
         await Bun.sleep(250); // let any async fetch land before asserting
-        return connections;
+        return { connections, pdf };
     } finally {
         server.stop(true);
     }
+}
+
+const connectionsWhileRendering = async (body: (u: (name: string) => string) => string): Promise<number> =>
+    (await renderAgainstListener((u) => page(body(u)))).connections;
+
+// A PDF's streams, inflated where they are compressed: page content, object streams, embedded files.
+function pdfStreams(pdf: Buffer): string[] {
+    const text = pdf.toString('latin1');
+    return [...text.matchAll(/stream\r?\n/g)].map(({ index, 0: open }) => {
+        const stream = pdf.subarray(index + open.length, text.indexOf('endstream', index + open.length));
+        try {
+            return inflateSync(stream).toString('latin1');
+        } catch {
+            return stream.toString('latin1');
+        }
+    });
 }
 
 suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
@@ -941,25 +962,106 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#00ff00"/></svg>';
         const outer = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image width="10" height="10" href="${base64Svg(leaf)}"/></svg>`;
         const body = sanitizeExportHtml(`<img src="${percentSvg(outer)}">`);
-        const pdf = await htmlToPdf(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`,
-        );
-        // The page's content streams, inflated: WeasyPrint draws an SVG as vector operators, the leaf's green fill one.
-        const text = pdf.toString('latin1');
-        const streams = [...text.matchAll(/stream\r?\n/g)].map(({ index, 0: open }) => {
-            const start = index + open.length;
-            try {
-                return inflateSync(pdf.subarray(start, text.indexOf('endstream', start))).toString('latin1');
-            } catch {
-                return '';
-            }
-        });
-        expect(streams.join('\n')).toContain('0 1 0 rg');
+        const pdf = await htmlToPdf(page(body));
+        // WeasyPrint draws an SVG as vector operators, the leaf's green fill one.
+        expect(pdfStreams(pdf).join('\n')).toContain('0 1 0 rg');
     });
 
-    test('an embedded data: image still renders (legit resources unaffected)', async () => {
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><img src="${DATA_PNG}" style="width:50px;height:50px"></body></html>`;
-        const pdf = await htmlToPdf(html);
-        expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    test('a data: image and a data: font still render', async () => {
+        const pdf = await htmlToPdf(
+            page(
+                `<style>${getFontFaceCSSForFamilies(['Excalifont'])}</style>` +
+                    `<img src="${DATA_PNG}" style="width:50px;height:50px"><p style="font-family:Excalifont">drawn</p>`,
+            ),
+        );
+        const streams = pdfStreams(pdf).join('\n');
+        expect(pdf.toString('latin1')).toContain('/Subtype /Image');
+        // No system font is named Excalifont: only the data: URI can have embedded it.
+        expect(streams).toMatch(/\/BaseFont \/[A-Z]{6}\+Excalifont/);
+    });
+});
+
+// The render script's fetcher opens only data: URIs, so it holds with the sanitizer bypassed: every body here is raw.
+// WeasyPrint's CLI fetched each of these, the attachments embedding the response or the file in the PDF.
+suite('PDF export SSRF (the data-only fetcher, sanitizer bypassed)', () => {
+    let dir = '';
+    let secretPath = '';
+    const SECRET = `EIGEN-SSRF-SECRET-${crypto.randomUUID()}`;
+    beforeAll(() => {
+        dir = mkdtempSync(join(tmpdir(), 'eigen-ssrf-'));
+        secretPath = join(dir, 'secret.txt');
+        writeFileSync(secretPath, SECRET);
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const expectNothingFetched = ({ connections, pdf }: { connections: number; pdf: Buffer }) => {
+        expect(connections).toBe(0);
+        expect(pdfStreams(pdf).some((stream) => stream.includes(SECRET))).toBe(false);
+        expect(pdf.toString('latin1')).not.toContain('/EmbeddedFile');
+    };
+
+    const fetchingSvg = (href: string) =>
+        `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image width="9" height="9" href="${href}"/><rect width="5" height="5" fill="url(${href}-fill)"/></svg>`;
+    const base64 = (bytes: string | Buffer) => Buffer.from(bytes).toString('base64');
+    const utf16 = (text: string) => Buffer.from(text, 'utf16le');
+
+    test('a hostile body fetches nothing, from the network or the disk', async () => {
+        const result = await renderAgainstListener((u) =>
+            page(
+                `<a rel="attachment" href="${u('attach')}">a</a>` +
+                    `<a rel="attachment" href="${secretPath}">b</a>` +
+                    `<a rel="attachment" href="file://${secretPath}">c</a>` +
+                    `<a rel="attachment" href="secret.txt">d</a>` +
+                    `<img src="${u('img')}"><img src="${u('protocol-relative').replace('http:', '')}">` +
+                    `<img src="${secretPath}"><img src="file://${secretPath}">` +
+                    `<img src="data:image/svg+xml;base64,${base64(fetchingSvg(u('nested')))}">` +
+                    `<img src="data:image/png;base64,${base64(fetchingSvg(u('mistyped')))}">` +
+                    `<img src="data:image/png;base64,${base64(utf16(` ${fetchingSvg(u('utf16le'))}`))}">` +
+                    `<img src="data:image/png;base64,${base64(utf16(` ${fetchingSvg(u('utf16be'))}`).swap16())}">` +
+                    `<div style="width:9px;height:9px;background:url(${u('css')})"></div>` +
+                    `<style>@import "${u('import')}";@font-face{font-family:X;src:url(${u('font')})}p{font-family:X}</style>` +
+                    `<link rel="stylesheet" href="${u('link')}">` +
+                    `<svg width="20" height="20"><image width="9" height="9" href="${u('svg-image')}"></image>` +
+                    `<use href="${u('use.svg#g')}"></use></svg>` +
+                    `<object data="${u('object')}"></object><embed src="${u('embed')}"><p>x</p>`,
+            ),
+        );
+        expectNothingFetched(result);
+    });
+
+    // A doc link mark's rel reaches the anchor as the collaborator wrote it.
+    test.each(['http', 'path'] as const)(
+        'a doc link with rel=attachment to a %s target fetches nothing',
+        async (kind) => {
+            const result = await renderAgainstListener(async (u) => {
+                const href = kind === 'http' ? u('attach') : secretPath;
+                const doc = new Y.Doc();
+                const link = { type: 'link', attrs: { href, rel: 'attachment' } };
+                seedEigendoc(doc, {
+                    type: 'doc',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [link] }] }],
+                });
+                const html = Buffer.from(
+                    (await renderEigendocExport(doc, 'pdf-html', 'Doc', [], undefined)).data,
+                ).toString();
+                expect(html).toContain(`<a rel="attachment" href="${href}"`);
+                return html;
+            });
+            expectNothingFetched(result);
+        },
+    );
+
+    // A text box keeps only an http(s) or mailto: href (LIGHT_EDITOR_HREF), so no plain path reaches a deck.
+    test('a deck link with rel=attachment to an http target fetches nothing', async () => {
+        const result = await renderAgainstListener((u) => {
+            const scene = buildGoldenDeckScene();
+            const html = `<p><a href="${u('attach')}" rel="attachment">x</a></p>`;
+            const doc = new Y.Doc();
+            seedDeckDoc(doc, { ...scene, elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)) });
+            const out = Buffer.from(renderEigenslidesExport(doc, 'pdf-html', 'Deck', []).data).toString();
+            expect(out).toContain(`<a href="${u('attach')}" rel="attachment"`);
+            return out;
+        });
+        expectNothingFetched(result);
     });
 });
