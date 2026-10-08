@@ -19,6 +19,7 @@ import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { ApiError } from '../../lib/core/errors';
+import { parseXml } from '../../lib/core/xml';
 import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -27,6 +28,7 @@ import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
     toTransferableBuffer,
+    toTransferableText,
 } from '../../lib/document/transform/protocol';
 import { runTransformToBytes, runTransformToExtractedText } from '../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
@@ -43,6 +45,7 @@ import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
+import * as thumbnails from '../../lib/shared/thumbnails';
 import type { User } from '../../lib/user';
 import {
     buildGoldenDeckScene,
@@ -905,6 +908,48 @@ describe('document transform (eigendoc)', () => {
         // Ownership moved to the Worker, and the bytes came back as a data URI.
         expect(media[0].data.byteLength).toBe(0);
         expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
+    }, 120_000);
+
+    test("an SVG figure's own bytes are sanitized as XML inside the Worker", async () => {
+        const { mount, path } = golden;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><text>a&nbsp;b</text><image href="https://example.com/beacon.png"/></svg>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'export',
+                documentType: 'eigendoc',
+                format: 'html',
+                title: path.name,
+                media: [{ name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) }],
+                publicOrigin: undefined,
+                source: await captureCollabSource(mount, path),
+            },
+            EXPORT_OPTIONS,
+        );
+        const html = Buffer.from(exportBytes(response)).toString('utf-8');
+        const base64 = html.match(/src="data:image\/svg\+xml;base64,([^"]+)"/)?.[1] ?? '';
+        const media = Buffer.from(base64, 'base64').toString('utf8');
+        expect(parseXml(media)?.local).toBe('svg');
+        expect(media).toContain('a\u00a0b');
+        expect(media).not.toContain('beacon');
+    }, 120_000);
+
+    test('a docx export whose client is gone re-encodes none of its media', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const spy = spyOn(thumbnails, 'generateImagePreview');
+        let calls = -1;
+        try {
+            await runDocumentExport(
+                { documentType: 'eigendoc', format: 'docx' },
+                golden.mount,
+                golden.path,
+                controller.signal,
+            ).catch(() => {});
+            calls = spy.mock.calls.length;
+        } finally {
+            spy.mockRestore();
+        }
+        expect(calls).toBe(0);
     }, 120_000);
 
     test('docx export loads Turbodocx from runtime node_modules inside the Worker', async () => {

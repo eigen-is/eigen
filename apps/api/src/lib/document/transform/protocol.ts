@@ -51,7 +51,7 @@ export type ExportTransformJob =
           documentType: 'eigensheets';
           format: SheetExportFormat;
           title: string;
-          media: TransformMedia[];
+          media: ExportMedia[];
       }
     | {
           kind: 'export';
@@ -67,14 +67,14 @@ export type ExportTransformJob =
           documentType: 'eigenslides';
           format: DocumentExportFormat;
           title: string;
-          media: TransformMedia[];
+          media: ExportMedia[];
       }
     | {
           kind: 'export';
           documentType: 'eigenvector';
           format: VectorExportFormat;
           title: string;
-          media: TransformMedia[];
+          media: ExportMedia[];
       };
 
 // Search reindexing: the same captured document, read for its body text only. The
@@ -168,7 +168,7 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
     if (request.kind === 'export') {
         for (const item of request.media) {
             buffers.push(item.data);
-            if ('png' in item && item.png) buffers.push(item.png);
+            if (item.png) buffers.push(item.png);
         }
     }
     return buffers;

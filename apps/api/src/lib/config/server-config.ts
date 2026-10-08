@@ -69,6 +69,12 @@ export function getDomain(): string {
     return process.env['DOMAIN'] || 'localhost';
 }
 
+// The address users reach the server at, for a link that leaves it; a dev server's localhost has none.
+export function getPublicOrigin(): string | undefined {
+    const domain = getDomain();
+    return domain === 'localhost' ? undefined : `https://${domain}`;
+}
+
 // Mail address suffix — defaults to the web domain. Set MAIL_DOMAIN to decouple, e.g. web at
 // eigen.example.com but mail at @example.com.
 export function getMailDomain(): string {

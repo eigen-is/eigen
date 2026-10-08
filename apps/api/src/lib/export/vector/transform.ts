@@ -49,7 +49,8 @@ export function renderEigenvectorExport(
         // through the shared sanitizer (the documented SSRF closure) exactly like slides/sheets and
         // the preview.
         const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), RICH_TEXT_TAGS);
-        return { data: toTransferableText(toXmlDocument(svg)), warnings: [] };
+        // sceneToSvg always writes its root.
+        return { data: toTransferableText(toXmlDocument(svg) ?? svg), warnings: [] };
     }
 
     // pdf-html: the drawing as compositor layers on a page sized to the artwork. Rich text prints

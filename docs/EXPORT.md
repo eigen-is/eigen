@@ -12,7 +12,7 @@ Export and import both dispatch on the container type, not the mime type. A mime
 
 ## The Worker renders and the main thread prepares
 
-`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. The xlsx export skips it, because the writer carries cells only.
+`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. A docx instead re-encodes each image from its source file as PNG or JPEG in the thumbnail Worker, uncached, so it takes one item at a time and queues no more once the client disconnects. The xlsx export skips it, because the writer carries cells only.
 
 The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, renders, sanitizes and, for docx, converts. `@turbodocx/html-to-docx` and ExcelJS load lazily, so an HTML export evaluates neither. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays on the main thread: it is already a separate process.
 
@@ -46,7 +46,7 @@ Export embeds every resource it needs, so any other reference came from a collab
 - Backslashes go before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches.
 - `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links.
 - The hooks are added and removed around each synchronous call, so they never leak to another DOMPurify user.
-- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So `prepareMedia` sanitizes `image/svg+xml` media before the Worker sees it.
+- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML, without the characters XML can't hold; a file with no `<svg>` in it is dropped. The main thread hands over the inlined bytes as they are, capped at `SVG_INLINE_MAX_BYTES`: sanitizing a big drawing holds jsdom for seconds. A docx's PNG fallback is drawn from those same bytes in the thumbnail Worker, where librsvg fetches nothing from a buffer, so an SVG no XML reader can read leaves the docx.
 
 Previews pass the same function the exact set of their own preview URLs ([PREVIEWS.md](PREVIEWS.md)). The tests are in `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 

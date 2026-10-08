@@ -10,7 +10,7 @@ import {
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { getDomain, isInternalAddress } from '../config/server-config';
+import { getPublicOrigin, isInternalAddress } from '../config/server-config';
 
 export const EMAIL_BORDER = '#e0e0e0';
 export const EMAIL_TEXT = '#1a1a1a';
@@ -129,11 +129,10 @@ export function renderEigenEmail(input: EmailShellInput): string {
         : '';
     let footer = '';
     if (input.footerLine) {
-        const domain = getDomain();
-        const domainLink =
-            domain === 'localhost'
-                ? 'Eigen'
-                : `<a href="https://${domain}" style="color:${EMAIL_LINK};text-decoration:none">Eigen</a>`;
+        const origin = getPublicOrigin();
+        const domainLink = origin
+            ? `<a href="${origin}" style="color:${EMAIL_LINK};text-decoration:none">Eigen</a>`
+            : 'Eigen';
         footer = `<div style="font-size:12px;color:${EMAIL_MUTED};padding:0 4px;margin-top:8px">${escapeHtml(input.footerLine)} · ${domainLink}</div>`;
     }
     const title = `<h2 style="margin:0 0 20px;font-size:18px;font-weight:600;color:${EMAIL_TEXT};font-family:${EMAIL_FONT}">${escapeHtml(input.title)}</h2>`;

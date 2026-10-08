@@ -1,12 +1,13 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp, { type Sharp } from 'sharp';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { parseXml } from '../../lib/core/xml';
 import { type ExportMedia, transferListOf } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
+import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
+import * as thumbnails from '../../lib/shared/thumbnails';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const dir = join(import.meta.dir, `../../../../../data-test/test-export-media-${Date.now()}`);
@@ -22,6 +23,10 @@ function createGetLocalDatabase(baseDir: string) {
     };
 }
 
+// Fully transparent, so a JPEG's black would show in the first pixel.
+const clear = () =>
+    sharp({ create: { width: 64, height: 32, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 0 } } });
+
 // A gradient, so a lossy step would show in the pixels.
 function gradient(width: number, height: number): Sharp {
     const pixels = Buffer.alloc(width * height * 3);
@@ -29,7 +34,7 @@ function gradient(width: number, height: number): Sharp {
     return sharp(pixels, { raw: { width, height, channels: 3 } });
 }
 
-const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#2563eb"/><text x="10" y="80">a&nbsp;b</text><image href="https://example.com/beacon.png"/></svg>`;
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#2563eb"/><text x="10" y="80">a&#160;b</text><image href="https://example.com/beacon.png"/></svg>`;
 
 const PNG_SIGNATURE = '89504e47';
 const JPEG_SIGNATURE = 'ffd8ff';
@@ -79,7 +84,28 @@ describe('collectExportMedia', () => {
             ['lossless.webp', await gradient(320, 200).webp({ lossless: true }).toBuffer()],
             ['lossy.webp', await gradient(320, 200).webp({ quality: 80 }).toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
+            // Past the inliner's cap, which binds only what it builds: nothing here is inlined.
+            [
+                'huge.svg',
+                Buffer.from(
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${' '.repeat(SVG_INLINE_MAX_BYTES)}</svg>`,
+                ),
+            ],
+            // HTML's &nbsp; in an SVG file: no XML reader draws it, and only the transform Worker's pass rewrites it.
+            [
+                'html.svg',
+                Buffer.from(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text>a&nbsp;b</text></svg>',
+                ),
+            ],
+            // VP8X: a lossy WebP with alpha.
+            ['clear.webp', await clear().webp({ quality: 80 }).toBuffer()],
+            ['clear.tiff', await clear().tiff({ compression: 'lzw' }).toBuffer()],
+            // A PNG whose stored type says JPEG.
+            ['clear.jpg', await clear().png().toBuffer()],
             ['broken.png', Buffer.from('not a png')],
+            // A PDF wearing an Illustrator name, which the thumbnail Worker would read through exiftool.
+            ['art.ai', await gradient(40, 40).png().toBuffer()],
             // A real video, from which the thumbnail Worker would take a frame.
             [
                 'clip.mp4',
@@ -91,8 +117,10 @@ describe('collectExportMedia', () => {
             gif: 'image/gif',
             jpg: 'image/jpeg',
             webp: 'image/webp',
+            tiff: 'image/tiff',
             svg: 'image/svg+xml',
             mp4: 'video/mp4',
+            ai: 'application/pdf',
         };
         for (const [name, bytes] of sources) {
             const mime = mimes[name.split('.').pop() ?? ''] ?? '';
@@ -104,11 +132,48 @@ describe('collectExportMedia', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    async function collect(format: 'docx' | 'html' | 'pdf-html'): Promise<ExportMedia[]> {
+    async function collect(format: 'docx' | 'html' | 'pdf-html', signal?: AbortSignal): Promise<ExportMedia[]> {
         const container = await mount.getPath(containerId);
         if (!container) throw new Error('no container');
-        return collectExportMedia(mount, container, format);
+        return collectExportMedia(mount, container, format, signal);
     }
+
+    // A docx re-encodes every image from its source on the thumbnail semaphore every upload and preview shares.
+    test('a docx prepares one media item at a time', async () => {
+        const encode = thumbnails.generateImagePreview;
+        let active = 0;
+        let peak = 0;
+        const spy = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async (...args) => {
+            peak = Math.max(peak, ++active);
+            try {
+                return await encode(...args);
+            } finally {
+                active--;
+            }
+        });
+        try {
+            await collect('docx');
+        } finally {
+            spy.mockRestore();
+        }
+        expect(peak).toBe(1);
+    }, 60_000);
+
+    test('a docx queues no more media once its export aborts', async () => {
+        const controller = new AbortController();
+        const spy = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
+            controller.abort();
+            return null;
+        });
+        let calls = 0;
+        try {
+            await collect('docx', controller.signal);
+            calls = spy.mock.calls.length;
+        } finally {
+            spy.mockRestore();
+        }
+        expect(calls).toBe(1);
+    }, 60_000);
 
     test('a docx takes a PNG of a lossless source and a JPEG of a photo, with the Worker size', async () => {
         const media = await collect('docx');
@@ -124,10 +189,26 @@ describe('collectExportMedia', () => {
         for (const item of media) expect(item.png === undefined).toBe(item.contentType !== 'image/svg+xml');
     }, 60_000);
 
-    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy', () => {
+    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with alpha', () => {
         const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
-        expect([chunk('lossless.webp'), chunk('lossy.webp')]).toEqual(['VP8L', 'VP8 ']);
+        expect([chunk('lossless.webp'), chunk('lossy.webp'), chunk('clear.webp')]).toEqual(['VP8L', 'VP8 ', 'VP8X']);
     });
+
+    test('a transparent image stays a transparent PNG, whatever its type or stored MIME says', async () => {
+        const media = await collect('docx');
+        for (const name of ['clear.webp', 'clear.tiff', 'clear.jpg']) {
+            const { contentType, data, width, height } = find(media, name);
+            const alpha = (await sharp(Buffer.from(data)).ensureAlpha().raw().toBuffer())[3];
+            expect([name, contentType, signatureOf(data), width, height, alpha]).toEqual([
+                name,
+                'image/png',
+                PNG_SIGNATURE,
+                64,
+                32,
+                0,
+            ]);
+        }
+    }, 60_000);
 
     test('a PNG comes from the source, pixel for pixel, never the lossy preview', async () => {
         const chart = find(await collect('docx'), 'chart.png');
@@ -153,13 +234,10 @@ describe('collectExportMedia', () => {
         expect(Buffer.from(photo.data).includes('Eigen')).toBe(false);
     }, 60_000);
 
-    test('an SVG is its sanitized XML beside a PNG at its own size', async () => {
+    test('an SVG is its own bytes, which the transform Worker sanitizes, beside a PNG at its own size', async () => {
         const svg = find(await collect('docx'), 'drawing.svg');
         expect([svg.contentType, svg.width, svg.height]).toEqual(['image/svg+xml', 300, 150]);
-        const text = Buffer.from(svg.data).toString('utf8');
-        expect(parseXml(text)?.local).toBe('svg');
-        expect(text).toContain('a b');
-        expect(text).not.toContain('beacon');
+        expect(Buffer.from(svg.data).toString('utf8')).toBe(SVG);
         const png = svg.png ?? new ArrayBuffer(0);
         expect(signatureOf(png)).toBe(PNG_SIGNATURE);
         const { width, height } = await sharp(Buffer.from(png)).metadata();
@@ -170,16 +248,35 @@ describe('collectExportMedia', () => {
         const names = (await collect('docx')).map((item) => item.name);
         expect(names).not.toContain('broken.png');
         expect(names).not.toContain('clip.mp4');
+        // Its PNG is drawn from the file's own bytes.
+        expect(names).not.toContain('html.svg');
+    }, 60_000);
+
+    test.each(['docx', 'html'] as const)(
+        '%s hands no SVG past SVG_INLINE_MAX_BYTES to the Worker',
+        async (format) => {
+            expect((await collect(format)).map((item) => item.name)).not.toContain('huge.svg');
+        },
+        60_000,
+    );
+
+    test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
+        const names = (await collect('docx')).map((item) => item.name);
+        expect(names).not.toContain('art.ai');
     }, 60_000);
 
     test.each(['html', 'pdf-html'] as const)(
-        '%s keeps the screen preview: WebP rasters, the SVG as XML, no size and no PNG',
+        '%s keeps the screen preview: WebP rasters, the SVG as its own bytes, no size and no PNG',
         async (format) => {
             const media = await collect(format);
             expect(media.map((item) => [item.name, item.contentType]).sort()).toEqual(
                 [
                     ['chart.png', 'image/webp'],
+                    ['clear.jpg', 'image/webp'],
+                    ['clear.tiff', 'image/webp'],
+                    ['clear.webp', 'image/webp'],
                     ['drawing.svg', 'image/svg+xml'],
+                    ['html.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
                     ['photo.jpg', 'image/webp'],
@@ -190,7 +287,7 @@ describe('collectExportMedia', () => {
             for (const item of media) {
                 expect([item.width, item.height, item.png]).toEqual([undefined, undefined, undefined]);
             }
-            expect(parseXml(Buffer.from(find(media, 'drawing.svg').data).toString('utf8'))?.local).toBe('svg');
+            expect(Buffer.from(find(media, 'drawing.svg').data).toString('utf8')).toBe(SVG);
         },
         60_000,
     );
