@@ -283,7 +283,98 @@ export function buildAllFeaturesDocJson(): JSONContent {
             { type: 'paragraph', attrs: { textAlign: 'center' } },
             { type: 'paragraph' },
             { type: 'pageBreak' },
-            { type: 'paragraph', content: [{ type: 'text', text: 'After the page break.' }] },
+            paragraph('After the page break.'),
+            {
+                type: 'bulletList',
+                content: [
+                    {
+                        type: 'listItem',
+                        content: [
+                            paragraph('Bullet one, holding a list lettered from c'),
+                            {
+                                type: 'orderedList',
+                                attrs: { start: 3, type: 'a' },
+                                content: [paragraph('Nested c'), paragraph('Nested d')].map((item) => ({
+                                    type: 'listItem',
+                                    content: [item],
+                                })),
+                            },
+                        ],
+                    },
+                    {
+                        type: 'listItem',
+                        content: [
+                            paragraph('Bullet two'),
+                            paragraph('Its second paragraph'),
+                            { type: 'pageBreak' },
+                            paragraph('After a break in the item'),
+                        ],
+                    },
+                    { type: 'listItem', content: [{ type: 'paragraph' }] },
+                ],
+            },
+            ...['Counts from one', 'Counts from one again'].map((item) => ({
+                type: 'orderedList',
+                attrs: { start: 1, type: null },
+                content: [{ type: 'listItem', content: [paragraph(item)] }],
+            })),
+            {
+                type: 'taskList',
+                content: [
+                    {
+                        type: 'taskItem',
+                        attrs: { checked: true },
+                        content: [
+                            paragraph('Done task'),
+                            {
+                                type: 'taskList',
+                                content: [
+                                    {
+                                        type: 'taskItem',
+                                        attrs: { checked: false },
+                                        content: [paragraph('Nested open')],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        type: 'taskItem',
+                        attrs: { checked: false },
+                        content: [
+                            paragraph('Open task'),
+                            { type: 'pageBreak' },
+                            paragraph('After a break in the task'),
+                        ],
+                    },
+                ],
+            },
+            {
+                type: 'blockquote',
+                content: [
+                    {
+                        type: 'heading',
+                        attrs: { level: 3, textAlign: null },
+                        content: [{ type: 'text', text: 'Quoted' }],
+                    },
+                    paragraph('Quoted paragraph'),
+                    { type: 'blockquote', content: [paragraph('Nested quote')] },
+                    { type: 'pageBreak' },
+                    paragraph('After a break in the quote'),
+                ],
+            },
+            {
+                type: 'codeBlock',
+                attrs: { language: 'javascript' },
+                content: [
+                    {
+                        type: 'text',
+                        text: 'function greet(name) {\n\t/* says\n\t   hello */\n\treturn "Hello, " + name;\n}',
+                    },
+                ],
+            },
+            { type: 'horizontalRule' },
+            paragraph('After the rule.'),
         ],
     };
 }

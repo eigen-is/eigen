@@ -18,23 +18,9 @@ const NONCHARACTER = String.fromCharCode(0xfffe);
 
 const schema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
 
-// The nodes U2b (lists, tasks, tables, code blocks, quotes, rules) and U2c (figures) map. Each throws until its
-// mapping lands and leaves this set; the writer is whole when it is empty.
-const PENDING_NODES = new Set([
-    'blockquote',
-    'bulletList',
-    'orderedList',
-    'listItem',
-    'taskList',
-    'taskItem',
-    'codeBlock',
-    'horizontalRule',
-    'table',
-    'tableRow',
-    'tableCell',
-    'tableHeader',
-    'figure',
-]);
+// The nodes U2b (tables) and U2c (figures) map. Each throws until its mapping lands and leaves this set; the writer is
+// whole when it is empty.
+const PENDING_NODES = new Set(['table', 'tableRow', 'tableCell', 'tableHeader', 'figure']);
 
 function docx(json: JSONContent, publicOrigin?: string): Promise<Uint8Array> {
     return eigendocToDocx(json, 'Report.eigendoc', publicOrigin);
@@ -98,6 +84,25 @@ function shape(element: XmlElement): string[] {
     return xmlElements(element).map((e) => e.local);
 }
 
+// An element as XML, names as written and namespace declarations left out: the exact-XML oracle. WordprocessingML
+// holds text only in leaves, so text before elements loses nothing.
+function xmlOf(element: XmlElement): string {
+    const attributes = Object.entries(element.attributes)
+        .filter(([name]) => name !== 'xmlns' && !name.startsWith('xmlns:'))
+        .map(([name, value]) => ` ${name}="${value}"`)
+        .join('');
+    const content = xmlText(element) + xmlElements(element).map(xmlOf).join('');
+    return content ? `<${element.name}${attributes}>${content}</${element.name}>` : `<${element.name}${attributes}/>`;
+}
+
+async function paragraphsOf(json: JSONContent): Promise<string[]> {
+    return xmlChildren(await bodyOf(json), W, 'p').map(xmlOf);
+}
+
+async function numberingOf(json: JSONContent): Promise<XmlElement> {
+    return part(await unzip(json), 'word/numbering.xml');
+}
+
 function doc(...content: JSONContent[]): JSONContent {
     return { type: 'doc', content };
 }
@@ -108,6 +113,47 @@ function p(...content: JSONContent[]): JSONContent {
 
 function text(value: string, ...marks: NonNullable<JSONContent['marks']>): JSONContent {
     return { type: 'text', text: value, marks };
+}
+
+function ul(...items: JSONContent[]): JSONContent {
+    return { type: 'bulletList', content: items };
+}
+
+function ol(attrs: Record<string, unknown>, ...items: JSONContent[]): JSONContent {
+    return { type: 'orderedList', attrs, content: items };
+}
+
+function li(...content: JSONContent[]): JSONContent {
+    return { type: 'listItem', content };
+}
+
+function tasks(...items: JSONContent[]): JSONContent {
+    return { type: 'taskList', content: items };
+}
+
+function task(checked: boolean, ...content: JSONContent[]): JSONContent {
+    return { type: 'taskItem', attrs: { checked }, content };
+}
+
+function quote(...content: JSONContent[]): JSONContent {
+    return { type: 'blockquote', content };
+}
+
+function code(value: string, language: string | null = null): JSONContent {
+    return { type: 'codeBlock', attrs: { language }, content: [text(value)] };
+}
+
+function heading(level: number, ...content: JSONContent[]): JSONContent {
+    return { type: 'heading', attrs: { level }, content };
+}
+
+const RULE: JSONContent = { type: 'horizontalRule' };
+const PAGE_BREAK: JSONContent = { type: 'pageBreak' };
+const PAGE_BREAK_XML = '<w:p><w:pPr><w:pStyle w:val="PageBreak"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>';
+
+// The run one plain text writes.
+function run(value: string): string {
+    return `<w:r><w:t xml:space="preserve">${value}</w:t></w:r>`;
 }
 
 function typesIn(json: JSONContent, nodes = new Set<string>(), marks = new Set<string>()) {
@@ -233,8 +279,17 @@ describe('docx writer — package', () => {
         expect(referenced.length).toBeGreaterThan(0);
         for (const id of referenced) expect(styleIds).toContain(id);
 
-        const numIds = xmlChildren(await part(zip, 'word/numbering.xml'), W, 'num').map((n) => w(n, 'numId'));
-        for (const numId of descendants(document, W, 'numId')) expect(numIds).toContain(w(numId, 'val'));
+        const numbering = await part(zip, 'word/numbering.xml');
+        const numIds = xmlChildren(numbering, W, 'num').map((n) => w(n, 'numId'));
+        expect(new Set(numIds).size).toBe(numIds.length);
+        const used = descendants(document, W, 'numId');
+        expect(used.length).toBeGreaterThan(0);
+        for (const numId of used) expect(numIds).toContain(w(numId, 'val'));
+        const abstractNumIds = xmlChildren(numbering, W, 'abstractNum').map((a) => w(a, 'abstractNumId'));
+        expect(new Set(abstractNumIds).size).toBe(abstractNumIds.length);
+        for (const num of xmlChildren(numbering, W, 'num')) {
+            expect(abstractNumIds).toContain(w(child(num, 'abstractNumId'), 'val'));
+        }
 
         const docPrIds = descendants(
             document,
@@ -307,6 +362,19 @@ describe('docx writer — page breaks', () => {
         expect(w(child(child(pageBreak, 'pPr'), 'pStyle'), 'val')).toBe('PageBreak');
         const br = only(xmlElements(child(pageBreak, 'r') ?? body));
         expect([br.local, w(br, 'type')]).toEqual(['br', 'page']);
+    });
+
+    test.each([
+        ['a list item', (...content: JSONContent[]) => ul(li(...content))],
+        ['a task item', (...content: JSONContent[]) => tasks(task(false, ...content))],
+        ['a quote', (...content: JSONContent[]) => quote(...content)],
+    ])('a page break in %s is the same unnumbered paragraph, at its place', async (_where, wrap) => {
+        const body = await bodyOf(doc(wrap(p(text('before')), PAGE_BREAK, p(text('after')))));
+        const [before, pageBreak, after, ...rest] = xmlChildren(body, W, 'p');
+        expect(rest).toEqual([]);
+        expect(texts(before ?? body)).toEndWith('before');
+        expect(xmlOf(pageBreak ?? body)).toBe(PAGE_BREAK_XML);
+        expect(texts(after ?? body)).toBe('after');
     });
 
     test('the Page Break style shrinks the paragraph mark the break leaves to 1 pt', async () => {
@@ -618,6 +686,307 @@ describe('docx writer — links', () => {
     });
 });
 
+describe('docx writer — lists', () => {
+    const numbered = (ilvl: number, numId: number, after: number, runs: string) =>
+        `<w:p><w:pPr><w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
+
+    test("an item's first paragraph is numbered, 0.25em after it, the list's last 1em", async () => {
+        expect(await paragraphsOf(doc(ul(li(p(text('one'))), li(p(text('two')))), p(text('after'))))).toEqual([
+            numbered(0, 1, 55, run('one')),
+            numbered(0, 1, 220, run('two')),
+            `<w:p>${run('after')}</w:p>`,
+        ]);
+    });
+
+    test('a list is one abstractNum with its start in all nine levels, and one num pointing at it', async () => {
+        const numbering = await numberingOf(doc(ol({ start: 3 }, li(p(text('x'))))));
+        const abstractNum = only(xmlChildren(numbering, W, 'abstractNum'));
+        expect(w(abstractNum, 'abstractNumId')).toBe('0');
+        const levels = xmlChildren(abstractNum, W, 'lvl');
+        expect(levels.map((level) => w(level, 'ilvl'))).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8']);
+        expect(levels.map((level) => xmlOf(level)).filter((_, i) => i === 0 || i === 8)).toEqual([
+            '<w:lvl w:ilvl="0"><w:start w:val="3"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="330" w:hanging="330"/></w:pPr></w:lvl>',
+            '<w:lvl w:ilvl="8"><w:start w:val="3"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%9."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2970" w:hanging="330"/></w:pPr></w:lvl>',
+        ]);
+        expect(xmlOf(only(xmlChildren(numbering, W, 'num')))).toBe(
+            '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>',
+        );
+        expect(descendants(numbering, W, 'lvlOverride')).toEqual([]);
+    });
+
+    test('a bullet is a disc at every level', async () => {
+        const levels = descendants(await numberingOf(doc(ul(li(p(text('x')))))), W, 'lvl');
+        expect(levels).toHaveLength(9);
+        for (const level of levels) {
+            expect([
+                w(child(level, 'start'), 'val'),
+                w(child(level, 'numFmt'), 'val'),
+                w(child(level, 'lvlText'), 'val'),
+            ]).toEqual(['1', 'bullet', '•']);
+        }
+    });
+
+    test.each([
+        ['1', 'decimal'],
+        ['a', 'lowerLetter'],
+        ['A', 'upperLetter'],
+        ['i', 'lowerRoman'],
+        ['I', 'upperRoman'],
+        [null, 'decimal'],
+        ['z', 'decimal'],
+    ])('type %p numbers in %s', async (type, format) => {
+        const levels = descendants(await numberingOf(doc(ol({ type }, li(p(text('x')))))), W, 'lvl');
+        expect(new Set(levels.map((level) => w(child(level, 'numFmt'), 'val')))).toEqual(new Set([format]));
+    });
+
+    test.each([
+        [-5, '0'],
+        [1e9, '32767'],
+        [2.6, '3'],
+        ['7', '1'],
+        [Number.NaN, '1'],
+    ])('start %p is written as %s', async (start, written) => {
+        const level = descendants(await numberingOf(doc(ol({ start }, li(p(text('x')))))), W, 'lvl')[0];
+        expect(w(child(level, 'start'), 'val')).toBe(written);
+    });
+
+    test('a nested list is its own abstractNum one level in; only the outer list ends 1em above', async () => {
+        const json = doc(
+            ul(li(p(text('outer')), ol({}, li(p(text('inner one'))), li(p(text('inner two'))))), li(p(text('last')))),
+        );
+        expect(await paragraphsOf(json)).toEqual([
+            numbered(0, 1, 55, run('outer')),
+            numbered(1, 2, 55, run('inner one')),
+            numbered(1, 2, 55, run('inner two')),
+            numbered(0, 1, 220, run('last')),
+        ]);
+        const [outer, inner] = xmlChildren(await numberingOf(json), W, 'abstractNum');
+        const indent = (list: XmlElement | undefined, ilvl: number) =>
+            w(child(child(list && xmlChildren(list, W, 'lvl')[ilvl], 'pPr'), 'ind'), 'left');
+        expect([indent(outer, 0), indent(inner, 1)]).toEqual(['330', '660']);
+        expect(w(child(child(inner, 'lvl'), 'numFmt'), 'val')).toBe('decimal');
+    });
+
+    test('two adjacent lists count separately', async () => {
+        const json = doc(ol({}, li(p(text('a')))), ol({}, li(p(text('b')))));
+        const numIds = descendants(await bodyOf(json), W, 'numId').map((numId) => w(numId, 'val'));
+        expect(numIds).toEqual(['1', '2']);
+        const nums = xmlChildren(await numberingOf(json), W, 'num');
+        expect(nums.map((num) => w(child(num, 'abstractNumId'), 'val'))).toEqual(['0', '1']);
+    });
+
+    test('every abstractNum has an nsid of its own, 8 hex digits, and all abstractNums come before the nums', async () => {
+        const numbering = await numberingOf(doc(ul(li(p(text('a')), ul(li(p(text('b')))))), ol({}, li(p(text('c'))))));
+        const nsids = descendants(numbering, W, 'nsid').map((nsid) => w(nsid, 'val') ?? '');
+        expect(nsids).toHaveLength(3);
+        expect(new Set(nsids).size).toBe(3);
+        for (const nsid of nsids) expect(nsid).toMatch(/^[0-9A-F]{8}$/);
+        expect(shape(numbering)).toEqual(['abstractNum', 'abstractNum', 'abstractNum', 'num', 'num', 'num']);
+    });
+
+    test("an item's other blocks are indented to its text, unnumbered", async () => {
+        expect(await paragraphsOf(doc(ul(li(p(text('first')), p(text('second'))), li(p(text('next'))))))).toEqual([
+            numbered(0, 1, 55, run('first')),
+            `<w:p><w:pPr><w:spacing w:after="55"/><w:ind w:left="330"/></w:pPr>${run('second')}</w:p>`,
+            numbered(0, 1, 220, run('next')),
+        ]);
+    });
+
+    test('an empty list item keeps its number', async () => {
+        expect(await paragraphsOf(doc(ul(li(p()))))).toEqual([numbered(0, 1, 220, '')]);
+    });
+
+    test("a list in a quote is numbered inside the quote's indent", async () => {
+        const json = doc(quote(ul(li(p(text('x'))))));
+        expect(await paragraphsOf(json)).toEqual([
+            `<w:p><w:pPr><w:pStyle w:val="Quote"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="220"/></w:pPr>${run('x')}</w:p>`,
+        ]);
+        const level = descendants(await numberingOf(json), W, 'lvl')[0];
+        expect(w(child(child(level, 'pPr'), 'ind'), 'left')).toBe('595');
+    });
+
+    test('a list item or a task item outside its list is written, unnumbered', async () => {
+        const paragraphs = await paragraphsOf(doc(li(p(text('stray'))), task(true, p(text('lost')))));
+        expect(paragraphs[0]).toBe(
+            `<w:p><w:pPr><w:spacing w:after="55"/><w:ind w:left="330"/></w:pPr>${run('stray')}</w:p>`,
+        );
+        expect(paragraphs[1]).toContain('lost');
+    });
+});
+
+describe('docx writer — task lists', () => {
+    const checkbox = (checked: boolean) =>
+        `<w:sdt><w:sdtPr><w14:checkbox><w14:checked w14:val="${checked ? 1 : 0}"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:hAnsi="MS Gothic" w:eastAsia="MS Gothic" w:cs="MS Gothic"/><w:strike w:val="0"/></w:rPr><w:t>${checked ? '☒' : '☐'}</w:t></w:r></w:sdtContent></w:sdt><w:r><w:rPr><w:strike w:val="0"/></w:rPr><w:tab/></w:r>`;
+
+    test('an item opens with a checkbox control and a tab that is never struck, its text hanging a level in', async () => {
+        expect(
+            await paragraphsOf(doc(tasks(task(false, p(text('open'))), task(true, p(text('done')))), p(text('after')))),
+        ).toEqual([
+            `<w:p><w:pPr><w:spacing w:after="0"/><w:ind w:left="330" w:hanging="330"/></w:pPr>${checkbox(false)}${run('open')}</w:p>`,
+            `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="220"/><w:ind w:left="330" w:hanging="330"/></w:pPr>${checkbox(true)}${run('done')}</w:p>`,
+            `<w:p>${run('after')}</w:p>`,
+        ]);
+    });
+
+    test('a checked item strikes all its content, nested items included', async () => {
+        const paragraphs = await paragraphsOf(
+            doc(tasks(task(true, p(text('done')), p(text('more')), tasks(task(false, p(text('nested'))))))),
+        );
+        expect(paragraphs.slice(1)).toEqual([
+            `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="0"/><w:ind w:left="330"/></w:pPr>${run('more')}</w:p>`,
+            `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="220"/><w:ind w:left="660" w:hanging="330"/></w:pPr>${checkbox(false)}${run('nested')}</w:p>`,
+        ]);
+    });
+
+    test('the Task Done style strikes in the muted color', async () => {
+        expect(xmlOf(style(await styles(), 'TaskDone'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="TaskDone"><w:name w:val="Task Done"/><w:basedOn w:val="Normal"/><w:rPr><w:strike/><w:color w:val="6B7280"/></w:rPr></w:style>',
+        );
+    });
+
+    test('MS Gothic, the checkbox glyphs, joins the font table only with a task list', async () => {
+        const names = async (json: JSONContent) =>
+            xmlChildren(await part(await unzip(json), 'word/fontTable.xml'), W, 'font').map((font) => w(font, 'name'));
+        expect(await names(doc(p(text('x'))))).not.toContain('MS Gothic');
+        expect(await names(doc(tasks(task(false, p(text('x'))))))).toEqual([
+            'Inter',
+            'Source Serif 4',
+            'JetBrains Mono',
+            'Excalifont',
+            'MS Gothic',
+        ]);
+    });
+});
+
+describe('docx writer — code blocks', () => {
+    // Each line's runs as text, color and italic.
+    async function codeLines(json: JSONContent): Promise<(string | undefined)[][][]> {
+        const paragraphs = xmlChildren(await bodyOf(json), W, 'p');
+        for (const paragraph of paragraphs) {
+            expect(w(child(child(paragraph, 'pPr'), 'pStyle'), 'val')).toBe('CodeBlock');
+        }
+        return paragraphs.map((paragraph) =>
+            xmlChildren(paragraph, W, 'r').map((r) => {
+                const rPr = child(r, 'rPr');
+                return [texts(r), w(child(rPr, 'color'), 'val'), child(rPr, 'i') && 'i'];
+            }),
+        );
+    }
+
+    test('one paragraph per line in the Code Block style, tokens colored as the editor colors them', async () => {
+        expect(await codeLines(doc(code('const a = "x";\nreturn 1;', 'javascript')))).toEqual([
+            [
+                ['const', 'CBA6F7', undefined],
+                [' a = ', undefined, undefined],
+                ['"x"', 'A6E3A1', undefined],
+                [';', undefined, undefined],
+            ],
+            [
+                ['return', 'CBA6F7', undefined],
+                [' ', undefined, undefined],
+                ['1', 'FAB387', undefined],
+                [';', undefined, undefined],
+            ],
+        ]);
+    });
+
+    test('a token spanning lines is split at the break and keeps its color and italic on both lines', async () => {
+        expect(await codeLines(doc(code('/* one\ntwo */', 'javascript')))).toEqual([
+            [['/* one', '6C7086', 'i']],
+            [['two */', '6C7086', 'i']],
+        ]);
+    });
+
+    test("a token inside another without a color of its own keeps the outer one's", async () => {
+        expect(await codeLines(doc(code('f"a{b}"', 'python')))).toEqual([
+            [
+                ['f"a', 'A6E3A1', undefined],
+                ['{b}', 'A6E3A1', undefined],
+                ['"', 'A6E3A1', undefined],
+            ],
+        ]);
+    });
+
+    test('\\r\\n and U+000B split lines too, an empty line stays, a tab stays in its line', async () => {
+        const body = await bodyOf(doc(code('a\r\nb\u000Bc\n\n\td', 'plaintext')));
+        const paragraphs = xmlChildren(body, W, 'p');
+        expect(paragraphs.map(texts)).toEqual(['a', 'b', 'c', '', 'd']);
+        expect(xmlOf(paragraphs[3] ?? body)).toBe('<w:p><w:pPr><w:pStyle w:val="CodeBlock"/></w:pPr></w:p>');
+        expect(shape(child(paragraphs[4], 'r') ?? body)).toEqual(['tab', 't']);
+    });
+
+    test('the language is not written, and one lowlight lacks is highlighted automatically, as in the HTML', async () => {
+        const auto = await paragraphsOf(doc(code('const a = 1;')));
+        expect(await paragraphsOf(doc(code('const a = 1;', 'no-such-language')))).toEqual(auto);
+        expect(auto.join('')).toContain('w:color');
+        expect(auto.join('')).not.toContain('no-such-language');
+    });
+
+    test("the Code Block style is the editor's dark box: borders as its padding, shading, mono at 286 auto", async () => {
+        expect(xmlOf(style(await styles(), 'CodeBlock'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="11" w:color="1E1E2E"/><w:left w:val="single" w:sz="4" w:space="14" w:color="1E1E2E"/><w:bottom w:val="single" w:sz="4" w:space="11" w:color="1E1E2E"/><w:right w:val="single" w:sz="4" w:space="14" w:color="1E1E2E"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="1E1E2E"/><w:spacing w:before="165" w:after="165" w:line="286" w:lineRule="auto"/><w:ind w:left="290" w:right="290"/><w:contextualSpacing/></w:pPr><w:rPr><w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono" w:eastAsia="JetBrains Mono" w:cs="JetBrains Mono"/><w:color w:val="CDD6F4"/><w:sz w:val="19"/><w:szCs w:val="19"/></w:rPr></w:style>',
+        );
+    });
+
+    test("a code block in a list item moves its box to the item's text", async () => {
+        const paragraphs = await paragraphsOf(doc(ul(li(p(text('x')), code('a', 'plaintext')), li(p(text('y'))))));
+        expect(paragraphs[1]).toBe(
+            '<w:p><w:pPr><w:pStyle w:val="CodeBlock"/><w:ind w:left="620" w:right="290"/></w:pPr><w:r><w:t xml:space="preserve">a</w:t></w:r></w:p>',
+        );
+    });
+});
+
+describe('docx writer — quotes', () => {
+    const quoted = (runs: string, pPr = '') => `<w:p><w:pPr><w:pStyle w:val="Quote"/>${pPr}</w:pPr>${runs}</w:p>`;
+
+    test('each paragraph takes the Quote style, the last 1em above the next block', async () => {
+        expect(await paragraphsOf(doc(quote(p(text('one')), p(text('two'))), p(text('after'))))).toEqual([
+            quoted(run('one')),
+            quoted(run('two'), '<w:spacing w:after="220"/>'),
+            `<w:p>${run('after')}</w:p>`,
+        ]);
+    });
+
+    test("the Quote style is the editor's bar, padding and grey italic", async () => {
+        expect(xmlOf(style(await styles(), 'Quote'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="11" w:color="D1D5DB"/></w:pBdr><w:spacing w:after="0"/><w:ind w:left="265"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="6B7280"/></w:rPr></w:style>',
+        );
+    });
+
+    test('a heading in a quote keeps its style and takes the bar and indent directly', async () => {
+        expect(await paragraphsOf(doc(quote(heading(2, text('quoted')), p(text('body')))))).toEqual([
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="11" w:color="D1D5DB"/></w:pBdr><w:spacing w:before="0"/><w:ind w:left="265"/></w:pPr>${run('quoted')}</w:p>`,
+            quoted(run('body'), '<w:spacing w:after="220"/>'),
+        ]);
+    });
+
+    test('a nested quote adds its indent', async () => {
+        expect(await paragraphsOf(doc(quote(p(text('outer')), quote(p(text('inner'))))))).toEqual([
+            quoted(run('outer')),
+            quoted(run('inner'), '<w:spacing w:after="220"/><w:ind w:left="530"/>'),
+        ]);
+    });
+
+    test("a quote in a list item sits at the item's text", async () => {
+        const paragraphs = await paragraphsOf(doc(ul(li(p(text('item')), quote(p(text('quoted')))))));
+        expect(paragraphs[1]).toBe(quoted(run('quoted'), '<w:spacing w:after="220"/><w:ind w:left="595"/>'));
+    });
+});
+
+describe('docx writer — horizontal rules', () => {
+    test('a rule is an empty paragraph in the Horizontal Rule style, its line a bottom border', async () => {
+        expect(await paragraphsOf(doc(RULE))).toEqual(['<w:p><w:pPr><w:pStyle w:val="HorizontalRule"/></w:pPr></w:p>']);
+        expect(xmlOf(style(await styles(), 'HorizontalRule'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="HorizontalRule"><w:name w:val="Horizontal Rule"/><w:basedOn w:val="Normal"/><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="E0E0E6"/></w:pBdr><w:spacing w:before="330" w:after="330" w:line="20" w:lineRule="exact"/></w:pPr><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:style>',
+        );
+    });
+
+    test("a rule in a list item starts at the item's text, and keeps its own larger margin below", async () => {
+        const paragraphs = await paragraphsOf(doc(ul(li(p(text('x')), RULE))));
+        expect(paragraphs[1]).toBe('<w:p><w:pPr><w:pStyle w:val="HorizontalRule"/><w:ind w:left="330"/></w:pPr></w:p>');
+    });
+});
+
 // ECMA-376 sequence orders, the test's own oracle: Word calls a file with a child out of order unreadable. A child
 // missing from its list fails too, so a writer that starts emitting it extends the list here.
 const SEQUENCES: Record<string, string[]> = {
@@ -640,6 +1009,15 @@ const SEQUENCES: Record<string, string[]> = {
         ...['rPr', 'tblPr', 'trPr', 'tcPr', 'tblStylePr'],
     ],
     docDefaults: ['rPrDefault', 'pPrDefault'],
+    pBdr: ['top', 'left', 'bottom', 'right', 'between', 'bar'],
+    numPr: ['ilvl', 'numId', 'numberingChange', 'ins'],
+    numbering: ['numPicBullet', 'abstractNum', 'num', 'numIdMacAtCleanup'],
+    abstractNum: ['nsid', 'multiLevelType', 'tmpl', 'name', 'styleLink', 'numStyleLink', 'lvl'],
+    num: ['abstractNumId', 'lvlOverride'],
+    lvl: [
+        ...['start', 'numFmt', 'lvlRestart', 'pStyle', 'isLgl', 'suff', 'lvlText', 'lvlPicBulletId', 'legacy'],
+        ...['lvlJc', 'pPr', 'rPr'],
+    ],
     font: [
         ...['altName', 'panose1', 'charset', 'family', 'notTrueType', 'pitch', 'sig', 'embedRegular', 'embedBold'],
         ...['embedItalic', 'embedBoldItalic'],
@@ -671,18 +1049,27 @@ const SEQUENCES: Record<string, string[]> = {
     ],
 };
 
+// The children a sequence may repeat in a row.
+const REPEATED = new Set(['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride']);
+
 describe('docx writer — property order', () => {
     test('every property list writes its children in the ECMA sequence', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
         const seen = new Set<string>();
         const outOfOrder: string[] = [];
-        for (const path of ['word/document.xml', 'word/styles.xml', 'word/settings.xml', 'word/fontTable.xml']) {
+        const paths = ['document', 'styles', 'numbering', 'settings', 'fontTable'].map((name) => `word/${name}.xml`);
+        for (const path of paths) {
             for (const element of elementsOf(await part(zip, path))) {
                 const sequence = element.ns === W ? SEQUENCES[element.local] : undefined;
                 if (!sequence) continue;
                 seen.add(element.local);
-                const order = xmlElements(element).map((c) => (c.ns === W ? sequence.indexOf(c.local) : -1));
-                if (order.some((index, i) => index < 0 || (i > 0 && index <= (order[i - 1] ?? -1)))) {
+                const children = xmlElements(element);
+                const order = children.map((c) => (c.ns === W ? sequence.indexOf(c.local) : -1));
+                const misplaced = (index: number, i: number) => {
+                    const previous = order[i - 1] ?? -1;
+                    return index < previous || (index === previous && !REPEATED.has(children[i]?.local ?? ''));
+                };
+                if (order.some((index, i) => index < 0 || misplaced(index, i))) {
                     outOfOrder.push(`${path} ${element.local}: ${shape(element).join(' ')}`);
                 }
             }

@@ -17,16 +17,17 @@ export function renderCodeBlockNode(
     lowlight: Lowlight,
 ): string {
     const language = node.attrs.language || '';
-    const code = node.textContent ?? '';
-
-    // Users rarely set a language, so highlightAuto is where nearly all export highlighting comes from.
-    const highlighted =
-        language && lowlight.registered(language)
-            ? hastToHtml(lowlight.highlight(language, code))
-            : hastToHtml(lowlight.highlightAuto(code));
-
+    const highlighted = hastToHtml(highlightCode(language, node.textContent ?? '', lowlight));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
     return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;
+}
+
+// The HTML and the docx code blocks highlight alike. Users rarely set a language, so highlightAuto is where nearly all
+// export highlighting comes from.
+export function highlightCode(language: string, code: string, lowlight: Lowlight): HastNode {
+    return language && lowlight.registered(language)
+        ? lowlight.highlight(language, code)
+        : lowlight.highlightAuto(code);
 }
 
 export type HastNode = {

@@ -5,8 +5,10 @@ import { DEFAULT_PAGE_SETUP, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
+import { common, createLowlight } from 'lowlight';
 import { cssColorToHex } from '../colors';
 import { proseValue, proseValueIfSet } from './prose-css';
+import { type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> docx bytes, WordprocessingML written by hand. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module must not reach the Mount or the
@@ -17,6 +19,7 @@ export async function eigendocToDocx(
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
+    const styles = styleDefinitions();
     const pkg: Package = {
         relationships: ['styles', 'numbering', 'settings', 'fontTable'].map((type) => ({
             type: `${R_NS}/${type}`,
@@ -24,8 +27,11 @@ export async function eigendocToDocx(
         })),
         hyperlinks: new Map(),
         publicOrigin,
+        styles: new Map(styles.map((style) => [style.id, style])),
+        lists: [],
+        checkboxes: false,
     };
-    const body = paragraphsOf(json.content ?? [], {}, { pkg, first: false }, false)
+    const body = paragraphsOf(json.content ?? [], {}, { pkg, first: false, indent: 0, depth: 0 }, false)
         .map(paragraphXml)
         .join('');
 
@@ -42,10 +48,10 @@ export async function eigendocToDocx(
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
-        ['word/styles.xml', stylesXml(), `${WML}.styles+xml`],
-        ['word/numbering.xml', `<w:numbering xmlns:w="${W_NS}"/>`, `${WML}.numbering+xml`],
+        ['word/styles.xml', stylesXml(styles), `${WML}.styles+xml`],
+        ['word/numbering.xml', numberingXml(pkg.lists), `${WML}.numbering+xml`],
         ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
-        ['word/fontTable.xml', FONT_TABLE_XML, `${WML}.fontTable+xml`],
+        ['word/fontTable.xml', fontTableXml(pkg.checkboxes), `${WML}.fontTable+xml`],
         ['word/_rels/fontTable.xml.rels', relationshipsXml([])],
     ];
     const overrides = parts.map(([path, , contentType]) =>
@@ -105,15 +111,30 @@ function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.join('')}</Relationships>`;
 }
 
-// What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target.
+// What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target, and its
+// lists; the styles the walk reads its own spacing from.
 type Package = {
     relationships: Relationship[];
     hyperlinks: Map<string, string>;
     publicOrigin: string | undefined;
+    styles: Map<string, StyleDef>;
+    lists: List[];
+    checkboxes: boolean;
 };
 
-// The walk's surroundings: a flow's first block drops a heading's margin above, a heading scales its inline code.
-type Context = { pkg: Package; first: boolean; headingPt?: number };
+// The walk's surroundings. A flow's first block drops a heading's margin above; indent is the twips the enclosing lists
+// and quotes move the text in, depth the lists around it; style and after are what a plain paragraph takes in its
+// container; list is the numbering an item takes; a heading scales its inline code.
+type Context = {
+    pkg: Package;
+    first: boolean;
+    indent: number;
+    depth: number;
+    style?: string;
+    after?: number;
+    list?: NumberingRef;
+    headingPt?: number;
+};
 
 const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
 
@@ -129,20 +150,40 @@ const FONT_FAMILY: Record<EigenFont['category'], string> = {
     'hand-drawn': 'script',
 };
 
-const FONT_TABLE_XML = `<w:fonts xmlns:w="${W_NS}">${EIGEN_FONTS.map(
-    ({ name, category }) =>
-        `<w:font w:name="${escapeXml(name)}"><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/></w:font>`,
-).join('')}</w:fonts>`;
+// MS Gothic draws the checkbox glyphs.
+function fontTableXml(checkboxes: boolean): string {
+    const fonts = EIGEN_FONTS.map(
+        ({ name, category }) =>
+            `<w:font w:name="${escapeXml(name)}"><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/></w:font>`,
+    );
+    if (checkboxes)
+        fonts.push(
+            `<w:font w:name="${CHECKBOX_FONT}"><w:charset w:val="80"/><w:family w:val="modern"/><w:pitch w:val="fixed"/></w:font>`,
+        );
+    return `<w:fonts xmlns:w="${W_NS}">${fonts.join('')}</w:fonts>`;
+}
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
 
+// sz in eighths of a point, space in points.
+type Border = { sz: number; space: number; color: string };
+
+const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
+
+type NumberingRef = { numId: number; ilvl: number };
+
 type ParagraphProps = {
     style?: string;
     keepNext?: true;
     keepLines?: true;
+    numPr?: NumberingRef;
+    pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
+    shading?: string;
     spacing?: Spacing;
+    ind?: { left: number; right?: number; hanging?: number };
+    contextualSpacing?: true;
     jc?: string;
     outlineLvl?: number;
 };
@@ -153,7 +194,8 @@ type RunProps = {
     font?: string;
     bold?: true;
     italic?: true;
-    strike?: true;
+    // false undoes a style's strike.
+    strike?: boolean;
     color?: string;
     spacing?: number;
     size?: number;
@@ -164,17 +206,35 @@ type RunProps = {
 
 type Paragraph = { props: ParagraphProps; runs: string };
 
-function pPrXml({ style, keepNext, keepLines, spacing, jc, outlineLvl }: ParagraphProps): string {
+function pPrXml(props: ParagraphProps): string {
+    const { style, keepNext, keepLines, numPr, pBdr, shading, spacing, ind, contextualSpacing, jc, outlineLvl } = props;
     return [
         style && `<w:pStyle w:val="${style}"/>`,
         keepNext && '<w:keepNext/>',
         keepLines && '<w:keepLines/>',
+        numPr && `<w:numPr><w:ilvl w:val="${numPr.ilvl}"/><w:numId w:val="${numPr.numId}"/></w:numPr>`,
+        pBdr && `<w:pBdr>${bordersXml(BORDER_SIDES, pBdr)}</w:pBdr>`,
+        shading && `<w:shd w:val="clear" w:color="auto" w:fill="${shading}"/>`,
         spacing &&
             `<w:spacing${spacing.before === undefined ? '' : ` w:before="${spacing.before}"`}${spacing.after === undefined ? '' : ` w:after="${spacing.after}"`}${spacing.line === undefined ? '' : ` w:line="${spacing.line}" w:lineRule="${spacing.exact ? 'exact' : 'auto'}"`}/>`,
+        ind &&
+            `<w:ind w:left="${ind.left}"${ind.right === undefined ? '' : ` w:right="${ind.right}"`}${ind.hanging === undefined ? '' : ` w:hanging="${ind.hanging}"`}/>`,
+        contextualSpacing && '<w:contextualSpacing/>',
         jc && `<w:jc w:val="${jc}"/>`,
         outlineLvl !== undefined && `<w:outlineLvl w:val="${outlineLvl}"/>`,
     ]
         .filter(Boolean)
+        .join('');
+}
+
+function bordersXml<Side extends string>(sides: readonly Side[], borders: Partial<Record<Side, Border>>): string {
+    return sides
+        .map((side) => {
+            const border = borders[side];
+            return border
+                ? `<w:${side} w:val="single" w:sz="${border.sz}" w:space="${border.space}" w:color="${border.color}"/>`
+                : '';
+        })
         .join('');
 }
 
@@ -185,7 +245,8 @@ function rPrXml(props: RunProps): string {
         font && `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>`,
         bold && '<w:b/><w:bCs/>',
         italic && '<w:i/><w:iCs/>',
-        strike && '<w:strike/>',
+        strike === true && '<w:strike/>',
+        strike === false && '<w:strike w:val="0"/>',
         color && `<w:color w:val="${color}"/>`,
         spacing !== undefined && `<w:spacing w:val="${spacing}"/>`,
         size !== undefined && `<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>`,
@@ -207,7 +268,11 @@ function paragraphXml({ props, runs }: Paragraph): string {
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragraph[]>([
-    ['paragraph', (node, context) => paragraphsOf(node.content ?? [], { jc: justification(node) }, context, true)],
+    [
+        'paragraph',
+        (node, context) =>
+            paragraphsOf(node.content ?? [], textProps({ jc: justification(node) }, context), context, true),
+    ],
     [
         'heading',
         (node, context) => {
@@ -216,15 +281,72 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragrap
             const firstMargin = context.first
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
                 : undefined;
-            const props = {
-                style: `Heading${level}`,
-                spacing: firstMargin === undefined ? undefined : { before: twips(cssPt(firstMargin, sizePt)) },
-                jc: justification(node),
-            };
+            const props = textProps(
+                {
+                    style: `Heading${level}`,
+                    spacing: firstMargin === undefined ? undefined : { before: twips(cssPt(firstMargin, sizePt)) },
+                    jc: justification(node),
+                },
+                context,
+            );
             return paragraphsOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
         },
     ],
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
+    [
+        'horizontalRule',
+        (_node, context) => [
+            { props: { style: 'HorizontalRule', ind: indentOf('HorizontalRule', context) }, runs: '' },
+        ],
+    ],
+    [
+        'blockquote',
+        (node, context) => {
+            const quote = { ...context, indent: context.indent + quoteLook().indent, style: 'Quote', after: undefined };
+            const paragraphs = paragraphsOf(node.content ?? [], textProps({}, quote), quote, false);
+            return withAfter(paragraphs, proseTwips('.eigen-prose blockquote', 'margin-bottom'), context.pkg);
+        },
+    ],
+    [
+        'codeBlock',
+        (node, context) => {
+            const language = node.attrs?.['language'];
+            const tree = highlightCode(typeof language === 'string' ? language : '', textOf(node), lowlight);
+            const { indent } = codeBlockLook();
+            const ind = context.indent === 0 ? undefined : { left: context.indent + indent, right: indent };
+            return codeLines(tree).map((runs) => ({ props: { style: 'CodeBlock', ind }, runs }));
+        },
+    ],
+    ['bulletList', (node, context) => listOf(node, context, 'ul', { format: 'bullet', start: 1 })],
+    [
+        'orderedList',
+        (node, context) => {
+            const type = node.attrs?.['type'];
+            const format = (typeof type === 'string' && LIST_FORMATS.get(type)) || 'decimal';
+            return listOf(node, context, 'ol', { format, start: clampInt(node.attrs?.['start'], 0, 32767, 1) });
+        },
+    ],
+    ['taskList', (node, context) => listOf(node, context, 'ul', undefined)],
+    [
+        'listItem',
+        (node, context) =>
+            itemOf(node, context, proseTwips('.eigen-prose li', 'margin-bottom'), (first) =>
+                context.list ? { ...first, props: { ...first.props, numPr: context.list, ind: undefined } } : first,
+            ),
+    ],
+    [
+        'taskItem',
+        (node, context) => {
+            const checked = node.attrs?.['checked'] === true;
+            const done = checked ? { ...context, style: 'TaskDone' } : context;
+            context.pkg.checkboxes = true;
+            const after = proseTwips('.eigen-prose ul[data-type="taskList"] li', 'margin-bottom');
+            return itemOf(node, done, after, (first, inner) => ({
+                props: { ...first.props, ind: { left: inner.indent, hanging: listLevel() } },
+                runs: checkboxXml(checked) + first.runs,
+            }));
+        },
+    ],
 ]);
 
 // Never fails on structure: inline content where a block belongs is wrapped in a paragraph, a nested block hoisted out.
@@ -243,10 +365,170 @@ function paragraphsOf(nodes: JSONContent[], props: ParagraphProps, context: Cont
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
-        paragraphs.push(...write(node, { pkg: context.pkg, first: !textblock && index === 0 }));
+        paragraphs.push(...write(node, { ...context, first: !textblock && index === 0, headingPt: undefined }));
     }
     if (inline.length > 0 || (textblock && paragraphs.length === 0)) flush();
     return paragraphs;
+}
+
+// A paragraph or heading where it stands: a plain one takes its container's style and spacing; a heading in a quote
+// takes the quote's bar directly.
+function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, context: Context): ParagraphProps {
+    const style = own.style ?? context.style;
+    return {
+        style,
+        pBdr: own.style && context.style === 'Quote' ? { left: quoteLook().border } : undefined,
+        spacing: own.spacing ?? (own.style || context.after === undefined ? undefined : { after: context.after }),
+        ind: indentOf(style, context),
+        jc: own.jc,
+    };
+}
+
+// Direct only where the style's own indent isn't the container's.
+function indentOf(style: string | undefined, context: Context): ParagraphProps['ind'] {
+    const own = context.pkg.styles.get(style ?? '')?.pPr?.ind?.left ?? 0;
+    return context.indent === own ? undefined : { left: context.indent };
+}
+
+// A container's bottom margin on its last paragraph, the larger of the two as margins collapse. A hairline keeps its
+// 1 pt.
+function withAfter(paragraphs: Paragraph[], after: number, pkg: Package): Paragraph[] {
+    const last = paragraphs.at(-1);
+    if (!last || last.props.style === 'PageBreak' || last.props.style === 'Spacer') return paragraphs;
+    if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after', pkg))) return paragraphs;
+    return [
+        ...paragraphs.slice(0, -1),
+        { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } },
+    ];
+}
+
+// What the style chain gives a paragraph: its own style, what that is based on, Normal for none.
+function styleSpacing(style: string | undefined, side: 'before' | 'after', pkg: Package): number {
+    for (let id = style ?? 'Normal'; ; ) {
+        const definition = pkg.styles.get(id);
+        const value = definition?.pPr?.spacing?.[side];
+        if (value !== undefined) return value;
+        if (!definition?.basedOn) return 0;
+        id = definition.basedOn;
+    }
+}
+
+function textOf(node: JSONContent): string {
+    return node.text ?? (node.content ?? []).map(textOf).join('');
+}
+
+// ── Lists: one abstractNum per list, so adjacent lists count separately ─────────────────────────────────────────────
+
+type List = { format: string; start: number; base: number };
+
+const LIST_FORMATS = new Map([
+    ['1', 'decimal'],
+    ['a', 'lowerLetter'],
+    ['A', 'upperLetter'],
+    ['i', 'lowerRoman'],
+    ['I', 'upperRoman'],
+]);
+
+// A task list has no numbering. Only the last paragraph of a list in no other list takes the list's margin.
+function listOf(
+    node: JSONContent,
+    context: Context,
+    tag: 'ul' | 'ol',
+    numbering: Omit<List, 'base'> | undefined,
+): Paragraph[] {
+    const ilvl = Math.min(context.depth, 8);
+    const list = numbering && {
+        numId: context.pkg.lists.push({ ...numbering, base: context.indent - listLevel() * ilvl }),
+        ilvl,
+    };
+    const items = { ...context, list };
+    const paragraphs = paragraphsOf(node.content ?? [], textProps({}, items), items, false);
+    if (context.depth > 0) return paragraphs;
+    return withAfter(paragraphs, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'), context.pkg);
+}
+
+// The item's text is a level in; only its first paragraph opens with the number or checkbox.
+function itemOf(
+    node: JSONContent,
+    context: Context,
+    after: number,
+    open: (first: Paragraph, inner: Context) => Paragraph,
+): Paragraph[] {
+    const inner = {
+        ...context,
+        indent: context.indent + listLevel(),
+        depth: context.depth + 1,
+        after,
+        list: undefined,
+    };
+    const [first, ...rest] = paragraphsOf(node.content ?? [], textProps({}, inner), inner, false);
+    if (!first) return [];
+    return [first.props.style === inner.style ? open(first, inner) : first, ...rest];
+}
+
+function listLevel(): number {
+    return proseTwips('.eigen-prose ul', 'padding-left');
+}
+
+function numberingXml(lists: List[]): string {
+    const level = listLevel();
+    const abstractNums = lists.map(({ format, start, base }, index) => {
+        const levels = Array.from(
+            { length: 9 },
+            (_, ilvl) =>
+                `<w:lvl w:ilvl="${ilvl}"><w:start w:val="${start}"/><w:numFmt w:val="${format}"/><w:lvlText w:val="${format === 'bullet' ? '•' : `%${ilvl + 1}.`}"/><w:lvlJc w:val="left"/><w:pPr>${pPrXml({ ind: { left: base + level * (ilvl + 1), hanging: level } })}</w:pPr></w:lvl>`,
+        );
+        const nsid = (index + 1).toString(16).toUpperCase().padStart(8, '0');
+        return `<w:abstractNum w:abstractNumId="${index}"><w:nsid w:val="${nsid}"/>${levels.join('')}</w:abstractNum>`;
+    });
+    const nums = lists.map((_, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`);
+    return `<w:numbering xmlns:w="${W_NS}">${abstractNums.join('')}${nums.join('')}</w:numbering>`;
+}
+
+const CHECKBOX_FONT = 'MS Gothic';
+
+// Word's checkbox control. Inter has no ballot box; MS Gothic is what Word writes and readers fall back to by glyph.
+// The tab run opts out of Task Done's strike too, or the line would start before the text.
+function checkboxXml(checked: boolean): string {
+    const state = (name: string, glyph: string) => `<w14:${name} w14:val="${glyph}" w14:font="${CHECKBOX_FONT}"/>`;
+    return [
+        `<w:sdt><w:sdtPr><w14:checkbox><w14:checked w14:val="${checked ? 1 : 0}"/>${state('checkedState', '2612')}${state('uncheckedState', '2610')}</w14:checkbox></w:sdtPr>`,
+        `<w:sdtContent><w:r><w:rPr>${rPrXml({ font: CHECKBOX_FONT, strike: false })}</w:rPr><w:t>${checked ? '☒' : '☐'}</w:t></w:r></w:sdtContent></w:sdt>`,
+        `<w:r><w:rPr>${rPrXml({ strike: false })}</w:rPr><w:tab/></w:r>`,
+    ].join('');
+}
+
+// ── Code blocks: one paragraph per line, lowlight's tokens as runs ─────────────────────────────────────────────────
+
+const lowlight = createLowlight(common);
+
+// A token that spans lines is split at each break and keeps its color and italic on every line.
+function codeLines(tree: HastNode): string[] {
+    const lines = [''];
+    const walk = (node: HastNode, props: RunProps) => {
+        if (node.type === 'text') {
+            for (const [index, segment] of (node.value ?? '').split(LINE_BREAK).entries()) {
+                if (index > 0) lines.push('');
+                const content = textXml(segment);
+                const rPr = rPrXml(props);
+                if (content) lines[lines.length - 1] += `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
+            }
+            return;
+        }
+        const token = { ...props };
+        for (const name of node.properties?.className ?? []) Object.assign(token, tokenLook(name));
+        for (const child of node.children ?? []) walk(child, token);
+    };
+    walk(tree, {});
+    return lines;
+}
+
+function tokenLook(className: string): RunProps {
+    const selector = `.eigen-prose pre .${className}`;
+    const look: RunProps = {};
+    if (proseValueIfSet(selector, 'color') !== undefined) look.color = proseColor(selector, 'color');
+    if (proseValueIfSet(selector, 'font-style') === 'italic') look.italic = true;
+    return look;
 }
 
 const JUSTIFICATION = new Map([
@@ -303,10 +585,14 @@ function runsXml(nodes: JSONContent[], context: Context): string {
     return xml;
 }
 
+// Text turns each line break into w:br, a code block into a new paragraph.
+const LINE_BREAK = /\r\n|[\r\n\v]/;
+const TEXT_CONTROLS = new RegExp(`(${LINE_BREAK.source}|\t)`);
+
 // Split before escaping, which drops the controls Word spells as elements.
 function textXml(text: string): string {
     return text
-        .split(/(\r\n|[\r\n\v\t])/)
+        .split(TEXT_CONTROLS)
         .map((part, index) => {
             if (index % 2 === 1) return part === '\t' ? '<w:tab/>' : '<w:br/>';
             const escaped = escapeXmlText(part);
@@ -397,8 +683,12 @@ function hyperlinkTarget(href: unknown, publicOrigin: string | undefined): strin
 
 // ── Styles, every value from eigen-prose.css ────────────────────────────────────────────────────────────────────
 
-// (usWinAscent + usWinDescent) / unitsPerEm, Word's line height; for Inter hhea and typo agree, so every reader does.
-const FONT_LINE_HEIGHT = new Map([['Inter', 1.21]]);
+// (usWinAscent + usWinDescent) / unitsPerEm, Word's line height; for Inter and JetBrains Mono hhea and typo agree, so
+// every reader does.
+const FONT_LINE_HEIGHT = new Map([
+    ['Inter', 1.21],
+    ['JetBrains Mono', 1.32],
+]);
 
 // rem against the 16 px root, px at 96 dpi, em against the element's own size.
 function cssPt(length: string, emPt: number): number {
@@ -448,9 +738,51 @@ function boxSide(shorthand: string, side: 'top' | 'right' | 'bottom' | 'left'): 
     return { top, right, bottom, left }[side];
 }
 
+// A solid border shorthand, its width in eighths of a point.
+function proseBorder(selector: string, property: string): Omit<Border, 'space'> {
+    const value = proseValue(selector, property);
+    const [width = '', style, color = ''] = value.trim().split(/\s+/);
+    if (style !== 'solid') throw new Error(`eigen-prose.css border ${value} on ${selector} has no docx spelling`);
+    const hex = cssColorToHex(color);
+    if (!hex) throw new Error(`eigen-prose.css border color ${color} on ${selector} has no docx spelling`);
+    return { sz: Math.round(cssPt(width, bodyPt()) * 8), color: hex };
+}
+
 function bodyPt(): number {
     return cssPt(proseValue('.eigen-prose', 'font-size'), 12);
 }
+
+// A length an element in the body text takes, in twips.
+function proseTwips(selector: string, property: string): number {
+    return twips(cssPt(proseValue(selector, property), bodyPt()));
+}
+
+// The bar is the left border and the padding its space; the indent puts the bar where the editor draws it.
+function quoteLook() {
+    const border = proseBorder('.eigen-prose blockquote', 'border-left');
+    const space = Math.round(cssPt(proseValue('.eigen-prose blockquote', 'padding-left'), bodyPt()));
+    return { border: { ...border, space }, indent: twips(space + border.sz / 8) };
+}
+
+// Paragraph shading stops at the borders, so borders in the fill's color carry it over the padding. The indent
+// compensates the side padding and border, so the box's outer edge sits on the text column (ruling R32).
+function codeBlockLook() {
+    const padding = proseValue('.eigen-prose pre', 'padding');
+    const fill = proseColor('.eigen-prose pre', 'background-color');
+    const border = (side: 'top' | 'left') => ({
+        sz: CODE_BORDER_EIGHTHS,
+        space: Math.round(cssPt(boxSide(padding, side), bodyPt())),
+        color: fill,
+    });
+    const [vertical, horizontal] = [border('top'), border('left')];
+    return {
+        fill,
+        borders: { top: vertical, left: horizontal, bottom: vertical, right: horizontal },
+        indent: twips(horizontal.space + CODE_BORDER_EIGHTHS / 8),
+    };
+}
+
+const CODE_BORDER_EIGHTHS = 4;
 
 // A heading without its own size or line height inherits the prose root's, as h5 and h6 do.
 function headingMetrics(level: number) {
@@ -507,10 +839,24 @@ const HAIRLINE: Pick<StyleDef, 'pPr' | 'rPr'> = {
 };
 
 // No w:lang, so Word checks spelling in the reader's own language.
-function stylesXml(): string {
+function stylesXml(styles: StyleDef[]): string {
+    const body = { font: proseFont('.eigen-prose'), sizePt: bodyPt(), color: proseColor('.eigen-prose', 'color') };
+    const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml({ font: body.font, color: body.color, size: halfPoints(body.sizePt) })}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
+    return `<w:styles xmlns:w="${W_NS}">${defaults}${styles.map(styleXml).join('')}</w:styles>`;
+}
+
+const TASK_DONE = 'ul[data-type="taskList"] li[data-checked="true"] > div';
+
+function styleDefinitions(): StyleDef[] {
     const body = { font: proseFont('.eigen-prose'), sizePt: bodyPt(), color: proseColor('.eigen-prose', 'color') };
     const paragraphLine = lineHeightPt(proseValue('.eigen-prose p', 'line-height'), body.sizePt);
     const captionPt = cssPt(proseValue('.eigen-prose figcaption', 'font-size'), body.sizePt);
+    const quote = quoteLook();
+    const code = codeBlockLook();
+    const codePt = cssPt(proseValue('.eigen-prose pre code', 'font-size'), body.sizePt);
+    const codeMargin = proseValue('.eigen-prose pre', 'margin');
+    const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
+    const ruleMargin = proseValue('.eigen-prose hr', 'margin');
     const headings = [1, 2, 3, 4, 5, 6].map((level): StyleDef => {
         const { sizePt, before, after, line, tracking } = headingMetrics(level);
         return {
@@ -565,6 +911,53 @@ function stylesXml(): string {
         ...headings,
         {
             type: 'paragraph',
+            id: 'Quote',
+            name: 'Quote',
+            basedOn: 'Normal',
+            qFormat: true,
+            pPr: {
+                pBdr: { left: quote.border },
+                spacing: {
+                    after: twips(
+                        cssPt(boxSide(proseValue('.eigen-prose blockquote p', 'margin'), 'bottom'), body.sizePt),
+                    ),
+                },
+                ind: { left: quote.indent },
+            },
+            rPr: {
+                italic: proseValue('.eigen-prose blockquote', 'font-style') === 'italic' || undefined,
+                color: proseColor('.eigen-prose blockquote', 'color'),
+            },
+        },
+        {
+            type: 'paragraph',
+            id: 'CodeBlock',
+            name: 'Code Block',
+            basedOn: 'Normal',
+            pPr: {
+                pBdr: code.borders,
+                shading: code.fill,
+                spacing: {
+                    before: twips(cssPt(boxSide(codeMargin, 'top'), body.sizePt)),
+                    after: twips(cssPt(boxSide(codeMargin, 'bottom'), body.sizePt)),
+                    line: autoLine(
+                        lineHeightPt(proseValue('.eigen-prose pre', 'line-height'), codePt),
+                        halfPoints(codePt) / 2,
+                        proseFont('.eigen-prose code'),
+                    ),
+                },
+                ind: { left: code.indent, right: code.indent },
+                // Only the box's ends take the margin, and the lines' borders merge into one box.
+                contextualSpacing: true,
+            },
+            rPr: {
+                font: proseFont('.eigen-prose code'),
+                color: proseColor('.eigen-prose pre code', 'color'),
+                size: halfPoints(codePt),
+            },
+        },
+        {
+            type: 'paragraph',
             id: 'Caption',
             name: 'caption',
             basedOn: 'Normal',
@@ -579,8 +972,34 @@ function stylesXml(): string {
             },
             rPr: { color: proseColor('.eigen-prose figcaption', 'color'), size: halfPoints(captionPt) },
         },
+        {
+            type: 'paragraph',
+            id: 'HorizontalRule',
+            name: 'Horizontal Rule',
+            basedOn: 'Normal',
+            pPr: {
+                pBdr: { bottom: rule },
+                spacing: {
+                    ...HAIRLINE.pPr?.spacing,
+                    before: twips(cssPt(boxSide(ruleMargin, 'top'), body.sizePt)),
+                    after: twips(cssPt(boxSide(ruleMargin, 'bottom'), body.sizePt)),
+                },
+            },
+            rPr: HAIRLINE.rPr,
+        },
         { type: 'paragraph', id: 'PageBreak', name: 'Page Break', basedOn: 'Normal', ...HAIRLINE },
         { type: 'paragraph', id: 'Spacer', name: 'Spacer', basedOn: 'Normal', ...HAIRLINE },
+        {
+            type: 'paragraph',
+            id: 'TaskDone',
+            name: 'Task Done',
+            basedOn: 'Normal',
+            // The editor strikes a checked item's whole content in the muted color.
+            rPr: {
+                strike: proseValue(TASK_DONE, 'text-decoration') === 'line-through' || undefined,
+                color: proseColor(TASK_DONE, 'color'),
+            },
+        },
         {
             type: 'character',
             id: 'Hyperlink',
@@ -602,6 +1021,5 @@ function stylesXml(): string {
             },
         },
     ];
-    const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml({ font: body.font, color: body.color, size: halfPoints(body.sizePt) })}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
-    return `<w:styles xmlns:w="${W_NS}">${defaults}${styles.map(styleXml).join('')}</w:styles>`;
+    return styles;
 }
