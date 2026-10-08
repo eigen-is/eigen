@@ -3,6 +3,7 @@ import type { JSONContent } from '@tiptap/core';
 import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { toTransferableText } from '../../lib/document/transform/protocol';
+import { proseValue } from '../../lib/export/doc/prose-css';
 import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { seedEigendoc } from '../fixtures/golden-documents';
@@ -95,17 +96,95 @@ describe('doc export — the stylesheet', () => {
 });
 
 describe('doc export — figures', () => {
-    test('a wrapped figure floats with the margins the docx writer floats it by', async () => {
+    const media = [{ name: 'chart.png', contentType: 'image/png', data: new ArrayBuffer(1) }];
+    const IMG = '<img src="data:image/png;base64,AA==" alt="" style="width: 320px; max-width: 100%" />';
+
+    async function exportHtml(json: JSONContent): Promise<string> {
+        const { data } = await renderEigendocExport(seededDoc(json), 'html', 'Report.eigendoc', media, undefined);
+        return new TextDecoder().decode(data);
+    }
+
+    // A <figure> in a <p> would close it in every HTML parser, the browser's and WeasyPrint's, splitting the paragraph.
+    test('a figure is spans its paragraph holds, the box the editor draws', async () => {
+        const html = await exportHtml({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'before ' },
+                        {
+                            type: 'figure',
+                            attrs: { mediaName: 'chart.png', width: 320, alignment: 'right', caption: 'Sales' },
+                        },
+                        { type: 'text', text: ' after' },
+                    ],
+                },
+            ],
+        });
+        expect(html).toContain(
+            `<p>before <span class="figure" data-layout="block" data-alignment="right">${IMG.replace(' />', '>')}<span class="figcaption">Sales</span></span> after</p>`,
+        );
+    });
+
+    test("a wrapped figure floats by the stylesheet's rule, which the docx writer reads too", async () => {
         const figure = (layout: string) => ({
             type: 'paragraph',
-            content: [{ type: 'figure', attrs: { mediaName: 'chart.png', layout } }],
+            content: [{ type: 'figure', attrs: { mediaName: 'chart.png', width: 320, layout } }],
         });
-        const media = [{ name: 'chart.png', contentType: 'image/png', data: new ArrayBuffer(1) }];
-        const doc = seededDoc({ type: 'doc', content: [figure('wrap-left'), figure('wrap-right')] });
-        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', media, undefined);
+        const html = await exportHtml({ type: 'doc', content: [figure('wrap-left'), figure('wrap-right')] });
+        expect(html).toContain('<span class="figure" data-layout="wrap-left" data-alignment="center"><img');
+        expect(html).toContain('<span class="figure" data-layout="wrap-right" data-alignment="center"><img');
+        expect(proseValue('.eigen-prose .figure[data-layout="wrap-left"]', 'float')).toBe('left');
+        expect(proseValue('.eigen-prose .figure[data-layout="wrap-left"]', 'margin')).toBe('0.25em 1em 0.5em 0');
+        expect(proseValue('.eigen-prose .figure[data-layout="wrap-right"]', 'float')).toBe('right');
+        expect(proseValue('.eigen-prose .figure[data-layout="wrap-right"]', 'margin')).toBe('0.25em 0 0.5em 1em');
+    });
+});
+
+// The editor's ProseMirror ends a textblock with a <br> wherever its last line would otherwise collapse (addTextblockHacks).
+describe('doc export — trailing breaks', () => {
+    async function bodyOf(...content: JSONContent[]): Promise<string> {
+        const { data } = await renderEigendocExport(
+            seededDoc({ type: 'doc', content }),
+            'html',
+            'Report.eigendoc',
+            [],
+            undefined,
+        );
         const html = new TextDecoder().decode(data);
-        expect(html).toContain('float: left; margin: 0.25em 1em 0.5em 0');
-        expect(html).toContain('float: right; margin: 0.25em 0 0.5em 1em');
+        return html.slice(html.indexOf('<article'), html.indexOf('</article>'));
+    }
+
+    test('an empty paragraph or heading keeps its line', async () => {
+        expect(await bodyOf({ type: 'paragraph' }, { type: 'heading', attrs: { level: 2 } })).toContain(
+            '<p><br></p><h2><br></h2>',
+        );
+    });
+
+    test('a textblock ending in an inline node or a newline gets the break, one ending in text none', async () => {
+        const body = await bodyOf(
+            { type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'hardBreak' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'b\n' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'c', marks: [{ type: 'bold' }] }] },
+            { type: 'heading', attrs: { level: 3 }, content: [{ type: 'figure', attrs: { caption: 'x' } }] },
+        );
+        expect(body).toContain('<p>a<br><br></p><p>b\n<br></p><p><strong>c</strong></p>');
+        expect(body).toContain(
+            '<h3><span class="figure" data-layout="block" data-alignment="center"><span class="figcaption">x</span></span><br></h3>',
+        );
+    });
+
+    test('a paragraph in a list item, a quote or a cell gets it too', async () => {
+        const empty = { type: 'paragraph' };
+        const body = await bodyOf(
+            { type: 'bulletList', content: [{ type: 'listItem', content: [empty] }] },
+            { type: 'blockquote', content: [empty] },
+            { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [empty] }] }] },
+        );
+        expect(body).toContain('<li><p><br></p></li>');
+        expect(body).toContain('<blockquote><p><br></p></blockquote>');
+        expect(body).toMatch(/<td[^>]*><p><br><\/p><\/td>/);
     });
 });
 

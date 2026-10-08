@@ -90,11 +90,44 @@
 
     /* Figures */
 
-    figure {
+    figure,
+    .figure {
         margin: 0.75em 0;
     }
 
-    figcaption {
+    /* The figure node is inline: a full-width box on the bottom of its line keeps ProseMirror's trailing break on that line, with no strut. */
+    .figure {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        vertical-align: bottom;
+    }
+
+    .figure[data-layout="block"] {
+        width: 100%;
+    }
+
+    .figure[data-layout="block"][data-alignment="left"] {
+        align-items: flex-start;
+    }
+
+    .figure[data-layout="block"][data-alignment="right"] {
+        align-items: flex-end;
+    }
+
+    /* A wrapped figure's float carries its only margin; the docx writer floats it by the same. */
+    .figure[data-layout="wrap-left"] {
+        float: left;
+        margin: 0.25em 1em 0.5em 0;
+    }
+
+    .figure[data-layout="wrap-right"] {
+        float: right;
+        margin: 0.25em 0 0.5em 1em;
+    }
+
+    figcaption,
+    .figcaption {
         font-size: 0.75rem;
         color: var(--color-muted-foreground);
         text-align: center;
@@ -115,6 +148,7 @@
     blockquote,
     pre,
     table,
+    .tableWrapper,
     ul[data-type="taskList"] {
         clear: both;
     }
@@ -137,6 +171,11 @@
 
     li > p {
         margin: 0;
+    }
+
+    /* An item contains the figure that floats in it, so the next item starts below it; :where keeps a task item's flex. */
+    li:has(:where(.figure[data-layout^="wrap"])) {
+        display: flow-root list-item;
     }
 
     ul ul,
@@ -193,7 +232,8 @@
         margin: 0.75em 0;
     }
 
-    figure img {
+    figure img,
+    .figure img {
         margin: 0;
     }
 
@@ -202,7 +242,16 @@
     table {
         border-collapse: collapse;
         width: 100%;
+    }
+
+    /* The editor's table scrolls in TipTap's wrapper, which takes the margin so it collapses as the export's table does. */
+    table,
+    .tableWrapper {
         margin: 0.75em 0;
+    }
+
+    .tableWrapper > table {
+        margin: 0;
     }
 
     th,
@@ -369,7 +418,6 @@
 
     .tableWrapper {
         overflow-x: auto;
-        margin: 0.75em 0;
     }
 
     /* Selection */
@@ -465,6 +513,14 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 
 ul[data-type="taskList"] ul[data-type="taskList"] {
     padding-left: 1.5em;
+}
+
+/* WebKit reads no flow-root list-item; layout containment is the item's own formatting context there. */
+@supports not (display: flow-root list-item) {
+    .eigen-prose li:has(:where(.figure[data-layout^="wrap"])),
+    .tiptap li:has(:where(.figure[data-layout^="wrap"])) {
+        contain: layout;
+    }
 }
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */

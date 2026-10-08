@@ -769,12 +769,15 @@ describe('document transform (xlsx import)', () => {
 // And again when the flattener dropped the CSS comments and prefixed every item of a comma list, the body stopped repeating the prose size and line height, and headings inherit the font size: those lines, and nothing else.
 // And again when the flattener kept declarations that precede a nested rule on their own rule, so the editor's .tiptap block reaches the export (repeated spaces kept, ligatures off), and the page wrapper lost its whitespace: those lines, and nothing else.
 // And again when the print extras stopped repeating the body font and color eigen-prose sets: that rule, and nothing else.
+// The preview and both doc hashes moved when a figure became spans its paragraph holds, the .figure box the editor draws, and a table's margin, a list item's floats and the float margins moved into eigen-prose.css: those, and nothing else.
+// And again when a textblock ending in a figure took the trailing <br> ProseMirror gives it: that <br>, and nothing else.
 // The docx hash is the writer's own output (to-docx.ts) with its embedded fonts; its image is the thumbnail
-// Worker's PNG of the source, so a writer, font or encoder change moves it.
-const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '768861141c05b1869948f8dc4095667c37239bdc6728d1a294f5a0fcddf49f7d';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '768861141c05b1869948f8dc4095667c37239bdc6728d1a294f5a0fcddf49f7d';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '3a0a9312864369c07fc5577b719fdb022a88ba627af88e6692a05a8446e56ede';
+// Worker's PNG of the source, so a writer, font or encoder change moves it. It moved when a figure's margin became an
+// inset inside its paragraph's spacing: the golden figure paragraph's spacing, and nothing else.
+const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '740ef5a79c0a31053569d6902b19b0ae86405e12b0cfb60d405ed8536dafccac';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '740ef5a79c0a31053569d6902b19b0ae86405e12b0cfb60d405ed8536dafccac';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '2ed332f8c234d467b5cdb3985dca57cc32d56505db6f86c41162ac57a6e5130d';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';
@@ -1212,7 +1215,8 @@ describe('document transform (docx round trip)', () => {
 
         // Empty paragraphs and the rule are dropped; quotes, code lines and task items come back as paragraphs; an
         // item's blocks after its first paragraph leave the list, and two adjacent lists become one; the header column
-        // comes back as plain cells; a caption is the paragraph after its image; a wrapped figure is its one-cell table.
+        // comes back as plain cells; a caption is the paragraph after its image; a wrapped figure is its one-cell table,
+        // and the clearing break that ends an item holding one a paragraph.
         const table = (...cells: string[]) => `table(tableRow(${cells.join(' ')}))`;
         expect((json.content ?? []).map(shape)).toEqual([
             ...Array(6).fill('heading'),
@@ -1250,6 +1254,7 @@ describe('document transform (docx round trip)', () => {
             table('tableCell(paragraph(figure) paragraph)'),
             'paragraph',
             table('tableCell(paragraph(figure))'),
+            'paragraph',
             'paragraph',
             'orderedList(listItem(paragraph))',
         ]);

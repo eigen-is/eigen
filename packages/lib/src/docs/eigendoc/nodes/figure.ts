@@ -22,6 +22,20 @@ declare module '@tiptap/core' {
     }
 }
 
+// A figure element's or the export's span.figure's attributes, one without an img no figure; layout and width parse on their own.
+function figureAttrsOf(dom: HTMLElement): FigureAttrs | false {
+    const img = dom.querySelector('img');
+    if (!img) return false;
+    return {
+        src: img.getAttribute('src'),
+        alt: img.getAttribute('alt'),
+        mediaName: img.getAttribute('data-media-name'),
+        caption: dom.querySelector('figcaption, .figcaption')?.textContent || null,
+        alignment: dom.getAttribute('data-alignment') || 'center',
+        commentCardId: dom.getAttribute('data-comment-id'),
+    };
+}
+
 export const FigureNode = Node.create({
     name: 'figure',
 
@@ -70,34 +84,9 @@ export const FigureNode = Node.create({
 
     parseHTML() {
         return [
-            {
-                tag: 'figure',
-                getAttrs(dom) {
-                    const el = dom as HTMLElement;
-                    const img = el.querySelector('img');
-                    if (!img) return false;
-                    const figcaption = el.querySelector('figcaption');
-                    const layoutAttr = el.getAttribute('data-layout');
-                    let layout: FigureLayout = 'block';
-                    if (layoutAttr) {
-                        layout = layoutAttr as FigureLayout;
-                    } else {
-                        const float = el.style?.float;
-                        if (float === 'left') layout = 'wrap-left';
-                        else if (float === 'right') layout = 'wrap-right';
-                    }
-                    return {
-                        src: img.getAttribute('src'),
-                        alt: img.getAttribute('alt'),
-                        mediaName: img.getAttribute('data-media-name'),
-                        caption: figcaption?.textContent || null,
-                        alignment: el.getAttribute('data-alignment') || 'center',
-                        layout,
-                        commentCardId: el.getAttribute('data-comment-id'),
-                    };
-                },
-                priority: 60,
-            },
+            { tag: 'figure', getAttrs: figureAttrsOf, priority: 60 },
+            // The export's figure: spans, which a paragraph can hold.
+            { tag: 'span.figure', getAttrs: figureAttrsOf, priority: 60 },
             {
                 tag: 'img[data-media-name]',
                 priority: 51,

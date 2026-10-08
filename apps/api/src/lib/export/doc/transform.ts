@@ -17,7 +17,7 @@ import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
-import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
+import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode, withTrailingBreaks } from './render';
 import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
@@ -97,7 +97,7 @@ const extensions = getDocExtensions({ lowlight });
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
-        content: json,
+        content: withTrailingBreaks(json),
         extensions,
         options: {
             nodeMapping: {
