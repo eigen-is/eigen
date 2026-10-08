@@ -711,6 +711,50 @@ describe('export sanitize — a data: SVG is sanitized as SVG media are', () => 
     });
 });
 
+// WeasyPrint opens any image not typed SVG with Pillow, and parses one Pillow cannot read as an SVG. So a data: URI
+// whose payload starts as XML is an SVG whatever its type says, read raw or as the base64 its handler decodes.
+describe('export sanitize — a data: payload WeasyPrint reads as SVG, whatever its type', () => {
+    // No url() in it, which the url( scan would refuse on its own.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${NESTED_EVIL}/mistyped"/></svg>`;
+    const b64 = Buffer.from(svg).toString('base64');
+
+    test.each([
+        ['typed PNG', `data:image/png;base64,${b64}`],
+        ['typed text', `data:text/plain;base64,${b64}`],
+        ['typed as a font', `data:font/woff2;base64,${b64}`],
+        ['untyped and percent-encoded', `data:,${encodeURIComponent(svg)}`],
+        ['led by whitespace', `data:image/png;base64,${Buffer.from(`\n\t  ${svg}`).toString('base64')}`],
+        ['led by encoded whitespace', `data:image/png,%20%0A${encodeURIComponent(svg)}`],
+        ['led by a UTF-8 byte order mark', `data:image/png;base64,${Buffer.from(`\ufeff${svg}`).toString('base64')}`],
+        ['in UTF-16', `data:image/png;base64,${Buffer.from(`\ufeff${svg}`, 'utf16le').toString('base64')}`],
+        ['base64 led by characters the decoder skips', `data:image/png;base64,!!!!${b64}`],
+        ['base64 percent-encoded', `data:image/png;base64,${b64.replace(/P/g, '%50')}`],
+        ['behind a base64 marker the handler does not read', `data:image/png;base64 ,${encodeURIComponent(svg)}`],
+    ])('one %s is removed', (_, uri) => {
+        expect(sanitizeExportHtml(`<img src="${uri}" alt="a">`)).toBe('<img alt="a">');
+        expect(sanitizeExportHtml(`<p style="color:red;background:url('${uri}')">a</p>`)).toBe('<p>a</p>');
+        expect(sanitizeExportHtml(`<style>.a{background:url("${uri}")}.b{color:red}</style>`)).toBe(
+            '<style>.b{color:red}</style>',
+        );
+        expect(sanitizeExportHtml(`<svg><rect id="r" fill="url('${uri}')"></rect></svg>`)).toBe(
+            '<svg><rect id="r"></rect></svg>',
+        );
+        expect(svgMedia(`<svg xmlns="http://www.w3.org/2000/svg"><image href="${uri}"/></svg>`)).toContain('<image/>');
+    });
+
+    test.each([
+        ['a PNG', DATA_PNG],
+        ['a JPEG', `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64')}`],
+        ['a font', `data:font/woff2;base64,${Buffer.from('wOF2\0\x01').toString('base64')}`],
+        ['a percent-encoded text', 'data:text/plain,hello%20world'],
+    ])('%s passes untouched', (_, uri) => {
+        expect(sanitizeExportHtml(`<img src="${uri}">`)).toBe(`<img src="${uri}">`);
+        expect(sanitizeExportHtml(`<style>.a{background:url("${uri}")}</style>`)).toBe(
+            `<style>.a{background:url("${uri}")}</style>`,
+        );
+    });
+});
+
 // Each arm embeds the media the Worker sanitized, so a drawing the inliner nested three deep keeps every level.
 describe('export sanitize — every arm embeds its own media as sanitized', () => {
     const OWN = sanitizeExportMedia([
@@ -872,6 +916,22 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             );
             // The media pass's output, embedded as an arm embeds it.
             return `${body}<img src="${base64Svg(Buffer.from(media.data).toString('utf8'))}">`;
+        });
+        expect(connections).toBe(0);
+    });
+
+    // WeasyPrint fetched each of these: Pillow cannot open them, so it parsed them as the SVG they are.
+    test('an SVG under another data: type triggers no network fetch', async () => {
+        const connections = await connectionsWhileRendering((u) => {
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image width="10" height="10" href="${u('mistyped')}"/></svg>`;
+            const b64 = Buffer.from(svg).toString('base64');
+            return sanitizeExportHtml(
+                `<img src="data:image/png;base64,${b64}">` +
+                    `<img src="data:text/plain;base64,${b64}">` +
+                    `<img src="data:,${encodeURIComponent(svg)}">` +
+                    `<img src="data:image/png;base64 ,${encodeURIComponent(svg)}">` +
+                    `<div style="width:50px;height:50px;background-image:url('data:font/woff2;base64,${b64}')">a</div>`,
+            );
         });
         expect(connections).toBe(0);
     });

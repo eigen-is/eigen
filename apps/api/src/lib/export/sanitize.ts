@@ -41,6 +41,7 @@ const NO_REFS: ReadonlySet<string> = new Set();
 const URL_SPACE = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
 // A url( that opens a data: URI, in any case, with the quote its URL may open with.
 const CSS_DATA_URL = /url\([\t\n\f\r ]*(['"]?)[\t\n\f\r ]*(?=data:)/gi;
+const XML_SPACE = new Set([0x09, 0x0a, 0x0d, 0x20]);
 // Padded or not; a quantum cut short or a character past the padding is no payload this decodes.
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}(?:==)?|[A-Za-z0-9+/]{3}=?)?$/;
 
@@ -217,12 +218,17 @@ function sanitizeSvg(svg: string, depth: number): string {
 // WeasyPrint decodes a data: SVG and fetches its nested <image href> and url(), so one that is not the export's own
 // media takes the pass media take, one level deeper, and is written back in its own encoding. Null removes it, as a
 // refused ref is removed: a payload that holds no drawing, or one deeper or longer than the inliner builds. A data:
-// URI of any other type is kept as it is.
+// URI of another type is kept as it is, unless its payload reads as XML: WeasyPrint parses an image Pillow cannot
+// open as an SVG, whatever its type, and a browser draws none.
 function keptDataUri(value: string, allowed: ReadonlySet<string>, depth: number): string | null {
     const uri = value.replace(URL_SPACE, '');
     if (allowed.has(uri)) return value;
-    const { type, params, comma } = dataUriHeader(uri);
-    if (type !== 'image/svg+xml') return value;
+    const comma = uri.indexOf(',');
+    const [type, ...params] = uri
+        .slice(5, comma < 0 ? undefined : comma)
+        .split(';')
+        .map((part) => part.trim().toLowerCase());
+    if (type !== 'image/svg+xml') return comma >= 0 && readsAsXml(uri.slice(comma + 1)) ? null : value;
     if (comma < 0 || depth >= MAX_SVG_INLINE_DEPTH || uri.length > SVG_INLINE_MAX_BYTES) return null;
     const base64 = params.at(-1) === 'base64';
     let payload = percentDecode(uri.slice(comma + 1));
@@ -239,22 +245,22 @@ function keptDataUri(value: string, allowed: ReadonlySet<string>, depth: number)
         : `data:image/svg+xml${charset},${percentEncode(svg)}`;
 }
 
-// A data: URI's media type and parameters, lowercased, and the comma its payload follows, -1 when it has none.
-function dataUriHeader(uri: string): { type: string; params: string[]; comma: number } {
-    const comma = uri.indexOf(',');
-    const [type, ...params] = uri
-        .slice(5, comma < 0 ? undefined : comma)
-        .split(';')
-        .map((part) => part.trim().toLowerCase());
-    return { type, params, comma };
-}
-
 // A presentation attribute's url() paints from a data: SVG nowhere this exports to, so outside a style one is
-// refused rather than decoded.
-const opensDataSvg = (value: string): boolean =>
-    [...value.matchAll(CSS_DATA_URL)].some(
-        ({ index, 0: open }) => dataUriHeader(value.slice(index + open.length)).type === 'image/svg+xml',
-    );
+// refused rather than decoded: past the depth bound, keptCss removes every one without reading it.
+const opensDataSvg = (value: string): boolean => keptCss(value, NO_REFS, MAX_SVG_INLINE_DEPTH) !== value;
+
+// The payload as WeasyPrint's data: handler may read it, raw or as base64, whose decoder skips what is not in its
+// alphabet: one starts as XML with a UTF-16 byte order mark or `<`, or with `<` past a UTF-8 mark and whitespace.
+function readsAsXml(payload: string): boolean {
+    const raw = percentDecode(payload);
+    const decoded = Buffer.from(raw.toString('latin1').replace(/[^A-Za-z0-9+/]/g, ''), 'base64');
+    return [raw, decoded].some((bytes) => {
+        if (/^(?:\xfe\xff|\xff\xfe|\0<)/.test(bytes.toString('latin1', 0, 2))) return true;
+        let at = bytes.toString('latin1', 0, 3) === '\xef\xbb\xbf' ? 3 : 0;
+        while (XML_SPACE.has(bytes[at])) at++;
+        return bytes[at] === 0x3c;
+    });
+}
 
 // As Python's unquote_to_bytes, which WeasyPrint's data: handler runs: a `%` without two hex digits is itself.
 function percentDecode(text: string): Buffer {
