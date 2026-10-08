@@ -40,4 +40,19 @@ describe('prose css — the flattened sheet', () => {
     test('every item of a nested comma list carries the parent', () => {
         expect(PROSE_CSS).toContain('.eigen-prose th, .eigen-prose td {');
     });
+
+    test('no selector holds a declaration', () => {
+        const selectors = [...PROSE_CSS.matchAll(/([^{}]*)\{/g)].map(([, selector]) => selector.trim());
+        for (const selector of selectors.filter((item) => !item.startsWith('@'))) {
+            expect(selector).not.toContain(';');
+            expect(selector).not.toMatch(/:\s/);
+        }
+    });
+
+    test('a block keeps its own declarations before, between and after its nested rules', () => {
+        expect(proseValue('.tiptap', 'outline')).toBe('none');
+        expect(proseValue('.tiptap', 'min-height')).toBe('100%');
+        expect(proseValue('.tiptap', 'white-space')).toBe('break-spaces');
+        expect(proseValue('.tiptap p', 'margin')).toBe('0');
+    });
 });

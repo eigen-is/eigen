@@ -61,23 +61,27 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
     const results: string[] = [];
     let depth = 0;
     let current = '';
-    let inNested = false;
     let nestedSelector = '';
 
-    for (let i = 0; i < body.length; i++) {
-        const ch = body[i];
+    const flushDeclarations = (declarations: string) => {
+        if (declarations.trim()) results.push(`${parentSelector} { ${declarations.trim()} }`);
+    };
+
+    for (const ch of body) {
         if (ch === '{') {
             if (depth === 0) {
-                nestedSelector = current.trim();
+                // The text since the last rule is the declarations that precede this selector.
+                const split = current.lastIndexOf(';') + 1;
+                flushDeclarations(current.slice(0, split));
+                nestedSelector = current.slice(split).trim();
                 current = '';
-                inNested = true;
             } else {
                 current += ch;
             }
             depth++;
         } else if (ch === '}') {
             depth--;
-            if (depth === 0 && inNested) {
+            if (depth === 0) {
                 const selectors = nestedSelector.split(SELECTOR_LIST_COMMA).map((item) => {
                     const selector = item.trim();
                     return selector.includes('&')
@@ -86,8 +90,6 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
                 });
                 results.push(`${selectors.join(', ')} { ${current.trim()} }`);
                 current = '';
-                inNested = false;
-                nestedSelector = '';
             } else {
                 current += ch;
             }
@@ -96,11 +98,7 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
         }
     }
 
-    const topLevelProps = current.trim();
-    if (topLevelProps) {
-        results.unshift(`${parentSelector} { ${topLevelProps} }`);
-    }
-
+    flushDeclarations(current);
     return results.join('\n');
 }
 

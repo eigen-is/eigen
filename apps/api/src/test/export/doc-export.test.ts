@@ -118,3 +118,17 @@ describe('doc export — page breaks', () => {
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
     });
 });
+
+describe('doc export — whitespace', () => {
+    test.each(['html', 'pdf-html'] as const)(
+        '%s keeps repeated spaces and prints no whitespace around the body',
+        async (format) => {
+            const doc = seededDoc({ type: 'doc', content: [paragraph('a  b')] });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', []);
+            const html = new TextDecoder().decode(data);
+            expect(html).toContain('<p>a  b</p>');
+            expect(html).toMatch(/<article class="eigen-prose tiptap"><p>/);
+            expect(html).toContain('</p></article>');
+        },
+    );
+});
