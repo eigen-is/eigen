@@ -12,7 +12,7 @@ declare module '@tiptap/core' {
     }
 }
 
-// html-to-docx writes a Word page break only for exactly this class.
+// The HTML and PDF exports page at exactly this class; the docx import's hr carries it too.
 export const PAGE_BREAK_CLASS = 'page-break';
 
 export const PageBreakNode = Node.create({

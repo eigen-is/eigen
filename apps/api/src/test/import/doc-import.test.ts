@@ -553,7 +553,7 @@ describe('docx import — page breaks', () => {
         ]);
     });
 
-    // Today's docx export drops it again: html-to-docx writes a page break only among the top-level blocks.
+    // The docx export writes it back where it stood, inside the cell.
     test('a break in a table cell splits the cell paragraph around a page break inside the cell', async () => {
         const json = await importJson(
             `<w:tbl><w:tr><w:tc>${paragraph(`${run('Cell')}<w:r>${PAGE_BREAK}</w:r>${run('Two')}`)}</w:tc></w:tr></w:tbl>`,

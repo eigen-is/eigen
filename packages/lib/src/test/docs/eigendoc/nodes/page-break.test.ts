@@ -57,7 +57,7 @@ const figure: JSONContent = { type: 'figure', attrs: { mediaName: 'a.png' } };
 const table = '<table><tbody><tr><td><p>A</p></td><td><p>B</p></td></tr></tbody></table>';
 
 describe('page break HTML', () => {
-    // html-to-docx turns exactly this class into a Word page break.
+    // The HTML and PDF exports page at exactly this class.
     test('a page break renders as a div with the exact page-break class', () => {
         expect(generateHTML(brokenDoc, extensions)).toContain(
             '<p>Before</p><div class="page-break"></div><p>After</p>',
