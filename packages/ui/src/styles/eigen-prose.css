@@ -173,6 +173,11 @@
         margin: 0;
     }
 
+    /* An item contains the figure that floats in it, so the next item starts below it; :where keeps a task item's flex. */
+    li:has(:where(.figure[data-layout^="wrap"])) {
+        display: flow-root list-item;
+    }
+
     ul ul,
     ol ol,
     ul ol,
@@ -508,6 +513,14 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 
 ul[data-type="taskList"] ul[data-type="taskList"] {
     padding-left: 1.5em;
+}
+
+/* WebKit reads no flow-root list-item; layout containment is the item's own formatting context there. */
+@supports not (display: flow-root list-item) {
+    .eigen-prose li:has(:where(.figure[data-layout^="wrap"])),
+    .tiptap li:has(:where(.figure[data-layout^="wrap"])) {
+        contain: layout;
+    }
 }
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
