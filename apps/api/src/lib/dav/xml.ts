@@ -2,6 +2,7 @@ import { escapeXml } from '@workspace/lib/xml';
 import { addressbookHomeHref, calendarHomeHref, principalHref } from './href';
 import type { PropMap } from './propfind';
 
+export const XML_DECLARATION = '<?xml version="1.0" encoding="utf-8"?>';
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
 // The prefix every served fragment is written with, bound once on the envelope.
@@ -23,7 +24,7 @@ export function propMap(fragments: string[]): PropMap {
 }
 
 function multistatus(responses: string[], extra?: string): string {
-    return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;
+    return `${XML_DECLARATION}\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;
 }
 
 // The 207 envelope every PROPFIND/REPORT answer ships in.
@@ -36,7 +37,7 @@ export function multistatusResponse(responses: string[], extra?: string): Respon
 
 // DAV:error wrapping one precondition element (RFC 3253 § 1.6), bound like the multistatus so the body stands alone.
 export function davError(status: number, element: string): Response {
-    return new Response(`<?xml version="1.0" encoding="utf-8"?><D:error ${NS}>${element}</D:error>`, {
+    return new Response(`${XML_DECLARATION}<D:error ${NS}>${element}</D:error>`, {
         status,
         headers: { 'Content-Type': XML_CONTENT_TYPE },
     });

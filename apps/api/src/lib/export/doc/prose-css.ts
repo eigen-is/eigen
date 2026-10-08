@@ -38,10 +38,8 @@ export function proseValueIfSet(selector: string, property: string): string | un
 function flattenEigenProseCSS(raw: string): string {
     let css = raw.replace(/\s*\/\*[\s\S]*?\*\//g, '').replace(/\.eigen-prose,\s*\n\s*\.tiptap\s*\{/g, '.eigen-prose {');
 
-    // Drop .dark overrides (export is always light)
     css = css.replace(/^\.dark\s+\.eigen-prose[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/gm, '');
 
-    // Flatten CSS nesting for all top-level blocks
     css = css.replace(/^(\.[a-zA-Z][\w-]*)\s*\{([\s\S]*?)^\}/gm, (_match, selector, body) => {
         if (body.includes('{')) {
             return flattenNestedBlock(selector, body);
@@ -49,7 +47,6 @@ function flattenEigenProseCSS(raw: string): string {
         return `${selector} {${body}}`;
     });
 
-    // Resolve CSS variables to concrete values
     css = css
         .replace(/var\(--font-sans\)/g, FONT_STACK_SANS)
         .replace(/var\(--font-mono\)/g, FONT_STACK_MONO)

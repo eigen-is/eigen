@@ -33,7 +33,7 @@ export const TableWidthClamp = Extension.create({
                         let totalWidth = 0;
                         for (let i = 0; i < firstRow.childCount; i++) {
                             const cell = firstRow.child(i);
-                            const cw = cell.attrs.colwidth as number[] | null;
+                            const cw: number[] | null = cell.attrs.colwidth;
                             for (let j = 0; j < cell.attrs.colspan; j++) {
                                 totalWidth += cw?.[j] || DEFAULT_CELL_WIDTH;
                             }
@@ -47,7 +47,7 @@ export const TableWidthClamp = Extension.create({
                         node.descendants((child, childPos) => {
                             if (child.type.name === 'table') return false;
                             if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
-                            const cw = child.attrs.colwidth as number[] | null;
+                            const cw: number[] | null = child.attrs.colwidth;
                             if (!cw) return false;
                             const scaled = cw.map((w) =>
                                 w ? Math.max(MIN_TABLE_COLUMN_PX, Math.floor(w * scale)) : w,

@@ -5,8 +5,9 @@
 // workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site-plan
 // drawing, mail, calendar, chat and contacts — driving the REAL product surfaces as the personas so
 // activity panels, file history and notifications populate for free. Docs are written as HTML and parsed
-// by the editor's schema straight into their Y.Docs; the budget sheet and the stickies board are byte-copied fixture containers; the sponsor deck
-// and the site plan are built into their Y.Docs from typed specs (demo/deck-build.ts, vector-build.ts).
+// by the editor's schema straight into their Y.Docs; the budget sheet and the stickies board are
+// byte-copied fixture containers; the sponsor deck and the site plan are built into their Y.Docs from
+// typed specs (demo/deck-build.ts, vector-build.ts).
 //
 // A host-level reset script wipes the data root hourly and re-runs this, so every timestamp
 // stays < 1h old. It MUST run against an empty data root (it refuses a completed setup).

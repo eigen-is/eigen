@@ -17,8 +17,7 @@ export type XmlElement = {
 
 type XmlContent = string | XmlElement | XML.Comment | XML.ProcessingInstruction;
 
-// Every way parseXml refuses input (malformed, a DOCTYPE, too deep, a namespace rule broken) is this one 400, and so
-// is serializeXmlChildren's one refusal.
+// Every refusal of parseXml (malformed, DOCTYPE, too deep, a namespace rule) and of serializeXmlChildren is this 400.
 export class XmlError extends ApiError {
     constructor(message: string, options?: ErrorOptions) {
         super(400, message, options);
@@ -53,8 +52,7 @@ export function parseXmlRoot(input: Uint8Array, ns: string, local: string): XmlE
     return root;
 }
 
-// A DOCTYPE is refused before Bun sees it: Bun applies ATTLIST defaults to every element, uncapped, and they can
-// inject `xmlns`. `undefined` asks for more of the prolog.
+// A DOCTYPE is refused before Bun sees it: its ATTLIST defaults are uncapped and can inject `xmlns`. `undefined` asks for more.
 function scanProlog(text: string, from: number, complete: boolean): 'blank' | 'root' | undefined {
     let i = from;
     let markup = false;
@@ -81,8 +79,7 @@ function scanProlog(text: string, from: number, complete: boolean): 'blank' | 'r
     }
 }
 
-// XML 1.0 Appendix F narrowed to what Bun reads: a BOM, UTF-16 by its first `<`, else an ASCII-compatible encoding.
-// Only the prolog is decoded; Bun decodes the body.
+// XML 1.0 Appendix F narrowed to what Bun reads (a BOM, UTF-16 by its first `<`, else ASCII-compatible); Bun decodes the body.
 function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     let encoding = 'latin1';
     let start = 0;
@@ -99,8 +96,7 @@ function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
     }
 }
 
-// An explicit stack, since recursion barely outlasts Bun's nesting limit. One binding map serves the whole walk, each
-// element's declarations undone on its way out by setting, never deleting: a delete costs JSC's Map its size.
+// An explicit stack, as recursion barely outlasts Bun's nesting limit; bindings are undone by setting, since a delete costs JSC's Map its size.
 function resolve(root: XML.Node): XmlElement {
     const bindings = new Map<string, string | undefined>([['xml', XML_NAMESPACE]]);
     const open: { content: XML.Node['children']; next: number; element: XmlElement; shadowed: [string, string?][] }[] =
@@ -110,8 +106,7 @@ function resolve(root: XML.Node): XmlElement {
         for (const [attribute, uri] of Object.entries(node.attributes)) {
             const prefix = declaredPrefix(attribute);
             if (prefix === undefined) continue;
-            // Namespaces in XML § 3: `xmlns` is never declared, `xml` only to its own namespace, and neither
-            // namespace goes to another prefix.
+            // Namespaces in XML § 3: `xmlns` is never declared, `xml` only to its own namespace, neither to another prefix.
             if (
                 (attribute !== 'xmlns' && (prefix === '' || prefix.includes(':') || uri === '')) ||
                 prefix === 'xmlns' ||
@@ -226,8 +221,7 @@ export function xmlAttr(element: XmlElement, ns: string, local: string): string 
 // Every top-level child redeclares the URIs it uses, so a long one shared by many children multiplies: capped at a DAV body.
 const MAX_DECLARED_URI_CHARS = 1_048_576;
 
-// Client XML kept as XML (a LOCK owner, a dead prop's value): each child declares the bindings its subtree takes from
-// outside, the default one included (`xmlns=""` too), so it means the same inside any envelope.
+// Client XML kept as XML (a LOCK owner, a dead prop's value): each child declares the bindings it takes from outside, so it reads the same in any envelope.
 export function serializeXmlChildren(element: XmlElement): string {
     let declaredUris = 0;
     const children = element.children.map((top) => {
