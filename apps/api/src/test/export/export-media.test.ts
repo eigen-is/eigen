@@ -91,6 +91,15 @@ describe('collectExportMedia', () => {
                     .withExif({ IFD0: { Copyright: 'Eigen' } })
                     .toBuffer(),
             ],
+            // VP8X: a lossless WebP whose ICC profile and EXIF take the extended header, its VP8L chunk after them.
+            [
+                'tagged-lossless.webp',
+                await gradient(320, 200)
+                    .webp({ lossless: true })
+                    .withIccProfile('p3')
+                    .withExif({ IFD0: { Copyright: 'Eigen' } })
+                    .toBuffer(),
+            ],
             ['photo.avif', await gradient(320, 200).avif().toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
             // Past the inliner's cap, which binds only what it builds: nothing here is inlined.
@@ -194,20 +203,20 @@ describe('collectExportMedia', () => {
         expect(kinds('chart.png')).toEqual(['image/png', PNG_SIGNATURE, 800, 500]);
         expect(kinds('still.gif')).toEqual(['image/png', PNG_SIGNATURE, 60, 40]);
         expect(kinds('lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
+        expect(kinds('tagged-lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
         expect(kinds('photo.jpg')).toEqual(['image/jpeg', JPEG_SIGNATURE, 600, 400]);
         expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
     }, 60_000);
 
-    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with EXIF or alpha', () => {
+    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with ICC, EXIF or alpha', () => {
         const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
-        expect(['lossless.webp', 'lossy.webp', 'tagged.webp', 'clear.webp'].map(chunk)).toEqual([
-            'VP8L',
-            'VP8 ',
-            'VP8X',
-            'VP8X',
-        ]);
+        expect(['lossless.webp', 'lossy.webp', 'tagged.webp', 'tagged-lossless.webp', 'clear.webp'].map(chunk)).toEqual(
+            ['VP8L', 'VP8 ', 'VP8X', 'VP8X', 'VP8X'],
+        );
+        const tagged = sources.get('tagged-lossless.webp')?.toString('latin1') ?? '';
+        expect(tagged.indexOf('ICCP')).toBeLessThan(tagged.indexOf('VP8L'));
     });
 
     test('a transparent image stays a transparent PNG, whatever its type or stored MIME says', async () => {
@@ -292,6 +301,7 @@ describe('collectExportMedia', () => {
                     ['huge.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
+                    ['tagged-lossless.webp', 'image/webp'],
                     ['photo.avif', 'image/webp'],
                     ['photo.jpg', 'image/webp'],
                     ['still.gif', 'image/webp'],

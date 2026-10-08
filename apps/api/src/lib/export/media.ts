@@ -79,13 +79,24 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath, docx: b
 // retries as PNG.
 const PNG_SOURCES = new Set(['image/png', 'image/gif']);
 
-// A WebP's first chunk names its coding, which the thumbnail Worker doesn't report: VP8L is lossless; VP8 is lossy,
-// and VP8X mostly so, its alpha caught by the retry.
+// A WebP's image chunk names its coding, which the thumbnail Worker doesn't report: VP8L is lossless; VP8 is lossy. An
+// ICC profile, EXIF or alpha puts a VP8X header and other chunks first, so the walk reads past them, in a bounded prefix.
+const WEBP_SCAN_BYTES = 64 * 1024;
+
 async function takesJpeg(mount: Mount, file: DrivePath, mime: string): Promise<boolean> {
     if (PNG_SOURCES.has(mime)) return false;
     if (mime !== 'image/webp') return true;
-    const header = await mount.readBytes(file.id, 16);
-    return header === null || Buffer.from(header).toString('latin1', 12, 16) !== 'VP8L';
+    const bytes = await mount.readBytes(file.id, WEBP_SCAN_BYTES);
+    if (!bytes) return true;
+    const header = Buffer.from(bytes);
+    for (let at = 12; at + 8 <= header.byteLength; ) {
+        const fourCC = header.toString('latin1', at, at + 4);
+        if (fourCC === 'VP8L') return false;
+        if (fourCC === 'VP8 ') return true;
+        const size = header.readUInt32LE(at + 4);
+        at += 8 + size + (size & 1);
+    }
+    return true;
 }
 
 // The thumbnail Worker's Buffer wraps exactly the ArrayBuffer it transferred back, so it is handed on uncopied.
