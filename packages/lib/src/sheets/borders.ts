@@ -35,14 +35,14 @@ export const BORDER_STYLES: Record<number, { name: BorderStyleName; css: string;
     };
 
 // The CSS shorthand for one border side — `<width> <style> <color>`, no trailing `;`. Internal
-// to `borderSidesToCss` below (its only caller); color-escaping and `;` handling live with that
+// to `borderSidesToCss` below (its only caller); color checking and `;` handling live with that
 // function's callers.
 function borderSideCss(style: number, color: string): string {
     return `${BORDER_STYLES[style]?.css ?? '1px solid'} ${color}`;
 }
 
 // The `border-<side>:<shorthand>` declarations for a cell's sides, shared by the HTML/PDF export
-// (BE, `escapeHtml` for `mapColor`, joins with `;`) and the copy-as-HTML serializer (FE, raw
+// (BE, a color check for `mapColor`, joins with `;`) and the copy-as-HTML serializer (FE, raw
 // color). `s` (the diagonal) has no CSS equivalent, so it is never emitted — BORDER_SIDE_CSS
 // covers only l/r/t/b. Returns bare declarations with no trailing `;`; each caller owns its join.
 export function borderSidesToCss(sides: CellBorderSides, mapColor: (color: string) => string = (c) => c): string[] {
