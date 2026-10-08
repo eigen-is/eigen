@@ -1237,6 +1237,21 @@ describe('docx writer — tables', () => {
         expect(gridOf(child(child(child(outer, 'tr'), 'tc'), 'tbl'))).toEqual([4140]);
     });
 
+    test('a table without every colwidth in a list item or quote fills what its indent leaves of the column', async () => {
+        const open = table(tr(td({}, p(text('x'))), td({}, p(text('y')))));
+        const widths = async (json: JSONContent) =>
+            (await tablesIn(json)).map((tbl) => [
+                xmlOf(child(child(tbl, 'tblPr'), 'tblW')),
+                xmlOf(child(child(tbl, 'tblPr'), 'tblInd')),
+            ]);
+        // 9638 twips of column: 330 in for an item, 265 for a quote.
+        expect(await widths(doc(open, ul(li(p(text('x')), open)), quote(open)))).toEqual([
+            ['<w:tblW w:w="5000" w:type="pct"/>', '<w:tblInd w:w="0" w:type="dxa"/>'],
+            ['<w:tblW w:w="4829" w:type="pct"/>', '<w:tblInd w:w="330" w:type="dxa"/>'],
+            ['<w:tblW w:w="4863" w:type="pct"/>', '<w:tblInd w:w="265" w:type="dxa"/>'],
+        ]);
+    });
+
     test('an empty cell is one paragraph, and a table with no cells writes nothing', async () => {
         const tbl = only(await tablesIn(doc(table(tr(td({}))))));
         expect(xmlOf(only(descendants(tbl, W, 'p')))).toBe('<w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p>');
