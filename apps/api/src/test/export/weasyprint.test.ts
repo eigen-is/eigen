@@ -93,6 +93,19 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
         expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
         expect(stderr).toContain('Traceback');
     });
+
+    // `exec`, so the timeout kills the sleep itself and nothing holds the probe's stdout open.
+    test('a probe that hangs answers 501 and the next export probes again', async () => {
+        const { outcomes } = await exportWithStubPython(
+            `if [ ! -e "$0.hung" ]; then : > "$0.hung"; exec /bin/sleep 30; fi\necho 70.0; exit 0`,
+            "printf '%%PDF-'",
+            2,
+        );
+        expect(outcomes).toEqual([
+            { status: 501, message: expect.stringContaining('WeasyPrint 68 or later.') },
+            { pdf: '%PDF-' },
+        ]);
+    }, 15_000);
 });
 
 suite('htmlToPdf', () => {
