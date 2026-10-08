@@ -171,6 +171,19 @@ describe('export sanitize — url() is refused on its token', () => {
         expect(sheet).toContain('.b{color:red}');
     });
 
+    // attr() can read an attribute as a URL, and WeasyPrint fails the whole export on `attr(name url)`.
+    test.each(['attr(data-x url)', 'ATTR(data-x url)', 'attr(title)'])(
+        '%s goes from a style attribute and a style element',
+        (css) => {
+            expect(sanitizeExportHtml(`<p data-x="x" style="color:red;content:${css}">a</p>`)).toBe(
+                '<p data-x="x">a</p>',
+            );
+            expect(sanitizeExportHtml(`<style>p::before{content:${css}}.b{color:red}</style>`)).toBe(
+                '<style>.b{color:red}</style>',
+            );
+        },
+    );
+
     test('an @font-face src holding a paren goes, and the rule beside it stays', () => {
         const out = sanitizeExportHtml(
             `<style>@font-face{font-family:Z;src:url("${EVIL}/d)")} p{font-family:Z}</style>`,
@@ -670,6 +683,15 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             );
         });
         expect(connections).toBe(0);
+    });
+
+    test('an attr() a collaborator wrote no longer fails the export', async () => {
+        const body = sanitizeExportHtml(
+            '<p data-x="data:image/png;base64,AAAA" style="width:9px;height:9px;background-image:attr(data-x url)">a</p>' +
+                '<style>p::before{content:attr(data-x url)}</style>',
+        );
+        const pdf = await htmlToPdf(page(body));
+        expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     });
 
     test('a clean data: SVG nested in another still renders', async () => {

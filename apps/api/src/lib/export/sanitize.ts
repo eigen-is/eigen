@@ -27,8 +27,9 @@ const CSS_URL = /url\((?![\t\n\f\r ]*(?:['"][\t\n\f\r ]*)?(?:data:|#))/gi;
 // One of the exact allowed refs as a whole url(), read where CSS_URL matched; none holds a quote, a paren or whitespace.
 // The ref is never empty, so no two whitespace runs can trade characters: a long run costs one pass, not its square.
 const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy;
-// What fetches without a url(): @import's string form and the image functions that take a string.
-const CSS_STRING_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(/i;
+// What fetches without a url(): @import's string form, the image functions that take a string, and attr(), which can
+// read an attribute as a URL. WeasyPrint fails the whole export on `attr(name url)`.
+const CSS_OTHER_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(|attr\(/i;
 const NO_REFS: ReadonlySet<string> = new Set();
 
 // The element hook types its node as a bare Node.
@@ -75,7 +76,7 @@ function escapesFunction(value: string): boolean {
 }
 
 const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
-    CSS_STRING_FETCHES.test(css) || urlFetches(css, allowed);
+    CSS_OTHER_FETCHES.test(css) || urlFetches(css, allowed);
 
 // A sheet's top-level statements: a rule or block ends at the `}` that closes it, an at-statement at its `;`.
 // Braces in strings and comments can misplace a cut, which is why the kept text is checked again whole.
