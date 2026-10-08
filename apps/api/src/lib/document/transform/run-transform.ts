@@ -40,9 +40,12 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
     opts: TransformOptions & { captureMs?: number },
 ): Promise<TransformResultFor<R>> {
     const { priority = 'foreground', ...rest } = opts;
+    const limits = TRANSFORM_LIMITS[request.kind];
+    // The media prep spends from the deadline, so an export is one deadline end to end; a spent one times out at once.
     const response = await documentTransformRunner.run(request, {
         ...rest,
-        ...TRANSFORM_LIMITS[request.kind],
+        ...limits,
+        deadlineMs: limits.deadlineMs - (rest.prepMs ?? 0),
         priority,
     });
     if (!response.ok) {

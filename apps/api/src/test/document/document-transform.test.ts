@@ -985,6 +985,38 @@ describe('document transform (eigendoc)', () => {
         expect(calls).toBe(0);
     }, 120_000);
 
+    // The prep's clock is skewed and its deadline signal fired by hand, so no test waits out 120 s.
+    test("a docx's media prep spends from the export's deadline, and once it is spent queues no more media and times out", async () => {
+        const doc = await seedGoldenDocument('deadline-doc', 'doc');
+        await seedDocumentMedia(doc.mount, doc.path, 'second.png', TEST_PNG_BYTES);
+        const { deadlineMs } = TRANSFORM_LIMITS.export;
+        const deadline = new AbortController();
+        const now = performance.now.bind(performance);
+        let skew = 0;
+        const clock = spyOn(performance, 'now').mockImplementation(() => now() + skew);
+        const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(() => deadline.signal);
+        const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
+            skew += deadlineMs;
+            deadline.abort();
+            return null;
+        });
+        let failure: unknown;
+        let calls = -1;
+        try {
+            failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
+                (err: unknown) => err,
+            );
+            calls = encode.mock.calls.length;
+            expect(timeout.mock.calls).toEqual([[deadlineMs]]);
+        } finally {
+            clock.mockRestore();
+            timeout.mockRestore();
+            encode.mockRestore();
+        }
+        expect(calls).toBe(1);
+        expect(String(failure)).toContain('eigendoc export transform failed (timeout): Document transform timed out');
+    }, 120_000);
+
     test('docx export through the Worker equals the writer on the main thread and matches the pinned golden hash', async () => {
         const { mount, path } = golden;
         const response = await documentTransformRunner.run(

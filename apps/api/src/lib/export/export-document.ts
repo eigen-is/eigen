@@ -11,7 +11,7 @@ import type {
     VectorExportFormat,
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
-import { documentTransformRunner } from '../document/transform/runner';
+import { documentTransformRunner, TRANSFORM_LIMITS } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
@@ -129,9 +129,11 @@ export async function runDocumentExport(
     documentTransformRunner.assertAdmissible('foreground');
 
     // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
-    // cells alone.
+    // cells alone. It spends from the job's deadline (run-transform.ts), and stops once that is spent.
     const prepStart = performance.now();
-    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format, signal);
+    const deadline = AbortSignal.timeout(TRANSFORM_LIMITS.export.deadlineMs);
+    const prepSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format, prepSignal);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the Worker. A docx
