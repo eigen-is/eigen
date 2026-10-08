@@ -13,7 +13,7 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import type { SCREEN_PREVIEW_MAX_SIZE } from '../../preview/preview-cache';
-import { FONT_STACK_MONO, FONT_STACK_SANS } from '../font-stacks';
+import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
@@ -133,13 +133,6 @@ input, button, textarea, select { font: inherit; color: inherit; background-colo
 a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
 h1, h2, h3, h4, h5, h6 { font-size: inherit; }
-
-body {
-    font-family: ${FONT_STACK_SANS};
-    color: #1a1a2e;
-    margin: 0;
-    padding: 0;
-}
 
 .page {
     max-width: 100%;

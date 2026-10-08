@@ -76,6 +76,12 @@ describe('doc export — the stylesheet', () => {
         expect(css.match(/font-size: 11pt/g)).toHaveLength(1);
     });
 
+    test('the body text font and color are set once, by eigen-prose', async () => {
+        const css = await exportStyle('pdf-html');
+        expect(css).not.toMatch(/(^|\n)\s*body \{/);
+        expect(css.match(/color: #1a1a2e/g)).toHaveLength(1);
+    });
+
     test('the dark theme stays out, whole', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/#3f3f46|#27272a/);
