@@ -111,7 +111,7 @@ function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, strin
         },
     });
 
-    return wrapInDocument(title, sanitizeExportHtml(bodyHtml, { allowedRefs: new Set(dataUriMap.values()) }));
+    return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
 }
 
 function wrapInDocument(title: string, bodyHtml: string): string {

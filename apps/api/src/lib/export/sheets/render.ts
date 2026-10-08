@@ -83,7 +83,7 @@ function styleAttr(styles: StyleRegistry | undefined, declarations: string): str
 // structural and where HTML entities are never decoded. Every declaration reaches the
 // document through here, so the whole class is closed at this one seam instead of per
 // field: `<`/`>` end the <style> element (and DOMPurify keeps what follows — an
-// <svg><image href> is a server-side fetch under WeasyPrint), `{`/`}` open and close
+// <svg><image href> is a fetch in the HTML download), `{`/`}` open and close
 // rule blocks, `\` starts a CSS escape (which also hides `url(`/`@import` from the
 // sanitizer's scan by spelling them `\75 rl(` / `@\69 mport`), and `/*` opens a comment
 // that swallows every later rule. None of them can appear in a legitimate declaration.
@@ -119,16 +119,13 @@ export function renderSheetsExportDocument(sheets: Sheet[], title: string, media
     const { html, css } = renderSheetsHtml(sheets, mediaUrls);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
-    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, {
-        ADD_ATTR: ['target'],
-        allowedRefs: new Set(mediaUrls.values()),
-    });
+    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, { ADD_ATTR: ['target'] });
     return wrapInDocument(title, sanitized);
 }
 
 // Runs inside the transform Worker. The page is sized to the widest/tallest sheet
 // so WeasyPrint never clips a wide grid. Unlike the HTML export this sanitizes
-// with no `target` on anchors, which a PDF has no use for.
+// with no options — no `target` on anchors in a PDF.
 export function renderSheetsPdfDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
     let maxW = 0;
     let maxH = 0;
@@ -139,9 +136,7 @@ export function renderSheetsPdfDocument(sheets: Sheet[], title: string, mediaUrl
     }
 
     const { html, css } = renderSheetsHtml(sheets, mediaUrls);
-    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, {
-        allowedRefs: new Set(mediaUrls.values()),
-    });
+    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`);
     const pageSize = {
         width: Math.min(maxW + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX),
         height: Math.min(maxH + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX),

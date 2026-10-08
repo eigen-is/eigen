@@ -29,15 +29,6 @@ export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 // A docx image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to in the Worker.
 export const DOCX_IMAGE_MAX_SIZE = 2560;
 
-// What the main thread's SVG inliner (preview/svg-media-inline.ts) builds, so what the Worker's sanitizer admits in an
-// SVG. A ~16MB served-output ceiling: base64 inflates ~1.37x, so a few MB of siblings fit; a hostile blow-up (one big
-// sibling referenced many times, or deep nesting) trips it and degrades to a stripped svg.
-export const SVG_INLINE_MAX_BYTES = 16 * 1024 * 1024;
-
-// svg-in-svg recursion ceiling: the served svg is depth 0, a referenced sibling svg is depth 1. A sibling svg deeper
-// than this is stripped rather than inlined.
-export const MAX_SVG_INLINE_DEPTH = 3;
-
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
 // Previews reference media by URL, so no bytes cross for a preview. (Vector renders to

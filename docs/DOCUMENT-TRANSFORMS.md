@@ -57,7 +57,7 @@ The measurements behind the choice: a spawn costs 2 to 4 ms, and the real cost i
 Not after a timeout, a crash, an overload or a module that fails to load. A fallback would bring back the server-wide freeze this layer exists to remove.
 
 - A recalc failure returns the replayed values with a `recalc-failed` warning and never fails the job. Only an export recalcs ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
-- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's DOMPurify config plus hooks of its own that strip every reference but an inlined raster image and every CSS fetch, and it forbids more tags, such as `svg` and `video` (`apps/api/src/lib/preview/eml-preview.ts`).
+- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's DOMPurify config plus hooks of its own that strip every reference but an inlined raster image and every CSS fetch, and it forbids more tags, such as `svg` and `video` (`apps/api/src/lib/preview/eml-preview.ts`).
 - The import commit stays on the main thread ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
 
 ## The runner logs one line per job, overload included

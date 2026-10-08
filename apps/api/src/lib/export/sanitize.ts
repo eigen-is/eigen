@@ -3,19 +3,13 @@ import type { VectorScene } from '@workspace/lib/vector';
 import { stripNonXmlChars } from '@workspace/lib/xml';
 import DOMPurify from 'isomorphic-dompurify';
 import { JSDOM } from 'jsdom';
-import {
-    type ExportMedia,
-    MAX_SVG_INLINE_DEPTH,
-    SVG_INLINE_MAX_BYTES,
-    toTransferableText,
-} from '../document/transform/protocol';
+import { type ExportMedia, toTransferableText } from '../document/transform/protocol';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 
-// DOMPurify's own config plus the exact URLs this body keeps as they are. A preview body embeds the
-// `/file/<id>/preview` URLs the main thread resolved, so it passes exactly those — an exact-string set, never a host
-// or prefix rule. An export passes the data: URIs of its own media, which sanitizeExportMedia already took through
-// the SVG pass a collaborator's data: SVG takes here.
+// DOMPurify's own config plus the exact non-data: URLs this body keeps. Exports embed every resource
+// as a data: URI and pass none; a preview body embeds the `/file/<id>/preview` URLs the main thread
+// resolved, so it passes exactly those — an exact-string set, never a host or prefix rule.
 type SanitizeOptions = SanitizeConfig & { allowedRefs?: ReadonlySet<string> };
 
 // Minimal structural view of the jsdom element passed to DOMPurify hooks.
@@ -30,25 +24,13 @@ export type AttrNode = {
 // never a url()/quote pair, so no paren or quote inside the URL ends a match early. CSS whitespace only: a
 // non-breaking space is part of the URL, which then is a relative path.
 const CSS_URL = /url\((?![\t\n\f\r ]*(?:['"][\t\n\f\r ]*)?(?:data:|#))/gi;
-// One of the exact allowed refs as a whole url(); none holds a quote, a paren or whitespace.
-const CSS_ALLOWED_URL = /^url\([\t\n\f\r ]*(['"]?)([^'"()\s]*)\1[\t\n\f\r ]*\)/i;
-// What fetches without a url(): @import's string form and the image functions that take a string.
-const CSS_STRING_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(/i;
-// An escape can spell `url(` in any attribute a CSS parser reads (`fill="\75 rl(…)"`).
-const ESCAPED_FUNCTION = /\\[^(]*\(/;
+// One of the exact allowed refs as a whole url(), read where CSS_URL matched; none holds a quote, a paren or whitespace.
+// The ref is never empty, so no two whitespace runs can trade characters: a long run costs one pass, not its square.
+const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy;
+// What fetches without a url(): @import's string form, the image functions that take a string, and attr(), which can
+// read an attribute as a URL. WeasyPrint fails the whole export on `attr(name url)`.
+const CSS_OTHER_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(|attr\(/i;
 const NO_REFS: ReadonlySet<string> = new Set();
-// The whitespace a URL parser trims.
-const URL_SPACE = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
-// A url( that opens a data: URI, in any case, with the quote its URL may open with.
-const CSS_DATA_URL = /url\([\t\n\f\r ]*(['"]?)[\t\n\f\r ]*(?=data:)/gi;
-const XML_SPACE = new Set([0x09, 0x0a, 0x0d, 0x20]);
-// Padded or not; a quantum cut short or a character past the padding is no payload this decodes.
-const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}(?:==)?|[A-Za-z0-9+/]{3}=?)?$/;
-
-// DOMPurify keeps its config and hooks per instance, and a data: SVG is sanitized from inside the hooks of the pass
-// that found it, so each nesting depth runs on an instance of its own.
-const purifiers = [DOMPurify];
-const purifierAt = (depth: number) => (purifiers[depth] ??= DOMPurify(new JSDOM('').window));
 
 // The element hook types its node as a bare Node.
 const isElement = (node: Node): node is Element => node.nodeType === 1;
@@ -61,8 +43,8 @@ const REF_ATTRS = ['src', 'poster', 'background'];
 const isAllowedRef = (value: string, allowed: ReadonlySet<string>): boolean =>
     /^[\t\n\f\r ]*data:/i.test(value) || allowed.has(value);
 
-// The elements whose href points into their own document. On another (an image, feImage) WeasyPrint resolves a
-// fragment against its base and opens file://<cwd>/; SVG 2 gives clipPath and mask no href. Lowercase, as compared.
+// The elements whose href points into their own document. On another (an image, feImage) a fragment resolves against
+// the document's URL, which is then fetched; SVG 2 gives clipPath and mask no href. Lowercase, as compared.
 const FRAGMENT_REF_TAGS = new Set([
     'use',
     'lineargradient',
@@ -80,14 +62,21 @@ const isFragmentRef = (value: string): boolean => /^[\t\n\f\r ]*#\S*[\t\n\f\r ]*
 // data: URI, so it fails the lookahead.
 function urlFetches(text: string, allowed: ReadonlySet<string>): boolean {
     for (const { index } of text.matchAll(CSS_URL)) {
-        const ref = CSS_ALLOWED_URL.exec(text.slice(index))?.[2];
+        CSS_ALLOWED_URL.lastIndex = index;
+        const ref = CSS_ALLOWED_URL.exec(text)?.[2];
         if (!ref || !allowed.has(ref)) return true;
     }
     return false;
 }
 
+// An escape can spell `url(` in any attribute a CSS parser reads (`fill="\75 rl(…)"`): a backslash before a `(`.
+function escapesFunction(value: string): boolean {
+    const backslash = value.indexOf('\\');
+    return backslash >= 0 && value.includes('(', backslash);
+}
+
 const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
-    CSS_STRING_FETCHES.test(css) || urlFetches(css, allowed);
+    CSS_OTHER_FETCHES.test(css) || urlFetches(css, allowed);
 
 // A sheet's top-level statements: a rule or block ends at the `}` that closes it, an at-statement at its `;`.
 // Braces in strings and comments can misplace a cut, which is why the kept text is checked again whole.
@@ -110,31 +99,21 @@ function cssStatements(css: string): string[] {
 
 // Every export resource is embedded as a data: URI (fonts + images) and every preview resource is one
 // of the prepared media URLs, so any other CSS url() or fetching attribute is attacker-injected via
-// schemaless slide/sheet/vector CRDT strings. WeasyPrint fetches those server-side when rendering the
-// PDF (SSRF from the API host), and a preview body is injected as live DOM in the drive hero (a beacon
-// fired at every viewer). Its CLI can't restrict protocols and DOMPurify keeps url()/src by default,
-// so restrict here. <a href> is left alone — link targets aren't fetched during render, and
-// sheets/docs carry legitimate http(s) hyperlinks.
-function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>, depth: number): void {
-    const tag = node.tagName.toLowerCase();
-    // A data: URI in an attribute that fetches goes through keptDataUri first, so the scans below read what it wrote.
-    // jsdom names an SVG <a> in lowercase, an HTML one in upper.
-    for (const attr of tag === 'a' ? REF_ATTRS : [...REF_ATTRS, 'href', 'xlink:href']) {
-        const value = node.getAttribute(attr);
-        if (value === null || !/^[\t\n\f\r ]*data:/i.test(value)) continue;
-        const kept = keptDataUri(value, allowed, depth);
-        if (kept === null) node.removeAttribute(attr);
-        else if (kept !== value) node.setAttribute(attr, kept);
-    }
+// schemaless slide/sheet/vector CRDT strings. A browser opening an HTML download fetches those, and a
+// preview body is injected as live DOM in the drive hero (a beacon fired at every viewer). DOMPurify
+// keeps url()/src by default, so restrict here; WeasyPrint's fetcher opens only data: URIs
+// (weasyprint-render.py). <a href> is left alone: a browser follows a link on a click, and sheets/docs
+// carry legitimate http(s) hyperlinks.
+function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
     // SVG presentation attributes (fill, filter, mask, marker-*) are CSS too, so every value is scanned for `url(`.
     for (const { name, value } of [...node.attributes]) {
         if (name === 'style') {
             // A CSS escape spells the same token invisibly to a regex (`\75 rl(…)` is `url(…)` to the parser), so
             // backslashes go before the scan. Generated export CSS never contains one.
-            const scanned = keptCss(value.replace(/\\/g, ''), allowed, depth);
-            if (scanned === null || cssFetches(scanned, allowed)) node.removeAttribute(name);
+            const scanned = value.replace(/\\/g, '');
+            if (cssFetches(scanned, allowed)) node.removeAttribute(name);
             else if (scanned !== value) node.setAttribute(name, scanned);
-        } else if (urlFetches(value, allowed) || ESCAPED_FUNCTION.test(value) || opensDataSvg(value)) {
+        } else if (urlFetches(value, allowed) || escapesFunction(value)) {
             node.removeAttribute(name);
         }
     }
@@ -146,8 +125,9 @@ function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>, depth: 
         if (value != null && !isAllowedRef(value, allowed)) node.removeAttribute(attr);
     }
     // SVG <image>/<use> reference through href (and legacy xlink:href), which DOMPurify
-    // keeps by default and WeasyPrint fetches server-side — the same SSRF as <img src>,
-    // through a different attribute.
+    // keeps by default and a browser fetches — the same beacon as <img src>, through a
+    // different attribute. jsdom names an SVG <a> in lowercase, an HTML one in upper.
+    const tag = node.tagName.toLowerCase();
     if (tag === 'a') return;
     const references = FRAGMENT_REF_TAGS.has(tag);
     for (const attr of ['href', 'xlink:href']) {
@@ -166,20 +146,13 @@ function isSameDocumentUse(node: AttrNode): boolean {
 
 // Same restriction for CSS text inside <style> elements (the sheets export emits its class rules there). Only the
 // statements that fetch go, so the rules beside them survive; a sheet whose kept text still fetches is emptied.
-function restrictStyleTextToDataRefs(
-    node: { textContent: string | null },
-    allowed: ReadonlySet<string>,
-    depth: number,
-): void {
+function restrictStyleTextToDataRefs(node: { textContent: string | null }, allowed: ReadonlySet<string>): void {
     const text = node.textContent;
     if (!text) return;
     // Backslashes go first for the same reason as in style attributes: `@\69 mport` and `\75 rl(` are `@import` and
     // `url(` to a CSS parser but not to the scan.
     const kept = cssStatements(text.replace(/\\/g, ''))
-        .flatMap((statement) => {
-            const css = keptCss(statement, allowed, depth);
-            return css === null || cssFetches(css, allowed) ? [] : [css];
-        })
+        .filter((statement) => !cssFetches(statement, allowed))
         .join('');
     const stripped = cssFetches(kept, allowed) ? '' : kept;
     if (stripped !== text) node.textContent = stripped;
@@ -189,113 +162,19 @@ function restrictStyleTextToDataRefs(
 // PDF and live-DOM output. Adds the URL restriction on top of DOMPurify. The hooks are scoped to this
 // synchronous call (add → sanitize → remove), so they never leak to other DOMPurify users.
 export function sanitizeExportHtml(html: string, options?: SanitizeOptions): string {
-    return sanitizeAt(html, options, 0);
-}
-
-// `depth` counts the data: SVGs this markup is nested in.
-function sanitizeAt(html: string, options: SanitizeOptions | undefined, depth: number): string {
     const { allowedRefs = NO_REFS, ...config } = options ?? {};
-    const purifier = purifierAt(depth);
-    purifier.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs, depth));
-    purifier.addHook('uponSanitizeElement', (node, data) => {
-        if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs, depth);
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
+    DOMPurify.addHook('uponSanitizeElement', (node, data) => {
+        if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs);
         // Decided per element. DOMPurify's namespace check drops a <use> outside a kept <svg>, whatever the profile.
         if (data.tagName === 'use') data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
     });
     try {
-        return purifier.sanitize(html, { FORCE_BODY: true, ...config }) as string;
+        return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config }) as string;
     } finally {
-        purifier.removeHook('afterSanitizeAttributes');
-        purifier.removeHook('uponSanitizeElement');
+        DOMPurify.removeHook('afterSanitizeAttributes');
+        DOMPurify.removeHook('uponSanitizeElement');
     }
-}
-
-// The pass every SVG takes before an export embeds it: the data-only restriction, written as XML.
-function sanitizeSvg(svg: string, depth: number): string {
-    return toXmlDocument(sanitizeAt(svg, undefined, depth));
-}
-
-// WeasyPrint decodes a data: SVG and fetches its nested <image href> and url(), so one that is not the export's own
-// media takes the pass media take, one level deeper, and is written back in its own encoding. Null removes it, as a
-// refused ref is removed: a payload that holds no drawing, or one deeper or longer than the inliner builds. A data:
-// URI of another type is kept as it is, unless its payload reads as XML: WeasyPrint parses an image Pillow cannot
-// open as an SVG, whatever its type, and a browser draws none.
-function keptDataUri(value: string, allowed: ReadonlySet<string>, depth: number): string | null {
-    const uri = value.replace(URL_SPACE, '');
-    if (allowed.has(uri)) return value;
-    const comma = uri.indexOf(',');
-    const [type, ...params] = uri
-        .slice(5, comma < 0 ? undefined : comma)
-        .split(';')
-        .map((part) => part.trim().toLowerCase());
-    if (type !== 'image/svg+xml') return comma >= 0 && readsAsXml(uri.slice(comma + 1)) ? null : value;
-    if (comma < 0 || depth >= MAX_SVG_INLINE_DEPTH || uri.length > SVG_INLINE_MAX_BYTES) return null;
-    const base64 = params.at(-1) === 'base64';
-    let payload = percentDecode(uri.slice(comma + 1));
-    if (base64) {
-        const encoded = payload.toString('latin1').replace(/[\t\n\f\r ]/g, '');
-        if (!BASE64.test(encoded)) return null;
-        payload = Buffer.from(encoded, 'base64');
-    }
-    const svg = sanitizeSvg(payload.toString('utf8'), depth + 1);
-    if (!svg) return null;
-    const charset = params.some((param) => param.startsWith('charset=')) ? ';charset=utf-8' : '';
-    return base64
-        ? `data:image/svg+xml${charset};base64,${Buffer.from(svg).toString('base64')}`
-        : `data:image/svg+xml${charset},${percentEncode(svg)}`;
-}
-
-// A presentation attribute's url() paints from a data: SVG nowhere this exports to, so outside a style one is
-// refused rather than decoded: past the depth bound, keptCss removes every one without reading it.
-const opensDataSvg = (value: string): boolean => keptCss(value, NO_REFS, MAX_SVG_INLINE_DEPTH) !== value;
-
-// The payload as WeasyPrint's data: handler may read it, raw or as base64, whose decoder skips what is not in its
-// alphabet: one starts as XML with a UTF-16 byte order mark or `<`, or with `<` past a UTF-8 mark and whitespace.
-function readsAsXml(payload: string): boolean {
-    const raw = percentDecode(payload);
-    const decoded = Buffer.from(raw.toString('latin1').replace(/[^A-Za-z0-9+/]/g, ''), 'base64');
-    return [raw, decoded].some((bytes) => {
-        if (/^(?:\xfe\xff|\xff\xfe|\0<)/.test(bytes.toString('latin1', 0, 2))) return true;
-        let at = bytes.toString('latin1', 0, 3) === '\xef\xbb\xbf' ? 3 : 0;
-        while (XML_SPACE.has(bytes[at])) at++;
-        return bytes[at] === 0x3c;
-    });
-}
-
-// As Python's unquote_to_bytes, which WeasyPrint's data: handler runs: a `%` without two hex digits is itself.
-function percentDecode(text: string): Buffer {
-    const parts = text.split(/(%[0-9a-f]{2})/i);
-    return Buffer.concat(
-        parts.map((part, i) => (i % 2 ? Buffer.from([Number.parseInt(part.slice(1), 16)]) : Buffer.from(part))),
-    );
-}
-
-// Every character but the unreserved ones escaped, so the URI holds no quote, paren or space in a url() or attribute.
-const percentEncode = (text: string): string =>
-    encodeURIComponent(text).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-
-// CSS with the URI of every url(data:…) as keptDataUri keeps it. Null when one is removed, or when its URL ends where
-// a CSS parser reads on: an escape, a newline in its string, or anything but `)` after its closing quote.
-function keptCss(css: string, allowed: ReadonlySet<string>, depth: number): string | null {
-    let kept = '';
-    let last = 0;
-    for (const { index, 0: open, 1: quote } of css.matchAll(CSS_DATA_URL)) {
-        // A url( inside an unencoded data: SVG is that SVG's own, sanitized with it.
-        if (index < last) continue;
-        const start = index + open.length;
-        const end = css.indexOf(quote || ')', start);
-        if (end < 0) return null;
-        const url = quote ? css.slice(start, end) : css.slice(start, end).replace(/[\t\n\f\r ]+$/, '');
-        if ((quote ? /[\n\f\r\\]/ : /[\s'"(\\]/).test(url)) return null;
-        const close = /[\t\n\f\r ]*\)/y;
-        close.lastIndex = end + 1;
-        if (quote && !close.test(css)) return null;
-        const uri = keptDataUri(url, allowed, depth);
-        if (uri === null) return null;
-        kept += css.slice(last, start) + uri;
-        last = end;
-    }
-    return kept + css.slice(last);
 }
 
 // A <use> draws its target once per reference, so nested ones multiply (6 levels of 10 is a million copies). One stays
@@ -326,15 +205,14 @@ export function toXmlDocument(svg: string): string {
     return stripNonXmlChars(new dom.window.XMLSerializer().serializeToString(root));
 }
 
-// SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. Embedded
-// as a data: URI it still reaches WeasyPrint's fetcher (a nested `<image href>` is the same SSRF the assembled document
-// closes), so every export arm takes it through the data-only pass here, off the event loop, written as XML, which a
-// docx part must be and an .svg data: URI is read as. One with no <svg> in it is no drawing, and is dropped like a
-// failed preview.
+// SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. A docx
+// carries it as a part of its own, and WeasyPrint and librsvg draw its every <use>, so every export arm takes it through
+// the data-only pass here, off the event loop, written as XML, which a docx part must be and an .svg data: URI is read
+// as. One with no <svg> in it is no drawing, and is dropped like a failed preview.
 export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
     return media.flatMap((item) => {
         if (item.contentType !== 'image/svg+xml') return [item];
-        const svg = sanitizeSvg(Buffer.from(item.data).toString('utf8'), 0);
+        const svg = toXmlDocument(sanitizeExportHtml(Buffer.from(item.data).toString('utf8')));
         return svg ? [{ ...item, data: toTransferableText(svg) }] : [];
     });
 }

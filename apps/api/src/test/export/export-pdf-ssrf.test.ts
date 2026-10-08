@@ -1,29 +1,22 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import * as Y from 'yjs';
 import { parseXml } from '../../lib/core/xml';
-import { SVG_INLINE_MAX_BYTES, toTransferableText } from '../../lib/document/transform/protocol';
+import { toTransferableText } from '../../lib/document/transform/protocol';
 import { renderEigenslidesExport } from '../../lib/export/canvas/transform';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
+import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 import { sanitizeExportHtml, sanitizeExportMedia } from '../../lib/export/sanitize';
-import { renderSheetsExportDocument, renderSheetsPdfDocument } from '../../lib/export/sheets/render';
-import { renderEigenvectorExport } from '../../lib/export/vector/transform';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
-import {
-    buildGoldenDeckScene,
-    buildGoldenVectorScene,
-    GOLDEN_MEDIA_NAME,
-    seedDeckDoc,
-    seedEigendoc,
-    seedVectorDoc,
-} from '../fixtures/golden-documents';
+import { buildGoldenDeckScene, seedDeckDoc, seedEigendoc } from '../fixtures/golden-documents';
 
-// SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a
-// schemaless slide/sheet color or text. It lands in CSS the server-side PDF renderer would
-// otherwise fetch (SSRF from the API host). All legit export resources are embedded as `data:`
-// URIs, so sanitizeExportHtml — run by every export path before htmlToPdf — strips every non-data
-// ref. That layer is tested unconditionally (WeasyPrint's CLI can't restrict protocols, so the
-// strip must not depend on the renderer being present); the end-to-end run is skipped where absent.
+// SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a schemaless slide/sheet
+// color or text. WeasyPrint renders through a fetcher that opens only data: URIs, the boundary the last suite tests with
+// the sanitizer bypassed. sanitizeExportHtml strips every non-data ref as well, which keeps the HTML downloads and the
+// preview DOM from fetching: that layer is tested unconditionally, the renderer only where it is installed.
 
 // 1x1 PNG — the only legitimate resource shape exports embed (fonts/images are data: URIs).
 const DATA_PNG =
@@ -150,7 +143,7 @@ describe('export sanitize — style elements', () => {
 });
 
 // A url() is refused on its token, never parsed as a pair: a quote or a paren inside the URL ends no match early,
-// and the CSS parser reads `URL(` as `url(`. WeasyPrint fetched every one of these past the pair regex.
+// and the CSS parser reads `URL(` as `url(`. A pair regex let every one of these reach the CSS parser.
 describe('export sanitize — url() is refused on its token', () => {
     const EVIL = 'http://evil.test';
 
@@ -177,6 +170,19 @@ describe('export sanitize — url() is refused on its token', () => {
         expect(sheet).not.toContain('evil.test');
         expect(sheet).toContain('.b{color:red}');
     });
+
+    // attr() can read an attribute as a URL, and WeasyPrint fails the whole export on `attr(name url)`.
+    test.each(['attr(data-x url)', 'ATTR(data-x url)', 'attr(title)'])(
+        '%s goes from a style attribute and a style element',
+        (css) => {
+            expect(sanitizeExportHtml(`<p data-x="x" style="color:red;content:${css}">a</p>`)).toBe(
+                '<p data-x="x">a</p>',
+            );
+            expect(sanitizeExportHtml(`<style>p::before{content:${css}}.b{color:red}</style>`)).toBe(
+                '<style>.b{color:red}</style>',
+            );
+        },
+    );
 
     test('an @font-face src holding a paren goes, and the rule beside it stays', () => {
         const out = sanitizeExportHtml(
@@ -225,6 +231,23 @@ describe('export sanitize — url() is refused on its token', () => {
         expect(out).toContain('fill="url(#g)"');
         expect(out).toContain(`mask="url('#m')"`);
         expect(out).toContain('clip-path="URL( #c )"');
+    });
+});
+
+// A collaborator's string sizes the scan, so every token pattern runs in one pass. A whitespace run after `url(` cost
+// its square in the allowed-ref read (3.8 s for 100 KB) and a run of backslashes the escape check's (2.1 s); 256 KB of
+// either takes milliseconds now, so the bound is far from both, whatever the machine's load.
+describe('export sanitize — a long crafted value costs one pass', () => {
+    const LONG = 256 * 1024;
+    test.each([
+        ['spaces after url( in a style attribute', `<p style="url(${' '.repeat(LONG)}x">a</p>`],
+        ['spaces after url( in a style element', `<style>.a{b:url(${' '.repeat(LONG)}x}</style>`],
+        ['spaces after url( in a presentation attribute', `<svg><rect fill="url(${' '.repeat(LONG)}x"></rect></svg>`],
+        ['backslashes in a presentation attribute', `<svg><rect fill="${'\\'.repeat(LONG)}"></rect></svg>`],
+    ])('%s', (_, html) => {
+        const start = performance.now();
+        sanitizeExportHtml(html);
+        expect(performance.now() - start).toBeLessThan(1000);
     });
 });
 
@@ -293,7 +316,7 @@ describe('export sanitize — allowed refs', () => {
 });
 
 // The url()/img-src rule left SVG's own reference attributes open. DOMPurify keeps
-// <svg><image href="http://…">, and WeasyPrint fetches it while rendering.
+// <svg><image href="http://…">, and a browser fetches it.
 describe('export sanitize — SVG references', () => {
     test('a remote href on an SVG image is dropped', () => {
         const out = sanitizeExportHtml('<svg><image href="http://evil.test/pixel.png"></image></svg>');
@@ -532,222 +555,21 @@ describe('export sanitize — SVG media <use> depth', () => {
     });
 });
 
-// A data: SVG a collaborator wrote is still an SVG to WeasyPrint, which decodes it and fetches its nested <image href>
-// and url(). So one that is not the export's own media takes the media's pass and is written back in its own encoding.
-const NESTED_EVIL = 'http://evil.test';
-const fetchingSvg = (name: string, inner = '') =>
-    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20"><image width="10" height="10" href="${NESTED_EVIL}/${name}"/><rect id="${name}" width="5" height="5" fill="url(${NESTED_EVIL}/${name}-fill)"/>${inner}</svg>`;
 const base64Svg = (svg: string, header = 'data:image/svg+xml;base64') =>
     `${header},${Buffer.from(svg).toString('base64')}`;
 const percentSvg = (svg: string, header = 'data:image/svg+xml') => `${header},${encodeURIComponent(svg)}`;
 
-const SVG_DATA_URI = /data:image\/svg\+xml(;charset=utf-8)?(;base64)?,([^"'()\s]*)/gi;
-
-// Every data: SVG in a sanitized string, decoded, and the ones nested in those after them.
-function nestedSvgs(text: string): string[] {
-    return [...text.matchAll(SVG_DATA_URI)].flatMap(([, , base64, payload]) => {
-        const svg = base64 ? Buffer.from(payload, 'base64').toString('utf8') : decodeURIComponent(payload);
-        return [svg, ...nestedSvgs(svg)];
-    });
-}
-
-// A chain of data: SVGs, each holding a <rect id="lN"> and the next level in its <image href>.
-function svgChain(levels: number, uri = base64Svg): string {
-    let href = '';
-    for (let level = levels; level >= 1; level--) {
-        const image = href ? `<image width="5" height="5" href="${href}"/>` : '';
-        href = uri(
-            `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect id="l${level}"/>${image}</svg>`,
-        );
-    }
-    return href;
-}
-
-const svgMedia = (svg: string) => {
-    const [item] = sanitizeExportMedia([
-        { name: 'a.svg', contentType: 'image/svg+xml', data: toTransferableText(svg) },
-    ]);
-    return Buffer.from(item.data).toString('utf8');
-};
-
-describe('export sanitize — a data: SVG is sanitized as SVG media are', () => {
-    const uri = base64Svg(fetchingSvg('nested'));
-
-    test.each([
-        ['an <img src>', `<img src="${uri}">`],
-        ['a style url()', `<div style="background-image:url('${uri}')">a</div>`],
-        [
-            'an SVG <image href>',
-            `<svg width="40" height="40"><image width="20" height="20" href="${uri}"></image></svg>`,
-        ],
-        ['an SVG <image xlink:href>', `<svg><image xlink:href="${uri}"></image></svg>`],
-        ['a <style> rule', `<style>.a{background:url("${uri}")}</style><div class="a">a</div>`],
-    ])('in %s it keeps its drawing and loses what fetches', (_, html) => {
-        const out = sanitizeExportHtml(html);
-        const [svg] = nestedSvgs(out);
-        expect(parseXml(svg)?.local).toBe('svg');
-        expect(svg).toContain('<rect id="nested" width="5" height="5"/>');
-        expect(svg).not.toContain('evil.test');
-        expect(out).not.toContain(uri);
-    });
-
-    test.each([
-        ['base64', base64Svg, /data:image\/svg\+xml;base64,/],
-        ['percent-encoded', percentSvg, /data:image\/svg\+xml,%3Csvg/],
-        [
-            'uppercase base64',
-            (svg: string) => base64Svg(svg, 'DATA:IMAGE/SVG+XML;BASE64'),
-            /data:image\/svg\+xml;base64,/,
-        ],
-        [
-            'uppercase percent-encoded',
-            (svg: string) => percentSvg(svg, 'DATA:IMAGE/SVG+XML'),
-            /data:image\/svg\+xml,%3Csvg/,
-        ],
-        [
-            'base64 with a charset',
-            (svg: string) => base64Svg(svg, 'data:image/svg+xml;charset=utf-8;base64'),
-            /data:image\/svg\+xml;charset=utf-8;base64,/,
-        ],
-        [
-            'percent-encoded with a charset and another parameter',
-            (svg: string) => percentSvg(svg, 'data:image/svg+xml;charset=UTF-8;foo=bar'),
-            /data:image\/svg\+xml;charset=utf-8,%3Csvg/,
-        ],
-    ])('a %s one is written back in its own encoding', (_, encode, written) => {
-        // DOMPurify drops a src whose scheme is not lowercase `data:`; a CSS parser reads any case.
-        const out = sanitizeExportHtml(`<p style="background:url('${encode(fetchingSvg('form'))}')">a</p>`);
-        expect(out).toMatch(written);
-        const [svg] = nestedSvgs(out);
-        expect(svg).toContain('<rect id="form" width="5" height="5"/>');
-        expect(svg).not.toContain('evil.test');
-    });
-
-    // The common way to put an SVG in CSS: unencoded inside a quoted url(), its `%` a literal one.
-    test('an unencoded one in a quoted url() keeps its text and its stray %', () => {
-        const svg = `<svg xmlns='http://www.w3.org/2000/svg'><text>100%</text><image href='${NESTED_EVIL}/raw'/></svg>`;
-        const out = sanitizeExportHtml(`<style>.a{background:url("data:image/svg+xml,${svg}")}.b{color:red}</style>`);
-        expect(out).toContain('.b{color:red}');
-        const [kept] = nestedSvgs(out);
-        expect(kept).toContain('<text>100%</text>');
-        expect(kept).not.toContain('evil.test');
-    });
-
-    test('one inside SVG media is sanitized too, at every level', () => {
-        const media = svgMedia(fetchingSvg('outer', `<image href="${base64Svg(fetchingSvg('inner'))}"/>`));
-        expect(media).not.toContain('evil.test');
-        const [inner] = nestedSvgs(media);
-        expect(inner).toContain('<rect id="inner" width="5" height="5"/>');
-        expect(inner).not.toContain('evil.test');
-    });
-
-    // The inliner nests sibling SVGs three deep below the one it serves; one deeper than that is no drawing it built.
-    test.each([
-        [
-            'SVG media',
-            (chain: string) => svgMedia(`<svg xmlns="http://www.w3.org/2000/svg"><image href="${chain}"/></svg>`),
-        ],
-        ['an <img src>', (chain: string) => sanitizeExportHtml(`<img src="${chain}">`)],
-    ])('in %s, three levels stay and a fourth goes', (_, sanitize) => {
-        for (const uri of [base64Svg, percentSvg]) {
-            const ids = nestedSvgs(sanitize(svgChain(4, uri))).map((svg) => svg.match(/<rect id="(l\d)"/)?.[1]);
-            expect(ids).toEqual(['l1', 'l2', 'l3']);
-        }
-    });
-
-    test.each([
-        ['bad base64', 'data:image/svg+xml;base64,@@@@'],
-        ['base64 cut mid-quantum', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=A'],
-        ['no <svg> in it', percentSvg('hello <b>x</b>')],
-        ['an empty payload', 'data:image/svg+xml,'],
-        ['no comma', 'data:image/svg+xml;base64'],
-    ])('one with %s is removed like a refused ref', (_, bad) => {
-        expect(sanitizeExportHtml(`<img src="${bad}" alt="a">`)).toBe('<img alt="a">');
-        expect(sanitizeExportHtml(`<p style="color:red;background:url('${bad}')">a</p>`)).toBe('<p>a</p>');
-        const sheet = sanitizeExportHtml(`<style>.a{background:url("${bad}")}.b{color:red}</style>`);
-        expect(sheet).toBe('<style>.b{color:red}</style>');
-        expect(svgMedia(`<svg xmlns="http://www.w3.org/2000/svg"><image href="${bad}"/></svg>`)).toContain('<image/>');
-    });
-
-    test('one longer than the inliner builds is removed', () => {
-        const big = base64Svg(
-            `<svg xmlns="http://www.w3.org/2000/svg"><desc>${'x'.repeat(SVG_INLINE_MAX_BYTES)}</desc></svg>`,
-        );
-        expect(sanitizeExportHtml(`<img src="${big}" alt="a">`)).toBe('<img alt="a">');
-    });
-
-    test('in a presentation attribute, which paints from none, it is refused with the attribute', () => {
-        for (const attr of ['fill', 'filter', 'mask', 'clip-path', 'marker-end']) {
-            const out = sanitizeExportHtml(`<svg><rect id="r" ${attr}="url('${uri}#x')"></rect></svg>`);
-            expect(out).toBe('<svg><rect id="r"></rect></svg>');
-        }
-    });
-
-    test('a url() spelling the renderer would read past is removed', () => {
-        const uri = percentSvg('<svg xmlns="http://www.w3.org/2000/svg"/>');
-        for (const css of [`url('${uri}'x)`, `url(${uri} x)`, `url('${uri}`, `url(${uri}`]) {
-            expect(sanitizeExportHtml(`<p style="background:${css}">a</p>`)).toBe('<p>a</p>');
-        }
-        // An escaped quote in an attribute only a CSS parser ends the string at.
-        const escaped = `url('data:image/svg+xml,<svg>\\'<image href=${NESTED_EVIL}/esc>')`;
-        expect(sanitizeExportHtml(`<svg><rect fill="${escaped}"></rect></svg>`)).not.toContain('evil.test');
-    });
-
-    test('the export’s own media, in allowedRefs, is embedded as the Worker already sanitized it', () => {
-        const own = base64Svg(svgMedia(`<svg xmlns="http://www.w3.org/2000/svg"><rect></rect></svg>`));
-        const out = sanitizeExportHtml(`<img src="${own}"><div style="background:url(${own})">a</div>`, {
-            allowedRefs: new Set([own]),
-        });
-        expect(out.split(own)).toHaveLength(3);
-    });
-
-    test('a data: image of another type passes untouched', () => {
-        const font = `data:font/woff2;base64,${Buffer.from('wOF2 font bytes').toString('base64')}`;
-        const out = sanitizeExportHtml(
-            `<img src="${DATA_PNG}"><style>@font-face{font-family:Z;src:url("${font}") format("woff2")}</style>`,
-        );
-        expect(out).toContain(`src="${DATA_PNG}"`);
-        expect(out).toContain(`src:url("${font}")`);
-    });
-});
-
-// WeasyPrint opens any image not typed SVG with Pillow, and parses one Pillow cannot read as an SVG. So a data: URI
-// whose payload starts as XML is an SVG whatever its type says, read raw or as the base64 its handler decodes.
-describe('export sanitize — a data: payload WeasyPrint reads as SVG, whatever its type', () => {
-    // No url() in it, which the url( scan would refuse on its own.
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${NESTED_EVIL}/mistyped"/></svg>`;
-    const b64 = Buffer.from(svg).toString('base64');
-
-    test.each([
-        ['typed PNG', `data:image/png;base64,${b64}`],
-        ['typed text', `data:text/plain;base64,${b64}`],
-        ['typed as a font', `data:font/woff2;base64,${b64}`],
-        ['untyped and percent-encoded', `data:,${encodeURIComponent(svg)}`],
-        ['led by whitespace', `data:image/png;base64,${Buffer.from(`\n\t  ${svg}`).toString('base64')}`],
-        ['led by encoded whitespace', `data:image/png,%20%0A${encodeURIComponent(svg)}`],
-        ['led by a UTF-8 byte order mark', `data:image/png;base64,${Buffer.from(`\ufeff${svg}`).toString('base64')}`],
-        ['in UTF-16', `data:image/png;base64,${Buffer.from(`\ufeff${svg}`, 'utf16le').toString('base64')}`],
-        ['base64 led by characters the decoder skips', `data:image/png;base64,!!!!${b64}`],
-        ['base64 percent-encoded', `data:image/png;base64,${b64.replace(/P/g, '%50')}`],
-        ['behind a base64 marker the handler does not read', `data:image/png;base64 ,${encodeURIComponent(svg)}`],
-    ])('one %s is removed', (_, uri) => {
-        expect(sanitizeExportHtml(`<img src="${uri}" alt="a">`)).toBe('<img alt="a">');
-        expect(sanitizeExportHtml(`<p style="color:red;background:url('${uri}')">a</p>`)).toBe('<p>a</p>');
-        expect(sanitizeExportHtml(`<style>.a{background:url("${uri}")}.b{color:red}</style>`)).toBe(
-            '<style>.b{color:red}</style>',
-        );
-        expect(sanitizeExportHtml(`<svg><rect id="r" fill="url('${uri}')"></rect></svg>`)).toBe(
-            '<svg><rect id="r"></rect></svg>',
-        );
-        expect(svgMedia(`<svg xmlns="http://www.w3.org/2000/svg"><image href="${uri}"/></svg>`)).toContain('<image/>');
-    });
-
+// A data: URI is kept as it came, whatever its type or payload: no browser fetches from an SVG drawn as an image,
+// librsvg draws one from its bytes, and WeasyPrint's fetcher opens nothing but data: URIs.
+describe('export sanitize — a data: URI passes as it is', () => {
     test.each([
         ['a PNG', DATA_PNG],
         ['a JPEG', `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64')}`],
         ['a font', `data:font/woff2;base64,${Buffer.from('wOF2\0\x01').toString('base64')}`],
         ['a percent-encoded text', 'data:text/plain,hello%20world'],
-    ])('%s passes untouched', (_, uri) => {
+        ['an SVG', base64Svg('<svg xmlns="http://www.w3.org/2000/svg"><image href="http://evil.test/a"/></svg>')],
+        ['a percent-encoded SVG', percentSvg('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>')],
+    ])('%s', (_, uri) => {
         expect(sanitizeExportHtml(`<img src="${uri}">`)).toBe(`<img src="${uri}">`);
         expect(sanitizeExportHtml(`<style>.a{background:url("${uri}")}</style>`)).toBe(
             `<style>.a{background:url("${uri}")}</style>`,
@@ -755,55 +577,15 @@ describe('export sanitize — a data: payload WeasyPrint reads as SVG, whatever 
     });
 });
 
-// Each arm embeds the media the Worker sanitized, so a drawing the inliner nested three deep keeps every level.
-describe('export sanitize — every arm embeds its own media as sanitized', () => {
-    const OWN = sanitizeExportMedia([
-        {
-            name: GOLDEN_MEDIA_NAME,
-            contentType: 'image/svg+xml',
-            data: toTransferableText(`<svg xmlns="http://www.w3.org/2000/svg"><image href="${svgChain(3)}"/></svg>`),
-        },
-    ]);
-    const embedded = base64Svg(Buffer.from(OWN[0].data).toString('utf8'));
-    const text = (data: ArrayBuffer) => Buffer.from(data).toString('utf8');
-
-    test.each(['html', 'pdf-html'] as const)('a doc figure, %s', async (format) => {
-        const doc = new Y.Doc();
-        seedEigendoc(doc, { type: 'doc', content: [{ type: 'figure', attrs: { mediaName: GOLDEN_MEDIA_NAME } }] });
-        const { data } = await renderEigendocExport(doc, format, 'Doc', OWN, undefined);
-        expect(text(data)).toContain(embedded);
-    });
-
-    test.each(['html', 'pdf-html'] as const)('a deck image and frame background, %s', (format) => {
-        const doc = new Y.Doc();
-        seedDeckDoc(doc, buildGoldenDeckScene());
-        expect(text(renderEigenslidesExport(doc, format, 'Deck', OWN).data)).toContain(embedded);
-    });
-
-    test.each(['svg', 'pdf-html'] as const)('a drawing image, %s', (format) => {
-        const doc = new Y.Doc();
-        seedVectorDoc(doc, buildGoldenVectorScene());
-        expect(text(renderEigenvectorExport(doc, format, 'Drawing', OWN).data)).toContain(embedded);
-    });
-
-    test.each([
-        ['html', renderSheetsExportDocument],
-        ['pdf-html', renderSheetsPdfDocument],
-    ])('a sheet image, %s', (_, render) => {
-        const sheet = {
-            name: 'Sheet1',
-            celldata: [],
-            images: [{ id: 'img_1', mediaName: GOLDEN_MEDIA_NAME, x: 0, y: 0, width: 10, height: 10 }],
-        };
-        expect(render([sheet], 'Sheet', new Map([[GOLDEN_MEDIA_NAME, embedded]]))).toContain(embedded);
-    });
-});
-
 const wp = await isWeasyPrintAvailable();
 const suite = wp ? describe : describe.skip;
 
-// Renders the sanitized body to PDF against a local listener, and counts the connections WeasyPrint opened to it.
-async function connectionsWhileRendering(body: (u: (name: string) => string) => string): Promise<number> {
+const page = (body: string) => `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`;
+
+// Renders the HTML to PDF against a local listener, and counts the connections WeasyPrint opened to it.
+async function renderAgainstListener(
+    html: (u: (name: string) => string) => string | Promise<string>,
+): Promise<{ connections: number; pdf: Buffer }> {
     let connections = 0;
     const server = Bun.listen({
         hostname: '127.0.0.1',
@@ -818,13 +600,28 @@ async function connectionsWhileRendering(body: (u: (name: string) => string) => 
         },
     });
     try {
-        const html = body((name) => `http://127.0.0.1:${server.port}/${name}`);
-        await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`);
+        const pdf = await htmlToPdf(await html((name) => `http://127.0.0.1:${server.port}/${name}`));
         await Bun.sleep(250); // let any async fetch land before asserting
-        return connections;
+        return { connections, pdf };
     } finally {
         server.stop(true);
     }
+}
+
+const connectionsWhileRendering = async (body: (u: (name: string) => string) => string): Promise<number> =>
+    (await renderAgainstListener((u) => page(body(u)))).connections;
+
+// A PDF's streams, inflated where they are compressed: page content, object streams, embedded files.
+function pdfStreams(pdf: Buffer): string[] {
+    const text = pdf.toString('latin1');
+    return [...text.matchAll(/stream\r?\n/g)].map(({ index, 0: open }) => {
+        const stream = pdf.subarray(index + open.length, text.indexOf('endstream', index + open.length));
+        try {
+            return inflateSync(stream).toString('latin1');
+        } catch {
+            return stream.toString('latin1');
+        }
+    });
 }
 
 suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
@@ -888,52 +685,13 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
         expect(connections).toBe(0);
     });
 
-    // nested.ts: a collaborator's data: SVG in an <img>, a style url() and an SVG <image> reached the listener as /img,
-    // /css and /svgimg, through the drawing's own <image href> and fill url().
-    test('a data: SVG a collaborator wrote triggers no network fetch, in any spelling or nesting', async () => {
-        const connections = await connectionsWhileRendering((u) => {
-            const inner = (name: string, nested = '') =>
-                `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20"><image width="10" height="10" href="${u(name)}"/><image width="10" height="10" xlink:href="${u(`${name}-x`)}"/><rect width="5" height="5" fill="url(${u(`${name}-fill`)})"/>${nested}</svg>`;
-            const nested = base64Svg(
-                inner('outer', `<image width="5" height="5" href="${base64Svg(inner('inner'))}"/>`),
-            );
-            const [media] = sanitizeExportMedia([
-                {
-                    name: 'a.svg',
-                    contentType: 'image/svg+xml',
-                    data: toTransferableText(inner('media', `<image href="${nested}"/>`)),
-                },
-            ]);
-            const body = sanitizeExportHtml(
-                `<img src="${base64Svg(inner('img'))}">` +
-                    `<div style="width:50px;height:50px;background-image:url('${base64Svg(inner('css'))}')">a</div>` +
-                    `<svg width="40" height="40"><image width="20" height="20" href="${base64Svg(inner('svgimg'))}"></image></svg>` +
-                    `<img src="${percentSvg(inner('pct'))}">` +
-                    `<div style="width:50px;height:50px;background:url(${base64Svg(inner('upper'), 'DATA:IMAGE/SVG+XML;BASE64')})">u</div>` +
-                    `<img src="${percentSvg(inner('charset'), 'data:image/svg+xml;charset=utf-8')}">` +
-                    `<style>.n{width:50px;height:50px;background:url("data:image/svg+xml,${inner('raw').replaceAll('"', "'")}")}</style><div class="n">n</div>` +
-                    `<img src="${nested}">`,
-            );
-            // The media pass's output, embedded as an arm embeds it.
-            return `${body}<img src="${base64Svg(Buffer.from(media.data).toString('utf8'))}">`;
-        });
-        expect(connections).toBe(0);
-    });
-
-    // WeasyPrint fetched each of these: Pillow cannot open them, so it parsed them as the SVG they are.
-    test('an SVG under another data: type triggers no network fetch', async () => {
-        const connections = await connectionsWhileRendering((u) => {
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image width="10" height="10" href="${u('mistyped')}"/></svg>`;
-            const b64 = Buffer.from(svg).toString('base64');
-            return sanitizeExportHtml(
-                `<img src="data:image/png;base64,${b64}">` +
-                    `<img src="data:text/plain;base64,${b64}">` +
-                    `<img src="data:,${encodeURIComponent(svg)}">` +
-                    `<img src="data:image/png;base64 ,${encodeURIComponent(svg)}">` +
-                    `<div style="width:50px;height:50px;background-image:url('data:font/woff2;base64,${b64}')">a</div>`,
-            );
-        });
-        expect(connections).toBe(0);
+    test('an attr() a collaborator wrote no longer fails the export', async () => {
+        const body = sanitizeExportHtml(
+            '<p data-x="data:image/png;base64,AAAA" style="width:9px;height:9px;background-image:attr(data-x url)">a</p>' +
+                '<style>p::before{content:attr(data-x url)}</style>',
+        );
+        const pdf = await htmlToPdf(page(body));
+        expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     });
 
     test('a clean data: SVG nested in another still renders', async () => {
@@ -941,25 +699,134 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#00ff00"/></svg>';
         const outer = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image width="10" height="10" href="${base64Svg(leaf)}"/></svg>`;
         const body = sanitizeExportHtml(`<img src="${percentSvg(outer)}">`);
-        const pdf = await htmlToPdf(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`,
-        );
-        // The page's content streams, inflated: WeasyPrint draws an SVG as vector operators, the leaf's green fill one.
-        const text = pdf.toString('latin1');
-        const streams = [...text.matchAll(/stream\r?\n/g)].map(({ index, 0: open }) => {
-            const start = index + open.length;
-            try {
-                return inflateSync(pdf.subarray(start, text.indexOf('endstream', start))).toString('latin1');
-            } catch {
-                return '';
-            }
-        });
-        expect(streams.join('\n')).toContain('0 1 0 rg');
+        const pdf = await htmlToPdf(page(body));
+        // WeasyPrint draws an SVG as vector operators, the leaf's green fill one.
+        expect(pdfStreams(pdf).join('\n')).toContain('0 1 0 rg');
     });
 
-    test('an embedded data: image still renders (legit resources unaffected)', async () => {
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><img src="${DATA_PNG}" style="width:50px;height:50px"></body></html>`;
-        const pdf = await htmlToPdf(html);
-        expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    test('a data: image and a data: font still render', async () => {
+        const pdf = await htmlToPdf(
+            page(
+                `<style>${getFontFaceCSSForFamilies(['Excalifont'])}</style>` +
+                    `<img src="${DATA_PNG}" style="width:50px;height:50px"><p style="font-family:Excalifont">drawn</p>`,
+            ),
+        );
+        const streams = pdfStreams(pdf).join('\n');
+        expect(pdf.toString('latin1')).toContain('/Subtype /Image');
+        // No system font is named Excalifont: only the data: URI can have embedded it.
+        expect(streams).toMatch(/\/BaseFont \/[A-Z]{6}\+Excalifont/);
+    });
+});
+
+// The render script's fetcher opens only data: URIs, so it holds with the sanitizer bypassed: every body here is raw.
+// WeasyPrint's CLI fetched each of these, the attachments embedding the response or the file in the PDF.
+suite('PDF export SSRF (the data-only fetcher, sanitizer bypassed)', () => {
+    let dir = '';
+    let secretPath = '';
+    const SECRET = `EIGEN-SSRF-SECRET-${crypto.randomUUID()}`;
+    beforeAll(() => {
+        dir = mkdtempSync(join(tmpdir(), 'eigen-ssrf-'));
+        secretPath = join(dir, 'secret.txt');
+        writeFileSync(secretPath, SECRET);
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    const expectNothingFetched = ({ connections, pdf }: { connections: number; pdf: Buffer }) => {
+        expect(connections).toBe(0);
+        expect(pdfStreams(pdf).some((stream) => stream.includes(SECRET))).toBe(false);
+        expect(pdf.toString('latin1')).not.toContain('/EmbeddedFile');
+    };
+
+    const fetchingSvg = (href: string) =>
+        `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><image width="9" height="9" href="${href}"/><rect width="5" height="5" fill="url(${href}-fill)"/></svg>`;
+    const base64 = (bytes: string | Buffer) => Buffer.from(bytes).toString('base64');
+    const utf16 = (text: string) => Buffer.from(text, 'utf16le');
+
+    test('a hostile body fetches nothing, from the network or the disk', async () => {
+        const result = await renderAgainstListener((u) =>
+            page(
+                `<a rel="attachment" href="${u('attach')}">a</a>` +
+                    `<a rel="attachment" href="${secretPath}">b</a>` +
+                    `<a rel="attachment" href="file://${secretPath}">c</a>` +
+                    `<a rel="attachment" href="secret.txt">d</a>` +
+                    `<img src="${u('img')}"><img src="${u('protocol-relative').replace('http:', '')}">` +
+                    `<img src="${secretPath}"><img src="file://${secretPath}">` +
+                    `<img src="data:image/svg+xml;base64,${base64(fetchingSvg(u('nested')))}">` +
+                    `<img src="data:image/png;base64,${base64(fetchingSvg(u('mistyped')))}">` +
+                    `<img src="data:image/png;base64,${base64(utf16(` ${fetchingSvg(u('utf16le'))}`))}">` +
+                    `<img src="data:image/png;base64,${base64(utf16(` ${fetchingSvg(u('utf16be'))}`).swap16())}">` +
+                    `<div style="width:9px;height:9px;background:url(${u('css')})"></div>` +
+                    `<style>@import "${u('import')}";@font-face{font-family:X;src:url(${u('font')})}p{font-family:X}</style>` +
+                    `<link rel="stylesheet" href="${u('link')}">` +
+                    `<svg width="20" height="20"><image width="9" height="9" href="${u('svg-image')}"></image>` +
+                    `<use href="${u('use.svg#g')}"></use></svg>` +
+                    `<object data="${u('object')}"></object><embed src="${u('embed')}"><p>x</p>`,
+            ),
+        );
+        expectNothingFetched(result);
+    });
+
+    // WeasyPrint's CLI decoded each of these and fetched the drawing's <image href>, xlink:href and fill url(), and
+    // parsed a payload Pillow cannot open as SVG under any type.
+    test('a data: SVG fetches nothing, in any spelling, nesting or type', async () => {
+        const result = await renderAgainstListener((u) => {
+            const inner = (name: string, nested = '') =>
+                `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20" height="20"><image width="10" height="10" href="${u(name)}"/><image width="10" height="10" xlink:href="${u(`${name}-x`)}"/><rect width="5" height="5" fill="url(${u(`${name}-fill`)})"/>${nested}</svg>`;
+            const nested = base64Svg(
+                inner('outer', `<image width="5" height="5" href="${base64Svg(inner('inner'))}"/>`),
+            );
+            const box = 'width:50px;height:50px';
+            return page(
+                `<img src="${base64Svg(inner('img'))}"><img src="${nested}">` +
+                    `<div style="${box};background-image:url('${base64Svg(inner('css'))}')">a</div>` +
+                    `<svg width="40" height="40"><image width="20" height="20" href="${base64Svg(inner('svgimg'))}"></image></svg>` +
+                    `<img src="${percentSvg(inner('pct'))}">` +
+                    `<div style="${box};background:url(${base64Svg(inner('upper'), 'DATA:IMAGE/SVG+XML;BASE64')})">u</div>` +
+                    `<img src="${percentSvg(inner('charset'), 'data:image/svg+xml;charset=utf-8')}">` +
+                    `<style>.n{${box};background:url("data:image/svg+xml,${inner('raw').replaceAll('"', "'")}")}</style><div class="n">n</div>` +
+                    `<img src="${base64Svg(inner('png'), 'data:image/png;base64')}">` +
+                    `<img src="${base64Svg(inner('text'), 'data:text/plain;base64')}">` +
+                    `<img src="data:,${encodeURIComponent(inner('untyped'))}">` +
+                    `<img src="data:image/png;base64 ,${encodeURIComponent(inner('marker'))}">` +
+                    `<div style="${box};background-image:url('${base64Svg(inner('font'), 'data:font/woff2;base64')}')">f</div>`,
+            );
+        });
+        expectNothingFetched(result);
+    });
+
+    // A doc link mark's rel reaches the anchor as the collaborator wrote it.
+    test.each(['http', 'path'] as const)(
+        'a doc link with rel=attachment to a %s target fetches nothing',
+        async (kind) => {
+            const result = await renderAgainstListener(async (u) => {
+                const href = kind === 'http' ? u('attach') : secretPath;
+                const doc = new Y.Doc();
+                const link = { type: 'link', attrs: { href, rel: 'attachment' } };
+                seedEigendoc(doc, {
+                    type: 'doc',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [link] }] }],
+                });
+                const html = Buffer.from(
+                    (await renderEigendocExport(doc, 'pdf-html', 'Doc', [], undefined)).data,
+                ).toString();
+                expect(html).toContain(`<a rel="attachment" href="${href}"`);
+                return html;
+            });
+            expectNothingFetched(result);
+        },
+    );
+
+    // A text box keeps only an http(s) or mailto: href (LIGHT_EDITOR_HREF), so no plain path reaches a deck.
+    test('a deck link with rel=attachment to an http target fetches nothing', async () => {
+        const result = await renderAgainstListener((u) => {
+            const scene = buildGoldenDeckScene();
+            const html = `<p><a href="${u('attach')}" rel="attachment">x</a></p>`;
+            const doc = new Y.Doc();
+            seedDeckDoc(doc, { ...scene, elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)) });
+            const out = Buffer.from(renderEigenslidesExport(doc, 'pdf-html', 'Deck', []).data).toString();
+            expect(out).toContain(`<a href="${u('attach')}" rel="attachment"`);
+            return out;
+        });
+        expectNothingFetched(result);
     });
 });
