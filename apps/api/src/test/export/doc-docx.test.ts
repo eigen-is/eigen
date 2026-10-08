@@ -1773,6 +1773,15 @@ describe('docx writer — figures', () => {
         expect(shape(await bodyOf(doc(ul(li(p(text('plain')))))))).toEqual(['p', 'sectPr']);
     });
 
+    test('an item clears only its own floats: a nested item holding one clears it, and the item around it adds none', async () => {
+        const wrapped = () => p(figure({ ...CHART, width: 100, layout: 'wrap-left' }), text('beside'));
+        const clearings = async (json: JSONContent) =>
+            (await paragraphsOf(json)).flatMap((paragraph, index) => (paragraph.includes('w:clear') ? [index] : []));
+        expect(await clearings(doc(ul(li(p(text('outer')), ul(li(wrapped())))), p(text('after'))))).toEqual([2]);
+        expect(await clearings(doc(ul(li(wrapped(), ul(li(wrapped())))), p(text('after'))))).toEqual([2]);
+        expect(await clearings(doc(ul(li(wrapped(), ul(li(p(text('inner')))))), p(text('after'))))).toEqual([2]);
+    });
+
     test("an item that opens with a missing figure's caption keeps its number or checkbox on a holder above it", async () => {
         // The holder's 0.25em, then the caption's box.
         const caption = `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="${55 + 165 + 23}" w:after="${55 + 165}"/><w:ind w:left="330"/><w:jc w:val="center"/></w:pPr>${run('Cap')}</w:p>`;

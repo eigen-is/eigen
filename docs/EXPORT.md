@@ -47,7 +47,7 @@ A figure is an inline node, so it renders as a `span.figure` with a `span.figcap
 
 In the editor a paragraph's own margins collapse with its neighbours', and a figure's 0.75em margin sits inside the paragraph and never collapses. Word and LibreOffice collapse adjacent spacing to the larger, as CSS does, and have no inside margin. So `to-docx.ts` carries the figure's margin as an inset on its paragraphs, and `withInsets` writes the whole gap on the inset paragraph's side: the neighbour's inset, the two spacings collapsed, its own inset. The pieces a figure splits a paragraph into share its margins, the first taking the one above and the last the one below. A paragraph that holds only a wrapped figure keeps its line, as the editor's trailing break does.
 
-A list item that holds a wrapped figure ends in a clearing break (`w:br w:clear="all"`) on a single-spaced Spacer paragraph, so the next item starts below the float, as in the editor. On an exact-height Spacer, LibreOffice ignores the clear. The cases are pinned in `apps/api/src/test/export/doc-docx.test.ts`.
+A list item that holds a wrapped figure ends in a clearing break (`w:br w:clear="all"`) on a single-spaced Spacer paragraph, so the next item starts below the float, as in the editor. A nested item clears its own floats, so the item around it writes no second break. On an exact-height Spacer, LibreOffice ignores the clear. The cases are pinned in `apps/api/src/test/export/doc-docx.test.ts`.
 
 ## WeasyPrint fetches only data: URIs
 

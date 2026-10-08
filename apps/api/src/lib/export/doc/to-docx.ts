@@ -754,7 +754,9 @@ function itemOf(
             ? blocks.with(index, open(first, inner))
             : blocks.toSpliced(index, 0, open({ props, runs: '' }, inner));
     // The editor's item contains its floats: a clearing break starts the next item below them, on a single-spaced hairline.
-    if (!blocks.some((block) => 'table' in block && block.float)) return opened;
+    // A nested item clears its own, so only a float after the last clearing break is this item's to clear.
+    const cleared = opened.findLastIndex((block) => !('table' in block) && block.runs === CLEAR_FLOATS);
+    if (!opened.slice(cleared + 1).some((block) => 'table' in block && block.float)) return opened;
     return [...opened, { props: { style: 'Spacer', spacing: { after, line: 240 } }, runs: CLEAR_FLOATS }];
 }
 
