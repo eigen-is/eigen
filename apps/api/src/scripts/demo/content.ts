@@ -82,7 +82,7 @@ export const TEAM_FOLDERS = [
 ] as const;
 export type TeamFolder = (typeof TEAM_FOLDERS)[number];
 
-// --- Documents (seeded via the shipped .docx -> eigendoc converter, dogfooding import) ---
+// --- Documents (written as HTML, parsed by the editor's schema into each eigendoc) ---
 
 export type DocComment = {
     // Slug used for the comment thread's chat name (lowercase, no extension).
@@ -101,7 +101,7 @@ export type SeededDoc = {
     folder: TeamFolder;
     name: string; // lowercase, no extension
     author: LeadRole;
-    html: string; // rendered to .docx, then converted to an eigendoc
+    html: string; // parsed into the eigendoc's JSON
     comments: DocComment[];
 };
 
@@ -1708,7 +1708,7 @@ export const PERSONAL_SHARES: SeededShare[] = [
 ];
 
 // --- Personal notes doc, seeded into every persona's OWN drive (same cozy content for all —
-// a private scratch pad, not shared). Role-agnostic on purpose so one docx serves everyone. ---
+// a private scratch pad, not shared). Role-agnostic on purpose so one document serves everyone. ---
 
 export const NOTES = {
     name: 'my notes', // lowercase, no extension
