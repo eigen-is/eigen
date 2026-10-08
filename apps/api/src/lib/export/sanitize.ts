@@ -159,10 +159,8 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
     DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
         if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs);
-        // Decided per element, and only in a profile that admits SVG at all.
-        if (data.tagName === 'use' && data.allowedTags['svg']) {
-            data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
-        }
+        // Decided per element. DOMPurify's namespace check drops a <use> outside a kept <svg>, whatever the profile.
+        if (data.tagName === 'use') data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
     });
     try {
         return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config }) as string;
