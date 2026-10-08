@@ -63,7 +63,8 @@
     "@types/jsdom": "^28.0.3",
     "@types/markdown-it": "^14.2.0",
     "bun-types": "latest",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "playwright-core": "^1.64.0"
   },
   "trustedDependencies": [],
   "module": "src/index.ts",

@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
+import type { Sheet } from '@workspace/lib/sheets';
+import { firefox } from 'playwright-core';
 import * as Y from 'yjs';
 import { parseXml } from '../../lib/core/xml';
 import { toTransferableText } from '../../lib/document/transform/protocol';
@@ -10,8 +12,10 @@ import { renderEigenslidesExport } from '../../lib/export/canvas/transform';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 import { sanitizeExportHtml, sanitizeExportMedia } from '../../lib/export/sanitize';
+import { renderSheetsExportDocument, renderSheetsPreviewHtml } from '../../lib/export/sheets/render';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { buildGoldenDeckScene, seedDeckDoc, seedEigendoc } from '../fixtures/golden-documents';
+import { NO_MEDIA } from '../setup';
 
 // SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a schemaless slide/sheet
 // color or text. WeasyPrint renders through a fetcher that opens only data: URIs, the boundary the last suite tests with
@@ -909,4 +913,77 @@ suite('PDF export SSRF (the data-only fetcher, sanitizer bypassed)', () => {
         });
         expectNothingFetched(result);
     });
+});
+
+// A browser opening an HTML download or mounting a preview body is the other reader. Firefox, unlike Chromium and
+// WebKit, loads a data: SVG named with a fragment as a document and fetches what it names, so it runs the bodies the
+// sanitizer refuses. Skipped where no Playwright Firefox is installed (`bunx playwright-core install firefox`).
+const firefoxSuite = existsSync(firefox.executablePath()) ? describe : describe.skip;
+
+firefoxSuite('HTML export in Firefox', () => {
+    // Each case's drawing imports its own name, so a hit names the form that fetched.
+    const FORMS: [string, (svg: string) => string][] = [
+        ['css-mask', (svg) => `<div style="width:9px;height:9px;mask:url('${svg}#m')"></div>`],
+        ['css-mask-image', (svg) => `<div style="width:9px;height:9px;mask-image:url('${svg}#m')"></div>`],
+        ['css-clip', (svg) => `<div style="width:9px;height:9px;clip-path:url('${svg}#c')"></div>`],
+        ['css-filter', (svg) => `<div style="width:9px;height:9px;filter:url(${svg}#f)"></div>`],
+        [
+            'style-filter',
+            (svg) => `<style>.f{width:9px;height:9px;filter:url("${svg}#f")}</style><div class="f"></div>`,
+        ],
+        ['fill', (svg) => `<svg><rect width="9" height="9" fill="url(${svg}#p)"></rect></svg>`],
+        ['fill-escaped', (svg) => `<svg><rect width="9" height="9" fill="url(${svg}\\23 p)"></rect></svg>`],
+        ['filter', (svg) => `<svg><rect width="9" height="9" filter="url(${svg}#f)"></rect></svg>`],
+        ['mask', (svg) => `<svg><rect width="9" height="9" mask="url(${svg}#m)"></rect></svg>`],
+        ['marker', (svg) => `<svg><path d="M1 1L8 8" stroke="red" marker-start="url(${svg}#k)"></path></svg>`],
+    ];
+
+    test('a data: SVG named with a fragment fetches nothing once sanitized', async () => {
+        const hits = new Set<string>();
+        const pages = new Map<string, string>();
+        const server = Bun.serve({
+            hostname: '127.0.0.1',
+            port: 0,
+            fetch(req) {
+                const path = new URL(req.url).pathname;
+                const body = pages.get(path);
+                if (body !== undefined) return new Response(body, { headers: { 'content-type': 'text/html' } });
+                if (path !== '/favicon.ico') hits.add(path.slice(1));
+                return new Response('', { status: 404 });
+            },
+        });
+        const browser = await firefox.launch();
+        try {
+            const drawing = (name: string) =>
+                base64Svg(
+                    `<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(http://127.0.0.1:${server.port}/${name});</style>` +
+                        '<mask id="m"><rect width="9" height="9" fill="white"/></mask><clipPath id="c"><rect width="9" height="9"/></clipPath>' +
+                        '<filter id="f"><feFlood/></filter><pattern id="p" width="9" height="9"><rect width="9" height="9"/></pattern>' +
+                        '<marker id="k"><rect width="9" height="9"/></marker></svg>',
+                );
+            const body = (prefix: string) => FORMS.map(([name, form]) => form(drawing(`${prefix}-${name}`))).join('');
+            // A sheet cell's background is a schemaless string that reaches the cell's class rule as written.
+            const sheet = (name: string): Sheet[] => {
+                const cell = { v: 'x', bg: `red;mask:url(${drawing(name)}#m)` };
+                return [{ name: 'Sheet1', celldata: [{ r: 0, c: 0, v: cell }], data: [[cell]] }];
+            };
+            pages.set('/raw', page(body('raw')));
+            pages.set('/sanitized', page(sanitizeExportHtml(body('sanitized'))));
+            pages.set('/sheet', renderSheetsExportDocument(sheet('sheet-export'), 'S', NO_MEDIA));
+            const preview = renderSheetsPreviewHtml(sheet('sheet-preview'), NO_MEDIA).html;
+            pages.set('/preview', page(sanitizeExportHtml(preview, { allowedRefs: new Set() })));
+            const browserPage = await browser.newPage();
+            for (const path of pages.keys()) {
+                await browserPage.goto(`http://127.0.0.1:${server.port}${path}`);
+                await Bun.sleep(1000); // a resource document loads after the page's load event
+            }
+            // The raw body proves this Firefox fetches every form, so the clean pages mean something.
+            const raw = [...hits].filter((hit) => hit.startsWith('raw-'));
+            expect(raw.sort()).toEqual(FORMS.map(([name]) => `raw-${name}`).sort());
+            expect([...hits].filter((hit) => !hit.startsWith('raw-'))).toEqual([]);
+        } finally {
+            await browser.close();
+            server.stop(true);
+        }
+    }, 30_000);
 });
