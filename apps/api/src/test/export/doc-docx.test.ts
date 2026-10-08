@@ -1063,7 +1063,7 @@ describe('docx writer — tables', () => {
         expect(gridOf(shared)).toEqual([1500, 4065, 4065]);
         expect(gridOf(floored)).toEqual([9600, 375]);
         const tblPr = child(shared, 'tblPr');
-        expect(xmlOf(child(tblPr, 'tblW'))).toBe('<w:tblW w:w="5000" w:type="pct"/>');
+        expect(xmlOf(child(tblPr, 'tblW'))).toBe('<w:tblW w:w="9630" w:type="dxa"/>');
         expect(child(tblPr, 'tblLayout')).toBeUndefined();
     });
 
@@ -1246,9 +1246,9 @@ describe('docx writer — tables', () => {
             ]);
         // 9638 twips of column: 330 in for an item, 265 for a quote.
         expect(await widths(doc(open, ul(li(p(text('x')), open)), quote(open)))).toEqual([
-            ['<w:tblW w:w="5000" w:type="pct"/>', '<w:tblInd w:w="0" w:type="dxa"/>'],
-            ['<w:tblW w:w="4829" w:type="pct"/>', '<w:tblInd w:w="330" w:type="dxa"/>'],
-            ['<w:tblW w:w="4863" w:type="pct"/>', '<w:tblInd w:w="265" w:type="dxa"/>'],
+            ['<w:tblW w:w="9630" w:type="dxa"/>', '<w:tblInd w:w="0" w:type="dxa"/>'],
+            ['<w:tblW w:w="9300" w:type="dxa"/>', '<w:tblInd w:w="330" w:type="dxa"/>'],
+            ['<w:tblW w:w="9360" w:type="dxa"/>', '<w:tblInd w:w="265" w:type="dxa"/>'],
         ]);
     });
 
@@ -1468,7 +1468,7 @@ describe('docx writer — figures', () => {
         svg?: string;
     }) {
         const cx = o.px * 9525;
-        const cy = Math.round(cx * o.ratio);
+        const cy = Math.max(635, Math.round((cx * o.ratio) / 635) * 635);
         const descr = o.descr ?? '';
         const blip = o.svg
             ? `<a:blip r:embed="${o.embed}"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip r:embed="${o.svg}"/></a:ext></a:extLst></a:blip>`
@@ -1516,6 +1516,25 @@ describe('docx writer — figures', () => {
         ]);
     });
 
+    test('an extent height is whole twips, at least one, with the width as is', async () => {
+        const strip = (name: string, width: number, height: number): ExportMedia => ({
+            name,
+            contentType: 'image/png',
+            data: new ArrayBuffer(1),
+            width,
+            height,
+        });
+        const media = [strip('divider.png', 1204, 4), strip('hair.png', 1000, 1)];
+        const extents = async (json: JSONContent) =>
+            descendants(await bodyOf(json, undefined, media), WP, 'extent').map((extent) => [
+                xmlAttr(extent, '', 'cx'),
+                xmlAttr(extent, '', 'cy'),
+            ]);
+        // 642 px of column, 4 / 1204 of it is 31.994 twips.
+        expect(await extents(doc(p(figure({ mediaName: 'divider.png' }))))).toEqual([['6115050', '20320']]);
+        expect(await extents(doc(p(figure({ mediaName: 'hair.png', width: 10 }))))).toEqual([['95250', '635']]);
+    });
+
     test('a caption follows in the Caption style, both aligned as the figure, and takes the margin below', async () => {
         expect(
             await blocksOf(doc(p(figure({ ...CHART, width: 320, alignment: 'right', caption: 'Figure 1\tchart' })))),
@@ -1559,7 +1578,7 @@ describe('docx writer — figures', () => {
         );
         expect(natural).toEqual([300, COLUMN_PX, 321, 500]);
         const extent = only(descendants(await bodyOf(doc(p(figure({ mediaName: 'photo.jpeg' })))), WP, 'extent'));
-        expect([xmlAttr(extent, '', 'cx'), xmlAttr(extent, '', 'cy')]).toEqual(['6115050', '4586288']);
+        expect([xmlAttr(extent, '', 'cx'), xmlAttr(extent, '', 'cy')]).toEqual(['6115050', '4586605']);
     });
 
     test("a figure in a list item is indented to the item's text and capped at what the indent leaves", async () => {
@@ -2098,6 +2117,10 @@ describe('docx writer — fonts', () => {
                 ['Inter Regular', 'JetBrains Mono Regular', 'JetBrains Mono Italic'],
             ],
             [doc(quote(p())), ['Inter Regular', 'Inter Italic']],
+            [
+                doc(quote(ul(li(p(figure({ mediaName: 'chart.png', width: 100, layout: 'wrap-left' })))))),
+                ['Inter Regular', 'Inter Italic'],
+            ],
         ];
         for (const [json, faces] of cases) expect(await embeddedFaces(json)).toEqual(faces);
     });

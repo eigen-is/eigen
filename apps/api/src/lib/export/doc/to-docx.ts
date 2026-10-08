@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, type FigureLayout, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
@@ -35,7 +35,7 @@ export async function eigendocToDocx(
         images: new Map(),
         files: [],
         drawings: 0,
-        // A Spacer's, a figure's and a holder's mark draw in the body's Regular.
+        // A Spacer's and a figure's mark draw in the body's Regular.
         faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
     const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
@@ -138,7 +138,7 @@ type Package = {
     faces: Map<string, Set<FontSlot>>;
 };
 
-// The walk's surroundings: a flow's column and its lists' and quotes' indent in twips, what a plain paragraph takes.
+// The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.
 type Context = {
     pkg: Package;
     first: boolean;
@@ -280,7 +280,7 @@ function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 
     return face;
 }
 
-// Word's auto line scales with the tallest face, CSS's doesn't: one other family rescales it, unless the mark's taller.
+// Word's auto line scales with the tallest face, CSS's doesn't: a paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
 function familyLine(style: string | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
@@ -523,7 +523,10 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         for (const block of written) blocks.push(block);
     }
     if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
-    else if (textblock && blocks.every((block) => 'float' in block)) blocks.push({ props, runs: '', emptied: true });
+    else if (textblock && blocks.every((block) => 'float' in block)) {
+        useFace(context.pkg, {}, props.style);
+        blocks.push({ props, runs: '', emptied: true });
+    }
     return blocks;
 }
 
@@ -531,7 +534,7 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
-// Readers draw adjacent boxes or bars as one, so a Spacer holds the collapsed gap a quote's bar would run through.
+// Readers draw adjacent boxes or bars as one, so the gap between them becomes a Spacer, its margins collapsed as CSS does.
 function keepApart(blocks: Block[], next: Block[]): void {
     const last = blocks.at(-1);
     const first = next[0];
@@ -814,10 +817,8 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
 
     const border = TABLE_LOOK.border;
     const margin = (side: string, width: number) => `<w:${side} w:w="${width}" w:type="dxa"/>`;
-    // A pct is of the whole column, which tblInd doesn't narrow; 5000 is all of it.
-    const pct = Math.round((5000 * (context.column - context.indent)) / context.column);
     const tblPr = [
-        fixed ? `<w:tblW w:w="${spanWidth(0, dxa.length)}" w:type="dxa"/>` : `<w:tblW w:w="${pct}" w:type="pct"/>`,
+        `<w:tblW w:w="${spanWidth(0, dxa.length)}" w:type="dxa"/>`,
         `<w:tblInd w:w="${context.indent}" w:type="dxa"/>`,
         `<w:tblBorders>${bordersXml(TABLE_BORDER_SIDES, { top: border, left: border, bottom: border, right: border, insideH: border, insideV: border })}</w:tblBorders>`,
         fixed ? '<w:tblLayout w:type="fixed"/>' : '',
@@ -862,11 +863,13 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
     return blocks.length > 0 ? blocksXml(blocks) : paragraphXml({ props: textProps({}, cell), runs: '' });
 }
 
+const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
+
 const TABLE_LOOK = {
     border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
     padding: {
-        vertical: twips(cssPt(boxSide(proseValue('.eigen-prose td', 'padding'), 'top'), BODY.sizePt)),
-        horizontal: twips(cssPt(boxSide(proseValue('.eigen-prose td', 'padding'), 'left'), BODY.sizePt)),
+        vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
+        horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
     },
     headerFill: proseColor('.eigen-prose th', 'background-color'),
     margin: twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt)),
@@ -884,15 +887,11 @@ const RASTER_EXTENSIONS = new Map([
 
 const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
 
-const WRAP_SIDES = new Map<string, 'left' | 'right'>([
-    ['wrap-left', 'left'],
-    ['wrap-right', 'right'],
-] satisfies [FigureLayout, 'left' | 'right'][]);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
-    const side = WRAP_SIDES.get(attrs['layout']);
+    const layout = attrs['layout'];
+    const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
     const alignment = attrs['alignment'];
     const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
     const caption = attrs['caption'];
@@ -914,7 +913,8 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const drawing = drawingXml(
         image,
         cx,
-        Math.round((cx * image.height) / image.width),
+        // Word floors the height to whole twips and refits the width to the image's ratio, so the height is whole already.
+        Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
         typeof alt === 'string' ? alt : '',
         context.pkg,
     );
