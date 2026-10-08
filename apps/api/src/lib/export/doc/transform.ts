@@ -83,11 +83,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
     <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
 </head>
 <body>
-    <div class="page">
-        <article class="eigen-prose tiptap">
-            ${bodyHtml}
-        </article>
-    </div>
+    <div class="page"><article class="eigen-prose tiptap">${bodyHtml}</article></div>
 </body>
 </html>`;
 }
