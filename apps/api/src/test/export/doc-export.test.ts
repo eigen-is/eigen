@@ -3,7 +3,7 @@ import type { JSONContent } from '@tiptap/core';
 import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { renderEigendocExport } from '../../lib/export/doc/transform';
+import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { seedEigendoc } from '../fixtures/golden-documents';
 
@@ -187,4 +187,24 @@ describe('doc export — docx SVG size', () => {
         expect(Math.abs(cx - width)).toBeLessThanOrEqual(1);
         expect(Math.abs(cy - height)).toBeLessThanOrEqual(1);
     });
+});
+
+// Worker.terminate() does not stop libvips, so only sharp's own timeout frees the one transform slot from a filter
+// librsvg grinds through for minutes.
+describe('doc export — docx SVG fallback timeout', () => {
+    const slow = `<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="2560"><filter id="f" x="0" y="0" width="1" height="1"><feTurbulence baseFrequency="0.9" numOctaves="10"/></filter><rect width="2560" height="2560" filter="url(#f)"/></svg>`;
+    const fast = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>';
+
+    test('an SVG that outlasts the timeout gets no PNG fallback, and the next one still does', async () => {
+        const start = performance.now();
+        const media = await withSvgFallbacks(
+            [
+                { name: 'slow.svg', contentType: 'image/svg+xml', data: toTransferableText(slow) },
+                { name: 'fast.svg', contentType: 'image/svg+xml', data: toTransferableText(fast) },
+            ],
+            1,
+        );
+        expect(performance.now() - start).toBeLessThan(6000);
+        expect(media.map(({ name, png }) => [name, png !== undefined])).toEqual([['fast.svg', true]]);
+    }, 30_000);
 });
