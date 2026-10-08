@@ -280,6 +280,8 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: ' and ' },
                     marked('a link', link),
                     marked(' in bold', link, { type: 'bold' }),
+                    { type: 'text', text: ', ' },
+                    marked('a link into Eigen', { type: 'link', attrs: { href: '/contacts/team/x?contactId=a%40b' } }),
                     { type: 'text', text: '.' },
                 ],
             },
@@ -384,6 +386,11 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     },
                 ],
             },
+            {
+                type: 'codeBlock',
+                attrs: { language: 'plaintext' },
+                content: [{ type: 'text', text: 'A second code block, right after the first.' }],
+            },
             { type: 'horizontalRule' },
             paragraph('After the rule.'),
             {
@@ -433,6 +440,20 @@ export function buildAllFeaturesDocJson(): JSONContent {
                         type: 'text',
                         text: `Text between the wrapped figures. ${'It runs on beside both. '.repeat(30)}`,
                     },
+                ],
+            },
+            {
+                type: 'orderedList',
+                attrs: { start: 1, type: null },
+                content: [
+                    {
+                        type: 'listItem',
+                        content: [
+                            figure({ mediaName: 'chart.png', width: 160, layout: 'wrap-left' }),
+                            paragraph('An item that opens with a wrapped figure.'),
+                        ],
+                    },
+                    { type: 'listItem', content: [paragraph('The next item.')] },
                 ],
             },
         ],
