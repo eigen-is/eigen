@@ -1640,6 +1640,16 @@ describe('docx writer — figures', () => {
             const blocks = await blocksOf(doc(table(tr(td({}, p(text('cell'))))), p(figure({ ...CHART, width: 100 }))));
             expect(blocks[1]).toBe(spaced(165 + 165, 165 + 220, chart(100)));
         });
+
+        // In an item the paragraph's 0.25em is below the table's 0.75em, which wins the collapse.
+        test('a figure before a table sits its own margin plus the table margin above it', async () => {
+            const blocks = await blocksOf(
+                doc(ul(li(p(figure({ ...CHART, width: 100 })), table(tr(td({}, p(text('cell'))))))), p(text('x'))),
+            );
+            expect(blocks[0]).toBe(
+                `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:before="165" w:after="${165 + 165}" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>${chart(100)}</w:p>`,
+            );
+        });
     });
 
     test('a block figure breaks the paragraph that holds it, the text on both sides kept, no margin at the split', async () => {
