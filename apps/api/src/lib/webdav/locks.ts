@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { parseXmlRoot, serializeXmlChildren, type XmlElement, xmlChild } from '../core/xml';
-import { DAV_NAMESPACES, XML_CONTENT_TYPE } from '../dav/xml';
+import { DAV_NAMESPACES, XML_CONTENT_TYPE, XML_DECLARATION } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
@@ -48,7 +48,7 @@ function readLockOwner(lockinfo: XmlElement): string | undefined {
 }
 
 function buildLockResponse(lock: Lock): Response {
-    const body = `<?xml version="1.0" encoding="utf-8"?>
+    const body = `${XML_DECLARATION}
 <D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
     return new Response(body, {
         status: 200,
