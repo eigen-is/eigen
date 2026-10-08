@@ -93,7 +93,7 @@ describe('Preview', () => {
         const { res } = await uploadAndTextPreview('test.json', '{"key": "value"}', 'application/json');
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data.body).toContain('key');
+        expect(data.body).toContain('hljs-attr');
         expect(data.mode).toBe('code');
     });
 
