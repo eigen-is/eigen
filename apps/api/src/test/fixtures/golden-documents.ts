@@ -209,6 +209,85 @@ export function buildHeavyDocJson(sections = 300): JSONContent {
     return { type: 'doc', content };
 }
 
+function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSONContent {
+    return { type: 'text', text, marks };
+}
+
+// Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
+// to the schema's, so a new node fails there until it is added here.
+export function buildAllFeaturesDocJson(): JSONContent {
+    const link = { type: 'link', attrs: { href: 'https://example.com/a b', title: 'Example' } };
+    const headings = [1, 2, 3, 4, 5, 6].map((level) => ({
+        type: 'heading',
+        attrs: { level, textAlign: level === 3 ? 'center' : null },
+        content: [
+            { type: 'text', text: `Heading ${level}` },
+            ...(level === 2 ? [{ type: 'text', text: ' with ' }, marked('code()', { type: 'code' })] : []),
+        ],
+    }));
+    const aligned = ['left', 'center', 'right', 'justify'].map((textAlign) => ({
+        type: 'paragraph',
+        attrs: { textAlign },
+        content: [{ type: 'text', text: `Aligned ${textAlign}.` }],
+    }));
+    return {
+        type: 'doc',
+        content: [
+            ...headings,
+            ...aligned,
+            {
+                type: 'paragraph',
+                content: [
+                    marked('bold', { type: 'bold' }),
+                    marked(' italic', { type: 'italic' }),
+                    marked(' underline', { type: 'underline' }),
+                    marked(' strike', { type: 'strike' }),
+                    { type: 'text', text: ' H' },
+                    marked('2', { type: 'subscript' }),
+                    { type: 'text', text: 'O, E = mc' },
+                    marked('2', { type: 'superscript' }),
+                    marked(' small', { type: 'small' }),
+                    marked(' code()', { type: 'code' }),
+                    marked(' red serif', {
+                        type: 'textStyle',
+                        attrs: { color: '#c00000', fontFamily: 'Source Serif 4' },
+                    }),
+                    marked(' highlighted', { type: 'highlight', attrs: { color: '#fef08a' } }),
+                    marked(' marked', { type: 'highlight', attrs: { color: null } }),
+                    marked(' commented', { type: 'comment', attrs: { cardId: 'card-1' } }),
+                    marked(
+                        ' all at once',
+                        { type: 'textStyle', attrs: { color: '#2563eb', fontFamily: 'JetBrains Mono' } },
+                        { type: 'bold' },
+                        { type: 'italic' },
+                        { type: 'strike' },
+                        { type: 'underline' },
+                        { type: 'superscript' },
+                        { type: 'small' },
+                        { type: 'highlight', attrs: { color: '#bbf7d0' } },
+                    ),
+                    { type: 'text', text: ' and ' },
+                    marked('a link', link),
+                    marked(' in bold', link, { type: 'bold' }),
+                    { type: 'text', text: '.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'First line\tafter a tab' },
+                    { type: 'hardBreak' },
+                    { type: 'text', text: 'second line' },
+                ],
+            },
+            { type: 'paragraph', attrs: { textAlign: 'center' } },
+            { type: 'paragraph' },
+            { type: 'pageBreak' },
+            { type: 'paragraph', content: [{ type: 'text', text: 'After the page break.' }] },
+        ],
+    };
+}
+
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     const tempDoc = prosemirrorJSONToYDoc(docSchema, json, 'default');
     writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
