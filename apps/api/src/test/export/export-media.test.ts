@@ -3,9 +3,10 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp, { type Sharp } from 'sharp';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { type ExportMedia, SVG_INLINE_MAX_BYTES } from '../../lib/document/transform/protocol';
+import type { ExportMedia } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
+import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import * as thumbnails from '../../lib/shared/thumbnails';
 import { createTestMountConfig } from '../mount-test-helpers';
 
