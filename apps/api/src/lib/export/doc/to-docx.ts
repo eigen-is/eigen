@@ -35,7 +35,7 @@ export async function eigendocToDocx(
         files: [],
         drawings: 0,
     };
-    const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0 };
+    const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
 
     const parts: [path: string, xml: string, contentType?: string][] = [
@@ -133,15 +133,16 @@ type Package = {
 };
 
 // The walk's surroundings. A flow (the body, a cell) is column twips wide and its first block drops a heading's margin
-// above; indent is the twips the enclosing lists and quotes move the text in, depth the lists around it; style, after
-// and align are what a plain paragraph takes in its container; list is the numbering an item takes; a heading scales
-// its inline code.
+// above; indent is the twips the enclosing lists and quotes move the text in, depth and quotes how many of each;
+// style, after and align are what a plain paragraph takes in its container; list is the numbering an item takes; a
+// heading scales its inline code.
 type Context = {
     pkg: Package;
     first: boolean;
     column: number;
     indent: number;
     depth: number;
+    quotes: number;
     style?: string;
     after?: number;
     align?: string;
@@ -229,9 +230,10 @@ type RunProps = {
 // A paragraph its wrapped figures emptied is only a holder: an item opens it, every other flow drops it.
 type Paragraph = { props: ParagraphProps; runs: string; emptied?: true };
 
-// A table is written whole; the flow around it adds the paragraphs Word needs beside it. A floating one holds a
-// wrapped figure and keeps no margin.
-type Block = Paragraph | { table: string; float?: true };
+// A table is written whole; the flow around it adds the paragraphs Word needs beside it, and the block after it takes
+// its after: the table's margin, or its container's larger one. A floating one holds a wrapped figure and keeps no
+// margin.
+type Block = Paragraph | { table: string; after?: number; float?: true };
 
 function pPrXml(props: ParagraphProps): string {
     const { style, keepNext, keepLines, numPr, pBdr, shading, spacing, ind, contextualSpacing, jc, outlineLvl } = props;
@@ -328,7 +330,8 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     [
         'blockquote',
         (node, context) => {
-            const quote = { ...context, indent: context.indent + QUOTE_LOOK.indent, style: 'Quote', after: undefined };
+            const indent = context.indent + (context.quotes < LIST_LEVELS ? QUOTE_LOOK.indent : 0);
+            const quote = { ...context, indent, quotes: context.quotes + 1, style: 'Quote', after: undefined };
             const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote, false);
             return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'));
         },
@@ -417,10 +420,12 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
 // Word and LibreOffice draw two adjacent boxes or bars as one (R35), so a Spacer stands between them, and it holds the
-// gap: the larger of the margins, as they collapse in the editor. Word runs a quote's bar through its after.
+// gap: the larger of the margins, as they collapse in the editor. Word runs a quote's bar through its after. A table
+// draws no box: blocksXml gives the block after it the larger margin, and the paragraph before one keeps its after.
 function keepApart(blocks: Block[], next: Block[]): void {
     const last = blocks.at(-1);
     const first = next[0];
+    if ((last && 'table' in last && !last.float) || (first && 'table' in first && !first.float)) return;
     if (!last || !first || 'table' in last || 'table' in first) {
         blocks.push(SPACER);
         return;
@@ -437,19 +442,20 @@ function keepApart(blocks: Block[], next: Block[]): void {
 }
 
 // Word merges adjacent tables and needs a paragraph after the last one in a cell or the body, so a Spacer stands where
-// no paragraph does. The block after an in-flow table takes the table's margin below as its before.
+// no paragraph does. The block after an in-flow table takes the table's after as its before.
 function blocksXml(written: Block[]): string {
-    const { margin } = TABLE_LOOK;
-    const spacer = (afterTable: boolean) =>
-        paragraphXml(afterTable ? { props: { style: 'Spacer', spacing: { before: margin } }, runs: '' } : SPACER);
+    const below = (block: Block | undefined) =>
+        block && 'table' in block && !block.float ? (block.after ?? TABLE_LOOK.margin) : undefined;
+    const spacer = (before: number | undefined) =>
+        paragraphXml(before === undefined ? SPACER : { props: { style: 'Spacer', spacing: { before } }, runs: '' });
     const blocks = written.filter((block) => 'table' in block || !block.emptied);
     return blocks
         .map((block, index) => {
             const previous = blocks[index - 1];
-            const afterTable = previous !== undefined && 'table' in previous && !previous.float;
-            if (!('table' in block)) return paragraphXml(afterTable ? withBefore(block, margin) : block);
-            const between = previous !== undefined && 'table' in previous ? spacer(afterTable) : '';
-            return `${between}${block.table}${index === blocks.length - 1 ? spacer(!block.float) : ''}`;
+            const before = below(previous);
+            if (!('table' in block)) return paragraphXml(before === undefined ? block : withBefore(block, before));
+            const between = previous !== undefined && 'table' in previous ? spacer(before) : '';
+            return `${between}${block.table}${index === blocks.length - 1 ? spacer(below(block)) : ''}`;
         })
         .join('');
 }
@@ -473,11 +479,16 @@ function indentOf(style: string | undefined, context: Context): ParagraphProps['
     return context.indent === own ? undefined : { left: context.indent };
 }
 
-// A container's bottom margin on its last paragraph, the larger of the two as margins collapse. A hairline keeps its
-// 1 pt; after a table the next block takes the table's margin.
+// A container's bottom margin on its last block, the larger of the two as margins collapse. A hairline keeps its 1 pt,
+// a floating figure no margin.
 function withAfter(blocks: Block[], after: number): Block[] {
     const last = blocks.at(-1);
-    if (!last || 'table' in last || last.props.style === 'PageBreak' || last.props.style === 'Spacer') return blocks;
+    if (!last || ('table' in last && last.float)) return blocks;
+    if ('table' in last) {
+        if (after <= (last.after ?? TABLE_LOOK.margin)) return blocks;
+        return [...blocks.slice(0, -1), { ...last, after }];
+    }
+    if (last.props.style === 'PageBreak' || last.props.style === 'Spacer') return blocks;
     if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after'))) return blocks;
     return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
 }
@@ -566,7 +577,7 @@ function itemOf(
 
 const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 
-// Word's nine levels; a list deeper still indents no further.
+// Word's nine levels; a list or quote deeper still indents no further.
 const LIST_LEVELS = 9;
 
 function itemIndent(context: Context): number {
@@ -619,6 +630,7 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             CELL_TYPES.has(cell.type ?? '') ? cell : { type: 'tableCell', content: [cell] },
         ),
     );
+    const columnPx = (context.column - context.indent) / 15;
     const carry: number[] = [];
     const holders: GridCell[] = [];
     const widths: (number | undefined)[] = [];
@@ -638,8 +650,11 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const cell = { node, content: [...(node.content ?? [])], column, colspan, rowspan };
             for (let k = 0; k < colspan; k++) {
                 const width: unknown = Array.isArray(colwidth) ? colwidth[k] : undefined;
+                // The column at most, so 63 of them sum to a number.
                 widths[column + k] ??=
-                    typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : undefined;
+                    typeof width === 'number' && Number.isFinite(width) && width > 0
+                        ? Math.min(width, Math.floor(columnPx))
+                        : undefined;
                 carry[column + k] = rowspan;
                 holders[column + k] = cell;
             }
@@ -651,7 +666,7 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     });
     if (widths.length === 0) return [];
 
-    const { dxa, fixed } = gridWidths(widths, (context.column - context.indent) / 15);
+    const { dxa, fixed } = gridWidths(widths, columnPx);
     const spanWidth = (column: number, colspan: number) =>
         dxa.slice(column, column + colspan).reduce((sum, width) => sum + width, 0);
     const covered = new Map<string, number>();
@@ -721,6 +736,7 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
         column,
         indent: 0,
         depth: 0,
+        quotes: 0,
         after: 0,
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
     };

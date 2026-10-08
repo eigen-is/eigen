@@ -1128,6 +1128,13 @@ describe('docx writer — tables', () => {
         expect(descendants(tbl, W, 'tcW').map((tcW) => w(tcW, 'w'))).toEqual(['9630', '375']);
     });
 
+    test('colwidths whose sum is past any number are each the column at most, so the grid stays whole twips', async () => {
+        const huge = { colwidth: [1.7e308] };
+        const tbl = only(await tablesIn(doc(table(tr(td(huge, p()), td(huge, p()), td({ colwidth: null }, p()))))));
+        expect(gridOf(tbl)).toEqual([4815, 4815, 375]);
+        expect(descendants(tbl, W, 'tcW').map((tcW) => w(tcW, 'w'))).toEqual(['4815', '4815', '375']);
+    });
+
     test('a table that ends the body or a cell is followed by a Spacer, and two tables are kept apart by one', async () => {
         const one = table(tr(td({}, p(text('x')))));
         const body = await bodyOf(doc(one, one, p(text('after')), one));
@@ -1311,11 +1318,27 @@ describe('docx writer — quotes', () => {
         expect(await paragraphsOf(doc(first, second))).toEqual([firstXml, spacer(gap - 20), secondXml]);
     });
 
+    // A table draws no box a code block merges with: 0.75em above it, the quote's 1em below it.
+    test('a quote that opens or ends with a table is the collapsed margin from a code block, no Spacer', async () => {
+        const blocks = await blocksOf(
+            doc(code('a', 'plaintext'), quote(table(tr(td({}, p(text('x')))))), code('b', 'plaintext')),
+        );
+        expect(blocks.map((block) => block.slice(0, 6))).toEqual(['<w:p><', '<w:tbl', '<w:p><']);
+        expect([blocks[0], blocks[2]]).toEqual([codeLine('a', ''), codeLine('b', '<w:spacing w:before="220"/>')]);
+    });
+
     test('a nested quote adds its indent', async () => {
         expect(await paragraphsOf(doc(quote(p(text('outer')), quote(p(text('inner'))))))).toEqual([
             quoted(run('outer')),
             quoted(run('inner'), '<w:spacing w:after="220"/><w:ind w:left="530"/>'),
         ]);
+    });
+
+    test('quotes past the ninth level indent no further', async () => {
+        let nested = quote(p(text('deepest')));
+        for (let depth = 0; depth < 11; depth++) nested = quote(p(text(`level ${depth}`)), nested);
+        const indents = descendants(await bodyOf(doc(nested)), W, 'ind').map((ind) => Number(w(ind, 'left')));
+        expect(Math.max(...indents)).toBe(9 * 265);
     });
 
     test("a quote in a list item sits at the item's text", async () => {
