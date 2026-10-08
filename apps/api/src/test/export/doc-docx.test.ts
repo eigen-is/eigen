@@ -383,15 +383,12 @@ describe('docx writer — paragraphs and headings', () => {
     });
 
     test('a heading takes its level style and keeps its alignment', async () => {
-        const heading = only(
-            xmlChildren(
-                await bodyOf(doc({ type: 'heading', attrs: { level: 2, textAlign: 'right' }, content: [text('x')] })),
-                W,
-                'p',
-            ),
+        const body = await bodyOf(
+            doc(p(text('x')), { type: 'heading', attrs: { level: 2, textAlign: 'right' }, content: [text('x')] }),
         );
+        const heading = xmlChildren(body, W, 'p')[1];
         const pPr = child(heading, 'pPr');
-        expect(shape(pPr ?? heading)).toEqual(['pStyle', 'jc']);
+        expect(shape(pPr ?? body)).toEqual(['pStyle', 'jc']);
         expect([w(child(pPr, 'pStyle'), 'val'), w(child(pPr, 'jc'), 'val')]).toEqual(['Heading2', 'right']);
     });
 
@@ -410,6 +407,17 @@ describe('docx writer — paragraphs and headings', () => {
             expect(w(child(pPr, 'outlineLvl'), 'val')).toBe(String(level - 1));
             expect(child(child(heading, 'rPr'), 'b')).toBeUndefined();
         }
+    });
+
+    test('a heading that opens the document drops its margin above, as h1:first-child to h4:first-child do', async () => {
+        const heading = (level: number) => ({ type: 'heading', attrs: { level }, content: [text('x')] });
+        const body = await bodyOf(doc(heading(1), heading(1)));
+        const [first, second] = xmlChildren(body, W, 'p');
+        expect(shape(child(first, 'pPr') ?? body)).toEqual(['pStyle', 'spacing']);
+        expect(w(child(child(first, 'pPr'), 'spacing'), 'before')).toBe('0');
+        expect(shape(child(second, 'pPr') ?? body)).toEqual(['pStyle']);
+        const fifth = only(xmlChildren(await bodyOf(doc(heading(5))), W, 'p'));
+        expect(shape(child(fifth, 'pPr') ?? fifth)).toEqual(['pStyle']);
     });
 
     test('an empty paragraph keeps its properties, and only a bare one is <w:p/>', async () => {
@@ -772,12 +780,15 @@ describe('docx writer — styles from the CSS', () => {
 
     test('a heading size follows the CSS', async () => {
         const original = { ...proseCss };
+        const proseValueIfSet = (selector: string, property: string) =>
+            selector === '.eigen-prose h1' && property === 'font-size'
+                ? '2rem'
+                : original.proseValueIfSet(selector, property);
         mock.module('../../lib/export/doc/prose-css', () => ({
             ...original,
+            proseValueIfSet,
             proseValue: (selector: string, property: string) =>
-                selector === '.eigen-prose h1' && property === 'font-size'
-                    ? '2rem'
-                    : original.proseValue(selector, property),
+                proseValueIfSet(selector, property) ?? original.proseValue(selector, property),
         }));
         try {
             const heading = style(await styles(), 'Heading1');

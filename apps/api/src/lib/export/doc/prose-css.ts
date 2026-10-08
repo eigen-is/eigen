@@ -21,9 +21,14 @@ export const PROSE_CSS = flattenEigenProseCSS(eigenProseCSSRaw);
 const PROSE_RULES = parseRules(PROSE_CSS);
 
 export function proseValue(selector: string, property: string): string {
-    const value = PROSE_RULES.get(selector)?.get(property);
+    const value = proseValueIfSet(selector, property);
     if (value === undefined) throw new Error(`eigen-prose.css sets no ${property} on ${selector}`);
     return value;
+}
+
+// For a property a rule may leave to inheritance or to another rule.
+export function proseValueIfSet(selector: string, property: string): string | undefined {
+    return PROSE_RULES.get(selector)?.get(property);
 }
 
 // ── CSS flattening ──────────────────────────────────────────────────────────

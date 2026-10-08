@@ -6,7 +6,7 @@ import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
 import { cssColorToHex } from '../colors';
-import { proseValue } from './prose-css';
+import { proseValue, proseValueIfSet } from './prose-css';
 
 // ProseMirror JSON -> docx bytes, WordprocessingML written by hand. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module must not reach the Mount or the
@@ -25,7 +25,7 @@ export async function eigendocToDocx(
         hyperlinks: new Map(),
         publicOrigin,
     };
-    const body = paragraphsOf(json.content ?? [], {}, { pkg }, false)
+    const body = paragraphsOf(json.content ?? [], {}, { pkg, first: false }, false)
         .map(paragraphXml)
         .join('');
 
@@ -112,8 +112,8 @@ type Package = {
     publicOrigin: string | undefined;
 };
 
-// The inline walk's surroundings: a heading scales the inline code inside it.
-type Context = { pkg: Package; headingPt?: number };
+// The walk's surroundings: a flow's first block drops a heading's margin above, a heading scales its inline code.
+type Context = { pkg: Package; first: boolean; headingPt?: number };
 
 const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
 
@@ -206,14 +206,22 @@ function paragraphXml({ props, runs }: Paragraph): string {
 
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const BLOCKS = new Map<string, (node: JSONContent, pkg: Package) => Paragraph[]>([
-    ['paragraph', (node, pkg) => paragraphsOf(node.content ?? [], { jc: justification(node) }, { pkg }, true)],
+const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Paragraph[]>([
+    ['paragraph', (node, context) => paragraphsOf(node.content ?? [], { jc: justification(node) }, context, true)],
     [
         'heading',
-        (node, pkg) => {
+        (node, context) => {
             const level = clampInt(node.attrs?.['level'], 1, 6, 1);
-            const props = { style: `Heading${level}`, jc: justification(node) };
-            return paragraphsOf(node.content ?? [], props, { pkg, headingPt: headingMetrics(level).sizePt }, true);
+            const { sizePt } = headingMetrics(level);
+            const firstMargin = context.first
+                ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
+                : undefined;
+            const props = {
+                style: `Heading${level}`,
+                spacing: firstMargin === undefined ? undefined : { before: twips(cssPt(firstMargin, sizePt)) },
+                jc: justification(node),
+            };
+            return paragraphsOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
         },
     ],
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
@@ -227,7 +235,7 @@ function paragraphsOf(nodes: JSONContent[], props: ParagraphProps, context: Cont
         paragraphs.push({ props, runs: runsXml(inline, context) });
         inline = [];
     };
-    for (const node of nodes) {
+    for (const [index, node] of nodes.entries()) {
         if (Object.hasOwn(INLINES, node.type ?? '')) {
             inline.push(node);
             continue;
@@ -235,7 +243,7 @@ function paragraphsOf(nodes: JSONContent[], props: ParagraphProps, context: Cont
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
-        paragraphs.push(...write(node, context.pkg));
+        paragraphs.push(...write(node, { pkg: context.pkg, first: !textblock && index === 0 }));
     }
     if (inline.length > 0 || (textblock && paragraphs.length === 0)) flush();
     return paragraphs;
@@ -394,6 +402,7 @@ const FONT_LINE_HEIGHT = new Map([['Inter', 1.21]]);
 
 // rem against the 16 px root, px at 96 dpi, em against the element's own size.
 function cssPt(length: string, emPt: number): number {
+    if (length.trim() === '0') return 0;
     const match = length.trim().match(/^(-?[\d.]+)(rem|em|px|pt)$/);
     if (!match) throw new Error(`eigen-prose.css length ${length} has no docx unit`);
     const [, value, unit] = match;
@@ -417,15 +426,6 @@ function autoLine(linePt: number, sizePt: number, font: string): number {
     const fontLineHeight = FONT_LINE_HEIGHT.get(font);
     if (fontLineHeight === undefined) throw new Error(`no line height for ${font}`);
     return Math.round((240 * linePt) / (sizePt * fontLineHeight));
-}
-
-// proseValue throws where a rule leaves the property out; an inherited property asks first.
-function proseValueIfSet(selector: string, property: string): string | undefined {
-    try {
-        return proseValue(selector, property);
-    } catch {
-        return undefined;
-    }
 }
 
 function proseColor(selector: string, property: string): string {
