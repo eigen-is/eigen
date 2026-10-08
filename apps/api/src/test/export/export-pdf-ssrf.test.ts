@@ -436,6 +436,63 @@ describe('export sanitize — SVG media', () => {
     });
 });
 
+// Each <use> draws its target once per reference, so nested ones multiply: 1.2 KB of 6 levels × 10 ran WeasyPrint
+// into its kill. Only a <use> whose target holds none stays, the one level matplotlib's glyphs need.
+describe('export sanitize — SVG media <use> depth', () => {
+    const sanitized = (svg: string) => {
+        const [item] = sanitizeExportMedia([
+            {
+                name: 'a.svg',
+                contentType: 'image/svg+xml',
+                data: toTransferableText(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${svg}</svg>`),
+            },
+        ]);
+        return Buffer.from(item.data).toString('utf8');
+    };
+    const uses = (xml: string): string[] => [...xml.matchAll(/<use\b[^>]*>/g)].map(([use]) => use);
+
+    test('a 6 × 10 fan-out keeps only the uses whose target holds no <use>', () => {
+        let levels = '<g id="l0"><rect width="1" height="1"/></g>';
+        for (let i = 1; i <= 6; i++) {
+            levels += `<g id="l${i}">${Array.from({ length: 10 }, () => `<use href="#l${i - 1}"/>`).join('')}</g>`;
+        }
+        const out = sanitized(`<defs>${levels}</defs><use href="#l6"/>`);
+        expect(uses(out)).toEqual(Array(10).fill('<use href="#l0"/>'));
+    });
+
+    test('a glyph <use> survives, in both spellings', () => {
+        const out = sanitized(
+            '<defs><path id="g" d="M0 0h1v1z"/></defs><use href="#g" x="1"/><use xlink:href="#g" x="2" xmlns:xlink="http://www.w3.org/1999/xlink"/>',
+        );
+        expect(uses(out)).toHaveLength(2);
+    });
+
+    const XLINK = 'xmlns:xlink="http://www.w3.org/1999/xlink"';
+    test.each([
+        ['a self-referencing <use>', '<use id="a" href="#a"/>', []],
+        [
+            'two groups using each other',
+            '<defs><g id="a"><use href="#b"/></g><g id="b"><use href="#a"/></g></defs><use href="#a"/>',
+            [],
+        ],
+        [
+            'a <use> of a <use>',
+            '<defs><path id="p" d="M0 0"/><use id="u" href="#p"/></defs><use href="#u"/>',
+            ['<use id="u" href="#p"/>'],
+        ],
+        ['a <use> with a missing target', '<use href="#nowhere"/>', []],
+        [
+            'a <use> whose second spelling targets a nested one',
+            `<defs><path id="p" d="M0 0"/><g id="g"><use href="#p"/></g></defs><use href="#p" xlink:href="#g" ${XLINK}/>`,
+            ['<use href="#p"/>'],
+        ],
+        // A reader may decode the escape and land on another id than the one looked up.
+        ['a percent-encoded target', '<defs><g id="l%31"><path d="M0 0"/></g></defs><use href="#l%31"/>', []],
+    ])('%s goes', (_, svg, kept) => {
+        expect(uses(sanitized(svg))).toEqual(kept);
+    });
+});
+
 const wp = await isWeasyPrintAvailable();
 const suite = wp ? describe : describe.skip;
 

@@ -156,11 +156,29 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
     }
 }
 
+// A <use> draws its target once per reference, so nested ones multiply (6 levels of 10 is a million copies). One stays
+// only when every target it names exists and holds no <use>, the one level matplotlib's glyphs need, which also ends
+// every cycle. A `%` goes too: a reader may decode it to another id than the one looked up here.
+function dropNestedUses(root: Element): void {
+    const ids = new Set([...root.querySelectorAll('[id]')].map((el) => el.id));
+    const nesting = new Set<string>();
+    for (const use of root.querySelectorAll('use')) {
+        for (let el: Element | null = use; el; el = el.parentElement) if (el.id) nesting.add(el.id);
+    }
+    for (const use of root.querySelectorAll('use')) {
+        const targets = [use.getAttribute('href'), use.getAttribute('xlink:href')]
+            .filter((ref) => ref !== null)
+            .map((ref) => ref.trim().slice(1));
+        if (targets.some((id) => id.includes('%') || !ids.has(id) || nesting.has(id))) use.remove();
+    }
+}
+
 // An .svg is read as XML, where DOMPurify's HTML (an unclosed <br>, an &nbsp;) blanks the drawing. Empty with no <svg>.
 export function toXmlDocument(svg: string): string {
     const dom = new JSDOM(svg, { contentType: 'text/html' });
     const root = dom.window.document.querySelector('svg');
     if (!root) return '';
+    dropNestedUses(root);
     // The serializer declares the namespaces itself, and a second xmlns is a duplicate attribute.
     for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
     return stripNonXmlChars(new dom.window.XMLSerializer().serializeToString(root));
