@@ -138,7 +138,7 @@ type Package = {
     faces: Map<string, Set<FontSlot>>;
 };
 
-// The walk's surroundings: a flow's column and its lists' and quotes' indent in twips, what a plain paragraph takes.
+// The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.
 type Context = {
     pkg: Package;
     first: boolean;
@@ -280,7 +280,7 @@ function styleFace(style: string | undefined): Pick<RunProps, 'font' | 'bold' | 
     return face;
 }
 
-// Word's auto line scales with the tallest face, CSS's doesn't: one other family rescales it, unless the mark's taller.
+// Word's auto line scales with the tallest face, CSS's doesn't: a paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
 function familyLine(style: string | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
@@ -534,7 +534,7 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
-// Readers draw adjacent boxes or bars as one, so a Spacer holds the collapsed gap a quote's bar would run through.
+// Readers draw adjacent boxes or bars as one, so the gap between them becomes a Spacer, its margins collapsed as CSS does.
 function keepApart(blocks: Block[], next: Block[]): void {
     const last = blocks.at(-1);
     const first = next[0];
