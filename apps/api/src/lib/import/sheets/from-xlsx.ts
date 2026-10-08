@@ -351,11 +351,7 @@ const CELL_IS_FORMULA_OP: Record<string, string> = {
 const FORMULA_BACKED_CF_TYPES = new Set(['containsText', 'notContainsText', 'beginsWith', 'endsWith', 'timePeriod']);
 
 function convertConditionalFormats(worksheet: Worksheet, theme: ThemePalette): ConditionalFormatRule[] {
-    // `conditionalFormattings` is a real Worksheet property (lib/doc/worksheet.js) missing
-    // from exceljs's typings.
-    const blocks =
-        (worksheet as unknown as { conditionalFormattings?: { ref: string; rules: XlsxCfRule[] }[] })
-            .conditionalFormattings ?? [];
+    const blocks = worksheet.conditionalFormattings ?? [];
 
     const flat: { rule: XlsxCfRule; ranges: SingleRange[] }[] = [];
     for (const block of blocks) {
@@ -599,6 +595,14 @@ type XlsxDataValidation = {
     errorStyle?: string;
 };
 
+// Real Worksheet properties (lib/doc/worksheet.js) that exceljs's typings omit.
+declare module 'exceljs' {
+    interface Worksheet {
+        conditionalFormattings?: { ref: string; rules: XlsxCfRule[] }[];
+        dataValidations?: { model?: Record<string, XlsxDataValidation> };
+    }
+}
+
 const DV_TYPE: Record<string, string> = {
     list: 'dropdown',
     whole: 'number_integer',
@@ -639,9 +643,7 @@ const DV_ROW_MARGIN = 1000;
 const DV_COL_MARGIN = 100;
 
 function convertDataValidations(worksheet: Worksheet): NonNullable<Sheet['dataVerification']> {
-    const model =
-        (worksheet as unknown as { dataValidations?: { model?: Record<string, XlsxDataValidation> } }).dataValidations
-            ?.model ?? {};
+    const model = worksheet.dataValidations?.model ?? {};
 
     // rowCount/columnCount are bounded by the row/cell elements present in the file
     // (the structural extent the rest of the converter trusts, e.g. the rowhidden pass).
@@ -916,10 +918,7 @@ async function readSheetPaths(
     return { spreadsheetml: namespaces.spreadsheetml, sheets: paths };
 }
 
-// A tree costs ~260 bytes of heap a tag and ~350-600 an attribute however few bytes they take in the input, and a
-// long value or text 1x (ASCII bytes) to 4x (one non-latin1 character widens the input to UTF-16) its length. So what
-// is parsed is bounded by its length and by its `<` and `=` (a tag has one, an attribute one; one in a value or text
-// only counts extra). A part or block past any bound is skipped like a malformed one.
+// A tree costs far more heap than its input, so what is parsed is bounded by length and by its `<` and `=` counts; past any bound a part is skipped like a malformed one.
 type ParseBound = { length: number; tags: number; attributes: number };
 // Workbook, rels and theme run to a few KB and a few hundred tags in a real file. Length in bytes.
 const PART_BOUND: ParseBound = { length: 1024 * 1024, tags: 10_000, attributes: 100_000 };
