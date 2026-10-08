@@ -2,6 +2,7 @@ import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@works
 import type { VectorScene } from '@workspace/lib/vector';
 import DOMPurify from 'isomorphic-dompurify';
 import { JSDOM } from 'jsdom';
+import { type ExportMedia, toTransferableText } from '../document/transform/protocol';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 
@@ -111,6 +112,17 @@ export function toXmlDocument(svg: string): string {
 // .svg data: URI is read as (DOMPurify writes `&nbsp;` and other HTML-only forms).
 export function sanitizeSvgMedia(svg: string): string {
     return toXmlDocument(sanitizeExportHtml(svg));
+}
+
+// SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. Embedded
+// as a data: URI it still reaches WeasyPrint's fetcher (a nested `<image href>` is the same SSRF the assembled document
+// closes), so every export arm takes it through sanitizeSvgMedia here, off the event loop.
+export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
+    return media.map((item) =>
+        item.contentType === 'image/svg+xml'
+            ? { ...item, data: toTransferableText(sanitizeSvgMedia(Buffer.from(item.data).toString('utf8'))) }
+            : item,
+    );
 }
 
 // A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the

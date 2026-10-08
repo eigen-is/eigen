@@ -46,7 +46,7 @@ Export embeds every resource it needs, so any other reference came from a collab
 - Backslashes go before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches.
 - `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links.
 - The hooks are added and removed around each synchronous call, so they never leak to another DOMPurify user.
-- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So `prepareMedia` sanitizes `image/svg+xml` media before the Worker sees it.
+- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML. The main thread hands over the inlined bytes as they are, capped at `SVG_INLINE_MAX_BYTES`: sanitizing a big drawing holds jsdom for seconds. A docx's PNG fallback is drawn from those same bytes in the thumbnail Worker, where librsvg fetches nothing from a buffer, so an SVG no XML reader can read leaves the docx.
 
 Previews pass the same function the exact set of their own preview URLs ([PREVIEWS.md](PREVIEWS.md)). The tests are in `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 

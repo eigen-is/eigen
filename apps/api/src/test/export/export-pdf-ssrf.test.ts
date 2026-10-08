@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { sanitizeExportHtml } from '../../lib/export/sanitize';
+import { parseXml } from '../../lib/core/xml';
+import { toTransferableText } from '../../lib/document/transform/protocol';
+import { sanitizeExportHtml, sanitizeExportMedia } from '../../lib/export/sanitize';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 
 // SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a
@@ -205,6 +207,29 @@ describe('export sanitize — SVG references', () => {
     test('http(s) anchors still keep their href', () => {
         const out = sanitizeExportHtml('<a href="https://example.com/report">r</a>');
         expect(out).toContain('href="https://example.com/report"');
+    });
+});
+
+// SVG media reaches the transform Worker as the file's own bytes, and every reader of it reads XML.
+describe('export sanitize — SVG media', () => {
+    const text = (data: ArrayBuffer) => Buffer.from(data).toString('utf8');
+
+    test('an SVG gets the data-only pass and is written as XML; a raster passes untouched', () => {
+        const raster = toTransferableText('raster bytes');
+        const [svg, png] = sanitizeExportMedia([
+            {
+                name: 'a.svg',
+                contentType: 'image/svg+xml',
+                data: toTransferableText(
+                    `<svg xmlns="http://www.w3.org/2000/svg"><text>a&nbsp;b<br></text><image href="http://evil.test/p.png"/></svg>`,
+                ),
+            },
+            { name: 'b.png', contentType: 'image/png', data: raster },
+        ]);
+        expect(parseXml(text(svg.data))?.local).toBe('svg');
+        expect(text(svg.data)).toContain('a\u00a0b');
+        expect(text(svg.data)).not.toContain('evil.test');
+        expect(png.data).toBe(raster);
     });
 });
 

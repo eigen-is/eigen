@@ -3,10 +3,10 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp, { type Sharp } from 'sharp';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { parseXml } from '../../lib/core/xml';
 import { type ExportMedia, transferListOf } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
+import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const dir = join(import.meta.dir, `../../../../../data-test/test-export-media-${Date.now()}`);
@@ -33,7 +33,7 @@ function gradient(width: number, height: number): Sharp {
     return sharp(pixels, { raw: { width, height, channels: 3 } });
 }
 
-const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#2563eb"/><text x="10" y="80">a&nbsp;b</text><image href="https://example.com/beacon.png"/></svg>`;
+const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#2563eb"/><text x="10" y="80">a&#160;b</text><image href="https://example.com/beacon.png"/></svg>`;
 
 const PNG_SIGNATURE = '89504e47';
 const JPEG_SIGNATURE = 'ffd8ff';
@@ -83,6 +83,20 @@ describe('collectExportMedia', () => {
             ['lossless.webp', await gradient(320, 200).webp({ lossless: true }).toBuffer()],
             ['lossy.webp', await gradient(320, 200).webp({ quality: 80 }).toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
+            // Past the inliner's cap, which binds only what it builds: nothing here is inlined.
+            [
+                'huge.svg',
+                Buffer.from(
+                    `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">${' '.repeat(SVG_INLINE_MAX_BYTES)}</svg>`,
+                ),
+            ],
+            // HTML's &nbsp; in an SVG file: no XML reader draws it, and only the transform Worker's pass rewrites it.
+            [
+                'html.svg',
+                Buffer.from(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><text>a&nbsp;b</text></svg>',
+                ),
+            ],
             // VP8X: a lossy WebP with alpha.
             ['clear.webp', await clear().webp({ quality: 80 }).toBuffer()],
             ['clear.tiff', await clear().tiff({ compression: 'lzw' }).toBuffer()],
@@ -182,13 +196,10 @@ describe('collectExportMedia', () => {
         expect(Buffer.from(photo.data).includes('Eigen')).toBe(false);
     }, 60_000);
 
-    test('an SVG is its sanitized XML beside a PNG at its own size', async () => {
+    test('an SVG is its own bytes, which the transform Worker sanitizes, beside a PNG at its own size', async () => {
         const svg = find(await collect('docx'), 'drawing.svg');
         expect([svg.contentType, svg.width, svg.height]).toEqual(['image/svg+xml', 300, 150]);
-        const text = Buffer.from(svg.data).toString('utf8');
-        expect(parseXml(text)?.local).toBe('svg');
-        expect(text).toContain('a b');
-        expect(text).not.toContain('beacon');
+        expect(Buffer.from(svg.data).toString('utf8')).toBe(SVG);
         const png = svg.png ?? new ArrayBuffer(0);
         expect(signatureOf(png)).toBe(PNG_SIGNATURE);
         const { width, height } = await sharp(Buffer.from(png)).metadata();
@@ -199,7 +210,17 @@ describe('collectExportMedia', () => {
         const names = (await collect('docx')).map((item) => item.name);
         expect(names).not.toContain('broken.png');
         expect(names).not.toContain('clip.mp4');
+        // Its PNG is drawn from the file's own bytes.
+        expect(names).not.toContain('html.svg');
     }, 60_000);
+
+    test.each(['docx', 'html'] as const)(
+        '%s hands no SVG past SVG_INLINE_MAX_BYTES to the Worker',
+        async (format) => {
+            expect((await collect(format)).map((item) => item.name)).not.toContain('huge.svg');
+        },
+        60_000,
+    );
 
     test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
         const names = (await collect('docx')).map((item) => item.name);
@@ -207,7 +228,7 @@ describe('collectExportMedia', () => {
     }, 60_000);
 
     test.each(['html', 'pdf-html'] as const)(
-        '%s keeps the screen preview: WebP rasters, the SVG as XML, no size and no PNG',
+        '%s keeps the screen preview: WebP rasters, the SVG as its own bytes, no size and no PNG',
         async (format) => {
             const media = await collect(format);
             expect(media.map((item) => [item.name, item.contentType]).sort()).toEqual(
@@ -217,6 +238,7 @@ describe('collectExportMedia', () => {
                     ['clear.tiff', 'image/webp'],
                     ['clear.webp', 'image/webp'],
                     ['drawing.svg', 'image/svg+xml'],
+                    ['html.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
                     ['photo.jpg', 'image/webp'],
@@ -227,7 +249,7 @@ describe('collectExportMedia', () => {
             for (const item of media) {
                 expect([item.width, item.height, item.png]).toEqual([undefined, undefined, undefined]);
             }
-            expect(parseXml(Buffer.from(find(media, 'drawing.svg').data).toString('utf8'))?.local).toBe('svg');
+            expect(Buffer.from(find(media, 'drawing.svg').data).toString('utf8')).toBe(SVG);
         },
         60_000,
     );

@@ -4,12 +4,12 @@ import { type ExportMedia, type ExportTransformJob, toTransferableBuffer } from 
 import type { Mount } from '../mount';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
+import { SVG_INLINE_MAX_BYTES } from '../preview/svg-media-inline';
 import { generateImagePreview } from '../shared/thumbnails';
-import { sanitizeSvgMedia } from './sanitize';
 
 // Main-thread media preparation for doc/slides exports: the screen-res preview of
-// every media child, as standalone buffers the Worker takes ownership of (base64 and
-// the data: URIs are built there). All Mount I/O — and the globally capped thumbnail
+// every media child, as standalone buffers the Worker takes ownership of (an SVG's
+// sanitizing, base64 and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail
 // path behind getScreenPreview — stays here: a document Worker never receives a Mount
 // and never spawns thumbnail Workers. A docx takes PNG or JPEG from the source file
 // instead, since Word for the web and Google Docs show no WebP, with the thumbnail
@@ -62,13 +62,14 @@ async function prepareMedia(
     if (result.contentType !== 'image/svg+xml') {
         return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
     }
-    // SVG media is served as-is (raw user bytes, an uploaded or pasted drawing). Embedded as a data:
-    // URI it still reaches WeasyPrint's fetcher — a nested `<image href>` is the same SSRF the
-    // assembled document closes in sanitizeExportHtml — so it gets the same data-only pass here.
-    const svg = Buffer.from(sanitizeSvgMedia(result.data.toString('utf8')));
-    if (format !== 'docx') return { name, contentType: result.contentType, data: toTransferableBuffer(svg) };
-    // The PNG every reader but Word draws, from the inlined SVG at its own size.
-    const fallback = await generateImagePreview(svg, result.contentType, file.name, '', file.id, {
+    // The file's own bytes, its siblings inlined: the transform Worker sanitizes them (sanitizeExportMedia), seconds of
+    // jsdom for a big drawing. The inliner caps only what it builds, so a drawing with nothing to inline gets its cap here.
+    if (result.data.byteLength > SVG_INLINE_MAX_BYTES) return null;
+    const data = toTransferableBuffer(result.data);
+    if (format !== 'docx') return { name, contentType: result.contentType, data };
+    // The PNG every reader but Word draws, at the SVG's own size. librsvg fetches no reference from a buffer, which has no
+    // base URI, so the unsanitized bytes draw only what they inline.
+    const fallback = await generateImagePreview(result.data, result.contentType, file.name, '', file.id, {
         format: 'png',
         maxSize: DOCX_MAX_SIZE,
     });
@@ -76,7 +77,7 @@ async function prepareMedia(
     return {
         name,
         contentType: result.contentType,
-        data: toTransferableBuffer(svg),
+        data,
         png: workerBuffer(fallback.data),
         width: fallback.width,
         height: fallback.height,
