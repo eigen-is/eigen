@@ -113,7 +113,7 @@ test('the renamed docx faces carry the family and slot names, with no typographi
             `${id} 1/0/0 ${value}`,
             `${id} 3/1/1033 ${value}`,
         ]);
-        const records = nameRecords(name).filter((record) => /^(1|2|4|6|16|17) /.test(record));
+        const records = nameRecords(name).filter((record) => /^(1|2|4|6|16|17|21|22) /.test(record));
         expect(records.sort()).toEqual(expected.sort());
     }
 });
