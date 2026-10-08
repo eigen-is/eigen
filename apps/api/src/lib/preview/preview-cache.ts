@@ -310,6 +310,11 @@ function regenerateTextInBackground(
     inFlightText.set(cacheName, task);
 }
 
+// Video, audio and PDF previews redirect to their embed URL, never an image.
+export function isScreenPreviewRedirect(mime: string): boolean {
+    return mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf';
+}
+
 export async function getScreenPreview(
     mount: Mount,
     drivePath: DrivePath,
@@ -317,7 +322,7 @@ export async function getScreenPreview(
 ): Promise<ScreenPreviewResult> {
     const mime = drivePath.mimeType || '';
 
-    if (mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf') {
+    if (isScreenPreviewRedirect(mime)) {
         return { type: 'redirect', url: embedUrl };
     }
 

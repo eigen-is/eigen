@@ -1331,3 +1331,51 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(a1?.v?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
     });
 });
+
+describe('Sheets xlsx export — colors', () => {
+    test('a short hex and an rgb() are normalized everywhere a color is written; one Office cannot hold is dropped', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 0], column: [0, 0] }],
+                format: { textColor: 'rgb(170, 0, 0)', cellColor: '#0f0' },
+                conditionName: 'greaterThan',
+                conditionRange: [],
+                conditionValue: ['0'],
+            },
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 0], column: [1, 1] }],
+                format: { textColor: 'red', cellColor: 'rgba(0, 0, 0, 0)' },
+                conditionName: 'greaterThan',
+                conditionRange: [],
+                conditionValue: ['0'],
+            },
+            { type: 'dataBar', cellrange: [{ row: [0, 0], column: [2, 2] }], format: ['#63c'] },
+        ];
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'a', fc: '#f00', bg: 'rgb(0, 128, 255)' } },
+                    { r: 0, c: 1, v: { v: 'b', fc: 'red', bg: 'rgba(0, 0, 0, 0)' } },
+                ],
+                config: { borderInfo: { '0_0': { l: { style: 1, color: '#00f' } } } },
+                conditionalFormatRules: rules,
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.getCell('A1').font?.color).toEqual({ argb: 'FFFF0000' });
+        expect(ws.getCell('A1').fill).toMatchObject({ fgColor: { argb: 'FF0080FF' } });
+        expect(ws.getCell('A1').border?.left?.color).toEqual({ argb: 'FF0000FF' });
+        expect(ws.getCell('B1').font?.color).toBeUndefined();
+        expect(ws.getCell('B1').fill).toBeUndefined();
+
+        const xml = await readZipEntry(await sheetsToXlsx(sheets), 'xl/styles.xml');
+        const argbs = [...xml.matchAll(/rgb="([0-9A-Fa-f]+)"/g)].map(([, argb]) => argb);
+        expect(argbs).toEqual(expect.arrayContaining(['FFAA0000', 'FF00FF00']));
+        for (const argb of argbs) expect(argb).toMatch(/^[0-9A-F]{8}$/);
+        const sheetXml = await readZipEntry(await sheetsToXlsx(sheets), 'xl/worksheets/sheet1.xml');
+        expect(sheetXml).toContain('rgb="FF6633CC"');
+    });
+});

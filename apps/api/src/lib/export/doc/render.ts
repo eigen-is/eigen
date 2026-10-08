@@ -17,16 +17,17 @@ export function renderCodeBlockNode(
     lowlight: Lowlight,
 ): string {
     const language = node.attrs.language || '';
-    const code = node.textContent ?? '';
-
-    // Users rarely set a language, so highlightAuto is where nearly all export highlighting comes from.
-    const highlighted =
-        language && lowlight.registered(language)
-            ? hastToHtml(lowlight.highlight(language, code))
-            : hastToHtml(lowlight.highlightAuto(code));
-
+    const highlighted = hastToHtml(highlightCode(language, node.textContent ?? '', lowlight));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
     return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;
+}
+
+// The HTML and the docx code blocks highlight alike. Users rarely set a language, so highlightAuto is where nearly all
+// export highlighting comes from.
+export function highlightCode(language: string, code: string, lowlight: Lowlight): HastNode {
+    return language && lowlight.registered(language)
+        ? lowlight.highlight(language, code)
+        : lowlight.highlightAuto(code);
 }
 
 export type HastNode = {
@@ -63,6 +64,10 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
+// A wrapped figure's distance from the text around it, in em of the body text; side is the text's side, the margin's
+// side is 0. The docx writer floats its figures by the same.
+export const FIGURE_WRAP_MARGIN_EM = { top: 0.25, bottom: 0.5, side: 1 };
+
 // `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
 export function renderFigureNode(
     attrs: FigureAttrs,
@@ -88,9 +93,11 @@ export function renderFigureNode(
 
     const layout = attrs.layout || 'block';
 
-    if (layout === 'wrap-left') return `<figure style="float: left; margin: 0.25em 1em 0.5em 0">${img}${cap}</figure>`;
+    const { top, bottom, side } = FIGURE_WRAP_MARGIN_EM;
+    if (layout === 'wrap-left')
+        return `<figure style="float: left; margin: ${top}em ${side}em ${bottom}em 0">${img}${cap}</figure>`;
     if (layout === 'wrap-right')
-        return `<figure style="float: right; margin: 0.25em 0 0.5em 1em">${img}${cap}</figure>`;
+        return `<figure style="float: right; margin: ${top}em 0 ${bottom}em ${side}em">${img}${cap}</figure>`;
 
     const align = alignment || 'center';
     const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';

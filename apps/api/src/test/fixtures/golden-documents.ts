@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -24,6 +24,7 @@ import {
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
 import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -207,6 +208,289 @@ export function buildHeavyDocJson(sections = 300): JSONContent {
         }
     }
     return { type: 'doc', content };
+}
+
+function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSONContent {
+    return { type: 'text', text, marks };
+}
+
+// Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
+// to the schema's, so a new node fails there until it is added here.
+export function buildAllFeaturesDocJson(): JSONContent {
+    const link = { type: 'link', attrs: { href: 'https://example.com/a b', title: 'Example' } };
+    const cell = (type: string, attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
+        type,
+        attrs,
+        content,
+    });
+    const row = (...cells: JSONContent[]): JSONContent => ({ type: 'tableRow', content: cells });
+    const small = (label: string): JSONContent => ({
+        type: 'table',
+        content: [row(cell('tableCell', { colwidth: [150] }, paragraph(label)))],
+    });
+    const headings = [1, 2, 3, 4, 5, 6].map((level) => ({
+        type: 'heading',
+        attrs: { level, textAlign: level === 3 ? 'center' : null },
+        content: [
+            { type: 'text', text: `Heading ${level}` },
+            ...(level === 2 ? [{ type: 'text', text: ' with ' }, marked('code()', { type: 'code' })] : []),
+        ],
+    }));
+    const aligned = ['left', 'center', 'right', 'justify'].map((textAlign) => ({
+        type: 'paragraph',
+        attrs: { textAlign },
+        content: [{ type: 'text', text: `Aligned ${textAlign}.` }],
+    }));
+    return {
+        type: 'doc',
+        content: [
+            ...headings,
+            ...aligned,
+            {
+                type: 'paragraph',
+                content: [
+                    marked('bold', { type: 'bold' }),
+                    marked(' italic', { type: 'italic' }),
+                    marked(' underline', { type: 'underline' }),
+                    marked(' strike', { type: 'strike' }),
+                    { type: 'text', text: ' H' },
+                    marked('2', { type: 'subscript' }),
+                    { type: 'text', text: 'O, E = mc' },
+                    marked('2', { type: 'superscript' }),
+                    marked(' small', { type: 'small' }),
+                    marked(' code()', { type: 'code' }),
+                    marked(' red serif', {
+                        type: 'textStyle',
+                        attrs: { color: '#c00000', fontFamily: 'Source Serif 4' },
+                    }),
+                    marked(' highlighted', { type: 'highlight', attrs: { color: '#fef08a' } }),
+                    marked(' marked', { type: 'highlight', attrs: { color: null } }),
+                    marked(' commented', { type: 'comment', attrs: { cardId: 'card-1' } }),
+                    marked(
+                        ' all at once',
+                        { type: 'textStyle', attrs: { color: '#2563eb', fontFamily: 'JetBrains Mono' } },
+                        { type: 'bold' },
+                        { type: 'italic' },
+                        { type: 'strike' },
+                        { type: 'underline' },
+                        { type: 'superscript' },
+                        { type: 'small' },
+                        { type: 'highlight', attrs: { color: '#bbf7d0' } },
+                    ),
+                    { type: 'text', text: ' and ' },
+                    marked('a link', link),
+                    marked(' in bold', link, { type: 'bold' }),
+                    { type: 'text', text: ', ' },
+                    marked('a link into Eigen', { type: 'link', attrs: { href: '/contacts/team/x?contactId=a%40b' } }),
+                    { type: 'text', text: '.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'First line\tafter a tab' },
+                    { type: 'hardBreak' },
+                    { type: 'text', text: 'second line' },
+                ],
+            },
+            { type: 'paragraph', attrs: { textAlign: 'center' } },
+            { type: 'paragraph' },
+            { type: 'pageBreak' },
+            paragraph('After the page break.'),
+            {
+                type: 'bulletList',
+                content: [
+                    {
+                        type: 'listItem',
+                        content: [
+                            paragraph('Bullet one, holding a list lettered from c'),
+                            {
+                                type: 'orderedList',
+                                attrs: { start: 3, type: 'a' },
+                                content: [paragraph('Nested c'), paragraph('Nested d')].map((item) => ({
+                                    type: 'listItem',
+                                    content: [item],
+                                })),
+                            },
+                        ],
+                    },
+                    {
+                        type: 'listItem',
+                        content: [
+                            paragraph('Bullet two'),
+                            paragraph('Its second paragraph'),
+                            { type: 'pageBreak' },
+                            paragraph('After a break in the item'),
+                        ],
+                    },
+                    { type: 'listItem', content: [{ type: 'paragraph' }] },
+                ],
+            },
+            ...['Counts from one', 'Counts from one again'].map((item) => ({
+                type: 'orderedList',
+                attrs: { start: 1, type: null },
+                content: [{ type: 'listItem', content: [paragraph(item)] }],
+            })),
+            {
+                type: 'taskList',
+                content: [
+                    {
+                        type: 'taskItem',
+                        attrs: { checked: true },
+                        content: [
+                            paragraph('Done task'),
+                            {
+                                type: 'taskList',
+                                content: [
+                                    {
+                                        type: 'taskItem',
+                                        attrs: { checked: false },
+                                        content: [paragraph('Nested open')],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    {
+                        type: 'taskItem',
+                        attrs: { checked: false },
+                        content: [
+                            paragraph('Open task'),
+                            { type: 'pageBreak' },
+                            paragraph('After a break in the task'),
+                        ],
+                    },
+                ],
+            },
+            {
+                type: 'blockquote',
+                content: [
+                    {
+                        type: 'heading',
+                        attrs: { level: 3, textAlign: null },
+                        content: [{ type: 'text', text: 'Quoted' }],
+                    },
+                    paragraph('Quoted paragraph'),
+                    { type: 'blockquote', content: [paragraph('Nested quote')] },
+                    { type: 'pageBreak' },
+                    paragraph('After a break in the quote'),
+                ],
+            },
+            {
+                type: 'codeBlock',
+                attrs: { language: 'javascript' },
+                content: [
+                    {
+                        type: 'text',
+                        text: 'function greet(name) {\n\t/* says\n\t   hello */\n\treturn "Hello, " + name;\n}',
+                    },
+                ],
+            },
+            {
+                type: 'codeBlock',
+                attrs: { language: 'plaintext' },
+                content: [{ type: 'text', text: 'A second code block, right after the first.' }],
+            },
+            { type: 'horizontalRule' },
+            paragraph('After the rule.'),
+            {
+                type: 'table',
+                content: [
+                    row(
+                        ...['Region', 'Q1', 'Q2', 'Note'].map((label, index) =>
+                            cell('tableHeader', { colwidth: [index % 3 === 0 ? 120 : 160] }, paragraph(label)),
+                        ),
+                    ),
+                    row(
+                        cell('tableHeader', { colwidth: [120] }, paragraph('North')),
+                        cell('tableCell', { colspan: 2, colwidth: [160, 160] }, paragraph('Spans two columns')),
+                        cell('tableCell', { rowspan: 2, colwidth: [120] }, paragraph('Spans two rows')),
+                    ),
+                    row(
+                        cell('tableHeader', { colwidth: [120] }, paragraph('South')),
+                        cell('tableCell', { align: 'center', colwidth: [160] }, paragraph('centred')),
+                        cell('tableCell', { align: 'right', colwidth: [160] }, paragraph('right')),
+                    ),
+                    row(
+                        cell(
+                            'tableCell',
+                            { colspan: 2, colwidth: [120, 160] },
+                            paragraph('Before a break in the cell'),
+                            { type: 'pageBreak' },
+                            paragraph('After it, a table that ends the cell'),
+                            small('Nested'),
+                        ),
+                        cell('tableCell', { colwidth: [160] }, { type: 'paragraph' }),
+                        cell('tableCell', { colwidth: null }, paragraph('No width')),
+                    ),
+                ],
+            },
+            small('One of two tables in a row'),
+            small('Two of two'),
+            paragraph('After the tables.'),
+            figure({ mediaName: 'chart.png', width: 320, alignment: 'left', caption: 'A chart, left', alt: 'Chart' }),
+            figure({ mediaName: 'photo.jpeg', width: null, alt: 'A photo at its own size' }),
+            figure({ mediaName: 'diagram.svg', width: 200, caption: 'An SVG', commentCardId: 'card-2' }),
+            figure({ mediaName: 'chart.png', width: 220, layout: 'wrap-left', caption: 'Wrapped left' }),
+            {
+                type: 'paragraph',
+                content: [
+                    figureNode({ mediaName: 'photo.jpeg', width: 220, layout: 'wrap-right', caption: 'Wrapped right' }),
+                    {
+                        type: 'text',
+                        text: `Text between the wrapped figures. ${'It runs on beside both. '.repeat(30)}`,
+                    },
+                ],
+            },
+            {
+                type: 'orderedList',
+                attrs: { start: 1, type: null },
+                content: [
+                    {
+                        type: 'listItem',
+                        content: [
+                            figure({ mediaName: 'chart.png', width: 160, layout: 'wrap-left' }),
+                            paragraph('An item that opens with a wrapped figure.'),
+                        ],
+                    },
+                    { type: 'listItem', content: [paragraph('The next item.')] },
+                ],
+            },
+        ],
+    };
+}
+
+function figureNode(attrs: FigureAttrs): JSONContent {
+    return { type: 'figure', attrs };
+}
+
+function figure(attrs: FigureAttrs): JSONContent {
+    return { type: 'paragraph', content: [figureNode(attrs)] };
+}
+
+// The all-features doc's media as the docx prep hands it over: sizes from the thumbnail Worker, an SVG beside its PNG.
+// The writer never decodes a raster, so marker bytes stand in for the PNG and the JPEG.
+export function buildAllFeaturesDocMedia(): ExportMedia[] {
+    return [
+        { name: 'chart.png', contentType: 'image/png', data: toTransferableText('chart png'), width: 800, height: 500 },
+        {
+            name: 'photo.jpeg',
+            contentType: 'image/jpeg',
+            data: toTransferableText('photo jpeg'),
+            width: 4000,
+            height: 3000,
+        },
+        {
+            name: 'diagram.svg',
+            contentType: 'image/svg+xml',
+            data: toTransferableText(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>',
+            ),
+            png: toTransferableText('diagram png'),
+            width: 300,
+            height: 150,
+        },
+    ];
 }
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {

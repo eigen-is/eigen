@@ -87,6 +87,21 @@ describe('doc export — the stylesheet', () => {
     });
 });
 
+describe('doc export — figures', () => {
+    test('a wrapped figure floats with the margins the docx writer floats it by', async () => {
+        const figure = (layout: string) => ({
+            type: 'paragraph',
+            content: [{ type: 'figure', attrs: { mediaName: 'chart.png', layout } }],
+        });
+        const media = [{ name: 'chart.png', contentType: 'image/png', data: new ArrayBuffer(1) }];
+        const doc = seededDoc({ type: 'doc', content: [figure('wrap-left'), figure('wrap-right')] });
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', media);
+        const html = new TextDecoder().decode(data);
+        expect(html).toContain('float: left; margin: 0.25em 1em 0.5em 0');
+        expect(html).toContain('float: right; margin: 0.25em 0 0.5em 1em');
+    });
+});
+
 describe('doc export — page breaks', () => {
     test.each(['html', 'pdf-html'] as const)('%s carries the page break div', async (format) => {
         const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', []);
