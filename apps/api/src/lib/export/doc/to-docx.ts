@@ -32,6 +32,7 @@ export async function eigendocToDocx(
         hyperlinks: new Map(),
         publicOrigin,
         lists: [],
+        bullets: new Map(),
         checkboxes: false,
         media: new Map(media.map((item) => [item.name, item])),
         images: new Map(),
@@ -126,12 +127,14 @@ function relationshipsXml(relationships: Relationship[]): string {
 }
 
 // What one export accumulates as it walks: the document's relationships, one per distinct hyperlink target and image,
-// its lists, the media parts, the drawings counted for their ids and the font faces its runs draw in.
+// its lists and the numId each bullet indent shares, the media parts, the drawings counted for their ids and the font
+// faces its runs draw in.
 type Package = {
     relationships: Relationship[];
     hyperlinks: Map<string, string>;
     publicOrigin: string | undefined;
     lists: List[];
+    bullets: Map<number, number>;
     checkboxes: boolean;
     media: Map<string, ExportMedia>;
     images: Map<string, Image>;
@@ -628,7 +631,7 @@ function textOf(node: JSONContent): string {
     return node.text ?? (node.content ?? []).map(textOf).join('');
 }
 
-// ── Lists: one abstractNum per list, so adjacent lists count separately ─────────────────────────────────────────────
+// ── Lists: one abstractNum per ordered list, so adjacent lists count separately ─────────────────────────────────────
 
 type List = { format: string; start: number; base: number };
 
@@ -653,7 +656,10 @@ function listOf(
     const list =
         numbering && content.some((item) => item.type === 'listItem')
             ? {
-                  numId: context.pkg.lists.push({ ...numbering, base: itemIndent(context) - LIST_LEVEL * (ilvl + 1) }),
+                  numId: numIdOf(context.pkg, {
+                      ...numbering,
+                      base: itemIndent(context) - LIST_LEVEL * (ilvl + 1),
+                  }),
                   ilvl,
               }
             : undefined;
@@ -661,6 +667,14 @@ function listOf(
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
     return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'));
+}
+
+// A bullet counts nothing, so bullet lists at one indent share their numbering: Word caps the definitions a file holds.
+function numIdOf(pkg: Package, list: List): number {
+    if (list.format !== 'bullet') return pkg.lists.push(list);
+    const shared = pkg.bullets.get(list.base) ?? pkg.lists.push(list);
+    pkg.bullets.set(list.base, shared);
+    return shared;
 }
 
 // The item's text is a level in; only its first paragraph opens with the number or checkbox.

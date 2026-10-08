@@ -876,8 +876,38 @@ describe('docx writer — lists', () => {
         expect(nums.map((num) => w(child(num, 'abstractNumId'), 'val'))).toEqual(['0', '1']);
     });
 
+    test('bullet lists of one indent share one abstractNum and num, a nested one a level in; ordered ones keep their own', async () => {
+        const json = doc(
+            ul(li(p(text('a')), ul(li(p(text('b')))))),
+            ul(li(p(text('c')))),
+            ol({}, li(p(text('d')))),
+            ol({}, li(p(text('e')))),
+            quote(ul(li(p(text('f'))))),
+        );
+        const body = await bodyOf(json);
+        expect(descendants(body, W, 'numPr').map(xmlOf)).toEqual(
+            [
+                [0, 1],
+                [1, 1],
+                [0, 1],
+                [0, 2],
+                [0, 3],
+                [0, 4],
+            ].map(([ilvl, numId]) => `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`),
+        );
+        const numbering = await numberingOf(json);
+        expect(
+            xmlChildren(numbering, W, 'abstractNum').map((list) => w(child(child(list, 'lvl'), 'numFmt'), 'val')),
+        ).toEqual(['bullet', 'decimal', 'decimal', 'bullet']);
+        expect(xmlChildren(numbering, W, 'num').map(xmlOf)).toEqual(
+            [0, 1, 2, 3].map((index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`),
+        );
+    });
+
     test('every abstractNum has an nsid of its own, 8 hex digits, and all abstractNums come before the nums', async () => {
-        const numbering = await numberingOf(doc(ul(li(p(text('a')), ul(li(p(text('b')))))), ol({}, li(p(text('c'))))));
+        const numbering = await numberingOf(
+            doc(ul(li(p(text('a')), ol({}, li(p(text('b')))))), ol({}, li(p(text('c'))))),
+        );
         const nsids = descendants(numbering, W, 'nsid').map((nsid) => w(nsid, 'val') ?? '');
         expect(nsids).toHaveLength(3);
         expect(new Set(nsids).size).toBe(3);
