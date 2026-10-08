@@ -12,7 +12,7 @@ Export and import both dispatch on the container type, not the mime type. A mime
 
 ## The Worker renders and the main thread prepares
 
-`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. The xlsx export skips it, because the writer carries cells only.
+`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. A docx instead re-encodes each image from its source file as PNG or JPEG in the thumbnail Worker, uncached, so it takes one item at a time and queues no more once the client disconnects. The xlsx export skips it, because the writer carries cells only.
 
 The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, renders, sanitizes and, for docx, converts. `@turbodocx/html-to-docx` and ExcelJS load lazily, so an HTML export evaluates neither. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays on the main thread: it is already a separate process.
 

@@ -18,23 +18,30 @@ export async function collectExportMedia(
     mount: Mount,
     drivePath: DrivePath,
     format: ExportTransformJob['format'],
+    signal?: AbortSignal,
 ): Promise<ExportMedia[]> {
     const media = await listDocumentMedia(mount, drivePath);
-    const prepared = await Promise.all([...media].map(([name, file]) => prepareMedia(mount, name, file, format)));
-    return prepared.filter((item) => item !== null);
+    if (format !== 'docx') {
+        const prepared = await Promise.all([...media].map(([name, file]) => prepareMedia(mount, name, file, false)));
+        return prepared.filter((item) => item !== null);
+    }
+    // A docx re-encodes every image, uncached, on the thumbnail semaphore uploads and previews share: one at a time, so
+    // one export holds at most one of its slots, and none once the client is gone (the runner then cancels the job).
+    const prepared: ExportMedia[] = [];
+    for (const [name, file] of media) {
+        if (signal?.aborted) break;
+        const item = await prepareMedia(mount, name, file, true);
+        if (item) prepared.push(item);
+    }
+    return prepared;
 }
 
 // The screen preview's largest side.
 const DOCX_MAX_SIZE = 2560;
 
-async function prepareMedia(
-    mount: Mount,
-    name: string,
-    file: DrivePath,
-    format: ExportTransformJob['format'],
-): Promise<ExportMedia | null> {
+async function prepareMedia(mount: Mount, name: string, file: DrivePath, docx: boolean): Promise<ExportMedia | null> {
     const mime = file.mimeType || '';
-    if (format === 'docx' && mime !== 'image/svg+xml') {
+    if (docx && mime !== 'image/svg+xml') {
         // What getScreenPreview shows as an image, and nothing else.
         if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
         const source = await mount.readFile(file.id);
@@ -66,7 +73,7 @@ async function prepareMedia(
     // jsdom for a big drawing. The inliner caps only what it builds, so a drawing with nothing to inline gets its cap here.
     if (result.data.byteLength > SVG_INLINE_MAX_BYTES) return null;
     const data = toTransferableBuffer(result.data);
-    if (format !== 'docx') return { name, contentType: result.contentType, data };
+    if (!docx) return { name, contentType: result.contentType, data };
     // The PNG every reader but Word draws, at the SVG's own size. librsvg fetches no reference from a buffer, which has no
     // base URI, so the unsanitized bytes draw only what they inline.
     const fallback = await generateImagePreview(result.data, result.contentType, file.name, '', file.id, {

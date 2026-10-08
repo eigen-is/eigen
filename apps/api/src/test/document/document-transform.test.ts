@@ -45,6 +45,7 @@ import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
+import * as thumbnails from '../../lib/shared/thumbnails';
 import type { User } from '../../lib/user';
 import {
     buildGoldenDeckScene,
@@ -930,6 +931,25 @@ describe('document transform (eigendoc)', () => {
         expect(parseXml(media)?.local).toBe('svg');
         expect(media).toContain('a\u00a0b');
         expect(media).not.toContain('beacon');
+    }, 120_000);
+
+    test('a docx export whose client is gone re-encodes none of its media', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const spy = spyOn(thumbnails, 'generateImagePreview');
+        let calls = -1;
+        try {
+            await runDocumentExport(
+                { documentType: 'eigendoc', format: 'docx' },
+                golden.mount,
+                golden.path,
+                controller.signal,
+            ).catch(() => {});
+            calls = spy.mock.calls.length;
+        } finally {
+            spy.mockRestore();
+        }
+        expect(calls).toBe(0);
     }, 120_000);
 
     test('docx export loads Turbodocx from runtime node_modules inside the Worker', async () => {

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp, { type Sharp } from 'sharp';
@@ -7,6 +7,7 @@ import { type ExportMedia, transferListOf } from '../../lib/document/transform/p
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
 import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
+import * as thumbnails from '../../lib/shared/thumbnails';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const dir = join(import.meta.dir, `../../../../../data-test/test-export-media-${Date.now()}`);
@@ -131,11 +132,48 @@ describe('collectExportMedia', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    async function collect(format: 'docx' | 'html' | 'pdf-html'): Promise<ExportMedia[]> {
+    async function collect(format: 'docx' | 'html' | 'pdf-html', signal?: AbortSignal): Promise<ExportMedia[]> {
         const container = await mount.getPath(containerId);
         if (!container) throw new Error('no container');
-        return collectExportMedia(mount, container, format);
+        return collectExportMedia(mount, container, format, signal);
     }
+
+    // A docx re-encodes every image from its source on the thumbnail semaphore every upload and preview shares.
+    test('a docx prepares one media item at a time', async () => {
+        const encode = thumbnails.generateImagePreview;
+        let active = 0;
+        let peak = 0;
+        const spy = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async (...args) => {
+            peak = Math.max(peak, ++active);
+            try {
+                return await encode(...args);
+            } finally {
+                active--;
+            }
+        });
+        try {
+            await collect('docx');
+        } finally {
+            spy.mockRestore();
+        }
+        expect(peak).toBe(1);
+    }, 60_000);
+
+    test('a docx queues no more media once its export aborts', async () => {
+        const controller = new AbortController();
+        const spy = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
+            controller.abort();
+            return null;
+        });
+        let calls = 0;
+        try {
+            await collect('docx', controller.signal);
+            calls = spy.mock.calls.length;
+        } finally {
+            spy.mockRestore();
+        }
+        expect(calls).toBe(1);
+    }, 60_000);
 
     test('a docx takes a PNG of a lossless source and a JPEG of a photo, with the Worker size', async () => {
         const media = await collect('docx');

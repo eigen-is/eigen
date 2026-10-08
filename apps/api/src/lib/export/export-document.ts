@@ -131,7 +131,7 @@ export async function runDocumentExport(
     // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
     // cells alone.
     const prepStart = performance.now();
-    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format);
+    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format, signal);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the Worker. A docx
