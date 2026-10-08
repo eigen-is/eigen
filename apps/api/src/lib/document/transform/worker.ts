@@ -59,7 +59,7 @@ async function renderExport(
         }
         case 'eigendoc': {
             const { renderEigendocExport } = await import('../../export/doc/transform');
-            return renderEigendocExport(doc, request.format, request.title, media);
+            return renderEigendocExport(doc, request.format, request.title, media, request.publicOrigin);
         }
         case 'eigenslides': {
             const { renderEigenslidesExport } = await import('../../export/canvas/transform');

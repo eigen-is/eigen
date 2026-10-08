@@ -14,10 +14,11 @@ import {
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
+import sharp from 'sharp';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
+import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
@@ -33,11 +34,12 @@ import {
 import { runTransformToBytes, runTransformToExtractedText } from '../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive';
+import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
-import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { type DocxImage, docSchema, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
@@ -48,6 +50,7 @@ import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-rend
 import * as thumbnails from '../../lib/shared/thumbnails';
 import type { User } from '../../lib/user';
 import {
+    buildAllFeaturesDocJson,
     buildGoldenDeckScene,
     buildGoldenDocJson,
     buildGoldenVectorScene,
@@ -764,9 +767,12 @@ describe('document transform (xlsx import)', () => {
 // And again when the dark-drop stopped leaving the dark theme's tail and a stray brace, and the two print blocks merged: those lines, and nothing else.
 // And again when the flattener dropped the CSS comments and prefixed every item of a comma list, the body stopped repeating the prose size and line height, and headings inherit the font size: those lines, and nothing else.
 // And again when the flattener kept declarations that precede a nested rule on their own rule, so the editor's .tiptap block reaches the export (repeated spaces kept, ligatures off), and the page wrapper lost its whitespace: those lines, and nothing else.
+// The docx hash is the writer's own output (to-docx.ts) with its embedded fonts; its image is the thumbnail
+// Worker's PNG of the source, so a writer, font or encoder change moves it.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '98ee4243a435ccd111a7523b1db78b709f61e27c7f37a6dbdd1c85f772707bff';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '98ee4243a435ccd111a7523b1db78b709f61e27c7f37a6dbdd1c85f772707bff';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fba4c2c2eac52a27ff87ba30a2b35661ac3058926a0cd87711a3a8fcc404bfb6';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';
@@ -953,7 +959,7 @@ describe('document transform (eigendoc)', () => {
         expect(calls).toBe(0);
     }, 120_000);
 
-    test('docx export loads Turbodocx from runtime node_modules inside the Worker', async () => {
+    test('docx export through the Worker equals the writer on the main thread and matches the pinned golden hash', async () => {
         const { mount, path } = golden;
         const response = await documentTransformRunner.run(
             {
@@ -967,13 +973,240 @@ describe('document transform (eigendoc)', () => {
             },
             EXPORT_OPTIONS,
         );
-        // Turbodocx is externalized from the bundle — a real zip proves the Worker
-        // resolved it at runtime and produced the document off-thread.
         const docx = Buffer.from(exportBytes(response));
-        expect(docx.byteLength).toBeGreaterThan(0);
-        expect(docx.subarray(0, 2).toString()).toBe('PK');
-        const zip = await JSZip.loadAsync(docx);
-        expect(Object.keys(zip.files)).toContain('word/document.xml');
+        const persisted = await readPersistedDoc(mount, path);
+        const media = await collectExportMedia(mount, path, 'docx');
+        const direct = await eigendocToDocx(readEigendocFromDoc(persisted), media, path.name, undefined);
+        persisted.destroy();
+        expect(docx.equals(Buffer.from(direct))).toBe(true);
+        expect(sha256(docx)).toBe(GOLDEN_DOC_EXPORT_DOCX_SHA256);
+    }, 120_000);
+});
+
+describe('document transform (docx round trip)', () => {
+    // The docx export as the Download menu runs it (the media prep, the Worker), read back by today's importer.
+    async function roundTrip(fileName: string, json: JSONContent): Promise<{ json: JSONContent; images: DocxImage[] }> {
+        const created = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        seedEigendoc((await home.drive.getCollabDocument(mountId, created.id)).doc, json);
+        const { mount, path } = await home.drive.resolveFile(mountId, created.id);
+        const solid = (width: number, height: number) =>
+            sharp({ create: { width, height, channels: 3, background: '#2563eb' } });
+        await seedDocumentMedia(mount, path, 'chart.png', await solid(800, 500).png().toBuffer());
+        await seedDocumentMedia(mount, path, 'photo.jpeg', await solid(400, 300).jpeg().toBuffer(), 'image/jpeg');
+        const svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>';
+        await seedDocumentMedia(mount, path, 'diagram.svg', Buffer.from(svg), 'image/svg+xml');
+        return docxToPmJson(await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path));
+    }
+
+    // The importer names media image-N.ext beside an empty src, the doc its own, so both are numbered as they appear.
+    function numberMedia(json: JSONContent): JSONContent {
+        let index = 0;
+        const walk = (node: JSONContent): JSONContent => ({
+            ...node,
+            ...(node.type === 'figure' && { attrs: { ...node.attrs, mediaName: `media-${index++}`, src: null } }),
+            ...(node.content && { content: node.content.map(walk) }),
+        });
+        return walk(json);
+    }
+
+    function typesIn(json: JSONContent, nodes = new Set<string>(), marks = new Set<string>()) {
+        if (json.type) nodes.add(json.type);
+        for (const mark of json.marks ?? []) marks.add(mark.type);
+        for (const node of json.content ?? []) typesIn(node, nodes, marks);
+        return { nodes, marks };
+    }
+
+    // Each attr's values across the doc's nodes and marks.
+    function attrValues(json: JSONContent, name: string, values = new Set<unknown>()): unknown[] {
+        for (const { attrs } of [json, ...(json.marks ?? [])]) if (attrs && name in attrs) values.add(attrs[name]);
+        for (const node of json.content ?? []) attrValues(node, name, values);
+        return [...values];
+    }
+
+    // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
+    function words(json: JSONContent): string[] {
+        const chunks: string[] = [];
+        const walk = (node: JSONContent) => {
+            const caption = node.attrs?.['caption'];
+            if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
+            const inline = node.content?.filter((child) => child.type === 'text' || child.type === 'hardBreak') ?? [];
+            if (inline.length > 0) chunks.push(inline.map((child) => child.text ?? ' ').join(''));
+            for (const child of node.content ?? []) walk(child);
+        };
+        walk(json);
+        return chunks.join(' ').split(/\s+/).filter(Boolean).sort();
+    }
+
+    // A block as its type and its block children; text is left out.
+    function shape(node: JSONContent): string {
+        const blocks = (node.content ?? []).filter((child) => child.type !== 'text' && child.type !== 'hardBreak');
+        return blocks.length > 0 ? `${node.type}(${blocks.map(shape).join(' ')})` : (node.type ?? '');
+    }
+
+    test('what the importer keeps comes back as it was', async () => {
+        const text = (value: string, ...marks: string[]) => ({
+            type: 'text',
+            text: value,
+            ...(marks.length > 0 && { marks: marks.map((type) => ({ type })) }),
+        });
+        const p = (...content: JSONContent[]) => ({ type: 'paragraph', content });
+        const item = (...content: JSONContent[]) => ({ type: 'listItem', content });
+        const cell = (type: string, attrs: Record<string, unknown>, value: string) => ({
+            type,
+            attrs,
+            content: [p(text(value))],
+        });
+        const json = docSchema
+            .nodeFromJSON({
+                type: 'doc',
+                content: [
+                    { type: 'heading', attrs: { level: 1 }, content: [text('Title')] },
+                    { type: 'heading', attrs: { level: 4 }, content: [text('Section')] },
+                    p(
+                        text('bold', 'bold'),
+                        text(' italic', 'italic'),
+                        text(' strike', 'strike'),
+                        text(' H'),
+                        text('2', 'subscript'),
+                        text('O, mc'),
+                        text('2', 'superscript'),
+                        text(' and '),
+                        {
+                            type: 'text',
+                            text: 'a link',
+                            marks: [{ type: 'link', attrs: { href: 'https://example.com/report?q=1#top' } }],
+                        },
+                    ),
+                    {
+                        type: 'bulletList',
+                        content: [
+                            item(p(text('One')), {
+                                type: 'orderedList',
+                                content: [item(p(text('One a'))), item(p(text('One b')))],
+                            }),
+                            item(p(text('Two'))),
+                        ],
+                    },
+                    {
+                        type: 'table',
+                        content: [
+                            {
+                                type: 'tableRow',
+                                content: [cell('tableHeader', {}, 'Region'), cell('tableHeader', {}, 'Q1')],
+                            },
+                            { type: 'tableRow', content: [cell('tableCell', { colspan: 2 }, 'Both columns')] },
+                            {
+                                type: 'tableRow',
+                                content: [cell('tableCell', { rowspan: 2 }, 'Two rows'), cell('tableCell', {}, 'x')],
+                            },
+                            { type: 'tableRow', content: [cell('tableCell', {}, 'y')] },
+                        ],
+                    },
+                    p({ type: 'figure', attrs: { mediaName: 'chart.png' } }),
+                    { type: 'pageBreak' },
+                    p(text('After the break.')),
+                ],
+            })
+            .toJSON();
+        const imported = await roundTrip('kept', json);
+        expect(numberMedia(imported.json)).toEqual(numberMedia(json));
+        expect(imported.images.map((image) => image.contentType)).toEqual(['image/png']);
+    }, 120_000);
+
+    // Phase 3's own reader shrinks every list here.
+    test('the all-features doc loses no text, and only what the importer is known to drop', async () => {
+        const original = buildAllFeaturesDocJson();
+        const { json, images } = await roundTrip('all-features', original);
+        expect(words(json)).toEqual(words(original));
+
+        const before = typesIn(original);
+        const after = typesIn(json);
+        expect([...after.nodes].filter((type) => !before.nodes.has(type))).toEqual([]);
+        expect([...before.nodes].filter((type) => !after.nodes.has(type)).sort()).toEqual([
+            'blockquote',
+            'codeBlock',
+            'horizontalRule',
+            'taskItem',
+            'taskList',
+        ]);
+        expect([...before.marks].filter((type) => !after.marks.has(type)).sort()).toEqual([
+            'code',
+            'comment',
+            'highlight',
+            'small',
+            'textStyle',
+            'underline',
+        ]);
+        const lostAttrs = { textAlign: [null], align: [null], colwidth: [null], start: [1], width: [null] };
+        for (const [name, values] of Object.entries(lostAttrs)) expect(attrValues(json, name)).toEqual(values);
+        expect(
+            ['alignment', 'layout', 'caption', 'commentCardId', 'title'].map((name) => attrValues(json, name)),
+        ).toEqual([['center'], ['block'], [null], [null], [null]]);
+
+        // Empty paragraphs and the rule are dropped; quotes, code lines and task items come back as paragraphs; an
+        // item's blocks after its first paragraph leave the list, and two adjacent lists become one; the header column
+        // comes back as plain cells; a caption is the paragraph after its image; a wrapped figure is its one-cell table.
+        const table = (...cells: string[]) => `table(tableRow(${cells.join(' ')}))`;
+        expect((json.content ?? []).map(shape)).toEqual([
+            ...Array(6).fill('heading'),
+            ...Array(6).fill('paragraph'),
+            'pageBreak',
+            'paragraph',
+            'bulletList(listItem(paragraph orderedList(listItem(paragraph) listItem(paragraph))) listItem(paragraph))',
+            'paragraph',
+            'pageBreak',
+            'paragraph',
+            'orderedList(listItem(paragraph) listItem(paragraph))',
+            ...Array(3).fill('paragraph'),
+            'pageBreak',
+            'paragraph',
+            'heading',
+            'paragraph',
+            'paragraph',
+            'pageBreak',
+            ...Array(8).fill('paragraph'),
+            [
+                'table(tableRow(tableHeader(paragraph) tableHeader(paragraph) tableHeader(paragraph) tableHeader(paragraph))',
+                'tableRow(tableCell(paragraph) tableCell(paragraph) tableCell(paragraph))',
+                'tableRow(tableCell(paragraph) tableCell(paragraph) tableCell(paragraph))',
+                `tableRow(tableCell(paragraph pageBreak paragraph ${table('tableCell(paragraph)')}) tableCell(paragraph) tableCell(paragraph)))`,
+            ].join(' '),
+            table('tableCell(paragraph)'),
+            table('tableCell(paragraph)'),
+            'paragraph',
+            'paragraph(figure)',
+            'paragraph',
+            'paragraph(figure)',
+            'paragraph(figure)',
+            'paragraph',
+            table('tableCell(paragraph(figure) paragraph)'),
+            table('tableCell(paragraph(figure) paragraph)'),
+            'paragraph',
+            table('tableCell(paragraph(figure))'),
+            'paragraph',
+            'orderedList(listItem(paragraph))',
+        ]);
+
+        // A root-relative href comes back absolute (phase 3 maps the instance's own origin back), a space as %20.
+        const hrefs = attrValues(json, 'href');
+        expect(hrefs).toEqual(['https://example.com/a%20b', `${getPublicOrigin()}/contacts/team/x?contactId=a%40b`]);
+        // An SVG comes back as its PNG fallback: the importer reads the a:blip, not the svgBlip.
+        expect(images.map((image) => image.contentType)).toEqual([
+            'image/png',
+            'image/jpeg',
+            'image/png',
+            'image/png',
+            'image/jpeg',
+            'image/png',
+        ]);
     }, 120_000);
 });
 
