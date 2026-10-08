@@ -208,6 +208,102 @@ describe('export sanitize — SVG references', () => {
         const out = sanitizeExportHtml('<a href="https://example.com/report">r</a>');
         expect(out).toContain('href="https://example.com/report"');
     });
+
+    test('an SVG link keeps its href like an HTML one', () => {
+        const out = sanitizeExportHtml(
+            '<svg><a href="https://example.com/a"><text>a</text></a><a xlink:href="https://example.com/b">b</a></svg>',
+        );
+        expect(out).toContain('href="https://example.com/a"');
+        expect(out).toContain('xlink:href="https://example.com/b"');
+    });
+});
+
+// matplotlib draws its text with <use href="#glyph">, Inkscape chains gradients through xlink:href and paints with
+// fill:url(#g): a reference into the same document fetches nothing.
+describe('export sanitize — same-document SVG references', () => {
+    const DEFS = '<defs><linearGradient id="g"></linearGradient><path id="glyph" d="M0 0h1v1z"></path></defs>';
+    const svg = (body: string) => sanitizeExportHtml(`<svg>${DEFS}${body}</svg>`);
+
+    test.each(['url(#g)', "url('#g')", 'url("#g")', 'url( #g )', "url( '#g' )", 'url(\n"#g"\t)'])(
+        'a fragment %s keeps its target in a style attribute and a style element',
+        (ref) => {
+            const attr = ref.replaceAll('"', '&quot;');
+            expect(svg(`<rect style="fill:${attr}"></rect>`)).toContain(`fill:${attr}`);
+            expect(svg(`<style>.a{fill:${ref}}</style>`)).toContain(`fill:${ref}`);
+        },
+    );
+
+    test.each([
+        ['remote', 'http://evil.test/s.svg#g'],
+        ['protocol-relative', '//evil.test/s.svg#g'],
+        ['relative path', 's.svg#g'],
+        ['root-relative path', '/s.svg#g'],
+        ['javascript:', 'javascript:alert(1)'],
+        ['non-breaking space before the hash, a relative path to a URL parser', ' #g'],
+        ['CSS-escaped hash, an unknown token once the backslash goes', '\\23 g'],
+    ])('a %s url() is stripped', (_, ref) => {
+        expect(svg(`<rect style="fill:url(${ref})"></rect>`)).toContain('fill:url()');
+        expect(svg(`<style>.a{fill:url(${ref})}</style>`)).toContain('fill:url()');
+    });
+
+    // An HTML <style> is raw text, so its entity is a relative path; an SVG one is parsed, so it is the hash.
+    test('an entity-spelled hash is what the CSS parser will read', () => {
+        expect(sanitizeExportHtml('<style>.a{fill:url(&#35;g)}</style>')).toContain('fill:url()');
+        expect(svg('<style>.a{fill:url(&#35;g)}</style>')).toContain('fill:url(#g)');
+    });
+
+    test('a fragment href keeps its target on a gradient and on <use>, in both spellings', () => {
+        const out = svg(
+            '<linearGradient id="h" xlink:href="#g"></linearGradient>' +
+                '<use href="#glyph" x="1"></use><use xlink:href="#glyph" x="2"></use><use href=" #glyph" x="3"></use>',
+        );
+        expect(out).toContain('<linearGradient id="h" xlink:href="#g">');
+        expect(out).toContain('<use href="#glyph" x="1">');
+        expect(out).toContain('<use xlink:href="#glyph" x="2">');
+        expect(out).toContain('<use href="#glyph" x="3">');
+    });
+
+    test.each([
+        ['remote', 'http://evil.test/s.svg#g'],
+        ['protocol-relative', '//evil.test/s.svg#g'],
+        ['relative path', 's.svg#g'],
+        ['javascript:', 'javascript:alert(1)'],
+        ['data:', 'data:image/svg+xml,%3Csvg%20id%3D%22g%22%2F%3E#g'],
+        ['entity-spelled remote', '&#104;ttp://evil.test/s.svg#g'],
+        ['space-led remote', ' http://evil.test/s.svg#g'],
+        ['non-breaking-space-led fragment', '&nbsp;#glyph'],
+    ])('a %s <use> goes, and so does its href', (_, ref) => {
+        for (const attr of ['href', 'xlink:href']) {
+            const out = svg(`<use ${attr}="${ref}"></use>`);
+            expect(out).not.toContain('<use');
+            expect(out).not.toContain('evil.test');
+        }
+    });
+
+    test('a <use> with no href, or a fragment beside a remote one, goes', () => {
+        expect(svg('<use x="1"></use>')).not.toContain('<use');
+        expect(svg('<use href="#glyph" xlink:href="http://evil.test/s.svg#g"></use>')).not.toContain('<use');
+    });
+
+    test('a non-fragment href on any other SVG element is still stripped', () => {
+        const out = svg('<linearGradient id="h" xlink:href="http://evil.test/s.svg#g"></linearGradient>');
+        expect(out).toContain('<linearGradient id="h">');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('an xml:base cannot turn a kept fragment into a remote reference', () => {
+        const out = svg('<image xml:base="http://evil.test/" href="#g"></image>');
+        expect(out).not.toContain('evil.test');
+    });
+
+    test('a profile without SVG admits no <use>', () => {
+        const out = sanitizeExportHtml('<p><use href="#glyph"></use></p>', { ALLOWED_TAGS: ['p'] });
+        expect(out).toBe('<p></p>');
+    });
+
+    test('foreignObject stays dropped', () => {
+        expect(svg('<foreignObject><div>x</div></foreignObject>')).not.toContain('foreignObject');
+    });
 });
 
 // SVG media reaches the transform Worker as the file's own bytes, and every reader of it reads XML.
@@ -275,14 +371,15 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             // Mirror an export path: sanitize the assembled body, then render — as every
             // caller does. One body carrying every known vector: plain and CSS-escaped
             // url()/@import in both a style element and a style attribute, and an SVG
-            // image reference through href and xlink:href.
+            // image and <use> reference through href and xlink:href.
             const u = (name: string) => `http://127.0.0.1:${server.port}/${name}`;
             const body = sanitizeExportHtml(
                 `<style>.pwn{background:url(${u('a.css')})}@import "${u('b.css')}";` +
                     `@\\69 mport "${u('c.css')}";.pwn2{background:\\75 rl(${u('d.png')})}</style>` +
                     `<div class="pwn" style="width:200px;height:100px;background-image:url(${u('e.png')})">x</div>` +
                     `<div style="background:\\75 rl(${u('f.png')})">y</div>` +
-                    `<svg><image href="${u('g.png')}"></image><image xlink:href="${u('h.png')}"></image></svg>`,
+                    `<svg><image href="${u('g.png')}"></image><image xlink:href="${u('h.png')}"></image>` +
+                    `<use href="${u('i.svg#g')}"></use><use xlink:href="${u('j.svg#g')}"></use></svg>`,
             );
             await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`);
             await Bun.sleep(250); // let any async fetch land before asserting

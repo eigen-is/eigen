@@ -3,7 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp, { type Sharp } from 'sharp';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { type ExportMedia, transferListOf } from '../../lib/document/transform/protocol';
+import type { ExportMedia } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
 import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
@@ -88,6 +88,15 @@ describe('collectExportMedia', () => {
                 'tagged.webp',
                 await gradient(320, 200)
                     .webp({ quality: 80 })
+                    .withExif({ IFD0: { Copyright: 'Eigen' } })
+                    .toBuffer(),
+            ],
+            // VP8X: a lossless WebP whose ICC profile and EXIF take the extended header, its VP8L chunk after them.
+            [
+                'tagged-lossless.webp',
+                await gradient(320, 200)
+                    .webp({ lossless: true })
+                    .withIccProfile('p3')
                     .withExif({ IFD0: { Copyright: 'Eigen' } })
                     .toBuffer(),
             ],
@@ -194,21 +203,20 @@ describe('collectExportMedia', () => {
         expect(kinds('chart.png')).toEqual(['image/png', PNG_SIGNATURE, 800, 500]);
         expect(kinds('still.gif')).toEqual(['image/png', PNG_SIGNATURE, 60, 40]);
         expect(kinds('lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
+        expect(kinds('tagged-lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
         expect(kinds('photo.jpg')).toEqual(['image/jpeg', JPEG_SIGNATURE, 600, 400]);
         expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
-        for (const item of media) expect(item.png === undefined).toBe(item.contentType !== 'image/svg+xml');
     }, 60_000);
 
-    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with EXIF or alpha', () => {
+    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with ICC, EXIF or alpha', () => {
         const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
-        expect(['lossless.webp', 'lossy.webp', 'tagged.webp', 'clear.webp'].map(chunk)).toEqual([
-            'VP8L',
-            'VP8 ',
-            'VP8X',
-            'VP8X',
-        ]);
+        expect(['lossless.webp', 'lossy.webp', 'tagged.webp', 'tagged-lossless.webp', 'clear.webp'].map(chunk)).toEqual(
+            ['VP8L', 'VP8 ', 'VP8X', 'VP8X', 'VP8X'],
+        );
+        const tagged = sources.get('tagged-lossless.webp')?.toString('latin1') ?? '';
+        expect(tagged.indexOf('ICCP')).toBeLessThan(tagged.indexOf('VP8L'));
     });
 
     test('a transparent image stays a transparent PNG, whatever its type or stored MIME says', async () => {
@@ -251,31 +259,27 @@ describe('collectExportMedia', () => {
         expect(Buffer.from(photo.data).includes('Eigen')).toBe(false);
     }, 60_000);
 
-    test('an SVG is its own bytes, which the transform Worker sanitizes, beside a PNG at its own size', async () => {
+    test('an SVG is its own bytes, which the transform Worker sanitizes and draws its PNG from', async () => {
         const svg = find(await collect('docx'), 'drawing.svg');
-        expect([svg.contentType, svg.width, svg.height]).toEqual(['image/svg+xml', 300, 150]);
+        expect([svg.contentType, svg.width, svg.height, svg.png]).toEqual([
+            'image/svg+xml',
+            undefined,
+            undefined,
+            undefined,
+        ]);
         expect(Buffer.from(svg.data).toString('utf8')).toBe(SVG);
-        const png = svg.png ?? new ArrayBuffer(0);
-        expect(signatureOf(png)).toBe(PNG_SIGNATURE);
-        const { width, height } = await sharp(Buffer.from(png)).metadata();
-        expect([width, height]).toEqual([300, 150]);
+        expect(find(await collect('docx'), 'html.svg').contentType).toBe('image/svg+xml');
     }, 60_000);
 
     test('media no reader can draw is dropped', async () => {
         const names = (await collect('docx')).map((item) => item.name);
         expect(names).not.toContain('broken.png');
         expect(names).not.toContain('clip.mp4');
-        // Its PNG is drawn from the file's own bytes.
-        expect(names).not.toContain('html.svg');
     }, 60_000);
 
-    test.each(['docx', 'html'] as const)(
-        '%s hands no SVG past SVG_INLINE_MAX_BYTES to the Worker',
-        async (format) => {
-            expect((await collect(format)).map((item) => item.name)).not.toContain('huge.svg');
-        },
-        60_000,
-    );
+    test('a docx hands no SVG past SVG_INLINE_MAX_BYTES to the Worker', async () => {
+        expect((await collect('docx')).map((item) => item.name)).not.toContain('huge.svg');
+    }, 60_000);
 
     test("a docx shows only what the screen preview shows: a PDF's media stays out, whatever its name", async () => {
         const names = (await collect('docx')).map((item) => item.name);
@@ -294,8 +298,10 @@ describe('collectExportMedia', () => {
                     ['clear.webp', 'image/webp'],
                     ['drawing.svg', 'image/svg+xml'],
                     ['html.svg', 'image/svg+xml'],
+                    ['huge.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
+                    ['tagged-lossless.webp', 'image/webp'],
                     ['photo.avif', 'image/webp'],
                     ['photo.jpg', 'image/webp'],
                     ['still.gif', 'image/webp'],
@@ -310,22 +316,4 @@ describe('collectExportMedia', () => {
         },
         60_000,
     );
-
-    test("an SVG's PNG rides the transfer list with its bytes", async () => {
-        const media = await collect('docx');
-        const svg = find(media, 'drawing.svg');
-        const transfer = transferListOf({
-            kind: 'export',
-            documentType: 'eigendoc',
-            format: 'docx',
-            title: 'doc.eigendoc',
-            media,
-            publicOrigin: undefined,
-            source: { snapshot: null, updates: [] },
-        });
-        if (!svg.png) throw new Error('no fallback');
-        expect(transfer).toContain(svg.data);
-        expect(transfer).toContain(svg.png);
-        expect(transfer).toHaveLength(media.length + 1);
-    }, 60_000);
 });

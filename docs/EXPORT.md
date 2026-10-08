@@ -12,7 +12,7 @@ Export and import both dispatch on the container type, not the mime type. A mime
 
 ## The Worker renders and the main thread prepares
 
-`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. A docx instead re-encodes each image from its source file as PNG or JPEG in the thumbnail Worker, uncached, so it takes one item at a time and queues no more once the client disconnects. The xlsx export skips it, because the writer carries cells only.
+`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. A docx instead re-encodes each image from its source file as PNG or JPEG in the thumbnail Worker, uncached, so it takes one item at a time and queues no more once the client disconnects. The prep spends from the export's 120 s transform deadline, so an export is one deadline end to end: once it is spent the prep queues no more media and the job fails as a timed-out one does. The xlsx export skips it, because the writer carries cells only.
 
 The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, renders, sanitizes and, for docx, converts. `@turbodocx/html-to-docx` and ExcelJS load lazily, so an HTML export evaluates neither. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays on the main thread: it is already a separate process.
 
@@ -39,14 +39,16 @@ The doc node renderers (`export/doc/render.ts`) are pure and shared with the pre
 
 ## The sanitizer keeps only data: references, because WeasyPrint fetches
 
-`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url()` in a `style` attribute or `<style>` element, every `src`, `poster` and `background`, and every SVG `href` must be a `data:` URI. Anything else is stripped, `srcset` is dropped and `@import` is removed from style text.
+`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url()` in a `style` attribute or `<style>` element, every `src`, `poster` and `background`, and every SVG `href` must be a `data:` URI. A `url()` or `href` may also be fragment-only (`#id`), a reference into the same document. Anything else is stripped, `srcset` is dropped and `@import` is removed from style text.
 
 Export embeds every resource it needs, so any other reference came from a collaborator's CRDT string: a text box's HTML, a sheet cell. WeasyPrint fetches such references while it renders, from the API host, and its CLI cannot restrict protocols. So the restriction runs inside the Worker on every assembled body, and docx and PDF inherit it.
 
 - Backslashes go before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches.
-- `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links.
+- `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links. jsdom names an SVG `<a>` in lowercase and an HTML one in uppercase, so the check ignores case.
+- DOMPurify drops every `<use>`. A profile that admits `<svg>` keeps one whose every `href` is fragment-only, because matplotlib draws its text with `<use href="#glyph">`; any other `<use>` goes.
+- Only the whitespace a URL or CSS parser trims counts as whitespace. A non-breaking space before `#` or `data:` makes a relative path of the rest.
 - The hooks are added and removed around each synchronous call, so they never leak to another DOMPurify user.
-- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML, without the characters XML can't hold; a file with no `<svg>` in it is dropped. The main thread hands over the inlined bytes as they are, capped at `SVG_INLINE_MAX_BYTES`: sanitizing a big drawing holds jsdom for seconds. A docx's PNG fallback is drawn from those same bytes in the thumbnail Worker, where librsvg fetches nothing from a buffer, so an SVG no XML reader can read leaves the docx.
+- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML, without the characters XML can't hold; a file with no `<svg>` in it is dropped. The main thread hands over the inlined bytes as they are, because sanitizing a big drawing holds jsdom for seconds. A docx caps them at `SVG_INLINE_MAX_BYTES`, because it also decodes them for the PNG fallback; HTML and PDF take any size. A docx's PNG fallback is drawn in the transform Worker from the sanitized XML its `svgBlip` carries, so the docx shows what the PDF shows. One librsvg cannot read leaves the docx. sharp reads physical units (`in`, `cm`, `mm`, `pt`, `pc`) at 72 dpi, so the figure's size scales a side the root `<svg>` gives in one by 96/72, the size the HTML export draws.
 
 Previews pass the same function the exact set of their own preview URLs ([PREVIEWS.md](PREVIEWS.md)). The tests are in `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 
@@ -76,7 +78,7 @@ The `pdf` arm is a single compositor page sized to the content plus 10 px on eac
 
 ## WeasyPrint dictates how a layer references its paint
 
-A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. The sanitizer rewrites a non-`data:` `url()` in CSS to `url()`, so a gradient moved into a style stops painting. And WeasyPrint resolves `url(#id)` only within the same `<svg>`.
+A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. WeasyPrint resolves `url(#id)` only within the same `<svg>`.
 
 An arrow's shaft is hidden under its label by a `<mask>`, because WeasyPrint ignores `clip-rule="evenodd"`. WeasyPrint applies a mask after drawing a node's children, so the reference goes on each shaft `<path>`, never a wrapping `<g>`. See `labelMask` and `maskShaft` in `packages/lib/src/vector/kinds/arrow-render.ts`.
 

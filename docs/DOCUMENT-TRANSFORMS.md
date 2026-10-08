@@ -24,7 +24,7 @@ Errors come back as a small typed code plus an optional HTTP status, never a clo
 
 ## The Worker graph stays light
 
-A module the Worker imports must never statically reach `preview/preview-cache.ts`. That would drag sharp and the sheet engine into every Worker, and it is why `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread) are separate files.
+A module the Worker imports must never statically reach `preview/preview-cache.ts`. That would drag sharp and the sheet engine into every Worker, and it is why `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread) are separate files. sharp itself loads lazily, only for a docx with an SVG to draw its PNG fallback from. The screen preview's size it caps that PNG at is pinned by a type-only import of `SCREEN_PREVIEW_MAX_SIZE`.
 
 Inside the Worker graph `ApiError` comes from `core/errors`, never the `core` barrel. The barrel pulls auth, the home relay and ExifTool into the Worker bundle: 10.3 MB against 4.7 MB. `buildfordocker` (`apps/api/package.json`) bundles each Worker entry, and that bundle is how purity is checked. Production runs `src/index.ts` directly, and ExcelJS, Turbodocx and mammoth stay external in `node_modules`.
 
@@ -40,7 +40,7 @@ Memory is the limit, not cores: one ExcelJS or Yjs heap exists at a time. A Bun 
 
 The queue holds 16 jobs at two priorities. Foreground is a user waiting. Background is the search extract and a stale preview's regeneration. A queued request holds its HTTP connection open, so foreground admission is capped by predicted wait, the summed admission costs of the queued and active jobs (at most 120 s), not by queue length alone. Background work may hold at most 8 of the 16 slots, so a mass reindex can't starve users. A dropped background job is safe: the next preview request enqueues it again, and so does the `contentDirty` bit, the flag on a `paths` row that marks its body for the search reindex ([SEARCH.md](SEARCH.md)).
 
-`TRANSFORM_LIMITS` (`runner.ts`) gives each kind a kill deadline and an admission cost. The deadline bounds a runaway. The cost is what a job is expected to take from the queue. It is keyed by kind, not document type, so the bytes previews run under the same `preview` row as the collab ones.
+`TRANSFORM_LIMITS` (`runner.ts`) gives each kind a kill deadline and an admission cost. The deadline bounds a runaway, and an export's media prep spends from it. The cost is what a job is expected to take from the queue. It is keyed by kind, not document type, so the bytes previews run under the same `preview` row as the collab ones.
 
 Admission is checked before the expensive preparation: the Yjs capture, export media, upload copies, the convert source read. A refused job pays for nothing. It gets a readable 503 ("The server is busy…"), which `useExportDocument` shows verbatim.
 

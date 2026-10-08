@@ -14,6 +14,7 @@ import {
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -940,6 +941,31 @@ describe('document transform (eigendoc)', () => {
         expect(media).not.toContain('beacon');
     }, 120_000);
 
+    // HTML's &nbsp; in an SVG file: librsvg rejects the raw bytes, and the Worker's pass writes them as XML.
+    test("a docx draws an SVG's PNG from the XML its svgBlip carries, so the docx shows what the PDF shows", async () => {
+        const { mount, path } = golden;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#2563eb"/><text y="15">a&nbsp;b</text></svg>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'export',
+                documentType: 'eigendoc',
+                format: 'docx',
+                title: path.name,
+                media: [{ name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) }],
+                publicOrigin: undefined,
+                source: await captureCollabSource(mount, path),
+            },
+            EXPORT_OPTIONS,
+        );
+        const zip = await JSZip.loadAsync(exportBytes(response));
+        const part = (pattern: RegExp) => zip.file(pattern)[0]?.async('nodebuffer') ?? Buffer.alloc(0);
+        const xml = await part(/^word\/media\/.*\.svg$/);
+        const png = await part(/^word\/media\/.*\.png$/);
+        expect(xml.toString('utf8')).toContain('a b');
+        const raw = (bytes: Buffer) => sharp(bytes).ensureAlpha().raw().toBuffer();
+        expect((await raw(png)).equals(await raw(xml))).toBe(true);
+    }, 120_000);
+
     test('a docx export whose client is gone re-encodes none of its media', async () => {
         const controller = new AbortController();
         controller.abort();
@@ -957,6 +983,38 @@ describe('document transform (eigendoc)', () => {
             spy.mockRestore();
         }
         expect(calls).toBe(0);
+    }, 120_000);
+
+    // The prep's clock is skewed and its deadline signal fired by hand, so no test waits out 120 s.
+    test("a docx's media prep spends from the export's deadline, and once it is spent queues no more media and times out", async () => {
+        const doc = await seedGoldenDocument('deadline-doc', 'doc');
+        await seedDocumentMedia(doc.mount, doc.path, 'second.png', TEST_PNG_BYTES);
+        const { deadlineMs } = TRANSFORM_LIMITS.export;
+        const deadline = new AbortController();
+        const now = performance.now.bind(performance);
+        let skew = 0;
+        const clock = spyOn(performance, 'now').mockImplementation(() => now() + skew);
+        const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(() => deadline.signal);
+        const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
+            skew += deadlineMs;
+            deadline.abort();
+            return null;
+        });
+        let failure: unknown;
+        let calls = -1;
+        try {
+            failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
+                (err: unknown) => err,
+            );
+            calls = encode.mock.calls.length;
+            expect(timeout.mock.calls).toEqual([[deadlineMs]]);
+        } finally {
+            clock.mockRestore();
+            timeout.mockRestore();
+            encode.mockRestore();
+        }
+        expect(calls).toBe(1);
+        expect(String(failure)).toContain('eigendoc export transform failed (timeout): Document transform timed out');
     }, 120_000);
 
     test('docx export through the Worker equals the writer on the main thread and matches the pinned golden hash', async () => {
