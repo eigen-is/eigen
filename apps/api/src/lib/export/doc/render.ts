@@ -62,11 +62,8 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
-// A wrapped figure's distance from the text around it, in em of the body text; side is the text's side, the margin's
-// side is 0. The docx writer floats its figures by the same.
-export const FIGURE_WRAP_MARGIN_EM = { top: 0.25, bottom: 0.5, side: 1 };
-
-// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
+// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview. Spans, which
+// a paragraph can hold, drawn by eigen-prose.css's .figure rules as the editor's node view is.
 export function renderFigureNode(
     attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
@@ -78,7 +75,6 @@ export function renderFigureNode(
     const caption = attrs.caption;
     const rawWidth = attrs.width;
     const width = typeof rawWidth === 'number' && Number.isFinite(rawWidth) ? Math.round(rawWidth) : null;
-    const alignment = attrs.alignment;
 
     const imgSrc = resolveImgSrc(mediaName, src);
 
@@ -87,17 +83,8 @@ export function renderFigureNode(
     const img = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
         : '';
-    const cap = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : '';
-
-    const layout = attrs.layout || 'block';
-
-    const { top, bottom, side } = FIGURE_WRAP_MARGIN_EM;
-    if (layout === 'wrap-left')
-        return `<figure style="float: left; margin: ${top}em ${side}em ${bottom}em 0">${img}${cap}</figure>`;
-    if (layout === 'wrap-right')
-        return `<figure style="float: right; margin: ${top}em 0 ${bottom}em ${side}em">${img}${cap}</figure>`;
-
-    const align = alignment || 'center';
-    const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
-    return `<figure style="display: flex; flex-direction: column; align-items: ${justify}">${img}${cap}</figure>`;
+    const cap = caption ? `<span class="figcaption">${escapeHtml(caption)}</span>` : '';
+    const layout = escapeHtml(String(attrs.layout || 'block'));
+    const alignment = escapeHtml(String(attrs.alignment || 'center'));
+    return `<span class="figure" data-layout="${layout}" data-alignment="${alignment}">${img}${cap}</span>`;
 }

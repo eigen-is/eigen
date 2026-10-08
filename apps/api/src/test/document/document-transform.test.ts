@@ -769,11 +769,12 @@ describe('document transform (xlsx import)', () => {
 // And again when the flattener dropped the CSS comments and prefixed every item of a comma list, the body stopped repeating the prose size and line height, and headings inherit the font size: those lines, and nothing else.
 // And again when the flattener kept declarations that precede a nested rule on their own rule, so the editor's .tiptap block reaches the export (repeated spaces kept, ligatures off), and the page wrapper lost its whitespace: those lines, and nothing else.
 // And again when the print extras stopped repeating the body font and color eigen-prose sets: that rule, and nothing else.
+// The preview and both doc hashes moved when a figure became spans its paragraph holds, the .figure box the editor draws, and a table's margin, a list item's floats and the float margins moved into eigen-prose.css: those, and nothing else.
 // The docx hash is the writer's own output (to-docx.ts) with its embedded fonts; its image is the thumbnail
 // Worker's PNG of the source, so a writer, font or encoder change moves it.
-const GOLDEN_DOC_PREVIEW_SHA256 = 'f4776e8690159b4505abd44544645e9d9220bb28d08d18edb76772fcdc0a4029';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '768861141c05b1869948f8dc4095667c37239bdc6728d1a294f5a0fcddf49f7d';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '768861141c05b1869948f8dc4095667c37239bdc6728d1a294f5a0fcddf49f7d';
+const GOLDEN_DOC_PREVIEW_SHA256 = '21b8ebbd960fe05ac9c8feb001078b51bb1db9d7363b6322a0a1e90c00a8cac3';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'eb4b1b56d23d624a98aaece876976e54aed6437a142cb7c538a88c3fd1c33af9';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'eb4b1b56d23d624a98aaece876976e54aed6437a142cb7c538a88c3fd1c33af9';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '3a0a9312864369c07fc5577b719fdb022a88ba627af88e6692a05a8446e56ede';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';

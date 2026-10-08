@@ -11,7 +11,7 @@ import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { proseValue, proseValueIfSet } from './prose-css';
-import { FIGURE_WRAP_MARGIN_EM, type HastNode, highlightCode } from './render';
+import { type HastNode, highlightCode } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
 export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
@@ -935,15 +935,15 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         return figure;
     }
     // A borderless floating one-cell table, the one wrap that keeps the caption under the image in every reader.
-    const em = (value: number) => twips(value * BODY.sizePt);
-    const sideMargin = em(FIGURE_WRAP_MARGIN_EM.side);
+    const float = proseValue(`.eigen-prose .figure[data-layout="wrap-${side}"]`, 'margin');
+    const fromText = (edge: 'top' | 'right' | 'bottom' | 'left') => twips(cssPt(boxSide(float, edge), BODY.sizePt));
     const tw = cx / EMU_PER_TWIP;
     const nil = TABLE_BORDER_SIDES.map((edge) => `<w:${edge} w:val="nil"/>`).join('');
     const unpadded = BORDER_SIDES.map((edge) => `<w:${edge} w:w="0" w:type="dxa"/>`).join('');
     // A list or quote indents only the left, so a right float keeps the margin's edge.
     const x = side === 'left' && context.indent > 0 ? `w:tblpX="${context.indent}"` : `w:tblpXSpec="${side}"`;
     const tblPr = [
-        `<w:tblpPr w:leftFromText="${side === 'right' ? sideMargin : 0}" w:rightFromText="${side === 'left' ? sideMargin : 0}" w:topFromText="${em(FIGURE_WRAP_MARGIN_EM.top)}" w:bottomFromText="${em(FIGURE_WRAP_MARGIN_EM.bottom)}" w:vertAnchor="text" w:horzAnchor="margin" ${x} w:tblpY="1"/>`,
+        `<w:tblpPr w:leftFromText="${fromText('left')}" w:rightFromText="${fromText('right')}" w:topFromText="${fromText('top')}" w:bottomFromText="${fromText('bottom')}" w:vertAnchor="text" w:horzAnchor="margin" ${x} w:tblpY="1"/>`,
         '<w:tblOverlap w:val="never"/>',
         `<w:tblW w:w="${tw}" w:type="dxa"/>`,
         `<w:tblBorders>${nil}</w:tblBorders>`,
