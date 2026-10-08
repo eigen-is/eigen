@@ -3,7 +3,7 @@
 // here as the one source of truth.
 
 // A C0 control other than TAB, CR, LF: not a content-line TEXT char (RFC 5545 § 3.1, RFC 6350 § 3.3). The
-// serialize seams below strip it; the vCard ingest parse rejects it (../vcard/ast.ts).
+// serialize seams below strip it; the vCard ingest parse rejects it (apps/api/src/lib/vcard/ast.ts).
 export function isIllegalC0(code: number): boolean {
     return code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d;
 }
