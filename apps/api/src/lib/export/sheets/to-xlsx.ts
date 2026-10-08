@@ -34,6 +34,7 @@ import type {
     Cell as XlsxCell,
 } from 'exceljs';
 import JSZip from 'jszip';
+import { cssColorToHex } from '../colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
 
@@ -338,23 +339,15 @@ function toBorder(sides: CellBorderSides): Partial<Borders> | null {
     return Object.keys(border).length > 0 ? border : null;
 }
 
-// Inline-string segments carry the cell's hex defaults or rgb(…) strings produced by
-// the editor's CSS pipeline (state/modules/inline-string.ts).
-function colorToArgb(color: string): string | undefined {
-    if (color.startsWith('#')) return hexToArgb(color);
-    const rgb = color.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
-    if (!rgb) return undefined;
-    const hex = (i: number) => Number(rgb[i]).toString(16).padStart(2, '0').toUpperCase();
-    return `FF${hex(1)}${hex(2)}${hex(3)}`;
-}
-
 function inlineSegmentsToRichText(segments: InlineStringSegment[] | undefined): RichText[] | null {
     if (!segments) return null;
     const runs: RichText[] = [];
     for (const seg of segments) {
         if (!seg.v) continue;
         const fontName = resolveFontFamily(seg.ff);
-        const argb = seg.fc ? colorToArgb(seg.fc) : undefined;
+        // The cell's hex defaults or the rgb(…) strings of the editor's CSS pipeline (state/modules/inline-string.ts).
+        const hex = seg.fc ? cssColorToHex(seg.fc) : undefined;
+        const argb = hex && `FF${hex}`;
         const font: Partial<Font> = {
             ...(seg.bl === 1 && { bold: true }),
             ...(seg.it === 1 && { italic: true }),
