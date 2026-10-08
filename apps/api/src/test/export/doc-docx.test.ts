@@ -606,10 +606,15 @@ describe('docx writer — marks', () => {
         expect(await runProps({ type: 'textStyle', attrs: { color: 'red', fontFamily: 'Comic Sans' } })).toEqual([]);
     });
 
-    test('a highlight is a shading fill, yellow without a color', async () => {
+    // A pasted <mark style="background-color: yellow"> stores the name: Highlight parses background-color.
+    test('a highlight is a shading fill, yellow without a color or with one Office cannot spell', async () => {
         expect(await runProps({ type: 'highlight', attrs: { color: '#fef08a' } })).toEqual([['shd', 'FEF08A']]);
-        expect(await runProps({ type: 'highlight', attrs: { color: null } })).toEqual([['shd', 'FFFF00']]);
-        expect(await runProps({ type: 'highlight', attrs: { color: 'rgba(0, 0, 0, 0)' } })).toEqual([]);
+        for (const color of [null, 'yellow', 'var(--highlight)']) {
+            expect(await runProps({ type: 'highlight', attrs: { color } })).toEqual([['shd', 'FFFF00']]);
+        }
+        for (const color of ['rgba(0, 0, 0, 0)', 'transparent']) {
+            expect(await runProps({ type: 'highlight', attrs: { color } })).toEqual([]);
+        }
         const shd = only(descendants(await bodyOf(doc(p(text('x', { type: 'highlight' })))), W, 'shd'));
         expect([w(shd, 'val'), w(shd, 'color')]).toEqual(['clear', 'auto']);
     });

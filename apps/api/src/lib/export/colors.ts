@@ -5,9 +5,17 @@ export function cssColorToHex(color: string): string | undefined {
     const value = color.trim();
     const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
     if (hex) return (hex.length === 3 ? [...hex].map((digit) => digit + digit).join('') : hex).toUpperCase();
-    const rgb = value.match(/^rgba?\((\d{1,3})[,\s]+(\d{1,3})[,\s]+(\d{1,3})(?:\s*[,/]\s*([\d.]+)%?)?\s*\)$/i);
+    const rgb = value.match(RGB);
     if (!rgb || Number(rgb[4] ?? 1) === 0) return undefined;
     const channels = rgb.slice(1, 4).map(Number);
     if (channels.some((channel) => channel > 255)) return undefined;
     return channels.map((channel) => channel.toString(16).padStart(2, '0').toUpperCase()).join('');
 }
+
+// The two spellings a browser's style gives a color that shows nothing: the keyword and an rgba() of alpha 0.
+export function isTransparentCssColor(color: string): boolean {
+    const value = color.trim();
+    return /^transparent$/i.test(value) || Number(value.match(RGB)?.[4] ?? 1) === 0;
+}
+
+const RGB = /^rgba?\((\d{1,3})[,\s]+(\d{1,3})[,\s]+(\d{1,3})(?:\s*[,/]\s*([\d.]+)%?)?\s*\)$/i;

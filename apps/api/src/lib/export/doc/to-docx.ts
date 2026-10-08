@@ -7,7 +7,7 @@ import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import JSZip from 'jszip';
 import { common, createLowlight } from 'lowlight';
 import type { ExportMedia } from '../../document/transform/protocol';
-import { cssColorToHex } from '../colors';
+import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { proseValue, proseValueIfSet } from './prose-css';
 import { FIGURE_WRAP_MARGIN_EM, type HastNode, highlightCode } from './render';
 
@@ -1031,8 +1031,12 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
         }),
     ],
     ['textStyle', (attrs) => ({ color: colorOf(attrs['color']), font: fontOf(attrs['fontFamily']) })],
-    // No color is the UA's yellow <mark>; a transparent one shades nothing.
-    ['highlight', (attrs) => ({ shading: attrs['color'] == null ? 'FFFF00' : colorOf(attrs['color']) })],
+    // A transparent color shades nothing; no color, or one Office can't spell (a named one), is the UA's yellow <mark>.
+    [
+        'highlight',
+        ({ color }) =>
+            typeof color === 'string' && isTransparentCssColor(color) ? {} : { shading: colorOf(color) ?? 'FFFF00' },
+    ],
     // The w:hyperlink around the runs carries it.
     ['link', () => ({})],
     // Nothing until the comments part exists.

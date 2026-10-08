@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cssColorToHex } from '../../lib/export/colors';
+import { cssColorToHex, isTransparentCssColor } from '../../lib/export/colors';
 
 describe('cssColorToHex', () => {
     test.each([
@@ -29,5 +29,18 @@ describe('cssColorToHex', () => {
         'rgba(255, 0, 0, 0%)',
     ])('%s is no color Office can hold', (color) => {
         expect(cssColorToHex(color)).toBeUndefined();
+    });
+
+    test.each([
+        ['transparent', true],
+        [' Transparent ', true],
+        ['rgba(0, 0, 0, 0)', true],
+        ['rgb(0 0 0 / 0%)', true],
+        ['rgba(255, 0, 0, 0.5)', false],
+        ['yellow', false],
+        ['#000', false],
+        ['', false],
+    ])('%s is transparent: %s', (color, transparent) => {
+        expect(isTransparentCssColor(color)).toBe(transparent);
     });
 });
