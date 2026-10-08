@@ -148,6 +148,7 @@
     blockquote,
     pre,
     table,
+    .tableWrapper,
     ul[data-type="taskList"] {
         clear: both;
     }
@@ -236,7 +237,16 @@
     table {
         border-collapse: collapse;
         width: 100%;
+    }
+
+    /* The editor's table scrolls in TipTap's wrapper, which takes the margin so it collapses as the export's table does. */
+    table,
+    .tableWrapper {
         margin: 0.75em 0;
+    }
+
+    .tableWrapper > table {
+        margin: 0;
     }
 
     th,
@@ -403,7 +413,6 @@
 
     .tableWrapper {
         overflow-x: auto;
-        margin: 0.75em 0;
     }
 
     /* Selection */
