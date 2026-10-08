@@ -110,7 +110,7 @@ docx joins xlsx as a format with its own writer, so EXPORT.md's rule becomes "ev
 | Color | `w:color` |
 | Highlight | `w:shd` fill (the multicolor highlight takes any color; `w:highlight` knows sixteen) |
 | Link | `w:hyperlink` with an external relationship |
-| Bullet, ordered, nested list | `numbering.xml`: one `w:abstractNum` per list with the start in its level, a `w:num` pointing at it, `w:ilvl` for depth (Apple's renderer ignored a shared abstract definition with a start override). Built: one per ordered list, while bullet lists at one indent share one, since Word caps the definitions a file holds |
+| Bullet, ordered, nested list | `numbering.xml`: one `w:abstractNum` per list with the start in its level, a `w:num` pointing at it, `w:ilvl` for depth (Apple's renderer ignored a shared abstract definition with a start override). Built: one per ordered list, while bullet lists at one indent share one, which keeps `numbering.xml` small, and a bullet has no counter to restart |
 | Task item | a `w14:checkbox` content control with its checked state |
 | Table | `w:tblGrid` from `colwidth`, `w:gridSpan`, `w:vMerge`, `w:tblHeader` on a row whose cells are all header cells, borders as the editor draws them |
 | Figure | `wp:inline` with `wp:extent` from `width` and the image's ratio; caption as a paragraph in Word's `Caption` style; wrap layouts as a borderless floating one-cell table holding the image and its caption (built so instead of `wp:anchor` + `wrapSquare`: the one wrap that keeps the caption under the image in every reader) |
