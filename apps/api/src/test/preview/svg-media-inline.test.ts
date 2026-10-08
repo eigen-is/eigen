@@ -4,11 +4,12 @@ import { join } from 'node:path';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { SVG_INLINE_MAX_BYTES } from '../../lib/document/transform/protocol';
 import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 import { collectExportMedia } from '../../lib/export/media';
 import { sanitizeExportMedia } from '../../lib/export/sanitize';
 import { Mount } from '../../lib/mount/mount';
-import { inlineSvgMediaRefs, SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
+import { inlineSvgMediaRefs } from '../../lib/preview/svg-media-inline';
 import { createTestMountConfig } from '../mount-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
