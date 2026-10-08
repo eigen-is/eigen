@@ -51,7 +51,7 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath, docx: b
             generateImagePreview(source, mime, file.name, '', file.id, { format, maxSize: DOCX_MAX_SIZE });
         let format: 'png' | 'jpeg' = (await takesJpeg(mount, file, mime)) ? 'jpeg' : 'png';
         let result = await encode(format);
-        // JPEG has no alpha: a photo's type that holds one anyway (a PNG stored as JPEG, a HEIF with alpha) takes PNG.
+        // JPEG has no alpha: a source that holds one (a VP8X WebP, an AVIF, a PNG stored as JPEG) takes PNG.
         if (result?.hasAlpha && format === 'jpeg') {
             format = 'png';
             result = await encode(format);
@@ -91,16 +91,17 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath, docx: b
     };
 }
 
-// Lossy codings, which JPEG keeps as they are. Every other type takes PNG, which keeps alpha and every pixel.
-const JPEG_SOURCES = new Set(['image/jpeg', 'image/heic', 'image/heif']);
+// Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha
+// retries as PNG.
+const PNG_SOURCES = new Set(['image/png', 'image/gif']);
 
-// A WebP's first chunk names its coding, which the thumbnail Worker doesn't report: only a plain lossy VP8 is a
-// photo; VP8L is lossless and VP8X carries alpha, animation or ICC.
+// A WebP's first chunk names its coding, which the thumbnail Worker doesn't report: VP8L is lossless; VP8 is lossy,
+// and VP8X mostly so, its alpha caught by the retry.
 async function takesJpeg(mount: Mount, file: DrivePath, mime: string): Promise<boolean> {
-    if (JPEG_SOURCES.has(mime)) return true;
-    if (mime !== 'image/webp') return false;
+    if (PNG_SOURCES.has(mime)) return false;
+    if (mime !== 'image/webp') return true;
     const header = await mount.readBytes(file.id, 16);
-    return header !== null && Buffer.from(header).toString('latin1', 12, 16) === 'VP8 ';
+    return header === null || Buffer.from(header).toString('latin1', 12, 16) !== 'VP8L';
 }
 
 // The thumbnail Worker's Buffer wraps exactly the ArrayBuffer it transferred back, so it is handed on uncopied.

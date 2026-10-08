@@ -83,6 +83,15 @@ describe('collectExportMedia', () => {
             ],
             ['lossless.webp', await gradient(320, 200).webp({ lossless: true }).toBuffer()],
             ['lossy.webp', await gradient(320, 200).webp({ quality: 80 }).toBuffer()],
+            // VP8X: a lossy WebP whose EXIF takes the extended header, no alpha.
+            [
+                'tagged.webp',
+                await gradient(320, 200)
+                    .webp({ quality: 80 })
+                    .withExif({ IFD0: { Copyright: 'Eigen' } })
+                    .toBuffer(),
+            ],
+            ['photo.avif', await gradient(320, 200).avif().toBuffer()],
             ['drawing.svg', Buffer.from(SVG)],
             // Past the inliner's cap, which binds only what it builds: nothing here is inlined.
             [
@@ -117,6 +126,7 @@ describe('collectExportMedia', () => {
             gif: 'image/gif',
             jpg: 'image/jpeg',
             webp: 'image/webp',
+            avif: 'image/avif',
             tiff: 'image/tiff',
             svg: 'image/svg+xml',
             mp4: 'video/mp4',
@@ -175,7 +185,7 @@ describe('collectExportMedia', () => {
         expect(calls).toBe(1);
     }, 60_000);
 
-    test('a docx takes a PNG of a lossless source and a JPEG of a photo, with the Worker size', async () => {
+    test('a docx takes a PNG of a lossless source and a JPEG of every other, with the Worker size', async () => {
         const media = await collect('docx');
         const kinds = (name: string) => {
             const { contentType, data, width, height } = find(media, name);
@@ -186,12 +196,19 @@ describe('collectExportMedia', () => {
         expect(kinds('lossless.webp')).toEqual(['image/png', PNG_SIGNATURE, 320, 200]);
         expect(kinds('photo.jpg')).toEqual(['image/jpeg', JPEG_SIGNATURE, 600, 400]);
         expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
+        expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
+        expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         for (const item of media) expect(item.png === undefined).toBe(item.contentType !== 'image/svg+xml');
     }, 60_000);
 
-    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with alpha', () => {
+    test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with EXIF or alpha', () => {
         const chunk = (name: string) => sources.get(name)?.toString('latin1', 12, 16);
-        expect([chunk('lossless.webp'), chunk('lossy.webp'), chunk('clear.webp')]).toEqual(['VP8L', 'VP8 ', 'VP8X']);
+        expect(['lossless.webp', 'lossy.webp', 'tagged.webp', 'clear.webp'].map(chunk)).toEqual([
+            'VP8L',
+            'VP8 ',
+            'VP8X',
+            'VP8X',
+        ]);
     });
 
     test('a transparent image stays a transparent PNG, whatever its type or stored MIME says', async () => {
@@ -279,8 +296,10 @@ describe('collectExportMedia', () => {
                     ['html.svg', 'image/svg+xml'],
                     ['lossless.webp', 'image/webp'],
                     ['lossy.webp', 'image/webp'],
+                    ['photo.avif', 'image/webp'],
                     ['photo.jpg', 'image/webp'],
                     ['still.gif', 'image/webp'],
+                    ['tagged.webp', 'image/webp'],
                     ['wide.png', 'image/webp'],
                 ].sort(),
             );
