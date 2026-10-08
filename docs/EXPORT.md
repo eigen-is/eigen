@@ -39,11 +39,13 @@ The doc node renderers (`export/doc/render.ts`) are pure and shared with the pre
 
 ## The sanitizer keeps only data: references, because WeasyPrint fetches
 
-`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url()` in a `style` attribute or `<style>` element, every `src`, `poster` and `background`, and every SVG `href` must be a `data:` URI. A `url()` or `href` may also be fragment-only (`#id`), a reference into the same document. Anything else is stripped, `srcset` is dropped and `@import` is removed from style text.
+`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url(`, every `src`, `poster` and `background`, and every SVG `href` must open a `data:` URI. A `url(` or `href` may also be fragment-only (`#id`), a reference into the same document. `srcset` is dropped. A `url(` that opens anything else costs the whole attribute it is in, and in a `<style>` element the statement it is in; so do `@import` and the string forms of `image-set()`, `image()`, `cross-fade()` and `element()`, which fetch with no `url(`.
 
 Export embeds every resource it needs, so any other reference came from a collaborator's CRDT string: a text box's HTML, a sheet cell. WeasyPrint fetches such references while it renders, from the API host, and its CLI cannot restrict protocols. So the restriction runs inside the Worker on every assembled body, and docx and PDF inherit it.
 
-- Backslashes go before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches.
+- The rule reads the `url(` token, in any case, never a `url(…)` pair. A quoted URL can hold a `)` or a quote, so a pair regex ends early on `url('http://host/a)')` and WeasyPrint fetches it. It is the same refusal `eml-preview.ts` makes for a message's CSS.
+- Every attribute value is scanned, not only `style`: an SVG `fill`, `filter`, `mask`, `clip-path` or `marker-*` is CSS too.
+- Backslashes go from `style` and `<style>` text before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches. Any other attribute whose backslash comes before a `(` is dropped.
 - `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links. jsdom names an SVG `<a>` in lowercase and an HTML one in uppercase, so the check ignores case.
 - DOMPurify drops every `<use>`. A profile that admits `<svg>` keeps one whose every `href` is fragment-only, because matplotlib draws its text with `<use href="#glyph">`; any other `<use>` goes.
 - Only the whitespace a URL or CSS parser trims counts as whitespace. A non-breaking space before `#` or `data:` makes a relative path of the rest.
