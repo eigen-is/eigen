@@ -334,8 +334,10 @@ type RunProps = {
     vertAlign?: 'subscript' | 'superscript';
 };
 
-// A paragraph its wrapped figures emptied is only a holder: an item opens it, every other flow drops it.
-type Paragraph = { props: ParagraphProps; runs: string; emptied?: true };
+// A figure's paragraphs carry its margin as an inset, inside their own spacing, which never collapses.
+type Paragraph = { props: ParagraphProps; runs: string; inset?: Inset };
+
+type Inset = { top: number; bottom: number };
 
 // The block after an in-flow table takes its after; a floating one holds a wrapped figure and keeps no margin.
 type Block = Paragraph | { table: string; after?: number; float?: true };
@@ -482,6 +484,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             context.pkg.checkboxes = true;
             const after = proseTwips('.eigen-prose ul[data-type="taskList"] li', 'margin-bottom');
             return itemOf(node, done, after, (first, inner) => ({
+                ...first,
                 props: { ...first.props, ind: { left: inner.indent, hanging: LIST_LEVEL } },
                 runs: checkboxXml(checked) + first.runs,
             }));
@@ -493,16 +496,17 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
-    let pieces = 0;
+    // The in-flow pieces a figure splits a textblock into, by index in blocks.
+    const pieces: number[] = [];
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
         const line = familyLine(props.style, useFace(context.pkg, {}, props.style), faces);
         let own = line === undefined ? props : { ...props, spacing: { ...props.spacing, line } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
-        if (pieces++ > 0 && STYLES.get(props.style ?? '')?.pPr?.outlineLvl !== undefined)
+        if (pieces.length > 0 && STYLES.get(props.style ?? '')?.pPr?.outlineLvl !== undefined)
             own = { ...own, outlineLvl: 9 };
-        blocks.push({ props: own, runs });
+        pieces.push(blocks.push({ props: own, runs }) - 1);
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
@@ -510,7 +514,10 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();
-            for (const block of figure) blocks.push(block);
+            for (const block of figure) {
+                const index = blocks.push(block) - 1;
+                if (!('table' in block)) pieces.push(index);
+            }
             continue;
         }
         if (INLINES.has(node.type ?? '')) {
@@ -525,12 +532,27 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
     }
-    if (inline.length > 0 || (textblock && blocks.length === 0)) flush();
-    else if (textblock && blocks.every((block) => 'float' in block)) {
-        useFace(context.pkg, {}, props.style);
-        blocks.push({ props, runs: '', emptied: true });
-    }
+    // A textblock its wrapped figures emptied keeps its line, as the editor's trailing break does.
+    if (inline.length > 0 || (textblock && pieces.length === 0)) flush();
+    if (textblock) shareMargins(blocks, pieces, props);
     return blocks;
+}
+
+// The pieces share their textblock's margins: the first takes the one above, the last the one below, none at a split.
+function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps): void {
+    const before = props.spacing?.before ?? styleSpacing(props.style, 'before');
+    const after = props.spacing?.after ?? styleSpacing(props.style, 'after');
+    for (const [order, index] of pieces.entries()) {
+        const piece = blocks[index];
+        if (!piece || 'table' in piece) continue;
+        const first = order === 0;
+        const last = order === pieces.length - 1;
+        const own: Spacing = {};
+        if (piece.inset ? first : !first && before > 0) own.before = first ? before : 0;
+        if (piece.inset ? last : !last && after > 0) own.after = last ? after : 0;
+        if (own.before !== undefined || own.after !== undefined)
+            blocks[index] = { ...piece, props: { ...piece.props, spacing: { ...piece.props.spacing, ...own } } };
+    }
 }
 
 const BOXED = new Set(['codeBlock', 'blockquote']);
@@ -563,7 +585,7 @@ function blocksXml(written: Block[]): string {
         block && 'table' in block && !block.float ? (block.after ?? TABLE_LOOK.margin) : undefined;
     const spacer = (before: number | undefined) =>
         paragraphXml(before === undefined ? SPACER : { props: { style: 'Spacer', spacing: { before } }, runs: '' });
-    const blocks = written.filter((block) => 'table' in block || !block.emptied);
+    const blocks = withInsets(written);
     return blocks
         .map((block, index) => {
             const previous = blocks[index - 1];
@@ -573,6 +595,35 @@ function blocksXml(written: Block[]): string {
             return `${between}${block.table}${index === blocks.length - 1 ? spacer(below(block)) : ''}`;
         })
         .join('');
+}
+
+// Readers collapse adjacent spacing to the larger, so an inset paragraph writes each whole gap on its side: the
+// neighbour's inset, the two collapsed, its own inset. A float is out of the flow.
+function withInsets(blocks: Block[]): Block[] {
+    const flow = blocks.filter((block) => !('table' in block && block.float));
+    const outer = (block: Block, side: 'before' | 'after') =>
+        'table' in block
+            ? side === 'after'
+                ? (block.after ?? TABLE_LOOK.margin)
+                : TABLE_LOOK.margin
+            : (block.props.spacing?.[side] ?? styleSpacing(block.props.style, side));
+    const inset = (block: Block | undefined, side: keyof Inset) =>
+        block && !('table' in block) ? (block.inset?.[side] ?? 0) : 0;
+    const spaced = new Map<Block, Block>();
+    for (const [index, block] of flow.entries()) {
+        if ('table' in block || !block.inset) continue;
+        const previous = flow[index - 1];
+        const next = flow[index + 1];
+        const before = previous
+            ? inset(previous, 'bottom') + Math.max(outer(previous, 'after'), outer(block, 'before'))
+            : outer(block, 'before');
+        const after = next
+            ? Math.max(outer(block, 'after'), outer(next, 'before')) + inset(next, 'top')
+            : outer(block, 'after');
+        const spacing = { ...block.props.spacing, before: before + block.inset.top, after: after + block.inset.bottom };
+        spaced.set(block, { ...block, props: { ...block.props, spacing } });
+    }
+    return blocks.map((block) => spaced.get(block) ?? block);
 }
 
 // A plain paragraph takes its container's style and spacing; a heading in a quote takes the quote's bar directly.
@@ -601,7 +652,8 @@ function withAfter(blocks: Block[], after: number): Block[] {
         if (after <= (last.after ?? TABLE_LOOK.margin)) return blocks;
         return [...blocks.slice(0, -1), { ...last, after }];
     }
-    if (last.props.style === 'PageBreak' || last.props.style === 'Spacer') return blocks;
+    if (last.props.style === 'PageBreak' || (last.props.style === 'Spacer' && last.runs !== CLEAR_FLOATS))
+        return blocks;
     if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after'))) return blocks;
     return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
 }
@@ -692,10 +744,16 @@ function itemOf(
     const found = blocks.findIndex((block) => !('float' in block));
     const index = found === -1 ? blocks.length : found;
     const first = blocks[index];
-    if (first && !('table' in first) && first.props.style === inner.style)
-        return blocks.with(index, open({ props: first.props, runs: first.runs }, inner));
-    return blocks.toSpliced(index, 0, open({ props, runs: '' }, inner));
+    const opened =
+        first && !('table' in first) && first.props.style === inner.style
+            ? blocks.with(index, open(first, inner))
+            : blocks.toSpliced(index, 0, open({ props, runs: '' }, inner));
+    // The editor's item contains its floats: a clearing break starts the next item below them, on a single-spaced hairline.
+    if (!blocks.some((block) => 'table' in block && block.float)) return opened;
+    return [...opened, { props: { style: 'Spacer', spacing: { after, line: 240 } }, runs: CLEAR_FLOATS }];
 }
+
+const CLEAR_FLOATS = '<w:r><w:br w:type="textWrapping" w:clear="all"/></w:r>';
 
 const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 
@@ -900,13 +958,19 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const caption = attrs['caption'];
     const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
     if (captionRuns) useFace(context.pkg, {}, 'Caption');
-    const captionParagraph = {
-        props: { style: 'Caption', ind: indentOf('Caption', context), jc },
+    const margin = proseValue('.eigen-prose .figure', 'margin');
+    const top = twips(cssPt(boxSide(margin, 'top'), BODY.sizePt));
+    const bottom = twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt));
+    const captionBefore = styleSpacing('Caption', 'before');
+    const captionParagraph = (before: number, inset: Inset): Paragraph => ({
+        props: { style: 'Caption', spacing: { before, after: 0 }, ind: indentOf('Caption', context), jc },
         runs: `<w:r>${captionRuns}</w:r>`,
-    };
+        inset,
+    });
     const mediaName = attrs['mediaName'];
     const image = typeof mediaName === 'string' ? imageOf(mediaName, context.pkg) : undefined;
-    if (!image) return captionRuns ? [captionParagraph] : [];
+    // The caption alone is the figure's box, as the HTML's.
+    if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);
     const width = attrs['width'];
     const set = typeof width === 'number' && Number.isFinite(width) ? Math.round(width) : 0;
@@ -921,17 +985,13 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         typeof alt === 'string' ? alt : '',
         context.pkg,
     );
-    const margin = proseValue('.eigen-prose figure', 'margin');
     if (!side) {
-        const spacing = {
-            before: twips(cssPt(boxSide(margin, 'top'), BODY.sizePt)),
-            // The caption takes the figure's margin below.
-            after: captionRuns ? 0 : twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt)),
-            // Single, or LibreOffice adds 5 pt above every image.
-            line: 240,
-        };
-        const figure: Block[] = [{ props: { spacing, ind: indentOf(undefined, context), jc }, runs: drawing }];
-        if (captionRuns) figure.push(captionParagraph);
+        // Single, or LibreOffice adds 5 pt above every image.
+        const spacing = { before: 0, after: 0, line: 240 };
+        // The caption takes the figure's margin below.
+        const inset = { top, bottom: captionRuns ? 0 : bottom };
+        const figure: Block[] = [{ props: { spacing, ind: indentOf(undefined, context), jc }, runs: drawing, inset }];
+        if (captionRuns) figure.push(captionParagraph(captionBefore, { top: 0, bottom }));
         return figure;
     }
     // A borderless floating one-cell table, the one wrap that keeps the caption under the image in every reader.

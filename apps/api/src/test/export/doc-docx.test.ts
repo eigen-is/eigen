@@ -175,7 +175,6 @@ function th(attrs: Record<string, unknown>, ...content: JSONContent[]): JSONCont
 const RULE: JSONContent = { type: 'horizontalRule' };
 const PAGE_BREAK: JSONContent = { type: 'pageBreak' };
 const PAGE_BREAK_XML = '<w:p><w:pPr><w:pStyle w:val="PageBreak"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>';
-const SPACER_XML = '<w:p><w:pPr><w:pStyle w:val="Spacer"/></w:pPr></w:p>';
 
 // The run one plain text writes.
 function run(value: string): string {
@@ -1478,8 +1477,9 @@ describe('docx writer — figures', () => {
 
     const chart = (px: number, id = 1) => drawing({ id, px, ratio: 500 / 800, part: 'image1.png', embed: 'rId5' });
 
-    const imageParagraph = (runs: string, jc = 'center', after = 165, ind = '') =>
-        `<w:p><w:pPr><w:spacing w:before="165" w:after="${after}" w:line="240" w:lineRule="auto"/>${ind}<w:jc w:val="${jc}"/></w:pPr>${runs}</w:p>`;
+    // A figure-only paragraph: the figure's 0.75em above, and below it that plus the paragraph's 1em.
+    const imageParagraph = (runs: string, jc = 'center', after = 385, ind = '', before = 165) =>
+        `<w:p><w:pPr><w:spacing w:before="${before}" w:after="${after}" w:line="240" w:lineRule="auto"/>${ind}<w:jc w:val="${jc}"/></w:pPr>${runs}</w:p>`;
 
     // The width of each figure's extent, in px.
     async function widthsOf(json: JSONContent): Promise<number[]> {
@@ -1505,6 +1505,8 @@ describe('docx writer — figures', () => {
 
     const floatingImage = (runs: string) =>
         `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>${runs}</w:p>`;
+    const clearing = (after: number) =>
+        `<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:after="${after}" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:br w:type="textWrapping" w:clear="all"/></w:r></w:p>`;
     const floatingCaption = (value: string) =>
         `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="0"/><w:jc w:val="center"/></w:pPr>${run(value)}</w:p>`;
 
@@ -1539,8 +1541,8 @@ describe('docx writer — figures', () => {
         expect(
             await blocksOf(doc(p(figure({ ...CHART, width: 320, alignment: 'right', caption: 'Figure 1\tchart' })))),
         ).toEqual([
-            imageParagraph(chart(320), 'right', 0),
-            '<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">Figure 1</w:t><w:tab/><w:t xml:space="preserve">chart</w:t></w:r></w:p>',
+            imageParagraph(chart(320), 'right', 23),
+            '<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">Figure 1</w:t><w:tab/><w:t xml:space="preserve">chart</w:t></w:r></w:p>',
         ]);
     });
 
@@ -1590,10 +1592,60 @@ describe('docx writer — figures', () => {
         ]);
     });
 
-    test('a block figure breaks the paragraph that holds it, the text on both sides kept', async () => {
+    // The editor's model: a paragraph's own margins sit outside and collapse as any paragraph's do; the figure's 0.75em
+    // sits inside them and never collapses, so a reader that collapses spacing gets the sum written on both sides.
+    describe('the figure box inside its paragraph', () => {
+        const spaced = (before: number, after: number, runs: string, jc = 'center') =>
+            `<w:p><w:pPr><w:spacing w:before="${before}" w:after="${after}" w:line="240" w:lineRule="auto"/><w:jc w:val="${jc}"/></w:pPr>${runs}</w:p>`;
+
+        test("a figure-only paragraph is the paragraph's margins plus the figure's, above and below", async () => {
+            expect(
+                await blocksOf(doc(p(text('above')), p(figure({ ...CHART, width: 100 })), p(text('below')))),
+            ).toEqual([
+                `<w:p>${run('above')}</w:p>`,
+                spaced(220 + 165, 165 + 220, chart(100)),
+                `<w:p>${run('below')}</w:p>`,
+            ]);
+        });
+
+        test('the paragraph after collapses with the figure paragraph’s 1em, the figure’s 0.75em adding to it', async () => {
+            const [, image] = await blocksOf(
+                doc(p(text('x')), p(figure({ ...CHART, width: 100 })), heading(2, text('h'))),
+            );
+            const h2Before = Math.round(1.5 * 1.375 * 12 * 20);
+            expect(image).toBe(spaced(385, 165 + h2Before, chart(100)));
+        });
+
+        test('a caption closes the box, the margin below under it, and a missing image leaves the caption the box', async () => {
+            expect(await blocksOf(doc(p(figure({ ...CHART, width: 100, caption: 'Cap' })), p(text('below'))))).toEqual([
+                spaced(165, 23, chart(100)),
+                `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Cap')}</w:p>`,
+                `<w:p>${run('below')}</w:p>`,
+            ]);
+            const [missing] = await blocksOf(doc(p(figure({ mediaName: 'gone', caption: 'Cap' }))));
+            expect(missing).toBe(
+                `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="${165 + 23}" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Cap')}</w:p>`,
+            );
+        });
+
+        test('two figure paragraphs in a row keep both boxes and the 1em between them', async () => {
+            const [first, second] = await blocksOf(
+                doc(p(figure({ ...CHART, width: 100 })), p(figure({ ...CHART, width: 100 }))),
+            );
+            expect(first).toBe(spaced(165, 165 + 220 + 165, chart(100)));
+            expect(second).toBe(spaced(165 + 220 + 165, 165 + 220, chart(100, 2)));
+        });
+
+        test('a figure after a table sits the table margin plus its own below it', async () => {
+            const blocks = await blocksOf(doc(table(tr(td({}, p(text('cell'))))), p(figure({ ...CHART, width: 100 }))));
+            expect(blocks[1]).toBe(spaced(165 + 165, 165 + 220, chart(100)));
+        });
+    });
+
+    test('a block figure breaks the paragraph that holds it, the text on both sides kept, no margin at the split', async () => {
         expect(await blocksOf(doc(p(text('before '), figure({ ...CHART, width: 100 }), text(' after'))))).toEqual([
-            `<w:p>${run('before ')}</w:p>`,
-            imageParagraph(chart(100)),
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${run('before ')}</w:p>`,
+            imageParagraph(chart(100), 'center', 165),
             `<w:p>${run(' after')}</w:p>`,
         ]);
     });
@@ -1601,9 +1653,9 @@ describe('docx writer — figures', () => {
     test("a block figure in a heading leaves the pieces after it the heading's look, out of the navigator", async () => {
         const json = doc(p(text('x')), heading(2, text('Before '), figure({ ...CHART, width: 100 }), text(' after')));
         expect((await blocksOf(json)).slice(1)).toEqual([
-            `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>${run('Before ')}</w:p>`,
-            imageParagraph(chart(100)),
-            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:outlineLvl w:val="9"/></w:pPr>${run(' after')}</w:p>`,
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:after="0"/></w:pPr>${run('Before ')}</w:p>`,
+            imageParagraph(chart(100), 'center', 165),
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="0"/><w:outlineLvl w:val="9"/></w:pPr>${run(' after')}</w:p>`,
         ]);
     });
 
@@ -1645,18 +1697,18 @@ describe('docx writer — figures', () => {
         ]);
     });
 
-    test('two floating figures keep a Spacer between their tables; an emptied holder goes, the last one is a Spacer', async () => {
+    // The editor's trailing break keeps the line of a paragraph that holds only a float.
+    test('a paragraph holding only a wrapped figure keeps its line, which keeps two floating tables apart', async () => {
         const left = figure({ ...CHART, width: 100, layout: 'wrap-left' });
         const right = figure({ ...CHART, width: 100, layout: 'wrap-right' });
         const blocks = await blocksOf(doc(p(left), p(right, text('flows'))));
-        expect(blocks.map((block) => block.slice(0, 6))).toEqual(['<w:tbl', '<w:p><', '<w:tbl', '<w:p><']);
-        expect(blocks[1]).toBe(SPACER_XML);
+        expect(blocks.map((block) => block.slice(0, 6))).toEqual(['<w:tbl', '<w:p/>', '<w:tbl', '<w:p><']);
         expect(blocks[3]).toBe(`<w:p>${run('flows')}</w:p>`);
         expect((await blocksOf(doc(p(text('x')), p(left)))).slice(1).map((block) => block.slice(0, 6))).toEqual([
             '<w:tbl',
-            '<w:p><',
+            '<w:p/>',
         ]);
-        expect((await blocksOf(doc(p(left))))[1]).toBe(SPACER_XML);
+        expect((await blocksOf(doc(p(left)))).map((block) => block.slice(0, 6))).toEqual(['<w:tbl', '<w:p/>']);
     });
 
     test('a floating figure keeps no table margin, and stays apart from an in-flow table', async () => {
@@ -1669,33 +1721,51 @@ describe('docx writer — figures', () => {
 
     test("a wrapped figure in an item's first paragraph leaves the number on its text", async () => {
         const body = await bodyOf(doc(ul(li(p(figure({ ...CHART, width: 100, layout: 'wrap-left' }), text('item'))))));
-        expect(shape(body)).toEqual(['tbl', 'p', 'sectPr']);
+        expect(shape(body)).toEqual(['tbl', 'p', 'p', 'sectPr']);
         expect(w(child(child(child(xmlChildren(body, W, 'p')[0], 'pPr'), 'numPr'), 'numId'), 'val')).toBe('1');
     });
 
     test('an item whose first paragraph holds only a wrapped figure keeps its number or checkbox on the emptied holder', async () => {
         const wrapped = p(figure({ ...CHART, width: 100, layout: 'wrap-left' }));
         const body = await bodyOf(doc(ol({}, li(wrapped), li(p(text('two'))))));
-        expect(shape(body)).toEqual(['tbl', 'p', 'p', 'sectPr']);
+        expect(shape(body)).toEqual(['tbl', 'p', 'p', 'p', 'sectPr']);
         const numbered = (after: number, runs: string) =>
             `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
-        expect(xmlChildren(body, W, 'p').map(xmlOf)).toEqual([numbered(55, ''), numbered(220, run('two'))]);
+        expect(xmlChildren(body, W, 'p').map(xmlOf)).toEqual([
+            numbered(55, ''),
+            clearing(55),
+            numbered(220, run('two')),
+        ]);
 
         // The text after the figure starts below the number, unnumbered, as the editor and the PDF draw it.
         const item = await bodyOf(doc(ol({}, li(wrapped, p(text('text'))))));
-        expect(shape(item)).toEqual(['tbl', 'p', 'p', 'sectPr']);
+        expect(shape(item)).toEqual(['tbl', 'p', 'p', 'p', 'sectPr']);
         expect(xmlChildren(item, W, 'p').map(xmlOf)).toEqual([
             numbered(55, ''),
-            `<w:p><w:pPr><w:spacing w:after="220"/><w:ind w:left="330"/></w:pPr>${run('text')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="55"/><w:ind w:left="330"/></w:pPr>${run('text')}</w:p>`,
+            clearing(220),
         ]);
 
         const checklist = await bodyOf(doc(tasks(task(false, wrapped))));
-        expect(shape(checklist)).toEqual(['tbl', 'p', 'sectPr']);
-        expect(shape(only(xmlChildren(checklist, W, 'p')))).toEqual(['pPr', 'sdt', 'r']);
+        expect(shape(checklist)).toEqual(['tbl', 'p', 'p', 'sectPr']);
+        expect(shape(xmlChildren(checklist, W, 'p')[0])).toEqual(['pPr', 'sdt', 'r']);
+    });
+
+    // The editor's item contains its floats; Word and LibreOffice draw the next item beside one unless a break clears it.
+    test('an item holding a wrapped figure ends in a clearing break on a hairline, the list margin below it', async () => {
+        const wrapped = p(figure({ ...CHART, width: 100, layout: 'wrap-left' }), text('beside'));
+        const body = await bodyOf(doc(ul(li(wrapped), li(p(text('next')))), p(text('after'))));
+        expect(xmlChildren(body, W, 'p').map(xmlOf).slice(1)).toEqual([
+            clearing(55),
+            `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="220"/></w:pPr>${run('next')}</w:p>`,
+            `<w:p>${run('after')}</w:p>`,
+        ]);
+        expect(shape(await bodyOf(doc(ul(li(p(text('plain')))))))).toEqual(['p', 'sectPr']);
     });
 
     test("an item that opens with a missing figure's caption keeps its number or checkbox on a holder above it", async () => {
-        const caption = `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:ind w:left="330"/><w:jc w:val="center"/></w:pPr>${run('Cap')}</w:p>`;
+        // The holder's 0.25em, then the caption's box.
+        const caption = `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="${55 + 165 + 23}" w:after="${55 + 165}"/><w:ind w:left="330"/><w:jc w:val="center"/></w:pPr>${run('Cap')}</w:p>`;
         const numbered = (after: number, runs: string) =>
             `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
         for (const layout of [undefined, 'wrap-left']) {
@@ -1714,8 +1784,9 @@ describe('docx writer — figures', () => {
     });
 
     test('a figure whose media is missing writes its caption, as the HTML does, aligned as the figure', async () => {
-        const caption = (jc: string) =>
-            `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="${jc}"/></w:pPr>${run('Lost')}</w:p>`;
+        // The caption is the box: the figure's 0.75em and the caption's own margin above it.
+        const caption = (jc: string, before: number, after: number) =>
+            `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="${before}" w:after="${after}"/><w:jc w:val="${jc}"/></w:pPr>${run('Lost')}</w:p>`;
         expect(
             await blocksOf(
                 doc(
@@ -1723,7 +1794,12 @@ describe('docx writer — figures', () => {
                     p(figure({ mediaName: 'gone', caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
                 ),
             ),
-        ).toEqual([`<w:p>${run('a')}</w:p>`, caption('right'), `<w:p>${run('b')}</w:p>`, caption('center')]);
+        ).toEqual([
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${run('a')}</w:p>`,
+            caption('right', 165 + 23, 165),
+            `<w:p>${run('b')}</w:p>`,
+            caption('center', 220 + 165 + 23, 165 + 220),
+        ]);
     });
 
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {
