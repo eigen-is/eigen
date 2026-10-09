@@ -252,6 +252,24 @@ describe('doc export — whitespace', () => {
     );
 });
 
+describe('doc export — caps', () => {
+    test.each(['html', 'pdf-html'] as const)('%s draws caps in CSS over the letters as typed', async (format) => {
+        const caps = (text: string, value: string) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { caps: value } }],
+        });
+        const doc = seededDoc({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [caps('Title', 'all'), caps(' Name', 'small')] }],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        expect(new TextDecoder().decode(data)).toContain(
+            '<p><span style="text-transform: uppercase">Title</span><span style="font-variant-caps: small-caps"> Name</span></p>',
+        );
+    });
+});
+
 // The docx writer's rule (doc-docx.test.ts), so a link to another Eigen file works in every format.
 describe('doc export — links', () => {
     async function hrefsOf(format: 'html' | 'pdf-html', publicOrigin?: string): Promise<string[]> {
