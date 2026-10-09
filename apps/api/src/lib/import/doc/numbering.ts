@@ -1,11 +1,12 @@
 import { LIST_LEVELS, spellNumber, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { int, is, w, wChild } from './package';
-import { MAX_CHAIN, readParaProps, type Styles } from './styles';
+import { MAX_CHAIN, type ParaProps, readParaProps, type Styles } from './styles';
 
 // Word's counters, emulated in document order: lists sharing a definition continue, a start override restarts once.
 
-type Level = { start: number; format: string; text: string; indLeft?: number; restart?: number; suffix: string };
+// pPr: the level's paragraph properties, its indent, which sit between the paragraph style's and the paragraph's own.
+type Level = { start: number; format: string; text: string; pPr: ParaProps; restart?: number; suffix: string };
 
 export type ListRef = {
     key: string;
@@ -14,7 +15,7 @@ export type ListRef = {
     number: number;
     // Read only for a numbered heading, which keeps its number as text.
     label(): string;
-    indLeft?: number;
+    pPr: ParaProps;
     suffix: string;
 };
 
@@ -120,7 +121,7 @@ export class Numbering {
                 }
                 return label.slice(0, MAX_LABEL_CHARS);
             },
-            indLeft: level.indLeft,
+            pPr: level.pPr,
             suffix: level.suffix,
         };
     }
@@ -139,7 +140,7 @@ function readLevel(lvl: XmlElement): Level {
         format: w(wChild(lvl, 'numFmt'), 'val') ?? 'decimal',
         // Cut once, so a long lvlText costs each label what a short one does.
         text: (w(wChild(lvl, 'lvlText'), 'val') ?? '').slice(0, MAX_LABEL_CHARS),
-        indLeft: readParaProps(wChild(lvl, 'pPr')).indLeft,
+        pPr: readParaProps(wChild(lvl, 'pPr')),
         restart: int(w(wChild(lvl, 'lvlRestart'), 'val')),
         suffix: w(wChild(lvl, 'suff'), 'val') ?? 'tab',
     };

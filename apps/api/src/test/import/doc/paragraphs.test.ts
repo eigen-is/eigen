@@ -400,6 +400,28 @@ describe('indented code', () => {
     });
 });
 
+// A list of another definition nests under the open item only where its level puts its number at or right of the
+// item's text: the spec's two numIds at ilvl 0 under a 720 text.
+describe('lists of two definitions', () => {
+    const level = (id: number, left: number) =>
+        `<w:abstractNum w:abstractNumId="${id}"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="${left}" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>`;
+    const NUMBERING = `${level(1, 720)}${level(2, 1440)}${level(3, 720)}<w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num><w:num w:numId="3"><w:abstractNumId w:val="3"/></w:num>`;
+    const bullet = (numId: number, text: string) =>
+        paragraph(run(text), `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>`);
+    const types = async (body: string) =>
+        ((await importDocxBody(body, { numbering: NUMBERING })).json.content ?? []).map(
+            (node) => nodesOfType(node, 'bulletList').length,
+        );
+
+    test('a number at 1,080 under a 720 text nests', async () => {
+        expect(await types(`${bullet(1, 'One')}${bullet(2, 'Inner')}`)).toEqual([2]);
+    });
+
+    test('numbers both at 360 are sibling lists', async () => {
+        expect(await types(`${bullet(1, 'One')}${bullet(3, 'Other')}`)).toEqual([1, 1]);
+    });
+});
+
 // Word reads each w:ind attribute on its own along the style chain, and starts a hanging first line left of the text.
 describe('indents', () => {
     const STYLES = [

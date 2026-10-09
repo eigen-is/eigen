@@ -33,6 +33,7 @@ function item(text: string, ilvl = 0, number = 1): Para {
             number,
             label: () => `${number}.`,
             suffix: 'tab',
+            pPr: {},
             ilvl,
         },
     });
@@ -73,6 +74,53 @@ describe('lists', () => {
             'orderedList[listItem[One]]',
             'pageBreak',
             'After',
+        ]);
+    });
+});
+
+// Depth comes from Word's level within one list; a list of another definition nests only where its number starts at or
+// right of the open item's text.
+describe('lists of two definitions', () => {
+    const bullet = (text: string, key: string, numberAt: number, indLeft = numberAt + 360): Para =>
+        para(text, {
+            indLeft,
+            numberAt,
+            list: {
+                key,
+                ordered: false,
+                format: 'bullet',
+                number: 1,
+                label: () => '',
+                suffix: 'tab',
+                pPr: {},
+                ilvl: 0,
+            },
+        });
+
+    test('a number right of the open text nests', () => {
+        expect(assembled([bullet('One', 'a', 360), bullet('Inner', 'b', 1080)])).toEqual([
+            'bulletList[listItem[One | bulletList[listItem[Inner]]]]',
+        ]);
+    });
+
+    test('a number left of the open text is a sibling list, however far its text is indented', () => {
+        expect(assembled([bullet('One', 'a', 360), bullet('Other', 'b', 360, 1440)])).toEqual([
+            'bulletList[listItem[One]]',
+            'bulletList[listItem[Other]]',
+        ]);
+    });
+
+    test('an empty paragraph between items of two lists stands between them', () => {
+        expect(assembled([bullet('One', 'a', 360), para(''), bullet('Two', 'b', 360)])).toEqual([
+            'bulletList[listItem[One]]',
+            '',
+            'bulletList[listItem[Two]]',
+        ]);
+    });
+
+    test('an empty paragraph between items of one list stays in the item above', () => {
+        expect(assembled([bullet('One', 'a', 360), para(''), bullet('Two', 'a', 360)])).toEqual([
+            'bulletList[listItem[One | ] | listItem[Two]]',
         ]);
     });
 });

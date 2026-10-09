@@ -201,7 +201,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list =
         numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
-    const props = mergePara(styled, list?.indLeft === undefined ? {} : { indLeft: list.indLeft }, direct);
+    const props = mergePara(styled, list?.pPr ?? {}, direct);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
     // grey of any shade, as other editors shade code.
@@ -309,7 +309,10 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
         };
-        if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
+        if (!numbered && list && role.kind !== 'heading') {
+            para.list = { ...list, ilvl };
+            para.numberAt = indLeft + Math.min(0, props.indFirst ?? 0);
+        }
         if (!numbered && task) para.task = task;
         if (boxed) para.boxed = true;
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;

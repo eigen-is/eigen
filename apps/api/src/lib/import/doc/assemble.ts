@@ -17,6 +17,8 @@ export type Para = {
     // A half after a page break, which continues its item rather than numbering again.
     continued: boolean;
     indLeft: number;
+    // Where an item's number starts, which says whether a list of another definition nests under the open item.
+    numberAt?: number;
     quote: number;
     // A quote inside the list item above it.
     inItem?: boolean;
@@ -332,6 +334,16 @@ function buildFlow(items: Item[]): JSONContent[] {
         );
     };
 
+    const betweenItems = (index: number): boolean => {
+        const following = next[index];
+        const top = stack.at(-1);
+        return (
+            following?.kind === 'para' &&
+            !!top &&
+            (following.task ? top.kind === 'taskList' : following.list?.key === top.key)
+        );
+    };
+
     for (const [index, item] of items.entries()) {
         if (item.kind === 'boundary') {
             flushCode();
@@ -389,7 +401,7 @@ function buildFlow(items: Item[]): JSONContent[] {
         if (stack.length > 0 && item.role.kind !== 'heading') {
             // A blank line between two items of one list stays in the item above, so the list stays one.
             const host =
-                item.continued || (item.empty && item.role.kind === 'paragraph' && continues(index))
+                item.continued || (item.empty && item.role.kind === 'paragraph' && betweenItems(index))
                     ? stack.at(-1)
                     : stack.findLast((open) => !item.empty && indentedUnder(item.indLeft, open.indent));
             if (host) {
@@ -437,7 +449,8 @@ function textblockOf(para: Para): JSONContent {
     return { type: 'paragraph', attrs: { textAlign }, content };
 }
 
-// Lists nest by Word's level within one list, by indent across lists and tasks; a number that doesn't follow starts a new list.
+// Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's
+// text, and tasks by indent. A number that doesn't follow starts a new list.
 function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JSONContent[]): void {
     // An item opens on a paragraph: a checkbox in a heading makes a task of the heading's text.
     const paragraph: JSONContent =
@@ -479,7 +492,11 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
             top.item = item;
             return;
         }
-        const deeper = sameList ? top.ilvl < ilvl : indent > top.indent + INDENT_TOLERANCE;
+        const deeper = sameList
+            ? top.ilvl < ilvl
+            : para.numberAt !== undefined && top.kind !== 'taskList'
+              ? para.numberAt >= top.indent - INDENT_TOLERANCE
+              : indent > top.indent + INDENT_TOLERANCE;
         // No deeper than Word's levels: lists of other definitions nest by indent, which a hostile file can deepen.
         if (deeper && stack.length < LIST_LEVELS) break;
         pop();
