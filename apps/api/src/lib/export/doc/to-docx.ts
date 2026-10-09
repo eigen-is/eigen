@@ -6,7 +6,7 @@ import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@wor
 import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
-import JSZip from 'jszip';
+import { writeZip } from '../../core/zip';
 import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
@@ -101,23 +101,19 @@ export async function eigendocToDocx(
         contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
     );
 
-    const zip = new JSZip();
-    const options = { date: ZIP_DATE, compression: 'DEFLATE', createFolders: false } as const;
-    zip.file(
-        '[Content_Types].xml',
-        `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
-        options,
-    );
-    for (const [path, xml] of parts) zip.file(path, `${XML_DECLARATION}${xml}`, options);
-    for (const [path, data] of fonts.files) zip.file(path, data, options);
-    for (const [path, data] of pkg.files) zip.file(path, data, { ...options, compression: 'STORE' });
-    return zip.generateAsync({ type: 'uint8array' });
+    return writeZip([
+        {
+            name: '[Content_Types].xml',
+            data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
+        },
+        ...parts.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
+        ...fonts.files.map(([name, data]) => ({ name, data })),
+        ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
+    ]);
 }
 
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-// The DOS epoch: a fixed date, so one doc always exports to the same bytes.
-const ZIP_DATE = new Date(Date.UTC(1980, 0, 1));
 
 const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import JSZip from 'jszip';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
+import { openZip } from '../../../lib/core/zip';
 import {
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
@@ -19,19 +19,19 @@ import {
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 
-const zip = await JSZip.loadAsync(
+const zip = openZip(
     await eigendocToDocx(buildAllFeaturesDocJson(), buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined),
 );
 
-async function part(path: string): Promise<XmlElement> {
-    const text = await zip.file(path)?.async('string');
-    const root = text === undefined ? null : parseXml(text);
+function part(path: string): XmlElement {
+    const data = zip.read(path);
+    const root = data === undefined ? null : parseXml(new TextDecoder().decode(data));
     if (!root) throw new Error(`${path} missing or blank`);
     return root;
 }
 
 const styles = new Map(
-    xmlChildren(await part('word/styles.xml'), W_NS, 'style').map((style) => [w(style, 'styleId'), style]),
+    xmlChildren(part('word/styles.xml'), W_NS, 'style').map((style) => [w(style, 'styleId'), style]),
 );
 
 function w(element: XmlElement | undefined, local: string): string | undefined {
@@ -100,8 +100,8 @@ describe('ooxml — the writer draws the editor look from the vocabulary', () =>
         expect(w(prop('Hyperlink', 'rPr', 'color'), 'val')).toBe(LINK_LOOK.color);
     });
 
-    test('a header cell: its fill', async () => {
-        const fills = descendants(await part('word/document.xml'), 'tcPr').map((tcPr) =>
+    test('a header cell: its fill', () => {
+        const fills = descendants(part('word/document.xml'), 'tcPr').map((tcPr) =>
             w(xmlChild(tcPr, W_NS, 'shd'), 'fill'),
         );
         expect(fills).toContain(HEADER_CELL_LOOK.fill);

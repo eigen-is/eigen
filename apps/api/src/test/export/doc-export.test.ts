@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import JSZip from 'jszip';
 import * as Y from 'yjs';
+import { openZip } from '../../lib/core/zip';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { proseValue } from '../../lib/export/doc/prose-css';
 import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
@@ -23,9 +23,9 @@ function brokenDoc(): Y.Doc {
     return seededDoc({ type: 'doc', content: [paragraph('Before'), { type: 'pageBreak' }, paragraph('After')] });
 }
 
-async function docxDocumentXml(doc: Y.Doc): Promise<string | undefined> {
+async function docxDocumentXml(doc: Y.Doc): Promise<string> {
     const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
-    return (await JSZip.loadAsync(data)).file('word/document.xml')?.async('string');
+    return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
 async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
@@ -47,16 +47,16 @@ describe('doc export — the page', () => {
     test('docx is an A4 page with 2 cm margins', async () => {
         const xml = await docxDocumentXml(seededDoc());
 
-        const pgSz = xml?.match(/<w:pgSz\b[^>]*>/)?.[0];
+        const pgSz = xml.match(/<w:pgSz\b[^>]*>/)?.[0];
         expect(pgSz).toContain('w:w="11906"');
         expect(pgSz).toContain('w:h="16838"');
-        const pgMar = xml?.match(/<w:pgMar\b[^>]*>/)?.[0];
+        const pgMar = xml.match(/<w:pgMar\b[^>]*>/)?.[0];
         for (const side of ['top', 'right', 'bottom', 'left']) expect(pgMar).toContain(`w:${side}="1134"`);
     });
 
     test('docx opens on the first paragraph, not an empty one', async () => {
         const xml = await docxDocumentXml(seededDoc());
-        expect(xml?.match(/<w:body>[\s\S]*?<\/w:p>/)?.[0]).toContain('Hello');
+        expect(xml.match(/<w:body>[\s\S]*?<\/w:p>/)?.[0]).toContain('Hello');
     });
 });
 
@@ -303,7 +303,7 @@ describe('doc export — docx SVG size', () => {
         });
         const media = [{ name: 'd.svg', contentType: 'image/svg+xml', data: toTransferableText(svg(attrs)) }];
         const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
-        const xml = (await (await JSZip.loadAsync(data)).file('word/document.xml')?.async('string')) ?? '';
+        const xml = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
         const [, cx = '0', cy = '0'] = xml.match(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/) ?? [];
         return [Number(cx) / 9525, Number(cy) / 9525];
     }
