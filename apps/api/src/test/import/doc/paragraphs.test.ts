@@ -104,4 +104,33 @@ describe('tracked changes and hidden text', () => {
         );
         expect(await blocks(body)).toEqual(['Kept inserted end']);
     });
+
+    // Accepted, a deleted paragraph mark leaves the following paragraph's mark, and so its properties, to both.
+    test('a paragraph whose mark is deleted joins the next, which keeps its properties and its number', async () => {
+        const numbering =
+            '<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>';
+        const deleted = '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>';
+        const numbered = '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>';
+        const { json } = await importDocxBody(
+            `${paragraph(run('Joined '), deleted)}${paragraph(run('centred'), '<w:jc w:val="center"/>')}${paragraph(run('One '), `${numbered}${deleted}`)}${paragraph(run('and more'), numbered)}${paragraph(run('Two'), numbered)}`,
+            { numbering },
+        );
+        expect(json.content).toEqual([
+            { type: 'paragraph', attrs: { textAlign: 'center' }, content: [{ type: 'text', text: 'Joined centred' }] },
+            {
+                type: 'orderedList',
+                attrs: { start: 1, type: null },
+                content: ['One and more', 'Two'].map((text) => ({
+                    type: 'listItem',
+                    content: [{ type: 'paragraph', attrs: { textAlign: null }, content: [{ type: 'text', text }] }],
+                })),
+            },
+        ]);
+    });
+
+    test("text joined into the body's last, empty paragraph after a table stays", async () => {
+        const table = `<w:tbl><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`;
+        const deleted = '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>';
+        expect(await blocks(`${table}${paragraph(run('Last'), deleted)}${EMPTY}`)).toEqual(['Cell', 'Last']);
+    });
 });

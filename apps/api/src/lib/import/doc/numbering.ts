@@ -197,10 +197,3 @@ function toRoman(value: number): string {
     }
     return roman;
 }
-
-export const ORDERED_TYPES: Record<string, string> = {
-    lowerLetter: 'a',
-    upperLetter: 'A',
-    lowerRoman: 'i',
-    upperRoman: 'I',
-};

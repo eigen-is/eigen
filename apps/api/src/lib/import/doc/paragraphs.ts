@@ -107,7 +107,7 @@ function readNotes(reader: Reader): JSONContent[] {
     return items;
 }
 
-const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
+export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
 
 // flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {
@@ -154,14 +154,16 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const task = taskOf(pieces);
     if (task?.checked && role.kind === 'paragraph') role = { kind: 'taskDone' };
     for (const [index, piece] of pieces.entries())
-        if (piece.kind === 'checkbox') pieces[index] = checkboxText(piece.checked);
+        if (piece.kind === 'checkbox')
+            pieces[index] = { kind: 'node', node: { type: 'text', text: piece.checked ? '☒' : '☐' } };
     const halves = splitAtBreaks(pieces);
 
     // A paragraph holding nothing but a page break gives no item: the break joins the open one, and the number stays free.
     const numId = direct.numId ?? styled.numId;
     const ilvl = Math.min(MAX_LEVEL, Math.max(0, direct.ilvl ?? styled.ilvl ?? 0));
     const breakOnly = halves.length > 1 && !halves.some(isShown);
-    const list = numId && numId !== '0' && !breakOnly ? reader.numbering.next(numId, ilvl) : undefined;
+    const list =
+        numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, { indLeft: list?.indLeft }, direct);
 
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
@@ -178,16 +180,30 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     const borders = props.borders ?? {};
     const leftBar = !!borders.left && !borders.top && !borders.bottom && !borders.right && role.kind !== 'code';
+    // The code box sits its own indent in from its container, and draws no quote bar: its indent alone nests it.
+    const indLeft = Math.max(0, (props.indLeft ?? 0) - (role.kind === 'code' ? CODE_BLOCK_LOOK.indent : 0));
     const quote = leftBar
-        ? Math.max(1, Math.round((props.indLeft ?? 0) / QUOTE_LOOK.indent))
+        ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent))
         : role.kind === 'quote'
           ? 1
-          : 0;
+          : role.kind === 'code'
+            ? Math.round(indLeft / QUOTE_LOOK.indent)
+            : 0;
     // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
     if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
-    if (task?.checked || (task && hasLook(pieces, 'strike', TASK_DONE_LOOK.color)))
-        stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
+    const done = `#${TASK_DONE_LOOK.color.toLowerCase()}`;
+    const shown = texts.flatMap((piece) =>
+        piece.kind === 'node' && piece.node.text?.trim() ? [piece.node.marks ?? []] : [],
+    );
+    const looksDone =
+        shown.length > 0 &&
+        shown.every(
+            (marks) =>
+                marks.some((mark) => mark.type === 'strike') &&
+                marks.some((mark) => mark.type === 'textStyle' && mark.attrs?.['color'] === done),
+        );
+    if (task?.checked || (task && looksDone)) stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
 
     // A numbered heading keeps its number as text: the schema holds no numbered heading.
     const label = list && role.kind === 'heading' ? list.label() : '';
@@ -219,7 +235,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
             continued: numbered,
-            indLeft: props.indLeft ?? 0,
+            indLeft,
             quote,
             empty: !visible && !content.some((node) => node.type === 'text' && node.text),
             small: halfTexts.length > 0 && halfTexts.every((piece) => piece.kind === 'node' && piece.small),
@@ -227,6 +243,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         };
         if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
+        if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         // A framed paragraph holding only an image is a wrapped figure.
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)
@@ -283,29 +300,6 @@ function dropLeadingTab(pieces: Piece[], from: number): void {
         if (rest) next.node.text = rest;
         else pieces.splice(from, 1);
     }
-}
-
-function checkboxText(checked: boolean): Piece {
-    return { kind: 'node', node: { type: 'text', text: checked ? '☒' : '☐' } };
-}
-
-function textPieces(pieces: Piece[]): JSONContent[] {
-    return pieces.flatMap((piece) =>
-        piece.kind === 'node' && piece.node.type === 'text' && piece.node.text?.trim() ? [piece.node] : [],
-    );
-}
-
-function hasLook(pieces: Piece[], toggle: string, color: string): boolean {
-    const hex = `#${color.toLowerCase()}`;
-    const texts = textPieces(pieces);
-    return (
-        texts.length > 0 &&
-        texts.every(
-            (node) =>
-                node.marks?.some((mark) => mark.type === toggle) &&
-                node.marks.some((mark) => mark.type === 'textStyle' && mark.attrs?.['color'] === hex),
-        )
-    );
 }
 
 function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {

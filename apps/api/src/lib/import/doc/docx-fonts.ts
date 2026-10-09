@@ -1,11 +1,9 @@
-import { bundledFont, EIGEN_FONT_NAMES, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
+import { bundledFont, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { type XmlElement, xmlChild } from '../../core/xml';
-import { A_NS } from '../../export/doc/ooxml';
+import { A_NS, BODY } from '../../export/doc/ooxml';
 import { descendants } from './package';
 
 // Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.
-
-const [DOCUMENT_FONT] = EIGEN_FONT_NAMES;
 
 export const MONOSPACE_FONT = EIGEN_FONTS.find((font) => font.category === 'monospace')?.name;
 
@@ -29,5 +27,5 @@ export function isMonospace(name: string | undefined): boolean {
 // The document font draws without a mark, so a foreign sans body is no mark and a serif or mono one is one per run.
 export function fontMark(name: string | undefined): string | undefined {
     const font = name ? bundledFont(name) : undefined;
-    return font === DOCUMENT_FONT ? undefined : font;
+    return font === BODY.font ? undefined : font;
 }

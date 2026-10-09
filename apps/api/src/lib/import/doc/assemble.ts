@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
-import { QUOTE_LOOK } from '../../export/doc/ooxml';
-import { type ListRef, ORDERED_TYPES } from './numbering';
+import { LIST_TYPES, QUOTE_LOOK } from '../../export/doc/ooxml';
+import type { ListRef } from './numbering';
 import type { Role } from './styles';
 
 // Items → blocks: floats and captions join their paragraph, quotes nest by depth, lists by level, code lines join.
@@ -19,6 +19,8 @@ export type Para = {
     quote: number;
     // A quote inside the list item above it.
     inItem?: boolean;
+    // A tracked deletion of the mark: accepted, the content joins the next paragraph.
+    joinsNext?: boolean;
     empty: boolean;
     small: boolean;
     hairline: boolean;
@@ -28,7 +30,7 @@ export type Item =
     | Para
     | { kind: 'break' }
     | { kind: 'boundary' }
-    | { kind: 'hr' }
+    | { kind: 'hr'; indent: number }
     | { kind: 'table'; node: JSONContent; indent: number }
     | { kind: 'block'; node: JSONContent; inItem?: boolean }
     | { kind: 'float'; figure: JSONContent };
@@ -53,7 +55,7 @@ export function isWhitespace(node: JSONContent): boolean {
 }
 
 export function build(raw: Item[]): JSONContent[] {
-    const items = attachFloatsAndCaptions(raw);
+    const items = attachFloatsAndCaptions(joinDeletedMarks(raw));
     quotesInItems(items);
     for (const item of items) if (item.kind === 'para') item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
     assignBreakDepths(items);
@@ -88,6 +90,17 @@ function isBlank(item: Item | undefined): boolean {
     );
 }
 
+// The joined paragraph is the next one, with its own properties: its mark is the one that stays.
+function joinDeletedMarks(raw: Item[]): Item[] {
+    return raw.filter((item, index) => {
+        const next = raw[index + 1];
+        if (item.kind !== 'para' || !item.joinsNext || next?.kind !== 'para') return true;
+        next.inlines = [...item.inlines, ...next.inlines];
+        next.empty &&= item.empty;
+        return false;
+    });
+}
+
 function attachFloatsAndCaptions(raw: Item[]): Item[] {
     const items: Item[] = [];
     let floats: JSONContent[] = [];
@@ -120,7 +133,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                 continue;
             }
             if (item.role.kind === 'hr') {
-                items.push({ kind: 'hr' });
+                items.push({ kind: 'hr', indent: item.indLeft });
                 continue;
             }
         }
@@ -152,14 +165,19 @@ function paraOf(inlines: JSONContent[]): Para {
     };
 }
 
-// The writer indents a quote in a list item from the item's text, so its depth counts from there and it stays in the item.
+// The writer indents a quote or code in a list item from the item's text, so its depth counts from there and it stays
+// in the item.
 function quotesInItems(items: Item[]): void {
     let open: Para | undefined;
     for (const item of items) {
-        if (item.kind === 'table' || item.kind === 'hr') open = undefined;
+        if ((item.kind === 'table' || item.kind === 'hr') && !(open && indentedUnder(item.indent, open.indLeft)))
+            open = undefined;
         if (item.kind !== 'para') continue;
         if (item.list || item.task) open = item;
-        else if (open && item.quote > 0 && item.indLeft > open.indLeft + INDENT_TOLERANCE) {
+        else if (open && item.role.kind === 'code' && indentedUnder(item.indLeft, open.indLeft)) {
+            item.quote = Math.max(0, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
+            item.inItem = item.quote > 0;
+        } else if (open && item.quote > 0 && item.indLeft > open.indLeft + INDENT_TOLERANCE) {
             item.quote = Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
             item.inItem = true;
         } else if (!item.continued && !item.empty) open = undefined;
@@ -244,11 +262,11 @@ type Open = {
 function buildFlow(items: Item[]): JSONContent[] {
     const blocks: JSONContent[] = [];
     const stack: Open[] = [];
-    let code: { language: string | null; lines: string[] } | undefined;
+    let code: { language: string | null; lines: string[]; host: Open | undefined } | undefined;
     const flushCode = () => {
         if (!code) return;
         const text = code.lines.join('\n');
-        blocks.push({
+        (code.host?.item.content ?? blocks).push({
             type: 'codeBlock',
             attrs: { language: code.language },
             content: text ? [{ type: 'text', text }] : [],
@@ -289,9 +307,10 @@ function buildFlow(items: Item[]): JSONContent[] {
             continue;
         }
         if (item.kind === 'para' && item.role.kind === 'code' && !item.list) {
-            if (stack.length > 0) closeLists();
-            if (code && code.language !== item.role.language) flushCode();
-            code ??= { language: item.role.language, lines: [] };
+            const host = stack.findLast((open) => indentedUnder(item.indLeft, open.indent));
+            if (code && (code.language !== item.role.language || code.host !== host)) flushCode();
+            closeLists(host ? stack.indexOf(host) + 1 : 0);
+            code ??= { language: item.role.language, lines: [], host };
             code.lines.push(textOf(item.inlines.filter((node) => node.type !== 'figure')));
             continue;
         }
@@ -306,20 +325,16 @@ function buildFlow(items: Item[]): JSONContent[] {
             blocks.push({ type: 'pageBreak' });
             continue;
         }
-        if (item.kind === 'hr') {
-            closeLists();
-            blocks.push({ type: 'horizontalRule' });
-            continue;
-        }
-        if (item.kind === 'table') {
+        if (item.kind === 'hr' || item.kind === 'table') {
+            const block = item.kind === 'hr' ? { type: 'horizontalRule' } : item.node;
             const host = stack.findLast((open) => indentedUnder(item.indent, open.indent));
             if (host) {
                 closeLists(stack.indexOf(host) + 1);
-                host.item.content?.push(item.node);
+                host.item.content?.push(block);
                 continue;
             }
             closeLists();
-            blocks.push(item.node);
+            blocks.push(block);
             continue;
         }
         if (item.kind === 'block') {
@@ -424,7 +439,7 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
         if (deeper) break;
     }
     const attrs =
-        kind === 'orderedList' ? { start: number, type: ORDERED_TYPES[para.list?.format ?? ''] ?? null } : undefined;
+        kind === 'orderedList' ? { start: number, type: LIST_TYPES.get(para.list?.format ?? '') ?? null } : undefined;
     const level: Open = {
         list: { type: kind, ...(attrs && { attrs }), content: [item] },
         item,

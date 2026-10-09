@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { CODE_LOOK, M_NS, R_NS, W_NS, W14_NS } from '../../export/doc/ooxml';
+import { CODE_LOOK, LINK_LOOK, M_NS, R_NS, W_NS, W14_NS } from '../../export/doc/ooxml';
 import { rootRelativeHref } from '../../export/doc/render';
 import type { Item } from './assemble';
 import { fontMark, MONOSPACE_FONT } from './docx-fonts';
@@ -245,6 +245,14 @@ export function pushText(reader: Reader, text: string, direct: RunProps, context
 
 type Marks = NonNullable<JSONContent['marks']>;
 
+// Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
+// Word's Hyperlink style. The editor draws its own, so on a link they are no mark.
+const LINK_LOOKS = new Map([
+    [LINK_LOOK.color, false],
+    ['1155CC', true],
+    ['0563C1', true],
+]);
+
 // Word resolves a run's look from the defaults, the table style, the paragraph style, the character style and the
 // run itself, the toggles of the two styles flipping each other. A look the paragraph's node already draws is no mark.
 function marksOf(
@@ -287,7 +295,8 @@ function marksOf(
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
     if (props.bold) marks.push({ type: 'bold' });
     if (props.italic) marks.push({ type: 'italic' });
-    if (props.underline && !link) marks.push({ type: 'underline' });
+    const linkLook = link ? LINK_LOOKS.get(props.color ?? '') : undefined;
+    if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
@@ -298,7 +307,9 @@ function marksOf(
     if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =
-        props.color && props.color !== reader.baseColor && props.color !== '000000' && !link ? props.color : undefined;
+        props.color && props.color !== reader.baseColor && props.color !== '000000' && linkLook === undefined
+            ? props.color
+            : undefined;
     const fontFamily = fontMark(font);
     if (color || fontFamily)
         marks.push({

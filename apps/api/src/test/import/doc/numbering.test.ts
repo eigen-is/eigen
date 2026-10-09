@@ -61,6 +61,12 @@ describe('counters', () => {
         ]);
     });
 
+    // A plain object would read the prototype's constructor as a type.
+    test('a format named after an object key is a decimal list', async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'constructor', '%1.')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        expect(lists((await importDocxBody(numbered(1, 'One'), { numbering })).json)).toEqual([[1, null, 1]]);
+    });
+
     test('a level numbered none is no list', async () => {
         expect(lists(await imported(numbered(15, 'Plain')))).toEqual([]);
     });

@@ -4,7 +4,7 @@ import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TWIPS_PER_PX, W_NS } from '../../export/doc/ooxml';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
 import { int, is, onOff, w, wChild } from './package';
-import { type Reader, readBlocks, type Scope } from './paragraphs';
+import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
@@ -154,8 +154,7 @@ function tableRows(table: XmlElement): Row[] {
             if (child.ns !== W_NS) continue;
             if (child.local === 'tc') cells.push(child);
             else if (child.local === 'sdt') visitCells(xmlElements(wChild(child, 'sdtContent') ?? child), cells);
-            else if (['customXml', 'ins', 'moveTo', 'smartTag'].includes(child.local))
-                visitCells(xmlElements(child), cells);
+            else if (WRAPPERS.has(child.local)) visitCells(xmlElements(child), cells);
         }
     };
     const visitRows = (elements: XmlElement[]) => {
@@ -168,7 +167,7 @@ function tableRows(table: XmlElement): Row[] {
                 visitCells(xmlElements(element), cells);
                 rows.push({ trPr, cells });
             } else if (element.local === 'sdt') visitRows(xmlElements(wChild(element, 'sdtContent') ?? element));
-            else if (['customXml', 'ins', 'moveTo'].includes(element.local)) visitRows(xmlElements(element));
+            else if (WRAPPERS.has(element.local)) visitRows(xmlElements(element));
         }
     };
     visitRows(xmlElements(table));

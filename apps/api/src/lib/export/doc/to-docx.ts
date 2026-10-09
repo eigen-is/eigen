@@ -28,6 +28,7 @@ import {
     halfPoints,
     headingStyleName,
     LINK_LOOK,
+    LIST_FORMATS,
     MC_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PIC_NS,
@@ -730,14 +731,6 @@ function textOf(node: JSONContent): string {
 // ── Lists: one abstractNum per ordered list, so adjacent lists count separately ─────────────────────────────────────
 
 type List = { format: string; start: number; base: number };
-
-const LIST_FORMATS = new Map([
-    ['1', 'decimal'],
-    ['a', 'lowerLetter'],
-    ['A', 'upperLetter'],
-    ['i', 'lowerRoman'],
-    ['I', 'upperRoman'],
-]);
 
 // Only an outermost list's last paragraph takes the list's margin; a task list and an empty one number nothing.
 function listOf(

@@ -85,7 +85,7 @@ describe('toggles', () => {
 });
 
 describe('links', () => {
-    test('a hyperlink keeps its tooltip as title and its anchor, and draws no color or underline of its own', async () => {
+    test("a hyperlink keeps its tooltip as title and its anchor, and Word's link look is no mark", async () => {
         const json = await imported(
             paragraph(
                 `<w:hyperlink r:id="rId9" w:anchor="part" w:tooltip="Read on">${run('Link', '<w:color w:val="0563C1"/><w:u w:val="single"/>')}</w:hyperlink>`,
@@ -98,6 +98,20 @@ describe('links', () => {
             ['https://example.com/page#part', 'Read on'],
         ]);
         expect([...marksOfType(json, 'textStyle'), ...marksOfType(json, 'underline')]).toEqual([]);
+    });
+
+    test("Google Docs' link look is no mark, a link's own color and underline are", async () => {
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`;
+        const json = await imported(
+            paragraph(
+                `<w:hyperlink r:id="rId9">${run('Google', '<w:color w:val="1155CC"/><w:u w:val="single"/>')}${run('Own', '<w:color w:val="FF0000"/><w:u w:val="single"/>')}</w:hyperlink>`,
+            ),
+            { rels },
+        );
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Own', '#ff0000'],
+        ]);
+        expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Own']);
     });
 
     test('a HYPERLINK field links its result and drops its code', async () => {
