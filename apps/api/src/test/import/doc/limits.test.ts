@@ -483,7 +483,10 @@ describe('values', () => {
 
     test('a column width stays between the narrowest column and the text column', async () => {
         const json = await imported(table([1, 99_999_999], [[cell('Thin'), cell('Wide')]]));
-        expect(cells(json).map((node) => node.attrs?.['colwidth'])).toEqual([[MIN_TABLE_COLUMN_PX], [COLUMN_PX]]);
+        expect(cells(json).map((node) => node.attrs?.['colwidth'])).toEqual([
+            [MIN_TABLE_COLUMN_PX],
+            [COLUMN_PX - MIN_TABLE_COLUMN_PX],
+        ]);
     });
 
     test('an image width stays within the text column', async () => {

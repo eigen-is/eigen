@@ -32,8 +32,8 @@ export type Reader = {
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it and the table style.
-export type Scope = { part: Part; inNote: boolean; tables: number; tableRun?: RunProps };
+// Per part: its relationships, whether its breaks page, the tables around it, the table style and the cell's width in px.
+export type Scope = { part: Part; inNote: boolean; tables: number; tableRun?: RunProps; room?: number };
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
     const theme = readTheme(pkg.theme);

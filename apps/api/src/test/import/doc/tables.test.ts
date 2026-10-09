@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { COLUMN_PX } from '../../../lib/import/doc/assemble';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
@@ -85,6 +86,33 @@ describe('table style first row', () => {
     test('w:firstRow="0" wins over the first row bit of w:val\'s mask', async () => {
         const { json } = await importDocxBody(styled('<w:tblLook w:val="0420" w:firstRow="0"/>'), { styles });
         expect(marksOfType(json, 'bold')).toEqual([]);
+    });
+});
+
+describe('column widths', () => {
+    const gridded = (grid: number[], cells: string[]) =>
+        `<w:tbl><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(cells)}</w:tbl>`;
+    const colwidths = (json: JSONContent) => nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth']);
+
+    // 200, 400 and 449 px: 1,049 px, which the editor would clip.
+    test('a grid wider than the text column scales down to it, column by column', async () => {
+        const { json } = await importDocxBody(gridded([3000, 6000, 6735], [cell('a'), cell('b'), cell('c')]));
+        const widths = colwidths(json);
+        expect(widths).toEqual([[122], [245], [275]]);
+        expect(widths.flat().reduce((sum, width) => sum + width, 0)).toBe(COLUMN_PX);
+    });
+
+    test('a grid that fits keeps its widths', async () => {
+        const { json } = await importDocxBody(gridded([3000, 4500], [cell('a'), cell('b')]));
+        expect(colwidths(json)).toEqual([[200], [300]]);
+    });
+
+    test("a nested table scales down to its cell's width", async () => {
+        const nested = gridded([4500, 4500], [cell('x'), cell('y')]);
+        const { json } = await importDocxBody(
+            gridded([3000, 3000], [`<w:tc>${nested}${paragraph('')}</w:tc>`, cell('b')]),
+        );
+        expect(colwidths(json)).toEqual([[200], [100], [100], [200]]);
     });
 });
 
