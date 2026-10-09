@@ -7,9 +7,11 @@ import { openZip, ZipError, type ZipReader } from '../../core/zip';
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
 // A tree costs per element too: 16 MB of empty paragraphs is 2.8 million of them and would take 3.5 GB. The corpus's
-// most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes, and
-// a run's text piece past its first as one: the corpus's most is 1,055.
+// most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes.
 export const MAX_DOCX_XML_TAGS = 750_000;
+
+// A piece past a run's first is a text node and its marks, up to 9 KB in the Yjs update; the corpus's most is 1,055.
+export const MAX_DOCX_PIECES = 75_000;
 
 export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
@@ -31,7 +33,7 @@ export type Package = {
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
     // A part a drawing names, read when met and charged as the others are; a damaged one, or one past a cap, is no part.
     readPart(path: string): XmlElement | undefined;
-    // A piece a run's text splits into past its first is a node, which costs what an element does.
+    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
     chargePiece(): void;
 };
 
@@ -48,6 +50,7 @@ export function readPackage(bytes: Uint8Array): Package {
     const budget: Budget = {
         left: MAX_DOCX_XML_BYTES,
         tags: MAX_DOCX_XML_TAGS,
+        pieces: MAX_DOCX_PIECES,
         charged: new Set(),
         parsed: new Map(),
         failed: new Map(),
@@ -93,8 +96,8 @@ export function readPackage(bytes: Uint8Array): Package {
         contentTypes,
         readPart: (path) => optional(() => readXml(zip, path, budget), true),
         chargePiece: () => {
-            budget.tags--;
-            if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+            budget.pieces--;
+            if (budget.pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         },
     };
 }
@@ -103,6 +106,7 @@ export function readPackage(bytes: Uint8Array): Package {
 type Budget = {
     left: number;
     tags: number;
+    pieces: number;
     charged: Set<string>;
     parsed: Map<string, XmlElement | undefined>;
     failed: Map<string, unknown>;
@@ -126,7 +130,7 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
         if (!bytes) return undefined;
         let tags = 0;
         for (const byte of bytes) if (byte === LESS_THAN) tags++;
-        // A part refused leaves the budget to the parts and pieces after it.
+        // A part refused leaves the budget to the parts after it.
         if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         budget.tags -= tags;
         const root = parseXml(bytes) ?? undefined;

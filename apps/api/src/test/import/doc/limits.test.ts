@@ -9,7 +9,7 @@ import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document
 import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
     buildDocxWithBody,
@@ -42,6 +42,7 @@ const floating = (inner: string) =>
     `<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`;
 
 const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const smartArt = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="1" name="Diagram 1"/><a:graphic><a:graphicData><dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
 const smartArtData = (inner: string) => ({
     rels: '<Relationship Id="rId20" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData" Target="diagrams/data1.xml"/>',
@@ -77,26 +78,36 @@ function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
 
 const MB = 1024 * 1024;
 
-// A process of its own, so its peak RSS is the import's alone; a refusal reports its status.
-function measuredImport(docx: ArrayBuffer): {
+// A process of its own, so its peak RSS is the import's alone, the Yjs update's on request; a refusal reports itself.
+function measuredImport(
+    docx: ArrayBuffer,
+    through: 'reader' | 'transform' = 'reader',
+): {
     blocks?: number;
     texts?: number;
     status?: number;
+    message?: string;
     rssGrowth: number;
     cpuMs: number;
 } {
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
-        const bytes = Buffer.from(await Bun.stdin.arrayBuffer());
+        const { importDocxToEigendocUpdate } = await import(process.env.TRANSFORM);
+        const data = await Bun.stdin.arrayBuffer();
         const peak = process.resourceUsage().maxRSS * 1024;
         const cpu = process.cpuUsage();
         const count = (node) => (node.type === 'text' ? 1 : 0) + (node.content ?? []).reduce((sum, child) => sum + count(child), 0);
         let result;
         try {
-            const { json } = docxToPmJson(bytes);
-            result = { blocks: json.content.length, texts: count(json) };
+            if (process.env.THROUGH === 'transform') {
+                importDocxToEigendocUpdate(data, undefined);
+                result = {};
+            } else {
+                const { json } = docxToPmJson(Buffer.from(data));
+                result = { blocks: json.content.length, texts: count(json) };
+            }
         } catch (error) {
-            result = { status: error.status };
+            result = { status: error.status, message: error.message };
         }
         const used = process.cpuUsage(cpu);
         console.log(JSON.stringify({
@@ -106,7 +117,12 @@ function measuredImport(docx: ArrayBuffer): {
         }));
     `;
     const child = Bun.spawnSync([process.execPath, '-e', script], {
-        env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },
+        env: {
+            ...process.env,
+            READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
+            TRANSFORM: Bun.resolveSync('../../../lib/import/doc/transform', import.meta.dir),
+            THROUGH: through,
+        },
         stdin: new Uint8Array(docx),
     });
     expect(child.stderr.toString()).toBe('');
@@ -314,8 +330,7 @@ describe('XML budget', () => {
     });
 });
 
-// A run's text splits where its face or its look changes, and each piece is a node charged as an element: a piece per
-// character of 'aب' × 4.8M took 6.5 GB.
+// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its own.
 describe('text pieces', () => {
     test('Latin and Arabic in one face and one look are one piece', async () => {
         const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
@@ -336,7 +351,7 @@ describe('text pieces', () => {
         ['a complex face of its own', paragraph(run(alternating, faces))],
         ['a complex face of its own in a code style', paragraph(run(alternating, faces), '<w:pStyle w:val="Code"/>')],
     ])(
-        'Latin and Arabic alternating in %s past the tag budget are 413',
+        'Latin and Arabic alternating in %s past the piece cap are 413',
         async (_, body) => {
             const styles = '<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/></w:style>';
             const result = measuredImport(await buildDocxWithBody(body, { styles }));
@@ -346,7 +361,39 @@ describe('text pieces', () => {
         30_000,
     );
 
-    test('alternating looks within the budget keep each', async () => {
+    test('a marked run split past the piece cap is 413 through the Yjs update', async () => {
+        const rich =
+            '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Times New Roman"/><w:b/><w:i/><w:strike/><w:caps/><w:u w:val="single"/><w:color w:val="FF0000"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>';
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('aب'.repeat(MAX_DOCX_PIECES), rich)}</w:hyperlink>`);
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com" TargetMode="External"/>`;
+        const result = measuredImport(await buildDocxWithBody(body, { rels }), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    // A graphic's part reads through the tags, and a run's pieces are no XML, so neither spends what the other needs.
+    test.each(['before', 'after'])(
+        'a chart that takes nearly every tag %s a split run leaves each its own',
+        async (order) => {
+            const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+            const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+            const chart = paragraph(
+                `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+            );
+            const title = '<c:title><c:tx><c:rich><a:p><a:r><a:t>Kept</a:t></a:r></a:p></c:rich></c:tx></c:title>';
+            const part = `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}${'<c:pt/>'.repeat(MAX_DOCX_XML_TAGS - 5000)}</c:chart></c:chartSpace>`;
+            const split = paragraph(run('aب'.repeat(5000), '<w:bCs/>'));
+            const { json } = await importDocxBody(order === 'before' ? `${chart}${split}` : `${split}${chart}`, {
+                rels: `<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: { 'word/charts/chart1.xml': new TextEncoder().encode(part) },
+            });
+            expect(texts(json)).toContain('Kept');
+            expect(texts(json)).toHaveLength(10_001);
+        },
+        30_000,
+    );
+
+    test('alternating looks within the piece cap keep each', async () => {
         const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
         expect(texts(json)).toHaveLength(2000);
         expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(Array(1000).fill('ب'));
@@ -695,7 +742,6 @@ describe('figures and media', () => {
 });
 
 describe('links', () => {
-    const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
     const linked = (target: string) =>
         importDocxBody(paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`), {
             rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="${target}" TargetMode="External"/>`,
