@@ -51,7 +51,7 @@ describe('fonts and code', () => {
     });
 
     test('a code character style is code, and JetBrains Mono on the code fill is code', async () => {
-        const styles = '<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/></w:style>';
+        const styles = `<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/><w:rPr>${font('Consolas')}</w:rPr></w:style>`;
         const json = await imported(
             paragraph(
                 `${run('styled', '<w:rStyle w:val="VerbatimChar"/>')}${run(' ')}${run('looked', `${font('JetBrains Mono')}<w:shd w:val="clear" w:fill="${CODE_LOOK.shading}"/>`)}`,
@@ -59,6 +59,19 @@ describe('fonts and code', () => {
             { styles },
         );
         expect(marksOfType(json, 'code').map((mark) => mark.text)).toEqual(['styled', 'looked']);
+    });
+
+    // Inline code needs a monospace run: a code style on a proportional run, or a run on a tinted fill, is no code.
+    test('a code style on a Times run is no code; a monospace run on any light grey is, on a tint not', async () => {
+        const styles = '<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/></w:style>';
+        const shaded = (fill: string) => `${font('Courier New')}<w:shd w:val="clear" w:fill="${fill}"/>`;
+        const json = await imported(
+            paragraph(
+                `${run('styled', `<w:rStyle w:val="VerbatimChar"/>${font('Times New Roman')}`)}${run(' ')}${run('grey', shaded('EEEEEE'))}${run(' ')}${run('tint', shaded('DDEEFF'))}`,
+            ),
+            { styles },
+        );
+        expect(marksOfType(json, 'code').map((mark) => mark.text)).toEqual(['grey']);
     });
 
     test('an Eigen font name stays, the document font is no mark', async () => {

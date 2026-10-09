@@ -4,13 +4,13 @@ import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { CODE_LOOK, LINK_LOOK } from '../../export/doc/looks';
+import { LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
-import { fontMark } from './docx-fonts';
+import { bundledFontOf, fontMark, MONOSPACE_FONT } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
-import { ABSORBED, isFill, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
+import { ABSORBED, isFill, isLightNeutral, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
 import { isLight } from './tables';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
@@ -301,8 +301,11 @@ function marksOf(
     }
 
     const shade = props.highlight || props.shading || '';
-    // Code from a code style or the editor's inline code look; a foreign monospace run alone is a font.
-    const code = styles.isCodeCharacter(direct.style) || (font === CODE_LOOK.font && shade === CODE_LOOK.shading);
+    // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign monospace
+    // run alone is a font.
+    const code =
+        bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT &&
+        (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
     if (code && !link) return { marks: [{ type: 'code' }], small: false, font, hidden: false };
     const marks: Marks = [];
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
