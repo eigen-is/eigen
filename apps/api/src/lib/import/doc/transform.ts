@@ -8,6 +8,7 @@ import {
     toTransferableBuffer,
 } from '../../document/transform/protocol';
 import { type DocxImage, docSchema, docxToPmJson } from './from-docx';
+import { NOT_A_DOCX } from './package';
 
 // Uploaded docx bytes → the Yjs update the main thread commits, plus the extracted
 // images it writes through Mount. Runs inside the transform Worker (worker.ts owns
@@ -43,6 +44,6 @@ async function parseDocxOrThrow(
         return await docxToPmJson(buffer, { publicOrigin });
     } catch (err) {
         if (err instanceof ApiError) throw err;
-        throw new ApiError(400, 'Not a valid docx file');
+        throw new ApiError(400, NOT_A_DOCX);
     }
 }

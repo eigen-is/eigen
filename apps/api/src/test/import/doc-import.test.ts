@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../../lib/core';
+import { writeZip } from '../../lib/core/zip';
 import { readEigendocFromDoc } from '../../lib/document/doc';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
@@ -325,6 +326,57 @@ describe('docx import resource guards', () => {
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(413);
         expect((error as ApiError).message).toBe('Document too large');
+    });
+});
+
+// What a user reads when a file is no docx Eigen reads: no message names an archive, markup or a part.
+describe('docx import errors', () => {
+    // An OLE compound file: its signature, then a directory entry naming a stream in UTF-16.
+    const ole = (stream: string): ArrayBuffer => {
+        const bytes = new Uint8Array(4096);
+        bytes.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+        bytes.set(Buffer.from(stream, 'utf16le'), 1024);
+        return toTransferableBuffer(bytes);
+    };
+
+    async function importError(data: ArrayBuffer): Promise<[number, string]> {
+        let error: unknown;
+        try {
+            await importDocxToEigendocUpdate(data, undefined);
+        } catch (e) {
+            error = e;
+        }
+        if (!(error instanceof ApiError)) throw new Error(`expected an ApiError, got ${String(error)}`);
+        return [error.status, error.message];
+    }
+
+    test('a password-protected file says so, through the import route', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'locked-import-target' },
+        );
+        const res = await importRequest(docPath.id, ole('EncryptedPackage'));
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe(
+            'This document is password-protected. Remove the password in Word and import it again.',
+        );
+    }, 60_000);
+
+    test('another OLE file, such as a .doc, is not a valid docx file', async () => {
+        expect(await importError(ole('WordDocument'))).toEqual([400, 'Not a valid docx file']);
+    });
+
+    test('malformed XML is not a valid docx file', async () => {
+        const docx = await buildDocxWithBody('<w:p><w:r><w:t>Unclosed</w:r></w:p>');
+        expect(await importError(docx)).toEqual([400, 'Not a valid docx file']);
+    });
+
+    test('a zip with no document is not a valid docx file', async () => {
+        const zip = writeZip([{ name: 'notes.txt', data: 'not a document' }]);
+        expect(await importError(toTransferableBuffer(zip))).toEqual([400, 'Not a valid docx file']);
     });
 });
 

@@ -47,9 +47,9 @@ const ENCRYPTED_PACKAGE = Buffer.from('EncryptedPackage', 'utf16le');
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): Package {
-    if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte)) {
-        throw new ApiError(400, Buffer.from(bytes).includes(ENCRYPTED_PACKAGE) ? PASSWORD_PROTECTED : NOT_A_DOCX);
-    }
+    // Any other OLE file, a .doc say, is no zip, which openZip refuses.
+    if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte) && Buffer.from(bytes).includes(ENCRYPTED_PACKAGE))
+        throw new ApiError(400, PASSWORD_PROTECTED);
     const zip = openZip(bytes);
     const budget: Budget = { left: MAX_DOCX_XML_BYTES, tags: MAX_DOCX_XML_TAGS, charged: new Set() };
     const contentTypes = readContentTypes(readXml(zip, '[Content_Types].xml', budget));
