@@ -145,6 +145,17 @@ describe('a block inside a list item or a quote', () => {
     });
 });
 
+// The writer gives each list its own w:num, so lists side by side stay apart.
+describe('lists side by side', () => {
+    test.each<[string, JSONContent[]]>([
+        ['two bullet lists', [bullets([p('One')]), bullets([p('Two')])]],
+        ['two bullet lists in an item', [ordered([p('One'), bullets([p('a')]), bullets([p('b')])])]],
+    ])('%s come back apart', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
 // The Hyperlink style draws the editor's link look; a link's own color and underline are the author's.
 describe("a link's own look", () => {
     const link = { type: 'link', attrs: { href: 'https://example.com/', title: null } };

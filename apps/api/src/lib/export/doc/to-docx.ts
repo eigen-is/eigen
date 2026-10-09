@@ -77,6 +77,7 @@ export async function eigendocToDocx(
         hyperlinks: new Map(),
         publicOrigin,
         lists: [],
+        nums: [],
         bullets: new Map(),
         checkboxes: false,
         languages: new Set(),
@@ -105,7 +106,7 @@ export async function eigendocToDocx(
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
         ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
-        ['word/numbering.xml', numberingXml(pkg.lists), `${WML}.numbering+xml`],
+        ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
         ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
         ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
         ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
@@ -172,6 +173,8 @@ type Package = {
     hyperlinks: Map<string, string>;
     publicOrigin: string | undefined;
     lists: List[];
+    // Each w:num's abstractNum, by index.
+    nums: number[];
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
@@ -743,7 +746,7 @@ function textOf(node: JSONContent): string {
     return node.text ?? (node.content ?? []).map(textOf).join('');
 }
 
-// ── Lists: one abstractNum per ordered list, so adjacent lists count separately ─────────────────────────────────────
+// ── Lists: a w:num per list and an abstractNum per ordered list, so adjacent lists stay apart and count separately ─
 
 type List = { format: string; start: number; base: number };
 
@@ -772,12 +775,13 @@ function listOf(
     return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'));
 }
 
-// A bullet counts nothing, so bullet lists at one indent share their numbering: Word caps the definitions a file holds.
+// Each list is a w:num of its own, so lists side by side stay apart; a bullet counts nothing, so bullet lists at one
+// indent share their definition: Word caps the definitions a file holds.
 function numIdOf(pkg: Package, list: List): number {
-    if (list.format !== 'bullet') return pkg.lists.push(list);
-    const shared = pkg.bullets.get(list.base) ?? pkg.lists.push(list);
-    pkg.bullets.set(list.base, shared);
-    return shared;
+    const bullet = list.format === 'bullet';
+    const abstract = (bullet ? pkg.bullets.get(list.base) : undefined) ?? pkg.lists.push(list) - 1;
+    if (bullet) pkg.bullets.set(list.base, abstract);
+    return pkg.nums.push(abstract);
 }
 
 // The item's text is a level in; only its first paragraph opens with the number or checkbox.
@@ -826,7 +830,7 @@ function itemIndent(context: Context): number {
     return context.indent + (context.depth < LIST_LEVELS ? LIST_LEVEL : 0);
 }
 
-function numberingXml(lists: List[]): string {
+function numberingXml(lists: List[], nums: number[]): string {
     const abstractNums = lists.map(({ format, start, base }, index) => {
         const levels = Array.from(
             { length: LIST_LEVELS },
@@ -836,8 +840,10 @@ function numberingXml(lists: List[]): string {
         const nsid = (index + 1).toString(16).toUpperCase().padStart(8, '0');
         return `<w:abstractNum w:abstractNumId="${index}"><w:nsid w:val="${nsid}"/>${levels.join('')}</w:abstractNum>`;
     });
-    const nums = lists.map((_, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`);
-    return `<w:numbering xmlns:w="${W_NS}">${abstractNums.join('')}${nums.join('')}</w:numbering>`;
+    const numXml = nums.map(
+        (abstract, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${abstract}"/></w:num>`,
+    );
+    return `<w:numbering xmlns:w="${W_NS}">${abstractNums.join('')}${numXml.join('')}</w:numbering>`;
 }
 
 const CHECKBOX_FONT = 'MS Gothic';

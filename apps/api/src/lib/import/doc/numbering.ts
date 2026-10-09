@@ -103,7 +103,8 @@ export class Numbering {
         }
         const shown = [...counters];
         return {
-            key: abstract.id,
+            // Numbers that follow on join lists sharing a definition; bullets show none, so each w:num is a list.
+            key: level.format === 'bullet' ? `${abstract.id}:${numId}` : abstract.id,
             ordered: level.format !== 'bullet',
             format: level.format,
             number: counters[ilvl] ?? level.start,
