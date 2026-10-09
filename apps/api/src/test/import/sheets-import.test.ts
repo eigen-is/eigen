@@ -931,6 +931,52 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('4:0')?.ff).toBe('Inter');
     });
 
+    test('convert maps each known font by its name, in any case and padding', async () => {
+        const expected: [name: string, ff: string][] = [
+            ['Inter', 'Inter'],
+            ['Source Serif 4', 'Source Serif 4'],
+            ['Source Serif Pro', 'Source Serif 4'],
+            ['JetBrains Mono', 'JetBrains Mono'],
+            ['Excalifont', 'Excalifont'],
+            ...[
+                'Calibri',
+                'Calibri Light',
+                'Arial',
+                'Helvetica',
+                'Helvetica Neue',
+                'Verdana',
+                'Tahoma',
+                'Segoe UI',
+                'Trebuchet MS',
+            ].map((name): [string, string] => [name, 'Inter']),
+            ...[
+                'Times New Roman',
+                'Times',
+                'Georgia',
+                'Cambria',
+                'Garamond',
+                'Book Antiqua',
+                'Palatino',
+                'Palatino Linotype',
+            ].map((name): [string, string] => [name, 'Source Serif 4']),
+            ...['Courier New', 'Courier', 'Consolas', 'Monaco', 'Lucida Console', 'Menlo'].map(
+                (name): [string, string] => [name, 'JetBrains Mono'],
+            ),
+            ['Comic Sans MS', 'Excalifont'],
+            ['Comic Sans', 'Excalifont'],
+            ['  TIMES NEW ROMAN ', 'Source Serif 4'],
+        ];
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        for (const [index, [name]] of expected.entries()) {
+            ws.getCell(index + 1, 1).value = name;
+            ws.getCell(index + 1, 1).font = { name };
+        }
+        const sheets = await parseWorkbook(workbook);
+        const ff = new Map((sheets[0].celldata ?? []).map((c) => [c.r, c.v?.ff] as const));
+        expect(expected.map(([name], index) => [name, ff.get(index)])).toEqual(expected);
+    });
+
     test('convert handles multi-sheet workbooks', async () => {
         const workbook = new ExcelJS.Workbook();
         workbook.addWorksheet('Sheet A').getCell('A1').value = 'Alpha';
