@@ -33,21 +33,9 @@ export type RunContext = {
     pending: Item[];
 };
 
-const SKIPPED_INLINE = new Set([
-    'del',
-    'moveFrom',
-    'pPr',
-    'rPr',
-    'sdtPr',
-    'sdtEndPr',
-    'bookmarkStart',
-    'bookmarkEnd',
-    'commentRangeStart',
-    'commentRangeEnd',
-    'proofErr',
-    'permStart',
-    'permEnd',
-]);
+// Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
+// nothing, so they walk to nothing; a comment's text lives in comments.xml, which is never read.
+const SKIPPED_INLINE = new Set(['del', 'moveFrom', 'pPr', 'rPr', 'sdtPr', 'sdtEndPr']);
 
 export function walkInline(reader: Reader, elements: XmlElement[], context: RunContext): void {
     for (const element of elements) {
