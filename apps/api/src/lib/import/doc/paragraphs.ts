@@ -182,7 +182,10 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
     const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
-    if (role.kind === 'heading' && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
+    const numId = direct.numId ?? styled.numId;
+    const listed = numId !== undefined && numId !== '0';
+    // A numbered heading is outline structure, and demoted its number would read as a list.
+    if (role.kind === 'heading' && !listed && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, scope, styleId)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
@@ -205,11 +208,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const halves = splitAtBreaks(pieces);
 
     // A paragraph holding nothing but a page break gives no item: the break joins the open one, and the number stays free.
-    const numId = direct.numId ?? styled.numId;
     const ilvl = Math.min(LIST_LEVELS - 1, Math.max(0, direct.ilvl ?? styled.ilvl ?? 0));
     const breakOnly = halves.length > 1 && !halves.some(isShown);
-    const list =
-        numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
+    const list = listed && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, list?.pPr ?? {}, direct);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light

@@ -136,4 +136,32 @@ describe('captions', () => {
     test('a small line after a block figure, not in the caption look, is a paragraph in small', async () => {
         expect(await captionOf(GOLDEN_DOCX_IMAGE_RUN, line('Note', '<w:sz w:val="16"/>'))).toEqual([null, ['Note']]);
     });
+
+    // A figure's caption is plain text; a Caption line no figure takes is a paragraph like any other.
+    describe("in Word's caption look", () => {
+        const WORD_CAPTION =
+            '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/><w:rPr><w:i/><w:color w:val="44546A"/><w:sz w:val="18"/></w:rPr></w:style>';
+        const CAPTION = '<w:pPr><w:pStyle w:val="Caption"/></w:pPr>';
+
+        test('a Caption paragraph no figure takes keeps the look and its own marks', async () => {
+            const { json } = await importDocxBody(line('Table 1', '<w:b/>', CAPTION), {
+                styles: `${BODY}${WORD_CAPTION}`,
+            });
+            expect(nodesOfType(json, 'text').map((node) => [node.text, node.marks?.map((mark) => mark.type)])).toEqual([
+                ['Table 1', ['textStyle', 'bold', 'italic', 'small']],
+            ]);
+            expect(marksOfType(json, 'textStyle')[0]?.attrs?.['color']).toBe('#44546a');
+        });
+
+        test('a Caption paragraph after a block figure is its caption, nothing left behind', async () => {
+            const { json } = await importDocxBody(
+                `${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${line('Figure 1', '<w:b/>', CAPTION)}`,
+                { styles: `${BODY}${WORD_CAPTION}` },
+            );
+            expect([nodesOfType(json, 'figure')[0]?.attrs?.['caption'], nodesOfType(json, 'text')]).toEqual([
+                'Figure 1',
+                [],
+            ]);
+        });
+    });
 });
