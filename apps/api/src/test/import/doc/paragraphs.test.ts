@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { CODE_BLOCK_LOOK } from '../../../lib/export/doc/ooxml';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -189,5 +190,50 @@ describe('indented code', () => {
             { styles: PRE },
         );
         expect(json.content).toEqual([{ type: 'blockquote', content: [text('Said'), code] }, text('After')]);
+    });
+
+    // 567 is 1 cm, 2160 Google Docs' 1.5": each within INDENT_TOLERANCE of the writer's code box in whole quotes.
+    const atIndent = (style: string, indent: number) =>
+        paragraph(run('x = 1'), `<w:pStyle w:val="${style}"/><w:ind w:left="${indent}"/>`);
+    const quoted = (depth: number): JSONContent =>
+        depth === 0 ? code : { type: 'blockquote', content: [quoted(depth - 1)] };
+
+    test.each([567, 1134, 2160])("at %i twips in another editor's style is code at the margin", async (indent) => {
+        const { json } = await importDocxBody(atIndent('HTMLPreformatted', indent), { styles: PRE });
+        expect(json.content).toEqual([code]);
+    });
+
+    test.each([
+        [567, 1],
+        [1134, 3],
+        [2160, 7],
+    ])("at %i twips in the writer's style is code %i quotes deep", async (indent, depth) => {
+        const styles = '<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/></w:style>';
+        const { json } = await importDocxBody(atIndent('CodeBlock', indent), { styles });
+        expect(json.content).toEqual([quoted(depth)]);
+    });
+
+    test("in the writer's style for a language, which a re-save may rename, nests too", async () => {
+        const styles = '<w:style w:type="paragraph" w:styleId="Python"><w:name w:val="Code Block (python)"/></w:style>';
+        const { json } = await importDocxBody(atIndent('Python', 1134), { styles });
+        expect(nodesOfType(json, 'blockquote')).toHaveLength(3);
+        expect(nodesOfType(json, 'codeBlock')[0]?.attrs).toEqual({ language: 'python' });
+    });
+
+    const { fill } = CODE_BLOCK_LOOK;
+    const border = (side: string) => `<w:${side} w:val="single" w:sz="4" w:space="11" w:color="${fill}"/>`;
+    test.each([
+        [
+            "the code box's fill and borders, as a Google Docs re-save keeps them,",
+            3,
+            ['top', 'left', 'bottom', 'right'],
+        ],
+        ["the code box's fill alone", 0, []],
+    ])('in %s at 1134 twips is code %i quotes deep', async (_look, depth, sides) => {
+        const box = `<w:pBdr>${sides.map(border).join('')}</w:pBdr><w:shd w:val="clear" w:fill="${fill}"/><w:ind w:left="1134"/>`;
+        const { json } = await importDocxBody(
+            paragraph(run('x = 1', '<w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono"/>'), box),
+        );
+        expect(json.content).toEqual([quoted(depth)]);
     });
 });

@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK, STYLE_NAMES, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { isMonospace, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -180,6 +180,17 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     const borders = props.borders ?? {};
     const leftBar = !!borders.left && !borders.top && !borders.bottom && !borders.right && role.kind !== 'code';
+    // The writer's code box: its style, or the fill and four borders a Google Docs re-save keeps of it.
+    const style = styles.get(styleId);
+    const boxed =
+        role.kind === 'code' &&
+        (style?.name === STYLE_NAMES.CodeBlock.toLowerCase() ||
+            style?.language !== undefined ||
+            (props.shading === CODE_BLOCK_LOOK.fill &&
+                !!borders.top &&
+                !!borders.left &&
+                !!borders.bottom &&
+                !!borders.right));
     const indLeft = props.indLeft ?? 0;
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
@@ -237,6 +248,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         };
         if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
+        if (boxed) para.boxed = true;
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         if (label && index === 0) para.labelled = true;
         // A framed paragraph holding only an image is a wrapped figure.

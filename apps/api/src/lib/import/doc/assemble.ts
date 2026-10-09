@@ -19,6 +19,8 @@ export type Para = {
     quote: number;
     // A quote inside the list item above it.
     inItem?: boolean;
+    // The writer's code box, whose indent counts its quotes.
+    boxed?: boolean;
     // A tracked deletion of the mark: accepted, the content joins the next paragraph.
     joinsNext?: boolean;
     // The first inline is a numbered heading's number.
@@ -195,7 +197,7 @@ function codeDepth(code: Para, open: Para | undefined, previous: Para | undefine
     const box = code.indLeft - CODE_BLOCK_LOOK.indent;
     const container = open && indentedUnder(box, open.indLeft) ? open.indLeft : 0;
     const depth = Math.round((box - container) / QUOTE_LOOK.indent);
-    if (depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
+    if (code.boxed && depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
         code.indLeft = box;
         code.quote = depth;
         code.inItem = container > 0 && depth > 0;
