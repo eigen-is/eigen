@@ -7,17 +7,50 @@ import { descendants, is, w, wChild } from './package';
 
 export const MONOSPACE_FONT = EIGEN_FONTS.find((font) => font.category === 'monospace')?.name;
 
-export type Theme = { font(themeName: string): string | undefined };
+export type Theme = { font(themeName: string, bidiLanguage?: string): string | undefined };
 
-export function readTheme(root: XmlElement | undefined): Theme {
+// *Bidi names the complex script face: the theme's a:cs, else its a:font for the script of the run's bidi language,
+// which the document's default language answers when the run names none.
+export function readTheme(root: XmlElement | undefined, defaultBidiLanguage?: string): Theme {
     const [scheme] = root ? descendants(root, A_NS, 'fontScheme') : [];
-    const latin = (local: string) => {
-        const font = scheme && xmlChild(scheme, A_NS, local);
-        return (font && xmlChild(font, A_NS, 'latin')?.attributes['typeface']) || undefined;
+    const typeface = (font: XmlElement | undefined) => font?.attributes['typeface'] || undefined;
+    const faces = (local: string) => {
+        const collection = scheme && xmlChild(scheme, A_NS, local);
+        if (!collection) return undefined;
+        const byScript = new Map(
+            xmlElements(collection)
+                .filter((font) => is(font, A_NS, 'font'))
+                .map((font) => [font.attributes['script'] ?? '', typeface(font)]),
+        );
+        return {
+            latin: typeface(xmlChild(collection, A_NS, 'latin')),
+            bidi: (language: string | undefined) =>
+                typeface(xmlChild(collection, A_NS, 'cs')) ?? byScript.get(scriptOf(language) ?? ''),
+        };
     };
-    const major = latin('majorFont');
-    const minor = latin('minorFont');
-    return { font: (name) => (name.startsWith('major') ? major : name.startsWith('minor') ? minor : undefined) };
+    const major = faces('majorFont');
+    const minor = faces('minorFont');
+    // Per language: a script lookup costs microseconds, and a file may name a language on every run.
+    const bidi = new Map<string, string | undefined>();
+    return {
+        font: (name, bidiLanguage = defaultBidiLanguage) => {
+            const collection = name.startsWith('major') ? major : name.startsWith('minor') ? minor : undefined;
+            if (!name.endsWith('Bidi')) return collection?.latin;
+            const key = `${name} ${bidiLanguage}`;
+            if (!bidi.has(key)) bidi.set(key, collection?.bidi(bidiLanguage));
+            return bidi.get(key);
+        },
+    };
+}
+
+// The ISO 15924 code the theme's a:font names, from a BCP 47 tag; a malformed tag from the file has none.
+function scriptOf(language: string | undefined): string | undefined {
+    if (!language) return undefined;
+    try {
+        return new Intl.Locale(language).maximize().script;
+    } catch {
+        return undefined;
+    }
 }
 
 // A name the map doesn't know, onto the bundled font of its fontTable.xml category, lowercase as the map's.

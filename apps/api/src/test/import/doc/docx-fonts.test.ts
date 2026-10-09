@@ -53,6 +53,27 @@ describe('body font', () => {
         });
         expect(fontsOf(json)).toEqual(['Source Serif 4', 'Source Serif 4']);
     });
+
+    // G11: Word's complex script theme fonts, the theme's cs face, else its face for the script of the bidi language.
+    test.each([
+        ["the theme's cs face", '<a:cs typeface="Courier New"/>', '', 'JetBrains Mono'],
+        ["the face of the default bidi language's script", '<a:cs typeface=""/>', '', 'Source Serif 4'],
+        [
+            "the face of the run's own bidi language's script",
+            '<a:cs typeface=""/>',
+            '<w:lang w:bidi="he-IL"/>',
+            'JetBrains Mono',
+        ],
+        ['none for a language without one', '<a:cs typeface=""/>', '<w:lang w:bidi="th-TH"/>', null],
+    ])('majorBidi resolves to %s', async (_name, cs, lang, expected) => {
+        const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/>${cs}<a:font script="Arab" typeface="Times New Roman"/><a:font script="Hebr" typeface="Courier New"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
+        const styles =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const body = paragraph(
+            `<w:r><w:rPr><w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>${lang}</w:rPr><w:t>Font</w:t></w:r>`,
+        );
+        expect(fontsOf((await importDocxBody(body, { styles, theme })).json)).toEqual([expected]);
+    });
 });
 
 // G5: a name the map doesn't know draws in its fontTable.xml category: fixed pitch is monospace, roman serif and swiss

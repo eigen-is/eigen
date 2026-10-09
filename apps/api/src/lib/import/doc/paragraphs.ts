@@ -45,7 +45,8 @@ export type Scope = {
 };
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
-    const theme = readTheme(pkg.theme);
+    const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
+    const theme = readTheme(pkg.theme, w(wChild(defaults, 'lang'), 'bidi'));
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');

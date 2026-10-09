@@ -119,7 +119,8 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 break;
             case 'rFonts': {
                 const themed = w(child, 'asciiTheme') ?? w(child, 'hAnsiTheme');
-                const font = (themed && theme.font(themed)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
+                const bidiLanguage = w(wChild(rPr, 'lang'), 'bidi');
+                const font = (themed && theme.font(themed, bidiLanguage)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
                 if (font) props.font = font;
                 break;
             }
