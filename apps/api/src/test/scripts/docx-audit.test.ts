@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import {
     auditImported,
     auditSource,
@@ -336,6 +337,78 @@ describe('source side', () => {
 });
 
 describe('both sides', () => {
+    const fontRun = (text: string, font: string) => run(text, `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`);
+
+    // A body in `font` with one word in `other`, read by the audit and imported by the reader.
+    async function fonts(font: string, other: string, heading = '') {
+        const docx = await buildDocxWithBody(
+            `${styled('Chapter', 'Title')}<w:p>${run('Body text ')}${fontRun('other', other)}</w:p>`,
+            {
+                styles: `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/></w:rPr></w:rPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:styleId="Chapter"><w:name w:val="heading 1"/>${heading}</w:style>`,
+            },
+        );
+        const { json } = await docxToPmJson(Buffer.from(docx));
+        return { source: auditSource(docx), imported: auditImported(json) };
+    }
+
+    const NO_FONT = { source: 0, imported: 0, matched: 0, invented: 0, kept: null };
+
+    const allIn = (fontFamily: string) =>
+        auditImported({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        {
+                            type: 'text',
+                            text: 'Title Body text other',
+                            marks: [{ type: 'textStyle', attrs: { fontFamily } }],
+                        },
+                    ],
+                },
+            ],
+        });
+
+    test('a Times body is Source Serif 4 on every word, on both sides, and kept only in that font', async () => {
+        const { source, imported } = await fonts('Times New Roman', 'Georgia');
+        expect(compareTallies(source, imported).features['font']).toEqual({
+            source: 4,
+            imported: 4,
+            matched: 4,
+            invented: 0,
+            kept: 1,
+        });
+        expect(compareTallies(source, allIn('JetBrains Mono')).features['font']).toEqual({
+            source: 4,
+            imported: 4,
+            matched: 0,
+            invented: 4,
+            kept: 0,
+        });
+    });
+
+    test('a Calibri body is no font on either side, nor a word in Arial or in the document font', async () => {
+        const { source, imported } = await fonts('Calibri', 'Arial');
+        expect(compareTallies(source, imported).features['font']).toEqual(NO_FONT);
+        expect(compareTallies(source, allIn('Inter')).features['font']).toEqual(NO_FONT);
+    });
+
+    test('an unknown body font is no font on either side, nor another unknown one', async () => {
+        const { source, imported } = await fonts('Zapfino Pro', 'Fraktur Old');
+        expect(compareTallies(source, imported).features['font']).toEqual(NO_FONT);
+    });
+
+    test("a heading style's own font is its words' font, as Word draws them", async () => {
+        const { source, imported } = await fonts(
+            'Calibri',
+            'Calibri',
+            '<w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria"/></w:rPr>',
+        );
+        expect([count(source, 'font'), compareTallies(source, imported).features['font']?.kept]).toEqual([1, 1]);
+    });
+
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
     // size, so the photo the doc leaves at its own width has one there.
     test("the writer's docx holds what its doc holds", async () => {

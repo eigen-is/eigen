@@ -15,6 +15,7 @@ import type { JSONContent } from '@tiptap/core';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
+import { fontMark } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { toTransitional } from '../lib/import/doc/package';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
@@ -214,7 +215,8 @@ export type Tally = {
     headings: HeadingLine[];
 };
 
-type Span = { text: string; marks: readonly Feature[] };
+// font: the bundled font a font mark draws in.
+type Span = { text: string; marks: readonly Feature[]; font?: string };
 
 type FeatureResult = { source: number; imported: number; matched: number; invented: number; kept: number | null };
 
@@ -280,14 +282,16 @@ function alternative(element: XmlElement): XmlElement | undefined {
 
 // Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
 // its characters does.
-function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
-    const words: { word: string; marks: Set<Feature> }[] = [];
+function wordsOf(spans: Span[]): { word: string; marks: Set<Feature>; font?: string }[] {
+    const words: { word: string; marks: Set<Feature>; font?: string }[] = [];
     let word = '';
     let marks = new Set<Feature>();
+    let font: string | undefined;
     const flush = () => {
-        if (word) words.push({ word, marks });
+        if (word) words.push({ word, marks, font });
         word = '';
         marks = new Set();
+        font = undefined;
     };
     for (const span of spans) {
         for (const char of span.text.replace(/\u00AD/g, '').replace(/[\u2010\u2011]/g, '-')) {
@@ -295,6 +299,7 @@ function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
             else {
                 word += char;
                 for (const mark of span.marks) marks.add(mark);
+                font = span.font ?? font;
             }
         }
     }
@@ -304,12 +309,13 @@ function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
 
 function record(tally: Tally, spans: Span[]): string[] {
     const words = wordsOf(spans);
-    for (const { word, marks } of words) {
+    for (const { word, marks, font } of words) {
         tally.words.push(word);
         for (const mark of marks) {
             const marked = tally.marks.get(mark) ?? [];
             tally.marks.set(mark, marked);
-            marked.push(word);
+            // A word in another font than Word's is no keep.
+            marked.push(mark === 'font' ? `${word} (${font})` : word);
             add(tally, mark);
         }
     }
@@ -379,9 +385,17 @@ type Field = { result: boolean; instr: string; link: boolean };
 
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
-type Inline = { scope: Scope; paragraph: Paragraph; runs: XmlElement[]; marks: boolean; link: boolean };
+// styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font.
+type Inline = {
+    scope: Scope;
+    paragraph: Paragraph;
+    runs: XmlElement[];
+    styleRuns: XmlElement[];
+    marks: boolean;
+    link: boolean;
+};
 
-type RunLook = { hidden: boolean; code: boolean; marks: Feature[] };
+type RunLook = { hidden: boolean; code: boolean; marks: Feature[]; font?: string };
 
 type Boxed = { element: XmlElement; boxed: boolean };
 
@@ -663,7 +677,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
-    const base = { font: fontOf(plain), color: colorOf(plain), size: sizeOf(plain), indent };
+    const base = { color: colorOf(plain), size: sizeOf(plain), indent };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
         const chain = styles.chain(val(child(rPr, 'rStyle')) ?? styles.character);
@@ -686,6 +700,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const highlight = val(first(sources, 'highlight'));
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W, 'fill')?.toUpperCase();
+        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]));
         const marks: [Feature, boolean][] = [
             ['bold', toggle('b')],
             ['italic', toggle('i')],
@@ -695,7 +710,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['superscript', vertAlign === 'superscript'],
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
-            ['font', (fontOf(sources) ?? base.font) !== base.font],
+            ['font', font !== undefined],
             ['small', sizeOf(sources) <= base.size * SMALL],
             ['link', linked],
         ];
@@ -703,6 +718,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
             marks: marks.filter(([, set]) => set).map(([feature]) => feature),
+            font,
         };
     };
 
@@ -721,7 +737,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const text = (value: string, context: Inline, look: RunLook | undefined) => {
         const marks: readonly Feature[] = !context.marks || !look ? [] : look.code ? ['code'] : look.marks;
-        context.paragraph.spans.push({ text: value, marks });
+        context.paragraph.spans.push({ text: value, marks, font: look?.font });
     };
     const space = (context: Inline) => context.paragraph.spans.push({ text: ' ', marks: [] });
 
@@ -929,6 +945,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             scope,
             paragraph: current,
             runs: structural ? (styles.rPr ? [styles.rPr] : []) : look.runs,
+            styleRuns: look.runs,
             marks: !look.code && !caption,
             link: false,
         });
@@ -1135,6 +1152,7 @@ export function auditImported(json: JSONContent): Tally {
                 continue;
             }
             const features: Feature[] = [];
+            let font: string | undefined;
             for (const mark of marks) {
                 const attrs = mark.attrs ?? {};
                 const feature = MARK_FEATURES.get(mark.type);
@@ -1142,9 +1160,10 @@ export function auditImported(json: JSONContent): Tally {
                 if (mark.type !== 'textStyle') continue;
                 const color = attrs['color'];
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
-                if (typeof attrs['fontFamily'] === 'string' && attrs['fontFamily']) features.push('font');
+                font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
+                if (font) features.push('font');
             }
-            spans.push({ text: value, marks: features });
+            spans.push({ text: value, marks: features, font });
         }
         const words = record(tally, spans);
         const text = textOf(spans);
@@ -1346,7 +1365,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words in another font than the body text's, small text words at most 85% of its size, text color words in another color. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',
