@@ -135,6 +135,20 @@ describe('a block inside a list item or a quote', () => {
     });
 });
 
+// The Hyperlink style draws the editor's link look; a link's own color and underline are the author's.
+describe("a link's own look", () => {
+    const link = { type: 'link', attrs: { href: 'https://example.com/', title: null } };
+    test.each<[string, Mark]>([
+        ['a color', { type: 'textStyle', attrs: { color: '#ff0000', fontFamily: null } }],
+        ['an underline', { type: 'underline' }],
+    ])('%s comes back', async (_name, mark) => {
+        const { source, json } = await roundTrip([
+            { type: 'paragraph', content: [{ type: 'text', text: 'Link', marks: [link, mark] }] },
+        ]);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
 // Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
 // It keeps one placeholder for the export's media, so names don't say which image is which.
 function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSONContent {
