@@ -1754,7 +1754,7 @@ if (import.meta.main && Bun.isMainThread) {
             corpus: positionals[0],
             out: values.out,
             importer: values.importer,
-            name: values.name ?? path.basename(values.importer ?? 'mammoth', '.ts'),
+            name: values.name ?? path.basename(values.importer ?? DEFAULT_IMPORTER, '.ts'),
             timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
         });
         console.log(

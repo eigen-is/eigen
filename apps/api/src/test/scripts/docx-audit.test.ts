@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
@@ -17,8 +18,8 @@ import {
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
 
-// The audit decides whether Eigen's own docx reader replaces mammoth, so what it counts is pinned here: Word's
-// semantics on the source side, the eigendoc JSON on the other, and one measure for both importers.
+// The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
+// the source side, the eigendoc JSON on the other, and one measure for every importer.
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'docx-audit-'));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -134,7 +135,7 @@ describe('source side', () => {
         const tally = await source(
             `<w:p>${run('Ouch')}<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>${run('.')}</w:p>`,
         );
-        // As mammoth writes it.
+        // As the reader writes it.
         const imported = auditImported({
             type: 'doc',
             content: [
@@ -414,7 +415,7 @@ describe('both sides', () => {
     test("the writer's docx holds what its doc holds", async () => {
         const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
-        const written = await auditSource(docx);
+        const written = auditSource(docx);
         const held = auditImported(json);
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),
@@ -528,14 +529,14 @@ describe('runs', () => {
             '| Bold (words) | 1 | 1 | 0 | 0.0% | 0 |',
         );
 
-        // mammoth maps the Strong run style to bold, which the source side counts too: kept, not invented.
-        const mammothOut = path.join(scratch, 'out-mammoth');
-        const mammothRun = await runAudit({ corpus: dir, out: mammothOut, name: 'mammoth', timeoutMs: 30_000 });
-        expect([mammothRun.crashes, mammothRun.timeouts]).toEqual([0, 0]);
-        const kept = JSON.parse(fs.readFileSync(path.join(mammothOut, 'files/nested/throw.docx.json'), 'utf8'));
+        // The reader maps the Strong run style to bold, which the source side counts too: kept, not invented.
+        const readerOut = path.join(scratch, 'out-reader');
+        const readerRun = await runAudit({ corpus: dir, out: readerOut, name: 'reader', timeoutMs: 30_000 });
+        expect([readerRun.crashes, readerRun.timeouts]).toEqual([0, 0]);
+        const kept = JSON.parse(fs.readFileSync(path.join(readerOut, 'files/nested/throw.docx.json'), 'utf8'));
         expect(kept.features.bold).toEqual({ source: 1, imported: 1, matched: 1, invented: 0, kept: 1 });
 
-        const comparison = compareRuns(stubOut, mammothOut);
+        const comparison = compareRuns(stubOut, readerOut);
         expect(comparison).toContain('| Bold (words) | 1 | 1 | 0.0% | 100.0% | +100.0 | 0 | 0 |');
         expect(comparison).toContain('nested/throw.docx');
     }, 60_000);
@@ -586,13 +587,29 @@ describe('runs', () => {
         fs.mkdirSync(dir, { recursive: true });
         fs.symlinkSync(real, path.join(dir, 'through'));
         const out = path.join(scratch, 'out-symlinked', 'deeper');
-        const meta = await runAudit({ corpus: dir, out, name: 'mammoth', timeoutMs: 30_000 });
+        const meta = await runAudit({ corpus: dir, out, name: 'reader', timeoutMs: 30_000 });
         expect([meta.files, fs.existsSync(path.join(out, 'files/through/linked.docx.json'))]).toEqual([1, true]);
 
         const empty = await corpus('empty', {});
         fs.mkdirSync(empty, { recursive: true });
-        expect(runAudit({ corpus: empty, out: path.join(scratch, 'out-empty'), name: 'mammoth' })).rejects.toThrow(
+        expect(runAudit({ corpus: empty, out: path.join(scratch, 'out-empty'), name: 'reader' })).rejects.toThrow(
             'No .docx files',
         );
+    }, 60_000);
+
+    test('a run is named after its importer module, the reader by default', async () => {
+        const dir = await corpus('named', { 'a.docx': await buildDocxWithBody(paragraph('named')) });
+        const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'foreign.ts');
+        await Bun.write(stub, 'export async function docxToPmJson() { return { json: { type: "doc" }, images: [] }; }');
+        const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
+        const names = await Promise.all(
+            [[], ['--importer', stub]].map(async (args, index) => {
+                const out = path.join(scratch, `out-named-${index}`);
+                const audit = Bun.spawn([process.execPath, script, dir, '--out', out, ...args], { stdout: 'ignore' });
+                expect(await audit.exited).toBe(0);
+                return JSON.parse(fs.readFileSync(path.join(out, 'run.json'), 'utf8')).name;
+            }),
+        );
+        expect(names).toEqual(['from-docx', 'foreign']);
     }, 60_000);
 });
