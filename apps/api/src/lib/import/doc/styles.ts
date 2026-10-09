@@ -91,6 +91,13 @@ export function isFill(fill: string | undefined): boolean {
     return !!fill && fill !== 'FFFFFF';
 }
 
+// A light grey, as the editor's code fill and its re-saves are: each channel at least D0 and within 18 of the others.
+export function isLightNeutral(fill: string | undefined): boolean {
+    if (!fill || !isFill(fill)) return false;
+    const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));
+    return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
+}
+
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
     const props: RunProps = {};
     for (const child of rPr ? xmlElements(rPr) : []) {

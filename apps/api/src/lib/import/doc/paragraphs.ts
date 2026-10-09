@@ -19,7 +19,17 @@ import {
     wChild,
 } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
-import { isFill, mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
+import {
+    isFill,
+    isLightNeutral,
+    mergePara,
+    mergeRun,
+    type Role,
+    type RunProps,
+    readParaProps,
+    readRunProps,
+    Styles,
+} from './styles';
 import { readTable } from './tables';
 
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
@@ -164,6 +174,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         role = { kind: 'heading', level: outline + 1 };
     const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
     if (role.kind === 'heading' && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
+    if (role.kind === 'code' && !isMonospace(reader, p, scope, styleId)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -192,16 +203,19 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, list?.indLeft === undefined ? {} : { indLeft: list.indLeft }, direct);
 
-    // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
+    // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
+    // grey of any shade, as other editors shade code.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
+    const mono = (piece: Piece) =>
+        piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT;
     const allMono =
-        texts.length > 0 &&
-        texts.every((piece) => piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT);
+        texts.some(mono) && texts.every((piece) => mono(piece) || (piece.kind === 'node' && isWhitespace(piece.node)));
     if (
         role.kind === 'paragraph' &&
         !list &&
         !task &&
-        ((allMono && isFill(props.shading)) || (texts.length === 0 && props.shading === CODE_BLOCK_LOOK.fill))
+        ((allMono && (props.shading === CODE_BLOCK_LOOK.fill || isLightNeutral(props.shading))) ||
+            (texts.length === 0 && props.shading === CODE_BLOCK_LOOK.fill))
     )
         role = { kind: 'code', language: null };
 
@@ -303,6 +317,19 @@ function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolea
     return (
         sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
     );
+}
+
+// G8: a code style draws code only where every run holding text is monospace; HTML Preformatted in Times is prose.
+function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: string | undefined): boolean {
+    const { styles } = reader;
+    const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
+    return descendants(p, W_NS, 'r')
+        .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
+        .every((run) => {
+            const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
+            const { font } = mergeRun(paraRun, styles.run(direct.style), direct);
+            return bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT;
+        });
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

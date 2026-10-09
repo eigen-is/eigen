@@ -191,9 +191,47 @@ describe('tracked changes and hidden text', () => {
 });
 
 // Other editors indent code as they indent text: only the writer's own indents nest it in quotes.
-describe('indented code', () => {
+// G8: a code style or the writer's flattened look is code only where every run holding text is monospace.
+describe('code blocks', () => {
+    const font = (name: string) => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
     const PRE =
-        '<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>';
+        '<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:style>';
+    const shaded = (fill: string) => `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>`;
+    const types = async (body: string) =>
+        ((await importDocxBody(body, { styles: PRE })).json.content ?? []).map((node) => node.type);
+
+    test('a Courier New paragraph without a fill is a paragraph in JetBrains Mono', async () => {
+        const { json } = await importDocxBody(paragraph(run('x = 1', font('Courier New'))));
+        expect(json.content?.map((node) => node.type)).toEqual(['paragraph']);
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['fontFamily'])).toEqual(['JetBrains Mono']);
+    });
+
+    test.each([
+        ['in Times New Roman is a paragraph', run('x = 1', font('Times New Roman')), ['paragraph']],
+        [
+            'with a space in Times New Roman is code',
+            `${run('x')}${run(' ', font('Times New Roman'))}${run('= 1')}`,
+            ['codeBlock'],
+        ],
+    ])('HTML Preformatted %s', async (_name, runs, expected) => {
+        expect(await types(paragraph(runs, '<w:pStyle w:val="HTMLPreformatted"/>'))).toEqual(expected);
+    });
+
+    test.each([
+        ['F3F4F6', ['codeBlock']],
+        ['EEEEEE', ['codeBlock']],
+        ['D0D0D0', ['codeBlock']],
+        ['CFCFCF', ['paragraph']],
+        ['DDEEFF', ['paragraph']],
+    ])('monospace runs on %s', async (fill, expected) => {
+        expect(await types(paragraph(run('x = 1', font('Consolas')), shaded(fill)))).toEqual(expected);
+    });
+});
+
+describe('indented code', () => {
+    // Word's HTML Preformatted draws in Courier New.
+    const MONO = '<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr>';
+    const PRE = `<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/>${MONO}</w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>`;
     const BULLETS =
         '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
     const pre = (text: string) => paragraph(run(text), '<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="720"/>');
@@ -292,7 +330,7 @@ describe('indented code', () => {
     });
 
     // An indent comes from the style unless the list level or the paragraph sets one.
-    const INDENTED = `${PRE}<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="IndentedPre"><w:name w:val="HTML Preformatted"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>`;
+    const INDENTED = `${PRE}<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="IndentedPre"><w:name w:val="HTML Preformatted"/><w:pPr><w:ind w:left="720"/></w:pPr>${MONO}</w:style>`;
     const UNINDENTED =
         '<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>';
     const styledPre = paragraph(run('x = 1'), '<w:pStyle w:val="IndentedPre"/>');
@@ -332,13 +370,13 @@ describe('indented code', () => {
         [1134, 3],
         [2160, 7],
     ])("at %i twips in the writer's style is code %i quotes deep", async (indent, depth) => {
-        const styles = '<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/></w:style>';
+        const styles = `<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/>${MONO}</w:style>`;
         const { json } = await importDocxBody(atIndent('CodeBlock', indent), { styles });
         expect(json.content).toEqual([quoted(depth)]);
     });
 
     test("in the writer's style for a language, which a re-save may rename, nests too", async () => {
-        const styles = '<w:style w:type="paragraph" w:styleId="Python"><w:name w:val="Code Block (python)"/></w:style>';
+        const styles = `<w:style w:type="paragraph" w:styleId="Python"><w:name w:val="Code Block (python)"/>${MONO}</w:style>`;
         const { json } = await importDocxBody(atIndent('Python', 1134), { styles });
         expect(nodesOfType(json, 'blockquote')).toHaveLength(3);
         expect(nodesOfType(json, 'codeBlock')[0]?.attrs).toEqual({ language: 'python' });
