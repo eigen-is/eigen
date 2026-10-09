@@ -33,6 +33,7 @@ function item(text: string, ilvl = 0, number = 1): Para {
             number,
             label: () => `${number}.`,
             suffix: 'tab',
+            pPr: {},
             ilvl,
         },
     });
@@ -73,6 +74,67 @@ describe('lists', () => {
             'orderedList[listItem[One]]',
             'pageBreak',
             'After',
+        ]);
+    });
+});
+
+// Depth comes from Word's level within one list; a list of another definition nests only where its number starts at or
+// right of the open item's text.
+describe('lists of two definitions', () => {
+    const bullet = (text: string, key: string, numberAt: number, indLeft = numberAt + 360): Para =>
+        para(text, {
+            indLeft,
+            numberAt,
+            list: {
+                key,
+                ordered: false,
+                format: 'bullet',
+                number: 1,
+                label: () => '',
+                suffix: 'tab',
+                pPr: {},
+                ilvl: 0,
+            },
+        });
+
+    test('a number right of the open text nests', () => {
+        expect(assembled([bullet('One', 'a', 360), bullet('Inner', 'b', 1080)])).toEqual([
+            'bulletList[listItem[One | bulletList[listItem[Inner]]]]',
+        ]);
+    });
+
+    test('a number left of the open text is a sibling list, however far its text is indented', () => {
+        expect(assembled([bullet('One', 'a', 360), bullet('Other', 'b', 360, 1440)])).toEqual([
+            'bulletList[listItem[One]]',
+            'bulletList[listItem[Other]]',
+        ]);
+    });
+
+    test('an empty paragraph between items of two lists stands between them', () => {
+        expect(assembled([bullet('One', 'a', 360), para(''), bullet('Two', 'b', 360)])).toEqual([
+            'bulletList[listItem[One]]',
+            '',
+            'bulletList[listItem[Two]]',
+        ]);
+    });
+
+    test('an empty paragraph before a paragraph at the open text stays in the item, and the list goes on', () => {
+        const text = para('More', { indLeft: 720 });
+        expect(assembled([bullet('One', 'a', 360), para(''), text, bullet('Two', 'a', 360)])).toEqual([
+            'bulletList[listItem[One |  | More] | listItem[Two]]',
+        ]);
+    });
+
+    test('an empty paragraph after a nested list, before the next item of the outer one, keeps the outer list one', () => {
+        const nested = bullet('Inner', 'b', 1080);
+        expect(assembled([bullet('One', 'a', 360), nested, para(''), bullet('Two', 'a', 360)])).toEqual([
+            'bulletList[listItem[One | bulletList[listItem[Inner | ]]] | listItem[Two]]',
+        ]);
+    });
+
+    test('an empty paragraph between items of one list stays in the item above', () => {
+        expect(assembled([bullet('One', 'a', 360), para(''), bullet('Two', 'a', 360)])).toEqual([
+            'bulletList[listItem[One | ] | listItem[Two]]',
         ]);
     });
 });
@@ -125,6 +187,30 @@ describe('blank lines before a page', () => {
 
 describe('floats', () => {
     const figure: JSONContent = { type: 'figure', attrs: { mediaName: 'image-1.png', layout: 'wrap-left' } };
+
+    // G10: the writer clears an item's wrapped figure with a break; a Google Docs re-save drops its clear and its style.
+    test("the line break clearing an item's wrapped figure stays out of the list", () => {
+        const holder = item('', 0, 1);
+        const cleared = para('', { inlines: [{ type: 'hardBreak' }], empty: false });
+        expect(
+            assembled([
+                { kind: 'float', figure },
+                holder,
+                para('One', { indLeft: ITEM_INDENT }),
+                cleared,
+                item('Two', 0, 2),
+            ]),
+        ).toEqual(['orderedList[listItem[figure | One] | listItem[Two]]']);
+    });
+
+    test('a line break between items without a wrapped figure ends the list', () => {
+        const broken = para('', { inlines: [{ type: 'hardBreak' }], empty: false });
+        expect(assembled([item('One', 0, 1), broken, item('Two', 0, 2)])).toEqual([
+            'orderedList[listItem[One]]',
+            'hardBreak',
+            'orderedList[listItem[Two]]',
+        ]);
+    });
 
     test("a float anchored in a numbered heading follows the heading's number", () => {
         const heading = para('2. ', { role: { kind: 'heading', level: 1 }, labelled: true });

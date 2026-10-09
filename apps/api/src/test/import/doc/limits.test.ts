@@ -9,6 +9,7 @@ import { LIST_LEVELS } from '../../../lib/core/ooxml';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
+import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
@@ -273,7 +274,7 @@ describe('structure', () => {
     }, 5000);
 
     test('quotes nest at most eight deep, deeper ones joining the eighth', async () => {
-        const bar = '<w:pBdr><w:left w:val="single" w:sz="24" w:space="12" w:color="E5E7EB"/></w:pBdr>';
+        const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="12" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr>`;
         const json = await imported(paragraph(run('Deep'), `${bar}<w:ind w:left="999999999"/>`));
         let depth = 0;
         for (let node = json.content?.[0]; node?.type === 'blockquote'; node = node.content?.[0]) depth++;

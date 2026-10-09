@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { CAPTION_LOOK } from '../../../lib/export/doc/looks';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Pictures: one media file per image part, named from its content type, placed as Word places it.
@@ -84,5 +85,55 @@ describe('placement', () => {
         expect([figure?.attrs?.['alt'], figure?.attrs?.['width']]).toEqual(['A pixel', 40]);
         expect(figure?.marks?.map((mark) => mark.attrs?.['href'])).toEqual(['https://example.com/']);
         expect(marksOfType(json, 'link')).toEqual([]);
+    });
+});
+
+// G9: a figure keeps its place; a block figure takes the next line as its caption only in the Caption style or the
+// writer's caption look, a wrapped one only what its own drawing holds.
+describe('captions', () => {
+    const STYLES = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
+    const BODY = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+    const wrapped = GOLDEN_DOCX_IMAGE_RUN.replace(
+        '<wp:inline>',
+        '<wp:anchor><wp:wrapSquare wrapText="bothSides"/>',
+    ).replace('</wp:inline>', '</wp:anchor>');
+    const line = (text: string, rPr: string, pPr = '') =>
+        `<w:p>${pPr}<w:r><w:rPr>${rPr}</w:rPr><w:t>${text}</w:t></w:r></w:p>`;
+    const captionOf = async (figure: string, next: string) => {
+        const { json } = await importDocxBody(`${paragraph(figure)}${next}`, { styles: `${BODY}${STYLES}` });
+        return [
+            nodesOfType(json, 'figure')[0]?.attrs?.['caption'],
+            marksOfType(json, 'small').map((mark) => mark.text),
+        ];
+    };
+
+    test('a Caption paragraph after an anchored, wrapped figure stays a paragraph', async () => {
+        expect(await captionOf(wrapped, line('Figure 1', '', '<w:pPr><w:pStyle w:val="Caption"/></w:pPr>'))).toEqual([
+            null,
+            [],
+        ]);
+    });
+
+    // Word for the web turns the writer's floating figure into a frame around the image and its caption.
+    test('a Caption paragraph in the frame of a framed figure is its caption, one outside it is not', async () => {
+        const frame = (side: string) => `<w:framePr w:wrap="around" w:xAlign="${side}"/>`;
+        const framed = (inner: string, side: string, style = '') =>
+            `<w:p><w:pPr>${style}${frame(side)}</w:pPr>${inner}</w:p>`;
+        const caption = '<w:pStyle w:val="Caption"/>';
+        const body = `${framed(GOLDEN_DOCX_IMAGE_RUN, 'left')}${framed('<w:r><w:t>Left</w:t></w:r>', 'left', caption)}${framed(GOLDEN_DOCX_IMAGE_RUN, 'right')}${framed('<w:r><w:t>Other</w:t></w:r>', 'left', caption)}`;
+        const { json } = await importDocxBody(body, { styles: STYLES });
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['layout'], node.attrs?.['caption']])).toEqual([
+            ['wrap-left', 'Left'],
+            ['wrap-right', null],
+        ]);
+    });
+
+    test("the caption look Google Docs flattens the writer's caption to is a block figure's caption", async () => {
+        const look = `<w:color w:val="${CAPTION_LOOK.color}"/><w:sz w:val="${CAPTION_LOOK.sizePt * 2}"/>`;
+        expect(await captionOf(GOLDEN_DOCX_IMAGE_RUN, line('Figure 1', look))).toEqual(['Figure 1', []]);
+    });
+
+    test('a small line after a block figure, not in the caption look, is a paragraph in small', async () => {
+        expect(await captionOf(GOLDEN_DOCX_IMAGE_RUN, line('Note', '<w:sz w:val="16"/>'))).toEqual([null, ['Note']]);
     });
 });

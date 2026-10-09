@@ -139,7 +139,25 @@ describe('a block inside a list item or a quote', () => {
             'code and a rule at the margin after a list, code in its last item',
             [ordered([p('One'), code('in()')]), code('after()'), ordered([p('Two')]), rule],
         ],
+        ['a quote in an item in a quote', [quote(p('Said'), ordered([p('One'), quote(p('Inner'))]), p('Done'))]],
+        [
+            'code opening a quote in an item in a quote',
+            [quote(p('Said'), ordered([p('One'), quote(code('inner()'), p('Inner'))]), p('Done'))],
+        ],
+        ['a rule in a quote', [quote(p('Said'), rule, p('Done'))]],
+        ['a rule in a quote two deep', [quote(p('Said'), quote(p('Deep'), rule, p('Deeper')), p('Done'))]],
     ])('%s', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// The writer gives each list its own w:num, so lists side by side stay apart.
+describe('lists side by side', () => {
+    test.each<[string, JSONContent[]]>([
+        ['two bullet lists', [bullets([p('One')]), bullets([p('Two')])]],
+        ['two bullet lists in an item', [ordered([p('One'), bullets([p('a')]), bullets([p('b')])])]],
+    ])('%s come back apart', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
@@ -188,12 +206,6 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        const want = googleLosses(expected(source, json), json);
-        const blocks = json.content ?? [];
-        expect(stored({ ...json, content: blocks.slice(0, -3) })).toEqual(
-            stored({ ...want, content: want.content?.slice(0, -1) }),
-        );
-        // G10, U5's: the re-save splits the list whose first item opens with a wrapped figure.
-        expect(blocks.slice(-3).map((node) => node.type)).toEqual(['orderedList', 'paragraph', 'orderedList']);
+        expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });
 });

@@ -1,7 +1,7 @@
 import { codeBlockLanguage, headingLevel, PAGE_SECTION_TYPES, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
-import type { Theme } from './docx-fonts';
+import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
 import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
@@ -19,12 +19,19 @@ export type RunProps = {
     linkColor?: boolean;
     highlight?: string;
     shading?: string;
-    font?: string;
+    fonts?: Fonts;
     size?: number;
     vanish?: boolean;
-};
+} & Script;
 
-type Borders = { top?: boolean; left?: boolean; bottom?: boolean; right?: boolean };
+// The left border's width in eighths of a point, which tells the writer's quote bar from a rule beside the text.
+type Borders = {
+    top?: boolean;
+    left?: boolean;
+    bottom?: boolean;
+    right?: boolean;
+    bar?: number;
+};
 
 export type ParaProps = {
     style?: string;
@@ -91,6 +98,13 @@ export function isFill(fill: string | undefined): boolean {
     return !!fill && fill !== 'FFFFFF';
 }
 
+// A light grey, as the editor's code fill and its re-saves are: each channel at least D0 and within 18 of the others.
+export function isLightNeutral(fill: string | undefined): boolean {
+    if (!fill || !isFill(fill)) return false;
+    const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));
+    return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
+}
+
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
     const props: RunProps = {};
     for (const child of rPr ? xmlElements(rPr) : []) {
@@ -116,9 +130,12 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 // A dstrike off must not undo a strike on.
                 if (child.local === 'strike' || onOff(child)) props.strike = onOff(child);
                 break;
-            case 'u':
-                props.underline = w(child, 'val') !== 'none';
+            case 'u': {
+                // MS-OI29500 §2.1.100c: Word reads a w:u without w:val, often only a color, as inherited.
+                const value = w(child, 'val');
+                if (value !== undefined) props.underline = value !== 'none';
                 break;
+            }
             case 'vertAlign':
                 props.vertAlign = w(child, 'val');
                 break;
@@ -133,12 +150,28 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 props.shading = shadingOf(child);
                 break;
             case 'rFonts': {
-                const themed = w(child, 'asciiTheme') ?? w(child, 'hAnsiTheme');
-                const bidiLanguage = w(wChild(rPr, 'lang'), 'bidi');
-                const font = (themed && theme.font(themed, bidiLanguage)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
-                if (font) props.font = font;
+                const lang = wChild(rPr, 'lang');
+                const fonts: Fonts = {};
+                for (const slot of FONT_SLOTS) {
+                    const themed = w(child, slot === 'cs' ? 'cstheme' : `${slot}Theme`);
+                    const language = themed?.endsWith('Bidi')
+                        ? w(lang, 'bidi')
+                        : themed?.endsWith('EastAsia')
+                          ? w(lang, 'eastAsia')
+                          : undefined;
+                    const font = (themed && theme.font(themed, language)) ?? w(child, slot);
+                    if (font) fonts[slot] = font;
+                }
+                props.fonts = fonts;
+                const hint = w(child, 'hint');
+                if (hint) props.hint = hint;
                 break;
             }
+            case 'cs':
+            case 'rtl':
+                // Either marks the run complex script, drawn all in its cs face; an rtl off leaves a cs on.
+                if (child.local === 'cs' || onOff(child)) props.complex = onOff(child);
+                break;
             case 'sz':
                 props.size = halfPoints(w(child, 'val'));
                 break;
@@ -194,6 +227,8 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                     const border = wChild(child, side);
                     if (border) borders[side] = !['nil', 'none'].includes(w(border, 'val') ?? 'none');
                 }
+                const left = wChild(child, 'left');
+                if (left) borders.bar = int(w(left, 'sz'));
                 props.borders = borders;
                 break;
             }
@@ -228,7 +263,13 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
 }
 
 export function mergeRun(...layers: RunProps[]): RunProps {
-    return Object.assign({}, ...layers);
+    const merged: RunProps = {};
+    for (const layer of layers) {
+        const { fonts, ...rest } = layer;
+        Object.assign(merged, rest);
+        if (fonts) merged.fonts = { ...merged.fonts, ...fonts };
+    }
+    return merged;
 }
 
 export function mergePara(...layers: ParaProps[]): ParaProps {

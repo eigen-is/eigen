@@ -4,13 +4,13 @@ import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { CODE_LOOK, halfPoints, LINK_LOOK, SMALL_LOOK } from '../../export/doc/looks';
+import { LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
-import { fontMark } from './docx-fonts';
+import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
-import { ABSORBED, isFill, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
+import { ABSORBED, isFill, isLightNeutral, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
 import { isLight } from './tables';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
@@ -48,7 +48,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
             continue;
         }
         if (element.ns === M_NS && (element.local === 'oMath' || element.local === 'oMathPara')) {
-            const text = descendants(element, M_NS, 't').map(xmlText).join('');
+            const text = mathText(element);
             if (text) pushText(reader, text, {}, context);
             continue;
         }
@@ -92,6 +92,15 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
                 walkInline(reader, xmlElements(element), context);
         }
     }
+}
+
+// G14: math as text until the schema holds math; each object and run of an equation is a word of its own.
+function mathText(element: XmlElement): string {
+    const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
+    return equations
+        .flatMap((equation) => xmlElements(equation).map((part) => descendants(part, M_NS, 't').map(xmlText).join('')))
+        .filter(Boolean)
+        .join(' ');
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps, context: RunContext): void {
@@ -246,16 +255,16 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
 
 export function pushText(reader: Reader, text: string, direct: RunProps, context: RunContext): void {
     if (!text) return;
-    const { marks, small, font, hidden } = marksOf(reader, direct, context);
-    if (hidden) return;
-    const node = marks.length > 0 ? { type: 'text', text, marks } : { type: 'text', text };
-    context.pieces.push({ kind: 'node', node, small, font });
+    for (const { text: part, marks, small, font } of marksOf(reader, text, direct, context)) {
+        const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
+        context.pieces.push({ kind: 'node', node, small, font });
+    }
 }
 
 type Marks = NonNullable<JSONContent['marks']>;
 
-// Eigen's small text is 75% of the body (eigen-prose.css), the writer's 9 pt in 11; foreign small print is at most this
-// share of the body size, and a body style a point smaller is still body text.
+// P8: small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
+// smaller is still body text.
 export const SMALL_PRINT = 0.85;
 
 // Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
@@ -271,9 +280,10 @@ const LINK_LOOKS = new Map([
 // run itself, the toggles of the two styles flipping each other. A look the paragraph's node already draws is no mark.
 function marksOf(
     reader: Reader,
+    text: string,
     direct: RunProps,
     context: RunContext,
-): { marks: Marks; small: boolean; font: string | undefined; hidden: boolean } {
+): { text: string; marks: Marks; small: boolean; font?: string }[] {
     const { styles } = reader;
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
@@ -286,9 +296,9 @@ function marksOf(
         delete charRun.underline;
     }
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
-    const font = full.font;
-    if (full.vanish) return { marks: [], small: false, font, hidden: true };
-    if (absorbed === 'all') return { marks: [], small: false, font, hidden: false };
+    const faces = byFace(text, full.fonts, full);
+    if (full.vanish) return [];
+    if (absorbed === 'all') return faces.map((face) => ({ ...face, marks: [], small: false }));
     const own = { ...paraRun };
     for (const key of absorbed) delete own[key];
     const props = mergeRun(own, charRun, direct);
@@ -301,9 +311,6 @@ function marksOf(
     }
 
     const shade = props.highlight || props.shading || '';
-    // Code from a code style or the editor's inline code look; a foreign monospace run alone is a font.
-    const code = styles.isCodeCharacter(direct.style) || (font === CODE_LOOK.font && shade === CODE_LOOK.shading);
-    if (code && !link) return { marks: [{ type: 'code' }], small: false, font, hidden: false };
     const marks: Marks = [];
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
     if (props.bold) marks.push({ type: 'bold' });
@@ -313,10 +320,7 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    const size = props.size;
-    const small =
-        (direct.size !== undefined && direct.size <= halfPoints(SMALL_LOOK.sizePt)) ||
-        (size !== undefined && size <= SMALL_PRINT * reader.bodySize);
+    const small = props.size !== undefined && props.size <= SMALL_PRINT * reader.bodySize;
     if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =
@@ -327,18 +331,32 @@ function marksOf(
         !(scope.onFill && !isFill(shade) && isLight(props.color))
             ? props.color
             : undefined;
-    const fontFamily = fontMark(font, reader.fontTable);
     // Word draws capitals over small caps.
     const caps: Caps | null = props.caps ? 'all' : props.smallCaps ? 'small' : null;
-    if (color || fontFamily || caps)
-        marks.push({
-            type: 'textStyle',
-            attrs: { color: color ? `#${color.toLowerCase()}` : null, fontFamily: fontFamily ?? null, caps },
-        });
-    if (isFill(shade))
-        marks.push({
-            type: 'highlight',
-            attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` },
-        });
-    return { marks, small, font, hidden: false };
+    const highlight: Marks = isFill(shade)
+        ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` } }]
+        : [];
+    return faces.map(({ text: part, font }) => {
+        // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
+        // monospace run alone is a font.
+        const code =
+            bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT &&
+            (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
+        if (code && !link) return { text: part, marks: [{ type: 'code' }], small: false, font };
+        const fontFamily = fontMark(font, reader.fontTable);
+        const textStyle: Marks =
+            color || fontFamily || caps
+                ? [
+                      {
+                          type: 'textStyle',
+                          attrs: {
+                              color: color ? `#${color.toLowerCase()}` : null,
+                              fontFamily: fontFamily ?? null,
+                              caps,
+                          },
+                      },
+                  ]
+                : [];
+        return { text: part, marks: [...marks, ...textStyle, ...highlight], small, font };
+    });
 }

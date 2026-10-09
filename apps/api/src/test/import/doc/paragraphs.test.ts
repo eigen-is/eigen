@@ -191,9 +191,57 @@ describe('tracked changes and hidden text', () => {
 });
 
 // Other editors indent code as they indent text: only the writer's own indents nest it in quotes.
-describe('indented code', () => {
+// G8: a code style or the writer's flattened look is code only where every run holding text is monospace.
+describe('code blocks', () => {
+    const font = (name: string) => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
     const PRE =
-        '<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>';
+        '<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr></w:style>';
+    const shaded = (fill: string) => `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>`;
+    const types = async (body: string) =>
+        ((await importDocxBody(body, { styles: PRE })).json.content ?? []).map((node) => node.type);
+
+    test('a Courier New paragraph without a fill is a paragraph in JetBrains Mono', async () => {
+        const { json } = await importDocxBody(paragraph(run('x = 1', font('Courier New'))));
+        expect(json.content?.map((node) => node.type)).toEqual(['paragraph']);
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['fontFamily'])).toEqual(['JetBrains Mono']);
+    });
+
+    test.each([
+        ['in Times New Roman is a paragraph', run('x = 1', font('Times New Roman')), ['paragraph']],
+        [
+            'with a space in Times New Roman is code',
+            `${run('x')}${run(' ', font('Times New Roman'))}${run('= 1')}`,
+            ['codeBlock'],
+        ],
+    ])('HTML Preformatted %s', async (_name, runs, expected) => {
+        expect(await types(paragraph(runs, '<w:pStyle w:val="HTMLPreformatted"/>'))).toEqual(expected);
+    });
+
+    // An empty line draws in its mark's face, which tells a blank line of code from a blank line in prose.
+    test.each([
+        ['Times New Roman', ['paragraph', 'paragraph', 'paragraph']],
+        ['Courier New', ['codeBlock']],
+    ])('an empty HTML Preformatted line marked in %s', async (face, expected) => {
+        const line = (text: string) => paragraph(run(text, font(face)), '<w:pStyle w:val="HTMLPreformatted"/>');
+        const empty = paragraph('', `<w:pStyle w:val="HTMLPreformatted"/><w:rPr>${font(face)}</w:rPr>`);
+        expect(await types(`${line('a')}${empty}${line('b')}`)).toEqual(expected);
+    });
+
+    test.each([
+        ['F3F4F6', ['codeBlock']],
+        ['EEEEEE', ['codeBlock']],
+        ['D0D0D0', ['codeBlock']],
+        ['CFCFCF', ['paragraph']],
+        ['DDEEFF', ['paragraph']],
+    ])('monospace runs on %s', async (fill, expected) => {
+        expect(await types(paragraph(run('x = 1', font('Consolas')), shaded(fill)))).toEqual(expected);
+    });
+});
+
+describe('indented code', () => {
+    // Word's HTML Preformatted draws in Courier New.
+    const MONO = '<w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr>';
+    const PRE = `<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/>${MONO}</w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>`;
     const BULLETS =
         '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
     const pre = (text: string) => paragraph(run(text), '<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="720"/>');
@@ -292,7 +340,7 @@ describe('indented code', () => {
     });
 
     // An indent comes from the style unless the list level or the paragraph sets one.
-    const INDENTED = `${PRE}<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="IndentedPre"><w:name w:val="HTML Preformatted"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>`;
+    const INDENTED = `${PRE}<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="IndentedPre"><w:name w:val="HTML Preformatted"/><w:pPr><w:ind w:left="720"/></w:pPr>${MONO}</w:style>`;
     const UNINDENTED =
         '<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>';
     const styledPre = paragraph(run('x = 1'), '<w:pStyle w:val="IndentedPre"/>');
@@ -332,13 +380,13 @@ describe('indented code', () => {
         [1134, 3],
         [2160, 7],
     ])("at %i twips in the writer's style is code %i quotes deep", async (indent, depth) => {
-        const styles = '<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/></w:style>';
+        const styles = `<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/>${MONO}</w:style>`;
         const { json } = await importDocxBody(atIndent('CodeBlock', indent), { styles });
         expect(json.content).toEqual([quoted(depth)]);
     });
 
     test("in the writer's style for a language, which a re-save may rename, nests too", async () => {
-        const styles = '<w:style w:type="paragraph" w:styleId="Python"><w:name w:val="Code Block (python)"/></w:style>';
+        const styles = `<w:style w:type="paragraph" w:styleId="Python"><w:name w:val="Code Block (python)"/>${MONO}</w:style>`;
         const { json } = await importDocxBody(atIndent('Python', 1134), { styles });
         expect(nodesOfType(json, 'blockquote')).toHaveLength(3);
         expect(nodesOfType(json, 'codeBlock')[0]?.attrs).toEqual({ language: 'python' });
@@ -362,13 +410,35 @@ describe('indented code', () => {
     });
 });
 
+// A list of another definition nests under the open item only where its level puts its number at or right of the
+// item's text: the spec's two numIds at ilvl 0 under a 720 text.
+describe('lists of two definitions', () => {
+    const level = (id: number, left: number) =>
+        `<w:abstractNum w:abstractNumId="${id}"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="${left}" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>`;
+    const NUMBERING = `${level(1, 720)}${level(2, 1440)}${level(3, 720)}<w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num><w:num w:numId="3"><w:abstractNumId w:val="3"/></w:num>`;
+    const bullet = (numId: number, text: string) =>
+        paragraph(run(text), `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>`);
+    const types = async (body: string) =>
+        ((await importDocxBody(body, { numbering: NUMBERING })).json.content ?? []).map(
+            (node) => nodesOfType(node, 'bulletList').length,
+        );
+
+    test('a number at 1,080 under a 720 text nests', async () => {
+        expect(await types(`${bullet(1, 'One')}${bullet(2, 'Inner')}`)).toEqual([2]);
+    });
+
+    test('numbers both at 360 are sibling lists', async () => {
+        expect(await types(`${bullet(1, 'One')}${bullet(3, 'Other')}`)).toEqual([1, 1]);
+    });
+});
+
 // Word reads each w:ind attribute on its own along the style chain, and starts a hanging first line left of the text.
 describe('indents', () => {
     const STYLES = [
         '<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>',
         '<w:style w:type="paragraph" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Indented"/><w:pPr><w:ind w:firstLine="0"/></w:pPr></w:style>',
         '<w:style w:type="paragraph" w:styleId="Hanging"><w:name w:val="Hanging"/><w:pPr><w:ind w:left="1021" w:hanging="1021"/></w:pPr></w:style>',
-        '<w:style w:type="paragraph" w:styleId="Requirement"><w:name w:val="Requirement"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8"/></w:pBdr><w:ind w:left="1134" w:hanging="1134"/></w:pPr></w:style>',
+        `<w:style w:type="paragraph" w:styleId="Requirement"><w:name w:val="Requirement"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="8" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr><w:ind w:left="1134" w:hanging="1134"/></w:pPr></w:style>`,
     ].join('');
     const NUMBERING =
         '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
@@ -403,6 +473,38 @@ describe('indents', () => {
             styles: STYLES,
         });
         expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
+    });
+});
+
+// G7: a bar alone is a quote only at the writer's width; on a heading of another it is no quote.
+describe('a left bar', () => {
+    const bar = (sz: number, color: string) =>
+        `<w:pBdr><w:left w:val="single" w:sz="${sz}" w:space="${QUOTE_LOOK.border.space}" w:color="${color}"/></w:pBdr><w:ind w:left="${QUOTE_LOOK.indent}"/>`;
+    const writers = bar(QUOTE_LOOK.border.sz, QUOTE_LOOK.border.color);
+    const types = async (body: string) =>
+        (
+            (
+                await importDocxBody(body, {
+                    styles: '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/></w:style>',
+                })
+            ).json.content ?? []
+        ).map((node) => node.type);
+
+    test.each([
+        ["the writer's on a paragraph is a quote", paragraph(run('Said'), writers), ['blockquote']],
+        ['of another width is a paragraph', paragraph(run('Said'), bar(6, QUOTE_LOOK.border.color)), ['paragraph']],
+        [
+            "of the writer's width in another color is a quote",
+            paragraph(run('Said'), bar(QUOTE_LOOK.border.sz, '2B6CB0')),
+            ['blockquote'],
+        ],
+        [
+            'on a Heading 2 leaves it a heading',
+            paragraph(run('Title'), `<w:pStyle w:val="Heading2"/>${bar(12, '4472C4')}`),
+            ['heading'],
+        ],
+    ])('%s', async (_name, body, expected) => {
+        expect(await types(body)).toEqual(expected);
     });
 });
 

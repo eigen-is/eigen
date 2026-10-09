@@ -17,9 +17,11 @@ export type Para = {
     // A half after a page break, which continues its item rather than numbering again.
     continued: boolean;
     indLeft: number;
+    // Where an item's number starts, which says whether a list of another definition nests under the open item.
+    numberAt?: number;
     quote: number;
-    // A quote inside the list item above it.
-    inItem?: boolean;
+    // A quote inside the list item above it: the quote depth that item sits at.
+    inItem?: number;
     // The writer's code box, whose indent counts its quotes.
     boxed?: boolean;
     // A tracked deletion of the mark: accepted, the content joins the next paragraph.
@@ -28,6 +30,10 @@ export type Para = {
     labelled?: boolean;
     empty: boolean;
     small: boolean;
+    // Every text run in the writer's caption size and color, the Caption style as a Google Docs re-save flattens it.
+    captionLook?: boolean;
+    // The side of the text frame it stands in, which holds a wrapped figure and its caption.
+    frame?: 'left' | 'right';
     hairline: boolean;
 };
 
@@ -35,7 +41,8 @@ export type Item =
     | Para
     | { kind: 'break' }
     | { kind: 'boundary' }
-    | { kind: 'hr'; indent: number }
+    // A rule's quote: the writer indents a rule in a quote to the quote's text.
+    | { kind: 'hr'; indent: number; quote?: number }
     | { kind: 'table'; node: JSONContent; indent: number }
     | { kind: 'block'; node: JSONContent; inItem?: boolean }
     | { kind: 'float'; figure: JSONContent };
@@ -122,11 +129,16 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                 item.empty = false;
                 floats = [];
             }
+            // G9: a block figure takes the next line in the Caption style or its look; a wrapped one only a caption in
+            // its own frame.
             const previous = items.at(-1);
-            if (isCaptionLike(item) && previous?.kind === 'para' && isFigureOnly(previous)) {
+            if (previous?.kind === 'para' && isFigureOnly(previous)) {
                 const figures = previous.inlines.filter((node) => node.type === 'figure');
                 const last = figures.at(-1);
-                if (last?.attrs && figures.length === 1 && !last.attrs['caption']) {
+                const caption = last?.attrs?.['layout']
+                    ? !!item.frame && item.frame === previous.frame && isCaptionLike(item)
+                    : !item.empty && !item.list && !item.task && (item.role.kind === 'caption' || !!item.captionLook);
+                if (caption && last?.attrs && figures.length === 1 && !last.attrs['caption']) {
                     last.attrs['caption'] = textOf(item.inlines);
                     continue;
                 }
@@ -175,7 +187,15 @@ function assignQuotes(items: Item[]): void {
     let previous: Para | undefined;
     let plain = 0;
     for (const item of items) {
-        // A table or rule ends a quote (depths); a page break doesn't.
+        if (item.kind === 'hr' && previous && previous.inItem === undefined) {
+            const depth = Math.round(item.indent / QUOTE_LOOK.indent);
+            const atText = Math.abs(item.indent - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE;
+            if (depth > 0 && depth <= previous.quote && atText) {
+                item.quote = depth;
+                continue;
+            }
+        }
+        // A table or a rule off the quote's text ends a quote (depths); a page break doesn't.
         if (item.kind === 'table' || item.kind === 'hr') {
             previous = undefined;
             if (!(open && indentedUnder(item.indent, open.indLeft))) open = undefined;
@@ -186,13 +206,14 @@ function assignQuotes(items: Item[]): void {
             codeDepth(item, open, previous);
             if (!(open && indentedUnder(item.indLeft, open.indLeft))) open = undefined;
         } else if (open && item.quote > 0 && item.indLeft > open.indLeft + INDENT_TOLERANCE) {
-            item.quote = Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
-            item.inItem = true;
+            // Past the quotes the item itself sits in.
+            item.quote = open.quote + Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
+            item.inItem = open.quote;
         } else if (!item.continued && !item.empty) open = undefined;
         item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
         if (item.quote > 0) {
             if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));
-            else plain = item.quote;
+            else if (item.inItem === undefined) plain = item.quote;
         }
         previous = item;
     }
@@ -209,21 +230,22 @@ function codeDepth(code: Para, open: Para | undefined, previous: Para | undefine
     if (code.boxed && depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
         code.indLeft = box;
         code.quote = (item?.quote ?? 0) + depth;
-        code.inItem = !!item && depth > 0;
+        code.inItem = item && depth > 0 ? item.quote : undefined;
     } else if (depth > 0 && previous && previous.quote > 0) {
         code.quote = previous.quote;
         code.inItem = previous.inItem;
     }
 }
 
-// A break or boundary sits in the shallower of the quotes around it; a table or rule between ends a quote.
+// A break or boundary sits in the shallower of the quotes around it; a table or a rule outside a quote ends it.
 function depths(items: Item[]): number[] {
     const nearest = (order: Item[]) => {
         let quote = 0;
         return order.map((item) => {
             const before = quote;
             if (item.kind === 'para') quote = item.quote;
-            else if (item.kind === 'table' || item.kind === 'hr') quote = 0;
+            else if (item.kind === 'hr') quote = item.quote ?? 0;
+            else if (item.kind === 'table') quote = 0;
             return before;
         });
     };
@@ -231,6 +253,7 @@ function depths(items: Item[]): number[] {
     const after = nearest([...items].reverse()).reverse();
     return items.map((item, index) => {
         if (item.kind === 'para') return item.quote;
+        if (item.kind === 'hr') return item.quote ?? 0;
         if (item.kind === 'break' || item.kind === 'boundary') return Math.min(before[index] ?? 0, after[index] ?? 0);
         return 0;
     });
@@ -247,7 +270,7 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
             out.push({
                 kind: 'block',
                 node: { type: 'blockquote', content },
-                inItem: first?.kind === 'para' && first.inItem,
+                inItem: first?.kind === 'para' && first.inItem === depth,
             });
         quoted = [];
     };
@@ -260,7 +283,9 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         }
         if (itemDepth > depth) {
             const [first] = quoted;
-            if (item.kind === 'para' && first?.kind === 'para' && !!first.inItem !== !!item.inItem) flushQuote();
+            // A quote in the item above starts a quote of its own, at the depth the item sits at.
+            const inItem = (entry: Item | undefined) => entry?.kind === 'para' && entry.inItem === depth;
+            if (item.kind === 'para' && first?.kind === 'para' && inItem(first) !== inItem(item)) flushQuote();
             quoted.push(item);
             continue;
         }
@@ -323,6 +348,16 @@ function buildFlow(items: Item[]): JSONContent[] {
         );
     };
 
+    // Within the open lists: the next is an item of one of them, or a paragraph at the open text, which goes on with it.
+    const betweenItems = (index: number): boolean => {
+        const following = next[index];
+        const top = stack.at(-1);
+        if (following?.kind !== 'para' || !top) return false;
+        if (following.task) return stack.some((open) => open.kind === 'taskList');
+        if (following.list) return stack.some((open) => open.key === following.list?.key);
+        return following.role.kind === 'paragraph' && !following.empty && indentedUnder(following.indLeft, top.indent);
+    };
+
     for (const [index, item] of items.entries()) {
         if (item.kind === 'boundary') {
             flushCode();
@@ -375,10 +410,12 @@ function buildFlow(items: Item[]): JSONContent[] {
             placeItem(item, node, stack, blocks);
             continue;
         }
+        // G10: the writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
+        if (isBreakOnly(item) && continues(index) && holdsWrapped(stack.at(-1)?.item)) continue;
         if (stack.length > 0 && item.role.kind !== 'heading') {
             // A blank line between two items of one list stays in the item above, so the list stays one.
             const host =
-                item.continued || (item.empty && item.role.kind === 'paragraph' && continues(index))
+                item.continued || (item.empty && item.role.kind === 'paragraph' && betweenItems(index))
                     ? stack.at(-1)
                     : stack.findLast((open) => !item.empty && indentedUnder(item.indLeft, open.indent));
             if (host) {
@@ -393,6 +430,19 @@ function buildFlow(items: Item[]): JSONContent[] {
     flushCode();
     closeLists();
     return blocks;
+}
+
+function isBreakOnly(para: Para): boolean {
+    return (
+        para.inlines.some((node) => node.type === 'hardBreak') &&
+        para.inlines.every((node) => node.type === 'hardBreak' || isWhitespace(node))
+    );
+}
+
+function holdsWrapped(item: JSONContent | undefined): boolean {
+    return !!item?.content?.some((block) =>
+        block.content?.some((node) => node.type === 'figure' && String(node.attrs?.['layout']).startsWith('wrap')),
+    );
 }
 
 // An unnumbered paragraph indented to an item's text continues the item; at no indent it ends the list.
@@ -413,7 +463,8 @@ function textblockOf(para: Para): JSONContent {
     return { type: 'paragraph', attrs: { textAlign }, content };
 }
 
-// Lists nest by Word's level within one list, by indent across lists and tasks; a number that doesn't follow starts a new list.
+// Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's
+// text, and tasks by indent. A number that doesn't follow starts a new list.
 function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JSONContent[]): void {
     // An item opens on a paragraph: a checkbox in a heading makes a task of the heading's text.
     const paragraph: JSONContent =
@@ -455,7 +506,11 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
             top.item = item;
             return;
         }
-        const deeper = sameList ? top.ilvl < ilvl : indent > top.indent + INDENT_TOLERANCE;
+        const deeper = sameList
+            ? top.ilvl < ilvl
+            : para.numberAt !== undefined && top.kind !== 'taskList'
+              ? para.numberAt >= top.indent - INDENT_TOLERANCE
+              : indent > top.indent + INDENT_TOLERANCE;
         // No deeper than Word's levels: lists of other definitions nest by indent, which a hostile file can deepen.
         if (deeper && stack.length < LIST_LEVELS) break;
         pop();

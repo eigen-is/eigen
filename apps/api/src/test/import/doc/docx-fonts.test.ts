@@ -76,6 +76,68 @@ describe('body font', () => {
     });
 });
 
+// Word draws each character in the face of its script: ASCII, other Latin (high ANSI), East Asian or complex script.
+describe('fonts by script', () => {
+    const faces = 'w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Courier New" w:cs="Courier New"';
+    const spans = (json: JSONContent) =>
+        nodesOfType(json, 'text').map((node) => [
+            node.text,
+            node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? null,
+        ]);
+    const runOf = (text: string, rPr = '') =>
+        paragraph(`<w:r><w:rPr><w:rFonts ${faces}/>${rPr}</w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`);
+
+    test('a run splits where its script changes face', async () => {
+        const { json } = await importDocxBody(`${runOf('Data 数据')}${runOf('Hi مرحبا')}`);
+        expect(spans(json)).toEqual([
+            ['Data ', 'Source Serif 4'],
+            ['数据', 'JetBrains Mono'],
+            ['Hi ', 'Source Serif 4'],
+            ['مرحبا', 'JetBrains Mono'],
+        ]);
+    });
+
+    test('a run marked complex script or right to left draws all in its cs face', async () => {
+        const { json } = await importDocxBody(`${runOf('Latin', '<w:cs/>')}${runOf('Latin', '<w:rtl/>')}`);
+        expect(spans(json)).toEqual([
+            ['Latin', 'JetBrains Mono'],
+            ['Latin', 'JetBrains Mono'],
+        ]);
+    });
+
+    test('the eastAsia hint draws the characters Latin and East Asian faces share in the East Asian one', async () => {
+        const { json } = await importDocxBody(
+            paragraph(
+                `<w:r><w:rPr><w:rFonts ${faces} w:hint="eastAsia"/></w:rPr><w:t xml:space="preserve">“x”</w:t></w:r>`,
+            ),
+        );
+        expect(spans(json)).toEqual([
+            ['“', 'JetBrains Mono'],
+            ['x', 'Source Serif 4'],
+            ['”', 'JetBrains Mono'],
+        ]);
+    });
+
+    test("an East Asian theme font resolves to the theme's ea face", async () => {
+        const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="Courier New"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
+        const body = paragraph(
+            '<w:r><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia"/></w:rPr><w:t>Data 数据</w:t></w:r>',
+        );
+        expect(spans((await importDocxBody(body, { theme })).json)).toEqual([
+            ['Data ', null],
+            ['数据', 'JetBrains Mono'],
+        ]);
+    });
+
+    test("a style's East Asian face stays under a run that sets only its Latin one", async () => {
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:eastAsia="Courier New"/></w:rPr></w:rPrDefault></w:docDefaults>`;
+        const body = paragraph(
+            '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/></w:rPr><w:t>数据</w:t></w:r>',
+        );
+        expect(spans((await importDocxBody(body, { styles })).json)).toEqual([['数据', 'JetBrains Mono']]);
+    });
+});
+
 // G5: a name the map doesn't know draws in its fontTable.xml category: fixed pitch is monospace, roman serif and swiss
 // sans at a variable pitch; script, decorative and auto are an unknown category (P4), and so is a family at pitch
 // default, which Word writes for a font it has no metrics of.

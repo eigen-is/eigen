@@ -13,7 +13,7 @@ const types = (json: JSONContent) =>
 
 describe('code block language', () => {
     // The writer's carrier is the style's name; a LibreOffice re-save renames the id and keeps the name.
-    const CODE_STYLES = `${style('CodeBlock', 'Code Block')}
+    const CODE_STYLES = `${style('CodeBlock', 'Code Block', '<w:rPr><w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono"/></w:rPr>')}
 ${style('CodeBlockjavascript', 'Code Block (javascript)', '<w:basedOn w:val="CodeBlock"/>')}
 ${style('CodeBlock-python', 'Code Block (python)', '<w:basedOn w:val="CodeBlock"/>')}
 ${style('CodeBlock-klingon', 'Code Block (klingon)', '<w:basedOn w:val="CodeBlock"/>')}`;

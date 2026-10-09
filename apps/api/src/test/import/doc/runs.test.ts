@@ -51,7 +51,7 @@ describe('fonts and code', () => {
     });
 
     test('a code character style is code, and JetBrains Mono on the code fill is code', async () => {
-        const styles = '<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/></w:style>';
+        const styles = `<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/><w:rPr>${font('Consolas')}</w:rPr></w:style>`;
         const json = await imported(
             paragraph(
                 `${run('styled', '<w:rStyle w:val="VerbatimChar"/>')}${run(' ')}${run('looked', `${font('JetBrains Mono')}<w:shd w:val="clear" w:fill="${CODE_LOOK.shading}"/>`)}`,
@@ -59,6 +59,19 @@ describe('fonts and code', () => {
             { styles },
         );
         expect(marksOfType(json, 'code').map((mark) => mark.text)).toEqual(['styled', 'looked']);
+    });
+
+    // Inline code needs a monospace run: a code style on a proportional run, or a run on a tinted fill, is no code.
+    test('a code style on a Times run is no code; a monospace run on any light grey is, on a tint not', async () => {
+        const styles = '<w:style w:type="character" w:styleId="VerbatimChar"><w:name w:val="Verbatim Char"/></w:style>';
+        const shaded = (fill: string) => `${font('Courier New')}<w:shd w:val="clear" w:fill="${fill}"/>`;
+        const json = await imported(
+            paragraph(
+                `${run('styled', `<w:rStyle w:val="VerbatimChar"/>${font('Times New Roman')}`)}${run(' ')}${run('grey', shaded('EEEEEE'))}${run(' ')}${run('tint', shaded('DDEEFF'))}`,
+            ),
+            { styles },
+        );
+        expect(marksOfType(json, 'code').map((mark) => mark.text)).toEqual(['grey']);
     });
 
     test('an Eigen font name stays, the document font is no mark', async () => {
@@ -82,6 +95,21 @@ describe('toggles', () => {
             { styles },
         );
         expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['direct']);
+    });
+});
+
+describe('underline', () => {
+    // MS-OI29500 §2.1.100c: Word reads a w:u without w:val as inherited, so only a style underlines it.
+    test('a w:u without w:val takes the style, else no underline', async () => {
+        const styles =
+            '<w:style w:type="character" w:styleId="Under"><w:name w:val="Under"/><w:rPr><w:u w:val="single"/></w:rPr></w:style>';
+        const json = await imported(
+            paragraph(
+                `${run('plain', '<w:u w:color="000000"/>')}${run('styled', '<w:rStyle w:val="Under"/><w:u w:color="000000"/>')}${run(' ')}${run('single', '<w:u w:val="single"/>')}`,
+            ),
+            { styles },
+        );
+        expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['styled', 'single']);
     });
 });
 
@@ -205,6 +233,15 @@ describe('symbols', () => {
     });
 });
 
+describe('math', () => {
+    // G14: math reads as text, each object and run its own word, so x²+1 is no one word.
+    test('OMML objects and runs side by side are spaced', async () => {
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
+        const json = await imported(paragraph(`${run('So ')}${math}`));
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['So x2 +1']);
+    });
+});
+
 describe('sizes', () => {
     // ST_HpsMeasure: half-points, or a universal measure in Strict OOXML.
     test('a run of 8pt on an 11 pt body is small, one of 11pt is not', async () => {
@@ -214,5 +251,12 @@ describe('sizes', () => {
             { styles },
         );
         expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['fine']);
+    });
+
+    // P8: small is relative to the body; 9 pt in a 9 pt body is body text.
+    test('9 pt runs on a 9 pt body are not small', async () => {
+        const styles = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="18"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const json = await imported(paragraph(run('body', '<w:sz w:val="18"/>')), { styles });
+        expect(marksOfType(json, 'small')).toEqual([]);
     });
 });

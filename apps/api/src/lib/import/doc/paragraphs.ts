@@ -1,9 +1,17 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { bundledFontOf, type FontTable, MONOSPACE_FONT, readFontTable, readTheme, type Theme } from './docx-fonts';
+import {
+    bundledFontOf,
+    byFace,
+    type FontTable,
+    MONOSPACE_FONT,
+    readFontTable,
+    readTheme,
+    type Theme,
+} from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import {
@@ -19,7 +27,17 @@ import {
     wChild,
 } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
-import { isFill, mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
+import {
+    isFill,
+    isLightNeutral,
+    mergePara,
+    mergeRun,
+    type Role,
+    type RunProps,
+    readParaProps,
+    readRunProps,
+    Styles,
+} from './styles';
 import { readTable } from './tables';
 
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
@@ -58,7 +76,8 @@ export type Scope = {
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
-    const theme = readTheme(pkg.theme, w(wChild(defaults, 'lang'), 'bidi'));
+    const lang = wChild(defaults, 'lang');
+    const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
@@ -164,6 +183,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         role = { kind: 'heading', level: outline + 1 };
     const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
     if (role.kind === 'heading' && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
+    if (role.kind === 'code' && !isMonospace(reader, p, scope, styleId)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -190,23 +210,35 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list =
         numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
-    const props = mergePara(styled, list?.indLeft === undefined ? {} : { indLeft: list.indLeft }, direct);
+    const props = mergePara(styled, list?.pPr ?? {}, direct);
 
-    // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
+    // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
+    // grey of any shade, as other editors shade code.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
+    const mono = (piece: Piece) =>
+        piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT;
     const allMono =
-        texts.length > 0 &&
-        texts.every((piece) => piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT);
+        texts.some(mono) && texts.every((piece) => mono(piece) || (piece.kind === 'node' && isWhitespace(piece.node)));
     if (
         role.kind === 'paragraph' &&
         !list &&
         !task &&
-        ((allMono && isFill(props.shading)) || (texts.length === 0 && props.shading === CODE_BLOCK_LOOK.fill))
+        ((allMono && (props.shading === CODE_BLOCK_LOOK.fill || isLightNeutral(props.shading))) ||
+            (texts.length === 0 && props.shading === CODE_BLOCK_LOOK.fill))
     )
         role = { kind: 'code', language: null };
 
     const borders = props.borders ?? {};
-    const leftBar = !!borders.left && !borders.top && !borders.bottom && !borders.right && role.kind !== 'code';
+    // G7: a bar alone is a quote only at the writer's width, which a heading in a quote carries too, in any color; the
+    // Quote style always is, and its bar counts its depth.
+    const writersBar = borders.bar === QUOTE_LOOK.border.sz;
+    const leftBar =
+        !!borders.left &&
+        !borders.top &&
+        !borders.bottom &&
+        !borders.right &&
+        role.kind !== 'code' &&
+        (role.kind === 'quote' || writersBar);
     // The writer's code box: its style, or the fill and four borders a Google Docs re-save keeps of it.
     const boxed =
         role.kind === 'code' &&
@@ -246,6 +278,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             node: { type: 'text', text: list?.suffix === 'nothing' ? label : `${label} ` },
         });
 
+    const captionColor = `#${CAPTION_LOOK.color.toLowerCase()}`;
     const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
@@ -273,14 +306,28 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             quote,
             empty: !visible && !content.some((node) => node.type === 'text' && node.text),
             small: halfTexts.length > 0 && halfTexts.every((piece) => piece.kind === 'node' && piece.small),
+            captionLook:
+                halfTexts.length > 0 &&
+                halfTexts.every(
+                    (piece) =>
+                        piece.kind === 'node' &&
+                        piece.small &&
+                        piece.node.marks?.some(
+                            (mark) => mark.type === 'textStyle' && mark.attrs?.['color'] === captionColor,
+                        ),
+                ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
         };
-        if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
+        if (!numbered && list && role.kind !== 'heading') {
+            para.list = { ...list, ilvl };
+            para.numberAt = indLeft + Math.min(0, props.indFirst ?? 0);
+        }
         if (!numbered && task) para.task = task;
         if (boxed) para.boxed = true;
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         if (label && index === 0) para.labelled = true;
         // A framed paragraph holding only an image is a wrapped figure.
+        if (props.frame) para.frame = props.frame;
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)
                 if (node.attrs && !node.attrs['layout']) node.attrs['layout'] = `wrap-${props.frame}`;
@@ -303,6 +350,24 @@ function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolea
     return (
         sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
     );
+}
+
+// G8: a code style draws code only where every run holding text is monospace, an empty line where its mark is;
+// HTML Preformatted in Times is prose.
+function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: string | undefined): boolean {
+    const { styles } = reader;
+    const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
+    const mono = (font: string | undefined) => bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT;
+    const faces = descendants(p, W_NS, 'r').flatMap((run) => {
+        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
+        const props = mergeRun(paraRun, styles.run(direct.style), direct);
+        return xmlElements(run).flatMap((child) =>
+            is(child, W_NS, 't') ? byFace(xmlText(child), props.fonts, props).filter((face) => face.text.trim()) : [],
+        );
+    });
+    if (faces.length > 0) return faces.every((face) => mono(face.font));
+    const mark = mergeRun(paraRun, readRunProps(wChild(wChild(p, 'pPr'), 'rPr'), reader.theme));
+    return mono(byFace(' ', mark.fonts, mark)[0]?.font);
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

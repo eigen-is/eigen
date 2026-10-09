@@ -895,7 +895,7 @@ describe('docx writer — lists', () => {
         expect(nums.map((num) => w(child(num, 'abstractNumId'), 'val'))).toEqual(['0', '1']);
     });
 
-    test('bullet lists of one indent share one abstractNum and num, a nested one a level in; ordered ones keep their own', async () => {
+    test('each list is a num of its own; bullet lists of one indent share one abstractNum, a nested one a level in; ordered ones keep their own', async () => {
         const json = doc(
             ul(li(p(text('a')), ul(li(p(text('b')))))),
             ul(li(p(text('c')))),
@@ -907,11 +907,11 @@ describe('docx writer — lists', () => {
         expect(descendants(body, W, 'numPr').map(xmlOf)).toEqual(
             [
                 [0, 1],
-                [1, 1],
-                [0, 1],
-                [0, 2],
+                [1, 2],
                 [0, 3],
                 [0, 4],
+                [0, 5],
+                [0, 6],
             ].map(([ilvl, numId]) => `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`),
         );
         const numbering = await numberingOf(json);
@@ -919,7 +919,9 @@ describe('docx writer — lists', () => {
             xmlChildren(numbering, W, 'abstractNum').map((list) => w(child(child(list, 'lvl'), 'numFmt'), 'val')),
         ).toEqual(['bullet', 'decimal', 'decimal', 'bullet']);
         expect(xmlChildren(numbering, W, 'num').map(xmlOf)).toEqual(
-            [0, 1, 2, 3].map((index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`),
+            [0, 0, 0, 1, 2, 3].map(
+                (abstract, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${abstract}"/></w:num>`,
+            ),
         );
     });
 

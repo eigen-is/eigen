@@ -56,6 +56,12 @@ const item = (numId: number, text: string, ilvl = 0) =>
     paragraph(text, `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`);
 
 describe('source side', () => {
+    test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
+        const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);
+        expect(tally.words).toEqual(['So', 'x2', '+1']);
+    });
+
     test('bold from a paragraph style counts through basedOn, and direct formatting wins over it', async () => {
         const tally = await source(
             `<w:p><w:pPr><w:pStyle w:val="Louder"/></w:pPr>${run('Loud words')}${run(' quiet', '<w:b w:val="0"/>')}</w:p>`,
@@ -337,6 +343,19 @@ describe('source side', () => {
 });
 
 describe('both sides', () => {
+    // Word draws each character in the face of its script, and a *Bidi theme font in the theme's complex script face.
+    test('fonts by script and a Bidi theme font read alike on both sides', async () => {
+        const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/><a:cs typeface="Times New Roman"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
+        const docx = await buildDocxWithBody(
+            `<w:p>${run('Data 数据', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Courier New"/>')}${run(' Bidi', '<w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>')}</w:p>`,
+            { theme },
+        );
+        const source = auditSource(docx);
+        expect(source.marks.get('font')).toEqual(['数据 (JetBrains Mono)', 'Bidi (Source Serif 4)']);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect(features['font']).toEqual({ source: 2, imported: 2, matched: 2, invented: 0, kept: 1 });
+    });
+
     const fontRun = (text: string, font: string) => run(text, `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`);
 
     // A body in `font` with one word in `other`, read by the audit and imported by the reader.

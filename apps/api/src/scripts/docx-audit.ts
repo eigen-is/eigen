@@ -32,7 +32,15 @@ import {
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
-import { fontMark, readFontTable } from '../lib/import/doc/docx-fonts';
+import {
+    byFace,
+    FONT_SLOTS,
+    type Fonts,
+    fontMark,
+    readFontTable,
+    readTheme,
+    type Script,
+} from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
@@ -357,7 +365,6 @@ type Styles = {
     character?: string;
     rPr?: XmlElement;
     pPr?: XmlElement;
-    theme: { major?: string; minor?: string };
 };
 
 type ParagraphLook = {
@@ -401,13 +408,14 @@ type Inline = {
     link: boolean;
 };
 
-type RunLook = { hidden: boolean; code: boolean; marks: Feature[]; font?: string };
+// marks: all but the font, which each face of the run's text carries on its own.
+type RunLook = { hidden: boolean; code: boolean; marks: Feature[]; fonts: Fonts; script: Script };
 
 type Boxed = { element: XmlElement; boxed: boolean };
 
 const newChain = (): Chain => ({ lists: [], carry: [] });
 
-function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined): Styles {
+function readStyles(root: XmlElement | undefined): Styles {
     const byId = new Map<string, XmlElement>();
     let paragraph: string | undefined;
     let character: string | undefined;
@@ -422,11 +430,6 @@ function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined)
     }
     const chains = new Map<string, XmlElement[]>();
     const defaults = child(root, 'docDefaults');
-    const scheme = child(child(theme, 'themeElements', A_NS), 'fontScheme', A_NS);
-    const typeface = (font: string) => {
-        const latin = child(child(scheme, font, A_NS), 'latin', A_NS);
-        return latin && xmlAttr(latin, '', 'typeface');
-    };
     return {
         chain: (id) => {
             if (!id) return [];
@@ -445,7 +448,6 @@ function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined)
         character,
         rPr: child(child(defaults, 'rPrDefault'), 'rPr'),
         pPr: child(child(defaults, 'pPrDefault'), 'pPr'),
-        theme: { major: typeface('majorFont'), minor: typeface('minorFont') },
     };
 }
 
@@ -604,9 +606,17 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     if (!document) throw new Error(`${main} missing`);
     const footnotes = read(partOf('footnotes'));
     const endnotes = read(partOf('endnotes'));
-    const styles = readStyles(read(partOf('styles')), read(partOf('theme')));
+    const styles = readStyles(read(partOf('styles')));
     const numberItem = readNumbering(read(partOf('numbering')));
     const fontTable = readFontTable(read(partOf('fontTable')));
+    const lang = (source: XmlElement | undefined, kind: 'bidi' | 'eastAsia') => {
+        const element = child(source, 'lang');
+        return element && xmlAttr(element, W_NS, kind);
+    };
+    const theme = readTheme(read(partOf('theme')), {
+        bidi: lang(styles.rPr, 'bidi'),
+        eastAsia: lang(styles.rPr, 'eastAsia'),
+    });
 
     const elements = new Map<string, number>();
     const stories = [document, footnotes, endnotes, read(partOf('comments'))];
@@ -666,17 +676,34 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         };
     };
 
-    const fontOf = (sources: XmlElement[]) => {
-        for (const source of sources) {
-            const fonts = child(source, 'rFonts');
-            if (!fonts) continue;
-            const theme = xmlAttr(fonts, W_NS, 'asciiTheme') ?? xmlAttr(fonts, W_NS, 'hAnsiTheme');
-            if (theme)
-                return ((theme.startsWith('major') ? styles.theme.major : styles.theme.minor) ?? theme).toLowerCase();
-            const name = xmlAttr(fonts, W_NS, 'ascii') ?? xmlAttr(fonts, W_NS, 'hAnsi');
-            if (name) return name.toLowerCase();
+    // Each face from the nearest source that names it, a theme font through the theme as the reader resolves it.
+    const fontsOf = (sources: XmlElement[]): Fonts => {
+        const fonts: Fonts = {};
+        for (const slot of FONT_SLOTS) {
+            for (const source of sources) {
+                const named = child(source, 'rFonts');
+                const themed = named && xmlAttr(named, W_NS, slot === 'cs' ? 'cstheme' : `${slot}Theme`);
+                const language = themed?.endsWith('Bidi')
+                    ? lang(source, 'bidi')
+                    : themed?.endsWith('EastAsia')
+                      ? lang(source, 'eastAsia')
+                      : undefined;
+                const font = (themed && theme.font(themed, language)) ?? (named && xmlAttr(named, W_NS, slot));
+                if (font) {
+                    fonts[slot] = font;
+                    break;
+                }
+            }
         }
-        return undefined;
+        return fonts;
+    };
+    const scriptOf = (sources: XmlElement[]): Script => {
+        const complex = first(sources, 'cs') ?? first(sources, 'rtl');
+        const hint = sources.flatMap((source) => {
+            const fonts = child(source, 'rFonts');
+            return (fonts && xmlAttr(fonts, W_NS, 'hint')) || [];
+        })[0];
+        return { complex: !!complex && on(complex), hint };
     };
     const colorOf = (sources: XmlElement[]) => {
         const color = val(first(sources, 'color'))?.toUpperCase();
@@ -708,7 +735,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const highlight = val(first(sources, 'highlight'));
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
-        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]), fontTable);
+        const faces = [...direct, ...characterRuns, ...context.styleRuns];
         const marks: [Feature, boolean][] = [
             ['bold', toggle('b')],
             ['italic', toggle('i')],
@@ -718,7 +745,6 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['superscript', vertAlign === 'superscript'],
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
-            ['font', font !== undefined],
             ['small', sizeOf(sources) <= base.size * SMALL_PRINT],
             ['caps', toggle('caps', context.styleRuns)],
             ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
@@ -728,7 +754,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
             marks: marks.filter(([, set]) => set).map(([feature]) => feature),
-            font,
+            fonts: fontsOf(faces),
+            script: scriptOf(sources),
         };
     };
 
@@ -745,9 +772,18 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         return !!box;
     };
 
+    // Word draws each character in the face of its script, as the reader splits a run.
     const text = (value: string, context: Inline, look: RunLook | undefined) => {
-        const marks: readonly Feature[] = !context.marks || !look ? [] : look.code ? ['code'] : look.marks;
-        context.paragraph.spans.push({ text: value, marks, font: look?.font });
+        if (!look) {
+            context.paragraph.spans.push({ text: value, marks: [] });
+            return;
+        }
+        for (const face of byFace(value, look.fonts, look.script)) {
+            const font = fontMark(face.font, fontTable);
+            const own: Feature[] = font ? [...look.marks, 'font'] : look.marks;
+            const marks: readonly Feature[] = !context.marks ? [] : look.code ? ['code'] : own;
+            context.paragraph.spans.push({ text: face.text, marks, font });
+        }
     };
     const space = (context: Inline) => context.paragraph.spans.push({ text: ' ', marks: [] });
 
@@ -865,6 +901,14 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             }
             if (node.ns === M_NS && node.local === 't') {
                 if (visible(context.scope)) text(xmlText(node), context, undefined);
+                continue;
+            }
+            // An equation's objects and runs are words of their own, as the reader reads math as text.
+            if (node.ns === M_NS && node.local === 'oMath') {
+                for (const part of xmlElements(node)) {
+                    inline(part, context);
+                    space(context);
+                }
                 continue;
             }
             if (node.ns !== W_NS) {
