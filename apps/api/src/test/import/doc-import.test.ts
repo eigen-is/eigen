@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
+import { writeZip } from '../../lib/core/zip';
 import { readEigendocFromDoc } from '../../lib/document/doc';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
@@ -160,6 +162,25 @@ describe('Eigendoc docx import/convert', () => {
         expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(altBytes));
     }, 120_000);
 
+    // The Worker reads no config: the job carries the origin, so a link into this instance comes back root-relative.
+    test('import makes a link to this instance root-relative', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'origin-import-target' },
+        );
+        const docx = await buildDocxWithBody(
+            '<w:p><w:hyperlink r:id="rId9"><w:r><w:t>Home</w:t></w:r></w:hyperlink></w:p>',
+            {
+                rels: `<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${getPublicOrigin()}/doc/x?y#z" TargetMode="External"/>`,
+            },
+        );
+        expect((await assertJson<{ success: boolean }>(await importRequest(docPath.id, docx))).success).toBe(true);
+        expect(JSON.stringify(await readDocJson(docPath.id))).toContain('"href":"/doc/x?y#z"');
+    }, 60_000);
+
     test('convert rejects non-.docx files', async () => {
         const uploaded = await upload('not a document', 'notes.txt', 'text/plain');
         const res = await convertRequest(uploaded.id);
@@ -310,22 +331,72 @@ describe('Eigendoc docx import/convert', () => {
 
 describe('docx import resource guards', () => {
     test('rejects a docx whose declared decompressed size exceeds the cap', async () => {
-        // The declared-size guard reads each entry's uncompressedSize straight from the zip
-        // central directory and never decompresses, so it needs no real bomb payload — the
-        // fixture forges a tiny entry's declared size just over the 200 MB cap. The guard
-        // runs before mammoth inflates anything (that OOM is uncatchable, so a post-parse
-        // check would never fire).
+        // openZip reads each entry's declared size straight from the zip central directory and
+        // never decompresses, so it needs no real bomb payload — the fixture forges a tiny entry's
+        // declared size just over the 200 MB cap. The cap holds before anything inflates (that
+        // OOM is uncatchable, so a post-parse check would never fire).
         const bomb = buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
 
         let error: unknown;
         try {
-            await importDocxToEigendocUpdate(toTransferableBuffer(bomb));
+            await importDocxToEigendocUpdate(toTransferableBuffer(bomb), undefined);
         } catch (e) {
             error = e;
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(413);
         expect((error as ApiError).message).toBe('Document too large');
+    });
+});
+
+// What a user reads when a file is no docx Eigen reads: no message names an archive, markup or a part.
+describe('docx import errors', () => {
+    // An OLE compound file: its signature, then a directory entry naming a stream in UTF-16.
+    const ole = (stream: string): ArrayBuffer => {
+        const bytes = new Uint8Array(4096);
+        bytes.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+        bytes.set(Buffer.from(stream, 'utf16le'), 1024);
+        return toTransferableBuffer(bytes);
+    };
+
+    async function importError(data: ArrayBuffer): Promise<[number, string]> {
+        let error: unknown;
+        try {
+            await importDocxToEigendocUpdate(data, undefined);
+        } catch (e) {
+            error = e;
+        }
+        if (!(error instanceof ApiError)) throw new Error(`expected an ApiError, got ${String(error)}`);
+        return [error.status, error.message];
+    }
+
+    test('a password-protected file says so, through the import route', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'locked-import-target' },
+        );
+        const res = await importRequest(docPath.id, ole('EncryptedPackage'));
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe(
+            'This document is password-protected. Remove the password in Word and import it again.',
+        );
+    }, 60_000);
+
+    test('another OLE file, such as a .doc, is not a valid docx file', async () => {
+        expect(await importError(ole('WordDocument'))).toEqual([400, 'Not a valid docx file']);
+    });
+
+    test('malformed XML is not a valid docx file', async () => {
+        const docx = await buildDocxWithBody('<w:p><w:r><w:t>Unclosed</w:r></w:p>');
+        expect(await importError(docx)).toEqual([400, 'Not a valid docx file']);
+    });
+
+    test('a zip with no document is not a valid docx file', async () => {
+        const zip = writeZip([{ name: 'notes.txt', data: 'not a document' }]);
+        expect(await importError(toTransferableBuffer(zip))).toEqual([400, 'Not a valid docx file']);
     });
 });
 
@@ -352,8 +423,34 @@ function blocks(json: JSONContent): string[] {
     });
 }
 
+// A list as its items, an item's blocks joined by ' + ', so where a page break sits inside an item shows.
+function outline(node: JSONContent): string {
+    const content = node.content ?? [];
+    switch (node.type) {
+        case 'text':
+            return node.text ?? '';
+        case 'hardBreak':
+            return '⏎';
+        case 'paragraph':
+        case 'heading':
+            return content.map(outline).join('');
+        case 'listItem':
+        case 'taskItem':
+            return content.map(outline).join(' + ');
+        case 'pageBreak':
+        case 'figure':
+            return node.type;
+        default:
+            return `${node.type}[${content.map(outline).join(' / ')}]`;
+    }
+}
+
+async function importOutline(body: string, footnotes = ''): Promise<string[]> {
+    return ((await importJson(body, footnotes)).content ?? []).map(outline);
+}
+
 async function importJson(body: string, footnotes = ''): Promise<JSONContent> {
-    return (await docxToPmJson(Buffer.from(await buildDocxWithBody(body, footnotes)))).json;
+    return (await docxToPmJson(Buffer.from(await buildDocxWithBody(body, { footnotes })))).json;
 }
 
 async function importBlocks(body: string, footnotes = ''): Promise<string[]> {
@@ -402,81 +499,82 @@ describe('docx import — page breaks', () => {
         ]);
     });
 
-    // Until the import reads Word's list numbers (PROPOSAL_DOCX phase 3), the second list numbers from 1 again.
-    test('a break in its own ordered item splits the list, which restarts its numbers', async () => {
+    // A page break in a list item stays in the item, so the list keeps its numbers. A paragraph holding only the
+    // break is no item of its own: the break joins the item above, and the next item takes the number.
+    test('a break in its own ordered item stays in the item above, and the list keeps counting', async () => {
         const body = [run('One'), `<w:r>${PAGE_BREAK}</w:r>`, run('Two')].map((inner) => paragraph(inner, ORDERED));
-        expect(await importBlocks(body.join(''))).toEqual(['orderedList(One)', 'pageBreak', 'orderedList(Two)']);
+        const json = await importJson(body.join(''));
+        expect((json.content ?? []).map(outline)).toEqual(['orderedList[One + pageBreak / Two]']);
+        expect(json.content?.[0]?.attrs?.['start']).toBe(1);
     });
 
-    test('a break mid list item splits the item and the list around a page break', async () => {
+    // As Word shows it: the rest of the item's text continues on the next page without a number of its own.
+    test('a break mid list item stays in the item, whose rest continues it unnumbered', async () => {
         const body = `${paragraph(run('One'), ORDERED)}${paragraph(`${run('Before')}<w:r>${PAGE_BREAK}</w:r>${run('After')}`, ORDERED)}`;
-        expect(await importBlocks(body)).toEqual(['orderedList(One/Before)', 'pageBreak', 'orderedList(After)']);
+        expect(await importOutline(body)).toEqual(['orderedList[One / Before + pageBreak + After]']);
     });
 
-    test('a break in a nested list item is dropped and leaves the list whole', async () => {
-        const list = (inner: string): string =>
-            `${paragraph(run('One'), ORDERED)}${paragraph(run('A'), NESTED)}${paragraph(inner, NESTED)}${paragraph(run('Two'), ORDERED)}`;
-        const json = await importJson(list(`${run('B')}<w:r>${PAGE_BREAK}</w:r>${run('C')}`));
-        expect(json).toEqual(await importJson(list(`${run('B')}${run('C')}`)));
-        expect(blocks(json)).toEqual(['orderedList(One/A/BC/Two)']);
+    test('a break in a nested list item stays in the nested item', async () => {
+        const body = `${paragraph(run('One'), ORDERED)}${paragraph(run('A'), NESTED)}${paragraph(`${run('B')}<w:r>${PAGE_BREAK}</w:r>${run('C')}`, NESTED)}${paragraph(run('Two'), ORDERED)}`;
+        expect(await importOutline(body)).toEqual(['orderedList[One + orderedList[A / B + pageBreak + C] / Two]']);
     });
 
-    // Split there, the nested item would open a list of its own under an empty bullet.
     test.each([
         ['ends a top-level item before its nested child', [`${run('One')}<w:r>${PAGE_BREAK}</w:r>`]],
         ['trails a top-level item before an empty run', [`${run('One')}<w:r>${PAGE_BREAK}<w:t></w:t></w:r>`]],
         ['stands as an item between a parent and its nested child', [run('One'), `<w:r>${PAGE_BREAK}</w:r>`]],
-    ])('a break that %s is dropped and leaves the list whole', async (_where, items) => {
-        const list = (top: string[]): string =>
-            `${top.map((inner) => paragraph(inner, ORDERED)).join('')}${paragraph(run('A'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
-        const json = await importJson(list(items));
-        expect(json).toEqual(await importJson(list([run('One')])));
-        expect(blocks(json)).toEqual(['orderedList(One/A/Two)']);
+    ])('a break that %s stays in the item, above its nested child', async (_where, items) => {
+        const list = `${items.map((inner) => paragraph(inner, ORDERED)).join('')}${paragraph(run('A'), NESTED)}${paragraph(run('Two'), ORDERED)}`;
+        expect(await importOutline(list)).toEqual(['orderedList[One + pageBreak + orderedList[A] / Two]']);
     });
 
     test.each([
-        ['a footnote reference', FOOTNOTE_REFERENCE, ['orderedList(One[1]/A/Two)', 'orderedList(Note ↑)']],
-        ['a line break', '<w:r><w:br/></w:r>', ['orderedList(One/A/Two)']],
-        ['a space', '<w:r><w:t xml:space="preserve"> </w:t></w:r>', ['orderedList(One/A/Two)']],
-    ])('a break that trails a top-level item before %s goes without it', async (_what, after, expected) => {
-        const json = await importJson(nestedList(`${run('One')}<w:r>${PAGE_BREAK}</w:r>${after}`), FOOTNOTE);
-        expect(json).toEqual(await importJson(nestedList(`${run('One')}${after}`), FOOTNOTE));
-        expect(blocks(json)).toEqual(expected);
-    });
+        [
+            'a footnote reference',
+            FOOTNOTE_REFERENCE,
+            ['orderedList[One + pageBreak + [1] + orderedList[A] / Two]', 'orderedList[Note ↑]'],
+        ],
+        ['a line break', '<w:r><w:br/></w:r>', ['orderedList[One + pageBreak + ⏎ + orderedList[A] / Two]']],
+        [
+            'a space',
+            '<w:r><w:t xml:space="preserve"> </w:t></w:r>',
+            ['orderedList[One + pageBreak + orderedList[A] / Two]'],
+        ],
+    ])(
+        'a break that trails a top-level item before %s keeps what shows on the item',
+        async (_what, after, expected) => {
+            expect(await importOutline(nestedList(`${run('One')}<w:r>${PAGE_BREAK}</w:r>${after}`), FOOTNOTE)).toEqual(
+                expected,
+            );
+        },
+    );
 
-    // Only a break that trails the item's text cuts it off from its nested items.
+    // Before the first item no list is open, so the break stands before it.
     test.each([
         [
             'starts a top-level item above a nested child',
             `<w:r>${PAGE_BREAK}</w:r>${run('One')}`,
-            ['pageBreak', 'orderedList(One/A/Two)'],
+            ['pageBreak', 'orderedList[One + orderedList[A] / Two]'],
         ],
         [
             'splits a top-level item above a nested child',
             `${run('One')}<w:r>${PAGE_BREAK}</w:r>${run('Half')}`,
-            ['orderedList(One)', 'pageBreak', 'orderedList(Half/A/Two)'],
+            ['orderedList[One + pageBreak + Half + orderedList[A] / Two]'],
         ],
         [
             'puts an image after a top-level item above a nested child',
             `${run('One')}<w:r>${PAGE_BREAK}</w:r>${GOLDEN_DOCX_IMAGE_RUN}`,
-            ['orderedList(One)', 'pageBreak', 'orderedList(/A/Two)'],
+            ['orderedList[One + pageBreak + figure + orderedList[A] / Two]'],
         ],
-    ])('a break that %s stays a page break', async (_where, item, expected) => {
-        expect(await importBlocks(nestedList(item))).toEqual(expected);
+    ])('a break that %s keeps the list whole', async (_where, item, expected) => {
+        expect(await importOutline(nestedList(item))).toEqual(expected);
     });
 
-    test('a second break that trails a split top-level item goes without what follows it', async () => {
-        const json = await importJson(
-            nestedList(
-                `${run('One')}<w:r>${PAGE_BREAK}</w:r>${run('Half')}<w:r>${PAGE_BREAK}</w:r>${FOOTNOTE_REFERENCE}`,
-            ),
-            FOOTNOTE,
-        );
-        expect(blocks(json)).toEqual([
-            'orderedList(One)',
-            'pageBreak',
-            'orderedList(Half[1]/A/Two)',
-            'orderedList(Note ↑)',
+    test('a second break in a split top-level item stays in the item too', async () => {
+        const item = `${run('One')}<w:r>${PAGE_BREAK}</w:r>${run('Half')}<w:r>${PAGE_BREAK}</w:r>${FOOTNOTE_REFERENCE}`;
+        expect(await importOutline(nestedList(item), FOOTNOTE)).toEqual([
+            'orderedList[One + pageBreak + Half + pageBreak + [1] + orderedList[A] / Two]',
+            'orderedList[Note ↑]',
         ]);
     });
 
@@ -516,12 +614,12 @@ describe('docx import — page breaks', () => {
         expect(await importBlocks(body)).toEqual(['pageBreak', 'heading1(Chapter)']);
     });
 
-    // The schema has no inline checkbox, so the half holding only a checkbox content control parses empty.
-    test('a checkbox before a break leaves no empty paragraph', async () => {
+    // A checkbox content control opening a paragraph makes it a task item, whose text is the half after the break.
+    test('a checkbox before a break opens a task item after it', async () => {
         const checkbox = `<w:sdt xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:sdtPr><w14:checkbox><w14:checked w14:val="0"/></w14:checkbox></w:sdtPr><w:sdtContent>${run('☐')}</w:sdtContent></w:sdt>`;
         expect(await importBlocks(paragraph(`${checkbox}<w:r>${PAGE_BREAK}</w:r>${run('After')}`))).toEqual([
             'pageBreak',
-            'paragraph(After)',
+            'taskList(After)',
         ]);
     });
 

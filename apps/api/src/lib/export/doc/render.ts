@@ -125,6 +125,13 @@ export function absoluteHref(href: string, publicOrigin: string | undefined): st
     return publicOrigin && href.startsWith('/') ? `${publicOrigin}${href}` : href;
 }
 
+// The import's inverse: a link into this instance comes back root-relative, never as `//host`, which leaves it.
+export function rootRelativeHref(href: string, publicOrigin: string | undefined): string {
+    if (!publicOrigin || !href.startsWith(publicOrigin)) return href;
+    const path = href.slice(publicOrigin.length);
+    return /^\/(?![/\\])/.test(path) ? path : href;
+}
+
 export function withAbsoluteLinks(node: JSONContent, publicOrigin: string | undefined): JSONContent {
     const content = node.content?.map((child) => withAbsoluteLinks(child, publicOrigin));
     const marks = node.marks?.map((mark) => {

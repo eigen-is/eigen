@@ -32,6 +32,7 @@
     "@workspace/sheet": "workspace:*",
     "@workspace/ui": "workspace:*",
     "better-auth": "^1.7.3",
+    "dingbat-to-unicode": "^1.0.1",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.30",
     "elysia-rate-limit": "^4.6.3",

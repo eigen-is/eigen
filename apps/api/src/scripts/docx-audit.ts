@@ -277,7 +277,7 @@ function alternative(element: XmlElement): XmlElement | undefined {
     return child(element, 'Choice', MC) ?? child(element, 'Fallback', MC);
 }
 
-// Soft hyphens show only at a line end; mammoth spells a non-breaking hyphen U+2011. A word carries every mark any of
+// Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
 // its characters does.
 function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
     const words: { word: string; marks: Set<Feature> }[] = [];

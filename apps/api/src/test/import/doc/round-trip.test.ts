@@ -1,0 +1,194 @@
+import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
+import type { JSONContent } from '@tiptap/core';
+import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
+import { type DocxImage, docSchema, docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
+
+// Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
+
+const ORIGIN = 'https://eigen.example';
+
+type Mark = NonNullable<JSONContent['marks']>[number];
+
+// Each imported media name is the source's whose bytes it holds.
+function sourceNames(images: DocxImage[]): Map<string, string> {
+    const media = buildAllFeaturesDocMedia();
+    return new Map(
+        images.flatMap((image) => {
+            const source = media.find((item) => Buffer.from(item.data).equals(image.data));
+            return source ? [[image.name, source.name]] : [];
+        }),
+    );
+}
+
+// The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
+// column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
+// (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
+// (7) OWNER: a run of empty paragraphs right before a page break goes.
+function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
+    const attrs = source.attrs && { ...source.attrs };
+    if (attrs) {
+        for (const name of ['colwidth', 'width'])
+            if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
+        if ('commentCardId' in attrs) attrs['commentCardId'] = null;
+        if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
+    }
+    const marks = source.marks?.flatMap((mark): Mark[] => {
+        if (mark.type === 'comment') return [];
+        if (mark.type === 'link' && typeof mark.attrs?.['href'] === 'string')
+            return [{ ...mark, attrs: { ...mark.attrs, href: mark.attrs['href'].replaceAll(' ', '%20') } }];
+        if (mark.type === 'textStyle' && mark.attrs?.['color'] === '#000000') {
+            return mark.attrs['fontFamily'] ? [{ ...mark, attrs: { ...mark.attrs, color: null } }] : [];
+        }
+        return [mark];
+    });
+    const kept = source.content?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index));
+    const content = kept?.map((child, index) => expected(child, imported?.content?.[index]));
+    return {
+        ...source,
+        ...(attrs && { attrs }),
+        ...(marks && (marks.length > 0 ? { marks } : { marks: undefined })),
+        ...(content && { content }),
+    };
+}
+
+function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {
+    const next = siblings
+        .slice(index)
+        .find((sibling) => sibling.type !== 'paragraph' || (sibling.content ?? []).length > 0);
+    return siblings[index]?.type === 'paragraph' && next?.type === 'pageBreak';
+}
+
+function withSourceNames(node: JSONContent, names: Map<string, string>): JSONContent {
+    const mediaName = node.attrs?.['mediaName'];
+    return {
+        ...node,
+        ...(typeof mediaName === 'string' && {
+            attrs: { ...node.attrs, mediaName: names.get(mediaName) ?? mediaName },
+        }),
+        ...(node.content && { content: node.content.map((child) => withSourceNames(child, names)) }),
+    };
+}
+
+// JSON round trips drop undefined keys, so both sides compare as stored.
+const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
+
+describe('the all-features doc', () => {
+    test('comes back as it was written, but for the named differences', async () => {
+        const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const docx = await eigendocToDocx(
+            buildAllFeaturesDocJson(),
+            buildAllFeaturesDocMedia(),
+            'All features',
+            ORIGIN,
+        );
+        const { json, images } = await docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+        const imported = withSourceNames(json, sourceNames(images));
+        expect(stored(imported)).toEqual(stored(expected(source, imported)));
+    });
+});
+
+const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+const quote = (...content: JSONContent[]) => ({ type: 'blockquote', content });
+const code = (text: string) => ({
+    type: 'codeBlock',
+    attrs: { language: 'javascript' },
+    content: [{ type: 'text', text }],
+});
+const rule = { type: 'horizontalRule' };
+const ordered = (...items: JSONContent[][]) => ({
+    type: 'orderedList',
+    attrs: { start: 1, type: null },
+    content: items.map((content) => ({ type: 'listItem', content })),
+});
+const bullets = (...items: JSONContent[][]) => ({
+    type: 'bulletList',
+    content: items.map((content) => ({ type: 'listItem', content })),
+});
+
+// The source as the schema stores it, and what an import of its docx gives back.
+async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
+    const source = docSchema.nodeFromJSON({ type: 'doc', content }).toJSON();
+    const { json } = await docxToPmJson(Buffer.from(await eigendocToDocx(source, [], 'Nested', undefined)));
+    return { source, json };
+}
+
+// The writer keeps a block's container as its indent, so each comes back inside it.
+describe('a block inside a list item or a quote', () => {
+    test.each<[string, JSONContent[]]>([
+        [
+            'a quote in an item and in a nested item, two deep',
+            [ordered([p('One'), quote(p('Said'), quote(p('Deeper')))], [p('Two')]), quote(p('After the list'))],
+        ],
+        ['code in an item', [ordered([p('One'), code('one()')], [p('Two')])]],
+        ['a rule in an item, and a quote after it', [ordered([p('One'), rule, quote(p('Said'))], [p('Two')])]],
+        [
+            'code and a rule in a nested item',
+            [ordered([p('One'), ordered([p('One a'), code('a()'), rule], [p('One b')])], [p('Two')])],
+        ],
+        ['code in a quote', [quote(p('Said'), code('said()'), p('Done'))]],
+        ['code in a quote in an item', [ordered([p('One'), quote(p('Said'), code('said()'))], [p('Two')])]],
+        ['code opening a quote in an item', [ordered([p('One'), quote(code('said()'), p('Done'))], [p('Two')])]],
+        ['code in an item in a quote', [quote(p('Said'), ordered([p('One'), code('one()')]), p('Done'))]],
+        [
+            'code at the margin after a list, then a quote two deep',
+            [bullets([p('One')]), code('x()'), quote(quote(p('Deep')))],
+        ],
+        [
+            'code and a rule at the margin after a list, code in its last item',
+            [ordered([p('One'), code('in()')]), code('after()'), ordered([p('Two')]), rule],
+        ],
+    ])('%s', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// The Hyperlink style draws the editor's link look; a link's own color and underline are the author's.
+describe("a link's own look", () => {
+    const link = { type: 'link', attrs: { href: 'https://example.com/', title: null } };
+    test.each<[string, Mark]>([
+        ['a color', { type: 'textStyle', attrs: { color: '#ff0000', fontFamily: null } }],
+        ['an underline', { type: 'underline' }],
+    ])('%s comes back', async (_name, mark) => {
+        const { source, json } = await roundTrip([
+            { type: 'paragraph', content: [{ type: 'text', text: 'Link', marks: [link, mark] }] },
+        ]);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
+// It keeps one placeholder for the export's media, so names don't say which image is which.
+function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSONContent {
+    const content = node.content
+        ?.filter((child) => !(child.type === 'pageBreak' && (node.type === 'tableCell' || node.type === 'tableHeader')))
+        .map((child, index) => googleLosses(child, imported?.content?.[index]));
+    const attrs = node.attrs && {
+        ...node.attrs,
+        ...(node.type === 'codeBlock' && { language: null }),
+        ...(node.type === 'figure' && { mediaName: imported?.attrs?.['mediaName'] }),
+    };
+    const marks = node.marks?.map((mark) =>
+        mark.type === 'link' ? { ...mark, attrs: { ...mark.attrs, title: null } } : mark,
+    );
+    return { ...node, ...(attrs && { attrs }), ...(marks && { marks }), ...(content && { content }) };
+}
+
+describe("the all-features doc's Google Docs re-save", () => {
+    test('comes back as written, but for the named differences and what Google Docs drops', async () => {
+        const bytes = await Bun.file(
+            join(import.meta.dir, '../../fixtures/docx/google-docs-all-features.docx'),
+        ).arrayBuffer();
+        const { json } = await docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
+        const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const want = googleLosses(expected(source, json), json);
+        const blocks = json.content ?? [];
+        expect(stored({ ...json, content: blocks.slice(0, -3) })).toEqual(
+            stored({ ...want, content: want.content?.slice(0, -1) }),
+        );
+        // G10, U5's: the re-save splits the list whose first item opens with a wrapped figure.
+        expect(blocks.slice(-3).map((node) => node.type)).toEqual(['orderedList', 'paragraph', 'orderedList']);
+    });
+});

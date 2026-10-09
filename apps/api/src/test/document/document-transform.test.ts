@@ -1048,7 +1048,7 @@ describe('document transform (eigendoc)', () => {
 });
 
 describe('document transform (docx round trip)', () => {
-    // The docx export as the Download menu runs it (the media prep, the Worker), read back by today's importer.
+    // The docx export as the Download menu runs it (the media prep, the Worker), read back as an import reads it.
     async function roundTrip(fileName: string, json: JSONContent): Promise<{ json: JSONContent; images: DocxImage[] }> {
         const created = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -1067,7 +1067,8 @@ describe('document transform (docx round trip)', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>';
         await seedDocumentMedia(mount, path, 'diagram.svg', Buffer.from(svg), 'image/svg+xml');
-        return docxToPmJson(await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path));
+        const docx = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
+        return docxToPmJson(docx, { publicOrigin: getPublicOrigin() });
     }
 
     // The importer names media image-N.ext beside an empty src, the doc its own, so both are numbered as they appear.
@@ -1079,13 +1080,6 @@ describe('document transform (docx round trip)', () => {
             ...(node.content && { content: node.content.map(walk) }),
         });
         return walk(json);
-    }
-
-    function typesIn(json: JSONContent, nodes = new Set<string>(), marks = new Set<string>()) {
-        if (json.type) nodes.add(json.type);
-        for (const mark of json.marks ?? []) marks.add(mark.type);
-        for (const node of json.content ?? []) typesIn(node, nodes, marks);
-        return { nodes, marks };
     }
 
     // Each attr's values across the doc's nodes and marks.
@@ -1109,12 +1103,6 @@ describe('document transform (docx round trip)', () => {
         return chunks.join(' ').split(/\s+/).filter(Boolean).sort();
     }
 
-    // A block as its type and its block children; text is left out.
-    function shape(node: JSONContent): string {
-        const blocks = (node.content ?? []).filter((child) => child.type !== 'text' && child.type !== 'hardBreak');
-        return blocks.length > 0 ? `${node.type}(${blocks.map(shape).join(' ')})` : (node.type ?? '');
-    }
-
     test('what the importer keeps comes back as it was', async () => {
         const text = (value: string, ...marks: string[]) => ({
             type: 'text',
@@ -1122,7 +1110,9 @@ describe('document transform (docx round trip)', () => {
             ...(marks.length > 0 && { marks: marks.map((type) => ({ type })) }),
         });
         const p = (...content: JSONContent[]) => ({ type: 'paragraph', content });
+        const half = { colwidth: [321] };
         const item = (...content: JSONContent[]) => ({ type: 'listItem', content });
+        // The writer gives every column and image its width, so the source names the widths it would fill in.
         const cell = (type: string, attrs: Record<string, unknown>, value: string) => ({
             type,
             attrs,
@@ -1164,17 +1154,23 @@ describe('document transform (docx round trip)', () => {
                         content: [
                             {
                                 type: 'tableRow',
-                                content: [cell('tableHeader', {}, 'Region'), cell('tableHeader', {}, 'Q1')],
+                                content: [cell('tableHeader', half, 'Region'), cell('tableHeader', half, 'Q1')],
                             },
-                            { type: 'tableRow', content: [cell('tableCell', { colspan: 2 }, 'Both columns')] },
                             {
                                 type: 'tableRow',
-                                content: [cell('tableCell', { rowspan: 2 }, 'Two rows'), cell('tableCell', {}, 'x')],
+                                content: [cell('tableCell', { colspan: 2, colwidth: [321, 321] }, 'Both columns')],
                             },
-                            { type: 'tableRow', content: [cell('tableCell', {}, 'y')] },
+                            {
+                                type: 'tableRow',
+                                content: [
+                                    cell('tableCell', { ...half, rowspan: 2 }, 'Two rows'),
+                                    cell('tableCell', half, 'x'),
+                                ],
+                            },
+                            { type: 'tableRow', content: [cell('tableCell', half, 'y')] },
                         ],
                     },
-                    p({ type: 'figure', attrs: { mediaName: 'chart.png' } }),
+                    p({ type: 'figure', attrs: { mediaName: 'chart.png', width: 642 } }),
                     { type: 'pageBreak' },
                     p(text('After the break.')),
                 ],
@@ -1185,94 +1181,14 @@ describe('document transform (docx round trip)', () => {
         expect(imported.images.map((image) => image.contentType)).toEqual(['image/png']);
     }, 120_000);
 
-    // Phase 3's own reader shrinks every list here.
-    test('the all-features doc loses no text, and only what the importer is known to drop', async () => {
+    // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
+    test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
         const original = buildAllFeaturesDocJson();
         const { json, images } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
-
-        const before = typesIn(original);
-        const after = typesIn(json);
-        expect([...after.nodes].filter((type) => !before.nodes.has(type))).toEqual([]);
-        expect([...before.nodes].filter((type) => !after.nodes.has(type)).sort()).toEqual([
-            'blockquote',
-            'codeBlock',
-            'horizontalRule',
-            'taskItem',
-            'taskList',
-        ]);
-        expect([...before.marks].filter((type) => !after.marks.has(type)).sort()).toEqual([
-            'code',
-            'comment',
-            'highlight',
-            'small',
-            'textStyle',
-            'underline',
-        ]);
-        const lostAttrs = { textAlign: [null], align: [null], colwidth: [null], start: [1], width: [null] };
-        for (const [name, values] of Object.entries(lostAttrs)) expect(attrValues(json, name)).toEqual(values);
-        expect(
-            ['alignment', 'layout', 'caption', 'commentCardId', 'title'].map((name) => attrValues(json, name)),
-        ).toEqual([['center'], ['block'], [null], [null], [null]]);
-
-        // Empty paragraphs and the rule are dropped; quotes, code lines and task items come back as paragraphs; an
-        // item's blocks after its first paragraph leave the list, and two adjacent lists become one; the header column
-        // comes back as plain cells; a caption is the paragraph after its image; a wrapped figure is its one-cell table,
-        // and the clearing break that ends an item holding one a paragraph.
-        const table = (...cells: string[]) => `table(tableRow(${cells.join(' ')}))`;
-        expect((json.content ?? []).map(shape)).toEqual([
-            ...Array(6).fill('heading'),
-            ...Array(6).fill('paragraph'),
-            'pageBreak',
-            'paragraph',
-            'bulletList(listItem(paragraph orderedList(listItem(paragraph) listItem(paragraph))) listItem(paragraph))',
-            'paragraph',
-            'pageBreak',
-            'paragraph',
-            'orderedList(listItem(paragraph) listItem(paragraph))',
-            ...Array(3).fill('paragraph'),
-            'pageBreak',
-            'paragraph',
-            'heading',
-            'paragraph',
-            'paragraph',
-            'pageBreak',
-            ...Array(8).fill('paragraph'),
-            [
-                'table(tableRow(tableHeader(paragraph) tableHeader(paragraph) tableHeader(paragraph) tableHeader(paragraph))',
-                'tableRow(tableCell(paragraph) tableCell(paragraph) tableCell(paragraph))',
-                'tableRow(tableCell(paragraph) tableCell(paragraph) tableCell(paragraph))',
-                `tableRow(tableCell(paragraph pageBreak paragraph ${table('tableCell(paragraph)')}) tableCell(paragraph) tableCell(paragraph)))`,
-            ].join(' '),
-            table('tableCell(paragraph)'),
-            table('tableCell(paragraph)'),
-            'paragraph',
-            'paragraph(figure)',
-            'paragraph',
-            'paragraph(figure)',
-            'paragraph(figure)',
-            'paragraph',
-            table('tableCell(paragraph(figure) paragraph)'),
-            table('tableCell(paragraph(figure) paragraph)'),
-            'paragraph',
-            table('tableCell(paragraph(figure))'),
-            'paragraph',
-            'paragraph',
-            'orderedList(listItem(paragraph))',
-        ]);
-
-        // A root-relative href comes back absolute (phase 3 maps the instance's own origin back), a space as %20.
-        const hrefs = attrValues(json, 'href');
-        expect(hrefs).toEqual(['https://example.com/a%20b', `${getPublicOrigin()}/contacts/team/x?contactId=a%40b`]);
-        // An SVG comes back as its PNG fallback: the importer reads the a:blip, not the svgBlip.
-        expect(images.map((image) => image.contentType)).toEqual([
-            'image/png',
-            'image/jpeg',
-            'image/png',
-            'image/png',
-            'image/jpeg',
-            'image/png',
-        ]);
+        expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
+        // One media file per image part, the SVG as itself rather than its PNG fallback.
+        expect(images.map((image) => image.contentType)).toEqual(['image/png', 'image/jpeg', 'image/svg+xml']);
     }, 120_000);
 });
 
@@ -1425,16 +1341,14 @@ describe('document transform (eigenvector)', () => {
 // a Yjs commit into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
-// survive the transfer untouched. Regenerate only for an intentional converter change. The parse hash
-// moved when the figure gained its `commentCardId` attribute: the image's JSON carries it as null, and
-// stripping that key restores the previous hash. The Yjs readback drops null attributes, so it held.
-const GOLDEN_DOCX_PM_JSON_SHA256 = '78e7c40265e25cb7519f66e435784731068f1fdecfd92051217397fb62b8bc91';
-const GOLDEN_DOCX_DOCUMENT_SHA256 = '51ae42c1e14f8f5acfa31337873d126218c155746f6850860afdc90900808cfe';
+// survive the transfer untouched. Regenerate only for an intentional converter change.
+const GOLDEN_DOCX_PM_JSON_SHA256 = 'a10269abb8310898d89830d5dc5912645b76ce686437d7afa7888a7fe0813860';
+const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde59984c3f50bfb836136c70';
 
 describe('document transform (docx import)', () => {
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {
         return documentTransformRunner.run(
-            { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', data },
+            { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: undefined, data },
             EXPORT_OPTIONS,
         );
     }
