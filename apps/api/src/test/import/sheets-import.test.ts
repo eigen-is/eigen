@@ -377,7 +377,7 @@ describe('Sheets xlsx import/convert', () => {
             await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
             'bomb-target.xlsx',
         );
-        const bomb = await buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
+        const bomb = buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
@@ -1855,7 +1855,7 @@ describe('xlsxToSheets resource guards', () => {
         // fixture forges a tiny entry's declared size just over the 200 MB cap. The guard runs
         // before any inflation (that OOM is uncatchable, so a post-load check is useless), so
         // this 413 comes from the declared-size pass.
-        const bomb = await buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
+        const bomb = buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
 
         let error: unknown;
         try {
@@ -1871,7 +1871,7 @@ describe('xlsxToSheets resource guards', () => {
     // exercising it needs >200 MB of genuine inflation, whose fixture can't be built in under
     // ~2 s without hand-rolling a native-zlib zip. The declared guard above and the cell-count
     // guard below stay covered; the byte-cap logic is one shared MAX_DECOMPRESSED_BYTES constant
-    // across both passes in lib/import/zip-size-guard.ts.
+    // (lib/core/zip.ts) across both passes in lib/import/zip-size-guard.ts.
 
     test('rejects an xlsx declaring an absurd cell count', async () => {
         // Two far-apart cells span the full Excel grid (1,048,576 × 16,384 ≈ 1.7e10 cells)

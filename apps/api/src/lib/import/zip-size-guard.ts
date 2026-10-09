@@ -1,5 +1,6 @@
 import type JSZip from 'jszip';
 import { ApiError } from '../core/errors';
+import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 
 // xlsx and docx are both zips, and the upload route only bounds the COMPRESSED bytes
 // (getUploadMaxSize, default 35 MB / mount quota) — so a decompression bomb, a few KB of
@@ -8,12 +9,8 @@ import { ApiError } from '../core/errors';
 // package unconditionally and that OOM is not catchable, so the caps below run BEFORE the
 // parser sees the buffer.
 //
-// Byte cap: total inflated bytes across all zip entries. A legit DENSE spreadsheet at the
-// importer's cell cap decompresses to ~140 MB (measured ~35 bytes per populated cell of
-// worksheet + deduped sharedStrings XML), comfortably under 200 MB, and a document that
-// large is far past anything a word processor authors. 200 MB also sits far below the
-// ~36 GB an honest 35 MB-compressed bomb declares.
-const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
+// Byte cap: MAX_DECOMPRESSED_BYTES total inflated bytes across all zip entries, the cap
+// core/zip.ts holds for docx too.
 
 // JSZip records each entry's declared uncompressed size (from the zip central directory)
 // on a private `_data`; reading it does NOT decompress. Public typings omit it.
