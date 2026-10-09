@@ -41,15 +41,7 @@ import {
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
-import {
-    byFace,
-    FONT_SLOTS,
-    type Fonts,
-    fontMark,
-    readFontTable,
-    readTheme,
-    type Script,
-} from '../lib/import/doc/docx-fonts';
+import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
@@ -311,6 +303,31 @@ function runText(t: XmlElement): string {
     const kept =
         xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
     return kept.replace(/[\r\n]/g, ' ');
+}
+
+// Word's face per character, apart from the reader's byFace so the audit never grades the reader by itself.
+const EAST_ASIAN_SCRIPT =
+    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}\u3000-\u303f\uff00-\uffef]/u;
+const COMPLEX_SCRIPT =
+    /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gurmukhi}\p{Script=Gujarati}\p{Script=Oriya}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Sinhala}\p{Script=Thai}\p{Script=Lao}\p{Script=Tibetan}\p{Script=Myanmar}\p{Script=Khmer}]/u;
+
+function facesOf(text: string, fonts: Fonts, script: Script): { text: string; font?: string; complex: boolean }[] {
+    const faces: { text: string; font?: string; complex: boolean }[] = [];
+    for (const char of text) {
+        const complex = !!script.complex || COMPLEX_SCRIPT.test(char);
+        const eastAsia = !complex && (EAST_ASIAN_SCRIPT.test(char) || (char > '\x7f' && script.hint === 'eastAsia'));
+        const font = complex
+            ? fonts.cs
+            : eastAsia
+              ? fonts.eastAsia
+              : char <= '\x7f'
+                ? (fonts.ascii ?? fonts.hAnsi)
+                : (fonts.hAnsi ?? fonts.ascii);
+        const last = faces.at(-1);
+        if (last && last.font === font && last.complex === complex) last.text += char;
+        else faces.push({ text: char, font, complex });
+    }
+    return faces;
 }
 
 // Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
@@ -831,7 +848,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             context.paragraph.spans.push({ text: value, marks: [] });
             return;
         }
-        for (const face of byFace(value, look.fonts, look.script, true)) {
+        for (const face of facesOf(value, look.fonts, look.script)) {
             const font = fontMark(face.font, fontTable);
             const shown = face.complex ? look.complexMarks : look.marks;
             const own: Feature[] = font ? [...shown, 'font'] : shown;

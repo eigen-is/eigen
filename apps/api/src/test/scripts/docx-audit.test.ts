@@ -354,22 +354,26 @@ describe('both sides', () => {
     test('fonts by script and a Bidi theme font read alike on both sides', async () => {
         const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/><a:cs typeface="Times New Roman"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
         const docx = await buildDocxWithBody(
-            `<w:p>${run('Data 数据', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Courier New"/>')}${run(' Bidi', '<w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>')}</w:p>`,
+            `<w:p>${run('Data 数据', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Courier New"/>')}${run(' Bidi', '<w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>')}${run(' Code كود', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Courier New"/>')}</w:p>`,
             { theme },
         );
         const source = auditSource(docx);
-        expect(source.marks.get('font')).toEqual(['数据 (JetBrains Mono)', 'Bidi (Source Serif 4)']);
+        expect(source.marks.get('font')).toEqual([
+            '数据 (JetBrains Mono)',
+            'Bidi (Source Serif 4)',
+            'كود (JetBrains Mono)',
+        ]);
         const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
-        expect(features['font']).toEqual({ source: 2, imported: 2, matched: 2, invented: 0, kept: 1 });
+        expect(features['font']).toEqual({ source: 3, imported: 3, matched: 3, invented: 0, kept: 1 });
     });
 
     // Word draws a complex script character's bold, italic and size from bCs, iCs and szCs.
     test('complex script bold and italic read alike on both sides', async () => {
         const docx = await buildDocxWithBody(
-            `<w:p>${run('مملكة', '<w:bCs/>')}${run(' Spain', '<w:bCs/><w:iCs/>')}${run(' إسبانيا', '<w:b/><w:iCs/>')}</w:p>`,
+            `<w:p>${run('مملكة', '<w:bCs/>')}${run(' Spain', '<w:bCs/><w:iCs/>')}${run(' إسبانيا', '<w:b/><w:iCs/>')}${run(' Madrid', '<w:rtl/><w:bCs/>')}</w:p>`,
         );
         const source = auditSource(docx);
-        expect([source.marks.get('bold'), source.marks.get('italic')]).toEqual([['مملكة'], ['إسبانيا']]);
+        expect([source.marks.get('bold'), source.marks.get('italic')]).toEqual([['مملكة', 'Madrid'], ['إسبانيا']]);
         const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
         expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
     });
