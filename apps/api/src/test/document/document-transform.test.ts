@@ -776,8 +776,8 @@ describe('document transform (xlsx import)', () => {
 // inset inside its paragraph's spacing: the golden figure paragraph's spacing, and nothing else.
 // The HTML hashes moved when the print CSS named .figure and let a table or quote holding a page break split.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'a0cad0cfcd281a8e363ee30e52ae7392d869301751bc2b91b7147a677e674fab';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'a0cad0cfcd281a8e363ee30e52ae7392d869301751bc2b91b7147a677e674fab';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '87d876f26660b097e8aa472ebcf3fc8aceae880f4a7de55b0bd001bf53b458f6';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '87d876f26660b097e8aa472ebcf3fc8aceae880f4a7de55b0bd001bf53b458f6';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '2ed332f8c234d467b5cdb3985dca57cc32d56505db6f86c41162ac57a6e5130d';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';

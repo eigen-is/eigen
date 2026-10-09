@@ -27,6 +27,7 @@ import {
     lowlight,
     renderCodeBlockNode,
     renderFigureNode,
+    renderOrderedListNode,
     renderTaskItemNode,
     withAbsoluteLinks,
     withTrailingBreaks,
@@ -116,6 +117,7 @@ function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, strin
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
+                orderedList: ({ node, children }) => renderOrderedListNode(node, children),
                 figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(node.attrs, (mediaName, src) =>
                         mediaName ? (dataUriMap.get(mediaName) ?? null) : src,

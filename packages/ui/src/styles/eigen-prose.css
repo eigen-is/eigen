@@ -165,6 +165,23 @@
         padding-left: 1.5em;
     }
 
+    /* The schema carries `type`; the decimal above would hide it. `s`: HTML matches `type` case-blind, so "a" would take "A". */
+    ol[type="a" s] {
+        list-style-type: lower-alpha;
+    }
+
+    ol[type="A" s] {
+        list-style-type: upper-alpha;
+    }
+
+    ol[type="i" s] {
+        list-style-type: lower-roman;
+    }
+
+    ol[type="I" s] {
+        list-style-type: upper-roman;
+    }
+
     li {
         line-height: 1.7;
     }
