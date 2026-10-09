@@ -46,12 +46,13 @@ const stylesXml = (extra: string): string => `<?xml version="1.0" encoding="UTF-
 ${extra}
 </w:styles>`;
 
-const NUMBERING = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+const numberingXml = (extra: string): string => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum>
 <w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>
 <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
 <w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>
+${extra}
 </w:numbering>`;
 
 const listParagraphs = GOLDEN_DOCX_LIST.map(
@@ -82,19 +83,31 @@ export async function buildGoldenDocx(imageBytes: Uint8Array): Promise<ArrayBuff
 }
 
 // The golden package around a body of the caller's own: its Heading1 style, bullets as numId 1 and
-// decimal numbers, two levels deep, as numId 2. Footnotes, when given, land in word/footnotes.xml; styles join styles.xml.
-export async function buildDocxWithBody(body: string, footnotes = '', styles = ''): Promise<ArrayBuffer> {
-    return zipDocx(documentXml(body), new Uint8Array(), footnotes, styles);
+// decimal numbers, two levels deep, as numId 2. Footnotes, when given, land in word/footnotes.xml; styles join styles.xml,
+// numbering numbering.xml.
+export async function buildDocxWithBody(
+    body: string,
+    footnotes = '',
+    styles = '',
+    numbering = '',
+): Promise<ArrayBuffer> {
+    return zipDocx(documentXml(body), new Uint8Array(), footnotes, styles, numbering);
 }
 
-async function zipDocx(document: string, imageBytes: Uint8Array, footnotes = '', styles = ''): Promise<ArrayBuffer> {
+async function zipDocx(
+    document: string,
+    imageBytes: Uint8Array,
+    footnotes = '',
+    styles = '',
+    numbering = '',
+): Promise<ArrayBuffer> {
     const zip = new JSZip();
     zip.file('[Content_Types].xml', CONTENT_TYPES, { date: EPOCH });
     zip.file('_rels/.rels', PACKAGE_RELS, { date: EPOCH });
     zip.file('word/document.xml', document, { date: EPOCH });
     zip.file('word/_rels/document.xml.rels', DOCUMENT_RELS, { date: EPOCH });
     zip.file('word/styles.xml', stylesXml(styles), { date: EPOCH });
-    zip.file('word/numbering.xml', NUMBERING, { date: EPOCH });
+    zip.file('word/numbering.xml', numberingXml(numbering), { date: EPOCH });
     zip.file('word/media/pixel.png', imageBytes, { date: EPOCH });
     if (footnotes) zip.file('word/footnotes.xml', footnotesXml(footnotes), { date: EPOCH });
     return zip.generateAsync({ type: 'arraybuffer' });

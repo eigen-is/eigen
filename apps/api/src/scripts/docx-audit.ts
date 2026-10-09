@@ -5,9 +5,9 @@
 //   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
 //   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
 //
-// The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, so a hang is cut at
-// the time cap and a crash is a result; every importer is measured by the same code. The per-file JSON samples the
-// words that differ, so an out dir of a private corpus stays out of the repo.
+// The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, and the source is read
+// in another, so a hang is cut at the time cap and a crash is a result; every importer is measured by the same code.
+// The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -15,6 +15,7 @@ import type { JSONContent } from '@tiptap/core';
 import JSZip from 'jszip';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { cssColorToHex } from '../lib/export/colors';
+import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { assertDecompressedSizeWithinBounds } from '../lib/import/zip-size-guard';
 
 const FEATURES = [
@@ -28,18 +29,18 @@ const FEATURES = [
     ['heading6', 'Heading 6'],
     ['heading7', 'Heading 7 to 9'],
     ['numberedHeadings', 'Numbered headings'],
-    ['bold', 'Bold (characters)'],
-    ['italic', 'Italic (characters)'],
-    ['underline', 'Underline (characters)'],
-    ['strike', 'Strike (characters)'],
-    ['subscript', 'Subscript (characters)'],
-    ['superscript', 'Superscript (characters)'],
-    ['color', 'Text color (characters)'],
-    ['highlight', 'Highlight (characters)'],
-    ['font', 'Font family (characters)'],
-    ['small', 'Small text (characters)'],
-    ['code', 'Inline code (characters)'],
-    ['link', 'Links (characters)'],
+    ['bold', 'Bold (words)'],
+    ['italic', 'Italic (words)'],
+    ['underline', 'Underline (words)'],
+    ['strike', 'Strike (words)'],
+    ['subscript', 'Subscript (words)'],
+    ['superscript', 'Superscript (words)'],
+    ['color', 'Text color (words)'],
+    ['highlight', 'Highlight (words)'],
+    ['font', 'Font family (words)'],
+    ['small', 'Small text (words)'],
+    ['code', 'Inline code (words)'],
+    ['link', 'Links (words)'],
     ['listItems', 'List items'],
     ['bulletItems', 'Bullet items'],
     ['orderedItems', 'Ordered items'],
@@ -185,9 +186,36 @@ const SMALL = 0.85;
 const SECTION_PAGE_BREAKS = new Set(['nextPage', 'oddPage', 'evenPage']);
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
 
-export type Tally = { counts: Map<Feature, number>; words: string[]; numbers: number[] };
+// Counted per word they touch, and matched as words, so a mark on the wrong words keeps nothing.
+const MARKS = new Set<Feature>([
+    'bold',
+    'italic',
+    'underline',
+    'strike',
+    'subscript',
+    'superscript',
+    'color',
+    'highlight',
+    'font',
+    'small',
+    'code',
+    'link',
+]);
 
-type FeatureResult = { source: number; imported: number; matched: number; kept: number | null };
+// A heading's line as shown: Word's number, when it numbers the heading, then its text.
+type HeadingLine = { line: string; numbered: boolean };
+
+export type Tally = {
+    counts: Map<Feature, number>;
+    words: string[];
+    numbers: number[];
+    marks: Map<Feature, string[]>;
+    headings: HeadingLine[];
+};
+
+type Span = { text: string; marks: readonly Feature[] };
+
+type FeatureResult = { source: number; imported: number; matched: number; invented: number; kept: number | null };
 
 type FileResult = {
     file: string;
@@ -213,6 +241,8 @@ type RunMeta = {
     importMs: number;
     totalMs: number;
 };
+
+const newTally = (): Tally => ({ counts: new Map(), words: [], numbers: [], marks: new Map(), headings: [] });
 
 function add(tally: Tally, feature: Feature, n = 1): void {
     tally.counts.set(feature, (tally.counts.get(feature) ?? 0) + n);
@@ -247,18 +277,49 @@ function alternative(element: XmlElement): XmlElement | undefined {
     return child(element, 'Choice', MC) ?? child(element, 'Fallback', MC);
 }
 
-// Soft hyphens show only at a line end; mammoth spells a non-breaking hyphen U+2011.
-function wordsOf(text: string): string[] {
-    return text
-        .replace(/\u00AD/g, '')
-        .replace(/[\u2010\u2011]/g, '-')
-        .split(/[\s\u200B]+/u)
-        .filter(Boolean);
+// Soft hyphens show only at a line end; mammoth spells a non-breaking hyphen U+2011. A word carries every mark any of
+// its characters does.
+function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
+    const words: { word: string; marks: Set<Feature> }[] = [];
+    let word = '';
+    let marks = new Set<Feature>();
+    const flush = () => {
+        if (word) words.push({ word, marks });
+        word = '';
+        marks = new Set();
+    };
+    for (const span of spans) {
+        for (const char of span.text.replace(/\u00AD/g, '').replace(/[\u2010\u2011]/g, '-')) {
+            if (/[\s\u200B]/u.test(char)) flush();
+            else {
+                word += char;
+                for (const mark of span.marks) marks.add(mark);
+            }
+        }
+    }
+    flush();
+    return words;
+}
+
+function record(tally: Tally, spans: Span[]): string[] {
+    const words = wordsOf(spans);
+    for (const { word, marks } of words) {
+        tally.words.push(word);
+        for (const mark of marks) {
+            const marked = tally.marks.get(mark) ?? [];
+            tally.marks.set(mark, marked);
+            marked.push(word);
+            add(tally, mark);
+        }
+    }
+    return words.map(({ word }) => word);
 }
 
 function nonSpace(text: string): number {
     return text.replace(/[\s\u00AD\u200B]/gu, '').length;
 }
+
+const textOf = (spans: Span[]) => spans.map((span) => span.text).join('');
 
 function multisetDiff<T>(source: T[], imported: T[]): { missing: T[]; extra: T[] } {
     const left = new Map<T, number>();
@@ -296,7 +357,9 @@ type ParagraphLook = {
     pageBreakBefore: boolean;
     sectionBreak: boolean;
     rule: boolean;
-    indented: boolean;
+    // The sides drawn and how: paragraphs in a row sharing them stand in one box.
+    borders: string;
+    indent: number;
     deletedMark: boolean;
     numId?: string;
     ilvl: number;
@@ -304,11 +367,12 @@ type ParagraphLook = {
     runs: XmlElement[];
 };
 
-type Paragraph = { text: string; image: boolean; breaks: number; quote: boolean; code: boolean };
+type Paragraph = { spans: Span[]; image: boolean; breaks: number; quote: boolean; code: boolean; borders: string };
 
 type OpenList = { level: number; ordered: boolean; number: number };
 
-type Chain = { last?: Paragraph; lists: OpenList[]; carry: string };
+// rule: the borders of an empty paragraph that is a rule unless the next one shares them.
+type Chain = { last?: Paragraph; lists: OpenList[]; carry: Span[]; rule?: string };
 
 type Field = { result: boolean; instr: string; link: boolean };
 
@@ -318,7 +382,7 @@ type Inline = { scope: Scope; paragraph: Paragraph; runs: XmlElement[]; marks: b
 
 type RunLook = { hidden: boolean; code: boolean; marks: Feature[] };
 
-const newChain = (): Chain => ({ lists: [], carry: '' });
+const newChain = (): Chain => ({ lists: [], carry: [] });
 
 function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined): Styles {
     const byId = new Map<string, XmlElement>();
@@ -392,25 +456,28 @@ function readNumbering(root: XmlElement | undefined) {
     }
     const counters = new Map<string, number[]>();
     const restarted = new Set<string>();
-    return (numId: string, ilvl: number): { ordered: boolean; number: number } | undefined => {
+    return (numId: string, ilvl: number): { ordered: boolean; number: number; label: string } | undefined => {
         const num = nums.get(numId);
         let abstractId = val(child(num, 'abstractNumId'));
         const styleLink = val(child(abstractId === undefined ? undefined : abstracts.get(abstractId), 'numStyleLink'));
         if (styleLink) abstractId = linked.get(styleLink) ?? abstractId;
         const abstract = abstractId === undefined ? undefined : abstracts.get(abstractId);
         if (!num || !abstract || abstractId === undefined) return undefined;
-        const override = xmlChildren(num, W, 'lvlOverride').find((o) => xmlAttr(o, W, 'ilvl') === String(ilvl));
-        const level = (element: XmlElement | undefined) =>
-            element && xmlChildren(element, W, 'lvl').find((lvl) => xmlAttr(lvl, W, 'ilvl') === String(ilvl));
-        const lvl = level(override) ?? level(abstract);
+        const levelAt = (at: number) => {
+            const override = xmlChildren(num, W, 'lvlOverride').find((o) => xmlAttr(o, W, 'ilvl') === String(at));
+            const level = (element: XmlElement | undefined) =>
+                element && xmlChildren(element, W, 'lvl').find((lvl) => xmlAttr(lvl, W, 'ilvl') === String(at));
+            return { override, lvl: level(override) ?? level(abstract) };
+        };
+        const { override, lvl } = levelAt(ilvl);
         if (!lvl) return undefined;
         const overrideStart = val(child(override, 'startOverride'));
         // ECMA-376 17.9.25: an omitted start is 0.
-        const start = Number(val(child(lvl, 'start')) ?? 0);
+        const startOf = (level: XmlElement | undefined) => Number(val(child(level, 'start')) ?? 0);
         const counter = counters.get(abstractId) ?? [];
         counters.set(abstractId, counter);
         const restart = `${numId}:${ilvl}`;
-        let number = counter[ilvl] === undefined ? start : counter[ilvl] + 1;
+        let number = counter[ilvl] === undefined ? startOf(lvl) : counter[ilvl] + 1;
         if (overrideStart !== undefined && !restarted.has(restart)) {
             restarted.add(restart);
             number = Number(overrideStart);
@@ -419,8 +486,50 @@ function readNumbering(root: XmlElement | undefined) {
         counter.length = ilvl + 1;
         const format = val(child(lvl, 'numFmt')) ?? 'decimal';
         if (format === 'none') return undefined;
-        return { ordered: format !== 'bullet', number };
+        const legal = !!child(lvl, 'isLgl');
+        const text = (val(child(lvl, 'lvlText')) ?? '').replace(/%([1-9])/g, (_, at: string) => {
+            const level = levelAt(Number(at) - 1).lvl;
+            const value = counter[Number(at) - 1] ?? startOf(level);
+            return spell(value, legal ? 'decimal' : (val(child(level, 'numFmt')) ?? 'decimal'));
+        });
+        const suffix = val(child(lvl, 'suff')) ?? 'tab';
+        return { ordered: format !== 'bullet', number, label: suffix === 'nothing' ? text : `${text} ` };
     };
+}
+
+const ROMAN: [number, string][] = [
+    [1000, 'M'],
+    [900, 'CM'],
+    [500, 'D'],
+    [400, 'CD'],
+    [100, 'C'],
+    [90, 'XC'],
+    [50, 'L'],
+    [40, 'XL'],
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+];
+
+// The number formats Word spells most; any other reads as decimal.
+function spell(value: number, format: string): string {
+    if (format === 'decimalZero' && value < 10) return `0${value}`;
+    if ((format === 'lowerLetter' || format === 'upperLetter') && value > 0) {
+        // Word's 27th is aa, its 28th bb.
+        const letter = String.fromCharCode(97 + ((value - 1) % 26)).repeat(Math.floor((value - 1) / 26) + 1);
+        return format === 'upperLetter' ? letter.toUpperCase() : letter;
+    }
+    if ((format === 'lowerRoman' || format === 'upperRoman') && value > 0) {
+        let roman = '';
+        let rest = value;
+        for (const [n, digits] of ROMAN) {
+            for (; rest >= n; rest -= n) roman += digits;
+        }
+        return format === 'lowerRoman' ? roman.toLowerCase() : roman;
+    }
+    return String(value);
 }
 
 function countElements(root: XmlElement, into: Map<string, number>): void {
@@ -478,41 +587,52 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
     for (const rel of related) if (rel.type === 'header' || rel.type === 'footer') stories.push(await read(rel.part));
     for (const story of stories) if (story) countElements(story, elements);
 
-    const tally: Tally = { counts: new Map(), words: [], numbers: [] };
+    const tally = newTally();
     const paragraphLook = (pPr: XmlElement | undefined): ParagraphLook => {
         const chain = styles.chain(val(child(pPr, 'pStyle')) ?? styles.paragraph);
         const names = chain.map(styleName);
         const pPrs = [pPr, ...chain.map((style) => child(style, 'pPr')), styles.pPr].flatMap((p) => p ?? []);
-        // Word's Title is H1 in Eigen (PROPOSAL_DOCX.md, Decision 8); 9 is body text.
-        const heading = chain
-            .map((style, index) => {
-                const named = Number(
-                    names[index].match(/^heading ([1-9])$/)?.[1] ?? (names[index] === 'title' ? 1 : 0),
-                );
-                const outline = Number(val(child(child(style, 'pPr'), 'outlineLvl')) ?? 9);
-                return named || (outline < 9 ? outline + 1 : 0);
-            })
-            .find((level) => level > 0);
+        // Word's Title is H1 in Eigen (PROPOSAL_DOCX.md, Decision 8). The nearest style that names a level decides,
+        // and outline level 9 is body text, as a TOC Heading based on Heading 1 sets it.
+        let heading: number | undefined;
+        for (const [index, style] of chain.entries()) {
+            const named = Number(names[index].match(/^heading ([1-9])$/)?.[1] ?? (names[index] === 'title' ? 1 : 0));
+            const outline = val(child(child(style, 'pPr'), 'outlineLvl'));
+            if (!named && outline === undefined) continue;
+            heading = named || (Number(outline) < 9 ? Number(outline) + 1 : undefined);
+            break;
+        }
         // numId and ilvl resolve apart: a paragraph may set its level on a style's list.
         const numPr = (local: string) => val(pPrs.map((p) => child(child(p, 'numPr'), local)).find(Boolean));
         const pageBreakBefore = first(pPrs, 'pageBreakBefore');
-        const bottom = child(first(pPrs, 'pBdr'), 'bottom');
-        const left = child(first(pPrs, 'pBdr'), 'left');
-        const bordered = (border: XmlElement | undefined) =>
-            !!border && !['none', 'nil'].includes(val(border) ?? 'none');
+        const pBdr = first(pPrs, 'pBdr');
+        const drawn = ['top', 'left', 'bottom', 'right', 'between'].flatMap((side) => {
+            const border = child(pBdr, side);
+            const style = val(border);
+            return border && style && !['none', 'nil'].includes(style) ? [{ side, border, style }] : [];
+        });
+        const only = (side: string) => drawn.length === 1 && drawn[0].side === side;
         const code = names.some((name) => CODE_BLOCK_STYLES.has(name));
         const section = child(pPr, 'sectPr');
-        const indent = first(pPrs, 'ind');
+        const left = pPrs
+            .map((p) => child(p, 'ind'))
+            .map((ind) => ind && (xmlAttr(ind, W, 'left') ?? xmlAttr(ind, W, 'start')))
+            .find((value) => value !== undefined);
         return {
             heading,
             code,
-            quote: !code && (names.some((name) => QUOTE_STYLES.has(name)) || bordered(left)),
+            quote: !code && (names.some((name) => QUOTE_STYLES.has(name)) || (heading === undefined && only('left'))),
             caption: names.includes('caption'),
             jc: val(first(pPrs, 'jc')),
             pageBreakBefore: !!pageBreakBefore && on(pageBreakBefore),
             sectionBreak: !!section && SECTION_PAGE_BREAKS.has(val(child(section, 'type')) ?? 'nextPage'),
-            rule: bordered(bottom),
-            indented: !!indent && Number(xmlAttr(indent, W, 'left') ?? xmlAttr(indent, W, 'start') ?? 0) > 0,
+            rule: only('bottom'),
+            borders: drawn
+                .map(({ side, border, style }) =>
+                    [side, style, xmlAttr(border, W, 'sz'), xmlAttr(border, W, 'color')].join(':'),
+                )
+                .join(' '),
+            indent: Number(left ?? 0),
             deletedMark: !!child(child(pPr, 'rPr'), 'del'),
             numId: numPr('numId'),
             ilvl: Number(numPr('ilvl') ?? 0),
@@ -538,8 +658,8 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
     };
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
     // What a run in a plain paragraph looks like: the text a mark stands out from.
-    const { runs: plain } = paragraphLook(undefined);
-    const base = { font: fontOf(plain), color: colorOf(plain), size: sizeOf(plain) };
+    const { runs: plain, indent } = paragraphLook(undefined);
+    const base = { font: fontOf(plain), color: colorOf(plain), size: sizeOf(plain), indent };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
         const chain = styles.chain(val(child(rPr, 'rStyle')) ?? styles.character);
@@ -556,7 +676,8 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
         };
         const linked = context.link || context.scope.fields.some((field) => field.link);
         const own = linked ? direct : sources;
-        const underline = val(first(own, 'u'));
+        // MS-OI29500 2.1.100: a w:u without w:val takes the style hierarchy's, and none at its end.
+        const underline = own.map((source) => val(child(source, 'u'))).find((value) => value !== undefined);
         const vertAlign = val(first(sources, 'vertAlign'));
         const highlight = val(first(sources, 'highlight'));
         const shading = first(sources, 'shd');
@@ -584,12 +705,10 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
     const visible = (scope: Scope) => scope.fields.every((field) => field.result);
 
     const text = (value: string, context: Inline, look: RunLook | undefined) => {
-        context.paragraph.text += value;
-        const n = nonSpace(value);
-        if (!n || !context.marks || !look) return;
-        if (look.code) add(tally, 'code', n);
-        else for (const mark of look.marks) add(tally, mark, n);
+        const marks: readonly Feature[] = !context.marks || !look ? [] : look.code ? ['code'] : look.marks;
+        context.paragraph.spans.push({ text: value, marks });
     };
+    const space = (context: Inline) => context.paragraph.spans.push({ text: ' ', marks: [] });
 
     const drawing = (element: XmlElement, context: Inline) => {
         for (const holder of xmlElements(element)) {
@@ -646,11 +765,11 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                 case 'tab':
                 case 'ptab':
                 case 'cr':
-                    if (shown) context.paragraph.text += ' ';
+                    if (shown) space(context);
                     break;
                 case 'br':
                     if (!shown) break;
-                    context.paragraph.text += ' ';
+                    space(context);
                     if (xmlAttr(node, W, 'type') !== 'page') break;
                     add(tally, 'pageBreaks');
                     context.paragraph.breaks++;
@@ -689,7 +808,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                 case 'endnoteReference':
                     if (!shown) break;
                     // Its number is the note's, not text: a word boundary, as on the imported side.
-                    context.paragraph.text += ' ';
+                    space(context);
                     add(tally, 'footnotes');
                     break;
             }
@@ -752,6 +871,8 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
     const paragraph = (element: XmlElement, scope: Scope) => {
         const look = paragraphLook(child(element, 'pPr'));
         const { chain } = scope;
+        if (chain.rule !== undefined && chain.rule !== look.borders) add(tally, 'rules');
+        chain.rule = undefined;
         const previous = chain.last;
         const caption = look.caption && !!previous?.image;
         const structural =
@@ -761,17 +882,18 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
             caption ||
             scope.note ||
             find(element, W14, 'checkbox').length > 0;
+        const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
+        // A heading can't stand in an Eigen list: Word shows its number as text, which survives as text or not at all.
+        const label = look.heading !== undefined && numbered?.ordered ? numbered.label : undefined;
         const current: Paragraph = {
-            text: chain.carry,
+            spans: [...(label ? [{ text: label, marks: [] }] : []), ...chain.carry],
             image: false,
             breaks: 0,
             quote: look.quote,
             code: look.code,
+            borders: look.borders,
         };
-        chain.carry = '';
-        const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
-        // A heading can't stand in an Eigen list: its outline number survives as its text or not at all.
-        if (numbered && look.heading !== undefined) add(tally, 'numberedHeadings');
+        chain.carry = [];
         const item = look.heading === undefined ? numbered : undefined;
         if (item) {
             add(tally, 'listItems');
@@ -805,28 +927,38 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
         });
         // A deleted paragraph mark joins the paragraph to the next.
         if (look.deletedMark) {
-            chain.carry = current.text;
+            chain.carry = current.spans;
             return;
         }
-        tally.words.push(...wordsOf(current.text));
-        const hasText = nonSpace(current.text) > 0;
+        const words = record(tally, current.spans);
+        const hasText = nonSpace(textOf(current.spans)) > 0;
         if (look.pageBreakBefore) add(tally, 'pageBreaks');
         if (look.sectionBreak) add(tally, 'pageBreaks');
         // A paragraph holding only a page break is the break, a block in Eigen: the quote, code or list around it goes on.
         if (!hasText && !current.image && current.breaks > 0) return;
-        // Word numbers on across an item's indented or empty paragraphs; a body paragraph or heading ends the list.
-        if (!item && hasText && (!look.indented || look.heading !== undefined)) chain.lists = [];
+        // Word numbers on across an item's empty paragraphs and those indented past the body; a body paragraph or heading
+        // ends the list.
+        if (!item && hasText && (look.indent <= base.indent || look.heading !== undefined)) chain.lists = [];
         chain.last = current;
         if (!scope.float && !caption && (hasText || current.image)) {
             add(tally, 'paragraphs');
-            if (look.heading && hasText) add(tally, HEADINGS[Math.min(look.heading, 7) - 1]);
+            if (look.heading && hasText) {
+                add(tally, HEADINGS[Math.min(look.heading, 7) - 1]);
+                if (label) add(tally, 'numberedHeadings');
+                tally.headings.push({ line: words.join(' '), numbered: !!label });
+            }
             const alignment = look.jc && ALIGNMENTS.get(look.jc);
             if (alignment && hasText && !look.code) add(tally, alignment);
         }
         if (caption && hasText) add(tally, 'captions');
         if (look.code && !previous?.code) add(tally, 'codeBlocks');
         if (look.quote && !previous?.quote) add(tally, 'blockquotes');
-        if (look.rule && !hasText && !current.image) add(tally, 'rules');
+        if (look.rule && !hasText && !current.image && previous?.borders !== look.borders) chain.rule = look.borders;
+    };
+
+    const settle = (chain: Chain) => {
+        if (chain.rule !== undefined) add(tally, 'rules');
+        chain.rule = undefined;
     };
 
     // Rows and cells may sit in content controls or custom XML.
@@ -896,6 +1028,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
             }
             if (node.ns === W && node.local === 'p') paragraph(node, scope);
             else if (node.ns === W && node.local === 'tbl') {
+                settle(scope.chain);
                 if (table(node, scope)) {
                     scope.chain.last = undefined;
                     scope.chain.lists = [];
@@ -909,8 +1042,9 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                 blocks(node, scope);
             }
         }
-        tally.words.push(...wordsOf(scope.chain.carry));
-        scope.chain.carry = '';
+        record(tally, scope.chain.carry);
+        scope.chain.carry = [];
+        settle(scope.chain);
     };
 
     const body = child(document, 'body');
@@ -941,35 +1075,36 @@ const MARK_FEATURES = new Map<string | undefined, Feature>([
     ['link', 'link'],
 ]);
 
-// 1, 1.2, 1.2.3., 4), a., (b), iv., B): how Word spells a number a heading starts with.
+// 1, 1.2, 1.2.3., 4), a., (b), iv., B): an imported heading that starts with one looks numbered.
 const NUMBER_LABEL = /^\s*(?:\d+(?:\.\d+)*[.)]?|\(?(?:[a-z]+|[A-Z]+)[.)])\s/;
 
 type Place = { depth: number; table: boolean; quote: boolean; align?: unknown };
 
 export function auditImported(json: JSONContent): Tally {
-    const tally: Tally = { counts: new Map(), words: [], numbers: [] };
+    const tally = newTally();
     const textblock = (node: JSONContent, align: unknown) => {
-        let text = '';
+        const spans: Span[] = [];
+        const space = () => spans.push({ text: ' ', marks: [] });
         let figure = false;
         let footnoteHref: unknown;
         for (const inline of node.content ?? []) {
             if (inline.type === 'figure') {
                 const attrs = inline.attrs ?? {};
-                text += ' ';
+                space();
                 if (!attrs['mediaName'] && !attrs['src']) continue;
                 add(tally, 'images');
                 if (typeof attrs['width'] === 'number' && attrs['width'] > 0) add(tally, 'imageWidths');
                 const caption = attrs['caption'];
                 if (typeof caption === 'string' && nonSpace(caption) > 0) {
                     add(tally, 'captions');
-                    tally.words.push(...wordsOf(caption));
+                    record(tally, [{ text: caption, marks: [] }]);
                 }
                 if (attrs['layout'] === 'wrap-left' || attrs['layout'] === 'wrap-right') add(tally, 'wrapped');
                 else figure = true;
                 continue;
             }
             if (inline.type !== 'text') {
-                text += ' ';
+                space();
                 continue;
             }
             const value = inline.text ?? '';
@@ -981,25 +1116,23 @@ export function auditImported(json: JSONContent): Tally {
             if (reference && href !== footnoteHref) add(tally, 'footnotes');
             footnoteHref = reference ? href : undefined;
             if (reference) {
-                text += ' ';
+                space();
                 continue;
             }
-            text += value;
-            const n = nonSpace(value);
-            if (!n) continue;
+            const features: Feature[] = [];
             for (const mark of marks) {
                 const attrs = mark.attrs ?? {};
-                if (mark.type === 'textStyle') {
-                    const color = attrs['color'];
-                    if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') add(tally, 'color', n);
-                    if (typeof attrs['fontFamily'] === 'string' && attrs['fontFamily']) add(tally, 'font', n);
-                    continue;
-                }
                 const feature = MARK_FEATURES.get(mark.type);
-                if (feature) add(tally, feature, n);
+                if (feature) features.push(feature);
+                if (mark.type !== 'textStyle') continue;
+                const color = attrs['color'];
+                if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
+                if (typeof attrs['fontFamily'] === 'string' && attrs['fontFamily']) features.push('font');
             }
+            spans.push({ text: value, marks: features });
         }
-        tally.words.push(...wordsOf(text));
+        const words = record(tally, spans);
+        const text = textOf(spans);
         const hasText = nonSpace(text) > 0;
         if (!hasText && !figure) return;
         add(tally, 'paragraphs');
@@ -1007,7 +1140,9 @@ export function auditImported(json: JSONContent): Tally {
         const level = node.attrs?.['level'];
         if (node.type === 'heading' && typeof level === 'number') {
             add(tally, HEADINGS[Math.min(Math.max(level, 1), 7) - 1]);
-            if (NUMBER_LABEL.test(text)) add(tally, 'numberedHeadings');
+            const numbered = NUMBER_LABEL.test(text);
+            if (numbered) add(tally, 'numberedHeadings');
+            tally.headings.push({ line: words.join(' '), numbered });
         }
         // A cell's alignment aligns its paragraphs.
         const alignment = ALIGNMENTS.get(String(node.attrs?.['textAlign'] ?? align));
@@ -1023,7 +1158,7 @@ export function auditImported(json: JSONContent): Tally {
             case 'codeBlock': {
                 add(tally, 'codeBlocks');
                 const text = children.map((inline) => inline.text ?? '').join('');
-                tally.words.push(...wordsOf(text));
+                record(tally, [{ text, marks: [] }]);
                 add(tally, 'paragraphs', text.split('\n').filter((line) => nonSpace(line) > 0).length);
                 return;
             }
@@ -1098,19 +1233,38 @@ export function auditImported(json: JSONContent): Tally {
 
 const SAMPLE = 20;
 
-// Text and item numbers match as multisets, so a word moved or a list renumbered is a loss; every other feature keeps
-// at most what the source holds, so an importer can't make up in one feature what it loses in another.
-function compareTallies(source: Tally, imported: Tally): Pick<FileResult, 'text' | 'features'> {
+// Text, marks and item numbers match as multisets of words and numbers, so a word moved, a mark on another word or
+// a list renumbered is a loss, and what has no match on the source side is invented. A numbered heading matches the
+// whole line Word shows. Every other feature keeps at most what the source holds, so an importer can't make up in one
+// feature what it loses in another, and invents what it holds beyond it.
+export function compareTallies(source: Tally, imported: Tally): Pick<FileResult, 'text' | 'features'> {
     const words = multisetDiff(source.words, imported.words);
     const numbers = multisetDiff(source.numbers, imported.numbers);
+    const lines = (tally: Tally, numbered?: boolean) =>
+        tally.headings.filter((heading) => numbered === undefined || heading.numbered).map(({ line }) => line);
+    const diffs = new Map<Feature, { missing: unknown[]; extra: unknown[] }>([
+        ['text', words],
+        ['itemNumbers', numbers],
+        [
+            'numberedHeadings',
+            {
+                missing: multisetDiff(lines(source, true), lines(imported)).missing,
+                extra: multisetDiff(lines(source), lines(imported, true)).extra,
+            },
+        ],
+        ...[...MARKS].map((mark): [Feature, { missing: unknown[]; extra: unknown[] }] => [
+            mark,
+            multisetDiff(source.marks.get(mark) ?? [], imported.marks.get(mark) ?? []),
+        ]),
+    ]);
     const features: Record<string, FeatureResult> = {};
     for (const [feature] of FEATURES) {
         const from = source.counts.get(feature) ?? 0;
         const to = imported.counts.get(feature) ?? 0;
-        const missing =
-            feature === 'text' ? words.missing.length : feature === 'itemNumbers' ? numbers.missing.length : 0;
-        const matched = feature === 'text' || feature === 'itemNumbers' ? from - missing : Math.min(from, to);
-        features[feature] = { source: from, imported: to, matched, kept: from > 0 ? matched / from : null };
+        const diff = diffs.get(feature);
+        const matched = diff ? from - diff.missing.length : Math.min(from, to);
+        const invented = diff ? diff.extra.length : Math.max(0, to - from);
+        features[feature] = { source: from, imported: to, matched, invented, kept: from > 0 ? matched / from : null };
     }
     return {
         text: {
@@ -1123,12 +1277,12 @@ function compareTallies(source: Tally, imported: Tally): Pick<FileResult, 'text'
     };
 }
 
-type Row = { files: number; source: number; imported: number; matched: number };
+type Row = { files: number; source: number; imported: number; matched: number; invented: number };
+
+const emptyRow = (): Row => ({ files: 0, source: 0, imported: 0, matched: 0, invented: 0 });
 
 function aggregate(results: FileResult[]): Map<string, Row> {
-    const rows = new Map<string, Row>(
-        FEATURES.map(([feature]) => [feature, { files: 0, source: 0, imported: 0, matched: 0 }]),
-    );
+    const rows = new Map<string, Row>(FEATURES.map(([feature]) => [feature, emptyRow()]));
     for (const result of results) {
         for (const [feature, row] of rows) {
             const counts = result.features[feature];
@@ -1137,6 +1291,7 @@ function aggregate(results: FileResult[]): Map<string, Row> {
             row.source += counts.source;
             row.imported += counts.imported;
             row.matched += counts.matched;
+            row.invented += counts.invented;
         }
     }
     return rows;
@@ -1170,20 +1325,21 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         `| Timeouts | ${meta.timeouts} |`,
         `| Unreadable sources | ${meta.sourceErrors} |`,
         `| Text kept | ${text ? percent(text.matched, text.source) : '–'} |`,
+        `| Text invented (words) | ${text?.invented ?? 0} |`,
         `| Import time | ${seconds(meta.importMs)} |`,
         `| Total time | ${seconds(meta.totalMs)} |`,
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count non-space characters, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts characters in another font than the body text's, small text characters at most 85% of its size, text color characters in another color. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading, kept when its imported text starts with a number. Kept sums each file's min(imported, source) over the source; text and ordered item numbers match as multisets. A crash or timeout keeps nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words in another font than the body text's, small text words at most 85% of its size, text color words in another color. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',
-        '| Feature | Files | Source | Imported | Kept |',
-        '|---|---:|---:|---:|---:|',
+        '| Feature | Files | Source | Imported | Kept | Invented |',
+        '|---|---:|---:|---:|---:|---:|',
         ...FEATURES.map(([feature, label]) => {
-            const row = rows.get(feature) ?? { files: 0, source: 0, imported: 0, matched: 0 };
-            return `| ${label} | ${row.files} | ${row.source} | ${row.imported} | ${percent(row.matched, row.source)} |`;
+            const row = rows.get(feature) ?? emptyRow();
+            return `| ${label} | ${row.files} | ${row.source} | ${row.imported} | ${percent(row.matched, row.source)} | ${row.invented} |`;
         }),
         '',
         '## Elements',
@@ -1261,12 +1417,13 @@ export function compareRuns(outA: string, outB: string): string {
         `| Crashes ${totals((meta) => meta.crashes)}`,
         `| Timeouts ${totals((meta) => meta.timeouts)}`,
         `| Text kept | ${kept(rowsA.get('text'))} | ${kept(rowsB.get('text'))} |`,
+        `| Text invented (words) | ${rowsA.get('text')?.invented ?? 0} | ${rowsB.get('text')?.invented ?? 0} |`,
         `| Import time ${totals((meta) => seconds(meta.importMs))}`,
         '',
         '## Features',
         '',
-        `| Feature | Files | Source | ${nameA} | ${nameB} | Δ points |`,
-        '|---|---:|---:|---:|---:|---:|',
+        `| Feature | Files | Source | ${nameA} kept | ${nameB} kept | Δ points | ${nameA} invented | ${nameB} invented |`,
+        '|---|---:|---:|---:|---:|---:|---:|---:|',
         ...FEATURES.map(([feature, label]) => {
             const ra = rowsA.get(feature);
             const rb = rowsB.get(feature);
@@ -1276,7 +1433,7 @@ export function compareRuns(outA: string, outB: string): string {
                     ? Math.round((rb.matched / rb.source - ra.matched / ra.source) * 1000) / 10
                     : undefined;
             const delta = points === undefined ? '–' : `${points > 0 ? '+' : ''}${(points || 0).toFixed(1)}`;
-            return `| ${label} | ${ra?.files ?? 0} | ${ra?.source ?? 0} | ${kept(ra)} | ${kept(rb)} | ${delta} |`;
+            return `| ${label} | ${ra?.files ?? 0} | ${ra?.source ?? 0} | ${kept(ra)} | ${kept(rb)} | ${delta} | ${ra?.invented ?? 0} | ${rb?.invented ?? 0} |`;
         }),
         '',
         '## Files that differ most',
@@ -1297,25 +1454,82 @@ const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/doc/from-docx
 const DEFAULT_TIMEOUT_MS = 60_000;
 const LOAD_TIMEOUT_MS = 60_000;
 
-type WorkerRequest = { kind: 'load'; importer: string } | { kind: 'import'; bytes: ArrayBuffer };
+type SourceTally = Awaited<ReturnType<typeof auditSource>>;
+
+type WorkerRequest =
+    | { kind: 'load'; importer: string }
+    | { kind: 'audit'; bytes: ArrayBuffer }
+    | { kind: 'import'; bytes: ArrayBuffer };
 
 type WorkerReply =
     | { kind: 'loaded' }
+    | { kind: 'audited'; source: SourceTally; ms: number }
     | { kind: 'imported'; json: JSONContent; images: number; ms: number }
-    | { kind: 'failed'; error: string; ms: number }
-    | { kind: 'timeout' }
-    | { kind: 'died'; error: string };
+    | { kind: 'failed'; error: string; ms: number };
 
-function reply(worker: Worker, timeoutMs: number): Promise<WorkerReply> {
+// What a request comes to: the worker's reply, or the worker cut at the cap or gone.
+type Outcome = WorkerReply | { kind: 'timeout' } | { kind: 'died'; error: string };
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+function isSourceTally(value: unknown): value is SourceTally {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'counts' in value &&
+        value.counts instanceof Map &&
+        'marks' in value &&
+        value.marks instanceof Map &&
+        'elements' in value &&
+        value.elements instanceof Map &&
+        'words' in value &&
+        Array.isArray(value.words) &&
+        'numbers' in value &&
+        Array.isArray(value.numbers) &&
+        'headings' in value &&
+        Array.isArray(value.headings)
+    );
+}
+
+function isReply(data: unknown): data is WorkerReply {
+    if (typeof data !== 'object' || data === null || !('kind' in data)) return false;
+    const timed = 'ms' in data && typeof data.ms === 'number';
+    switch (data.kind) {
+        case 'loaded':
+            return true;
+        case 'audited':
+            return timed && 'source' in data && isSourceTally(data.source);
+        case 'imported':
+            return (
+                timed &&
+                'json' in data &&
+                typeof data.json === 'object' &&
+                data.json !== null &&
+                'images' in data &&
+                typeof data.images === 'number'
+            );
+        case 'failed':
+            return timed && 'error' in data && typeof data.error === 'string';
+        default:
+            return false;
+    }
+}
+
+function isImporter(value: unknown): value is typeof docxToPmJson {
+    return typeof value === 'function';
+}
+
+function reply(worker: Worker, timeoutMs: number): Promise<Outcome> {
     return new Promise((resolve) => {
-        const finish = (result: WorkerReply) => {
+        const finish = (result: Outcome) => {
             clearTimeout(timer);
             worker.removeEventListener('message', onMessage);
             worker.removeEventListener('error', onError);
             worker.removeEventListener('close', onClose);
             resolve(result);
         };
-        const onMessage = (event: MessageEvent<WorkerReply>) => finish(event.data);
+        const onMessage = (event: MessageEvent<unknown>) =>
+            finish(isReply(event.data) ? event.data : { kind: 'died', error: 'malformed reply' });
         const onError = (event: ErrorEvent) => finish({ kind: 'died', error: event.message });
         const onClose = () => finish({ kind: 'died', error: 'worker exited' });
         const timer = setTimeout(() => finish({ kind: 'timeout' }), timeoutMs);
@@ -1325,14 +1539,44 @@ function reply(worker: Worker, timeoutMs: number): Promise<WorkerReply> {
     });
 }
 
-async function loadImporter(importer: string): Promise<Worker> {
+async function spawn(importer: string | undefined): Promise<Worker> {
     const worker = new Worker(import.meta.path);
+    if (importer === undefined) return worker;
     const loaded = reply(worker, LOAD_TIMEOUT_MS);
     worker.postMessage({ kind: 'load', importer } satisfies WorkerRequest);
     const result = await loaded;
     if (result.kind === 'loaded') return worker;
     worker.terminate();
     throw new Error(`Cannot load ${importer}: ${'error' in result ? result.error : result.kind}`);
+}
+
+// One worker under the time cap; one cut, dead or out of memory is replaced on the next request, and a replacement
+// that fails to load is that request's crash.
+function lane(timeoutMs: number, importer?: string) {
+    let worker: Worker | undefined;
+    return {
+        start: async () => {
+            worker ??= await spawn(importer);
+        },
+        ask: async (request: WorkerRequest, transfer: Transferable[]): Promise<Outcome> => {
+            let current: Worker;
+            try {
+                current = worker ?? (await spawn(importer));
+            } catch (error) {
+                return { kind: 'died', error: message(error) };
+            }
+            worker = current;
+            const pending = reply(current, timeoutMs);
+            current.postMessage(request, transfer);
+            const outcome = await pending;
+            if (outcome.kind === 'timeout' || outcome.kind === 'died') {
+                current.terminate();
+                worker = undefined;
+            }
+            return outcome;
+        },
+        close: () => worker?.terminate(),
+    };
 }
 
 export async function runAudit(options: {
@@ -1346,51 +1590,40 @@ export async function runAudit(options: {
     const importer = path.resolve(options.importer ?? DEFAULT_IMPORTER);
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     // Word's lock files (~$name.docx) are no packages.
-    const files = [...new Bun.Glob('**/*.docx').scanSync(options.corpus)]
+    const files = [...new Bun.Glob('**/*.docx').scanSync({ cwd: options.corpus, followSymlinks: true })]
         .filter((file) => !path.basename(file).startsWith('~$'))
         .sort();
+    if (files.length === 0) throw new Error(`No .docx files under ${options.corpus}`);
+    fs.mkdirSync(options.out, { recursive: true });
     fs.rmSync(path.join(options.out, 'files'), { recursive: true, force: true });
-    let worker = await loadImporter(importer);
+    // The source is read off the main thread too, under the same cap.
+    const sources = lane(timeoutMs);
+    const imports = lane(timeoutMs, importer);
+    await imports.start();
+    const took = (outcome: Outcome) =>
+        'ms' in outcome ? Math.round(outcome.ms) : outcome.kind === 'timeout' ? timeoutMs : 0;
     const results: FileResult[] = [];
     try {
         for (const [index, file] of files.entries()) {
             const bytes = await Bun.file(path.join(options.corpus, file)).arrayBuffer();
-            const sourceStarted = performance.now();
-            let source: Awaited<ReturnType<typeof auditSource>> | undefined;
-            let sourceError: string | undefined;
-            try {
-                source = await auditSource(bytes);
-            } catch (error) {
-                sourceError = error instanceof Error ? error.message : String(error);
-            }
-            const sourceMs = performance.now() - sourceStarted;
+            const copy = bytes.slice(0);
             const size = bytes.byteLength;
-            const pending = reply(worker, timeoutMs);
-            worker.postMessage({ kind: 'import', bytes } satisfies WorkerRequest, [bytes]);
-            const outcome = await pending;
-            if (outcome.kind === 'timeout' || outcome.kind === 'died') {
-                worker.terminate();
-                worker = await loadImporter(importer);
-            }
-            const empty: Tally = { counts: new Map(), words: [], numbers: [] };
-            const imported = outcome.kind === 'imported' ? auditImported(outcome.json) : empty;
+            const [audited, outcome] = await Promise.all([
+                sources.ask({ kind: 'audit', bytes: copy }, [copy]),
+                imports.ask({ kind: 'import', bytes }, [bytes]),
+            ]);
+            const source = audited.kind === 'audited' ? audited.source : undefined;
+            const sourceError = source ? undefined : 'error' in audited ? audited.error : audited.kind;
+            const imported = outcome.kind === 'imported' ? auditImported(outcome.json) : newTally();
             const result: FileResult = {
                 file,
                 bytes: size,
                 import: outcome.kind === 'imported' ? 'ok' : outcome.kind === 'timeout' ? 'timeout' : 'crash',
-                ...(outcome.kind === 'failed' || outcome.kind === 'died' ? { error: outcome.error } : {}),
+                ...('error' in outcome ? { error: outcome.error } : {}),
                 ...(sourceError ? { sourceError } : {}),
-                ms: {
-                    source: Math.round(sourceMs),
-                    import:
-                        outcome.kind === 'imported' || outcome.kind === 'failed'
-                            ? Math.round(outcome.ms)
-                            : outcome.kind === 'timeout'
-                              ? timeoutMs
-                              : 0,
-                },
+                ms: { source: took(audited), import: took(outcome) },
                 ...(outcome.kind === 'imported' ? { images: outcome.images } : {}),
-                ...compareTallies(source ?? empty, imported),
+                ...compareTallies(source ?? newTally(), imported),
                 elements: Object.fromEntries(
                     ELEMENTS.flatMap((label) => {
                         const n = source?.elements.get(label) ?? 0;
@@ -1407,7 +1640,8 @@ export async function runAudit(options: {
             );
         }
     } finally {
-        worker.terminate();
+        sources.close();
+        imports.close();
     }
     const meta: RunMeta = {
         name: options.name,
@@ -1427,36 +1661,41 @@ export async function runAudit(options: {
 
 declare var self: Worker;
 
-// The worker side: loads the importer once, then imports one file per message.
+// The worker side: reads a source, or loads the importer once and then imports one file per message.
 if (!Bun.isMainThread) {
-    let importer: unknown;
+    let importer: typeof docxToPmJson | undefined;
     self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const request = event.data;
         const started = performance.now();
         try {
             if (request.kind === 'load') {
                 const module: unknown = await import(request.importer);
-                importer =
+                const exported =
                     typeof module === 'object' && module !== null && 'docxToPmJson' in module
                         ? module.docxToPmJson
                         : undefined;
-                if (typeof importer !== 'function') throw new Error('no docxToPmJson export');
+                if (!isImporter(exported)) throw new Error('no docxToPmJson export');
+                importer = exported;
                 postMessage({ kind: 'loaded' } satisfies WorkerReply);
                 return;
             }
-            if (typeof importer !== 'function') throw new Error('no importer loaded');
+            if (request.kind === 'audit') {
+                const source = await auditSource(request.bytes);
+                postMessage({ kind: 'audited', source, ms: performance.now() - started } satisfies WorkerReply);
+                return;
+            }
+            if (!importer) throw new Error('no importer loaded');
             const { json, images } = await importer(Buffer.from(request.bytes));
-            if (typeof json !== 'object' || json === null) throw new Error('the importer returned no JSON');
             postMessage({
                 kind: 'imported',
                 json,
-                images: Array.isArray(images) ? images.length : 0,
+                images: images.length,
                 ms: performance.now() - started,
             } satisfies WorkerReply);
         } catch (error) {
             postMessage({
                 kind: 'failed',
-                error: error instanceof Error ? error.message : String(error),
+                error: message(error),
                 ms: performance.now() - started,
             } satisfies WorkerReply);
         }
