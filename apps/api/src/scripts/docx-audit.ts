@@ -398,12 +398,13 @@ type Field = { result: boolean; instr: string; link: boolean };
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
 // styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
-// capitals.
+// capitals. weightRuns: what bold and size read, as a heading draws its own and leaves its style's other formatting.
 type Inline = {
     scope: Scope;
     paragraph: Paragraph;
     runs: XmlElement[];
     styleRuns: XmlElement[];
+    weightRuns: XmlElement[];
     marks: boolean;
     link: boolean;
 };
@@ -576,8 +577,9 @@ function countElements(root: XmlElement, into: Map<string, number>): void {
 }
 
 // Word's view: deleted and moved-away text, field instructions and hidden runs are no text, and a field's result is.
-// Formatting a structure draws (a heading's, a quote's, a note's, a task's paragraph style) is the structure's, not a
-// mark; a link's color and underline count only when set on the run itself. Table styles are not resolved.
+// Formatting a structure draws (a heading's weight and size, a quote's, a note's, a task's paragraph style) is the
+// structure's, not a mark; a link's color and underline count only when set on the run itself. Table styles are not
+// resolved.
 export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements: Map<string, number> } {
     const zip = openZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     const read = (part: string | undefined) => {
@@ -625,7 +627,9 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const tally = newTally();
     const paragraphLook = (pPr: XmlElement | undefined): ParagraphLook => {
-        const chain = styles.chain(val(child(pPr, 'pStyle')) ?? styles.paragraph);
+        // Word draws a paragraph naming a style the file lacks in the default paragraph style.
+        const named = styles.chain(val(child(pPr, 'pStyle')));
+        const chain = named.length > 0 ? named : styles.chain(styles.paragraph);
         const names = chain.map(styleName);
         const pPrs = [pPr, ...chain.map((style) => child(style, 'pPr')), styles.pPr].flatMap((p) => p ?? []);
         // Word's Title is H1 in Eigen (PROPOSAL_DOCX.md, Decision 8). The nearest style that names a level decides,
@@ -737,7 +741,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
         const faces = [...direct, ...characterRuns, ...context.styleRuns];
         const marks: [Feature, boolean][] = [
-            ['bold', toggle('b')],
+            ['bold', toggle('b', context.weightRuns)],
             ['italic', toggle('i')],
             ['underline', underline !== undefined && underline !== 'none'],
             ['strike', toggle('strike') || toggle('dstrike')],
@@ -745,7 +749,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['superscript', vertAlign === 'superscript'],
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
-            ['small', sizeOf(sources) <= base.size * SMALL_PRINT],
+            ['small', sizeOf([...direct, ...characterRuns, ...context.weightRuns]) <= base.size * SMALL_PRINT],
             ['caps', toggle('caps', context.styleRuns)],
             ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
             ['link', linked],
@@ -995,11 +999,13 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 }
             }
         }
+        const defaults = styles.rPr ? [styles.rPr] : [];
         inline(element, {
             scope,
             paragraph: current,
-            runs: structural ? (styles.rPr ? [styles.rPr] : []) : look.runs,
+            runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
+            weightRuns: structural ? defaults : look.runs,
             marks: !look.code && !caption,
             link: false,
         });
@@ -1421,7 +1427,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',
