@@ -317,7 +317,7 @@ function marksOf(
         !(scope.onFill && !isFill(shade) && isLight(props.color))
             ? props.color
             : undefined;
-    const fontFamily = fontMark(font);
+    const fontFamily = fontMark(font, reader.fontTable);
     if (color || fontFamily)
         marks.push({
             type: 'textStyle',

@@ -35,6 +35,7 @@ export type Package = {
     styles?: XmlElement;
     numbering?: XmlElement;
     theme?: XmlElement;
+    fontTable?: XmlElement;
     footnotes?: Part;
     endnotes?: Part;
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
@@ -64,7 +65,7 @@ export function readPackage(bytes: Uint8Array): Package {
     const located = (type: string) => relOfType(documentRels, type) ?? `word/${type}.xml`;
     const notes = ['footnotes', 'endnotes'].map(located);
     // Every content part is charged before the first of them inflates.
-    const parts = [documentPath, ...['styles', 'numbering', 'theme'].map(located), ...notes];
+    const parts = [documentPath, ...['styles', 'numbering', 'theme', 'fontTable'].map(located), ...notes];
     charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
     const document = readXml(zip, documentPath, budget);
     if (!document) throw new ApiError(400, NOT_A_DOCX);
@@ -90,6 +91,7 @@ export function readPackage(bytes: Uint8Array): Package {
         styles: xml('styles'),
         numbering: xml('numbering'),
         theme: xml('theme'),
+        fontTable: xml('fontTable'),
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypes,

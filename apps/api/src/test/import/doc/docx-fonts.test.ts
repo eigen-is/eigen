@@ -54,3 +54,55 @@ describe('body font', () => {
         expect(fontsOf(json)).toEqual(['Source Serif 4', 'Source Serif 4']);
     });
 });
+
+// G5: a name the map doesn't know draws in its fontTable.xml category: fixed pitch is monospace, roman serif and swiss
+// sans at a variable pitch; script, decorative and auto are an unknown category (P4), and so is a family at pitch
+// default, which Word writes for a font it has no metrics of.
+describe('fontTable.xml fallback', () => {
+    const font = (name: string, family: string, pitch = 'variable') =>
+        `<w:font w:name="${name}"><w:family w:val="${family}"/><w:pitch w:val="${pitch}"/></w:font>`;
+    const fontTable = [
+        font('Fixed Fancy', 'auto', 'fixed'),
+        font('Modern Fancy', 'modern'),
+        font('Roman Fancy', 'roman'),
+        font('Swiss Fancy', 'swiss'),
+        font('Script Fancy', 'script'),
+        font('Decorative Fancy', 'decorative'),
+        font('Unmeasured Fancy', 'roman', 'default'),
+        font('Georgia', 'swiss'),
+    ].join('');
+    const runIn = (name: string) =>
+        `<w:r><w:rPr><w:rFonts w:ascii="${name}" w:hAnsi="${name}"/></w:rPr><w:t>${name}</w:t></w:r>`;
+
+    test('an unknown name maps by its family and pitch; a known name by its own', async () => {
+        const names = [
+            'Fixed Fancy',
+            'Modern Fancy',
+            'Roman Fancy',
+            'Swiss Fancy',
+            'Script Fancy',
+            'Decorative Fancy',
+            'Unmeasured Fancy',
+            'Georgia',
+            'Unlisted Fancy',
+        ];
+        const { json } = await importDocxBody(names.map((name) => paragraph(runIn(name))).join(''), { fontTable });
+        expect(fontsOf(json)).toEqual([
+            'JetBrains Mono',
+            null,
+            'Source Serif 4',
+            null,
+            null,
+            null,
+            null,
+            'Source Serif 4',
+            null,
+        ]);
+    });
+
+    test('a shaded paragraph in an unknown fixed-pitch font is the code a Google Docs re-save flattens', async () => {
+        const shaded = `<w:p><w:pPr><w:shd w:val="clear" w:fill="F3F4F6"/></w:pPr>${runIn('Fixed Fancy')}</w:p>`;
+        const { json } = await importDocxBody(shaded, { fontTable });
+        expect(nodesOfType(json, 'codeBlock')).toHaveLength(1);
+    });
+});

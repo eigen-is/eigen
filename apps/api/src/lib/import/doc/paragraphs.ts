@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK, STYLE_NAMES, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { isMonospace, readTheme, type Theme } from './docx-fonts';
+import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { MAX_LEVEL, Numbering } from './numbering';
 import { alternative, int, isAlternateContent, type Package, type Part, w, wChild } from './package';
@@ -18,6 +18,7 @@ type NoteRef = { type: 'footnote' | 'endnote'; id: string; number: number };
 export type Reader = {
     pkg: Package;
     theme: Theme;
+    fontTable: FontTable;
     styles: Styles;
     numbering: Numbering;
     images: MediaPart[];
@@ -52,6 +53,7 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
     return {
         pkg,
         theme,
+        fontTable: readFontTable(pkg.fontTable),
         styles,
         numbering: new Numbering(pkg.numbering, styles),
         images: [],
@@ -174,7 +176,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
-    const allMono = texts.length > 0 && texts.every((piece) => piece.kind === 'node' && isMonospace(piece.font));
+    const allMono =
+        texts.length > 0 && texts.every((piece) => piece.kind === 'node' && isMonospace(piece.font, reader.fontTable));
     const shaded = !!props.shading && props.shading !== 'FFFFFF';
     if (
         role.kind === 'paragraph' &&

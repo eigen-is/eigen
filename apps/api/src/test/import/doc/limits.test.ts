@@ -105,6 +105,16 @@ describe('XML budget', () => {
         expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
     });
 
+    test('a fontTable.xml past the budget is 413 before the body inflates', async () => {
+        const reads = spyOn(ZipReader.prototype, 'read');
+        spies.push(reads);
+        const error = await rejection(
+            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_DOCX_XML_BYTES) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+    });
+
     test('the budget counts the parts together', async () => {
         const half = padding(MAX_DOCX_XML_BYTES / 2);
         const error = await rejection(importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
