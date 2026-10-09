@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
@@ -14,7 +15,18 @@ import {
 } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
-import { alternative, descendants, is, isAlternateContent, type Package, type Part, twips, w, wChild } from './package';
+import {
+    alternative,
+    DOCUMENT_TOO_LARGE,
+    descendants,
+    is,
+    isAlternateContent,
+    type Package,
+    type Part,
+    twips,
+    w,
+    wChild,
+} from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
     isFill,
@@ -146,6 +158,9 @@ function readNotes(reader: Reader): JSONContent[] {
 }
 
 export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
+
+// y-tiptap spreads a paragraph's children into one call, which overflows near 500,000; the corpus's most is 274.
+export const MAX_INLINE_NODES = 50_000;
 
 // flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {
@@ -286,6 +301,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     for (const [index, half] of halves.entries()) {
         if (index > 0) items.push({ kind: 'break' });
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
+        if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const visible = isShown(half);
         const isRule = half.some((piece) => piece.kind === 'hr');
         if ((split || markHidden || direct.markDeleted) && !visible && !isRule) continue;

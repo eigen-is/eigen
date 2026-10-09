@@ -10,6 +10,7 @@ import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
     buildDocxWithBody,
@@ -621,6 +622,18 @@ describe('structure', () => {
         expect(performance.now() - started).toBeLessThan(2000);
     }, 60_000);
 
+    // y-tiptap passes a paragraph's children to one call: 740,000 overflowed the stack.
+    test('a paragraph past the inline node cap is 413 through the Yjs update', async () => {
+        const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2 + 1)}</w:r>`);
+        const result = measuredImport(await buildDocxWithBody(body), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    test('a paragraph at the inline node cap imports', async () => {
+        const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2)}</w:r>`);
+        expect(nodesOfType(await imported(body), 'hardBreak')).toHaveLength(MAX_INLINE_NODES / 2);
+    });
+
     test('fields left open cost each run what one field does', async () => {
         const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
         const body = paragraph(`<w:r>${open.repeat(40_000)}${'<w:t>x</w:t>'.repeat(40_000)}</w:r>`);
@@ -817,5 +830,26 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         expect(result.blocks).toBeGreaterThan(10_000);
         expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
+    }, 120_000);
+});
+
+describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
+    // y-tiptap passes a block's children to one call, which 700,000 paragraphs in one cell overflow.
+    test('a block of too many children is 413, not a stack overflow', async () => {
+        const body = `<w:tbl><w:tr><w:tc>${'<w:p/>'.repeat(700_000)}</w:tc></w:tr></w:tbl>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                data: await buildDocxWithBody(body),
+            },
+            { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
+        );
+        expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
+            413,
+            'Document too large',
+        ]);
     }, 120_000);
 });
