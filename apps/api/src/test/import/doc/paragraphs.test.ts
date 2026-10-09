@@ -406,7 +406,7 @@ describe('indents', () => {
         '<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>',
         '<w:style w:type="paragraph" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Indented"/><w:pPr><w:ind w:firstLine="0"/></w:pPr></w:style>',
         '<w:style w:type="paragraph" w:styleId="Hanging"><w:name w:val="Hanging"/><w:pPr><w:ind w:left="1021" w:hanging="1021"/></w:pPr></w:style>',
-        '<w:style w:type="paragraph" w:styleId="Requirement"><w:name w:val="Requirement"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8"/></w:pBdr><w:ind w:left="1134" w:hanging="1134"/></w:pPr></w:style>',
+        `<w:style w:type="paragraph" w:styleId="Requirement"><w:name w:val="Requirement"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="8" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr><w:ind w:left="1134" w:hanging="1134"/></w:pPr></w:style>`,
     ].join('');
     const NUMBERING =
         '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
@@ -441,6 +441,38 @@ describe('indents', () => {
             styles: STYLES,
         });
         expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
+    });
+});
+
+// G7: a bar alone is a quote only at the writer's width; on a heading of another it is no quote.
+describe('a left bar', () => {
+    const bar = (sz: number, color: string) =>
+        `<w:pBdr><w:left w:val="single" w:sz="${sz}" w:space="${QUOTE_LOOK.border.space}" w:color="${color}"/></w:pBdr><w:ind w:left="${QUOTE_LOOK.indent}"/>`;
+    const writers = bar(QUOTE_LOOK.border.sz, QUOTE_LOOK.border.color);
+    const types = async (body: string) =>
+        (
+            (
+                await importDocxBody(body, {
+                    styles: '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/></w:style>',
+                })
+            ).json.content ?? []
+        ).map((node) => node.type);
+
+    test.each([
+        ["the writer's on a paragraph is a quote", paragraph(run('Said'), writers), ['blockquote']],
+        ['of another width is a paragraph', paragraph(run('Said'), bar(6, QUOTE_LOOK.border.color)), ['paragraph']],
+        [
+            "of the writer's width in another color is a quote",
+            paragraph(run('Said'), bar(QUOTE_LOOK.border.sz, '2B6CB0')),
+            ['blockquote'],
+        ],
+        [
+            'on a Heading 2 leaves it a heading',
+            paragraph(run('Title'), `<w:pStyle w:val="Heading2"/>${bar(12, '4472C4')}`),
+            ['heading'],
+        ],
+    ])('%s', async (_name, body, expected) => {
+        expect(await types(body)).toEqual(expected);
     });
 });
 

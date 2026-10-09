@@ -220,7 +220,16 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         role = { kind: 'code', language: null };
 
     const borders = props.borders ?? {};
-    const leftBar = !!borders.left && !borders.top && !borders.bottom && !borders.right && role.kind !== 'code';
+    // G7: a bar alone is a quote only at the writer's width, which a heading in a quote carries too, in any color; the
+    // Quote style always is, and its bar counts its depth.
+    const writersBar = borders.bar === QUOTE_LOOK.border.sz;
+    const leftBar =
+        !!borders.left &&
+        !borders.top &&
+        !borders.bottom &&
+        !borders.right &&
+        role.kind !== 'code' &&
+        (role.kind === 'quote' || writersBar);
     // The writer's code box: its style, or the fill and four borders a Google Docs re-save keeps of it.
     const boxed =
         role.kind === 'code' &&

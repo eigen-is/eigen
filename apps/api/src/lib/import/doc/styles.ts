@@ -24,7 +24,14 @@ export type RunProps = {
     vanish?: boolean;
 };
 
-type Borders = { top?: boolean; left?: boolean; bottom?: boolean; right?: boolean };
+// The left border's width in eighths of a point, which tells the writer's quote bar from a rule beside the text.
+type Borders = {
+    top?: boolean;
+    left?: boolean;
+    bottom?: boolean;
+    right?: boolean;
+    bar?: number;
+};
 
 export type ParaProps = {
     style?: string;
@@ -204,6 +211,8 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                     const border = wChild(child, side);
                     if (border) borders[side] = !['nil', 'none'].includes(w(border, 'val') ?? 'none');
                 }
+                const left = wChild(child, 'left');
+                if (left) borders.bar = int(w(left, 'sz'));
                 props.borders = borders;
                 break;
             }
