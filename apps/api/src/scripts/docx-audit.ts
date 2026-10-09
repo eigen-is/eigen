@@ -22,7 +22,6 @@ import {
     PACKAGE_RELATIONSHIPS_NS,
     PAGE_SECTION_TYPES,
     R_NS,
-    spellNumber,
     toTransitional,
     V_NS,
     W_NS,
@@ -509,11 +508,47 @@ function readNumbering(root: XmlElement | undefined) {
         const text = (val(child(lvl, 'lvlText')) ?? '').replace(/%([1-9])/g, (_, at: string) => {
             const level = levelAt(Number(at) - 1).lvl;
             const value = counter[Number(at) - 1] ?? startOf(level);
-            return spellNumber(value, legal ? 'decimal' : (val(child(level, 'numFmt')) ?? 'decimal'));
+            return spell(value, legal ? 'decimal' : (val(child(level, 'numFmt')) ?? 'decimal'));
         });
         const suffix = val(child(lvl, 'suff')) ?? 'tab';
         return { ordered: format !== 'bullet', number, label: suffix === 'nothing' ? text : `${text} ` };
     };
+}
+
+const ROMAN: [number, string][] = [
+    [1000, 'M'],
+    [900, 'CM'],
+    [500, 'D'],
+    [400, 'CD'],
+    [100, 'C'],
+    [90, 'XC'],
+    [50, 'L'],
+    [40, 'XL'],
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+];
+
+// Spelled here, not with the reader's spellNumber: the audit measures the reader, so it reads Word on its own.
+// The number formats Word spells most; any other reads as decimal.
+function spell(value: number, format: string): string {
+    if (format === 'decimalZero' && value < 10) return `0${value}`;
+    if ((format === 'lowerLetter' || format === 'upperLetter') && value > 0) {
+        // Word's 27th is aa, its 28th bb.
+        const letter = String.fromCharCode(97 + ((value - 1) % 26)).repeat(Math.floor((value - 1) / 26) + 1);
+        return format === 'upperLetter' ? letter.toUpperCase() : letter;
+    }
+    if ((format === 'lowerRoman' || format === 'upperRoman') && value > 0) {
+        let roman = '';
+        let rest = value;
+        for (const [n, digits] of ROMAN) {
+            for (; rest >= n; rest -= n) roman += digits;
+        }
+        return format === 'lowerRoman' ? roman.toLowerCase() : roman;
+    }
+    return String(value);
 }
 
 function countElements(root: XmlElement, into: Map<string, number>): void {
