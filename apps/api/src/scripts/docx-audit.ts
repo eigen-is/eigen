@@ -17,6 +17,7 @@ import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { toTransitional } from '../lib/import/doc/package';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -177,8 +178,8 @@ const ALIGNMENTS = new Map<string, Feature>([
 
 // Lowercased style names, as Word writes the built-in ones.
 const QUOTE_STYLES = new Set(['quote', 'intense quote', 'block text']);
-const CODE_BLOCK_STYLES = new Set(['code block', 'html preformatted', 'source code', 'macro text']);
-const CODE_STYLES = new Set(['code', 'html code', 'html typewriter', 'html keyboard', 'html sample', 'verbatim char']);
+const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
+const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
 // Eigen's small text is 75% of the body (eigen-prose.css), the docx writer's 9 pt in 11; a body style a point
 // smaller is still body text.

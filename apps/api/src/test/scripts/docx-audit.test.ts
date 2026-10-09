@@ -286,6 +286,15 @@ describe('source side', () => {
         expect(tally.words).toEqual(['Agree', 'End']);
     });
 
+    test("the reader's code style names are code on the source side", async () => {
+        const tally = await source(
+            `${styled('CodeParagraph', 'let x')}<w:p>${run('cargo', '<w:rStyle w:val="SourceText"/>')}${run(' build')}</w:p>`,
+            `<w:style w:type="paragraph" w:styleId="CodeParagraph"><w:name w:val="Code"/></w:style>
+<w:style w:type="character" w:styleId="SourceText"><w:name w:val="Source Text"/></w:style>`,
+        );
+        expect([count(tally, 'codeBlocks'), tally.marks.get('code')]).toEqual([1, ['cargo']]);
+    });
+
     test('a Strict package reads as its transitional twin', () => {
         const strict = 'http://purl.oclc.org/ooxml';
         const rel = (id: string, type: string, target: string) =>
