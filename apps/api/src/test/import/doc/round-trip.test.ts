@@ -160,7 +160,8 @@ describe("a link's own look", () => {
 });
 
 // Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
-// It keeps one placeholder for the export's media, so names don't say which image is which.
+// It keeps one placeholder for the export's media, so names don't say which image is which. The recording predates
+// caps.
 function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSONContent {
     const content = node.content
         ?.filter((child) => !(child.type === 'pageBreak' && (node.type === 'tableCell' || node.type === 'tableHeader')))
@@ -171,7 +172,11 @@ function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSO
         ...(node.type === 'figure' && { mediaName: imported?.attrs?.['mediaName'] }),
     };
     const marks = node.marks?.map((mark) =>
-        mark.type === 'link' ? { ...mark, attrs: { ...mark.attrs, title: null } } : mark,
+        mark.type === 'link'
+            ? { ...mark, attrs: { ...mark.attrs, title: null } }
+            : mark.type === 'textStyle'
+              ? { ...mark, attrs: { ...mark.attrs, caps: null } }
+              : mark,
     );
     return { ...node, ...(attrs && { attrs }), ...(marks && { marks }), ...(content && { content }) };
 }
