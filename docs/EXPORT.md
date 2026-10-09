@@ -45,6 +45,8 @@ A figure is an inline node, so it renders as a `span.figure` with a `span.figcap
 
 `withTrailingBreaks` (`export/doc/render.ts`) gives a paragraph, heading or code block the trailing `<br>` the editor has, in the export and the preview alike ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
+The static renderer nests a text's marks the other way round from the editor: it wraps the first mark innermost, where ProseMirror draws it outermost. So a link's own color landed outside its `<a>`, and `.eigen-prose a` drew the link color over it. `inEditorMarkOrder` (`export/doc/render.ts`) hands the renderer the doc over a schema whose marks rank in reverse, so the export and the preview nest marks as the editor does: the `<a>` outermost, its color inside it.
+
 ## A doc's docx is written from its JSON, with the editor's CSS values
 
 `eigendocToDocx` (`export/doc/to-docx.ts`) writes the WordprocessingML by hand from the JSON `readEigendocFromDoc` returns, and zips it with `writeZip` (`core/zip.ts`), the way xlsx is written from the workbook and not from HTML. Fed the export HTML, a converter kept a doc's structure and lost almost every visual property ([PROPOSAL_DOCX.md](proposals/PROPOSAL_DOCX.md)). Every size, margin, color and border comes from `eigen-prose.css` through `proseValue` (`export/doc/prose-css.ts`), so the editor's look lives in one file and the docx keeps the editor's spacing. `proseValue` throws when the CSS sets no such value, so a renamed rule fails the export tests instead of drifting.
@@ -174,6 +176,10 @@ The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later
 ## A docx import replaces the document
 
 `from-docx.ts` converts through mammoth, sanitizes with DOMPurify and parses with the eigendoc schema. A Word page break splits its paragraph on the way in ([DOCS.md](DOCS.md#a-word-page-break-splits-its-paragraph-on-import)). `writeEigendocUpdateToYjs` clears the fragment first, so an import replaces rather than appends. The images are written after the commit under deterministic names (`image-0.png`, …), so a repeat import overwrites them instead of failing after the content committed.
+
+## An imported doc is stored as the editor leaves it on open
+
+The editor repairs some content the moment it loads: prosemirror-tables pads a row short of its table's columns, and on the next pass gives the new cells their column's width, and StarterKit's TrailingNode appends an empty paragraph to a doc that ends in anything else. Each repair is a Yjs update nobody typed, and two people opening a fresh import together write it twice. So `importDocxToEigendocUpdate` (`import/doc/transform.ts`) runs `fixTables` until it finds nothing and ends the doc in a paragraph before it encodes the update. The reader avoids the ragged rows in the first place: `w:gridAfter` gets a filler cell as `w:gridBefore` does, and a row of vMerge continuations only is dropped with the cells above spanning one row less. `apps/api/src/test/import/doc/transform.test.ts` opens the stored doc with the editor's plugins and expects no change.
 
 ## Contacts and calendar export splice stored bytes
 

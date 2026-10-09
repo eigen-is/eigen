@@ -245,15 +245,15 @@ describe('structure', () => {
     test('a merge that starts in the last row spans that row alone', async () => {
         const json = await imported(
             table(
-                [2000],
+                [2000, 2000],
                 [
-                    [cell('Top', '<w:vMerge w:val="restart"/>')],
-                    [cell('', '<w:vMerge/>')],
-                    [cell('Last', '<w:vMerge w:val="restart"/>')],
+                    [cell('Top', '<w:vMerge w:val="restart"/>'), cell('a')],
+                    [cell('', '<w:vMerge/>'), cell('b')],
+                    [cell('Last', '<w:vMerge w:val="restart"/>'), cell('c')],
                 ],
             ),
         );
-        expect(cells(json).map((node) => node.attrs?.['rowspan'])).toEqual([2, 1]);
+        expect(cells(json).map((node) => node.attrs?.['rowspan'])).toEqual([2, 1, 1, 1, 1]);
     });
 
     test('a basedOn cycle stops at the first repeat', async () => {

@@ -78,7 +78,7 @@ function quoteLook() {
 
 export const QUOTE_LOOK = quoteLook();
 
-const TASK_DONE = 'ul[data-type="taskList"] li[data-checked="true"] > div';
+const TASK_DONE = 'ul[data-type="taskList"] li[data-checked="true"] > div > :not([data-type="taskList"])';
 
 // The editor strikes a checked item's whole content in the muted color.
 export const TASK_DONE_LOOK = {

@@ -67,13 +67,9 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     for (const [rowIndex, row] of rows.entries()) {
         const header = (onOff(wChild(row.trPr, 'tblHeader')) ?? false) || (rowIndex === 0 && shadedHeader);
         const cells: JSONContent[] = [];
+        const extended = new Set<NonNullable<JSONContent['attrs']>>();
         let column = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0), columns);
-        if (column > 0)
-            cells.push({
-                type: 'tableCell',
-                attrs: { colspan: column, colwidth: widths(columnPx, 0, column) },
-                content: [{ type: 'paragraph' }],
-            });
+        if (column > 0) cells.push(gridFiller(columnPx, 0, column));
         for (const cell of row.cells) {
             const tcPr = wChild(cell, 'tcPr');
             // Within the grid's columns left, or Word's limit where the grid names none.
@@ -85,7 +81,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             if (vMerge && w(vMerge, 'val') !== 'restart') {
                 const above = open.get(column);
                 if (above?.attrs) {
-                    above.attrs['rowspan'] = Number(above.attrs['rowspan'] ?? 1) + 1;
+                    extended.add(above.attrs);
                     column += colspan;
                     continue;
                 }
@@ -105,11 +101,25 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             cells.push(node);
             column += colspan;
         }
-        if (cells.length > 0) rowNodes.push({ type: 'tableRow', content: cells });
+        const after = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridAfter'), 'val')) ?? 0), columns - column);
+        if (after > 0) cells.push(gridFiller(columnPx, column, after));
+        // A row of continuations only has no cell to hold: dropped, the cells above don't reach into it.
+        if (cells.length === 0) continue;
+        for (const attrs of extended) attrs['rowspan'] = Number(attrs['rowspan'] ?? 1) + 1;
+        rowNodes.push({ type: 'tableRow', content: cells });
     }
     if (rowNodes.length === 0) return [];
     const indent = twips(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
     return [{ kind: 'table', node: { type: 'table', content: rowNodes }, indent }];
+}
+
+// The columns a row skips before or after its cells: one empty cell, as the editor would pad them on open.
+function gridFiller(columnPx: number[], column: number, colspan: number): JSONContent {
+    return {
+        type: 'tableCell',
+        attrs: { colspan, colwidth: widths(columnPx, column, colspan) },
+        content: [{ type: 'paragraph' }],
+    };
 }
 
 function cellContent(cell: XmlElement): XmlElement[] {
