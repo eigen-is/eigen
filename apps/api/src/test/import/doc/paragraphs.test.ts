@@ -61,6 +61,16 @@ describe('empty paragraphs', () => {
         expect(await blocks(body)).toEqual(expected);
     });
 
+    // P2: a heading line would draw taller than the blank line Word shows.
+    test('an empty heading holding a bookmark is a blank line', async () => {
+        const heading = paragraph(
+            '<w:bookmarkStart w:id="0" w:name="_Top"/><w:bookmarkEnd w:id="0"/>',
+            '<w:pStyle w:val="Heading1"/>',
+        );
+        const { json } = await importDocxBody(`${paragraph(run('One'))}${heading}${paragraph(run('Two'))}`);
+        expect(json.content?.[1]).toEqual({ type: 'paragraph', attrs: { textAlign: null } });
+    });
+
     test('a paragraph of spaces counts as empty before a break', async () => {
         expect(
             await blocks(

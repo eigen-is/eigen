@@ -241,7 +241,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
         const para: Para = {
             kind: 'para',
-            role: isRule && !visible ? { kind: 'hr' } : role,
+            // P2: an empty heading is the blank line Word shows, not a heading's height.
+            role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
             continued: numbered,
