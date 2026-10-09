@@ -164,11 +164,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     const borders = props.borders ?? {};
     const leftBar = !!borders.left && !borders.top && !borders.bottom && !borders.right && role.kind !== 'code';
+    // The code box sits its own indent in from its container, and draws no quote bar: its indent alone nests it.
+    const indLeft = Math.max(0, (props.indLeft ?? 0) - (role.kind === 'code' ? CODE_BLOCK_LOOK.indent : 0));
     const quote = leftBar
-        ? Math.max(1, Math.round((props.indLeft ?? 0) / QUOTE_LOOK.indent))
+        ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent))
         : role.kind === 'quote'
           ? 1
-          : 0;
+          : role.kind === 'code'
+            ? Math.round(indLeft / QUOTE_LOOK.indent)
+            : 0;
     // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
     if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
@@ -205,7 +209,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
             continued: numbered,
-            indLeft: props.indLeft ?? 0,
+            indLeft,
             quote,
             empty: !visible && !content.some((node) => node.type === 'text' && node.text),
             small: halfTexts.length > 0 && halfTexts.every((piece) => piece.kind === 'node' && piece.small),

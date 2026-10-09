@@ -89,27 +89,48 @@ describe('the all-features doc', () => {
     });
 });
 
-describe('a quote in a list item', () => {
-    test('comes back inside its item, at its depth', async () => {
-        const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
-        const quote = (...content: JSONContent[]) => ({ type: 'blockquote', content });
-        const source = docSchema
-            .nodeFromJSON({
-                type: 'doc',
-                content: [
-                    {
-                        type: 'bulletList',
-                        content: [
-                            { type: 'listItem', content: [p('One'), quote(p('Said'), quote(p('Deeper')))] },
-                            { type: 'listItem', content: [p('Two')] },
-                        ],
-                    },
-                    quote(p('After the list')),
-                ],
-            })
-            .toJSON();
-        const docx = await eigendocToDocx(source, [], 'Quotes', undefined);
-        const { json } = await docxToPmJson(Buffer.from(docx));
+const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+const quote = (...content: JSONContent[]) => ({ type: 'blockquote', content });
+const code = (text: string) => ({
+    type: 'codeBlock',
+    attrs: { language: 'javascript' },
+    content: [{ type: 'text', text }],
+});
+const rule = { type: 'horizontalRule' };
+const ordered = (...items: JSONContent[][]) => ({
+    type: 'orderedList',
+    attrs: { start: 1, type: null },
+    content: items.map((content) => ({ type: 'listItem', content })),
+});
+
+// The source as the schema stores it, and what an import of its docx gives back.
+async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
+    const source = docSchema.nodeFromJSON({ type: 'doc', content }).toJSON();
+    const { json } = await docxToPmJson(Buffer.from(await eigendocToDocx(source, [], 'Nested', undefined)));
+    return { source, json };
+}
+
+// The writer keeps a block's container as its indent, so each comes back inside it.
+describe('a block inside a list item or a quote', () => {
+    test.each<[string, JSONContent[]]>([
+        [
+            'a quote in an item and in a nested item, two deep',
+            [ordered([p('One'), quote(p('Said'), quote(p('Deeper')))], [p('Two')]), quote(p('After the list'))],
+        ],
+        ['code in an item', [ordered([p('One'), code('one()')], [p('Two')])]],
+        ['a rule in an item, and a quote after it', [ordered([p('One'), rule, quote(p('Said'))], [p('Two')])]],
+        [
+            'code and a rule in a nested item',
+            [ordered([p('One'), ordered([p('One a'), code('a()'), rule], [p('One b')])], [p('Two')])],
+        ],
+        ['code in a quote', [quote(p('Said'), code('said()'), p('Done'))]],
+        ['code in a quote in an item', [ordered([p('One'), quote(p('Said'), code('said()'))], [p('Two')])]],
+        [
+            'code and a rule at the margin after a list, code in its last item',
+            [ordered([p('One'), code('in()')]), code('after()'), ordered([p('Two')]), rule],
+        ],
+    ])('%s', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
 });
