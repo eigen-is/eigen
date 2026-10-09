@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CODE_BLOCK_LOOK } from '../../../lib/export/doc/ooxml';
+import { CODE_BLOCK_LOOK } from '../../../lib/export/doc/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -105,6 +105,34 @@ describe('comments', () => {
         );
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Before commented after']);
         expect(marksOfType(json, 'comment')).toEqual([]);
+    });
+});
+
+// Google Docs writes a checklist item as its glyph, then a tab or a space or two, then the text.
+describe('a checkbox glyph opening a paragraph', () => {
+    async function read(text: string): Promise<[string | undefined, boolean | undefined, string]> {
+        const { json } = await importDocxBody(paragraph(run(text)));
+        const [block] = json.content ?? [];
+        const checked = block?.content?.[0]?.attrs?.['checked'];
+        return [
+            block?.type,
+            checked,
+            nodesOfType(block ?? {}, 'text')
+                .map((node) => node.text)
+                .join(''),
+        ];
+    }
+
+    test.each([
+        ['a tab', '☐\tMilk', false],
+        ['a space', '☒ Milk', true],
+        ['two spaces', '☐  Milk', false],
+    ])('followed by %s opens a task item', async (_after, text, checked) => {
+        expect(await read(text)).toEqual(['taskList', checked, 'Milk']);
+    });
+
+    test.each(['☐2 apples', '☐{x}', '☐}'])('followed by anything else is text: %s', async (text) => {
+        expect(await read(text)).toEqual(['paragraph', undefined, text]);
     });
 });
 

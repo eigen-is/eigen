@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CODE_LOOK } from '../../../lib/export/doc/ooxml';
+import { CODE_LOOK } from '../../../lib/export/doc/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A run's look: which marks Word's formatting becomes, and which it doesn't.

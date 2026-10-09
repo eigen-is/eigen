@@ -1,6 +1,6 @@
+import { codeBlockLanguage, headingLevel, PAGE_SECTION_TYPES, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { codeBlockLanguage, STYLE_NAMES, W_NS } from '../../export/doc/ooxml';
-import { lowlight } from '../../export/doc/render';
+import { lowlight } from '../../document/lowlight';
 import type { Theme } from './docx-fonts';
 import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
 
@@ -84,6 +84,11 @@ export function shadingOf(shd: XmlElement | undefined): string | undefined {
     return w(shd, 'val') === 'solid' ? (hexColor(w(shd, 'color')) ?? '') : '';
 }
 
+// White is no fill: Word and Google Docs spell an unshaded cell or paragraph that way too.
+export function isFill(fill: string | undefined): boolean {
+    return !!fill && fill !== 'FFFFFF';
+}
+
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
     const props: RunProps = {};
     for (const child of rPr ? xmlElements(rPr) : []) {
@@ -138,9 +143,6 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
 }
 
 const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
-
-// A section that starts on a new page; continuous and nextColumn don't, and a missing type is nextPage.
-const PAGE_SECTIONS = ['nextPage', 'oddPage', 'evenPage'];
 
 export function readParaProps(pPr: XmlElement | undefined): ParaProps {
     const props: ParaProps = {};
@@ -209,7 +211,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
             }
             case 'sectPr': {
                 const type = w(wChild(child, 'type'), 'val');
-                props.sectionBreak = type === undefined || PAGE_SECTIONS.includes(type);
+                props.sectionBreak = type === undefined || PAGE_SECTION_TYPES.has(type);
                 break;
             }
         }
@@ -231,7 +233,8 @@ export function mergePara(...layers: ParaProps[]): ParaProps {
     return merged;
 }
 
-// Style names as dl/ uses them for code, plus Eigen's own; `Plain Text` is letters and survey routing, no code.
+// The styles other writers set code in (Word's HTML ones, pandoc's Source Code and Verbatim Char), plus Eigen's own;
+// `Plain Text` is letters and survey routing, no code.
 export const CODE_PARAGRAPH_STYLES = [STYLE_NAMES.CodeBlock, 'HTML Preformatted', 'Source Code', 'Code', 'Macro Text'];
 export const CODE_CHARACTER_STYLES = [
     STYLE_NAMES.Code,
@@ -292,16 +295,17 @@ const ROLE_BY_NAME = new Map<string, Role>([
 const CODE_CHARACTER_NAMES = new Set(lowercase(CODE_CHARACTER_STYLES));
 
 function roleOf({ name, language }: Style): Role | undefined {
-    const heading = name.match(/^heading ([1-9])$/);
-    if (heading) return { kind: 'heading', level: Math.min(6, Number(heading[1])) };
+    const level = headingLevel(name);
+    if (level) return { kind: 'heading', level: Math.min(6, level) };
     if (language) return { kind: 'code', language: lowlight.registered(language) ? language : null };
     return ROLE_BY_NAME.get(name);
 }
 
-// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark.
+// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark; a subtitle
+// draws as a paragraph.
 export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
     heading: ['bold', 'size'],
-    subtitle: ['bold', 'italic', 'size'],
+    subtitle: [],
     quote: ['italic', 'color'],
     code: 'all',
     caption: 'all',

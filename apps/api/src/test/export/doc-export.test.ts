@@ -233,7 +233,7 @@ describe('doc export — page breaks', () => {
 
     test('a docx export imports back to the same blocks', async () => {
         const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
-        const { json } = await docxToPmJson(Buffer.from(data));
+        const { json } = docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
     });
 });

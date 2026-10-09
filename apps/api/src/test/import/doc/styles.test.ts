@@ -74,6 +74,14 @@ describe('roles', () => {
             { type: 'italic' },
         ]);
     });
+
+    // A subtitle draws as a paragraph, which draws no look of its own.
+    test("a Subtitle style's bold, italic and small size stay marks", async () => {
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Subtitle', 'Subtitle', '<w:rPr><w:b/><w:i/><w:sz w:val="16"/></w:rPr>')}`;
+        const { json } = await importDocxBody(styled('Subtitle', 'Sub'), { styles });
+        expect(types(json)).toEqual(['paragraph']);
+        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([{ type: 'bold' }, { type: 'italic' }, { type: 'small' }]);
+    });
 });
 
 // G6: a heading set in body-sized text by hand reads as body text in Word; size alone demotes nothing, as Word's
@@ -126,5 +134,16 @@ describe('headings in body-sized text', () => {
         ],
     ])('a %s stays a heading', async (_name, body, type) => {
         expect((await read(body)).types).toEqual([type]);
+    });
+
+    // In a cell the table style's size is the heading's where its own style sets none, as it is the runs'.
+    test.each([
+        ['14 pt, its runs set to the 11 pt body', 28, 22, 'paragraph'],
+        ['8 pt, its runs set to 9 pt', 16, 18, 'heading4'],
+    ])('a Heading 4 in a table whose style is %s', async (_name, tableSize, runSize, type) => {
+        const table = `<w:style w:type="table" w:styleId="Sized"><w:name w:val="Sized"/><w:rPr><w:sz w:val="${tableSize}"/></w:rPr></w:style>`;
+        const body = `<w:tbl><w:tblPr><w:tblStyle w:val="Sized"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>${heading('Heading4', sized('Four', runSize))}</w:tc></w:tr></w:tbl><w:p/>`;
+        const { json } = await importDocxBody(body, { styles: `${STYLES}${table}` });
+        expect(types(nodesOfType(json, 'tableCell')[0] ?? {})).toEqual([type]);
     });
 });

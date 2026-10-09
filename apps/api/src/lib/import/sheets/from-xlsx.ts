@@ -26,26 +26,10 @@ import {
     update,
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
-import JSZip from 'jszip';
 import { ApiError } from '../../core/errors';
+import { A_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS, toTransitional } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
-
-// Transitional OOXML, then Strict, which exceljs reads as well. A part's root namespace tells the two apart;
-// both use one package relationships namespace.
-const OOXML_NAMESPACES = [
-    {
-        spreadsheetml: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
-        relationships: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-        drawingml: 'http://schemas.openxmlformats.org/drawingml/2006/main',
-    },
-    {
-        spreadsheetml: 'http://purl.oclc.org/ooxml/spreadsheetml/main',
-        relationships: 'http://purl.oclc.org/ooxml/officeDocument/relationships',
-        drawingml: 'http://purl.oclc.org/ooxml/drawingml/main',
-    },
-] as const;
-const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -90,27 +74,44 @@ type ThemePalette = string[];
 const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
-    // One JSZip pass, reused for the size guard AND the theme and hyperlink reads below. loadAsync
-    // reads the central directory without decompressing, so the guard can run BEFORE
-    // exceljs's xlsx.load — the OOM a bomb triggers happens inside load() and is not
-    // catchable, so a post-load check would never fire.
-    const zip = await JSZip.loadAsync(buffer);
-    await assertDecompressedSizeWithinBounds(zip, 'Spreadsheet too large');
+    const checked = repackXlsx(buffer);
 
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    await workbook.xlsx.load(checked);
     assertCellCountWithinBounds(workbook);
 
+    const zip = openZip(checked);
     // One after the other, so their trees are never alive together.
-    const theme = await readThemePalette(zip);
-    const locationLinks = await readLocationHyperlinks(zip);
+    const theme = readThemePalette(zip);
+    const locationLinks = readLocationHyperlinks(zip);
 
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
         sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name)));
     }
     return sheets;
+}
+
+// The upload route bounds only the compressed bytes, and exceljs inflates the whole package, where an out-of-memory
+// can't be caught. So every entry is read once before it: openZip refuses an archive declaring more than the byte cap,
+// and a read inflates no further than its entry declares, so an entry lying small is refused too.
+// exceljs gets those reads stored in a new package, so its own zip reader sees only bytes openZip checked.
+function repackXlsx(buffer: Buffer): Buffer {
+    try {
+        const zip = openZip(buffer);
+        const entries: ZipWriteEntry[] = [];
+        for (const name of zip.names()) {
+            const data = zip.read(name);
+            if (data) entries.push({ name, data, store: true });
+        }
+        const packed = writeZip(entries);
+        return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
+    } catch (error) {
+        if (!(error instanceof ZipError)) throw error;
+        const message = error.status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file';
+        throw new ApiError(error.status, message, { cause: error });
+    }
 }
 
 function assertCellCountWithinBounds(workbook: Workbook): void {
@@ -816,19 +817,16 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
 // attribute at all. Excel itself authors internal links in exactly this form
 // (<hyperlink ref location=…> without a rel), so recover them straight from the
 // worksheet XML. Returns sheet name → (anchor cell ref → location target).
-// Reuses the zip loaded by xlsxToSheets — no second decompression pass.
-export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
+export function readLocationHyperlinks(zip: ZipReader): Map<string, Map<string, string>> {
     const bySheet = new Map<string, Map<string, string>>();
-    const workbook = await readSheetPaths(zip);
-    if (!workbook) return bySheet;
-
     // One sheet at a time: each is decoded whole, and together they can reach the decompressed cap.
-    for (const { name, path } of workbook.sheets) {
-        const text = await zip.file(path)?.async('string');
-        const hyperlinks = text && readHyperlinksBlock(text, workbook.spreadsheetml);
+    for (const { name, path } of readSheetPaths(zip) ?? []) {
+        const bytes = zip.read(path);
+        const text = bytes && new TextDecoder().decode(bytes);
+        const hyperlinks = text && readHyperlinksBlock(text);
         if (!hyperlinks) continue;
         const links = new Map<string, string>();
-        for (const hyperlink of xmlChildren(hyperlinks, workbook.spreadsheetml, 'hyperlink')) {
+        for (const hyperlink of xmlChildren(hyperlinks, SML_NS, 'hyperlink')) {
             const ref = xmlAttr(hyperlink, '', 'ref');
             const location = xmlAttr(hyperlink, '', 'location');
             // ref may span a range; the anchor cell carries the link.
@@ -840,31 +838,28 @@ export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Ma
 }
 
 // Each sheet's name and part path, as plain values: the workbook and rels trees are gone before any sheet is read.
-async function readSheetPaths(
-    zip: JSZip,
-): Promise<{ spreadsheetml: string; sheets: { name: string; path: string }[] } | undefined> {
-    const workbook = await readPart(zip, 'xl/workbook.xml');
-    const rels = await readPart(zip, 'xl/_rels/workbook.xml.rels');
-    const namespaces = OOXML_NAMESPACES.find(({ spreadsheetml }) => spreadsheetml === workbook?.ns);
-    const sheets = namespaces && workbook && xmlChild(workbook, namespaces.spreadsheetml, 'sheets');
-    if (!namespaces || !sheets || !rels) return undefined;
+function readSheetPaths(zip: ZipReader): { name: string; path: string }[] | undefined {
+    const workbook = readPart(zip, 'xl/workbook.xml');
+    const rels = readPart(zip, 'xl/_rels/workbook.xml.rels');
+    const sheets = workbook?.ns === SML_NS ? xmlChild(workbook, SML_NS, 'sheets') : undefined;
+    if (!sheets || !rels) return undefined;
 
     const relTargets = new Map<string, string>();
-    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS, 'Relationship')) {
+    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS_NS, 'Relationship')) {
         const id = xmlAttr(rel, '', 'Id');
         const target = xmlAttr(rel, '', 'Target');
         if (id != null && target != null) relTargets.set(id, target);
     }
     const paths: { name: string; path: string }[] = [];
-    for (const sheet of xmlChildren(sheets, namespaces.spreadsheetml, 'sheet')) {
+    for (const sheet of xmlChildren(sheets, SML_NS, 'sheet')) {
         const name = xmlAttr(sheet, '', 'name');
-        const rId = xmlAttr(sheet, namespaces.relationships, 'id');
+        const rId = xmlAttr(sheet, R_NS, 'id');
         const target = rId != null ? relTargets.get(rId) : undefined;
         if (name == null || target == null) continue;
         // Workbook-rel targets are relative to xl/ unless rooted.
         paths.push({ name, path: target.startsWith('/') ? target.slice(1) : `xl/${target}` });
     }
-    return { spreadsheetml: namespaces.spreadsheetml, sheets: paths };
+    return paths;
 }
 
 // A tree costs far more heap than its input, so what is parsed is bounded by length and by its `<` and `=` counts; past any bound a part is skipped like a malformed one.
@@ -900,7 +895,7 @@ const HYPERLINKS_START_TAG = /<((?:[^\s/<>:]+:)?hyperlinks)[\s/>]/g;
 // and the root's start tag so the namespaces bound there stay bound and a DOCTYPE is still refused. The schema puts
 // the block after the sheet data, so the search starts past it: past the bulk of the sheet, and past any opener a
 // comment there could hide.
-function readHyperlinksBlock(sheet: string, spreadsheetml: string): XmlElement | undefined {
+function readHyperlinksBlock(sheet: string): XmlElement | undefined {
     const root = ROOT_START_TAG.exec(sheet);
     if (!root) return undefined;
     const head = sheet.slice(0, root.index + root[0].length);
@@ -915,19 +910,21 @@ function readHyperlinksBlock(sheet: string, spreadsheetml: string): XmlElement |
     const block = sheet.slice(open.index, close + 1);
     if (!withinParseBound([head, block], HYPERLINKS_BOUND)) return undefined;
     const wrapped = parsePart(`${head}${block}</${root[1]}>`);
-    return wrapped ? xmlChild(wrapped, spreadsheetml, 'hyperlinks') : undefined;
+    return wrapped ? xmlChild(wrapped, SML_NS, 'hyperlinks') : undefined;
 }
 
-async function readPart(zip: JSZip, path: string): Promise<XmlElement | null> {
-    const bytes = await zip.file(path)?.async('uint8array');
+function readPart(zip: ZipReader, path: string): XmlElement | null {
+    const bytes = zip.read(path);
     return bytes && withinParseBound([bytes], PART_BOUND) ? parsePart(bytes) : null;
 }
 
 // exceljs has read the workbook by now, so a part Bun refuses (malformed, a DOCTYPE) costs only what these reads
-// take from it: the location links or the theme colors, never the import.
+// take from it: the location links or the theme colors, never the import. Strict reads as transitional.
 function parsePart(xml: string | Uint8Array): XmlElement | null {
     try {
-        return parseXml(xml);
+        const root = parseXml(xml);
+        if (root) toTransitional(root);
+        return root;
     } catch (error) {
         if (error instanceof XmlError) return null;
         throw error;
@@ -1308,18 +1305,17 @@ const CLR_SCHEME_ELEMENTS = [
 ] as const;
 const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
-async function readThemePalette(zip: JSZip): Promise<ThemePalette> {
-    const theme = await readPart(zip, 'xl/theme/theme1.xml');
-    const drawingml = OOXML_NAMESPACES.find((namespaces) => namespaces.drawingml === theme?.ns)?.drawingml;
-    const elements = drawingml && theme && xmlChild(theme, drawingml, 'themeElements');
-    const scheme = drawingml && elements && xmlChild(elements, drawingml, 'clrScheme');
-    if (!drawingml || !scheme) return [];
+function readThemePalette(zip: ZipReader): ThemePalette {
+    const theme = readPart(zip, 'xl/theme/theme1.xml');
+    const elements = theme?.ns === A_NS ? xmlChild(theme, A_NS, 'themeElements') : undefined;
+    const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
+    if (!scheme) return [];
 
     const xmlColors: string[] = [];
     for (const el of CLR_SCHEME_ELEMENTS) {
-        const slot = xmlChild(scheme, drawingml, el);
-        const srgb = slot && xmlChild(slot, drawingml, 'srgbClr');
-        const sys = slot && xmlChild(slot, drawingml, 'sysClr');
+        const slot = xmlChild(scheme, A_NS, el);
+        const srgb = slot && xmlChild(slot, A_NS, 'srgbClr');
+        const sys = slot && xmlChild(slot, A_NS, 'sysClr');
         const hex = (srgb && xmlAttr(srgb, '', 'val')) ?? (sys && xmlAttr(sys, '', 'lastClr'));
         xmlColors.push(hex && /^[A-Fa-f0-9]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : '#000000');
     }

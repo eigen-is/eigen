@@ -1,10 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
+import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, STYLE_NAMES, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
+import { bundledFontOf, type FontTable, MONOSPACE_FONT, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
-import { MAX_LEVEL, Numbering } from './numbering';
+import { Numbering } from './numbering';
 import {
     alternative,
     descendants,
@@ -18,8 +19,8 @@ import {
     wChild,
 } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
-import { mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
-import { isFill, readTable } from './tables';
+import { isFill, mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
+import { readTable } from './tables';
 
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
 // text boxes and notes; assemble.ts turns the items into blocks.
@@ -94,7 +95,7 @@ export function readDocument(reader: Reader): JSONContent[] {
     return blocks;
 }
 
-// Notes as the import has always shown them: a [n] reference, and at the end one numbered list with a back link per note.
+// Notes as Eigen holds them: a [n] reference, and at the end one numbered list with a back link per note.
 // A note referenced inside a note joins the end of the map, which this loop still reaches.
 function readNotes(reader: Reader): JSONContent[] {
     const items: JSONContent[] = [];
@@ -144,10 +145,10 @@ export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope)
     });
 }
 
-const CHECKBOX_GLYPHS = new Map([
-    ['☐', false],
+const CHECKBOXES = new Map([
+    [CHECKBOX_GLYPHS.unchecked, false],
     ['☑', true],
-    ['☒', true],
+    [CHECKBOX_GLYPHS.checked, true],
 ]);
 
 function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
@@ -161,8 +162,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
-    if (role.kind === 'heading' && isBodySized(reader, p, mergeRun(styles.docRun, styles.run(styleId)).size ?? 20))
-        role = { kind: 'paragraph' };
+    const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
+    if (role.kind === 'heading' && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -177,12 +178,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     if (task?.checked && role.kind === 'paragraph') role = { kind: 'taskDone' };
     for (const [index, piece] of pieces.entries())
         if (piece.kind === 'checkbox')
-            pieces[index] = { kind: 'node', node: { type: 'text', text: piece.checked ? '☒' : '☐' } };
+            pieces[index] = {
+                kind: 'node',
+                node: { type: 'text', text: piece.checked ? CHECKBOX_GLYPHS.checked : CHECKBOX_GLYPHS.unchecked },
+            };
     const halves = splitAtBreaks(pieces);
 
     // A paragraph holding nothing but a page break gives no item: the break joins the open one, and the number stays free.
     const numId = direct.numId ?? styled.numId;
-    const ilvl = Math.min(MAX_LEVEL, Math.max(0, direct.ilvl ?? styled.ilvl ?? 0));
+    const ilvl = Math.min(LIST_LEVELS - 1, Math.max(0, direct.ilvl ?? styled.ilvl ?? 0));
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list =
         numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
@@ -191,13 +195,13 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
     const allMono =
-        texts.length > 0 && texts.every((piece) => piece.kind === 'node' && isMonospace(piece.font, reader.fontTable));
-    const shaded = !!props.shading && props.shading !== 'FFFFFF';
+        texts.length > 0 &&
+        texts.every((piece) => piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT);
     if (
         role.kind === 'paragraph' &&
         !list &&
         !task &&
-        ((allMono && shaded) || (texts.length === 0 && props.shading === CODE_BLOCK_LOOK.fill))
+        ((allMono && isFill(props.shading)) || (texts.length === 0 && props.shading === CODE_BLOCK_LOOK.fill))
     )
         role = { kind: 'code', language: null };
 
@@ -325,9 +329,9 @@ function taskOf(pieces: Piece[]): { checked: boolean } | undefined {
     }
     if (opener?.kind !== 'node' || opener.node.type !== 'text') return undefined;
     const text = opener.node.text ?? '';
-    const checked = CHECKBOX_GLYPHS.get(text.charAt(0));
-    if (checked === undefined || (text.length > 1 && !/^[\t {2}]/.test(text.slice(1)))) return undefined;
-    const rest = text.slice(1).replace(/^[\t {2}]/, '');
+    const checked = CHECKBOXES.get(text.charAt(0));
+    if (checked === undefined || (text.length > 1 && !/^[\t ]/.test(text.slice(1)))) return undefined;
+    const rest = text.slice(1).replace(/^(?:\t| {1,2})/, '');
     if (rest) opener.node.text = rest;
     else {
         pieces.splice(first, 1);

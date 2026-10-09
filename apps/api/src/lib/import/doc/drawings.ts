@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
+import { A_NS, ASVG_NS, EMU_PER_PX, EMU_PER_TWIP, O_NS, PIC_NS, R_NS, V_NS, W_NS, WP_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { A_NS, ASVG_NS, EMU_PER_PX, EMU_PER_TWIP, O_NS, PIC_NS, R_NS, V_NS, W_NS, WP_NS } from '../../export/doc/ooxml';
 import { COLUMN_PX, isCaptionLike, isFigureOnly, type Para, textOf } from './assemble';
 import { contentTypeOf, descendants, int } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';

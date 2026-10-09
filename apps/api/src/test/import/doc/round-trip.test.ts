@@ -83,7 +83,7 @@ describe('the all-features doc', () => {
             'All features',
             ORIGIN,
         );
-        const { json, images } = await docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+        const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(images));
         expect(stored(imported)).toEqual(stored(expected(source, imported)));
     });
@@ -110,7 +110,7 @@ const bullets = (...items: JSONContent[][]) => ({
 // The source as the schema stores it, and what an import of its docx gives back.
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
     const source = docSchema.nodeFromJSON({ type: 'doc', content }).toJSON();
-    const { json } = await docxToPmJson(Buffer.from(await eigendocToDocx(source, [], 'Nested', undefined)));
+    const { json } = docxToPmJson(Buffer.from(await eigendocToDocx(source, [], 'Nested', undefined)));
     return { source, json };
 }
 
@@ -181,7 +181,7 @@ describe("the all-features doc's Google Docs re-save", () => {
         const bytes = await Bun.file(
             join(import.meta.dir, '../../fixtures/docx/google-docs-all-features.docx'),
         ).arrayBuffer();
-        const { json } = await docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
+        const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         const want = googleLosses(expected(source, json), json);
         const blocks = json.content ?? [];

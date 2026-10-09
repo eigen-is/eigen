@@ -136,7 +136,7 @@ export async function importDocxBody(
     body: string,
     parts: DocxParts = {},
     options: { publicOrigin?: string } = {},
-): Promise<Awaited<ReturnType<typeof docxToPmJson>>> {
+): Promise<ReturnType<typeof docxToPmJson>> {
     return docxToPmJson(Buffer.from(await buildDocxWithBody(body, parts)), options);
 }
 

@@ -12,12 +12,29 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import {
+    A_NS,
+    C_NS,
+    headingLevel,
+    M_NS,
+    MC_NS,
+    O_NS,
+    PACKAGE_RELATIONSHIPS_NS,
+    PAGE_SECTION_TYPES,
+    R_NS,
+    toTransitional,
+    V_NS,
+    W_NS,
+    W10_NS,
+    W14_NS,
+    WP_NS,
+} from '../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
-import { fontMark } from '../lib/import/doc/docx-fonts';
+import { fontMark, readFontTable } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { toTransitional } from '../lib/import/doc/package';
+import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
@@ -143,27 +160,14 @@ const ELEMENTS = [
 
 const ELEMENT_SET = new Set(ELEMENTS);
 
-const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
-const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
-const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
-const V = 'urn:schemas-microsoft-com:vml';
-const O = 'urn:schemas-microsoft-com:office:office';
-const W10 = 'urn:schemas-microsoft-com:office:word';
-const M = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
-const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
-const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-const REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
-
 const PREFIXES = new Map([
-    [W, 'w'],
-    [W14, 'w14'],
-    [WP, 'wp'],
-    [MC, 'mc'],
-    [V, 'v'],
-    [M, 'm'],
-    [C, 'c'],
+    [W_NS, 'w'],
+    [W14_NS, 'w14'],
+    [WP_NS, 'wp'],
+    [MC_NS, 'mc'],
+    [V_NS, 'v'],
+    [M_NS, 'm'],
+    [C_NS, 'c'],
 ]);
 
 const HEADINGS: Feature[] = ['heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'heading7'];
@@ -182,10 +186,6 @@ const QUOTE_STYLES = new Set(['quote', 'intense quote', 'block text']);
 const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
-// Eigen's small text is 75% of the body (eigen-prose.css), the docx writer's 9 pt in 11; a body style a point
-// smaller is still body text.
-const SMALL = 0.85;
-const SECTION_PAGE_BREAKS = new Set(['nextPage', 'oddPage', 'evenPage']);
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
 
 // Counted per word they touch, and matched as words, so a mark on the wrong words keeps nothing.
@@ -251,12 +251,12 @@ function add(tally: Tally, feature: Feature, n = 1): void {
     tally.counts.set(feature, (tally.counts.get(feature) ?? 0) + n);
 }
 
-function child(element: XmlElement | undefined, local: string, ns = W): XmlElement | undefined {
+function child(element: XmlElement | undefined, local: string, ns = W_NS): XmlElement | undefined {
     return element && xmlChild(element, ns, local);
 }
 
 function val(element: XmlElement | undefined): string | undefined {
-    return element && xmlAttr(element, W, 'val');
+    return element && xmlAttr(element, W_NS, 'val');
 }
 
 // An on/off property present without w:val is on.
@@ -270,14 +270,15 @@ function find(root: XmlElement, ns: string, local: string): XmlElement[] {
     const stack = xmlElements(root).reverse();
     for (let element = stack.pop(); element; element = stack.pop()) {
         if (element.ns === ns && element.local === local) found.push(element);
-        else if (!(element.ns === W && element.local === 'txbxContent')) stack.push(...xmlElements(element).reverse());
+        else if (!(element.ns === W_NS && element.local === 'txbxContent'))
+            stack.push(...xmlElements(element).reverse());
     }
     return found;
 }
 
 // Word renders the first choice it understands; every choice in this corpus's era is one Word 2010 reads.
 function alternative(element: XmlElement): XmlElement | undefined {
-    return child(element, 'Choice', MC) ?? child(element, 'Fallback', MC);
+    return child(element, 'Choice', MC_NS) ?? child(element, 'Fallback', MC_NS);
 }
 
 // Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
@@ -405,20 +406,20 @@ function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined)
     const byId = new Map<string, XmlElement>();
     let paragraph: string | undefined;
     let character: string | undefined;
-    for (const style of root ? xmlChildren(root, W, 'style') : []) {
-        const id = xmlAttr(style, W, 'styleId');
+    for (const style of root ? xmlChildren(root, W_NS, 'style') : []) {
+        const id = xmlAttr(style, W_NS, 'styleId');
         if (!id) continue;
         byId.set(id, style);
-        if (!['1', 'true', 'on'].includes(xmlAttr(style, W, 'default') ?? '')) continue;
-        const type = xmlAttr(style, W, 'type');
+        if (!['1', 'true', 'on'].includes(xmlAttr(style, W_NS, 'default') ?? '')) continue;
+        const type = xmlAttr(style, W_NS, 'type');
         if (type === 'paragraph') paragraph = id;
         if (type === 'character') character = id;
     }
     const chains = new Map<string, XmlElement[]>();
     const defaults = child(root, 'docDefaults');
-    const scheme = child(child(theme, 'themeElements', A), 'fontScheme', A);
+    const scheme = child(child(theme, 'themeElements', A_NS), 'fontScheme', A_NS);
     const typeface = (font: string) => {
-        const latin = child(child(scheme, font, A), 'latin', A);
+        const latin = child(child(scheme, font, A_NS), 'latin', A_NS);
         return latin && xmlAttr(latin, '', 'typeface');
     };
     return {
@@ -444,7 +445,7 @@ function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined)
 }
 
 function styleName(style: XmlElement): string {
-    return (val(child(style, 'name')) ?? xmlAttr(style, W, 'styleId') ?? '').toLowerCase();
+    return (val(child(style, 'name')) ?? xmlAttr(style, W_NS, 'styleId') ?? '').toLowerCase();
 }
 
 function first(sources: XmlElement[], local: string): XmlElement | undefined {
@@ -459,16 +460,16 @@ function first(sources: XmlElement[], local: string): XmlElement | undefined {
 function readNumbering(root: XmlElement | undefined) {
     const abstracts = new Map<string, XmlElement>();
     const linked = new Map<string, string>();
-    for (const abstract of root ? xmlChildren(root, W, 'abstractNum') : []) {
-        const id = xmlAttr(abstract, W, 'abstractNumId');
+    for (const abstract of root ? xmlChildren(root, W_NS, 'abstractNum') : []) {
+        const id = xmlAttr(abstract, W_NS, 'abstractNumId');
         if (id === undefined) continue;
         abstracts.set(id, abstract);
         const link = val(child(abstract, 'styleLink'));
         if (link) linked.set(link, id);
     }
     const nums = new Map<string, XmlElement>();
-    for (const num of root ? xmlChildren(root, W, 'num') : []) {
-        const id = xmlAttr(num, W, 'numId');
+    for (const num of root ? xmlChildren(root, W_NS, 'num') : []) {
+        const id = xmlAttr(num, W_NS, 'numId');
         if (id !== undefined) nums.set(id, num);
     }
     const counters = new Map<string, number[]>();
@@ -481,9 +482,9 @@ function readNumbering(root: XmlElement | undefined) {
         const abstract = abstractId === undefined ? undefined : abstracts.get(abstractId);
         if (!num || !abstract || abstractId === undefined) return undefined;
         const levelAt = (at: number) => {
-            const override = xmlChildren(num, W, 'lvlOverride').find((o) => xmlAttr(o, W, 'ilvl') === String(at));
+            const override = xmlChildren(num, W_NS, 'lvlOverride').find((o) => xmlAttr(o, W_NS, 'ilvl') === String(at));
             const level = (element: XmlElement | undefined) =>
-                element && xmlChildren(element, W, 'lvl').find((lvl) => xmlAttr(lvl, W, 'ilvl') === String(at));
+                element && xmlChildren(element, W_NS, 'lvl').find((lvl) => xmlAttr(lvl, W_NS, 'ilvl') === String(at));
             return { override, lvl: level(override) ?? level(abstract) };
         };
         const { override, lvl } = levelAt(ilvl);
@@ -530,6 +531,7 @@ const ROMAN: [number, string][] = [
     [1, 'I'],
 ];
 
+// Spelled here, not with the reader's spellNumber: the audit measures the reader, so it reads Word on its own.
 // The number formats Word spells most; any other reads as decimal.
 function spell(value: number, format: string): string {
     if (format === 'decimalZero' && value < 10) return `0${value}`;
@@ -557,7 +559,7 @@ function countElements(root: XmlElement, into: Map<string, number>): void {
         const prefix = PREFIXES.get(element.ns);
         let label = prefix && `${prefix}:${element.local}`;
         if (label === 'w:br') {
-            const type = xmlAttr(element, W, 'type');
+            const type = xmlAttr(element, W_NS, 'type');
             if (type === 'page' || type === 'column') label = `w:br type=${type}`;
         }
         if (label && ELEMENT_SET.has(label)) bump(label);
@@ -580,7 +582,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const relationships = (part: string) => {
         const directory = path.posix.dirname(part);
         const rels = read(path.posix.join(directory, '_rels', `${path.posix.basename(part)}.rels`));
-        return (rels ? xmlChildren(rels, REL, 'Relationship') : [])
+        return (rels ? xmlChildren(rels, PACKAGE_RELATIONSHIPS_NS, 'Relationship') : [])
             .filter((rel) => xmlAttr(rel, '', 'TargetMode') !== 'External')
             .map((rel) => {
                 const target = xmlAttr(rel, '', 'Target') ?? '';
@@ -599,6 +601,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const endnotes = read(partOf('endnotes'));
     const styles = readStyles(read(partOf('styles')), read(partOf('theme')));
     const numberItem = readNumbering(read(partOf('numbering')));
+    const fontTable = readFontTable(read(partOf('fontTable')));
 
     const elements = new Map<string, number>();
     const stories = [document, footnotes, endnotes, read(partOf('comments'))];
@@ -614,7 +617,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         // and outline level 9 is body text, as a TOC Heading based on Heading 1 sets it.
         let heading: number | undefined;
         for (const [index, style] of chain.entries()) {
-            const named = Number(names[index].match(/^heading ([1-9])$/)?.[1] ?? (names[index] === 'title' ? 1 : 0));
+            const named = headingLevel(names[index]) ?? (names[index] === 'title' ? 1 : 0);
             const outline = val(child(child(style, 'pPr'), 'outlineLvl'));
             if (!named && outline === undefined) continue;
             heading = named || (Number(outline) < 9 ? Number(outline) + 1 : undefined);
@@ -634,7 +637,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const section = child(pPr, 'sectPr');
         const left = pPrs
             .map((p) => child(p, 'ind'))
-            .map((ind) => ind && (xmlAttr(ind, W, 'left') ?? xmlAttr(ind, W, 'start')))
+            .map((ind) => ind && (xmlAttr(ind, W_NS, 'left') ?? xmlAttr(ind, W_NS, 'start')))
             .find((value) => value !== undefined);
         return {
             heading,
@@ -643,11 +646,11 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             caption: names.includes('caption'),
             jc: val(first(pPrs, 'jc')),
             pageBreakBefore: !!pageBreakBefore && on(pageBreakBefore),
-            sectionBreak: !!section && SECTION_PAGE_BREAKS.has(val(child(section, 'type')) ?? 'nextPage'),
+            sectionBreak: !!section && PAGE_SECTION_TYPES.has(val(child(section, 'type')) ?? 'nextPage'),
             rule: only('bottom'),
             borders: drawn
                 .map(({ side, border, style }) =>
-                    [side, style, xmlAttr(border, W, 'sz'), xmlAttr(border, W, 'color')].join(':'),
+                    [side, style, xmlAttr(border, W_NS, 'sz'), xmlAttr(border, W_NS, 'color')].join(':'),
                 )
                 .join(' '),
             indent: Number(left ?? 0),
@@ -662,10 +665,10 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         for (const source of sources) {
             const fonts = child(source, 'rFonts');
             if (!fonts) continue;
-            const theme = xmlAttr(fonts, W, 'asciiTheme') ?? xmlAttr(fonts, W, 'hAnsiTheme');
+            const theme = xmlAttr(fonts, W_NS, 'asciiTheme') ?? xmlAttr(fonts, W_NS, 'hAnsiTheme');
             if (theme)
                 return ((theme.startsWith('major') ? styles.theme.major : styles.theme.minor) ?? theme).toLowerCase();
-            const name = xmlAttr(fonts, W, 'ascii') ?? xmlAttr(fonts, W, 'hAnsi');
+            const name = xmlAttr(fonts, W_NS, 'ascii') ?? xmlAttr(fonts, W_NS, 'hAnsi');
             if (name) return name.toLowerCase();
         }
         return undefined;
@@ -699,8 +702,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const vertAlign = val(first(sources, 'vertAlign'));
         const highlight = val(first(sources, 'highlight'));
         const shading = first(sources, 'shd');
-        const fill = shading && xmlAttr(shading, W, 'fill')?.toUpperCase();
-        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]));
+        const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
+        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]), fontTable);
         const marks: [Feature, boolean][] = [
             ['bold', toggle('b')],
             ['italic', toggle('i')],
@@ -711,7 +714,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
             ['font', font !== undefined],
-            ['small', sizeOf(sources) <= base.size * SMALL],
+            ['small', sizeOf(sources) <= base.size * SMALL_PRINT],
             ['link', linked],
         ];
         return {
@@ -726,11 +729,11 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     // A checkbox control at any level shows its box: Word restricts its content to the glyph, which is no text.
     const checkbox = (sdt: XmlElement, scope: Scope) => {
-        const box = child(child(sdt, 'sdtPr'), 'checkbox', W14);
+        const box = child(child(sdt, 'sdtPr'), 'checkbox', W14_NS);
         if (box && visible(scope)) {
             add(tally, 'taskItems');
-            const checked = child(box, 'checked', W14);
-            if (checked && ['1', 'true'].includes(xmlAttr(checked, W14, 'val') ?? '')) add(tally, 'checkedTasks');
+            const checked = child(box, 'checked', W14_NS);
+            if (checked && ['1', 'true'].includes(xmlAttr(checked, W14_NS, 'val') ?? '')) add(tally, 'checkedTasks');
         }
         return !!box;
     };
@@ -743,48 +746,48 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const drawing = (element: XmlElement, context: Inline) => {
         for (const holder of xmlElements(element)) {
-            if (holder.ns !== WP) continue;
-            const blips = find(holder, A, 'blip').filter(
-                (blip) => xmlAttr(blip, R, 'embed') || xmlAttr(blip, R, 'link'),
+            if (holder.ns !== WP_NS) continue;
+            const blips = find(holder, A_NS, 'blip').filter(
+                (blip) => xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link'),
             );
-            const extent = child(holder, 'extent', WP);
+            const extent = child(holder, 'extent', WP_NS);
             if (blips.length > 0) {
                 add(tally, 'images', blips.length);
                 if (Number(extent && xmlAttr(extent, '', 'cx')) > 0) add(tally, 'imageWidths', blips.length);
-                if (holder.local === 'anchor' && WRAPS.some((wrap) => child(holder, wrap, WP))) {
+                if (holder.local === 'anchor' && WRAPS.some((wrap) => child(holder, wrap, WP_NS))) {
                     add(tally, 'wrapped', blips.length);
                 } else context.paragraph.image = true;
             }
-            for (const box of find(holder, W, 'txbxContent'))
+            for (const box of find(holder, W_NS, 'txbxContent'))
                 blocks(box, { ...context.scope, chain: newChain(), fields: [] });
         }
     };
 
     const vml = (element: XmlElement, context: Inline) => {
-        const shapes = [...find(element, V, 'shape'), ...find(element, V, 'rect')];
-        if (shapes.some((shape) => ['t', 'true'].includes(xmlAttr(shape, O, 'hr') ?? ''))) add(tally, 'rules');
+        const shapes = [...find(element, V_NS, 'shape'), ...find(element, V_NS, 'rect')];
+        if (shapes.some((shape) => ['t', 'true'].includes(xmlAttr(shape, O_NS, 'hr') ?? ''))) add(tally, 'rules');
         for (const shape of shapes) {
-            const image = child(shape, 'imagedata', V);
-            if (!image || !xmlAttr(image, R, 'id')) continue;
+            const image = child(shape, 'imagedata', V_NS);
+            if (!image || !xmlAttr(image, R_NS, 'id')) continue;
             add(tally, 'images');
             if (/(^|;)\s*width\s*:/.test(xmlAttr(shape, '', 'style') ?? '')) add(tally, 'imageWidths');
-            const wrap = child(shape, 'wrap', W10);
+            const wrap = child(shape, 'wrap', W10_NS);
             if (wrap && ['square', 'tight', 'through'].includes(xmlAttr(wrap, '', 'type') ?? '')) add(tally, 'wrapped');
             else context.paragraph.image = true;
         }
-        for (const box of find(element, W, 'txbxContent'))
+        for (const box of find(element, W_NS, 'txbxContent'))
             blocks(box, { ...context.scope, chain: newChain(), fields: [] });
     };
 
     const runContent = (container: XmlElement, look: RunLook, context: Inline) => {
         const { fields } = context.scope;
         for (const node of xmlElements(container)) {
-            if (node.ns === MC && node.local === 'AlternateContent') {
+            if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) runContent(choice, look, context);
                 continue;
             }
-            if (node.ns !== W) continue;
+            if (node.ns !== W_NS) continue;
             const shown = visible(context.scope) && !look.hidden;
             switch (node.local) {
                 case 't':
@@ -801,12 +804,12 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 case 'br':
                     if (!shown) break;
                     space(context);
-                    if (xmlAttr(node, W, 'type') !== 'page') break;
+                    if (xmlAttr(node, W_NS, 'type') !== 'page') break;
                     add(tally, 'pageBreaks');
                     context.paragraph.breaks++;
                     break;
                 case 'fldChar': {
-                    const type = xmlAttr(node, W, 'fldCharType');
+                    const type = xmlAttr(node, W_NS, 'fldCharType');
                     if (type === 'begin') {
                         fields.push({ result: false, instr: '', link: false });
                         const box = child(child(node, 'ffData'), 'checkBox');
@@ -848,16 +851,16 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const inline = (container: XmlElement, context: Inline) => {
         for (const node of xmlElements(container)) {
-            if (node.ns === MC && node.local === 'AlternateContent') {
+            if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) inline(choice, context);
                 continue;
             }
-            if (node.ns === M && node.local === 't') {
+            if (node.ns === M_NS && node.local === 't') {
                 if (visible(context.scope)) text(xmlText(node), context, undefined);
                 continue;
             }
-            if (node.ns !== W) {
+            if (node.ns !== W_NS) {
                 inline(node, context);
                 continue;
             }
@@ -871,7 +874,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 case 'fldSimple':
                     inline(node, {
                         ...context,
-                        link: context.link || /^\s*HYPERLINK\b/i.test(xmlAttr(node, W, 'instr') ?? ''),
+                        link: context.link || /^\s*HYPERLINK\b/i.test(xmlAttr(node, W_NS, 'instr') ?? ''),
                     });
                     break;
                 case 'sdt': {
@@ -904,7 +907,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             look.code ||
             caption ||
             scope.note ||
-            find(element, W14, 'checkbox').length > 0;
+            find(element, W14_NS, 'checkbox').length > 0;
         const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
         // A heading can't stand in an Eigen list: Word shows its number as text, which survives as text or not at all.
         const label = look.heading !== undefined && numbered?.ordered ? numbered.label : undefined;
@@ -988,7 +991,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     // Rows and cells may sit in content controls or custom XML; boxed when a checkbox control holds them.
     const within = (element: XmlElement, local: string, scope: Scope, boxed = false): Boxed[] =>
         xmlElements(element).flatMap((node) => {
-            if (node.ns !== W) return [];
+            if (node.ns !== W_NS) return [];
             if (node.local === local) return [{ element: node, boxed }];
             if (node.local === 'sdt') {
                 const content = child(node, 'sdtContent');
@@ -1007,7 +1010,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         if (
             only &&
             child(child(element, 'tblPr'), 'tblpPr') &&
-            (find(only, A, 'blip').length > 0 || find(only, V, 'imagedata').length > 0)
+            (find(only, A_NS, 'blip').length > 0 || find(only, V_NS, 'imagedata').length > 0)
         ) {
             add(tally, 'wrapped');
             blocks(only, { ...scope, chain: newChain(), float: true });
@@ -1015,8 +1018,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         }
         add(tally, 'tables');
         if (scope.cell) add(tally, 'nestedTables');
-        const grid = xmlChildren(child(element, 'tblGrid') ?? element, W, 'gridCol');
-        if (grid.some((column) => Number(xmlAttr(column, W, 'w')) > 0)) add(tally, 'columnWidths');
+        const grid = xmlChildren(child(element, 'tblGrid') ?? element, W_NS, 'gridCol');
+        if (grid.some((column) => Number(xmlAttr(column, W_NS, 'w')) > 0)) add(tally, 'columnWidths');
         const placed = rows.map((row, index) => {
             const trPr = child(row.element, 'trPr');
             const header = child(trPr, 'tblHeader');
@@ -1052,14 +1055,14 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const blocks = (container: XmlElement, scope: Scope) => {
         for (const node of xmlElements(container)) {
-            if (node.ns === MC && node.local === 'AlternateContent') {
+            if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) blocks(choice, scope);
                 continue;
             }
-            if (node.ns === W && node.local === 'p') paragraph(node, scope);
-            else if (node.ns === W && node.local === 'sdt' && checkbox(node, scope)) continue;
-            else if (node.ns === W && node.local === 'tbl') {
+            if (node.ns === W_NS && node.local === 'p') paragraph(node, scope);
+            else if (node.ns === W_NS && node.local === 'sdt' && checkbox(node, scope)) continue;
+            else if (node.ns === W_NS && node.local === 'tbl') {
                 settle(scope.chain);
                 if (table(node, scope)) {
                     scope.chain.last = undefined;
@@ -1067,7 +1070,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 }
             } else if (
                 !(
-                    node.ns === W &&
+                    node.ns === W_NS &&
                     ['del', 'moveFrom', 'sdtPr', 'sdtEndPr', 'sectPr', 'tblPr', 'pPr'].includes(node.local)
                 )
             ) {
@@ -1083,7 +1086,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     if (body) blocks(body, { chain: newChain(), float: false, cell: false, note: false, fields: [] });
     for (const notes of [footnotes, endnotes]) {
         for (const note of notes ? xmlElements(notes) : []) {
-            if (SKIPPED_NOTES.has(xmlAttr(note, W, 'type') ?? '')) continue;
+            if (SKIPPED_NOTES.has(xmlAttr(note, W_NS, 'type') ?? '')) continue;
             blocks(note, { chain: newChain(), float: false, cell: false, note: true, fields: [] });
         }
     }
@@ -1549,7 +1552,12 @@ function isReply(data: unknown): data is WorkerReply {
     }
 }
 
-function isImporter(value: unknown): value is typeof docxToPmJson {
+// Another importer may answer with a Promise, as mammoth's did.
+type Importer = (
+    ...args: Parameters<typeof docxToPmJson>
+) => ReturnType<typeof docxToPmJson> | Promise<ReturnType<typeof docxToPmJson>>;
+
+function isImporter(value: unknown): value is Importer {
     return typeof value === 'function';
 }
 
@@ -1697,7 +1705,7 @@ declare var self: Worker;
 
 // The worker side: reads a source, or loads the importer once and then imports one file per message.
 if (!Bun.isMainThread) {
-    let importer: typeof docxToPmJson | undefined;
+    let importer: Importer | undefined;
     self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const request = event.data;
         const started = performance.now();

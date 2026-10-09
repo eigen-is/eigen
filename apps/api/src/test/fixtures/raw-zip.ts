@@ -13,6 +13,8 @@ export type RawPart = {
     localName?: string;
     // An offset for the central entry alone: no local header is written for it.
     offset?: number;
+    // Extra fields for the central entry, after a ZIP64 one.
+    extra?: Uint8Array;
 };
 
 const encoder = new TextEncoder();
@@ -64,7 +66,9 @@ export function build(
             chunks.push(local, part.body);
             at += local.length + part.body.length;
         }
-        const entry = new Uint8Array(46 + name.length + (part.zip64 ? 28 : 0));
+        const extras = part.extra ?? new Uint8Array(0);
+        const zip64Extra = part.zip64 ? 28 : 0;
+        const entry = new Uint8Array(46 + name.length + zip64Extra + extras.length);
         const view = new DataView(entry.buffer);
         view.setUint32(0, 0x02014b50, true);
         view.setUint16(4, 45, true);
@@ -76,7 +80,7 @@ export function build(
         view.setUint32(20, part.zip64 ? 0xffffffff : part.body.length, true);
         view.setUint32(24, part.zip64 ? 0xffffffff : part.size, true);
         view.setUint16(28, name.length, true);
-        view.setUint16(30, part.zip64 ? 28 : 0, true);
+        view.setUint16(30, zip64Extra + extras.length, true);
         view.setUint32(42, part.zip64 ? 0xffffffff : offset, true);
         entry.set(name, 46);
         if (part.zip64) {
@@ -87,6 +91,7 @@ export function build(
             view.setBigUint64(extra + 12, BigInt(part.body.length), true);
             view.setBigUint64(extra + 20, BigInt(offset), true);
         }
+        entry.set(extras, 46 + name.length + zip64Extra);
         central.push(entry);
     }
     const directoryStart = base + at;

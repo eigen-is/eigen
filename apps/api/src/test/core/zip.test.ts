@@ -316,18 +316,15 @@ describe('openZip refuses', () => {
 });
 
 describe('openZip reads', () => {
-    test('stored and deflated entries, with their sizes and dates', () => {
+    test('stored and deflated entries, with their sizes', () => {
         const zip = openZip(build([TYPES, REAL]));
         expect(zip.names()).toEqual(['[Content_Types].xml', 'word/document.xml']);
         expect(utf8.decode(zip.read('word/document.xml'))).toBe('<w:document>REAL</w:document>');
         expect(zip.entry('word/document.xml')?.size).toBe(REAL.size);
-        // raw-zip writes DOS date 0x21: 1 January 1980.
-        expect(zip.entry('word/document.xml')?.date.toISOString()).toBe('1980-01-01T00:00:00.000Z');
         expect(zip.read('word/missing.xml')).toBeUndefined();
         expect(Object.keys(zip.entry('word/document.xml') ?? {}).sort()).toEqual([
             'compressedSize',
             'crc32',
-            'date',
             'method',
             'name',
             'size',
@@ -387,17 +384,16 @@ describe('openZip reads', () => {
     });
 
     test('what JSZip writes, as JSZip reads it: deflate, store, data descriptors, folders, a comment, a non-ASCII name', async () => {
-        const date = new Date(Date.UTC(2024, 4, 17, 13, 45, 58));
         for (const streamFiles of [false, true]) {
             const source = new JSZip();
-            source.file('[Content_Types].xml', '<Types/>', { date });
-            source.file('word/document.xml', '<w:document>Ünïcode — text</w:document>'.repeat(50), { date });
+            source.file('[Content_Types].xml', '<Types/>');
+            source.file('word/document.xml', '<w:document>Ünïcode — text</w:document>'.repeat(50));
             source.file(
                 'word/media/image1.png',
                 new Uint8Array(4000).map((_, i) => i % 251),
-                { date, compression: 'STORE' },
+                { compression: 'STORE' },
             );
-            source.file('word/media/café.png', new Uint8Array(0), { date });
+            source.file('word/media/café.png', new Uint8Array(0));
             const bytes = await source.generateAsync({
                 type: 'uint8array',
                 compression: 'DEFLATE',
@@ -409,7 +405,6 @@ describe('openZip reads', () => {
             expect(ours.names().sort()).toEqual(Object.keys(theirs.files).sort());
             for (const file of Object.values(theirs.files)) {
                 expect(Buffer.from(ours.read(file.name) ?? [])).toEqual(Buffer.from(await file.async('uint8array')));
-                expect(ours.entry(file.name)?.date).toEqual(file.date);
             }
         }
     });
@@ -562,23 +557,21 @@ describe('writeZip', () => {
     const bytesOf = (data: Uint8Array | string) =>
         Buffer.from(typeof data === 'string' ? new TextEncoder().encode(data) : data);
 
-    test('round-trips through openZip: names, bytes, methods and the DOS epoch', () => {
+    test('round-trips through openZip: names, bytes and methods', () => {
         const zip = openZip(writeZip(files));
         expect(zip.names()).toEqual(files.map((file) => file.name));
         for (const file of files) {
             expect(Buffer.from(zip.read(file.name) ?? [])).toEqual(bytesOf(file.data));
             expect(zip.entry(file.name)?.method).toBe(file.store ? 0 : 8);
-            expect(zip.entry(file.name)?.date.toISOString()).toBe('1980-01-01T00:00:00.000Z');
         }
     });
 
-    test('round-trips through JSZip, a date to the even second', async () => {
-        const date = new Date(Date.UTC(2026, 9, 9, 12, 34, 57));
-        const zip = await JSZip.loadAsync(writeZip(files, date));
+    test('round-trips through JSZip, every entry dated the DOS epoch', async () => {
+        const zip = await JSZip.loadAsync(writeZip(files));
         for (const file of files) {
             const entry = zip.file(file.name);
             expect(Buffer.from((await entry?.async('uint8array')) ?? [])).toEqual(bytesOf(file.data));
-            expect(entry?.date.toISOString()).toBe('2026-10-09T12:34:56.000Z');
+            expect(entry?.date.toISOString()).toBe('1980-01-01T00:00:00.000Z');
         }
     });
 
@@ -591,10 +584,8 @@ describe('writeZip', () => {
         expect(Buffer.from(writeZip(files))).toEqual(Buffer.from(writeZip(files)));
     });
 
-    test('refuses a name twice, a date DOS cannot hold and the ZIP64 entry count', () => {
+    test('refuses a name twice and the ZIP64 entry count', () => {
         expect(() => writeZip([files[0], files[0]])).toThrow('zipped twice');
-        expect(() => writeZip(files, new Date(Date.UTC(1979, 11, 31)))).toThrow('1980 to 2107');
-        expect(() => writeZip(files, new Date(Number.NaN))).toThrow('1980 to 2107');
         const many = Array.from({ length: 0xffff }, (_, i) => ({ name: `${i}`, data: '', store: true }));
         expect(() => writeZip(many)).toThrow('ZIP64');
         const most = Buffer.from(writeZip(many.slice(1)));

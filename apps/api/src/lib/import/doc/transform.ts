@@ -12,11 +12,11 @@ import { docSchema, docxToPmJson } from './from-docx';
 // execution; the conversion logic stays here in import/, pure over the buffer), so
 // the reader and the ProseMirror-to-Yjs conversion never touch the event loop. The
 // reader refuses a file it can't read as a 400 or 413 itself.
-export async function importDocxToEigendocUpdate(
+export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
-): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
-    const { json, images, warnings } = await docxToPmJson(Buffer.from(data), { publicOrigin });
+): DocImportWorkerResult & { warnings: TransformWarning[] } {
+    const { json, images, warnings } = docxToPmJson(Buffer.from(data), { publicOrigin });
 
     const tempDoc = prosemirrorJSONToYDoc(docSchema, json, 'default');
     const update = Y.encodeStateAsUpdate(tempDoc);

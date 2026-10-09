@@ -5,8 +5,8 @@ import { ApiError } from './errors';
 // when the archive opens and every inflate stops at its entry's declared size, so a lying entry can't grow
 // past it. Inflating is synchronous: callers run in a transform Worker.
 
-// The bytes an archive may declare in total, for docx here and xlsx in zip-size-guard.ts. A dense sheet at the
-// importer's cell cap inflates to ~140 MB (~35 bytes per cell); an honest 35 MB upload of zeros declares ~36 GB.
+// The bytes an archive may declare in total, for docx and xlsx. A dense sheet at the importer's cell cap inflates to
+// ~140 MB (~35 bytes per cell); an honest 35 MB upload of zeros declares ~36 GB.
 export const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
 // The corpus's most is 1,714 parts, in a LibreOffice test file; its real documents stay under 100.
 export const MAX_ZIP_ENTRIES = 10_000;
@@ -48,7 +48,6 @@ export type ZipEntry = {
     compressedSize: number;
     // As declared: a read checks it.
     size: number;
-    date: Date;
 };
 
 type Located = { entry: ZipEntry; dataStart: number };
@@ -191,8 +190,7 @@ export function openZip(bytes: Uint8Array): ZipReader {
             throw new ZipError('local-name-differs');
         }
         if (entries.has(name)) throw new ZipError('duplicate-name');
-        const date = dosDate(u16(at + 12), u16(at + 14));
-        entries.set(name, { entry: { name, method, crc32: u32(at + 16), compressedSize, size, date }, dataStart });
+        entries.set(name, { entry: { name, method, crc32: u32(at + 16), compressedSize, size }, dataStart });
         spans.push([offset, dataStart + compressedSize]);
         at = next;
     }
@@ -241,33 +239,15 @@ function findExtra(
     return undefined;
 }
 
-// MS-DOS date and time, read as UTC as JSZip does.
-function dosDate(time: number, date: number): Date {
-    return new Date(
-        Date.UTC(
-            (date >> 9) + 1980,
-            ((date >> 5) & 0x0f) - 1,
-            date & 0x1f,
-            time >> 11,
-            (time >> 5) & 0x3f,
-            (time & 0x1f) * 2,
-        ),
-    );
-}
-
 export type ZipWriteEntry = { name: string; data: Uint8Array | string; store?: boolean };
 
 const utf8Encoder = new TextEncoder();
-// One input always zips to the same bytes.
-const DOS_EPOCH = new Date(Date.UTC(1980, 0, 1));
+// Every entry is dated the DOS epoch, 1 January 1980 at midnight, so one input always zips to the same bytes.
+const DOS_TIME = 0;
+const DOS_DAY = (1 << 5) | 1;
 
 // Deflates unless `store`. No ZIP64: past 4 GB or 65,534 entries it throws, as a sentinel value would need one.
-export function writeZip(files: Iterable<ZipWriteEntry>, date: Date = DOS_EPOCH): Uint8Array {
-    const year = date.getUTCFullYear();
-    // Negated, so an Invalid Date's NaN fails it too.
-    if (!(year >= 1980 && year <= 2107)) throw new Error('A zip date falls in 1980 to 2107');
-    const time = (date.getUTCHours() << 11) | (date.getUTCMinutes() << 5) | (date.getUTCSeconds() >> 1);
-    const day = ((year - 1980) << 9) | ((date.getUTCMonth() + 1) << 5) | date.getUTCDate();
+export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
     const names = new Set<string>();
     const chunks: Uint8Array[] = [];
     const central: Uint8Array[] = [];
@@ -287,8 +267,8 @@ export function writeZip(files: Iterable<ZipWriteEntry>, date: Date = DOS_EPOCH)
             [20, 2],
             [flags, 2],
             [file.store ? 0 : 8, 2],
-            [time, 2],
-            [day, 2],
+            [DOS_TIME, 2],
+            [DOS_DAY, 2],
             [Bun.hash.crc32(data), 4],
             [body.length, 4],
             [data.length, 4],

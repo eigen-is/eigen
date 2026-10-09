@@ -4,8 +4,8 @@ import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
+import { lowlight } from '../../document/lowlight';
 import type { TransformWarning } from '../../document/transform/protocol';
-import { lowlight } from '../../export/doc/render';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
@@ -20,10 +20,10 @@ export type DocxImage = {
 
 export const docSchema = getSchema(getDocExtensions({ lowlight }));
 
-export async function docxToPmJson(
+export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): Promise<{ json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] }> {
+): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
