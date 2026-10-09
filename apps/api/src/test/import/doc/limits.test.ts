@@ -7,6 +7,7 @@ import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
+import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { COLUMN_PX, MAX_LIST_DEPTH, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
@@ -387,6 +388,22 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
             cpuMs: (used.user + used.system) / 1000,
         }));
     `;
+
+    // A Worker's stack takes a spread of no more than about 500,000 arguments.
+    test('600,000 paragraphs inside one content control import in the Worker', async () => {
+        const body = `<w:sdt><w:sdtContent>${'<w:p/>'.repeat(600_000)}</w:sdtContent></w:sdt>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                data: await buildDocxWithBody(body),
+            },
+            { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
+        );
+        expect(response.ok || response.error).toBe(true);
+    }, 120_000);
 
     test('imports within 1 GB of peak RSS and 10 s of CPU', async () => {
         const path = join(dir, 'report.docx');

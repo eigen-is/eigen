@@ -95,21 +95,17 @@ function readNotes(reader: Reader): JSONContent[] {
 
 const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
 
+// flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {
-    const items: Item[] = [];
-    for (const element of elements) {
-        if (isAlternateContent(element)) {
-            items.push(...readBlocks(reader, alternative(element), scope));
-            continue;
-        }
-        if (element.ns !== W_NS) continue;
-        if (element.local === 'p') items.push(...readParagraph(reader, element, scope));
-        else if (element.local === 'tbl') items.push(...readTable(reader, element, scope));
-        else if (element.local === 'sdt')
-            items.push(...readBlocks(reader, xmlElements(wChild(element, 'sdtContent') ?? element), scope));
-        else if (WRAPPERS.has(element.local)) items.push(...readBlocks(reader, xmlElements(element), scope));
-    }
-    return items;
+    return elements.flatMap((element): Item[] => {
+        if (isAlternateContent(element)) return readBlocks(reader, alternative(element), scope);
+        if (element.ns !== W_NS) return [];
+        if (element.local === 'p') return readParagraph(reader, element, scope);
+        if (element.local === 'tbl') return readTable(reader, element, scope);
+        if (element.local === 'sdt')
+            return readBlocks(reader, xmlElements(wChild(element, 'sdtContent') ?? element), scope);
+        return WRAPPERS.has(element.local) ? readBlocks(reader, xmlElements(element), scope) : [];
+    });
 }
 
 const CHECKBOX_GLYPHS = new Map([
@@ -226,7 +222,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         numbered = true;
         items.push(para);
     }
-    items.push(...context.pending);
+    for (const item of context.pending) items.push(item);
     if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
     return items;
 }

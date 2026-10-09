@@ -63,26 +63,29 @@ export function readPackage(bytes: Uint8Array): Package {
     const document = readXml(zip, documentPath, budget);
     if (!document) throw new ApiError(400, NOT_A_DOCX);
     // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it.
-    const optional = (path: string) => {
+    const optional = <T>(read: () => T): T | undefined => {
         try {
-            return readXml(zip, path, budget);
+            return read();
         } catch (error) {
             if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
             throw error;
         }
     };
-    const part = (path: string): Part | undefined => {
-        const root = optional(path);
-        return root && { path, root, rels: readRels(zip, path, budget) };
-    };
+    const xml = (type: string) => optional(() => readXml(zip, located(type), budget));
+    const part = (type: string) =>
+        optional((): Part | undefined => {
+            const path = located(type);
+            const root = readXml(zip, path, budget);
+            return root && { path, root, rels: readRels(zip, path, budget) };
+        });
     return {
         zip,
         document: { path: documentPath, root: document, rels: documentRels },
-        styles: optional(located('styles')),
-        numbering: optional(located('numbering')),
-        theme: optional(located('theme')),
-        footnotes: part(located('footnotes')),
-        endnotes: part(located('endnotes')),
+        styles: xml('styles'),
+        numbering: xml('numbering'),
+        theme: xml('theme'),
+        footnotes: part('footnotes'),
+        endnotes: part('endnotes'),
         contentTypes,
     };
 }

@@ -109,7 +109,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const caption =
                 tail.map((para) => textOf(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
-        } else context.pending.push(...boxed);
+        } else for (const item of boxed) context.pending.push(item);
         // A picture's own link, DrawingML's click hyperlink on its frame.
         const click = docPr && xmlChild(docPr, A_NS, 'hlinkClick');
         const link = click ? linkOf(reader, click, context.scope) : undefined;
@@ -145,7 +145,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             pushFigure({ type: 'figure', attrs: { mediaName: name, alt, width } }, context);
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
-            context.pending.push(...readBlocks(reader, xmlElements(box), context.scope));
+            for (const item of readBlocks(reader, xmlElements(box), context.scope)) context.pending.push(item);
     }
 }
 
