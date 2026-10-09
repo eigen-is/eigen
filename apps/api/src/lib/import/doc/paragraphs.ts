@@ -132,16 +132,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const { styles } = reader;
     const direct = readParaProps(wChild(p, 'pPr'));
     const styleId = direct.style && styles.get(direct.style) ? direct.style : styles.defaultParagraph;
+    const style = styles.get(styleId);
     const styled = mergePara(styles.docPara, styles.para(styleId));
     let role: Role = styles.role(styleId) ?? { kind: 'paragraph' };
     // A custom heading style gives its outline level; one set on a paragraph directly, or a TOC entry's, draws as body text.
     const outline = styles.para(styleId).outlineLvl;
-    if (
-        role.kind === 'paragraph' &&
-        outline !== undefined &&
-        outline < 6 &&
-        !styles.get(styleId)?.name.startsWith('toc')
-    )
+    if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
 
     const context: RunContext = { scope, paraStyle: styleId, role, pieces: [], pending: [] };
@@ -181,7 +177,6 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const borders = props.borders ?? {};
     const leftBar = !!borders.left && !borders.top && !borders.bottom && !borders.right && role.kind !== 'code';
     // The writer's code box: its style, or the fill and four borders a Google Docs re-save keeps of it.
-    const style = styles.get(styleId);
     const boxed =
         role.kind === 'code' &&
         (style?.name === STYLE_NAMES.CodeBlock.toLowerCase() ||
