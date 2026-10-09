@@ -25,6 +25,7 @@ import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
 import {
+    inEditorMarkOrder,
     renderCodeBlockNode,
     renderFigureNode,
     renderOrderedListNode,
@@ -111,7 +112,7 @@ const extensions = getDocExtensions({ lowlight });
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
-        content: withTrailingBreaks(json),
+        content: inEditorMarkOrder(withTrailingBreaks(json)),
         extensions,
         options: {
             nodeMapping: {

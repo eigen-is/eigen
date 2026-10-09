@@ -1,5 +1,6 @@
-import type { JSONContent } from '@tiptap/core';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { getSchema, type JSONContent } from '@tiptap/core';
+import { type Node, Schema } from '@tiptap/pm/model';
+import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { lowlight } from '../../document/lowlight';
 
@@ -114,6 +115,18 @@ export function withTrailingBreaks(node: JSONContent): JSONContent {
     const last = content?.at(-1);
     if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
+}
+
+// The static renderer wraps a text's first mark innermost, where the editor draws it outermost, so a link's own color
+// sat outside its <a> and drew in the link color. Over marks ranked in reverse it nests them as the editor does.
+const { spec } = getSchema(getDocExtensions({ lowlight }));
+const reversedMarks = new Schema({
+    ...spec,
+    marks: Object.fromEntries(Object.entries(spec.marks.toObject()).reverse()),
+});
+
+export function inEditorMarkOrder(json: JSONContent): Node {
+    return reversedMarks.nodeFromJSON(json);
 }
 
 // Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.

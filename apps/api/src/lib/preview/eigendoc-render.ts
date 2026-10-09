@@ -4,7 +4,13 @@ import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
 import { lowlight } from '../document/lowlight';
 import type { TransformWarning } from '../document/transform/protocol';
-import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode, withTrailingBreaks } from '../export/doc/render';
+import {
+    inEditorMarkOrder,
+    renderCodeBlockNode,
+    renderFigureNode,
+    renderTaskItemNode,
+    withTrailingBreaks,
+} from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
@@ -35,7 +41,7 @@ export function renderEigendocPreviewBody(
     const content = truncated ? { ...json, content: blocks.slice(0, PREVIEW_MAX_BLOCKS) } : json;
 
     const html = renderToHTMLString({
-        content: withTrailingBreaks(content),
+        content: inEditorMarkOrder(withTrailingBreaks(content)),
         extensions,
         options: {
             nodeMapping: {

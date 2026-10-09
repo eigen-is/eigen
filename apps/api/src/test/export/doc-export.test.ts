@@ -337,6 +337,37 @@ describe('doc export — links', () => {
         },
     );
 
+    // The editor draws a link's own color: its <a> holds the colored span, so .eigen-prose a's color has nothing to draw.
+    test.each(['html', 'pdf-html'] as const)('%s nests a colored link as the editor does', async (format) => {
+        const href = 'https://a.example/';
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'plain', marks: [{ type: 'link', attrs: { href } }] },
+                        {
+                            type: 'text',
+                            text: 'pink',
+                            marks: [
+                                { type: 'textStyle', attrs: { color: '#ff00aa' } },
+                                { type: 'underline' },
+                                { type: 'link', attrs: { href } },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        expect([...document.querySelectorAll('article p > *')].map((node) => node.outerHTML)).toEqual([
+            `<a rel="noopener noreferrer" href="${href}">plain</a>`,
+            `<a rel="noopener noreferrer" href="${href}"><span style="color: #ff00aa"><u>pink</u></span></a>`,
+        ]);
+    });
+
     test('a root-relative href stays relative without a public origin', async () => {
         expect(await hrefsOf('html')).toEqual(['/drive/x?id=1', 'https://host/x', 'https://a.example/', '#frag']);
     });
