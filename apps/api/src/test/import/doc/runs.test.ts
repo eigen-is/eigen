@@ -233,6 +233,15 @@ describe('symbols', () => {
     });
 });
 
+describe('math', () => {
+    // G14: math reads as text, each object and run its own word, so x²+1 is no one word.
+    test('OMML objects and runs side by side are spaced', async () => {
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
+        const json = await imported(paragraph(`${run('So ')}${math}`));
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['So x2 +1']);
+    });
+});
+
 describe('sizes', () => {
     // ST_HpsMeasure: half-points, or a universal measure in Strict OOXML.
     test('a run of 8pt on an 11 pt body is small, one of 11pt is not', async () => {

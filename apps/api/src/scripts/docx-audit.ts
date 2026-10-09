@@ -867,6 +867,14 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 if (visible(context.scope)) text(xmlText(node), context, undefined);
                 continue;
             }
+            // An equation's objects and runs are words of their own, as the reader reads math as text.
+            if (node.ns === M_NS && node.local === 'oMath') {
+                for (const part of xmlElements(node)) {
+                    inline(part, context);
+                    space(context);
+                }
+                continue;
+            }
             if (node.ns !== W_NS) {
                 inline(node, context);
                 continue;

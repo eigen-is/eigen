@@ -48,7 +48,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
             continue;
         }
         if (element.ns === M_NS && (element.local === 'oMath' || element.local === 'oMathPara')) {
-            const text = descendants(element, M_NS, 't').map(xmlText).join('');
+            const text = mathText(element);
             if (text) pushText(reader, text, {}, context);
             continue;
         }
@@ -92,6 +92,15 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
                 walkInline(reader, xmlElements(element), context);
         }
     }
+}
+
+// G14: math as text until the schema holds math; each object and run of an equation is a word of its own.
+function mathText(element: XmlElement): string {
+    const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
+    return equations
+        .flatMap((equation) => xmlElements(equation).map((part) => descendants(part, M_NS, 't').map(xmlText).join('')))
+        .filter(Boolean)
+        .join(' ');
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps, context: RunContext): void {

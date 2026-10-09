@@ -56,6 +56,12 @@ const item = (numId: number, text: string, ilvl = 0) =>
     paragraph(text, `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`);
 
 describe('source side', () => {
+    test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
+        const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);
+        expect(tally.words).toEqual(['So', 'x2', '+1']);
+    });
+
     test('bold from a paragraph style counts through basedOn, and direct formatting wins over it', async () => {
         const tally = await source(
             `<w:p><w:pPr><w:pStyle w:val="Louder"/></w:pPr>${run('Loud words')}${run(' quiet', '<w:b w:val="0"/>')}</w:p>`,
