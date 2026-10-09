@@ -140,7 +140,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const task = taskOf(pieces);
     if (task?.checked && role.kind === 'paragraph') role = { kind: 'taskDone' };
     for (const [index, piece] of pieces.entries())
-        if (piece.kind === 'checkbox') pieces[index] = checkboxText(piece.checked);
+        if (piece.kind === 'checkbox')
+            pieces[index] = { kind: 'node', node: { type: 'text', text: piece.checked ? '☒' : '☐' } };
     const halves = splitAtBreaks(pieces);
 
     // A paragraph holding nothing but a page break gives no item: the break joins the open one, and the number stays free.
@@ -177,8 +178,18 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
     if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
-    if (task?.checked || (task && hasLook(pieces, 'strike', TASK_DONE_LOOK.color)))
-        stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
+    const done = `#${TASK_DONE_LOOK.color.toLowerCase()}`;
+    const shown = texts.flatMap((piece) =>
+        piece.kind === 'node' && piece.node.text?.trim() ? [piece.node.marks ?? []] : [],
+    );
+    const looksDone =
+        shown.length > 0 &&
+        shown.every(
+            (marks) =>
+                marks.some((mark) => mark.type === 'strike') &&
+                marks.some((mark) => mark.type === 'textStyle' && mark.attrs?.['color'] === done),
+        );
+    if (task?.checked || (task && looksDone)) stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
 
     // A numbered heading keeps its number as text: the schema holds no numbered heading.
     const label = list && role.kind === 'heading' ? list.label() : '';
@@ -275,29 +286,6 @@ function dropLeadingTab(pieces: Piece[], from: number): void {
         if (rest) next.node.text = rest;
         else pieces.splice(from, 1);
     }
-}
-
-function checkboxText(checked: boolean): Piece {
-    return { kind: 'node', node: { type: 'text', text: checked ? '☒' : '☐' } };
-}
-
-function textPieces(pieces: Piece[]): JSONContent[] {
-    return pieces.flatMap((piece) =>
-        piece.kind === 'node' && piece.node.type === 'text' && piece.node.text?.trim() ? [piece.node] : [],
-    );
-}
-
-function hasLook(pieces: Piece[], toggle: string, color: string): boolean {
-    const hex = `#${color.toLowerCase()}`;
-    const texts = textPieces(pieces);
-    return (
-        texts.length > 0 &&
-        texts.every(
-            (node) =>
-                node.marks?.some((mark) => mark.type === toggle) &&
-                node.marks.some((mark) => mark.type === 'textStyle' && mark.attrs?.['color'] === hex),
-        )
-    );
 }
 
 function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {
