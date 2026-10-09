@@ -273,6 +273,13 @@ describe('source side', () => {
         expect([count(ended, 'orderedLists'), count(continued, 'orderedLists')]).toEqual([2, 1]);
     });
 
+    test('the source is read with core/zip, not JSZip', () => {
+        const script = fs.readFileSync(new URL('../../scripts/docx-audit.ts', import.meta.url), 'utf8');
+        expect(script).not.toContain("from 'jszip'");
+        expect(script).not.toContain('zip-size-guard');
+        expect(script).toContain("from '../lib/core/zip'");
+    });
+
     test('a start override restarts its list once', async () => {
         const tally = await source(`${item(7, 'one')}${item(7, 'two')}${item(9, 'five')}${item(9, 'six')}`);
         expect([tally.numbers, count(tally, 'orderedLists'), count(tally, 'orderedStarts')]).toEqual([

@@ -12,11 +12,10 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import JSZip from 'jszip';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
+import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { assertDecompressedSizeWithinBounds } from '../lib/import/zip-size-guard';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -552,16 +551,15 @@ function countElements(root: XmlElement, into: Map<string, number>): void {
 // Word's view: deleted and moved-away text, field instructions and hidden runs are no text, and a field's result is.
 // Formatting a structure draws (a heading's, a quote's, a note's, a task's paragraph style) is the structure's, not a
 // mark; a link's color and underline count only when set on the run itself. Table styles are not resolved.
-export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tally & { elements: Map<string, number> }> {
-    const zip = await JSZip.loadAsync(bytes);
-    await assertDecompressedSizeWithinBounds(zip, 'Document too large');
-    const read = async (part: string | undefined) => {
-        const text = part === undefined ? undefined : await zip.file(part)?.async('string');
-        return text === undefined ? undefined : (parseXml(text) ?? undefined);
+export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements: Map<string, number> } {
+    const zip = openZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    const read = (part: string | undefined) => {
+        const xml = part === undefined ? undefined : zip.read(part);
+        return xml === undefined ? undefined : (parseXml(xml) ?? undefined);
     };
-    const relationships = async (part: string) => {
+    const relationships = (part: string) => {
         const directory = path.posix.dirname(part);
-        const rels = await read(path.posix.join(directory, '_rels', `${path.posix.basename(part)}.rels`));
+        const rels = read(path.posix.join(directory, '_rels', `${path.posix.basename(part)}.rels`));
         return (rels ? xmlChildren(rels, REL, 'Relationship') : [])
             .filter((rel) => xmlAttr(rel, '', 'TargetMode') !== 'External')
             .map((rel) => {
@@ -572,19 +570,19 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                 };
             });
     };
-    const main = (await relationships('')).find((rel) => rel.type === 'officeDocument')?.part ?? 'word/document.xml';
-    const related = await relationships(main);
+    const main = relationships('').find((rel) => rel.type === 'officeDocument')?.part ?? 'word/document.xml';
+    const related = relationships(main);
     const partOf = (type: string) => related.find((rel) => rel.type === type)?.part;
-    const document = await read(main);
+    const document = read(main);
     if (!document) throw new Error(`${main} missing`);
-    const footnotes = await read(partOf('footnotes'));
-    const endnotes = await read(partOf('endnotes'));
-    const styles = readStyles(await read(partOf('styles')), await read(partOf('theme')));
-    const numberItem = readNumbering(await read(partOf('numbering')));
+    const footnotes = read(partOf('footnotes'));
+    const endnotes = read(partOf('endnotes'));
+    const styles = readStyles(read(partOf('styles')), read(partOf('theme')));
+    const numberItem = readNumbering(read(partOf('numbering')));
 
     const elements = new Map<string, number>();
-    const stories = [document, footnotes, endnotes, await read(partOf('comments'))];
-    for (const rel of related) if (rel.type === 'header' || rel.type === 'footer') stories.push(await read(rel.part));
+    const stories = [document, footnotes, endnotes, read(partOf('comments'))];
+    for (const rel of related) if (rel.type === 'header' || rel.type === 'footer') stories.push(read(rel.part));
     for (const story of stories) if (story) countElements(story, elements);
 
     const tally = newTally();
@@ -1454,7 +1452,7 @@ const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/doc/from-docx
 const DEFAULT_TIMEOUT_MS = 60_000;
 const LOAD_TIMEOUT_MS = 60_000;
 
-type SourceTally = Awaited<ReturnType<typeof auditSource>>;
+type SourceTally = ReturnType<typeof auditSource>;
 
 type WorkerRequest =
     | { kind: 'load'; importer: string }
@@ -1680,7 +1678,7 @@ if (!Bun.isMainThread) {
                 return;
             }
             if (request.kind === 'audit') {
-                const source = await auditSource(request.bytes);
+                const source = auditSource(request.bytes);
                 postMessage({ kind: 'audited', source, ms: performance.now() - started } satisfies WorkerReply);
                 return;
             }
