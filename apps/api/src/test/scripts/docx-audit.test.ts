@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
+import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import {
     auditImported,
@@ -271,6 +272,24 @@ describe('source side', () => {
             defaults,
         );
         expect([count(ended, 'orderedLists'), count(continued, 'orderedLists')]).toEqual([2, 1]);
+    });
+
+    test('a Strict package reads as its transitional twin', () => {
+        const strict = 'http://purl.oclc.org/ooxml';
+        const rel = (id: string, type: string, target: string) =>
+            `<Relationship Id="${id}" Type="${strict}/officeDocument/relationships/${type}" Target="${target}"/>`;
+        const rels = (...list: string[]) =>
+            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.join('')}</Relationships>`;
+        const docx = writeZip(
+            Object.entries({
+                '_rels/.rels': rels(rel('rId1', 'officeDocument', 'word/document.xml')),
+                'word/_rels/document.xml.rels': rels(rel('rId1', 'styles', 'styles.xml')),
+                'word/styles.xml': `<w:styles xmlns:w="${strict}/wordprocessingml/main"><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style></w:styles>`,
+                'word/document.xml': `<w:document xmlns:w="${strict}/wordprocessingml/main"><w:body>${styled('Heading1', 'Strict title')}${paragraph('Two words')}</w:body></w:document>`,
+            }).map(([name, data]) => ({ name, data })),
+        );
+        const tally = auditSource(docx);
+        expect([tally.words, count(tally, 'heading1')]).toEqual([['Strict', 'title', 'Two', 'words'], 1]);
     });
 
     test('the source is read with core/zip, not JSZip', () => {

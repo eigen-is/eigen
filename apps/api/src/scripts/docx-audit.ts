@@ -16,6 +16,7 @@ import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements,
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
+import { toTransitional } from '../lib/import/doc/package';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -555,7 +556,9 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const zip = openZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     const read = (part: string | undefined) => {
         const xml = part === undefined ? undefined : zip.read(part);
-        return xml === undefined ? undefined : (parseXml(xml) ?? undefined);
+        const root = xml && parseXml(xml);
+        if (root) toTransitional(root);
+        return root ?? undefined;
     };
     const relationships = (part: string) => {
         const directory = path.posix.dirname(part);
