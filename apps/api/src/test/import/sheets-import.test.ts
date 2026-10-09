@@ -903,7 +903,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('3:0')?.rt).toBe(-90);
         expect(byCoord.get('4:0')?.rt).toBe('vertical');
         // Georgia is a serif font → mapped to the bundled Source Serif 4. See FONT_CATEGORY_MAP
-        // in apps/api/src/lib/import/sheets/from-xlsx.ts; only the four supported faces
+        // in packages/lib/src/constants/fonts.ts; only the four supported faces
         // ship as embedded webfonts, so unsupported families collapse to the closest one.
         expect(byCoord.get('0:1')?.ff).toBe('Source Serif 4');
     });
@@ -975,6 +975,15 @@ describe('Sheets xlsx conversion fidelity', () => {
         const sheets = await parseWorkbook(workbook);
         const ff = new Map((sheets[0].celldata ?? []).map((c) => [c.r, c.v?.ff] as const));
         expect(expected.map(([name], index) => [name, ff.get(index)])).toEqual(expected);
+    });
+
+    test('convert reads the shared font map', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        ws.getCell('A1').value = 'serif';
+        ws.getCell('A1').font = { name: 'Lora' };
+        const sheets = await parseWorkbook(workbook);
+        expect(sheets[0].celldata?.[0]?.v?.ff).toBe('Source Serif 4');
     });
 
     test('convert handles multi-sheet workbooks', async () => {

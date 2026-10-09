@@ -27,7 +27,16 @@ describe('paste maps foreign fonts onto the bundled ones', () => {
         expect(pastedFont(`'${font}'`)).toBe(bundled);
     });
 
-    test.each(['Arial', 'Calibri', 'Inter', 'Wingdings', "'Times New Roman', serif"])(
+    test.each([
+        ['Garamond', 'Source Serif 4'],
+        ['Lora', 'Source Serif 4'],
+        ['Menlo', 'JetBrains Mono'],
+        ['Source Serif 4', 'Source Serif 4'],
+    ])('%s pastes as %s through the shared font map', (font, bundled) => {
+        expect(pastedFont(`'${font}'`)).toBe(bundled);
+    });
+
+    test.each(['Arial', 'Calibri', 'Roboto', 'Inter', 'Wingdings', "'Times New Roman', serif"])(
         '%s pastes in the document font',
         (font) => {
             expect(pastedFont(font)).toBe('');

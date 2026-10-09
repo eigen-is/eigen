@@ -1,21 +1,13 @@
-import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { bundledFont, EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 
 // Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, images and tables no wider than the column.
 export function cleanPastedHTML(html: string, maxWidth: number): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    const fontMap: Record<string, string> = {
-        'Times New Roman': getFontFamily('Source Serif 4'),
-        Georgia: getFontFamily('Source Serif 4'),
-        Palatino: getFontFamily('Source Serif 4'),
-        'Palatino Linotype': getFontFamily('Source Serif 4'),
-        'Courier New': getFontFamily('JetBrains Mono'),
-        Consolas: getFontFamily('JetBrains Mono'),
-        'Comic Sans MS': getFontFamily('Excalifont'),
-    };
     doc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
-        const ff = el.style.fontFamily.replace(/['"]/g, '').trim();
-        el.style.fontFamily = fontMap[ff] ?? '';
+        const font = bundledFont(el.style.fontFamily.replace(/['"]/g, ''));
+        // The document font needs no mark.
+        el.style.fontFamily = font && font !== EIGEN_FONTS[0].name ? getFontFamily(font) : '';
     });
 
     doc.querySelectorAll<HTMLElement>('img, table').forEach((el) => {

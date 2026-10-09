@@ -42,3 +42,60 @@ export function getFontName(value: string): string {
     const match = first ? EIGEN_FONTS.find((f) => f.name === first) : undefined;
     return match ? match.name : value;
 }
+
+// Font names, trimmed and lowercase, onto the category whose bundled font stands in for them: only the
+// bundled faces are embedded in an export. Read by xlsx and docx import and by the docs paste.
+export const FONT_CATEGORY_MAP: ReadonlyMap<string, EigenFont['category']> = new Map<string, EigenFont['category']>([
+    ...EIGEN_FONTS.map((font): [string, EigenFont['category']] => [font.name.toLowerCase(), font.category]),
+    ['calibri', 'sans-serif'],
+    ['calibri light', 'sans-serif'],
+    ['aptos', 'sans-serif'],
+    ['arial', 'sans-serif'],
+    ['arimo', 'sans-serif'],
+    ['helvetica', 'sans-serif'],
+    ['helvetica neue', 'sans-serif'],
+    ['lato', 'sans-serif'],
+    ['liberation sans', 'sans-serif'],
+    ['montserrat', 'sans-serif'],
+    ['noto sans', 'sans-serif'],
+    ['open sans', 'sans-serif'],
+    ['oswald', 'sans-serif'],
+    ['quicksand', 'sans-serif'],
+    ['roboto', 'sans-serif'],
+    ['segoe ui', 'sans-serif'],
+    ['tahoma', 'sans-serif'],
+    ['trebuchet ms', 'sans-serif'],
+    ['verdana', 'sans-serif'],
+    ['source serif pro', 'serif'],
+    ['book antiqua', 'serif'],
+    ['cambria', 'serif'],
+    ['garamond', 'serif'],
+    ['georgia', 'serif'],
+    ['liberation serif', 'serif'],
+    ['lora', 'serif'],
+    ['merriweather', 'serif'],
+    ['noto serif', 'serif'],
+    ['palatino', 'serif'],
+    ['palatino linotype', 'serif'],
+    ['times', 'serif'],
+    ['times new roman', 'serif'],
+    ['tinos', 'serif'],
+    ['consolas', 'monospace'],
+    ['courier', 'monospace'],
+    ['courier new', 'monospace'],
+    ['cousine', 'monospace'],
+    ['fira code', 'monospace'],
+    ['liberation mono', 'monospace'],
+    ['lucida console', 'monospace'],
+    ['menlo', 'monospace'],
+    ['monaco', 'monospace'],
+    ['roboto mono', 'monospace'],
+    ['source code pro', 'monospace'],
+    ['comic sans', 'hand-drawn'],
+    ['comic sans ms', 'hand-drawn'],
+]);
+
+export function bundledFont(name: string): string | undefined {
+    const category = FONT_CATEGORY_MAP.get(name.trim().toLowerCase());
+    return category && EIGEN_FONTS.find((font) => font.category === category)?.name;
+}
