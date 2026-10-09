@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'bun:test';
+import { createDocument, getSchema } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
 const { getFontName } = await import('@workspace/lib/constants/fonts');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
+const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+
+const schema = getSchema(getDocExtensions());
 
 // The name the textStyle mark's parseHTML reads from the pasted stack.
 function pastedFont(fontFamily: string): string {
@@ -42,4 +46,17 @@ describe('paste maps foreign fonts onto the bundled ones', () => {
             expect(pastedFont(font)).toBe('');
         },
     );
+});
+
+// Word's clipboard spells caps as CSS on the run's span, beside the font the cleaner rewrites.
+describe('paste keeps caps', () => {
+    test.each([
+        ["font-family:'Times New Roman';text-transform:uppercase", 'all'],
+        ['font-family:Calibri;font-variant:small-caps', 'small'],
+        ['font-variant:normal;text-transform:none', null],
+    ])('%s pastes as caps %s', (style, caps) => {
+        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600);
+        const marks = createDocument(html, schema).firstChild?.firstChild?.marks ?? [];
+        expect(marks.find((mark) => mark.type.name === 'textStyle')?.attrs['caps'] ?? null).toBe(caps);
+    });
 });
