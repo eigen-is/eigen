@@ -1287,7 +1287,7 @@ describe('docx writer — code blocks', () => {
     async function codeLines(json: JSONContent): Promise<(string | undefined)[][][]> {
         const paragraphs = xmlChildren(await bodyOf(json), W, 'p');
         for (const paragraph of paragraphs) {
-            expect(w(child(child(paragraph, 'pPr'), 'pStyle'), 'val')).toBe('CodeBlock');
+            expect(w(child(child(paragraph, 'pPr'), 'pStyle'), 'val')).toStartWith('CodeBlock-');
         }
         return paragraphs.map((paragraph) =>
             xmlChildren(paragraph, W, 'r').map((r) => {
@@ -1335,15 +1335,38 @@ describe('docx writer — code blocks', () => {
         const body = await bodyOf(doc(code('a\r\nb\u000Bc\n\n\td', 'plaintext')));
         const paragraphs = xmlChildren(body, W, 'p');
         expect(paragraphs.map(texts)).toEqual(['a', 'b', 'c', '', 'd']);
-        expect(xmlOf(paragraphs[3] ?? body)).toBe('<w:p><w:pPr><w:pStyle w:val="CodeBlock"/></w:pPr></w:p>');
+        expect(xmlOf(paragraphs[3] ?? body)).toBe('<w:p><w:pPr><w:pStyle w:val="CodeBlock-plaintext"/></w:pPr></w:p>');
         expect(shape(child(paragraphs[4], 'r') ?? body)).toEqual(['tab', 't']);
     });
 
-    test('the language is not written, and one lowlight lacks is highlighted automatically, as in the HTML', async () => {
+    test('a language lowlight knows rides on a hidden style of its own, based on Code Block, on every line', async () => {
+        const json = doc(code('a\nb', 'javascript'), p(text('x')), code('c', 'javascript'), code('d', 'js'));
+        expect(descendants(await bodyOf(json), W, 'pStyle').map((pStyle) => w(pStyle, 'val'))).toEqual([
+            'CodeBlock-javascript',
+            'CodeBlock-javascript',
+            'CodeBlock-javascript',
+            'Spacer',
+            'CodeBlock-js',
+        ]);
+        const all = await styles(json);
+        expect(xmlOf(style(all, 'CodeBlock-javascript'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="CodeBlock-javascript"><w:name w:val="Code Block (javascript)"/><w:basedOn w:val="CodeBlock"/><w:semiHidden/></w:style>',
+        );
+        expect([...all.keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([
+            'CodeBlock-javascript',
+            'CodeBlock-js',
+        ]);
+    });
+
+    test('no language, or one lowlight lacks, is highlighted automatically, as in the HTML, and writes no style', async () => {
         const auto = await paragraphsOf(doc(code('const a = 1;')));
         expect(await paragraphsOf(doc(code('const a = 1;', 'no-such-language')))).toEqual(auto);
+        expect(await paragraphsOf(doc(code('const a = 1;', '"/><w:b/>')))).toEqual(auto);
+        expect(auto.join('')).toContain('<w:pStyle w:val="CodeBlock"/>');
         expect(auto.join('')).toContain('w:color');
-        expect(auto.join('')).not.toContain('no-such-language');
+        const json = doc(code('a'), p(text('x')), code('b', 'no-such-language'), p(text('y')), code('c', '"/><w:b/>'));
+        expect([...(await styles(json)).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
+        expect([...(await styles()).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
     });
 
     test("the Code Block style is the editor's dark box: borders as its padding, shading, mono at 286 auto", async () => {
@@ -1366,7 +1389,7 @@ describe('docx writer — code blocks', () => {
     test("a code block in a list item moves its box to the item's text", async () => {
         const paragraphs = await paragraphsOf(doc(ul(li(p(text('x')), code('a', 'plaintext')), li(p(text('y'))))));
         expect(paragraphs[1]).toBe(
-            '<w:p><w:pPr><w:pStyle w:val="CodeBlock"/><w:ind w:left="620" w:right="290"/></w:pPr><w:r><w:t xml:space="preserve">a</w:t></w:r></w:p>',
+            '<w:p><w:pPr><w:pStyle w:val="CodeBlock-plaintext"/><w:ind w:left="620" w:right="290"/></w:pPr><w:r><w:t xml:space="preserve">a</w:t></w:r></w:p>',
         );
     });
 });
@@ -1398,7 +1421,7 @@ describe('docx writer — quotes', () => {
     // The editor's margins collapse to the larger, 0.75em below a code block, 1em below a quote, none above one; the
     // Spacer's 1 pt line is part of the gap. Word runs a quote's bar through its after, so the gap is the Spacer's.
     const codeLine = (value: string, spacing: string) =>
-        `<w:p><w:pPr><w:pStyle w:val="CodeBlock"/>${spacing}</w:pPr>${run(value)}</w:p>`;
+        `<w:p><w:pPr><w:pStyle w:val="CodeBlock-plaintext"/>${spacing}</w:pPr>${run(value)}</w:p>`;
     const spacer = (before: number) =>
         `<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="${before}"/></w:pPr></w:p>`;
 
@@ -2380,6 +2403,6 @@ describe('docx writer — bounds', () => {
     test('a block of more blocks than a call takes arguments exports', async () => {
         const lines = 'x\n'.repeat(1_100_000);
         const document = entryText(await unzip(doc(code(lines, 'plaintext'))), 'word/document.xml') ?? '';
-        expect(document.split('w:val="CodeBlock"').length - 1).toBe(1_100_001);
+        expect(document.split('w:val="CodeBlock-plaintext"').length - 1).toBe(1_100_001);
     });
 });

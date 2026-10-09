@@ -20,6 +20,7 @@ import {
     CODE_BLOCK_LOOK,
     CODE_LOOK,
     CONTENT_TYPES_NS,
+    codeBlockStyle,
     cssPt,
     EMU_PER_PX,
     EMU_PER_TWIP,
@@ -44,7 +45,7 @@ import {
     WP_NS,
 } from './ooxml';
 import { proseValue, proseValueIfSet } from './prose-css';
-import { absoluteHref, type HastNode, highlightCode } from './render';
+import { absoluteHref, type HastNode, highlightCode, lowlight } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
 export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
@@ -67,6 +68,7 @@ export async function eigendocToDocx(
         lists: [],
         bullets: new Map(),
         checkboxes: false,
+        languages: new Set(),
         media: new Map(media.map((item) => [item.name, item])),
         images: new Map(),
         files: [],
@@ -91,7 +93,7 @@ export async function eigendocToDocx(
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
-        ['word/styles.xml', stylesXml(), `${WML}.styles+xml`],
+        ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
         ['word/numbering.xml', numberingXml(pkg.lists), `${WML}.numbering+xml`],
         ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
         ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
@@ -161,6 +163,7 @@ type Package = {
     lists: List[];
     bullets: Map<number, number>;
     checkboxes: boolean;
+    languages: Set<string>;
     media: Map<string, DocxMedia>;
     images: Map<string, Image>;
     files: [path: string, data: ArrayBuffer][];
@@ -323,6 +326,8 @@ type NumberingRef = { numId: number; ilvl: number };
 
 type ParagraphProps = {
     style?: StyleId;
+    // A code block's language, written as its own style on top of style; every look still reads style.
+    language?: string;
     keepNext?: true;
     keepLines?: true;
     numPr?: NumberingRef;
@@ -360,9 +365,22 @@ type Inset = { top: number; bottom: number };
 type Block = Paragraph | { table: string; after?: number; float?: true };
 
 function pPrXml(props: ParagraphProps): string {
-    const { style, keepNext, keepLines, numPr, pBdr, shading, spacing, ind, contextualSpacing, jc, outlineLvl } = props;
+    const {
+        style,
+        language,
+        keepNext,
+        keepLines,
+        numPr,
+        pBdr,
+        shading,
+        spacing,
+        ind,
+        contextualSpacing,
+        jc,
+        outlineLvl,
+    } = props;
     return [
-        style && `<w:pStyle w:val="${style}"/>`,
+        style && `<w:pStyle w:val="${language === undefined ? style : codeBlockStyle(language).id}"/>`,
         keepNext && '<w:keepNext/>',
         keepLines && '<w:keepLines/>',
         numPr && `<w:numPr><w:ilvl w:val="${numPr.ilvl}"/><w:numId w:val="${numPr.numId}"/></w:numPr>`,
@@ -463,13 +481,16 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     [
         'codeBlock',
         (node, context) => {
-            const language = node.attrs?.['language'];
-            const tree = highlightCode(typeof language === 'string' ? language : '', textOf(node));
+            const attr = node.attrs?.['language'];
+            // Only a name lowlight knows is written: the style id and name carry it verbatim.
+            const language = typeof attr === 'string' && lowlight.registered(attr) ? attr : undefined;
+            if (language !== undefined) context.pkg.languages.add(language);
+            const tree = highlightCode(language ?? '', textOf(node));
             // The mark of an empty or comment-only line draws in the style's Regular.
             useFace(context.pkg, {}, 'CodeBlock');
             const { indent } = CODE_BLOCK_LOOK;
             const ind = context.indent === 0 ? undefined : { left: context.indent + indent, right: indent };
-            return codeLines(tree, context.pkg).map((runs) => ({ props: { style: 'CodeBlock', ind }, runs }));
+            return codeLines(tree, context.pkg).map((runs) => ({ props: { style: 'CodeBlock', language, ind }, runs }));
         },
     ],
     ['bulletList', (node, context) => listOf(node, context, 'ul', { format: 'bullet', start: 1 })],
@@ -1353,6 +1374,7 @@ type StyleDef = {
     next?: StyleId;
     uiPriority?: number;
     semiHidden?: true;
+    unhideWhenUsed?: true;
     qFormat?: true;
     pPr?: ParagraphProps;
     rPr?: RunProps;
@@ -1360,13 +1382,28 @@ type StyleDef = {
 };
 
 function styleXml(style: StyleDef): string {
-    const { type, id, name, isDefault, basedOn, next, uiPriority, semiHidden, qFormat, pPr, rPr, tblPr } = style;
+    const {
+        type,
+        id,
+        name,
+        isDefault,
+        basedOn,
+        next,
+        uiPriority,
+        semiHidden,
+        unhideWhenUsed,
+        qFormat,
+        pPr,
+        rPr,
+        tblPr,
+    } = style;
     return [
         `<w:style w:type="${type}"${isDefault ? ' w:default="1"' : ''} w:styleId="${id}"><w:name w:val="${name}"/>`,
         basedOn && `<w:basedOn w:val="${basedOn}"/>`,
         next && `<w:next w:val="${next}"/>`,
         uiPriority !== undefined && `<w:uiPriority w:val="${uiPriority}"/>`,
-        semiHidden && '<w:semiHidden/><w:unhideWhenUsed/>',
+        semiHidden && '<w:semiHidden/>',
+        unhideWhenUsed && '<w:unhideWhenUsed/>',
         qFormat && '<w:qFormat/>',
         pPr && `<w:pPr>${pPrXml(pPr)}</w:pPr>`,
         rPr && `<w:rPr>${rPrXml(rPr)}</w:rPr>`,
@@ -1386,9 +1423,18 @@ const HAIRLINE: Pick<StyleDef, 'pPr' | 'rPr'> = {
 };
 
 // No w:lang, so Word checks spelling in the reader's own language.
-function stylesXml(): string {
+function stylesXml(languages: Set<string>): string {
     const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml({ font: BODY.font, color: BODY.color, size: halfPoints(BODY.sizePt) })}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
-    return `<w:styles xmlns:w="${W_NS}">${defaults}${[...STYLES.values()].map(styleXml).join('')}</w:styles>`;
+    // Without unhideWhenUsed a language's style stays out of the gallery once used.
+    const variants = [...languages].map(
+        (language): StyleDef => ({
+            type: 'paragraph',
+            ...codeBlockStyle(language),
+            basedOn: 'CodeBlock',
+            semiHidden: true,
+        }),
+    );
+    return `<w:styles xmlns:w="${W_NS}">${defaults}${[...STYLES.values(), ...variants].map(styleXml).join('')}</w:styles>`;
 }
 
 function styleDefinitions(): StyleDef[] {
@@ -1437,6 +1483,7 @@ function styleDefinitions(): StyleDef[] {
             isDefault: true,
             uiPriority: 1,
             semiHidden: true,
+            unhideWhenUsed: true,
         },
         {
             type: 'table',
@@ -1445,6 +1492,7 @@ function styleDefinitions(): StyleDef[] {
             isDefault: true,
             uiPriority: 99,
             semiHidden: true,
+            unhideWhenUsed: true,
             tblPr: '<w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr>',
         },
         {
@@ -1454,6 +1502,7 @@ function styleDefinitions(): StyleDef[] {
             isDefault: true,
             uiPriority: 99,
             semiHidden: true,
+            unhideWhenUsed: true,
         },
         ...headings,
         {

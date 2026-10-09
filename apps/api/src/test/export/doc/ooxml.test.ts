@@ -56,6 +56,11 @@ describe('ooxml — the writer names its styles by the vocabulary', () => {
     test('every style the writer defines carries its vocabulary name', () => {
         const names = new Map<string, string>(Object.entries(STYLE_NAMES));
         for (const level of [1, 2, 3, 4, 5, 6]) names.set(`Heading${level}`, headingStyleName(level));
+        // The languages of the doc's code blocks.
+        for (const language of ['javascript', 'plaintext']) {
+            const { id, name } = codeBlockStyle(language);
+            names.set(id, name);
+        }
         const written = [...styles].map(([id, style]) => [id, w(xmlChild(style, W_NS, 'name'), 'val')]);
         expect(written).toEqual(written.map(([id]) => [id, id === undefined ? undefined : names.get(id)]));
         expect(new Set(written.map(([id]) => id))).toEqual(new Set(names.keys()));
