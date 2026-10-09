@@ -102,6 +102,10 @@ const ordered = (...items: JSONContent[][]) => ({
     attrs: { start: 1, type: null },
     content: items.map((content) => ({ type: 'listItem', content })),
 });
+const bullets = (...items: JSONContent[][]) => ({
+    type: 'bulletList',
+    content: items.map((content) => ({ type: 'listItem', content })),
+});
 
 // The source as the schema stores it, and what an import of its docx gives back.
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
@@ -127,6 +131,10 @@ describe('a block inside a list item or a quote', () => {
         ['code in a quote in an item', [ordered([p('One'), quote(p('Said'), code('said()'))], [p('Two')])]],
         ['code opening a quote in an item', [ordered([p('One'), quote(code('said()'), p('Done'))], [p('Two')])]],
         ['code in an item in a quote', [quote(p('Said'), ordered([p('One'), code('one()')]), p('Done'))]],
+        [
+            'code at the margin after a list, then a quote two deep',
+            [bullets([p('One')]), code('x()'), quote(quote(p('Deep')))],
+        ],
         [
             'code and a rule at the margin after a list, code in its last item',
             [ordered([p('One'), code('in()')]), code('after()'), ordered([p('Two')]), rule],
