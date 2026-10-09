@@ -8,7 +8,7 @@ import { MAX_LEVEL, Numbering } from './numbering';
 import { alternative, int, isAlternateContent, type Package, type Part, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import { mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
-import { readTable } from './tables';
+import { isFill, readTable } from './tables';
 
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
 // text boxes and notes; assemble.ts turns the items into blocks.
@@ -32,8 +32,16 @@ export type Reader = {
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it, the table style and the cell's width in px.
-export type Scope = { part: Part; inNote: boolean; tables: number; tableRun?: RunProps; room?: number };
+// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px
+// and whether the text sits on a fill the schema drops.
+export type Scope = {
+    part: Part;
+    inNote: boolean;
+    tables: number;
+    tableRun?: RunProps;
+    room?: number;
+    onFill?: boolean;
+};
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
     const theme = readTheme(pkg.theme);
@@ -140,7 +148,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
 
-    const context: RunContext = { scope, paraStyle: styleId, role, pieces: [], pending: [] };
+    // No fill of its own is transparent: a cell's shows through.
+    const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
+    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [] };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),

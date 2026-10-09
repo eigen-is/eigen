@@ -32,13 +32,20 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         ? (isOn(w(look, 'firstRow')) ?? (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0)
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
+    const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableStyle?.fill;
     const cellItems = (cell: XmlElement, rowIndex: number, colwidth: number[] | null): Item[] => {
-        const first = rowIndex === 0 && firstRowOn && tableStyle?.firstRowRun;
+        const firstRow = rowIndex === 0 && firstRowOn;
+        const first = firstRow && tableStyle?.firstRowRun;
+        const fill =
+            shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')) ??
+            (firstRow ? tableStyle?.firstRowFill : undefined) ??
+            tableFill;
         const cellScope: Scope = {
             ...scope,
             tables: scope.tables + 1,
             tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
             room: colwidth ? colwidth.reduce((sum, width) => sum + width, 0) : scope.room,
+            onFill: scope.onFill || isFill(fill),
         };
         return readBlocks(reader, cellContent(cell), cellScope);
     };
@@ -108,9 +115,12 @@ function cellContent(cell: XmlElement): XmlElement[] {
     return xmlElements(cell).filter((child) => !is(child, W_NS, 'tcPr'));
 }
 
-function cellFill(cell: XmlElement): boolean {
-    const fill = shadingOf(wChild(wChild(cell, 'tcPr'), 'shd'));
+export function isFill(fill: string | undefined): boolean {
     return !!fill && fill !== 'FFFFFF';
+}
+
+function cellFill(cell: XmlElement): boolean {
+    return isFill(shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')));
 }
 
 // A shaded first row over unshaded rows is a header row, as Google Docs and many templates draw one.
@@ -123,6 +133,16 @@ function isShadedHeader(rows: Row[]): boolean {
         first.cells.every(cellFill) &&
         rest.every((row) => !row.cells.some(cellFill))
     );
+}
+
+// P3: contrast below 1.5 against white, by WCAG's relative luminance. On a fill the schema drops, Word draws such text
+// legibly; on Eigen's paper it would vanish, so it takes the body color.
+export function isLight(hex: string): boolean {
+    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
+        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
 }
 
 // The writer's wrapped figure: a floating one-cell table holding the image and its caption.

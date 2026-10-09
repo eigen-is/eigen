@@ -246,6 +246,9 @@ type Style = {
     pPr: ParaProps;
     rPr: RunProps;
     firstRowRun?: RunProps;
+    // A table style's cell fill, whole and in its first row.
+    fill?: string;
+    firstRowFill?: string;
 };
 
 // What a paragraph style means in eigendoc. Its look is the node's, so the props it absorbs are no marks.
@@ -333,6 +336,10 @@ export class Styles {
                 pPr: readParaProps(wChild(element, 'pPr')),
                 rPr: readRunProps(wChild(element, 'rPr'), theme),
                 firstRowRun: firstRow && readRunProps(wChild(firstRow, 'rPr'), theme),
+                fill:
+                    shadingOf(wChild(wChild(element, 'tcPr'), 'shd')) ??
+                    shadingOf(wChild(wChild(element, 'tblPr'), 'shd')),
+                firstRowFill: shadingOf(wChild(wChild(firstRow, 'tcPr'), 'shd')),
             });
             if (type === 'paragraph' && isOn(w(element, 'default'))) defaultParagraph ??= id;
         }

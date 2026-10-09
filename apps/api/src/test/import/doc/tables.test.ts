@@ -116,6 +116,69 @@ describe('column widths', () => {
     });
 });
 
+// P3: Word draws light text on a fill the schema drops; on Eigen's paper it would vanish.
+describe('light text on a fill', () => {
+    const colored = (text: string, color: string, pPr = '', rPr = '') =>
+        paragraph(`<w:r><w:rPr><w:color w:val="${color}"/>${rPr}</w:rPr><w:t>${text}</w:t></w:r>`, pPr);
+    const colorsOf = async (body: string, styles = '') =>
+        marksOfType((await importDocxBody(body, { styles })).json, 'textStyle').map((mark) => [
+            mark.text,
+            mark.attrs['color'],
+        ]);
+    const filledCell = (inner: string, fill: string) =>
+        `<w:tc><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr>${inner}</w:tc>`;
+
+    test('white and light grey text in a teal cell lose their color; grey, dark blue and highlighted keep it', async () => {
+        const inner = [
+            colored('white', 'FFFFFF'),
+            colored('light', 'D9D9D9'),
+            colored('grey', '808080'),
+            colored('blue', '1F4E79'),
+            colored('marked', 'FFFFFF', '', '<w:highlight w:val="darkBlue"/>'),
+        ].join('');
+        expect(await colorsOf(table([row([filledCell(inner, '008080'), cell('b')])]))).toEqual([
+            ['grey', '#808080'],
+            ['blue', '#1f4e79'],
+            ['marked', '#ffffff'],
+        ]);
+    });
+
+    test("white text in a nested table's plain cell or a plain paragraph lets the teal cell around it show", async () => {
+        const nested = table([row([`<w:tc>${colored('nested', 'FFFFFF')}</w:tc>`, cell('b')])]);
+        const plain = colored('plain', 'FFFFFF', '<w:shd w:val="clear" w:fill="auto"/>');
+        expect(await colorsOf(table([row([filledCell(`${nested}${plain}`, '008080'), cell('b')])]))).toEqual([]);
+    });
+
+    test('white text on no fill keeps its color', async () => {
+        expect(await colorsOf(colored('white', 'FFFFFF'))).toEqual([['white', '#ffffff']]);
+    });
+
+    test('white text in a shaded paragraph loses its color', async () => {
+        expect(await colorsOf(colored('white', 'FFFFFF', '<w:shd w:val="clear" w:fill="1F4E79"/>'))).toEqual([]);
+    });
+
+    test("white text on a table style's first row fill loses its color, in the body rows it keeps it", async () => {
+        const styles =
+            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="4472C4"/></w:tcPr></w:tblStylePr></w:style>';
+        const body = table(
+            [
+                row([`<w:tc>${colored('head', 'FFFFFF')}</w:tc>`, cell('b')]),
+                row([`<w:tc>${colored('body', 'FFFFFF')}</w:tc>`, cell('d')]),
+            ],
+            '<w:tblStyle w:val="Dark"/><w:tblLook w:firstRow="1"/>',
+        );
+        expect(await colorsOf(body, styles)).toEqual([['body', '#ffffff']]);
+    });
+
+    test("a cell without a fill of its own in a table filled whole loses it; a cell's explicit none keeps it", async () => {
+        const body = table(
+            [row([`<w:tc>${colored('filled', 'FFFFFF')}</w:tc>`, filledCell(colored('clear', 'FFFFFF'), 'auto')])],
+            '<w:shd w:val="clear" w:fill="000000"/>',
+        );
+        expect(await colorsOf(body)).toEqual([['clear', '#ffffff']]);
+    });
+});
+
 describe('merges', () => {
     test('gridSpan and vMerge are colspan and rowspan', async () => {
         const body = table([
