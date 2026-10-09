@@ -195,7 +195,7 @@ describe('Eigendoc docx import/convert', () => {
             `folder/${rootId}/create/doc`,
             { fileName: 'bomb-import-target' },
         );
-        const bomb = await buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
+        const bomb = buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
         const res = await importRequest(docPath.id, toTransferableBuffer(bomb));
         expect(res.status).toBe(413);
         expect(await res.text()).toBe('Document too large');
@@ -315,7 +315,7 @@ describe('docx import resource guards', () => {
         // fixture forges a tiny entry's declared size just over the 200 MB cap. The guard
         // runs before mammoth inflates anything (that OOM is uncatchable, so a post-parse
         // check would never fire).
-        const bomb = await buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
+        const bomb = buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
 
         let error: unknown;
         try {

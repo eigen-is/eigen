@@ -12,3 +12,4 @@ export * from './path-utils';
 export * from './transfer';
 export * from './window-limiter';
 export * from './xml';
+export * from './zip';
