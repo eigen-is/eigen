@@ -263,11 +263,12 @@ export function is(element: XmlElement, ns: string, local: string): boolean {
     return element.ns === ns && element.local === local;
 }
 
-// ST_OnOff attribute value: 1, true, on / 0, false, off; anything else is no answer.
+// ST_OnOff attribute value: 1, true, on / 0, false, off, whitespace around it allowed; anything else is no answer.
 export function isOn(value: string | undefined): boolean | undefined {
-    if (value === undefined) return undefined;
-    if (['1', 'true', 'on'].includes(value)) return true;
-    return ['0', 'false', 'off'].includes(value) ? false : undefined;
+    const trimmed = value?.trim();
+    if (trimmed === undefined) return undefined;
+    if (['1', 'true', 'on'].includes(trimmed)) return true;
+    return ['0', 'false', 'off'].includes(trimmed) ? false : undefined;
 }
 
 // A bare element is on.

@@ -63,13 +63,27 @@ describe('table style first row', () => {
     const styled = (look: string) =>
         table([row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])], `<w:tblStyle w:val="Grid"/>${look}`);
 
-    test.each(['1', 'true', 'on'])('w:firstRow="%s" in tblLook applies the style\'s first row look', async (value) => {
-        const { json } = await importDocxBody(styled(`<w:tblLook w:firstRow="${value}"/>`), { styles });
-        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
-    });
+    // ST_OnOff allows whitespace around the value.
+    test.each(['1', 'true', 'on', ' true '])(
+        'w:firstRow="%s" in tblLook applies the style\'s first row look',
+        async (value) => {
+            const { json } = await importDocxBody(styled(`<w:tblLook w:firstRow="${value}"/>`), { styles });
+            expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+        },
+    );
 
     test('w:firstRow="false" in tblLook does not', async () => {
         const { json } = await importDocxBody(styled('<w:tblLook w:firstRow="false"/>'), { styles });
+        expect(marksOfType(json, 'bold')).toEqual([]);
+    });
+
+    test("w:val's first row bit applies it without w:firstRow", async () => {
+        const { json } = await importDocxBody(styled('<w:tblLook w:val="0420"/>'), { styles });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+    });
+
+    test('w:firstRow="0" wins over the first row bit of w:val\'s mask', async () => {
+        const { json } = await importDocxBody(styled('<w:tblLook w:val="0420" w:firstRow="0"/>'), { styles });
         expect(marksOfType(json, 'bold')).toEqual([]);
     });
 });

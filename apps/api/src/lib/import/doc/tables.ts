@@ -28,7 +28,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
     const firstRowOn = look
-        ? isOn(w(look, 'firstRow')) || (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0
+        ? (isOn(w(look, 'firstRow')) ?? (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0)
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
     const cellItems = (cell: XmlElement, rowIndex: number): Item[] => {
