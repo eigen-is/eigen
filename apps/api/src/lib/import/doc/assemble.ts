@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
+import { QUOTE_LOOK } from '../../export/doc/ooxml';
 import { type ListRef, ORDERED_TYPES } from './numbering';
 import type { Role } from './styles';
 
@@ -16,6 +17,8 @@ export type Para = {
     continued: boolean;
     indLeft: number;
     quote: number;
+    // A quote inside the list item above it.
+    inItem?: boolean;
     empty: boolean;
     small: boolean;
     hairline: boolean;
@@ -27,7 +30,7 @@ export type Item =
     | { kind: 'boundary' }
     | { kind: 'hr' }
     | { kind: 'table'; node: JSONContent; indent: number }
-    | { kind: 'block'; node: JSONContent }
+    | { kind: 'block'; node: JSONContent; inItem?: boolean }
     | { kind: 'float'; figure: JSONContent };
 
 const PAGE = pagePx(DEFAULT_PAGE_SETUP);
@@ -51,6 +54,7 @@ export function isWhitespace(node: JSONContent): boolean {
 
 export function build(raw: Item[]): JSONContent[] {
     const items = attachFloatsAndCaptions(raw);
+    quotesInItems(items);
     for (const item of items) if (item.kind === 'para') item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
     assignBreakDepths(items);
     return buildLevel(items, 0);
@@ -148,6 +152,20 @@ function paraOf(inlines: JSONContent[]): Para {
     };
 }
 
+// The writer indents a quote in a list item from the item's text, so its depth counts from there and it stays in the item.
+function quotesInItems(items: Item[]): void {
+    let open: Para | undefined;
+    for (const item of items) {
+        if (item.kind === 'table' || item.kind === 'hr') open = undefined;
+        if (item.kind !== 'para') continue;
+        if (item.list || item.task) open = item;
+        else if (open && item.quote > 0 && item.indLeft > open.indLeft + INDENT_TOLERANCE) {
+            item.quote = Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
+            item.inItem = true;
+        } else if (!item.continued && !item.empty) open = undefined;
+    }
+}
+
 // A quote's list items carry the list's indent too, so they sit at the depth of the quote around them.
 function assignBreakDepths(items: Item[]): void {
     let plain = 0;
@@ -184,7 +202,13 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
     const flushQuote = () => {
         if (quoted.length === 0) return;
         const content = buildLevel(quoted, depth + 1);
-        if (content.length > 0) out.push({ kind: 'block', node: { type: 'blockquote', content } });
+        const [first] = quoted;
+        if (content.length > 0)
+            out.push({
+                kind: 'block',
+                node: { type: 'blockquote', content },
+                inItem: first?.kind === 'para' && first.inItem,
+            });
         quoted = [];
     };
     const itemDepths = depths(items);
@@ -195,6 +219,8 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
             continue;
         }
         if (itemDepth > depth) {
+            const [first] = quoted;
+            if (item.kind === 'para' && first?.kind === 'para' && !!first.inItem !== !!item.inItem) flushQuote();
             quoted.push(item);
             continue;
         }
@@ -297,6 +323,11 @@ function buildFlow(items: Item[]): JSONContent[] {
             continue;
         }
         if (item.kind === 'block') {
+            const host = item.inItem ? stack.at(-1) : undefined;
+            if (host) {
+                host.item.content?.push(item.node);
+                continue;
+            }
             closeLists();
             blocks.push(item.node);
             continue;
