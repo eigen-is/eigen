@@ -21,7 +21,9 @@ export type Piece =
 
 export type Link = { href: string; title: string | null };
 
-export type Field = { phase: 'code' | 'result'; code: string; link?: Link; checkbox?: boolean };
+// Each open field carries what the fields around it say too, so the innermost answers alone: whether any is still in
+// its code, and the link its result shows.
+export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean };
 
 export type RunContext = {
     scope: Scope;
@@ -55,7 +57,12 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
         if (SKIPPED_INLINE.has(element.local)) continue;
         switch (element.local) {
             case 'r':
-                readRun(reader, element, context);
+                readRunContent(
+                    reader,
+                    xmlElements(element),
+                    readRunProps(wChild(element, 'rPr'), reader.theme),
+                    context,
+                );
                 break;
             case 'hyperlink': {
                 const link = linkOf(reader, element, context.scope);
@@ -70,8 +77,9 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
             case 'sdt': {
                 const checkbox = xmlChild(wChild(element, 'sdtPr') ?? element, W14_NS, 'checkbox');
                 if (checkbox) {
-                    const checked = w14Val(xmlChild(checkbox, W14_NS, 'checked'));
-                    context.pieces.push({ kind: 'checkbox', checked: checked === '1' || checked === 'true' });
+                    const checked = xmlChild(checkbox, W14_NS, 'checked');
+                    const value = checked && xmlAttr(checked, W14_NS, 'val');
+                    context.pieces.push({ kind: 'checkbox', checked: value === '1' || value === 'true' });
                     break;
                 }
                 walkInline(reader, xmlElements(wChild(element, 'sdtContent') ?? element), context);
@@ -84,11 +92,6 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
     }
 }
 
-function readRun(reader: Reader, run: XmlElement, context: RunContext): void {
-    const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
-    readRunContent(reader, xmlElements(run), direct, context);
-}
-
 function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps, context: RunContext): void {
     for (const child of children) {
         if (isAlternateContent(child)) {
@@ -99,12 +102,12 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
             fieldChar(reader, child, context);
             continue;
         }
-        if (reader.fields.some((field) => field.phase === 'code')) {
-            const field = reader.fields.at(-1);
-            if (field && child.ns === W_NS && child.local === 'instrText') field.code += xmlText(child);
+        const field = reader.fields.at(-1);
+        if (field?.inCode) {
+            if (child.ns === W_NS && child.local === 'instrText') field.code += xmlText(child);
             continue;
         }
-        const link = reader.fields.findLast((field) => field.link)?.link ?? context.link;
+        const link = field?.link ?? context.link;
         const linked = link ? { ...context, link } : context;
         if (child.ns !== W_NS) {
             if (child.ns === M_NS) walkInline(reader, [child], linked);
@@ -158,12 +161,14 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
             case 'endnoteReference': {
                 const type = child.local === 'footnoteReference' ? 'footnote' : 'endnote';
                 const id = w(child, 'id') ?? '';
-                reader.noteRefs.push({ type, id });
+                const key = `${type}-${id}`;
+                const note = reader.notes.get(key) ?? { type, id, number: reader.notes.size + 1 };
+                reader.notes.set(key, note);
                 context.pieces.push({
                     kind: 'node',
                     node: {
                         type: 'text',
-                        text: `[${reader.noteRefs.length}]`,
+                        text: `[${note.number}]`,
                         marks: [{ type: 'link', attrs: { href: `#${type}-${id}` } }, { type: 'superscript' }],
                     },
                 });
@@ -182,16 +187,17 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
     if (type === 'begin') {
         const checkBox = wChild(wChild(element, 'ffData'), 'checkBox');
         const checked = checkBox && (onOff(wChild(checkBox, 'checked')) ?? onOff(wChild(checkBox, 'default')) ?? false);
-        reader.fields.push({ phase: 'code', code: '', checkbox: checked });
+        reader.fields.push({ inCode: true, code: '', checkbox: checked });
     } else if (type === 'separate') {
         const field = reader.fields.at(-1);
+        const outer = reader.fields.at(-2);
         if (field) {
-            field.phase = 'result';
-            field.link = hyperlinkField(reader, field.code);
+            field.inCode = outer?.inCode ?? false;
+            field.link = hyperlinkField(reader, field.code) ?? outer?.link;
         }
     } else if (type === 'end') {
         const field = reader.fields.pop();
-        if (field?.checkbox !== undefined && reader.fields.every((outer) => outer.phase === 'result'))
+        if (field?.checkbox !== undefined && !reader.fields.at(-1)?.inCode)
             context.pieces.push({ kind: 'checkbox', checked: field.checkbox });
     }
 }
@@ -227,10 +233,6 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
     }
     if (!quoted.length) target = args.trim().split(/\s+/)[0] ?? '';
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
-}
-
-function w14Val(element: XmlElement | undefined): string | undefined {
-    return element && xmlAttr(element, W14_NS, 'val');
 }
 
 export function pushText(reader: Reader, text: string, direct: RunProps, context: RunContext): void {

@@ -31,11 +31,23 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         ? w(look, 'firstRow') === '1' || (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
+    const cellItems = (cell: XmlElement, rowIndex: number): Item[] => {
+        const first = rowIndex === 0 && firstRowOn && tableStyle?.firstRowRun;
+        const cellScope: Scope = {
+            ...scope,
+            tables: scope.tables + 1,
+            tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
+        };
+        return readBlocks(reader, cellContent(cell), cellScope);
+    };
 
+    // Read once: the walk counts list numbers and notes as it goes.
     const float = wChild(tblPr, 'tblpPr');
     const [onlyRow] = rows;
-    if (float && rows.length === 1 && onlyRow?.cells.length === 1) {
-        const figure = floatingFigure(reader, onlyRow.cells[0], float, grid, scope);
+    const onlyCell = rows.length === 1 && onlyRow?.cells.length === 1 ? onlyRow.cells[0] : undefined;
+    const onlyItems = float && onlyCell ? cellItems(onlyCell, 0) : undefined;
+    if (float && onlyItems) {
+        const figure = floatingFigure(reader, onlyItems, float, grid);
         if (figure) return [{ kind: 'float', figure }];
     }
 
@@ -68,13 +80,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                     continue;
                 }
             }
-            const first = rowIndex === 0 && firstRowOn && tableStyle?.firstRowRun;
-            const cellScope: Scope = {
-                ...scope,
-                tables: scope.tables + 1,
-                tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
-            };
-            const content = build(readBlocks(reader, cellContent(cell), cellScope));
+            const content = build(cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex));
             const fill = shadingOf(wChild(tcPr, 'shd'));
             const node: JSONContent = {
                 type: header || fill === HEADER_CELL_LOOK.fill ? 'tableHeader' : 'tableCell',
@@ -117,15 +123,7 @@ function isShadedHeader(rows: Row[]): boolean {
 }
 
 // The writer's wrapped figure: a floating one-cell table holding the image and its caption.
-function floatingFigure(
-    reader: Reader,
-    cell: XmlElement | undefined,
-    float: XmlElement,
-    grid: number[],
-    scope: Scope,
-): JSONContent | undefined {
-    if (!cell) return undefined;
-    const items = readBlocks(reader, cellContent(cell), scope);
+function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: number[]): JSONContent | undefined {
     const paras = items.filter((item): item is Para => item.kind === 'para' && !item.empty);
     if (paras.length !== items.filter((item) => item.kind !== 'para' || !item.empty).length) return undefined;
     const [image, caption, ...rest] = paras;

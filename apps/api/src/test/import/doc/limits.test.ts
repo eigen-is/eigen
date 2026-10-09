@@ -37,8 +37,33 @@ const ordered = (numId: number, level = 0) =>
 const numberedFrom = (start: string) =>
     `<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:start w:val="${start}"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>`;
 
+const noteRef = (id: number) => `<w:r><w:footnoteReference w:id="${id}"/></w:r>`;
+const footnote = (id: number, inner: string) => `<w:footnote w:id="${id}">${inner}</w:footnote>`;
+const floating = (inner: string) =>
+    `<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`;
+
 const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
 const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
+const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
+// The notes list closes the document, one item per note.
+const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
+
+// A process of its own with a deadline, for a file that could hold the reader in a loop.
+function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
+    const script = `
+        const { docxToPmJson } = await import(process.env.READER);
+        const { json } = await docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
+        console.log(JSON.stringify(json));
+    `;
+    const child = Bun.spawnSync([process.execPath, '-e', script], {
+        env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },
+        stdin: new Uint8Array(docx),
+        timeout,
+    });
+    expect(child.exitedDueToTimeout).toBe(false);
+    expect(child.stderr.toString()).toBe('');
+    return JSON.parse(child.stdout.toString());
+}
 
 async function rejection(promise: Promise<unknown>): Promise<ApiError> {
     const error = await promise.then(
@@ -225,6 +250,68 @@ describe('structure', () => {
         const [first] = nodesOfType(json, 'heading');
         expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
     }, 20_000);
+
+    test('a footnote that references itself, or one that references it back, is read once', async () => {
+        const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(1)}${noteRef(3)}`), {
+            footnotes: [
+                footnote(1, paragraph(`${run('One')}${noteRef(2)}`)),
+                footnote(2, paragraph(`${run('Two')}${noteRef(1)}`)),
+                footnote(3, paragraph(`${run('Self')}${noteRef(3)}`)),
+            ].join(''),
+        });
+        const json = importInChild(docx, 10_000);
+        expect(notes(json)).toEqual(['One[3] ↑', 'Self[2] ↑', 'Two[1] ↑']);
+        expect(texts(json.content?.[0] ?? {})).toEqual(['Body', '[1]', '[2]']);
+    }, 15_000);
+
+    test('a long note referenced 400 times is read once', async () => {
+        const body = paragraph(noteRef(1).repeat(400));
+        const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
+        const started = performance.now();
+        const json = await imported(body, { footnotes });
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(notes(json)).toHaveLength(1);
+        expect(texts(json.content?.[0] ?? {})).toEqual(['[1]'.repeat(400)]);
+    }, 20_000);
+
+    test('20,000 notes stay linear', async () => {
+        const count = 20_000;
+        const ids = Array.from({ length: count }, (_, index) => index + 1);
+        const body = paragraph(ids.map(noteRef).join(''));
+        const footnotes = ids.map((id) => footnote(id, paragraph(run(`N${id}`)))).join('');
+        const started = performance.now();
+        const json = await imported(body, { footnotes });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(notes(json)).toHaveLength(count);
+    }, 60_000);
+
+    test('a floating one-cell table that holds no figure is read once', async () => {
+        const item = (text: string) => paragraph(run(text), ordered(2));
+        const body = `${item('One')}${floating(`${item('Two')}${paragraph(`${run('Cell')}${noteRef(1)}`)}`)}${item('Three')}`;
+        const json = await imported(body, { footnotes: footnote(1, paragraph(run('Note'))) });
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1, 2, 3, 1]);
+        expect(notes(json)).toEqual(['Note ↑']);
+    });
+
+    test('floating tables nest at most eight deep, each read once', async () => {
+        const depth = 24;
+        const open = '<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tr><w:tc>';
+        const body = `${open.repeat(depth)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(depth)}`;
+        const started = performance.now();
+        const json = await imported(body);
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
+        expect(texts(json)).toEqual(['Core']);
+    }, 20_000);
+
+    test('fields left open cost each run what one field does', async () => {
+        const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
+        const body = paragraph(`<w:r>${open.repeat(40_000)}${'<w:t>x</w:t>'.repeat(40_000)}</w:r>`);
+        const started = performance.now();
+        const json = await imported(body);
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(texts(json).join('')).toHaveLength(40_000);
+    }, 60_000);
 });
 
 describe('values', () => {

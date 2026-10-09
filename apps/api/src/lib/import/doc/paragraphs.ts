@@ -13,7 +13,7 @@ import { readTable } from './tables';
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
 // text boxes and notes; assemble.ts turns the items into blocks.
 
-type NoteRef = { type: 'footnote' | 'endnote'; id: string };
+type NoteRef = { type: 'footnote' | 'endnote'; id: string; number: number };
 
 export type Reader = {
     pkg: Package;
@@ -22,7 +22,8 @@ export type Reader = {
     numbering: Numbering;
     images: MediaPart[];
     imageNames: Map<string, string>;
-    noteRefs: NoteRef[];
+    // By type and id, in the order first referenced: a note is read once however often it is referenced.
+    notes: Map<string, NoteRef>;
     fields: Field[];
     // The body's size in half-points and its color, which no run needs a mark for.
     bodySize: number;
@@ -47,7 +48,7 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         numbering: new Numbering(pkg.numbering, styles),
         images: [],
         imageNames: new Map(),
-        noteRefs: [],
+        notes: new Map(),
         fields: [],
         // Word's default is 10 pt.
         bodySize: body.size ?? 20,
@@ -72,11 +73,24 @@ export function readDocument(reader: Reader): JSONContent[] {
 }
 
 // Notes as the import has always shown them: a [n] reference, and at the end one numbered list with a back link per note.
+// A note referenced inside a note joins the end of the map, which this loop still reaches.
 function readNotes(reader: Reader): JSONContent[] {
     const items: JSONContent[] = [];
-    for (const ref of reader.noteRefs) {
+    const index = (part: Part | undefined, type: NoteRef['type']) => {
+        const byId = new Map<string, XmlElement>();
+        for (const note of part ? xmlElements(part.root) : []) {
+            const id = w(note, 'id');
+            if (note.local === type && id !== undefined && !byId.has(id)) byId.set(id, note);
+        }
+        return byId;
+    };
+    const byType = {
+        footnote: index(reader.pkg.footnotes, 'footnote'),
+        endnote: index(reader.pkg.endnotes, 'endnote'),
+    };
+    for (const ref of reader.notes.values()) {
         const part = ref.type === 'footnote' ? reader.pkg.footnotes : reader.pkg.endnotes;
-        const note = part && xmlElements(part.root).find((el) => el.local === ref.type && w(el, 'id') === ref.id);
+        const note = byType[ref.type].get(ref.id);
         if (!part || !note) continue;
         reader.fields.length = 0;
         const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true, tables: 0 }));
