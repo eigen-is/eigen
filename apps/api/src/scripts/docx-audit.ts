@@ -12,11 +12,13 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import JSZip from 'jszip';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
+import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
+import { fontMark } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { assertDecompressedSizeWithinBounds } from '../lib/import/zip-size-guard';
+import { toTransitional } from '../lib/import/doc/package';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -177,8 +179,8 @@ const ALIGNMENTS = new Map<string, Feature>([
 
 // Lowercased style names, as Word writes the built-in ones.
 const QUOTE_STYLES = new Set(['quote', 'intense quote', 'block text']);
-const CODE_BLOCK_STYLES = new Set(['code block', 'html preformatted', 'source code', 'macro text']);
-const CODE_STYLES = new Set(['code', 'html code', 'html typewriter', 'html keyboard', 'html sample', 'verbatim char']);
+const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
+const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
 // Eigen's small text is 75% of the body (eigen-prose.css), the docx writer's 9 pt in 11; a body style a point
 // smaller is still body text.
@@ -213,7 +215,8 @@ export type Tally = {
     headings: HeadingLine[];
 };
 
-type Span = { text: string; marks: readonly Feature[] };
+// font: the bundled font a font mark draws in.
+type Span = { text: string; marks: readonly Feature[]; font?: string };
 
 type FeatureResult = { source: number; imported: number; matched: number; invented: number; kept: number | null };
 
@@ -279,14 +282,16 @@ function alternative(element: XmlElement): XmlElement | undefined {
 
 // Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
 // its characters does.
-function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
-    const words: { word: string; marks: Set<Feature> }[] = [];
+function wordsOf(spans: Span[]): { word: string; marks: Set<Feature>; font?: string }[] {
+    const words: { word: string; marks: Set<Feature>; font?: string }[] = [];
     let word = '';
     let marks = new Set<Feature>();
+    let font: string | undefined;
     const flush = () => {
-        if (word) words.push({ word, marks });
+        if (word) words.push({ word, marks, font });
         word = '';
         marks = new Set();
+        font = undefined;
     };
     for (const span of spans) {
         for (const char of span.text.replace(/\u00AD/g, '').replace(/[\u2010\u2011]/g, '-')) {
@@ -294,6 +299,7 @@ function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
             else {
                 word += char;
                 for (const mark of span.marks) marks.add(mark);
+                font = span.font ?? font;
             }
         }
     }
@@ -303,12 +309,13 @@ function wordsOf(spans: Span[]): { word: string; marks: Set<Feature> }[] {
 
 function record(tally: Tally, spans: Span[]): string[] {
     const words = wordsOf(spans);
-    for (const { word, marks } of words) {
+    for (const { word, marks, font } of words) {
         tally.words.push(word);
         for (const mark of marks) {
             const marked = tally.marks.get(mark) ?? [];
             tally.marks.set(mark, marked);
-            marked.push(word);
+            // A word in another font than Word's is no keep.
+            marked.push(mark === 'font' ? `${word} (${font})` : word);
             add(tally, mark);
         }
     }
@@ -378,9 +385,19 @@ type Field = { result: boolean; instr: string; link: boolean };
 
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
-type Inline = { scope: Scope; paragraph: Paragraph; runs: XmlElement[]; marks: boolean; link: boolean };
+// styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font.
+type Inline = {
+    scope: Scope;
+    paragraph: Paragraph;
+    runs: XmlElement[];
+    styleRuns: XmlElement[];
+    marks: boolean;
+    link: boolean;
+};
 
-type RunLook = { hidden: boolean; code: boolean; marks: Feature[] };
+type RunLook = { hidden: boolean; code: boolean; marks: Feature[]; font?: string };
+
+type Boxed = { element: XmlElement; boxed: boolean };
 
 const newChain = (): Chain => ({ lists: [], carry: [] });
 
@@ -552,16 +569,17 @@ function countElements(root: XmlElement, into: Map<string, number>): void {
 // Word's view: deleted and moved-away text, field instructions and hidden runs are no text, and a field's result is.
 // Formatting a structure draws (a heading's, a quote's, a note's, a task's paragraph style) is the structure's, not a
 // mark; a link's color and underline count only when set on the run itself. Table styles are not resolved.
-export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tally & { elements: Map<string, number> }> {
-    const zip = await JSZip.loadAsync(bytes);
-    await assertDecompressedSizeWithinBounds(zip, 'Document too large');
-    const read = async (part: string | undefined) => {
-        const text = part === undefined ? undefined : await zip.file(part)?.async('string');
-        return text === undefined ? undefined : (parseXml(text) ?? undefined);
+export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements: Map<string, number> } {
+    const zip = openZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    const read = (part: string | undefined) => {
+        const xml = part === undefined ? undefined : zip.read(part);
+        const root = xml && parseXml(xml);
+        if (root) toTransitional(root);
+        return root ?? undefined;
     };
-    const relationships = async (part: string) => {
+    const relationships = (part: string) => {
         const directory = path.posix.dirname(part);
-        const rels = await read(path.posix.join(directory, '_rels', `${path.posix.basename(part)}.rels`));
+        const rels = read(path.posix.join(directory, '_rels', `${path.posix.basename(part)}.rels`));
         return (rels ? xmlChildren(rels, REL, 'Relationship') : [])
             .filter((rel) => xmlAttr(rel, '', 'TargetMode') !== 'External')
             .map((rel) => {
@@ -572,19 +590,19 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                 };
             });
     };
-    const main = (await relationships('')).find((rel) => rel.type === 'officeDocument')?.part ?? 'word/document.xml';
-    const related = await relationships(main);
+    const main = relationships('').find((rel) => rel.type === 'officeDocument')?.part ?? 'word/document.xml';
+    const related = relationships(main);
     const partOf = (type: string) => related.find((rel) => rel.type === type)?.part;
-    const document = await read(main);
+    const document = read(main);
     if (!document) throw new Error(`${main} missing`);
-    const footnotes = await read(partOf('footnotes'));
-    const endnotes = await read(partOf('endnotes'));
-    const styles = readStyles(await read(partOf('styles')), await read(partOf('theme')));
-    const numberItem = readNumbering(await read(partOf('numbering')));
+    const footnotes = read(partOf('footnotes'));
+    const endnotes = read(partOf('endnotes'));
+    const styles = readStyles(read(partOf('styles')), read(partOf('theme')));
+    const numberItem = readNumbering(read(partOf('numbering')));
 
     const elements = new Map<string, number>();
-    const stories = [document, footnotes, endnotes, await read(partOf('comments'))];
-    for (const rel of related) if (rel.type === 'header' || rel.type === 'footer') stories.push(await read(rel.part));
+    const stories = [document, footnotes, endnotes, read(partOf('comments'))];
+    for (const rel of related) if (rel.type === 'header' || rel.type === 'footer') stories.push(read(rel.part));
     for (const story of stories) if (story) countElements(story, elements);
 
     const tally = newTally();
@@ -659,7 +677,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
-    const base = { font: fontOf(plain), color: colorOf(plain), size: sizeOf(plain), indent };
+    const base = { color: colorOf(plain), size: sizeOf(plain), indent };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
         const chain = styles.chain(val(child(rPr, 'rStyle')) ?? styles.character);
@@ -682,6 +700,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
         const highlight = val(first(sources, 'highlight'));
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W, 'fill')?.toUpperCase();
+        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]));
         const marks: [Feature, boolean][] = [
             ['bold', toggle('b')],
             ['italic', toggle('i')],
@@ -691,7 +710,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
             ['superscript', vertAlign === 'superscript'],
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
-            ['font', (fontOf(sources) ?? base.font) !== base.font],
+            ['font', font !== undefined],
             ['small', sizeOf(sources) <= base.size * SMALL],
             ['link', linked],
         ];
@@ -699,14 +718,26 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
             marks: marks.filter(([, set]) => set).map(([feature]) => feature),
+            font,
         };
     };
 
     const visible = (scope: Scope) => scope.fields.every((field) => field.result);
 
+    // A checkbox control at any level shows its box: Word restricts its content to the glyph, which is no text.
+    const checkbox = (sdt: XmlElement, scope: Scope) => {
+        const box = child(child(sdt, 'sdtPr'), 'checkbox', W14);
+        if (box && visible(scope)) {
+            add(tally, 'taskItems');
+            const checked = child(box, 'checked', W14);
+            if (checked && ['1', 'true'].includes(xmlAttr(checked, W14, 'val') ?? '')) add(tally, 'checkedTasks');
+        }
+        return !!box;
+    };
+
     const text = (value: string, context: Inline, look: RunLook | undefined) => {
         const marks: readonly Feature[] = !context.marks || !look ? [] : look.code ? ['code'] : look.marks;
-        context.paragraph.spans.push({ text: value, marks });
+        context.paragraph.spans.push({ text: value, marks, font: look?.font });
     };
     const space = (context: Inline) => context.paragraph.spans.push({ text: ' ', marks: [] });
 
@@ -844,16 +875,8 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                     });
                     break;
                 case 'sdt': {
-                    const box = child(child(node, 'sdtPr'), 'checkbox', W14);
-                    if (!box) {
-                        const content = child(node, 'sdtContent');
-                        if (content) inline(content, context);
-                    } else if (visible(context.scope)) {
-                        add(tally, 'taskItems');
-                        const checked = child(box, 'checked', W14);
-                        if (checked && ['1', 'true'].includes(xmlAttr(checked, W14, 'val') ?? ''))
-                            add(tally, 'checkedTasks');
-                    }
+                    const content = child(node, 'sdtContent');
+                    if (!checkbox(node, context.scope) && content) inline(content, context);
                     break;
                 }
                 case 'del':
@@ -922,6 +945,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
             scope,
             paragraph: current,
             runs: structural ? (styles.rPr ? [styles.rPr] : []) : look.runs,
+            styleRuns: look.runs,
             marks: !look.code && !caption,
             link: false,
         });
@@ -961,23 +985,24 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
         chain.rule = undefined;
     };
 
-    // Rows and cells may sit in content controls or custom XML.
-    const within = (element: XmlElement, local: string): XmlElement[] =>
+    // Rows and cells may sit in content controls or custom XML; boxed when a checkbox control holds them.
+    const within = (element: XmlElement, local: string, scope: Scope, boxed = false): Boxed[] =>
         xmlElements(element).flatMap((node) => {
             if (node.ns !== W) return [];
-            if (node.local === local) return [node];
+            if (node.local === local) return [{ element: node, boxed }];
             if (node.local === 'sdt') {
                 const content = child(node, 'sdtContent');
-                return content ? within(content, local) : [];
+                const box = checkbox(node, scope);
+                return content ? within(content, local, scope, boxed || box) : [];
             }
-            return node.local === 'customXml' ? within(node, local) : [];
+            return node.local === 'customXml' ? within(node, local, scope, boxed) : [];
         });
 
     // False for a floating figure, which stands outside the flow around it.
     const table = (element: XmlElement, scope: Scope): boolean => {
-        const rows = within(element, 'tr').filter((row) => !child(child(row, 'trPr'), 'del'));
-        const cells = rows.map((row) => within(row, 'tc'));
-        const only = cells.length === 1 && cells[0].length === 1 ? cells[0][0] : undefined;
+        const rows = within(element, 'tr', scope).filter((row) => !child(child(row.element, 'trPr'), 'del'));
+        const cells = rows.map((row) => within(row.element, 'tc', scope, row.boxed));
+        const only = cells.length === 1 && cells[0].length === 1 ? cells[0][0].element : undefined;
         // The writer's wrapped figure, and Word's floating picture-in-a-table: a figure, not a table.
         if (
             only &&
@@ -993,27 +1018,33 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
         const grid = xmlChildren(child(element, 'tblGrid') ?? element, W, 'gridCol');
         if (grid.some((column) => Number(xmlAttr(column, W, 'w')) > 0)) add(tally, 'columnWidths');
         const placed = rows.map((row, index) => {
-            const trPr = child(row, 'trPr');
+            const trPr = child(row.element, 'trPr');
             const header = child(trPr, 'tblHeader');
             if (header && on(header)) add(tally, 'headerRows');
             let column = Number(val(child(trPr, 'gridBefore')) ?? 0);
-            return cells[index].map((cell) => {
+            return cells[index].map(({ element: cell, boxed }) => {
                 const tcPr = child(cell, 'tcPr');
                 const span = Number(val(child(tcPr, 'gridSpan')) ?? 1) || 1;
                 const merge = child(tcPr, 'vMerge');
-                const at = { cell, column, span, merge: merge && (val(merge) === 'restart' ? 'restart' : 'continue') };
+                const at = {
+                    cell,
+                    boxed,
+                    column,
+                    span,
+                    merge: merge && (val(merge) === 'restart' ? 'restart' : 'continue'),
+                };
                 column += span;
                 return at;
             });
         });
         for (const [index, row] of placed.entries()) {
-            for (const { cell, column, span, merge } of row) {
+            for (const { cell, boxed, column, span, merge } of row) {
                 if (merge === 'continue') continue;
                 add(tally, 'cells');
                 if (span > 1) add(tally, 'colspanCells');
                 const below = placed[index + 1]?.find((next) => next.column === column);
                 if (merge === 'restart' && below?.merge === 'continue') add(tally, 'rowspanCells');
-                blocks(cell, { ...scope, chain: newChain(), cell: true });
+                if (!boxed) blocks(cell, { ...scope, chain: newChain(), cell: true });
             }
         }
         return true;
@@ -1027,6 +1058,7 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
                 continue;
             }
             if (node.ns === W && node.local === 'p') paragraph(node, scope);
+            else if (node.ns === W && node.local === 'sdt' && checkbox(node, scope)) continue;
             else if (node.ns === W && node.local === 'tbl') {
                 settle(scope.chain);
                 if (table(node, scope)) {
@@ -1120,6 +1152,7 @@ export function auditImported(json: JSONContent): Tally {
                 continue;
             }
             const features: Feature[] = [];
+            let font: string | undefined;
             for (const mark of marks) {
                 const attrs = mark.attrs ?? {};
                 const feature = MARK_FEATURES.get(mark.type);
@@ -1127,9 +1160,10 @@ export function auditImported(json: JSONContent): Tally {
                 if (mark.type !== 'textStyle') continue;
                 const color = attrs['color'];
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
-                if (typeof attrs['fontFamily'] === 'string' && attrs['fontFamily']) features.push('font');
+                font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
+                if (font) features.push('font');
             }
-            spans.push({ text: value, marks: features });
+            spans.push({ text: value, marks: features, font });
         }
         const words = record(tally, spans);
         const text = textOf(spans);
@@ -1331,7 +1365,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words in another font than the body text's, small text words at most 85% of its size, text color words in another color. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',
@@ -1454,7 +1488,7 @@ const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/doc/from-docx
 const DEFAULT_TIMEOUT_MS = 60_000;
 const LOAD_TIMEOUT_MS = 60_000;
 
-type SourceTally = Awaited<ReturnType<typeof auditSource>>;
+type SourceTally = ReturnType<typeof auditSource>;
 
 type WorkerRequest =
     | { kind: 'load'; importer: string }
@@ -1680,7 +1714,7 @@ if (!Bun.isMainThread) {
                 return;
             }
             if (request.kind === 'audit') {
-                const source = await auditSource(request.bytes);
+                const source = auditSource(request.bytes);
                 postMessage({ kind: 'audited', source, ms: performance.now() - started } satisfies WorkerReply);
                 return;
             }
@@ -1720,7 +1754,7 @@ if (import.meta.main && Bun.isMainThread) {
             corpus: positionals[0],
             out: values.out,
             importer: values.importer,
-            name: values.name ?? path.basename(values.importer ?? 'mammoth', '.ts'),
+            name: values.name ?? path.basename(values.importer ?? DEFAULT_IMPORTER, '.ts'),
             timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
         });
         console.log(

@@ -200,7 +200,7 @@ const STRICT_NAMESPACES = new Map([
     ['http://purl.oclc.org/ooxml/officeDocument/math', M_NS],
 ]);
 
-function toTransitional(root: XmlElement): void {
+export function toTransitional(root: XmlElement): void {
     const stack = [root];
     for (let element = stack.pop(); element; element = stack.pop()) {
         element.ns = STRICT_NAMESPACES.get(element.ns) ?? element.ns;

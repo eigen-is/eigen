@@ -2,7 +2,10 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import {
     auditImported,
     auditSource,
@@ -15,8 +18,8 @@ import {
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
 
-// The audit decides whether Eigen's own docx reader replaces mammoth, so what it counts is pinned here: Word's
-// semantics on the source side, the eigendoc JSON on the other, and one measure for both importers.
+// The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
+// the source side, the eigendoc JSON on the other, and one measure for every importer.
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'docx-audit-'));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -132,7 +135,7 @@ describe('source side', () => {
         const tally = await source(
             `<w:p>${run('Ouch')}<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>${run('.')}</w:p>`,
         );
-        // As mammoth writes it.
+        // As the reader writes it.
         const imported = auditImported({
             type: 'doc',
             content: [
@@ -273,6 +276,52 @@ describe('source side', () => {
         expect([count(ended, 'orderedLists'), count(continued, 'orderedLists')]).toEqual([2, 1]);
     });
 
+    test('a checkbox control around a paragraph, a row or a cell is a task, and its glyph no text', async () => {
+        const box = (content: string, checked = false) =>
+            `<w:sdt><w:sdtPr><w14:checkbox xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w14:checked w14:val="${checked ? 1 : 0}"/></w14:checkbox></w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+        const cell = (text: string) => `<w:tc>${paragraph(text)}</w:tc>`;
+        const table = (rows: string) => `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>${rows}</w:tbl>`;
+        const tally = await source(
+            `${box(paragraph('☒'), true)}${table(`<w:tr>${cell('Agree')}${box(cell('☐'))}</w:tr>${box(`<w:tr>${cell('☐')}</w:tr>`)}`)}${paragraph('End')}`,
+        );
+        expect([count(tally, 'taskItems'), count(tally, 'checkedTasks'), count(tally, 'cells')]).toEqual([3, 1, 3]);
+        expect(tally.words).toEqual(['Agree', 'End']);
+    });
+
+    test("the reader's code style names are code on the source side", async () => {
+        const tally = await source(
+            `${styled('CodeParagraph', 'let x')}<w:p>${run('cargo', '<w:rStyle w:val="SourceText"/>')}${run(' build')}</w:p>`,
+            `<w:style w:type="paragraph" w:styleId="CodeParagraph"><w:name w:val="Code"/></w:style>
+<w:style w:type="character" w:styleId="SourceText"><w:name w:val="Source Text"/></w:style>`,
+        );
+        expect([count(tally, 'codeBlocks'), tally.marks.get('code')]).toEqual([1, ['cargo']]);
+    });
+
+    test('a Strict package reads as its transitional twin', () => {
+        const strict = 'http://purl.oclc.org/ooxml';
+        const rel = (id: string, type: string, target: string) =>
+            `<Relationship Id="${id}" Type="${strict}/officeDocument/relationships/${type}" Target="${target}"/>`;
+        const rels = (...list: string[]) =>
+            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.join('')}</Relationships>`;
+        const docx = writeZip(
+            Object.entries({
+                '_rels/.rels': rels(rel('rId1', 'officeDocument', 'word/document.xml')),
+                'word/_rels/document.xml.rels': rels(rel('rId1', 'styles', 'styles.xml')),
+                'word/styles.xml': `<w:styles xmlns:w="${strict}/wordprocessingml/main"><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/></w:style></w:styles>`,
+                'word/document.xml': `<w:document xmlns:w="${strict}/wordprocessingml/main"><w:body>${styled('Heading1', 'Strict title')}${paragraph('Two words')}</w:body></w:document>`,
+            }).map(([name, data]) => ({ name, data })),
+        );
+        const tally = auditSource(docx);
+        expect([tally.words, count(tally, 'heading1')]).toEqual([['Strict', 'title', 'Two', 'words'], 1]);
+    });
+
+    test('the source is read with core/zip, not JSZip', () => {
+        const script = fs.readFileSync(new URL('../../scripts/docx-audit.ts', import.meta.url), 'utf8');
+        expect(script).not.toContain("from 'jszip'");
+        expect(script).not.toContain('zip-size-guard');
+        expect(script).toContain("from '../lib/core/zip'");
+    });
+
     test('a start override restarts its list once', async () => {
         const tally = await source(`${item(7, 'one')}${item(7, 'two')}${item(9, 'five')}${item(9, 'six')}`);
         expect([tally.numbers, count(tally, 'orderedLists'), count(tally, 'orderedStarts')]).toEqual([
@@ -289,12 +338,84 @@ describe('source side', () => {
 });
 
 describe('both sides', () => {
+    const fontRun = (text: string, font: string) => run(text, `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`);
+
+    // A body in `font` with one word in `other`, read by the audit and imported by the reader.
+    async function fonts(font: string, other: string, heading = '') {
+        const docx = await buildDocxWithBody(
+            `${styled('Chapter', 'Title')}<w:p>${run('Body text ')}${fontRun('other', other)}</w:p>`,
+            {
+                styles: `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/></w:rPr></w:rPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:styleId="Chapter"><w:name w:val="heading 1"/>${heading}</w:style>`,
+            },
+        );
+        const { json } = await docxToPmJson(Buffer.from(docx));
+        return { source: auditSource(docx), imported: auditImported(json) };
+    }
+
+    const NO_FONT = { source: 0, imported: 0, matched: 0, invented: 0, kept: null };
+
+    const allIn = (fontFamily: string) =>
+        auditImported({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        {
+                            type: 'text',
+                            text: 'Title Body text other',
+                            marks: [{ type: 'textStyle', attrs: { fontFamily } }],
+                        },
+                    ],
+                },
+            ],
+        });
+
+    test('a Times body is Source Serif 4 on every word, on both sides, and kept only in that font', async () => {
+        const { source, imported } = await fonts('Times New Roman', 'Georgia');
+        expect(compareTallies(source, imported).features['font']).toEqual({
+            source: 4,
+            imported: 4,
+            matched: 4,
+            invented: 0,
+            kept: 1,
+        });
+        expect(compareTallies(source, allIn('JetBrains Mono')).features['font']).toEqual({
+            source: 4,
+            imported: 4,
+            matched: 0,
+            invented: 4,
+            kept: 0,
+        });
+    });
+
+    test('a Calibri body is no font on either side, nor a word in Arial or in the document font', async () => {
+        const { source, imported } = await fonts('Calibri', 'Arial');
+        expect(compareTallies(source, imported).features['font']).toEqual(NO_FONT);
+        expect(compareTallies(source, allIn('Inter')).features['font']).toEqual(NO_FONT);
+    });
+
+    test('an unknown body font is no font on either side, nor another unknown one', async () => {
+        const { source, imported } = await fonts('Zapfino Pro', 'Fraktur Old');
+        expect(compareTallies(source, imported).features['font']).toEqual(NO_FONT);
+    });
+
+    test("a heading style's own font is its words' font, as Word draws them", async () => {
+        const { source, imported } = await fonts(
+            'Calibri',
+            'Calibri',
+            '<w:rPr><w:rFonts w:ascii="Cambria" w:hAnsi="Cambria"/></w:rPr>',
+        );
+        expect([count(source, 'font'), compareTallies(source, imported).features['font']?.kept]).toEqual([1, 1]);
+    });
+
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
     // size, so the photo the doc leaves at its own width has one there.
     test("the writer's docx holds what its doc holds", async () => {
         const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
-        const written = await auditSource(docx);
+        const written = auditSource(docx);
         const held = auditImported(json);
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),
@@ -408,14 +529,14 @@ describe('runs', () => {
             '| Bold (words) | 1 | 1 | 0 | 0.0% | 0 |',
         );
 
-        // mammoth maps the Strong run style to bold, which the source side counts too: kept, not invented.
-        const mammothOut = path.join(scratch, 'out-mammoth');
-        const mammothRun = await runAudit({ corpus: dir, out: mammothOut, name: 'mammoth', timeoutMs: 30_000 });
-        expect([mammothRun.crashes, mammothRun.timeouts]).toEqual([0, 0]);
-        const kept = JSON.parse(fs.readFileSync(path.join(mammothOut, 'files/nested/throw.docx.json'), 'utf8'));
+        // The reader maps the Strong run style to bold, which the source side counts too: kept, not invented.
+        const readerOut = path.join(scratch, 'out-reader');
+        const readerRun = await runAudit({ corpus: dir, out: readerOut, name: 'reader', timeoutMs: 30_000 });
+        expect([readerRun.crashes, readerRun.timeouts]).toEqual([0, 0]);
+        const kept = JSON.parse(fs.readFileSync(path.join(readerOut, 'files/nested/throw.docx.json'), 'utf8'));
         expect(kept.features.bold).toEqual({ source: 1, imported: 1, matched: 1, invented: 0, kept: 1 });
 
-        const comparison = compareRuns(stubOut, mammothOut);
+        const comparison = compareRuns(stubOut, readerOut);
         expect(comparison).toContain('| Bold (words) | 1 | 1 | 0.0% | 100.0% | +100.0 | 0 | 0 |');
         expect(comparison).toContain('nested/throw.docx');
     }, 60_000);
@@ -466,13 +587,29 @@ describe('runs', () => {
         fs.mkdirSync(dir, { recursive: true });
         fs.symlinkSync(real, path.join(dir, 'through'));
         const out = path.join(scratch, 'out-symlinked', 'deeper');
-        const meta = await runAudit({ corpus: dir, out, name: 'mammoth', timeoutMs: 30_000 });
+        const meta = await runAudit({ corpus: dir, out, name: 'reader', timeoutMs: 30_000 });
         expect([meta.files, fs.existsSync(path.join(out, 'files/through/linked.docx.json'))]).toEqual([1, true]);
 
         const empty = await corpus('empty', {});
         fs.mkdirSync(empty, { recursive: true });
-        expect(runAudit({ corpus: empty, out: path.join(scratch, 'out-empty'), name: 'mammoth' })).rejects.toThrow(
+        expect(runAudit({ corpus: empty, out: path.join(scratch, 'out-empty'), name: 'reader' })).rejects.toThrow(
             'No .docx files',
         );
+    }, 60_000);
+
+    test('a run is named after its importer module, the reader by default', async () => {
+        const dir = await corpus('named', { 'a.docx': await buildDocxWithBody(paragraph('named')) });
+        const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'foreign.ts');
+        await Bun.write(stub, 'export async function docxToPmJson() { return { json: { type: "doc" }, images: [] }; }');
+        const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
+        const names = await Promise.all(
+            [[], ['--importer', stub]].map(async (args, index) => {
+                const out = path.join(scratch, `out-named-${index}`);
+                const audit = Bun.spawn([process.execPath, script, dir, '--out', out, ...args], { stdout: 'ignore' });
+                expect(await audit.exited).toBe(0);
+                return JSON.parse(fs.readFileSync(path.join(out, 'run.json'), 'utf8')).name;
+            }),
+        );
+        expect(names).toEqual(['from-docx', 'foreign']);
     }, 60_000);
 });
