@@ -68,7 +68,7 @@ export class Numbering {
     // A numbering style's abstractNum holds no levels of its own: it links to the style, whose numPr names the real one.
     private abstractOf(numId: string): { id: string; levels: Map<number, Level> } | undefined {
         const seen = new Set<string>();
-        for (let id: string | undefined = numId; id !== undefined && !seen.has(id); ) {
+        for (let id = numId; ; ) {
             seen.add(id);
             const num = this.nums.get(id);
             const abstract = num && this.abstracts.get(num.abstractId);
@@ -77,7 +77,6 @@ export class Numbering {
             if (!linked || seen.has(linked)) return { id: num.abstractId, levels: abstract.levels };
             id = linked;
         }
-        return undefined;
     }
 
     next(numId: string, ilvl: number): ListRef | undefined {
@@ -107,7 +106,7 @@ export class Numbering {
             ordered: level.format !== 'bullet',
             format: level.format,
             number: counters[ilvl] ?? level.start,
-            // Text and level numbers alternate; it stops at the cap, so a long lvlText costs no more than a short one.
+            // Text and level numbers alternate; building stops at the cap, so a long lvlText costs what a short one does.
             label: () => {
                 let label = '';
                 for (const [index, piece] of level.text.split(/%([1-9])/).entries()) {
@@ -138,7 +137,7 @@ function readLevel(lvl: XmlElement): Level {
     return {
         start: startOf(wChild(lvl, 'start')) ?? 1,
         format: w(wChild(lvl, 'numFmt'), 'val') ?? 'decimal',
-        text: (w(wChild(lvl, 'lvlText'), 'val') ?? '').slice(0, MAX_LABEL_CHARS),
+        text: w(wChild(lvl, 'lvlText'), 'val') ?? '',
         indLeft: readParaProps(wChild(lvl, 'pPr')).indLeft,
         restart: int(w(wChild(lvl, 'lvlRestart'), 'val')),
         suffix: w(wChild(lvl, 'suff'), 'val') ?? 'tab',
@@ -150,9 +149,7 @@ function formatNumber(value: number, format: string): string {
         case 'lowerLetter':
         case 'upperLetter': {
             const index = Math.max(1, value) - 1;
-            const letters = String.fromCharCode(97 + (index % 26)).repeat(
-                Math.min(MAX_LABEL_CHARS, Math.floor(index / 26) + 1),
-            );
+            const letters = String.fromCharCode(97 + (index % 26)).repeat(Math.floor(index / 26) + 1);
             return format === 'upperLetter' ? letters.toUpperCase() : letters;
         }
         case 'lowerRoman':

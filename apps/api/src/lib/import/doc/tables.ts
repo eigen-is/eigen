@@ -1,18 +1,24 @@
 import type { JSONContent } from '@tiptap/core';
+import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TWIPS_PER_PX, W_NS } from '../../export/doc/ooxml';
-import { build, type Item, isWhitespace, type Para, textOf } from './assemble';
+import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
 import { int, is, onOff, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
 
+// Word's column limit: a span is walked column by column, so a gridSpan of 2e9 would hold the Worker to its deadline.
+const MAX_COLUMNS = 63;
+
 export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item[] {
     const tblPr = wChild(table, 'tblPr');
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => is(col, W_NS, 'gridCol'))
-        .map((col) => int(w(col, 'w')) ?? 0);
+        .map((col) => int(w(col, 'w')) ?? 0)
+        .slice(0, MAX_COLUMNS);
+    const columns = grid.length || MAX_COLUMNS;
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
     const firstRowOn = look
@@ -34,7 +40,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     for (const [rowIndex, row] of rows.entries()) {
         const header = (onOff(wChild(row.trPr, 'tblHeader')) ?? false) || (rowIndex === 0 && shadedHeader);
         const cells: JSONContent[] = [];
-        let column = int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0;
+        let column = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0), columns);
         if (column > 0)
             cells.push({
                 type: 'tableCell',
@@ -43,7 +49,11 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             });
         for (const cell of row.cells) {
             const tcPr = wChild(cell, 'tcPr');
-            const colspan = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
+            // Within the grid's columns left, or Word's limit where the grid names none.
+            const colspan = Math.min(
+                Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1),
+                Math.max(1, columns - column),
+            );
             const vMerge = wChild(tcPr, 'vMerge');
             if (vMerge && w(vMerge, 'val') !== 'restart') {
                 const above = open.get(column);
@@ -161,7 +171,7 @@ function tableRows(table: XmlElement): Row[] {
 function widths(grid: number[], column: number, colspan: number): number[] | null {
     const spanned = grid.slice(column, column + colspan);
     if (spanned.length !== colspan || spanned.some((width) => !(width > 0))) return null;
-    return spanned.map((width) => Math.max(1, Math.round(width / TWIPS_PER_PX)));
+    return spanned.map((width) => Math.min(COLUMN_PX, Math.max(MIN_TABLE_COLUMN_PX, Math.round(width / TWIPS_PER_PX))));
 }
 
 // A cell whose paragraphs share one alignment is an aligned cell.

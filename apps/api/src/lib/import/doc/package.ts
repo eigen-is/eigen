@@ -16,6 +16,10 @@ import {
 // The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
+// A tree costs per element too: 16 MB of empty paragraphs is 2.8 million of them and would take 3.5 GB. The corpus's
+// most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes.
+export const MAX_DOCX_XML_TAGS = 750_000;
+
 export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 export const PASSWORD_PROTECTED =
@@ -47,7 +51,7 @@ export function readPackage(bytes: Uint8Array): Package {
         throw new ApiError(400, Buffer.from(bytes).includes(ENCRYPTED_PACKAGE) ? PASSWORD_PROTECTED : NOT_A_DOCX);
     }
     const zip = openZip(bytes);
-    const budget: Budget = { left: MAX_DOCX_XML_BYTES, charged: new Set() };
+    const budget: Budget = { left: MAX_DOCX_XML_BYTES, tags: MAX_DOCX_XML_TAGS, charged: new Set() };
     const contentTypes = readContentTypes(readXml(zip, '[Content_Types].xml', budget));
     const documentPath = relOfType(readRels(zip, '', budget), 'officeDocument') ?? 'word/document.xml';
     const documentRels = readRels(zip, documentPath, budget);
@@ -85,7 +89,7 @@ export function readPackage(bytes: Uint8Array): Package {
     };
 }
 
-type Budget = { left: number; charged: Set<string> };
+type Budget = { left: number; tags: number; charged: Set<string> };
 
 // Declared sizes are the cap: a read inflates no further than its entry declares (core/zip), so nothing parsed passes it.
 function charge(zip: ZipReader, paths: string[], budget: Budget): void {
@@ -99,10 +103,15 @@ function charge(zip: ZipReader, paths: string[], budget: Budget): void {
 function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | undefined {
     charge(zip, [path], budget);
     const bytes = zip.read(path);
-    const root = bytes && parseXml(bytes);
+    if (!bytes) return undefined;
+    for (const byte of bytes) if (byte === LESS_THAN) budget.tags--;
+    if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+    const root = parseXml(bytes);
     if (root) toTransitional(root);
     return root ?? undefined;
 }
+
+const LESS_THAN = 0x3c;
 
 function readContentTypes(root: XmlElement | undefined): Package['contentTypes'] {
     const defaults = new Map<string, string>();

@@ -1,5 +1,7 @@
+import type { JSONContent } from '@tiptap/core';
 import { writeZip } from '../../lib/core/zip';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
 
 // Deterministic .docx fixture for the docx import work. Hand-built OOXML rather
 // than a checked-in binary, so every part the importer reads is visible here:
@@ -127,4 +129,30 @@ function zipDocx(document: string, parts: DocxParts): ArrayBuffer {
         ...(footnotes && { 'word/footnotes.xml': footnotesXml(footnotes) }),
     };
     return toTransferableBuffer(writeZip(Object.entries(entries).map(([name, data]) => ({ name, data, store: true }))));
+}
+
+// A body imported as an upload is, its parts beside the golden package's.
+export async function importDocxBody(
+    body: string,
+    parts: DocxParts = {},
+    options: { publicOrigin?: string } = {},
+): Promise<Awaited<ReturnType<typeof docxToPmJson>>> {
+    return docxToPmJson(Buffer.from(await buildDocxWithBody(body, parts)), options);
+}
+
+// Every node of a type, in document order.
+export function nodesOfType(json: JSONContent, type: string): JSONContent[] {
+    return [
+        ...(json.type === type ? [json] : []),
+        ...(json.content ?? []).flatMap((child) => nodesOfType(child, type)),
+    ];
+}
+
+// Every mark of a type on any text, with the text it sits on.
+export function marksOfType(json: JSONContent, type: string): { text: string; attrs: Record<string, unknown> }[] {
+    return nodesOfType(json, 'text').flatMap((node) =>
+        (node.marks ?? [])
+            .filter((mark) => mark.type === type)
+            .map((mark) => ({ text: node.text ?? '', attrs: mark.attrs ?? {} })),
+    );
 }
