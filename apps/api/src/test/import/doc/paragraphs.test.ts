@@ -192,13 +192,42 @@ describe('indented code', () => {
         expect(json.content).toEqual([{ type: 'blockquote', content: [text('Said'), code] }, text('After')]);
     });
 
-    test('after a quote and a table is code at the margin', async () => {
-        const table = `<w:tbl><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`;
-        const { json } = await importDocxBody(
-            `${paragraph(run('Said'), '<w:pStyle w:val="Quote"/>')}${table}${pre('x = 1')}`,
-            { styles: PRE },
-        );
-        expect(json.content?.map((node) => node.type)).toEqual(['blockquote', 'table', 'codeBlock']);
+    // A page break keeps a quote open; only a table or a rule ends it.
+    const said = paragraph(run('Said'), '<w:pStyle w:val="Quote"/>');
+    const codeOf = (value: string) => ({
+        type: 'codeBlock',
+        attrs: { language: null },
+        content: [{ type: 'text', text: value }],
+    });
+    const pageBreak = { type: 'pageBreak' };
+    test.each([
+        [
+            'in the code',
+            `${said}${pre(`a</w:t></w:r>${PAGE_BREAK}<w:r><w:t>b`)}`,
+            [codeOf('a'), pageBreak, codeOf('b')],
+        ],
+        ['of its own', `${said}${paragraph(PAGE_BREAK)}${pre('x = 1')}`, [pageBreak, code]],
+        [
+            'before the code',
+            `${said}${paragraph(run('x = 1'), '<w:pStyle w:val="HTMLPreformatted"/><w:pageBreakBefore/><w:ind w:left="720"/>')}`,
+            [pageBreak, code],
+        ],
+        [
+            'ending the quote',
+            `${paragraph(`${run('Said')}${PAGE_BREAK}`, '<w:pStyle w:val="Quote"/>')}${pre('x = 1')}`,
+            [pageBreak, code],
+        ],
+    ])('right after a quote, across a page break %s, continues it', async (_where, body, rest) => {
+        const { json } = await importDocxBody(`${body}${paragraph(run('After'))}`, { styles: PRE });
+        expect(json.content).toEqual([{ type: 'blockquote', content: [text('Said'), ...rest] }, text('After')]);
+    });
+
+    test.each([
+        ['table', `<w:tbl><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`, 'table'],
+        ['rule', paragraph('', '<w:pBdr><w:bottom w:val="single" w:sz="6"/></w:pBdr>'), 'horizontalRule'],
+    ])('after a quote and a %s is code at the margin', async (_name, between, type) => {
+        const { json } = await importDocxBody(`${said}${between}${pre('x = 1')}`, { styles: PRE });
+        expect(json.content?.map((node) => node.type)).toEqual(['blockquote', type, 'codeBlock']);
     });
 
     // 567 is 1 cm, 2160 Google Docs' 1.5": each within INDENT_TOLERANCE of the writer's code box in whole quotes.

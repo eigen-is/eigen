@@ -175,12 +175,12 @@ function assignQuotes(items: Item[]): void {
     let previous: Para | undefined;
     let plain = 0;
     for (const item of items) {
-        if ((item.kind === 'table' || item.kind === 'hr') && !(open && indentedUnder(item.indent, open.indLeft)))
-            open = undefined;
-        if (item.kind !== 'para') {
+        // A table or rule ends a quote (depths); a page break doesn't.
+        if (item.kind === 'table' || item.kind === 'hr') {
             previous = undefined;
-            continue;
+            if (!(open && indentedUnder(item.indent, open.indLeft))) open = undefined;
         }
+        if (item.kind !== 'para') continue;
         if (item.list || item.task) open = item;
         else if (item.role.kind === 'code') {
             codeDepth(item, open, previous);
