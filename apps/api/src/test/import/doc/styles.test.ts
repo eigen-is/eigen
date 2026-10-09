@@ -136,6 +136,26 @@ describe('headings in body-sized text', () => {
         expect((await read(body)).types).toEqual([type]);
     });
 
+    // A numbered heading is outline structure; demoted, its number would read as a list.
+    test.each([
+        ['its style', 'Numbered', ''],
+        ['the paragraph', 'Heading1', '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'],
+    ])('a Heading 1 numbered by %s, its runs at 9 pt, stays a heading with its label', async (_name, id, numPr) => {
+        const numbered = style(
+            'Numbered',
+            'Numbered Heading',
+            '<w:basedOn w:val="Heading1"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr>',
+        );
+        const numbering =
+            '<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>';
+        const body = `<w:p><w:pPr><w:pStyle w:val="${id}"/>${numPr}</w:pPr>${sized('Small ', 18)}${sized('title', 18)}</w:p>`;
+        const { json } = await importDocxBody(body, { styles: `${STYLES}${numbered}`, numbering });
+        const text = nodesOfType(json, 'text')
+            .map((node) => node.text)
+            .join('');
+        expect([types(json), text]).toEqual([['heading1'], '1. Small title']);
+    });
+
     // In a cell the table style's size is the heading's where its own style sets none, as it is the runs'.
     test.each([
         ['14 pt, its runs set to the 11 pt body', 28, 22, 'paragraph'],
