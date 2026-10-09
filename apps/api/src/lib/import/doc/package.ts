@@ -12,8 +12,7 @@ export const MAX_DOCX_XML_TAGS = 750_000;
 
 export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
-export const PASSWORD_PROTECTED =
-    'This document is password-protected. Remove the password in Word and import it again.';
+const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
 export type Relationship = { type: string; target: string; external: boolean };
 

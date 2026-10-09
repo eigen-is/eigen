@@ -3,7 +3,7 @@ import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxm
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
+import { bundledFontOf, type FontTable, MONOSPACE_FONT, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import {
@@ -95,7 +95,7 @@ export function readDocument(reader: Reader): JSONContent[] {
     return blocks;
 }
 
-// Notes as the import has always shown them: a [n] reference, and at the end one numbered list with a back link per note.
+// Notes as Eigen holds them: a [n] reference, and at the end one numbered list with a back link per note.
 // A note referenced inside a note joins the end of the map, which this loop still reaches.
 function readNotes(reader: Reader): JSONContent[] {
     const items: JSONContent[] = [];
@@ -195,7 +195,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
     const allMono =
-        texts.length > 0 && texts.every((piece) => piece.kind === 'node' && isMonospace(piece.font, reader.fontTable));
+        texts.length > 0 &&
+        texts.every((piece) => piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT);
     if (
         role.kind === 'paragraph' &&
         !list &&
@@ -329,8 +330,8 @@ function taskOf(pieces: Piece[]): { checked: boolean } | undefined {
     if (opener?.kind !== 'node' || opener.node.type !== 'text') return undefined;
     const text = opener.node.text ?? '';
     const checked = CHECKBOXES.get(text.charAt(0));
-    if (checked === undefined || (text.length > 1 && !/^[\t {2}]/.test(text.slice(1)))) return undefined;
-    const rest = text.slice(1).replace(/^[\t {2}]/, '');
+    if (checked === undefined || (text.length > 1 && !/^[\t ]/.test(text.slice(1)))) return undefined;
+    const rest = text.slice(1).replace(/^(?:\t| {1,2})/, '');
     if (rest) opener.node.text = rest;
     else {
         pieces.splice(first, 1);

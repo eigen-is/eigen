@@ -339,7 +339,7 @@ describe('docx import resource guards', () => {
 
         let error: unknown;
         try {
-            await importDocxToEigendocUpdate(toTransferableBuffer(bomb), undefined);
+            importDocxToEigendocUpdate(toTransferableBuffer(bomb), undefined);
         } catch (e) {
             error = e;
         }
@@ -362,7 +362,7 @@ describe('docx import errors', () => {
     async function importError(data: ArrayBuffer): Promise<[number, string]> {
         let error: unknown;
         try {
-            await importDocxToEigendocUpdate(data, undefined);
+            importDocxToEigendocUpdate(data, undefined);
         } catch (e) {
             error = e;
         }
@@ -450,7 +450,7 @@ async function importOutline(body: string, footnotes = ''): Promise<string[]> {
 }
 
 async function importJson(body: string, footnotes = ''): Promise<JSONContent> {
-    return (await docxToPmJson(Buffer.from(await buildDocxWithBody(body, { footnotes })))).json;
+    return docxToPmJson(Buffer.from(await buildDocxWithBody(body, { footnotes }))).json;
 }
 
 async function importBlocks(body: string, footnotes = ''): Promise<string[]> {

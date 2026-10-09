@@ -1356,7 +1356,7 @@ describe('document transform (docx import)', () => {
     // The document the pre-move pipeline produced: parse on this thread, commit into
     // a fresh Y.Doc, read back. The Worker must reproduce it exactly.
     async function referenceDocument(): Promise<JSONContent> {
-        const { json } = await docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        const { json } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
         const doc = new Y.Doc();
         seedEigendoc(doc, json);
         const read = readEigendocFromDoc(doc);
@@ -1365,7 +1365,7 @@ describe('document transform (docx import)', () => {
     }
 
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
-        const { json, images } = await docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        const { json, images } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
         expect(sha256(JSON.stringify(json))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
             { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },

@@ -5,7 +5,7 @@ import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { CODE_LOOK, halfPoints, LINK_LOOK, SMALL_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
-import { fontMark, MONOSPACE_FONT } from './docx-fonts';
+import { fontMark } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
@@ -301,9 +301,7 @@ function marksOf(
 
     const shade = props.highlight || props.shading || '';
     // Code from a code style or the editor's inline code look; a foreign monospace run alone is a font.
-    const code =
-        styles.isCodeCharacter(direct.style) ||
-        (font === MONOSPACE_FONT && shade !== '' && shade === CODE_LOOK.shading);
+    const code = styles.isCodeCharacter(direct.style) || (font === CODE_LOOK.font && shade === CODE_LOOK.shading);
     if (code && !link) return { marks: [{ type: 'code' }], small: false, font, hidden: false };
     const marks: Marks = [];
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });

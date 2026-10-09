@@ -198,9 +198,9 @@ function assignQuotes(items: Item[]): void {
     }
 }
 
-// The writer sets a code box its own indent in from its container, d quote indents in from the margin or the item's
-// text, past the item's own quotes; other editors indent code as text, so another indent nests it only right after a
-// quote, in that quote.
+// The writer sets a code box its own indent in from its container, and each quote around it a quote's indent in from
+// the margin or the item's text, past the item's own quotes; other editors indent code as text, so another indent nests
+// it only right after a quote, in that quote.
 function codeDepth(code: Para, open: Para | undefined, previous: Para | undefined): void {
     const box = code.indLeft - CODE_BLOCK_LOOK.indent;
     const item = open && indentedUnder(box, open.indLeft) ? open : undefined;

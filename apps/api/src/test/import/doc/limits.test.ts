@@ -53,7 +53,7 @@ const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((
 function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
-        const { json } = await docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
+        const { json } = docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
         console.log(JSON.stringify(json));
     `;
     const child = Bun.spawnSync([process.execPath, '-e', script], {
@@ -66,11 +66,13 @@ function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
     return JSON.parse(child.stdout.toString());
 }
 
-async function rejection(promise: Promise<unknown>): Promise<ApiError> {
-    const error = await promise.then(
-        () => undefined,
-        (reason: unknown) => reason,
-    );
+async function rejection(read: () => unknown): Promise<ApiError> {
+    const error = await Promise.resolve()
+        .then(read)
+        .then(
+            () => undefined,
+            (reason: unknown) => reason,
+        );
     if (!(error instanceof ApiError)) throw new Error(`expected an ApiError, got ${String(error)}`);
     return error;
 }
@@ -88,7 +90,7 @@ describe('XML budget', () => {
         const reads = spyOn(ZipReader.prototype, 'read');
         const parses = spyOn(xml, 'parseXml');
         spies.push(reads, parses);
-        const error = await rejection(docxToPmJson(Buffer.from(docx)));
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
         // The package's structure was read through the spies; the body was not.
         expect(parses).toHaveBeenCalled();
@@ -101,7 +103,7 @@ describe('XML budget', () => {
         const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_XML_TAGS));
         const parses = spyOn(xml, 'parseXml');
         spies.push(parses);
-        const error = await rejection(docxToPmJson(Buffer.from(docx)));
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
         expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
     });
@@ -109,7 +111,7 @@ describe('XML budget', () => {
     test('a fontTable.xml past the budget is 413 before the body inflates', async () => {
         const reads = spyOn(ZipReader.prototype, 'read');
         spies.push(reads);
-        const error = await rejection(
+        const error = await rejection(() =>
             importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_DOCX_XML_BYTES) }),
         );
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
@@ -118,7 +120,7 @@ describe('XML budget', () => {
 
     test('the budget counts the parts together', async () => {
         const half = padding(MAX_DOCX_XML_BYTES / 2);
-        const error = await rejection(importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
+        const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
@@ -138,7 +140,7 @@ describe('XML budget', () => {
             const data = golden.read(name) ?? new Uint8Array();
             return name === 'word/styles.xml' ? { ...stored(name, data), crc: 0 } : stored(name, data);
         });
-        const { json } = await docxToPmJson(build(parts));
+        const { json } = docxToPmJson(build(parts));
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Body']);
     });
 
@@ -157,7 +159,7 @@ describe('XML budget', () => {
         });
         const parses = spyOn(xml, 'parseXml');
         spies.push(parses);
-        const { json } = await docxToPmJson(build(parts));
+        const { json } = docxToPmJson(build(parts));
         expect(texts(json)).toEqual(['Body']);
         const size = golden.entry('word/document.xml')?.size;
         expect(parses.mock.calls.filter(([input]) => input.length === size)).toHaveLength(1);
@@ -182,7 +184,7 @@ describe('XML budget', () => {
         ];
         const parses = spyOn(xml, 'parseXml');
         spies.push(parses);
-        const { json } = await docxToPmJson(build(parts));
+        const { json } = docxToPmJson(build(parts));
         expect(texts(json)).toEqual(['Body']);
         expect(parses.mock.calls.filter(([input]) => input.length === broken.length)).toHaveLength(1);
     });
@@ -210,7 +212,7 @@ describe('XML budget', () => {
             throw new TypeError('slip');
         });
         spies.push(parses);
-        const error = await rejection(docxToPmJson(Buffer.from(docx)));
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
     });
 
@@ -220,7 +222,7 @@ describe('XML budget', () => {
             const data = golden.read(name) ?? new Uint8Array();
             return name === 'word/document.xml' ? { ...deflated(name, data), size: 10 } : stored(name, data);
         });
-        const error = await rejection(docxToPmJson(build(parts)));
+        const error = await rejection(() => docxToPmJson(build(parts)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
     });
 });
@@ -522,7 +524,7 @@ describe('figures and media', () => {
         const media = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
         const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media })));
         const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
-        const { images } = await docxToPmJson(input);
+        const { images } = docxToPmJson(input);
         expect(images[0]?.data.buffer).toBe(input.buffer);
     });
 
@@ -617,7 +619,7 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         const bytes = Buffer.from(await Bun.file(process.env.DOCX).arrayBuffer());
         const peak = process.resourceUsage().maxRSS * 1024;
         const cpu = process.cpuUsage();
-        const { json } = await docxToPmJson(bytes);
+        const { json } = docxToPmJson(bytes);
         const used = process.cpuUsage(cpu);
         console.log(JSON.stringify({
             blocks: json.content.length,

@@ -20,10 +20,10 @@ export type DocxImage = {
 
 export const docSchema = getSchema(getDocExtensions({ lowlight }));
 
-export async function docxToPmJson(
+export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): Promise<{ json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] }> {
+): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);

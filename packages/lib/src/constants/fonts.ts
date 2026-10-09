@@ -47,8 +47,8 @@ export function getFontName(value: string): string {
 }
 
 // Font names, trimmed and lowercase, onto the category whose bundled font stands in for them: only the
-// bundled faces are embedded in an export. Read by xlsx and docx import and by the docs paste.
-export const FONT_CATEGORY_MAP: ReadonlyMap<string, EigenFont['category']> = new Map<string, EigenFont['category']>([
+// bundled faces are embedded in an export.
+export const FONT_CATEGORY_MAP: ReadonlyMap<string, EigenFont['category']> = new Map([
     ...EIGEN_FONTS.map((font): [string, EigenFont['category']] => [font.name.toLowerCase(), font.category]),
     ['calibri', 'sans-serif'],
     ['calibri light', 'sans-serif'],

@@ -1516,7 +1516,12 @@ function isReply(data: unknown): data is WorkerReply {
     }
 }
 
-function isImporter(value: unknown): value is typeof docxToPmJson {
+// Another importer may answer with a Promise, as mammoth's did.
+type Importer = (
+    ...args: Parameters<typeof docxToPmJson>
+) => ReturnType<typeof docxToPmJson> | Promise<ReturnType<typeof docxToPmJson>>;
+
+function isImporter(value: unknown): value is Importer {
     return typeof value === 'function';
 }
 
@@ -1664,7 +1669,7 @@ declare var self: Worker;
 
 // The worker side: reads a source, or loads the importer once and then imports one file per message.
 if (!Bun.isMainThread) {
-    let importer: typeof docxToPmJson | undefined;
+    let importer: Importer | undefined;
     self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const request = event.data;
         const started = performance.now();

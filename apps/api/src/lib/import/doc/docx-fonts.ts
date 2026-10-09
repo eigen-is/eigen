@@ -78,12 +78,8 @@ export function readFontTable(root: XmlElement | undefined): FontTable {
     return table;
 }
 
-function bundledFontOf(name: string | undefined, fontTable?: FontTable): string | undefined {
+export function bundledFontOf(name: string | undefined, fontTable?: FontTable): string | undefined {
     return name ? (bundledFont(name) ?? fontTable?.get(name.trim().toLowerCase())) : undefined;
-}
-
-export function isMonospace(name: string | undefined, fontTable?: FontTable): boolean {
-    return !!MONOSPACE_FONT && bundledFontOf(name, fontTable) === MONOSPACE_FONT;
 }
 
 // The document font draws without a mark, so a foreign sans body is no mark and a serif or mono one is one per run.

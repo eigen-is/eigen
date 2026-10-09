@@ -233,7 +233,8 @@ export function mergePara(...layers: ParaProps[]): ParaProps {
     return merged;
 }
 
-// Style names as dl/ uses them for code, plus Eigen's own; `Plain Text` is letters and survey routing, no code.
+// The styles other writers set code in (Word's HTML ones, pandoc's Source Code and Verbatim Char), plus Eigen's own;
+// `Plain Text` is letters and survey routing, no code.
 export const CODE_PARAGRAPH_STYLES = [STYLE_NAMES.CodeBlock, 'HTML Preformatted', 'Source Code', 'Code', 'Macro Text'];
 export const CODE_CHARACTER_STYLES = [
     STYLE_NAMES.Code,

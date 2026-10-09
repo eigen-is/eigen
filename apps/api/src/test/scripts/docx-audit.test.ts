@@ -348,7 +348,7 @@ describe('both sides', () => {
 <w:style w:type="paragraph" w:styleId="Chapter"><w:name w:val="heading 1"/>${heading}</w:style>`,
             },
         );
-        const { json } = await docxToPmJson(Buffer.from(docx));
+        const { json } = docxToPmJson(Buffer.from(docx));
         return { source: auditSource(docx), imported: auditImported(json) };
     }
 
