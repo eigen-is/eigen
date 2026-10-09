@@ -59,4 +59,72 @@ describe('roles', () => {
         expect(types(json)).toEqual(['heading2', 'blockquote']);
         expect([...marksOfType(json, 'bold'), ...marksOfType(json, 'italic')]).toEqual([]);
     });
+
+    // A heading draws its own size and weight; Word's italic Heading 4 and its color are looks Eigen's heading lacks.
+    test("a heading style's italic and color stay marks, as its bold and size don't", async () => {
+        const styles = style(
+            'Heading4',
+            'heading 4',
+            '<w:rPr><w:b/><w:i/><w:color w:val="2F5496"/><w:sz w:val="28"/></w:rPr>',
+        );
+        const { json } = await importDocxBody(styled('Heading4', 'Four'), { styles });
+        expect(types(json)).toEqual(['heading4']);
+        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([
+            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null } },
+            { type: 'italic' },
+        ]);
+    });
+});
+
+// G6: a heading set in body-sized text by hand reads as body text in Word; size alone demotes nothing, as Word's
+// Heading 4 to 6 are 11 pt on an 11 pt Normal.
+describe('headings in body-sized text', () => {
+    const STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Heading1', 'heading 1', '<w:rPr><w:b/><w:sz w:val="32"/></w:rPr>')}${style('Heading4', 'heading 4', '<w:rPr><w:b/><w:i/></w:rPr>')}${style('Heading6', 'heading 6', '<w:rPr><w:sz w:val="20"/></w:rPr>')}`;
+    const sized = (text: string, size?: number) =>
+        `<w:r>${size ? `<w:rPr><w:sz w:val="${size}"/></w:rPr>` : ''}<w:t xml:space="preserve">${text}</w:t></w:r>`;
+    const heading = (id: string, runs: string) => `<w:p><w:pPr><w:pStyle w:val="${id}"/></w:pPr>${runs}</w:p>`;
+    const read = async (body: string) => {
+        const { json } = await importDocxBody(body, { styles: STYLES });
+        return {
+            types: types(json),
+            bold: marksOfType(json, 'bold').map((mark) => mark.text),
+            italic: marksOfType(json, 'italic').map((mark) => mark.text),
+        };
+    };
+
+    test('a Heading 1 whose runs all carry a direct size of 9 pt on an 11 pt body is a bold paragraph', async () => {
+        expect(await read(heading('Heading1', `${sized('Small ', 18)}${sized('title', 18)}`))).toEqual({
+            types: ['paragraph'],
+            bold: ['Small title'],
+            italic: [],
+        });
+    });
+
+    test('a Heading 4 at the body size with no direct size stays a heading', async () => {
+        expect(await read(heading('Heading4', sized('Four')))).toEqual({
+            types: ['heading4'],
+            bold: [],
+            italic: ['Four'],
+        });
+    });
+
+    test('a Heading 4 whose runs carry the body size directly is a bold italic paragraph', async () => {
+        expect(await read(heading('Heading4', sized('Four', 20)))).toEqual({
+            types: ['paragraph'],
+            bold: ['Four'],
+            italic: ['Four'],
+        });
+    });
+
+    test.each([
+        ['Heading 1 with a direct size above the body', heading('Heading1', sized('Big', 24)), 'heading1'],
+        ['Heading 6 of 10 pt with its own size set directly', heading('Heading6', sized('Six', 20)), 'heading6'],
+        [
+            'Heading 1 with a run without a direct size',
+            heading('Heading1', `${sized('Small ', 18)}${sized('and not')}`),
+            'heading1',
+        ],
+    ])('a %s stays a heading', async (_name, body, type) => {
+        expect((await read(body)).types).toEqual([type]);
+    });
 });

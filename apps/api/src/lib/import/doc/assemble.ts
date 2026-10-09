@@ -118,7 +118,9 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                 floats.length > 0 &&
                 (item.role.kind === 'paragraph' || item.role.kind === 'heading' || item.role.kind === 'taskDone')
             ) {
-                item.inlines = [...floats, ...item.inlines];
+                // After a numbered heading's number, as joined text goes.
+                const at = item.labelled ? 1 : 0;
+                item.inlines = [...item.inlines.slice(0, at), ...floats, ...item.inlines.slice(at)];
                 item.empty = false;
                 floats = [];
             }

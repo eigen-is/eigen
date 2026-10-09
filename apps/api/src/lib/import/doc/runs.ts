@@ -10,6 +10,7 @@ import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { ABSORBED, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
+import { isFill, isLight } from './tables';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 export type Piece =
@@ -309,16 +310,20 @@ function marksOf(
     if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =
-        props.color && props.color !== reader.baseColor && props.color !== '000000' && linkLook === undefined
+        props.color &&
+        props.color !== reader.baseColor &&
+        props.color !== '000000' &&
+        linkLook === undefined &&
+        !(scope.onFill && !isFill(shade) && isLight(props.color))
             ? props.color
             : undefined;
-    const fontFamily = fontMark(font);
+    const fontFamily = fontMark(font, reader.fontTable);
     if (color || fontFamily)
         marks.push({
             type: 'textStyle',
             attrs: { color: color ? `#${color.toLowerCase()}` : null, fontFamily: fontFamily ?? null },
         });
-    if (shade && shade !== 'FFFFFF')
+    if (isFill(shade))
         marks.push({ type: 'highlight', attrs: { color: shade === 'FFFF00' ? null : `#${shade.toLowerCase()}` } });
     return { marks, small, font, hidden: false };
 }

@@ -105,6 +105,16 @@ describe('XML budget', () => {
         expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
     });
 
+    test('a fontTable.xml past the budget is 413 before the body inflates', async () => {
+        const reads = spyOn(ZipReader.prototype, 'read');
+        spies.push(reads);
+        const error = await rejection(
+            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_DOCX_XML_BYTES) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+    });
+
     test('the budget counts the parts together', async () => {
         const half = padding(MAX_DOCX_XML_BYTES / 2);
         const error = await rejection(importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
@@ -483,7 +493,10 @@ describe('values', () => {
 
     test('a column width stays between the narrowest column and the text column', async () => {
         const json = await imported(table([1, 99_999_999], [[cell('Thin'), cell('Wide')]]));
-        expect(cells(json).map((node) => node.attrs?.['colwidth'])).toEqual([[MIN_TABLE_COLUMN_PX], [COLUMN_PX]]);
+        expect(cells(json).map((node) => node.attrs?.['colwidth'])).toEqual([
+            [MIN_TABLE_COLUMN_PX],
+            [COLUMN_PX - MIN_TABLE_COLUMN_PX],
+        ]);
     });
 
     test('an image width stays within the text column', async () => {

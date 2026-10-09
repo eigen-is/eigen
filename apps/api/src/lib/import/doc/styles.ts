@@ -2,7 +2,7 @@ import { type XmlElement, xmlElements } from '../../core/xml';
 import { codeBlockLanguage, STYLE_NAMES, W_NS } from '../../export/doc/ooxml';
 import { lowlight } from '../../export/doc/render';
 import type { Theme } from './docx-fonts';
-import { int, is, isOn, onOff, w, wChild } from './package';
+import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type RunProps = {
@@ -31,6 +31,8 @@ export type ParaProps = {
     numId?: string;
     ilvl?: number;
     indLeft?: number;
+    // The first line's offset from the left indent: firstLine to the right, hanging (negative) to the left.
+    indFirst?: number;
     pageBreakBefore?: boolean;
     outlineLvl?: number;
     borders?: Borders;
@@ -119,12 +121,13 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 break;
             case 'rFonts': {
                 const themed = w(child, 'asciiTheme') ?? w(child, 'hAnsiTheme');
-                const font = (themed && theme.font(themed)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
+                const bidiLanguage = w(wChild(rPr, 'lang'), 'bidi');
+                const font = (themed && theme.font(themed, bidiLanguage)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
                 if (font) props.font = font;
                 break;
             }
             case 'sz':
-                props.size = int(w(child, 'val'));
+                props.size = halfPoints(w(child, 'val'));
                 break;
             case 'vanish':
                 props.vanish = onOff(child);
@@ -160,9 +163,15 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 if (ilvl !== undefined) props.ilvl = ilvl;
                 break;
             }
-            case 'ind':
-                props.indLeft = int(w(child, 'left') ?? w(child, 'start')) ?? props.indLeft;
+            case 'ind': {
+                // Each attribute inherits on its own: a w:ind of only a hanging keeps the style's left.
+                const left = twips(w(child, 'left') ?? w(child, 'start'));
+                if (left !== undefined) props.indLeft = left;
+                const hanging = twips(w(child, 'hanging'));
+                const first = hanging === undefined ? twips(w(child, 'firstLine')) : -hanging;
+                if (first !== undefined) props.indFirst = first;
                 break;
+            }
             case 'pageBreakBefore':
                 props.pageBreakBefore = onOff(child);
                 break;
@@ -182,12 +191,12 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 props.shading = shadingOf(child);
                 break;
             case 'spacing': {
-                const line = int(w(child, 'line'));
+                const line = twips(w(child, 'line'));
                 if (w(child, 'lineRule') === 'exact' && line !== undefined) props.exactLine = line;
                 break;
             }
             case 'rPr':
-                props.markSize = int(w(wChild(child, 'sz'), 'val'));
+                props.markSize = halfPoints(w(wChild(child, 'sz'), 'val'));
                 props.markHidden = onOff(wChild(child, 'vanish'));
                 props.markDeleted = !!(wChild(child, 'del') ?? wChild(child, 'moveFrom'));
                 break;
@@ -246,6 +255,9 @@ type Style = {
     pPr: ParaProps;
     rPr: RunProps;
     firstRowRun?: RunProps;
+    // A table style's cell fill, whole and in its first row.
+    fill?: string;
+    firstRowFill?: string;
 };
 
 // What a paragraph style means in eigendoc. Its look is the node's, so the props it absorbs are no marks.
@@ -286,8 +298,9 @@ function roleOf({ name, language }: Style): Role | undefined {
     return ROLE_BY_NAME.get(name);
 }
 
+// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark.
 export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
-    heading: ['bold', 'italic', 'size'],
+    heading: ['bold', 'size'],
     subtitle: ['bold', 'italic', 'size'],
     quote: ['italic', 'color'],
     code: 'all',
@@ -333,6 +346,10 @@ export class Styles {
                 pPr: readParaProps(wChild(element, 'pPr')),
                 rPr: readRunProps(wChild(element, 'rPr'), theme),
                 firstRowRun: firstRow && readRunProps(wChild(firstRow, 'rPr'), theme),
+                fill:
+                    shadingOf(wChild(wChild(element, 'tcPr'), 'shd')) ??
+                    shadingOf(wChild(wChild(element, 'tblPr'), 'shd')),
+                firstRowFill: shadingOf(wChild(wChild(firstRow, 'tcPr'), 'shd')),
             });
             if (type === 'paragraph' && isOn(w(element, 'default'))) defaultParagraph ??= id;
         }

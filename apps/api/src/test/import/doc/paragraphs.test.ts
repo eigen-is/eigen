@@ -61,6 +61,16 @@ describe('empty paragraphs', () => {
         expect(await blocks(body)).toEqual(expected);
     });
 
+    // P2: a heading line would draw taller than the blank line Word shows.
+    test('an empty heading holding a bookmark is a blank line', async () => {
+        const heading = paragraph(
+            '<w:bookmarkStart w:id="0" w:name="_Top"/><w:bookmarkEnd w:id="0"/>',
+            '<w:pStyle w:val="Heading1"/>',
+        );
+        const { json } = await importDocxBody(`${paragraph(run('One'))}${heading}${paragraph(run('Two'))}`);
+        expect(json.content?.[1]).toEqual({ type: 'paragraph', attrs: { textAlign: null } });
+    });
+
     test('a paragraph of spaces counts as empty before a break', async () => {
         expect(
             await blocks(
@@ -184,6 +194,29 @@ describe('indented code', () => {
         ]);
     });
 
+    // Strict OOXML gives lengths in universal measures: 36pt is 720 twips, half an inch.
+    test.each([
+        [
+            "at a bullet's text",
+            '36pt',
+            '0.5in',
+            [{ type: 'bulletList', content: [{ type: 'listItem', content: [text('Item'), code] }] }],
+        ],
+        [
+            "left of a bullet's text",
+            '1in',
+            '36pt',
+            [{ type: 'bulletList', content: [{ type: 'listItem', content: [text('Item')] }] }, code],
+        ],
+    ])('in points %s', async (_name, bullet, indent, expected) => {
+        const numbering = BULLETS.replace('w:left="720" w:hanging="360"', `w:start="${bullet}" w:hanging="18pt"`);
+        const { json } = await importDocxBody(
+            `${paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr>')}${paragraph(run('x = 1'), `<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="${indent}"/>`)}`,
+            { styles: PRE, numbering },
+        );
+        expect(json.content).toEqual(expected);
+    });
+
     test('right after a quote continues it', async () => {
         const { json } = await importDocxBody(
             `${paragraph(run('Said'), '<w:pStyle w:val="Quote"/>')}${pre('x = 1')}${paragraph(run('After'))}`,
@@ -230,6 +263,31 @@ describe('indented code', () => {
         expect(json.content?.map((node) => node.type)).toEqual(['blockquote', type, 'codeBlock']);
     });
 
+    // An indent comes from the style unless the list level or the paragraph sets one.
+    const INDENTED = `${PRE}<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="IndentedPre"><w:name w:val="HTML Preformatted"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>`;
+    const UNINDENTED =
+        '<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>';
+    const styledPre = paragraph(run('x = 1'), '<w:pStyle w:val="IndentedPre"/>');
+    const item = (pPr: string) =>
+        paragraph(run('Item'), `${pPr}<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${pPr ? 6 : 5}"/></w:numPr>`);
+    const inItem = [{ type: 'bulletList', content: [{ type: 'listItem', content: [text('Item'), code] }] }];
+    test.each([
+        [
+            'right after a quote continues it',
+            `${said}${styledPre}`,
+            [{ type: 'blockquote', content: [text('Said'), code] }],
+        ],
+        ["at a bullet's text is code in the item", `${item('')}${styledPre}`, inItem],
+        [
+            'at the text of a bullet in it whose level sets none is code in the item',
+            `${item('<w:pStyle w:val="Indented"/>')}${pre('x = 1')}`,
+            inItem,
+        ],
+    ])('indented by its style, %s', async (_name, body, expected) => {
+        const { json } = await importDocxBody(body, { styles: INDENTED, numbering: `${BULLETS}${UNINDENTED}` });
+        expect(json.content).toEqual(expected);
+    });
+
     // 567 is 1 cm, 2160 Google Docs' 1.5": each within INDENT_TOLERANCE of the writer's code box in whole quotes.
     const atIndent = (style: string, indent: number) =>
         paragraph(run('x = 1'), `<w:pStyle w:val="${style}"/><w:ind w:left="${indent}"/>`);
@@ -273,5 +331,49 @@ describe('indented code', () => {
             paragraph(run('x = 1', '<w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono"/>'), box),
         );
         expect(json.content).toEqual([quoted(depth)]);
+    });
+});
+
+// Word reads each w:ind attribute on its own along the style chain, and starts a hanging first line left of the text.
+describe('indents', () => {
+    const STYLES = [
+        '<w:style w:type="paragraph" w:styleId="Indented"><w:name w:val="Indented"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style>',
+        '<w:style w:type="paragraph" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Indented"/><w:pPr><w:ind w:firstLine="0"/></w:pPr></w:style>',
+        '<w:style w:type="paragraph" w:styleId="Hanging"><w:name w:val="Hanging"/><w:pPr><w:ind w:left="1021" w:hanging="1021"/></w:pPr></w:style>',
+        '<w:style w:type="paragraph" w:styleId="Requirement"><w:name w:val="Requirement"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8"/></w:pBdr><w:ind w:left="1134" w:hanging="1134"/></w:pPr></w:style>',
+    ].join('');
+    const NUMBERING =
+        '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
+    const bullet = paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr>');
+    const outline = async (body: string) =>
+        ((await importDocxBody(body, { styles: STYLES, numbering: NUMBERING })).json.content ?? []).map((node) =>
+            node.type === 'bulletList'
+                ? `bulletList[${(node.content?.[0]?.content ?? []).map((child) => nodesOfType(child, 'text')[0]?.text).join(' | ')}]`
+                : (node.type ?? ''),
+        );
+
+    test.each([
+        [
+            "a direct first line keeps the style's left",
+            paragraph(run('Under'), '<w:pStyle w:val="Indented"/><w:ind w:firstLine="0"/>'),
+        ],
+        [
+            "a style's first line keeps the left of the style it is based on",
+            paragraph(run('Under'), '<w:pStyle w:val="Child"/>'),
+        ],
+    ])('%s, so the paragraph continues the item', async (_name, under) => {
+        expect(await outline(`${bullet}${under}`)).toEqual(['bulletList[Item | Under]']);
+    });
+
+    test("a paragraph hanging from the item's text back to the margin starts at the margin, after the list", async () => {
+        const centred = paragraph(run('Centred'), '<w:pStyle w:val="Hanging"/><w:jc w:val="center"/>');
+        expect(await outline(`${bullet}${centred}`)).toEqual(['bulletList[Item]', 'paragraph']);
+    });
+
+    test('a left bar on a paragraph hanging back to the margin is one quote, at its first line', async () => {
+        const { json } = await importDocxBody(paragraph(run('Shall'), '<w:pStyle w:val="Requirement"/>'), {
+            styles: STYLES,
+        });
+        expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
     });
 });

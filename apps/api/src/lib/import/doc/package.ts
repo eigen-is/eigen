@@ -35,6 +35,7 @@ export type Package = {
     styles?: XmlElement;
     numbering?: XmlElement;
     theme?: XmlElement;
+    fontTable?: XmlElement;
     footnotes?: Part;
     endnotes?: Part;
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
@@ -64,7 +65,7 @@ export function readPackage(bytes: Uint8Array): Package {
     const located = (type: string) => relOfType(documentRels, type) ?? `word/${type}.xml`;
     const notes = ['footnotes', 'endnotes'].map(located);
     // Every content part is charged before the first of them inflates.
-    const parts = [documentPath, ...['styles', 'numbering', 'theme'].map(located), ...notes];
+    const parts = [documentPath, ...['styles', 'numbering', 'theme', 'fontTable'].map(located), ...notes];
     charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
     const document = readXml(zip, documentPath, budget);
     if (!document) throw new ApiError(400, NOT_A_DOCX);
@@ -90,6 +91,7 @@ export function readPackage(bytes: Uint8Array): Package {
         styles: xml('styles'),
         numbering: xml('numbering'),
         theme: xml('theme'),
+        fontTable: xml('fontTable'),
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypes,
@@ -281,6 +283,31 @@ export function int(value: string | undefined): number | undefined {
     if (value === undefined) return undefined;
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
+}
+
+// ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
+const POINTS_PER_UNIT = new Map([
+    ['pt', 1],
+    ['pc', 12],
+    ['pi', 12],
+    ['in', 72],
+    ['cm', 72 / 2.54],
+    ['mm', 72 / 25.4],
+]);
+
+// A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
+function measure(value: string | undefined, perPoint: number): number | undefined {
+    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)(pt|pc|pi|in|cm|mm)$/) ?? [];
+    const points = POINTS_PER_UNIT.get(unit);
+    return points === undefined ? int(value) : Math.round(Number(number) * points * perPoint);
+}
+
+export function twips(value: string | undefined): number | undefined {
+    return measure(value, 20);
+}
+
+export function halfPoints(value: string | undefined): number | undefined {
+    return measure(value, 2);
 }
 
 // Document order; a match's own content and a text box's are not searched.

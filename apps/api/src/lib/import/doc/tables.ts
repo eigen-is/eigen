@@ -3,7 +3,7 @@ import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TWIPS_PER_PX, W_NS } from '../../export/doc/ooxml';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
-import { int, is, isOn, onOff, w, wChild } from './package';
+import { int, is, isOn, onOff, twips, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { mergeRun, shadingOf } from './styles';
 
@@ -22,21 +22,30 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tblPr = wChild(table, 'tblPr');
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => is(col, W_NS, 'gridCol'))
-        .map((col) => int(w(col, 'w')) ?? 0)
+        .map((col) => twips(w(col, 'w')) ?? 0)
         .slice(0, MAX_COLUMNS);
     const columns = grid.length || MAX_COLUMNS;
+    const columnPx = scaled(grid, scope.room ?? COLUMN_PX);
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
     const firstRowOn = look
         ? (isOn(w(look, 'firstRow')) ?? (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0)
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
-    const cellItems = (cell: XmlElement, rowIndex: number): Item[] => {
-        const first = rowIndex === 0 && firstRowOn && tableStyle?.firstRowRun;
+    const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableStyle?.fill;
+    const cellItems = (cell: XmlElement, rowIndex: number, colwidth: number[] | null): Item[] => {
+        const firstRow = rowIndex === 0 && firstRowOn;
+        const first = firstRow && tableStyle?.firstRowRun;
+        const fill =
+            shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')) ??
+            (firstRow ? tableStyle?.firstRowFill : undefined) ??
+            tableFill;
         const cellScope: Scope = {
             ...scope,
             tables: scope.tables + 1,
             tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
+            room: colwidth ? colwidth.reduce((sum, width) => sum + width, 0) : scope.room,
+            onFill: scope.onFill || isFill(fill),
         };
         return readBlocks(reader, cellContent(cell), cellScope);
     };
@@ -45,7 +54,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const float = wChild(tblPr, 'tblpPr');
     const [onlyRow] = rows;
     const onlyCell = rows.length === 1 && onlyRow?.cells.length === 1 ? onlyRow.cells[0] : undefined;
-    const onlyItems = float && onlyCell ? cellItems(onlyCell, 0) : undefined;
+    const onlyItems = float && onlyCell ? cellItems(onlyCell, 0, widths(columnPx, 0, columnPx.length)) : undefined;
     if (float && onlyItems) {
         const figure = floatingFigure(reader, onlyItems, float, grid);
         if (figure) return [{ kind: 'float', figure }];
@@ -61,7 +70,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (column > 0)
             cells.push({
                 type: 'tableCell',
-                attrs: { colspan: column, colwidth: widths(grid, 0, column) },
+                attrs: { colspan: column, colwidth: widths(columnPx, 0, column) },
                 content: [{ type: 'paragraph' }],
             });
         for (const cell of row.cells) {
@@ -80,11 +89,12 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                     continue;
                 }
             }
-            const content = build(cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex));
+            const colwidth = widths(columnPx, column, colspan);
+            const content = build(cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex, colwidth));
             const fill = shadingOf(wChild(tcPr, 'shd'));
             const node: JSONContent = {
                 type: header || fill === HEADER_CELL_LOOK.fill ? 'tableHeader' : 'tableCell',
-                attrs: { colspan, rowspan: 1, colwidth: widths(grid, column, colspan), ...hoistAlignment(content) },
+                attrs: { colspan, rowspan: 1, colwidth, ...hoistAlignment(content) },
                 content: content.length > 0 ? content : [{ type: 'paragraph' }],
             };
             for (let k = 0; k < colspan; k++) {
@@ -97,7 +107,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (cells.length > 0) rowNodes.push({ type: 'tableRow', content: cells });
     }
     if (rowNodes.length === 0) return [];
-    const indent = int(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
+    const indent = twips(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
     return [{ kind: 'table', node: { type: 'table', content: rowNodes }, indent }];
 }
 
@@ -105,9 +115,12 @@ function cellContent(cell: XmlElement): XmlElement[] {
     return xmlElements(cell).filter((child) => !is(child, W_NS, 'tcPr'));
 }
 
-function cellFill(cell: XmlElement): boolean {
-    const fill = shadingOf(wChild(wChild(cell, 'tcPr'), 'shd'));
+export function isFill(fill: string | undefined): boolean {
     return !!fill && fill !== 'FFFFFF';
+}
+
+function cellFill(cell: XmlElement): boolean {
+    return isFill(shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')));
 }
 
 // A shaded first row over unshaded rows is a header row, as Google Docs and many templates draw one.
@@ -122,6 +135,16 @@ function isShadedHeader(rows: Row[]): boolean {
     );
 }
 
+// P3: contrast below 1.5 against white, by WCAG's relative luminance. On a fill the schema drops, Word draws such text
+// legibly; on Eigen's paper it would vanish, so it takes the body color.
+export function isLight(hex: string): boolean {
+    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
+        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
+}
+
 // The writer's wrapped figure: a floating one-cell table holding the image and its caption.
 function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: number[]): JSONContent | undefined {
     const paras = items.filter((item): item is Para => item.kind === 'para' && !item.empty);
@@ -132,7 +155,7 @@ function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: 
     if (!figure || figures.length !== 1 || rest.length > 0) return undefined;
     if (image?.inlines.some((node) => node.type !== 'figure' && !isWhitespace(node))) return undefined;
     const spec = w(float, 'tblpXSpec');
-    const x = int(w(float, 'tblpX')) ?? 0;
+    const x = twips(w(float, 'tblpX')) ?? 0;
     const width = grid.reduce((sum, col) => sum + col, 0);
     const right =
         spec === 'right' || spec === 'outside' || (spec === undefined && x + width / 2 > reader.columnTwips / 2);
@@ -174,10 +197,38 @@ function tableRows(table: XmlElement): Row[] {
     return rows;
 }
 
-function widths(grid: number[], column: number, colspan: number): number[] | null {
-    const spanned = grid.slice(column, column + colspan);
-    if (spanned.length !== colspan || spanned.some((width) => !(width > 0))) return null;
-    return spanned.map((width) => Math.min(COLUMN_PX, Math.max(MIN_TABLE_COLUMN_PX, Math.round(width / TWIPS_PER_PX))));
+// Twips to px, within the room: a column too thin to draw takes the floor and the others scale into what is left,
+// rounded at the running sum so they fill it exactly. At most one pass per column, of at most 63.
+function scaled(grid: number[], room: number): number[] {
+    const px = grid.map((width) => (width > 0 ? width / TWIPS_PER_PX : 0));
+    const total = px.reduce((sum, width) => sum + width, 0);
+    const target = Math.min(room, total);
+    const thin = new Set<number>();
+    let scale = 1;
+    for (let grew = true; grew; ) {
+        const free = px.reduce((sum, width, index) => (thin.has(index) ? sum : sum + width), 0);
+        scale = free > 0 ? Math.max(0, target - thin.size * MIN_TABLE_COLUMN_PX) / free : 0;
+        grew = false;
+        for (const [index, width] of px.entries()) {
+            if (width > 0 && !thin.has(index) && width * scale < MIN_TABLE_COLUMN_PX) {
+                thin.add(index);
+                grew = true;
+            }
+        }
+    }
+    let before = 0;
+    return px.map((width, index) => {
+        if (!(width > 0)) return 0;
+        if (thin.has(index)) return MIN_TABLE_COLUMN_PX;
+        const start = Math.round(before * scale);
+        before += width;
+        return Math.max(MIN_TABLE_COLUMN_PX, Math.round(before * scale) - start);
+    });
+}
+
+function widths(columnPx: number[], column: number, colspan: number): number[] | null {
+    const spanned = columnPx.slice(column, column + colspan);
+    return spanned.length > 0 && spanned.length === colspan && spanned.every((width) => width > 0) ? spanned : null;
 }
 
 // A cell whose paragraphs share one alignment is an aligned cell.

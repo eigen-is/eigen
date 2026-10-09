@@ -166,3 +166,15 @@ describe('symbols', () => {
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['•✓']);
     });
 });
+
+describe('sizes', () => {
+    // ST_HpsMeasure: half-points, or a universal measure in Strict OOXML.
+    test('a run of 8pt on an 11 pt body is small, one of 11pt is not', async () => {
+        const styles = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const json = await imported(
+            paragraph(`${run('fine', '<w:sz w:val="8pt"/>')}${run(' body', '<w:sz w:val="11pt"/>')}`),
+            { styles },
+        );
+        expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['fine']);
+    });
+});

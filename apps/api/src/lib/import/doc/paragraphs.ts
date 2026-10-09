@@ -1,14 +1,25 @@
 import type { JSONContent } from '@tiptap/core';
-import { type XmlElement, xmlElements } from '../../core/xml';
+import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK, STYLE_NAMES, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { isMonospace, readTheme, type Theme } from './docx-fonts';
+import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { MAX_LEVEL, Numbering } from './numbering';
-import { alternative, int, isAlternateContent, type Package, type Part, w, wChild } from './package';
+import {
+    alternative,
+    descendants,
+    halfPoints,
+    is,
+    isAlternateContent,
+    type Package,
+    type Part,
+    twips,
+    w,
+    wChild,
+} from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import { mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
-import { readTable } from './tables';
+import { isFill, readTable } from './tables';
 
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
 // text boxes and notes; assemble.ts turns the items into blocks.
@@ -18,6 +29,7 @@ type NoteRef = { type: 'footnote' | 'endnote'; id: string; number: number };
 export type Reader = {
     pkg: Package;
     theme: Theme;
+    fontTable: FontTable;
     styles: Styles;
     numbering: Numbering;
     images: MediaPart[];
@@ -32,11 +44,20 @@ export type Reader = {
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it and the table style.
-export type Scope = { part: Part; inNote: boolean; tables: number; tableRun?: RunProps };
+// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px
+// and whether the text sits on a fill the schema drops.
+export type Scope = {
+    part: Part;
+    inNote: boolean;
+    tables: number;
+    tableRun?: RunProps;
+    room?: number;
+    onFill?: boolean;
+};
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
-    const theme = readTheme(pkg.theme);
+    const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
+    const theme = readTheme(pkg.theme, w(wChild(defaults, 'lang'), 'bidi'));
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
@@ -44,6 +65,7 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
     return {
         pkg,
         theme,
+        fontTable: readFontTable(pkg.fontTable),
         styles,
         numbering: new Numbering(pkg.numbering, styles),
         images: [],
@@ -54,9 +76,9 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         bodySize: body.size ?? 20,
         baseColor: body.color,
         columnTwips:
-            (int(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
-            (int(w(margin, 'left')) ?? 1440) -
-            (int(w(margin, 'right')) ?? 1440),
+            (twips(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
+            (twips(w(margin, 'left')) ?? 1440) -
+            (twips(w(margin, 'right')) ?? 1440),
         publicOrigin,
     };
 }
@@ -139,8 +161,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
+    if (role.kind === 'heading' && isBodySized(reader, p, mergeRun(styles.docRun, styles.run(styleId)).size ?? 20))
+        role = { kind: 'paragraph' };
 
-    const context: RunContext = { scope, paraStyle: styleId, role, pieces: [], pending: [] };
+    // No fill of its own is transparent: a cell's shows through.
+    const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
+    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [] };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),
@@ -160,11 +186,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list =
         numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
-    const props = mergePara(styled, { indLeft: list?.indLeft }, direct);
+    const props = mergePara(styled, list?.indLeft === undefined ? {} : { indLeft: list.indLeft }, direct);
 
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
-    const allMono = texts.length > 0 && texts.every((piece) => piece.kind === 'node' && isMonospace(piece.font));
+    const allMono =
+        texts.length > 0 && texts.every((piece) => piece.kind === 'node' && isMonospace(piece.font, reader.fontTable));
     const shaded = !!props.shading && props.shading !== 'FFFFFF';
     if (
         role.kind === 'paragraph' &&
@@ -186,7 +213,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 !!borders.left &&
                 !!borders.bottom &&
                 !!borders.right));
-    const indLeft = props.indLeft ?? 0;
+    // A hanging first line starts left of the text, where Word draws a bar and an indent nests; an item's holds its
+    // number or checkbox, so an item is at its text.
+    const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
     // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
@@ -231,7 +260,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
         const para: Para = {
             kind: 'para',
-            role: isRule && !visible ? { kind: 'hr' } : role,
+            // P2: an empty heading is the blank line Word shows, not a heading's height.
+            role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
             continued: numbered,
@@ -258,6 +288,17 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     for (const item of context.pending) items.push(item);
     if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
     return items;
+}
+
+// G6: every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
+// text; the style's bold and italic then stay as marks. A run's text box is not searched.
+function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolean {
+    const sizes = descendants(p, W_NS, 'r')
+        .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
+        .map((run) => halfPoints(w(wChild(wChild(run, 'rPr'), 'sz'), 'val')));
+    return (
+        sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
+    );
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

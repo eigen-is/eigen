@@ -122,3 +122,18 @@ describe('blank lines before a page', () => {
         ]);
     });
 });
+
+describe('floats', () => {
+    const figure: JSONContent = { type: 'figure', attrs: { mediaName: 'image-1.png', layout: 'wrap-left' } };
+
+    test("a float anchored in a numbered heading follows the heading's number", () => {
+        const heading = para('2. ', { role: { kind: 'heading', level: 1 }, labelled: true });
+        heading.inlines.push({ type: 'text', text: 'Results' });
+        const [block] = build([{ kind: 'float', figure }, heading]);
+        expect(block?.content?.map((node) => (node.type === 'text' ? node.text : node.type))).toEqual([
+            '2. ',
+            'figure',
+            'Results',
+        ]);
+    });
+});

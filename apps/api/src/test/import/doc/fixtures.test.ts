@@ -75,10 +75,14 @@ describe('docx fixtures', () => {
         expect(nodesOfType(json, 'bulletList')[0]?.content).toHaveLength(9);
     });
 
-    // Its majorBidi theme fonts are G11, U4's.
-    test('docx4j load-and-save: notes, a table and the SVG as itself', async () => {
+    test('docx4j load-and-save: notes, a table, the SVG as itself and majorBidi as the Arabic face', async () => {
         const { json, images } = await imported('docx4j-loadAndSave.docx');
         expect(texts(json)).toContain('[1]');
+        // G11: majorBidi with an empty a:cs is the theme's Arab face, Times New Roman, as the default bidi language is ar-SA.
+        const fonts = nodesOfType(json, 'text')
+            .filter((node) => node.text === 'Font (Times New Roman)')
+            .map((node) => node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily']);
+        expect(fonts).toEqual(['Source Serif 4']);
         expect(nodesOfType(json, 'table').length).toBeGreaterThan(0);
         expect(images.map((image) => image.contentType)).toContain('image/svg+xml');
     });
