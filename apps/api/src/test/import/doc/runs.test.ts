@@ -85,6 +85,21 @@ describe('toggles', () => {
     });
 });
 
+describe('underline', () => {
+    // MS-OI29500 §2.1.100c: Word reads a w:u without w:val as inherited, so only a style underlines it.
+    test('a w:u without w:val takes the style, else no underline', async () => {
+        const styles =
+            '<w:style w:type="character" w:styleId="Under"><w:name w:val="Under"/><w:rPr><w:u w:val="single"/></w:rPr></w:style>';
+        const json = await imported(
+            paragraph(
+                `${run('plain', '<w:u w:color="000000"/>')}${run('styled', '<w:rStyle w:val="Under"/><w:u w:color="000000"/>')}${run(' ')}${run('single', '<w:u w:val="single"/>')}`,
+            ),
+            { styles },
+        );
+        expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['styled', 'single']);
+    });
+});
+
 describe('caps', () => {
     const capsOf = (json: JSONContent) =>
         marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['caps'], mark.attrs['fontFamily']]);

@@ -116,9 +116,12 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 // A dstrike off must not undo a strike on.
                 if (child.local === 'strike' || onOff(child)) props.strike = onOff(child);
                 break;
-            case 'u':
-                props.underline = w(child, 'val') !== 'none';
+            case 'u': {
+                // MS-OI29500 §2.1.100c: Word reads a w:u without w:val, often only a color, as inherited.
+                const value = w(child, 'val');
+                if (value !== undefined) props.underline = value !== 'none';
                 break;
+            }
             case 'vertAlign':
                 props.vertAlign = w(child, 'val');
                 break;
