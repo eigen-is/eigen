@@ -165,7 +165,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
     return items;
 }
 
-function paraOf(inlines: JSONContent[]): Para {
+export function paraOf(inlines: JSONContent[]): Para {
     return {
         kind: 'para',
         role: { kind: 'paragraph' },

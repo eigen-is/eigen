@@ -28,6 +28,8 @@ export type Package = {
     footnotes?: Part;
     endnotes?: Part;
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
+    // A part a drawing names, read when met and charged as the others are; a damaged one is no part.
+    readPart(path: string): XmlElement | undefined;
 };
 
 // An encrypted docx is an OLE compound file holding the package as a stream of this name.
@@ -84,6 +86,7 @@ export function readPackage(bytes: Uint8Array): Package {
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypes,
+        readPart: (path) => optional(() => readXml(zip, path, budget)),
     };
 }
 

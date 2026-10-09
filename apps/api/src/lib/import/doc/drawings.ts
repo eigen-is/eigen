@@ -1,7 +1,21 @@
 import type { JSONContent } from '@tiptap/core';
-import { A_NS, ASVG_NS, EMU_PER_PX, EMU_PER_TWIP, O_NS, PIC_NS, R_NS, V_NS, W_NS, WP_NS } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { COLUMN_PX, isCaptionLike, isFigureOnly, type Para, textOf } from './assemble';
+import {
+    A_NS,
+    ASVG_NS,
+    C_NS,
+    DGM_NS,
+    DSP_NS,
+    EMU_PER_PX,
+    EMU_PER_TWIP,
+    O_NS,
+    PIC_NS,
+    R_NS,
+    V_NS,
+    W_NS,
+    WP_NS,
+} from '../../core/ooxml';
+import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import { COLUMN_PX, type Item, isCaptionLike, isFigureOnly, type Para, paraOf, textOf } from './assemble';
 import { contentTypeOf, descendants, int } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { linkOf, pushText, type RunContext } from './runs';
@@ -52,7 +66,7 @@ function mediaName(reader: Reader, path: string): string | undefined {
     return name;
 }
 
-function imagePath(id: string | undefined, scope: Scope): string | undefined {
+function partPath(id: string | undefined, scope: Scope): string | undefined {
     const rel = id ? scope.part.rels.get(id) : undefined;
     return rel && !rel.external ? rel.target : undefined;
 }
@@ -74,7 +88,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg] = blip ? descendants(blip, ASVG_NS, 'svgBlip') : [];
             const embedded = (element: XmlElement | undefined) => element && xmlAttr(element, R_NS, 'embed');
-            const path = imagePath(embedded(svg), context.scope) ?? imagePath(embedded(blip), context.scope);
+            const path = partPath(embedded(svg), context.scope) ?? partPath(embedded(blip), context.scope);
             const name = path && mediaName(reader, path);
             if (!name) {
                 // A linked picture lives outside the file; its alt text says what it was.
@@ -114,7 +128,63 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const click = docPr && xmlChild(docPr, A_NS, 'hlinkClick');
         const link = click ? linkOf(reader, click, context.scope) : undefined;
         for (const figure of figures) pushFigure(figure, link ? { ...context, link } : context);
+        for (const item of graphicText(reader, frame, context.scope)) context.pending.push(item);
     }
+}
+
+// SmartArt's text is the document's: its drawing's shapes in order, else its data model's points. A chart keeps its
+// title only. The schema holds neither graphic, so each counts as dropped.
+function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
+    const lines: JSONContent[][] = [];
+    for (const diagram of descendants(frame, DGM_NS, 'relIds')) {
+        reader.graphicsDropped++;
+        const data = readOnce(reader, partPath(xmlAttr(diagram, R_NS, 'dm'), scope));
+        if (!data) continue;
+        const [ext] = descendants(data, DSP_NS, 'dataModelExt');
+        const drawing = readOnce(reader, partPath(ext?.attributes['relId'], scope));
+        const paragraphs = drawing
+            ? descendants(drawing, DSP_NS, 'txBody').flatMap((body) => xmlChildren(body, A_NS, 'p'))
+            : descendants(data, DGM_NS, 'pt')
+                  .filter((point) => SMARTART_TEXT_POINTS.has(point.attributes['type'] ?? 'node'))
+                  .flatMap((point) => descendants(point, A_NS, 'p'));
+        for (const paragraph of paragraphs) lines.push(drawingLine(paragraph));
+    }
+    for (const chart of descendants(frame, C_NS, 'chart')) {
+        reader.graphicsDropped++;
+        const space = readOnce(reader, partPath(xmlAttr(chart, R_NS, 'id'), scope));
+        const plot = space && xmlChild(space, C_NS, 'chart');
+        const title = plot && xmlChild(plot, C_NS, 'title');
+        const text = title && xmlChild(title, C_NS, 'tx');
+        if (!text) continue;
+        const rich = xmlChild(text, C_NS, 'rich');
+        // A title from a cell keeps the cell's cached text.
+        const cached = descendants(text, C_NS, 'v').map(xmlText).join('');
+        if (rich) for (const paragraph of xmlChildren(rich, A_NS, 'p')) lines.push(drawingLine(paragraph));
+        else if (cached) lines.push([{ type: 'text', text: cached }]);
+    }
+    return lines.filter((line) => line.some((node) => node.type === 'text')).map(paraOf);
+}
+
+// The points a SmartArt draws text for; transitions and presentation points hold none of the document's.
+const SMARTART_TEXT_POINTS = new Set(['node', 'asst']);
+
+// A part a second graphic names adds nothing, so no file multiplies one part's text.
+function readOnce(reader: Reader, path: string | undefined): XmlElement | undefined {
+    if (!path || reader.graphicParts.has(path)) return undefined;
+    reader.graphicParts.add(path);
+    return reader.pkg.readPart(path);
+}
+
+function drawingLine(paragraph: XmlElement): JSONContent[] {
+    const line: JSONContent[] = [];
+    for (const child of xmlElements(paragraph)) {
+        if (child.ns !== A_NS) continue;
+        if (child.local === 'br') line.push({ type: 'hardBreak' });
+        const run = (child.local === 'r' || child.local === 'fld') && xmlChild(child, A_NS, 't');
+        const text = run && xmlText(run).replace(/[\r\n]/g, ' ');
+        if (text) line.push({ type: 'text', text });
+    }
+    return line;
 }
 
 // A linked image keeps its link.
@@ -137,7 +207,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             continue;
         }
         for (const data of descendants(shape, V_NS, 'imagedata')) {
-            const path = imagePath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
+            const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
             const name = path && mediaName(reader, path);
             if (!name) continue;
             const width = vmlWidthPx(shape.attributes['style'] ?? '');

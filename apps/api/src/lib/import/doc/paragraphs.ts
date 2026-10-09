@@ -56,6 +56,9 @@ export type Reader = {
     // By type and id, in the order first referenced: a note is read once however often it is referenced.
     notes: Map<string, NoteRef>;
     fields: Field[];
+    // Charts and SmartArt, whose graphic the schema can't hold, and the parts of theirs read: each is read once.
+    graphicsDropped: number;
+    graphicParts: Set<string>;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
     bodySizeCs: number;
@@ -93,6 +96,8 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         imageNames: new Map(),
         notes: new Map(),
         fields: [],
+        graphicsDropped: 0,
+        graphicParts: new Set(),
         // Word's default is 10 pt.
         bodySize: body.size ?? 20,
         bodySizeCs: body.sizeCs ?? body.size ?? 20,

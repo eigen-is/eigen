@@ -11,6 +11,9 @@ export const WP_NS = 'http://schemas.openxmlformats.org/drawingml/2006/wordproce
 export const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export const PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 export const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+// Word's drawing of a SmartArt, the shapes and their text as laid out.
+export const DSP_NS = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
 export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 export const MC_NS = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
@@ -35,6 +38,8 @@ const STRICT_NAMESPACES = new Map([
     [`${STRICT}/drawingml/wordprocessingDrawing`, WP_NS],
     [`${STRICT}/drawingml/main`, A_NS],
     [`${STRICT}/drawingml/picture`, PIC_NS],
+    [`${STRICT}/drawingml/chart`, C_NS],
+    [`${STRICT}/drawingml/diagram`, DGM_NS],
     [`${STRICT}/officeDocument/math`, M_NS],
     [`${STRICT}/spreadsheetml/main`, SML_NS],
 ]);

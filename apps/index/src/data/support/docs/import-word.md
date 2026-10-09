@@ -5,10 +5,12 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file, including bold and italic text, headings, lists, tables, page breaks, and embedded images.
+
+A SmartArt graphic comes in as its text, one paragraph per shape, and a chart as its title only.
 
 A numbered list with a page break in the middle comes back as two lists, and the second one starts again at 1. A page break in a nested list item, or at the end of the item directly above one, is left out, so the list stays whole. A paragraph set to "Page break before" in Word doesn't get a page break.
 

@@ -44,6 +44,17 @@ const footnote = (id: number, inner: string) => `<w:footnote w:id="${id}">${inne
 const floating = (inner: string) =>
     `<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`;
 
+const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+const smartArt = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="1" name="Diagram 1"/><a:graphic><a:graphicData><dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+const smartArtData = (inner: string) => ({
+    rels: '<Relationship Id="rId20" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData" Target="diagrams/data1.xml"/>',
+    media: {
+        'word/diagrams/data1.xml': new TextEncoder().encode(
+            `<dgm:dataModel xmlns:dgm="${DGM}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><dgm:ptLst>${inner}</dgm:ptLst></dgm:dataModel>`,
+        ),
+    },
+});
+
 const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
 const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
 const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
@@ -204,6 +215,13 @@ describe('XML budget', () => {
             media: { 'word/notes.xml': encode(notes), 'word/_rels/notes.xml.rels': encode('<Relationships>') },
         });
         expect(texts(json)).toEqual(['Body', '[1]']);
+    });
+
+    test('a SmartArt part past the budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(paragraph(smartArt), smartArtData(padding(MAX_DOCX_XML_BYTES))),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
     // As a corrupt file is, rather than as a server error.
@@ -368,6 +386,19 @@ describe('structure', () => {
         expect(notes(json)).toHaveLength(1);
         expect(texts(json.content?.[0] ?? {})).toEqual(['[1]'.repeat(400)]);
     }, 20_000);
+
+    test('a SmartArt that 1,000 graphics name is read once', async () => {
+        const points = Array.from(
+            { length: 1000 },
+            (_, index) =>
+                `<dgm:pt modelId="${index}"><dgm:t><a:p><a:r><a:t>P${index}</a:t></a:r></a:p></dgm:t></dgm:pt>`,
+        ).join('');
+        const started = performance.now();
+        const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(texts(json)).toHaveLength(1000);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
+    }, 60_000);
 
     test('20,000 notes stay linear', async () => {
         const count = 20_000;
