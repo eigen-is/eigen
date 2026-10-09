@@ -51,6 +51,7 @@ import {
     proseBorder,
     proseColor,
     QUOTE_LOOK,
+    SMALL_LOOK,
     TASK_DONE_LOOK,
     twips,
 } from './looks';
@@ -1256,16 +1257,7 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ['subscript', () => ({ vertAlign: 'subscript' })],
     ['superscript', () => ({ vertAlign: 'superscript' })],
     // Direct formatting, not a style: a run holds one rStyle, and a link already takes it.
-    [
-        'small',
-        () => {
-            const sizePt = cssPt(proseValue('.eigen-prose small', 'font-size'), BODY.sizePt);
-            return {
-                spacing: twips(cssPt(proseValue('.eigen-prose small', 'letter-spacing'), sizePt)),
-                size: halfPoints(sizePt),
-            };
-        },
-    ],
+    ['small', () => ({ spacing: twips(SMALL_LOOK.letterSpacingPt), size: halfPoints(SMALL_LOOK.sizePt) })],
     [
         'code',
         (_attrs, { headingPt }) => ({

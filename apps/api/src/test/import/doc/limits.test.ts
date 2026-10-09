@@ -5,10 +5,11 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
+import { LIST_LEVELS } from '../../../lib/core/ooxml';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
-import { COLUMN_PX, MAX_LIST_DEPTH, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
@@ -291,7 +292,7 @@ describe('structure', () => {
         const json = await imported(body, { numbering });
         const depth = (node: JSONContent): number =>
             (node.type === 'bulletList' ? 1 : 0) + Math.max(0, ...(node.content ?? []).map(depth));
-        expect(depth(json)).toBe(MAX_LIST_DEPTH);
+        expect(depth(json)).toBe(LIST_LEVELS);
         expect(nodesOfType(json, 'listItem')).toHaveLength(count);
     });
 

@@ -1,4 +1,4 @@
-import { spellNumber, W_NS } from '../../core/ooxml';
+import { LIST_LEVELS, spellNumber, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { int, is, w, wChild } from './package';
 import { MAX_CHAIN, readParaProps, type Styles } from './styles';
@@ -18,8 +18,7 @@ export type ListRef = {
     suffix: string;
 };
 
-// Word's levels and its number range.
-export const MAX_LEVEL = 8;
+// Word's number range.
 const MAX_START = 32_767;
 // Longer than any label Word draws; uncapped, a long lvlText or a letter count would grow with every item.
 const MAX_LABEL_CHARS = 255;
@@ -97,7 +96,7 @@ export class Numbering {
         if (override?.start !== undefined && !this.started.has(startKey)) counters[ilvl] = override.start;
         else counters[ilvl] = current === undefined ? level.start : current < MAX_START ? current + 1 : 1;
         this.started.add(startKey);
-        for (let deeper = ilvl + 1; deeper <= MAX_LEVEL; deeper++) {
+        for (let deeper = ilvl + 1; deeper < LIST_LEVELS; deeper++) {
             const restart = (num.overrides.get(deeper)?.level ?? abstract.levels.get(deeper))?.restart;
             if (restart === undefined || restart > ilvl) counters[deeper] = undefined;
         }

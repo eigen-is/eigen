@@ -114,6 +114,13 @@ function codeBlockLook() {
 
 export const CODE_BLOCK_LOOK = codeBlockLook();
 
+function smallLook() {
+    const sizePt = cssPt(proseValue('.eigen-prose small', 'font-size'), BODY.sizePt);
+    return { sizePt, letterSpacingPt: cssPt(proseValue('.eigen-prose small', 'letter-spacing'), sizePt) };
+}
+
+export const SMALL_LOOK = smallLook();
+
 export const CAPTION_LOOK = {
     sizePt: cssPt(proseValue('.eigen-prose figcaption', 'font-size'), BODY.sizePt),
     color: proseColor('.eigen-prose figcaption', 'color'),

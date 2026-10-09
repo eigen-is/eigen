@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
-import { LIST_TYPES } from '../../core/ooxml';
+import { LIST_LEVELS, LIST_TYPES } from '../../core/ooxml';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../export/doc/looks';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
@@ -47,9 +47,6 @@ export const COLUMN_PX = Math.floor(PAGE.width - PAGE.margin.left - PAGE.margin.
 
 // Deeper quotes join the deepest, so a hostile indent can't nest without end.
 export const MAX_QUOTE_DEPTH = 8;
-
-// Word's levels; lists of other definitions nest by indent, which a hostile file can deepen without end.
-export const MAX_LIST_DEPTH = 9;
 
 const INDENT_TOLERANCE = 60;
 
@@ -459,7 +456,8 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
             return;
         }
         const deeper = sameList ? top.ilvl < ilvl : indent > top.indent + INDENT_TOLERANCE;
-        if (deeper && stack.length < MAX_LIST_DEPTH) break;
+        // No deeper than Word's levels: lists of other definitions nest by indent, which a hostile file can deepen.
+        if (deeper && stack.length < LIST_LEVELS) break;
         pop();
         if (deeper) break;
     }

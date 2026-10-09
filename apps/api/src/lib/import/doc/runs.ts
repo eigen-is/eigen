@@ -3,14 +3,14 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { CODE_LOOK, LINK_LOOK } from '../../export/doc/looks';
+import { CODE_LOOK, halfPoints, LINK_LOOK, SMALL_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
 import { fontMark, MONOSPACE_FONT } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
-import { ABSORBED, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
-import { isFill, isLight } from './tables';
+import { ABSORBED, isFill, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
+import { isLight } from './tables';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 export type Piece =
@@ -253,6 +253,10 @@ export function pushText(reader: Reader, text: string, direct: RunProps, context
 
 type Marks = NonNullable<JSONContent['marks']>;
 
+// Eigen's small text is 75% of the body (eigen-prose.css), the writer's 9 pt in 11; foreign small print is at most this
+// share of the body size, and a body style a point smaller is still body text.
+export const SMALL_PRINT = 0.85;
+
 // Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
 // Word's Hyperlink style; any color from the theme's link colors underlines too. The editor draws its own, so on a link
 // they are no mark.
@@ -310,10 +314,10 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    // The writer's small is 9 pt; foreign small print is at most 85% of the body size.
     const size = props.size;
     const small =
-        (direct.size !== undefined && direct.size <= 18) || (size !== undefined && size <= 0.85 * reader.bodySize);
+        (direct.size !== undefined && direct.size <= halfPoints(SMALL_LOOK.sizePt)) ||
+        (size !== undefined && size <= SMALL_PRINT * reader.bodySize);
     if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =

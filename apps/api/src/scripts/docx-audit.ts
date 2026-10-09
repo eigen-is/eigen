@@ -35,6 +35,7 @@ import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
 import { fontMark } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
+import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
@@ -186,9 +187,6 @@ const QUOTE_STYLES = new Set(['quote', 'intense quote', 'block text']);
 const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
-// Eigen's small text is 75% of the body (eigen-prose.css), the docx writer's 9 pt in 11; a body style a point
-// smaller is still body text.
-const SMALL = 0.85;
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
 
 // Counted per word they touch, and matched as words, so a mark on the wrong words keeps nothing.
@@ -680,7 +678,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
             ['font', font !== undefined],
-            ['small', sizeOf(sources) <= base.size * SMALL],
+            ['small', sizeOf(sources) <= base.size * SMALL_PRINT],
             ['link', linked],
         ];
         return {

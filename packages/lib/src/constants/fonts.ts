@@ -15,6 +15,9 @@ export const EIGEN_FONTS: EigenFont[] = [
     { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400] },
 ];
 
+// A doc's text draws in it without a font mark, so a paste or an import gives it none.
+export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
+
 // The vocabulary a stored `fontFamily` must be one of — a name, never a CSS stack. Readers validate
 // against this so an unrecognised value falls back instead of reaching a CSS declaration.
 export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((f) => f.name);

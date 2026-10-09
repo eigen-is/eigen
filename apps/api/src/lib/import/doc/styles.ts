@@ -84,6 +84,11 @@ export function shadingOf(shd: XmlElement | undefined): string | undefined {
     return w(shd, 'val') === 'solid' ? (hexColor(w(shd, 'color')) ?? '') : '';
 }
 
+// White is no fill: Word and Google Docs spell an unshaded cell or paragraph that way too.
+export function isFill(fill: string | undefined): boolean {
+    return !!fill && fill !== 'FFFFFF';
+}
+
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
     const props: RunProps = {};
     for (const child of rPr ? xmlElements(rPr) : []) {

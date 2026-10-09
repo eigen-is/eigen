@@ -1,4 +1,4 @@
-import { bundledFont, EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
+import { bundledFont, DOCUMENT_FONT, getFontFamily } from '@workspace/lib/constants/fonts';
 
 // Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, images and tables no wider than the column.
 export function cleanPastedHTML(html: string, maxWidth: number): string {
@@ -7,7 +7,7 @@ export function cleanPastedHTML(html: string, maxWidth: number): string {
     doc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
         const font = bundledFont(el.style.fontFamily.replace(/['"]/g, ''));
         // The document font needs no mark.
-        el.style.fontFamily = font && font !== EIGEN_FONTS[0].name ? getFontFamily(font) : '';
+        el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
     });
 
     doc.querySelectorAll<HTMLElement>('img, table').forEach((el) => {

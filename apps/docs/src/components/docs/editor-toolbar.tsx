@@ -1,6 +1,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import { EIGEN_FONTS, getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, EIGEN_FONTS, getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -177,7 +177,7 @@ export const EditorToolbar = ({
 
     // Docs stores the fontFamily attr as an EIGEN_FONTS name now; getFontName also collapses any
     // legacy full-stack value a not-yet-normalized doc still carries.
-    const activeFontName = getFontName(editor.getAttributes('textStyle').fontFamily || '') || EIGEN_FONTS[0].name;
+    const activeFontName = getFontName(editor.getAttributes('textStyle').fontFamily || '') || DOCUMENT_FONT;
 
     return (
         <>

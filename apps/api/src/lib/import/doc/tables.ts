@@ -6,7 +6,7 @@ import { HEADER_CELL_LOOK } from '../../export/doc/looks';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
 import { int, is, isOn, onOff, twips, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
-import { mergeRun, shadingOf } from './styles';
+import { isFill, mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
 
@@ -114,10 +114,6 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
 
 function cellContent(cell: XmlElement): XmlElement[] {
     return xmlElements(cell).filter((child) => !is(child, W_NS, 'tcPr'));
-}
-
-export function isFill(fill: string | undefined): boolean {
-    return !!fill && fill !== 'FFFFFF';
 }
 
 function cellFill(cell: XmlElement): boolean {

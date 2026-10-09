@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { openZip } from '../../../lib/core/zip';
 import {
+    BODY,
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
     CODE_LOOK,
@@ -107,5 +109,11 @@ describe('the writer draws the editor look from the vocabulary', () => {
         );
         expect(fills).toContain(HEADER_CELL_LOOK.fill);
         expect(new Set(fills.filter((fill) => fill !== undefined))).toEqual(new Set([HEADER_CELL_LOOK.fill]));
+    });
+});
+
+describe('the writer draws its body in the document font', () => {
+    test('the prose body is the font a doc draws without a mark', () => {
+        expect(BODY.font).toBe(DOCUMENT_FONT);
     });
 });
