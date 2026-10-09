@@ -20,8 +20,8 @@ export type Para = {
     // Where an item's number starts, which says whether a list of another definition nests under the open item.
     numberAt?: number;
     quote: number;
-    // A quote inside the list item above it.
-    inItem?: boolean;
+    // A quote inside the list item above it: the quote depth that item sits at.
+    inItem?: number;
     // The writer's code box, whose indent counts its quotes.
     boxed?: boolean;
     // A tracked deletion of the mark: accepted, the content joins the next paragraph.
@@ -197,13 +197,14 @@ function assignQuotes(items: Item[]): void {
             codeDepth(item, open, previous);
             if (!(open && indentedUnder(item.indLeft, open.indLeft))) open = undefined;
         } else if (open && item.quote > 0 && item.indLeft > open.indLeft + INDENT_TOLERANCE) {
-            item.quote = Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
-            item.inItem = true;
+            // Past the quotes the item itself sits in.
+            item.quote = open.quote + Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
+            item.inItem = open.quote;
         } else if (!item.continued && !item.empty) open = undefined;
         item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
         if (item.quote > 0) {
             if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));
-            else plain = item.quote;
+            else if (item.inItem === undefined) plain = item.quote;
         }
         previous = item;
     }
@@ -220,7 +221,7 @@ function codeDepth(code: Para, open: Para | undefined, previous: Para | undefine
     if (code.boxed && depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
         code.indLeft = box;
         code.quote = (item?.quote ?? 0) + depth;
-        code.inItem = !!item && depth > 0;
+        code.inItem = item && depth > 0 ? item.quote : undefined;
     } else if (depth > 0 && previous && previous.quote > 0) {
         code.quote = previous.quote;
         code.inItem = previous.inItem;
@@ -258,7 +259,7 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
             out.push({
                 kind: 'block',
                 node: { type: 'blockquote', content },
-                inItem: first?.kind === 'para' && first.inItem,
+                inItem: first?.kind === 'para' && first.inItem === depth,
             });
         quoted = [];
     };
@@ -271,7 +272,9 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         }
         if (itemDepth > depth) {
             const [first] = quoted;
-            if (item.kind === 'para' && first?.kind === 'para' && !!first.inItem !== !!item.inItem) flushQuote();
+            // A quote in the item above starts a quote of its own, at the depth the item sits at.
+            const inItem = (entry: Item | undefined) => entry?.kind === 'para' && entry.inItem === depth;
+            if (item.kind === 'para' && first?.kind === 'para' && inItem(first) !== inItem(item)) flushQuote();
             quoted.push(item);
             continue;
         }

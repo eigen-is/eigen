@@ -139,6 +139,11 @@ describe('a block inside a list item or a quote', () => {
             'code and a rule at the margin after a list, code in its last item',
             [ordered([p('One'), code('in()')]), code('after()'), ordered([p('Two')]), rule],
         ],
+        ['a quote in an item in a quote', [quote(p('Said'), ordered([p('One'), quote(p('Inner'))]), p('Done'))]],
+        [
+            'code opening a quote in an item in a quote',
+            [quote(p('Said'), ordered([p('One'), quote(code('inner()'), p('Inner'))]), p('Done'))],
+        ],
     ])('%s', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
