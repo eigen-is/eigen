@@ -83,9 +83,13 @@ A list item that holds a wrapped figure ends in a clearing break (`w:br w:clear=
 
 Each ordered list gets its own `w:abstractNum` with its start in all nine levels, so two adjacent lists count separately. A bullet counts nothing, so bullet lists at one indent share one definition, which keeps `numbering.xml` small, and a bullet has no counter to restart. Word has nine levels, so a list or quote deeper still indents no further.
 
-## A docx keeps every page break and points root-relative links at the instance
+## A docx keeps every page break
 
-A page break is a paragraph holding `w:br w:type="page"` wherever it stands, at the top level or in a list item, a task item, a quote or a table cell. A link's root-relative `href` means nothing outside Eigen, so the writer prefixes it with the public origin (`getPublicOrigin`, none on a `localhost` dev server), and a protocol-relative one gets `https:`. The HTML and PDF downloads keep a relative link relative, an open [ROADMAP](ROADMAP.md) question.
+A page break is a paragraph holding `w:br w:type="page"` wherever it stands, at the top level or in a list item, a task item, a quote or a table cell.
+
+## Every export points root-relative links at the instance
+
+A link's root-relative `href` means nothing outside Eigen, so the docx, the HTML and the PDF prefix it with the public origin (`getPublicOrigin`, none on a `localhost` dev server), and a protocol-relative one gets `https:`, since a downloaded file would open it as `file:`. One rule serves all three: `absoluteHref` in `apps/api/src/lib/export/doc/render.ts`, which the docx writer calls per link and `withAbsoluteLinks` applies to the JSON before the HTML render.
 
 ## WeasyPrint fetches only data: URIs
 

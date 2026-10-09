@@ -23,7 +23,14 @@ import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
-import { lowlight, renderCodeBlockNode, renderFigureNode, renderTaskItemNode, withTrailingBreaks } from './render';
+import {
+    lowlight,
+    renderCodeBlockNode,
+    renderFigureNode,
+    renderTaskItemNode,
+    withAbsoluteLinks,
+    withTrailingBreaks,
+} from './render';
 import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
@@ -46,7 +53,7 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks(media);
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
-    const html = renderEigendocDocument(json, toDataUriMap(media), title);
+    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title);
     return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 }
 

@@ -102,3 +102,19 @@ export function withTrailingBreaks(node: JSONContent): JSONContent {
     if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }
+
+// Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.
+export function absoluteHref(href: string, publicOrigin: string | undefined): string {
+    if (href.startsWith('//')) return `https:${href}`;
+    return publicOrigin && href.startsWith('/') ? `${publicOrigin}${href}` : href;
+}
+
+export function withAbsoluteLinks(node: JSONContent, publicOrigin: string | undefined): JSONContent {
+    const content = node.content?.map((child) => withAbsoluteLinks(child, publicOrigin));
+    const marks = node.marks?.map((mark) => {
+        const href = mark.attrs?.['href'];
+        if (mark.type !== 'link' || typeof href !== 'string') return mark;
+        return { ...mark, attrs: { ...mark.attrs, href: absoluteHref(href.trim(), publicOrigin) } };
+    });
+    return { ...node, ...(content && { content }), ...(marks && { marks }) };
+}

@@ -136,8 +136,8 @@ export async function runDocumentExport(
     const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format, prepSignal);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
-    // docx document property carries the stripped one, applied in the Worker. A docx
-    // absolutizes root-relative links with the public origin, none on a checkout's dev server.
+    // docx document property carries the stripped one, applied in the Worker. Root-relative
+    // links take the public origin in every format, none on a checkout's dev server.
     const request: ExportTransformJob =
         job.documentType === 'eigendoc'
             ? {

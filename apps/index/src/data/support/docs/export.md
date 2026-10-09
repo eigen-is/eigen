@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -31,7 +31,7 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 The exported file contains the document text and all formatting: headings, lists, tables, images, code blocks, and other content. Comment threads are not included in the exported file.
 
-A page break starts a new page in the PDF and the Word file.
+A page break starts a new page in the PDF and the Word file. In all three formats, links to other files in Eigen point to your Eigen server.
 
 The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the Word file:
 
@@ -40,7 +40,6 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Numbered lists keep their numbers, and task lists keep their checkboxes, ticked or not.
 - Tables keep their column widths and borders, and a header row repeats on every page.
 - Code blocks keep their colors, and quotes keep the bar along their left edge.
-- Links to other files in Eigen point to your Eigen server.
 
 The PDF and the Word file use the same page as the editor: A4 with 2 cm margins. You can see it under **File → Page setup…**.
 

@@ -251,6 +251,45 @@ describe('doc export — whitespace', () => {
     );
 });
 
+// The docx writer's rule (doc-docx.test.ts), so a link to another Eigen file works in every format.
+describe('doc export — links', () => {
+    async function hrefsOf(format: 'html' | 'pdf-html', publicOrigin?: string): Promise<string[]> {
+        const linked = (href: string) => ({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] });
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        linked('/drive/x?id=1'),
+                        linked('//host/x'),
+                        linked('https://a.example/'),
+                        linked('#frag'),
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], publicOrigin);
+        return [...new TextDecoder().decode(data).matchAll(/<a [^>]*href="([^"]*)"/g)].map((match) => match[1] ?? '');
+    }
+
+    test.each(['html', 'pdf-html'] as const)(
+        '%s prefixes a root-relative href with the public origin',
+        async (format) => {
+            expect(await hrefsOf(format, 'https://eigen.example')).toEqual([
+                'https://eigen.example/drive/x?id=1',
+                'https://host/x',
+                'https://a.example/',
+                '#frag',
+            ]);
+        },
+    );
+
+    test('a root-relative href stays relative without a public origin', async () => {
+        expect(await hrefsOf('html')).toEqual(['/drive/x?id=1', 'https://host/x', 'https://a.example/', '#frag']);
+    });
+});
+
 // A docx sizes an SVG figure as the HTML export draws it: CSS at 96 dpi, where sharp reads physical units at 72.
 describe('doc export — docx SVG size', () => {
     const svg = (attrs: string) =>

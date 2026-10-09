@@ -11,7 +11,7 @@ import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { proseValue, proseValueIfSet } from './prose-css';
-import { type HastNode, highlightCode } from './render';
+import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
 export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
@@ -1286,14 +1286,8 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     // Gated after the strip, or a character XML can't hold could hide a scheme; trimmed as a URL parser trims.
     const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
-    // Outside Eigen a root-relative href means nothing.
-    const absolute = kept.startsWith('//')
-        ? `https:${kept}`
-        : publicOrigin && kept.startsWith('/')
-          ? `${publicOrigin}${kept}`
-          : kept;
     // What a URI reference can't hold; `%` stays, so an encoded href encodes no further.
-    const target = absolute.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
+    const target = absoluteHref(kept, publicOrigin).replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
         encodeURIComponent(character),
     );
     const title = attrs?.['title'];
