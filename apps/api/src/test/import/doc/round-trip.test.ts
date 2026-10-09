@@ -188,12 +188,6 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        const want = googleLosses(expected(source, json), json);
-        const blocks = json.content ?? [];
-        expect(stored({ ...json, content: blocks.slice(0, -3) })).toEqual(
-            stored({ ...want, content: want.content?.slice(0, -1) }),
-        );
-        // G10, U5's: the re-save splits the list whose first item opens with a wrapped figure.
-        expect(blocks.slice(-3).map((node) => node.type)).toEqual(['orderedList', 'paragraph', 'orderedList']);
+        expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });
 });

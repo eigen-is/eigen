@@ -384,6 +384,8 @@ function buildFlow(items: Item[]): JSONContent[] {
             placeItem(item, node, stack, blocks);
             continue;
         }
+        // G10: the writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
+        if (isBreakOnly(item) && continues(index) && holdsWrapped(stack.at(-1)?.item)) continue;
         if (stack.length > 0 && item.role.kind !== 'heading') {
             // A blank line between two items of one list stays in the item above, so the list stays one.
             const host =
@@ -402,6 +404,19 @@ function buildFlow(items: Item[]): JSONContent[] {
     flushCode();
     closeLists();
     return blocks;
+}
+
+function isBreakOnly(para: Para): boolean {
+    return (
+        para.inlines.some((node) => node.type === 'hardBreak') &&
+        para.inlines.every((node) => node.type === 'hardBreak' || isWhitespace(node))
+    );
+}
+
+function holdsWrapped(item: JSONContent | undefined): boolean {
+    return !!item?.content?.some((block) =>
+        block.content?.some((node) => node.type === 'figure' && String(node.attrs?.['layout']).startsWith('wrap')),
+    );
 }
 
 // An unnumbered paragraph indented to an item's text continues the item; at no indent it ends the list.

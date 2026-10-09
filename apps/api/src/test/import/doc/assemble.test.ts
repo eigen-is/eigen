@@ -126,6 +126,30 @@ describe('blank lines before a page', () => {
 describe('floats', () => {
     const figure: JSONContent = { type: 'figure', attrs: { mediaName: 'image-1.png', layout: 'wrap-left' } };
 
+    // G10: the writer clears an item's wrapped figure with a break; a Google Docs re-save drops its clear and its style.
+    test("the line break clearing an item's wrapped figure stays out of the list", () => {
+        const holder = item('', 0, 1);
+        const cleared = para('', { inlines: [{ type: 'hardBreak' }], empty: false });
+        expect(
+            assembled([
+                { kind: 'float', figure },
+                holder,
+                para('One', { indLeft: ITEM_INDENT }),
+                cleared,
+                item('Two', 0, 2),
+            ]),
+        ).toEqual(['orderedList[listItem[figure | One] | listItem[Two]]']);
+    });
+
+    test('a line break between items without a wrapped figure ends the list', () => {
+        const broken = para('', { inlines: [{ type: 'hardBreak' }], empty: false });
+        expect(assembled([item('One', 0, 1), broken, item('Two', 0, 2)])).toEqual([
+            'orderedList[listItem[One]]',
+            'hardBreak',
+            'orderedList[listItem[Two]]',
+        ]);
+    });
+
     test("a float anchored in a numbered heading follows the heading's number", () => {
         const heading = para('2. ', { role: { kind: 'heading', level: 1 }, labelled: true });
         heading.inlines.push({ type: 'text', text: 'Results' });
