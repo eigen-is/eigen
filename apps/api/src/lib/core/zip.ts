@@ -29,14 +29,15 @@ export type ZipErrorCode =
     | 'too-large'
     | 'corrupt';
 
-// Every refusal of openZip and of a read: 413 for an archive past the caps, 400 for any other.
+// Every refusal of openZip and of a read: 413 for an archive past the caps, 400 for any other. The message
+// reaches the user, so it names no entry: those are the archive's own bytes.
 export class ZipError extends ApiError {
     constructor(
         readonly code: ZipErrorCode,
-        message: string,
         options?: ErrorOptions,
     ) {
-        super(code === 'too-many-entries' || code === 'too-large' ? 413 : 400, message, options);
+        const tooLarge = code === 'too-many-entries' || code === 'too-large';
+        super(tooLarge ? 413 : 400, tooLarge ? 'Archive too large' : 'Not a valid zip file', options);
     }
 }
 
@@ -48,8 +49,9 @@ export type ZipEntry = {
     // As declared: a read checks it.
     size: number;
     date: Date;
-    dataStart: number;
 };
+
+type Located = { entry: ZipEntry; dataStart: number };
 
 const END = 0x06054b50;
 const END64 = 0x06064b50;
@@ -62,21 +64,17 @@ const MAX32 = 0xffffffff;
 // Traditional and strong encryption.
 const ENCRYPTED_FLAGS = 0x0001 | 0x0040;
 const UTF8_FLAG = 0x0800;
-// `..` as a segment, a leading slash or drive letter, a backslash, a control character.
-const UNSAFE_NAME = /(^|\/)\.\.(\/|$)|^\/|^[A-Za-z]:|\\|\p{Cc}/u;
 
-const utf8 = new TextDecoder();
+// Names are kept verbatim and found only by their exact name: a BOM stays, so it can't alias another name.
+const utf8 = new TextDecoder('utf-8', { ignoreBOM: true });
 
 export class ZipReader {
     readonly #bytes: Uint8Array;
-    readonly #entries: Map<string, ZipEntry>;
-    // Kept verbatim and found only by their exact name, never normalized onto a safe one.
-    readonly unsafeNames: readonly string[];
+    readonly #entries: Map<string, Located>;
 
-    constructor(bytes: Uint8Array, entries: Map<string, ZipEntry>) {
+    constructor(bytes: Uint8Array, entries: Map<string, Located>) {
         this.#bytes = bytes;
         this.#entries = entries;
-        this.unsafeNames = [...entries.keys()].filter((name) => UNSAFE_NAME.test(name));
     }
 
     names(): string[] {
@@ -84,34 +82,30 @@ export class ZipReader {
     }
 
     entry(name: string): ZipEntry | undefined {
-        return this.#entries.get(name);
+        return this.#entries.get(name)?.entry;
     }
 
     read(name: string): Uint8Array | undefined {
-        const entry = this.#entries.get(name);
-        if (!entry) return undefined;
-        const raw = this.#bytes.subarray(entry.dataStart, entry.dataStart + entry.compressedSize);
-        const data = entry.method === 0 ? raw : inflate(raw, entry);
-        if (data.length !== entry.size) throw new ZipError('bad-size', `${name} is not its declared size`);
-        if (Bun.hash.crc32(data) !== entry.crc32) throw new ZipError('bad-crc', `${name} fails its CRC-32`);
+        const located = this.#entries.get(name);
+        if (!located) return undefined;
+        const { entry, dataStart } = located;
+        const raw = this.#bytes.subarray(dataStart, dataStart + entry.compressedSize);
+        const data = entry.method === 0 ? raw : inflate(raw, entry.size);
+        if (data.length !== entry.size) throw new ZipError('bad-size');
+        if (Bun.hash.crc32(data) !== entry.crc32) throw new ZipError('bad-crc');
         return data;
-    }
-
-    text(name: string): string | undefined {
-        const data = this.read(name);
-        return data && utf8.decode(data);
     }
 }
 
-function inflate(raw: Uint8Array, entry: ZipEntry): Uint8Array {
+function inflate(raw: Uint8Array, size: number): Uint8Array {
     try {
         // zlib stops at maxOutputLength; Bun.inflateSync has no such bound.
-        return inflateRawSync(raw, { maxOutputLength: Math.max(1, entry.size) });
+        return inflateRawSync(raw, { maxOutputLength: Math.max(1, size) });
     } catch (error) {
         if (error instanceof RangeError && 'code' in error && error.code === 'ERR_BUFFER_TOO_LARGE') {
-            throw new ZipError('bad-size', `${entry.name} inflates past its declared ${entry.size} bytes`);
+            throw new ZipError('bad-size');
         }
-        throw new ZipError('corrupt', `${entry.name} is not a valid deflate stream`, { cause: error });
+        throw new ZipError('corrupt', { cause: error });
     }
 }
 
@@ -130,53 +124,43 @@ export function openZip(bytes: Uint8Array): ZipReader {
     let directoryEnd = end;
     if (end >= 20 && u32(end - 20) === END64_LOCATOR) {
         const end64 = u64(end - 12);
-        if (u32(end - 16) !== 0 || u32(end - 4) > 1) throw new ZipError('multi-disk', 'Multi-disk archive');
-        if (!inside(end64, 56, end - 20) || u32(end64) !== END64) {
-            throw new ZipError('corrupt', 'No ZIP64 end record where its locator points');
-        }
+        if (u32(end - 16) !== 0 || u32(end - 4) > 1) throw new ZipError('multi-disk');
+        if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
         // The record runs up to its locator, so no bytes hide between them.
-        if (end64 + 12 + u64(end64 + 4) !== end - 20) {
-            throw new ZipError('misplaced', 'Bytes after the ZIP64 end record');
-        }
+        if (end64 + 12 + u64(end64 + 4) !== end - 20) throw new ZipError('misplaced');
         if (u32(end64 + 16) !== 0 || u32(end64 + 20) !== 0 || u64(end64 + 24) !== u64(end64 + 32)) {
-            throw new ZipError('multi-disk', 'Multi-disk archive');
+            throw new ZipError('multi-disk');
         }
         count = u64(end64 + 32);
         directorySize = u64(end64 + 40);
         directoryStart = u64(end64 + 48);
         directoryEnd = end64;
     } else {
-        if (u16(end + 4) !== 0 || u16(end + 6) !== 0 || u16(end + 8) !== count) {
-            throw new ZipError('multi-disk', 'Multi-disk archive');
-        }
-        if (count === MAX16 || directorySize === MAX32 || directoryStart === MAX32) {
-            throw new ZipError('missing-zip64', 'ZIP64 values without a ZIP64 end record');
-        }
+        if (u16(end + 4) !== 0 || u16(end + 6) !== 0 || u16(end + 8) !== count) throw new ZipError('multi-disk');
+        if (count === MAX16 || directorySize === MAX32 || directoryStart === MAX32) throw new ZipError('missing-zip64');
     }
-    if (count > MAX_ZIP_ENTRIES) throw new ZipError('too-many-entries', `${count} entries`);
     // The directory ends where the end record starts, and each entry takes at least 46 bytes of it.
-    if (directoryStart + directorySize !== directoryEnd || count * 46 > directorySize) {
-        throw new ZipError('misplaced', 'Central directory out of place');
-    }
+    if (directoryStart + directorySize !== directoryEnd || count * 46 > directorySize) throw new ZipError('misplaced');
+    if (count > MAX_ZIP_ENTRIES) throw new ZipError('too-many-entries');
 
-    const entries = new Map<string, ZipEntry>();
+    const entries = new Map<string, Located>();
     const spans: [start: number, end: number][] = [];
     let declaredTotal = 0;
     let at = directoryStart;
     for (let index = 0; index < count; index++) {
-        if (!inside(at, 46, directoryEnd) || u32(at) !== CENTRAL) throw new ZipError('corrupt', 'Bad central header');
+        if (!inside(at, 46, directoryEnd) || u32(at) !== CENTRAL) throw new ZipError('corrupt');
         const flags = u16(at + 8);
         const method = u16(at + 10);
         const nameLength = u16(at + 28);
         const extraStart = at + 46 + nameLength;
         const extraLength = u16(at + 30);
         const next = extraStart + extraLength + u16(at + 32);
-        if (next > directoryEnd) throw new ZipError('corrupt', 'Central header past the directory');
+        if (next > directoryEnd) throw new ZipError('corrupt');
         const nameBytes = bytes.subarray(at + 46, extraStart);
         // As JSZip does: OOXML names are ASCII, so the CP437 reading of a name without the UTF-8 flag is moot.
         const name = utf8.decode(nameBytes);
-        if (flags & ENCRYPTED_FLAGS) throw new ZipError('encrypted', `${name} is encrypted`);
-        if (method !== 0 && method !== 8) throw new ZipError('unsupported-method', `${name} uses method ${method}`);
+        if (flags & ENCRYPTED_FLAGS) throw new ZipError('encrypted');
+        if (method !== 0 && method !== 8) throw new ZipError('unsupported-method');
 
         let size = u32(at + 24);
         let compressedSize = u32(at + 20);
@@ -185,9 +169,7 @@ export function openZip(bytes: Uint8Array): ZipReader {
             const extra = findExtra(view, extraStart, extraLength, ZIP64_EXTRA);
             let field = extra?.start ?? 0;
             const take = () => {
-                if (!extra || field + 8 > extra.end) {
-                    throw new ZipError('missing-zip64', `${name} lacks its ZIP64 field`);
-                }
+                if (!extra || field + 8 > extra.end) throw new ZipError('missing-zip64');
                 const value = u64(field);
                 field += 8;
                 return value;
@@ -197,34 +179,30 @@ export function openZip(bytes: Uint8Array): ZipReader {
             if (offset === MAX32) offset = take();
         }
         declaredTotal += size;
-        if (declaredTotal > MAX_DECOMPRESSED_BYTES) {
-            throw new ZipError('too-large', `Entries declare over ${MAX_DECOMPRESSED_BYTES} bytes`);
-        }
+        if (declaredTotal > MAX_DECOMPRESSED_BYTES) throw new ZipError('too-large');
 
-        if (!inside(offset, 30, directoryStart)) throw new ZipError('out-of-range', `${name} starts past the entries`);
-        if (u32(offset) !== LOCAL) throw new ZipError('corrupt', `${name} has no local header`);
-        if (u16(offset + 6) & ENCRYPTED_FLAGS) throw new ZipError('encrypted', `${name} is encrypted`);
+        if (!inside(offset, 30, directoryStart)) throw new ZipError('out-of-range');
+        if (u32(offset) !== LOCAL) throw new ZipError('corrupt');
+        if (u16(offset + 6) & ENCRYPTED_FLAGS) throw new ZipError('encrypted');
         const localNameLength = u16(offset + 26);
         const dataStart = offset + 30 + localNameLength + u16(offset + 28);
-        if (!inside(dataStart, compressedSize, directoryStart)) {
-            throw new ZipError('out-of-range', `${name} runs past the entries`);
+        if (!inside(dataStart, compressedSize, directoryStart)) throw new ZipError('out-of-range');
+        if (Buffer.compare(bytes.subarray(offset + 30, offset + 30 + localNameLength), nameBytes) !== 0) {
+            throw new ZipError('local-name-differs');
         }
-        if (!sameBytes(bytes.subarray(offset + 30, offset + 30 + localNameLength), nameBytes)) {
-            throw new ZipError('local-name-differs', `${name} has another name in its local header`);
-        }
-        if (entries.has(name)) throw new ZipError('duplicate-name', `${name} appears twice`);
+        if (entries.has(name)) throw new ZipError('duplicate-name');
         const date = dosDate(u16(at + 12), u16(at + 14));
-        entries.set(name, { name, method, crc32: u32(at + 16), compressedSize, size, date, dataStart });
+        entries.set(name, { entry: { name, method, crc32: u32(at + 16), compressedSize, size, date }, dataStart });
         spans.push([offset, dataStart + compressedSize]);
         at = next;
     }
-    if (at !== directoryEnd) throw new ZipError('misplaced', 'Central directory longer than its entries');
+    if (at !== directoryEnd) throw new ZipError('misplaced');
 
     spans.sort((a, b) => a[0] - b[0]);
     // A prefix would let the bytes read as another format too.
-    if ((spans[0]?.[0] ?? directoryStart) !== 0) throw new ZipError('misplaced', 'Bytes before the first entry');
+    if ((spans[0]?.[0] ?? directoryStart) !== 0) throw new ZipError('misplaced');
     for (let index = 1; index < spans.length; index++) {
-        if (spans[index][0] < spans[index - 1][1]) throw new ZipError('overlap', 'Two entries share bytes');
+        if (spans[index][0] < spans[index - 1][1]) throw new ZipError('overlap');
     }
     return new ZipReader(bytes, entries);
 }
@@ -243,8 +221,8 @@ function findEnd(bytes: Uint8Array, view: DataView): number {
             found.push(at);
         }
     }
-    if (found.length === 0) throw new ZipError('no-end', 'No end of central directory');
-    if (found.length > 1) throw new ZipError('ambiguous-end', 'The comment holds a second end record');
+    if (found.length === 0) throw new ZipError('no-end');
+    if (found.length > 1) throw new ZipError('ambiguous-end');
     return found[0];
 }
 
@@ -277,10 +255,6 @@ function dosDate(time: number, date: number): Date {
     );
 }
 
-function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
-    return a.length === b.length && a.every((byte, index) => byte === b[index]);
-}
-
 export type ZipWriteEntry = { name: string; data: Uint8Array | string; store?: boolean };
 
 const utf8Encoder = new TextEncoder();
@@ -290,7 +264,8 @@ const DOS_EPOCH = new Date(Date.UTC(1980, 0, 1));
 // Deflates unless `store`. No ZIP64: past 4 GB or 65,534 entries it throws, as a sentinel value would need one.
 export function writeZip(files: Iterable<ZipWriteEntry>, date: Date = DOS_EPOCH): Uint8Array {
     const year = date.getUTCFullYear();
-    if (year < 1980 || year > 2107) throw new Error('A zip date falls in 1980 to 2107');
+    // Negated, so an Invalid Date's NaN fails it too.
+    if (!(year >= 1980 && year <= 2107)) throw new Error('A zip date falls in 1980 to 2107');
     const time = (date.getUTCHours() << 11) | (date.getUTCMinutes() << 5) | (date.getUTCSeconds() >> 1);
     const day = ((year - 1980) << 9) | ((date.getUTCMonth() + 1) << 5) | date.getUTCDate();
     const names = new Set<string>();

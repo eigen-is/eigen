@@ -20,6 +20,7 @@ const TYPES = stored('[Content_Types].xml', '<Types/>');
 const REAL = deflated('word/document.xml', '<w:document>REAL</w:document>');
 const EVIL = deflated('word/document.xml', '<w:document>EVIL</w:document>');
 const CENTRAL_HEADER = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+const utf8 = new TextDecoder();
 
 const zeros = new Map<number, Uint8Array>();
 function zeroStream(bytes: number): Uint8Array {
@@ -43,7 +44,7 @@ function patched(bytes: Uint8Array, at: number, value: number, width: 2 | 4): Bu
 // Every entry read, the most a caller can ask of an archive.
 function readAll(bytes: Uint8Array): Map<string, string> {
     const zip = openZip(bytes);
-    return new Map(zip.names().map((name) => [name, zip.text(name) ?? '']));
+    return new Map(zip.names().map((name) => [name, utf8.decode(zip.read(name))]));
 }
 
 function refusal(bytes: Uint8Array): ZipError {
@@ -81,6 +82,14 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         `${MAX_ZIP_ENTRIES + 1} entries`,
         () => build(Array.from({ length: MAX_ZIP_ENTRIES + 1 }, (_, i) => stored(`customXml/item${i}.xml`, 'x'))),
         'too-many-entries',
+    ],
+    [
+        'a count past the cap over a two-entry directory',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return patched(patched(zip, zip.length - 22 + 8, 20_000, 2), zip.length - 22 + 10, 20_000, 2);
+        },
+        'misplaced',
     ],
     [
         '100,000 entries',
@@ -276,6 +285,33 @@ describe('openZip refuses', () => {
         expect(error).toBeInstanceOf(ApiError);
         expect(error.code).toBe(code);
         expect(error.status).toBe(code === 'too-large' || code === 'too-many-entries' ? 413 : 400);
+        expect(error.message).toBe(error.status === 413 ? 'Archive too large' : 'Not a valid zip file');
+    });
+
+    test('with a message that holds no entry name', () => {
+        const name = `word/${'\u0001'.repeat(100)}${'x'.repeat(60_000)}.xml`;
+        const named = { ...REAL, name };
+        const archives = [
+            build([TYPES, { ...named, flags: 0x0001 }]),
+            build([TYPES, { ...named, method: 12 }]),
+            build([TYPES, { ...named, localName: 'word/evil.xml' }]),
+            build([TYPES, named, named]),
+            build([TYPES, { ...named, crc: 0xdeadbeef }]),
+            build([TYPES, { ...named, size: named.size + 1 }]),
+            build([TYPES, { ...named, body: new Uint8Array([0xff, 0xff, 0xff]) }]),
+            build([TYPES, { ...named, offset: 1_000_000 }]),
+            build([TYPES, bomb(name, MiB, 1000)]),
+            build([TYPES, bomb(name, 1, MAX_DECOMPRESSED_BYTES)]),
+        ];
+        const codes = new Set<ZipErrorCode>();
+        for (const archive of archives) {
+            const error = refusal(archive);
+            codes.add(error.code);
+            expect(error.message).not.toContain('xxxx');
+            expect(error.message).not.toContain('\u0001');
+            expect(error.message).not.toMatch(/\d/);
+        }
+        expect(codes.size).toBe(archives.length - 1);
     });
 });
 
@@ -283,12 +319,19 @@ describe('openZip reads', () => {
     test('stored and deflated entries, with their sizes and dates', () => {
         const zip = openZip(build([TYPES, REAL]));
         expect(zip.names()).toEqual(['[Content_Types].xml', 'word/document.xml']);
-        expect(zip.text('word/document.xml')).toBe('<w:document>REAL</w:document>');
+        expect(utf8.decode(zip.read('word/document.xml'))).toBe('<w:document>REAL</w:document>');
         expect(zip.entry('word/document.xml')?.size).toBe(REAL.size);
         // raw-zip writes DOS date 0x21: 1 January 1980.
         expect(zip.entry('word/document.xml')?.date.toISOString()).toBe('1980-01-01T00:00:00.000Z');
         expect(zip.read('word/missing.xml')).toBeUndefined();
-        expect(zip.unsafeNames).toEqual([]);
+        expect(Object.keys(zip.entry('word/document.xml') ?? {}).sort()).toEqual([
+            'compressedSize',
+            'crc32',
+            'date',
+            'method',
+            'name',
+            'size',
+        ]);
     });
 
     test('up to the caps', () => {
@@ -314,7 +357,7 @@ describe('openZip reads', () => {
 
     test('an entry only when it is read', () => {
         const zip = openZip(build([TYPES, REAL, bomb('word/media/image1.png', GiB, 1000)]));
-        expect(zip.text('word/document.xml')).toBe('<w:document>REAL</w:document>');
+        expect(utf8.decode(zip.read('word/document.xml'))).toBe('<w:document>REAL</w:document>');
         expect(() => zip.read('word/media/image1.png')).toThrow(ZipError);
     });
 
@@ -324,20 +367,23 @@ describe('openZip reads', () => {
         expect(Buffer.from(zip.read('word/embeddings/package.zip') ?? [])).toEqual(Buffer.from(inner));
     });
 
-    test('unsafe names verbatim beside the safe ones, found only by their exact name', () => {
-        const unsafe = [
+    test('names verbatim, each found only by its exact name', () => {
+        const aliases = [
             '../word/document.xml',
             'word\\document.xml',
             '/word/document.xml',
-            'C:/word.xml',
-            'word/a\u0001.xml',
+            './word/document.xml',
+            'Word/Document.xml',
+            '\uFEFFword/document.xml',
         ];
-        const safe = ['word/..x/a.xml', 'word/a..b.xml', 'word/./a.xml'];
-        const parts = [TYPES, REAL, ...[...unsafe, ...safe].map((name) => ({ ...EVIL, name }))];
-        const zip = openZip(build(parts));
-        expect(zip.unsafeNames).toEqual(unsafe);
-        expect(zip.text('word/document.xml')).toBe('<w:document>REAL</w:document>');
-        expect(zip.text('../word/document.xml')).toBe('<w:document>EVIL</w:document>');
+        for (const alias of aliases) {
+            const zip = openZip(build([TYPES, { ...EVIL, name: alias }]));
+            expect(zip.names()).toEqual(['[Content_Types].xml', alias]);
+            expect(zip.read('word/document.xml')).toBeUndefined();
+        }
+        const zip = openZip(build([TYPES, REAL, ...aliases.map((name) => ({ ...EVIL, name }))]));
+        expect(utf8.decode(zip.read('word/document.xml'))).toBe('<w:document>REAL</w:document>');
+        expect(utf8.decode(zip.read('\uFEFFword/document.xml'))).toBe('<w:document>EVIL</w:document>');
     });
 
     test('what JSZip writes, as JSZip reads it: deflate, store, data descriptors, folders, a comment, a non-ASCII name', async () => {
@@ -370,7 +416,7 @@ describe('openZip reads', () => {
 });
 
 // One process per bomb, so its peak RSS is the bomb's alone.
-describe('a bomb stays under 64 MB of peak RSS', () => {
+describe('a bomb stays within its peak RSS', () => {
     const dir = mkdtempSync(join(tmpdir(), 'zip-bombs-'));
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
     const script = `
@@ -385,16 +431,25 @@ describe('a bomb stays under 64 MB of peak RSS', () => {
         }
         console.log(JSON.stringify({ outcome, maxRss: process.resourceUsage().maxRSS * 1024 }));
     `;
-    const cases: [string, () => Uint8Array, string][] = [
-        ...refused.filter(([name]) => name in bombs),
+    type Case = [name: string, make: () => Uint8Array, outcome: string, maxRss: number];
+    const cases: Case[] = [
+        ...refused.filter(([name]) => name in bombs).map(([name, make, code]): Case => [name, make, code, 64 * MiB]),
         [
             'a bomb zipped in a zip',
             () => build([TYPES, REAL, stored('word/embeddings/package.zip', build([bomb('bomb.bin', GiB, GiB)]))]),
             'ok',
+            64 * MiB,
+        ],
+        // The one inflate that may fill the cap.
+        [
+            'a 1 GiB bomb declaring the whole cap',
+            () => build([bomb('word/media/image1.png', GiB, MAX_DECOMPRESSED_BYTES)]),
+            'bad-size',
+            MAX_DECOMPRESSED_BYTES + 64 * MiB,
         ],
     ];
 
-    test.each(cases)('%s', (name, make, outcome) => {
+    test.each(cases)('%s', (name, make, outcome, maxRss) => {
         const path = join(dir, `${name}.zip`);
         writeFileSync(path, make());
         const run = Bun.spawnSync([process.execPath, '-e', script], {
@@ -402,7 +457,7 @@ describe('a bomb stays under 64 MB of peak RSS', () => {
         });
         const result: { outcome: string; maxRss: number } = JSON.parse(run.stdout.toString());
         expect(result.outcome).toBe(outcome);
-        expect(result.maxRss).toBeLessThan(64 * MiB);
+        expect(result.maxRss).toBeLessThan(maxRss);
     });
 });
 
@@ -418,8 +473,8 @@ function random(seed: number): () => number {
 }
 
 describe('openZip under fuzzing', () => {
-    test('2,000 seeded mutations of a docx open, read or throw a ZipError, within the memory bound', () => {
-        const docx = writeZip([
+    test('2,000 seeded mutations of a docx and its ZIP64 twin open, read or throw a ZipError, within the memory bound', () => {
+        const files = [
             { name: '[Content_Types].xml', data: '<Types><Default Extension="xml"/></Types>' },
             { name: '_rels/.rels', data: '<Relationships><Relationship Target="word/document.xml"/></Relationships>' },
             {
@@ -429,18 +484,27 @@ describe('openZip under fuzzing', () => {
             { name: 'word/styles.xml', data: '<w:styles/>' },
             { name: 'word/media/image1.png', data: new Uint8Array(512).map((_, i) => (i * 7) % 256), store: true },
             { name: 'word/media/', data: '', store: true },
-        ]);
+        ];
+        const zip64 = build(
+            files.map((file) => ({ ...(file.store ? stored : deflated)(file.name, file.data), zip64: true })),
+            { zip64End: true },
+        );
         // Header starts, so most mutations hit a field rather than deflate data.
-        const source = Buffer.from(docx);
-        const headers = [0x02014b50, 0x04034b50, 0x06054b50].flatMap((signature) => {
-            const found: number[] = [];
-            for (let at = 0; at + 4 <= source.length; at++) if (source.readUInt32LE(at) === signature) found.push(at);
-            return found;
-        });
-        const values = [0, 1, 2, 30, 46, 0x7f, 0xff, 0x7fff, 0xffff, 0x10000, 0x7fffffff, 0xffffffff, docx.length];
+        const sources = [Buffer.from(writeZip(files)), zip64].map((source) => ({
+            source,
+            headers: [0x02014b50, 0x04034b50, 0x06054b50, 0x06064b50, 0x07064b50].flatMap((signature) => {
+                const found: number[] = [];
+                for (let at = 0; at + 4 <= source.length; at++) {
+                    if (source.readUInt32LE(at) === signature) found.push(at);
+                }
+                return found;
+            }),
+            values: [0, 1, 2, 30, 46, 0x7f, 0xff, 0x7fff, 0xffff, 0x10000, 0x7fffffff, 0xffffffff, source.length],
+        }));
         const outcomes = new Map<string, number>();
         const peakBefore = process.resourceUsage().maxRSS * 1024;
         for (let round = 0; round < 2000; round++) {
+            const { source, headers, values } = sources[round % 2];
             const next = random(round + 1);
             const pick = (n: number) => Math.floor(next() * n);
             let bytes = Buffer.from(source);
@@ -530,6 +594,7 @@ describe('writeZip', () => {
     test('refuses a name twice, a date DOS cannot hold and the ZIP64 entry count', () => {
         expect(() => writeZip([files[0], files[0]])).toThrow('zipped twice');
         expect(() => writeZip(files, new Date(Date.UTC(1979, 11, 31)))).toThrow('1980 to 2107');
+        expect(() => writeZip(files, new Date(Number.NaN))).toThrow('1980 to 2107');
         const many = Array.from({ length: 0xffff }, (_, i) => ({ name: `${i}`, data: '', store: true }));
         expect(() => writeZip(many)).toThrow('ZIP64');
         const most = Buffer.from(writeZip(many.slice(1)));
