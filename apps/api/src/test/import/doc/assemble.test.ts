@@ -118,6 +118,20 @@ describe('lists of two definitions', () => {
         ]);
     });
 
+    test('an empty paragraph before a paragraph at the open text stays in the item, and the list goes on', () => {
+        const text = para('More', { indLeft: 720 });
+        expect(assembled([bullet('One', 'a', 360), para(''), text, bullet('Two', 'a', 360)])).toEqual([
+            'bulletList[listItem[One |  | More] | listItem[Two]]',
+        ]);
+    });
+
+    test('an empty paragraph after a nested list, before the next item of the outer one, keeps the outer list one', () => {
+        const nested = bullet('Inner', 'b', 1080);
+        expect(assembled([bullet('One', 'a', 360), nested, para(''), bullet('Two', 'a', 360)])).toEqual([
+            'bulletList[listItem[One | bulletList[listItem[Inner | ]]] | listItem[Two]]',
+        ]);
+    });
+
     test('an empty paragraph between items of one list stays in the item above', () => {
         expect(assembled([bullet('One', 'a', 360), para(''), bullet('Two', 'a', 360)])).toEqual([
             'bulletList[listItem[One | ] | listItem[Two]]',

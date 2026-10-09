@@ -348,14 +348,14 @@ function buildFlow(items: Item[]): JSONContent[] {
         );
     };
 
+    // Within the open lists: the next is an item of one of them, or a paragraph at the open text, which goes on with it.
     const betweenItems = (index: number): boolean => {
         const following = next[index];
         const top = stack.at(-1);
-        return (
-            following?.kind === 'para' &&
-            !!top &&
-            (following.task ? top.kind === 'taskList' : following.list?.key === top.key)
-        );
+        if (following?.kind !== 'para' || !top) return false;
+        if (following.task) return stack.some((open) => open.kind === 'taskList');
+        if (following.list) return stack.some((open) => open.key === following.list?.key);
+        return following.role.kind === 'paragraph' && !following.empty && indentedUnder(following.indLeft, top.indent);
     };
 
     for (const [index, item] of items.entries()) {
