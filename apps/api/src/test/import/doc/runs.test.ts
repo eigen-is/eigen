@@ -224,6 +224,18 @@ describe('links', () => {
     });
 });
 
+describe('text', () => {
+    // Pandoc ends a w:t with a line feed and no xml:space; Word shows question2, not question 2.
+    test("a w:t's surrounding whitespace is dropped unless xml:space preserves it", async () => {
+        const json = await imported(
+            paragraph(
+                '<w:r><w:t>question\n</w:t></w:r><w:r><w:t>2</w:t></w:r><w:r><w:t xml:space="preserve"> and </w:t></w:r><w:r><w:t>\t more\nthan\u00a0</w:t></w:r><w:r><w:t> </w:t></w:r><w:r><w:t>one</w:t></w:r>',
+            ),
+        );
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['question2 and more than\u00a0one']);
+    });
+});
+
 describe('symbols', () => {
     test('a w:sym reads through its font, the private-use spelling too', async () => {
         const json = await imported(

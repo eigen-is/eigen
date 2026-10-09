@@ -62,6 +62,13 @@ describe('source side', () => {
         expect(tally.words).toEqual(['So', 'x2', '+1']);
     });
 
+    test("a w:t's surrounding whitespace counts only where xml:space preserves it, as Word draws it", async () => {
+        const tally = await source(
+            '<w:p><w:r><w:t>question\n</w:t></w:r><w:r><w:t>2</w:t></w:r><w:r><w:t xml:space="preserve"> and</w:t></w:r></w:p>',
+        );
+        expect(tally.words).toEqual(['question2', 'and']);
+    });
+
     test('bold from a paragraph style counts through basedOn, and direct formatting wins over it', async () => {
         const tally = await source(
             `<w:p><w:pPr><w:pStyle w:val="Louder"/></w:pPr>${run('Loud words')}${run(' quiet', '<w:b w:val="0"/>')}</w:p>`,

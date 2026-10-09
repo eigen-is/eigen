@@ -42,7 +42,7 @@ import {
     type Script,
 } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { SMALL_PRINT } from '../lib/import/doc/runs';
+import { runText, SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
@@ -861,7 +861,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             const shown = visible(context.scope) && !look.hidden;
             switch (node.local) {
                 case 't':
-                    if (shown) text(xmlText(node), context, look);
+                    if (shown) text(runText(node), context, look);
                     break;
                 case 'noBreakHyphen':
                     if (shown) text('-', context, look);

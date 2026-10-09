@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
 import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT } from './docx-fonts';
@@ -126,7 +126,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
         }
         switch (child.local) {
             case 't':
-                pushText(reader, xmlText(child).replace(/[\r\n]/g, ' '), direct, linked);
+                pushText(reader, runText(child), direct, linked);
                 break;
             case 'tab':
             case 'ptab':
@@ -190,6 +190,14 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
                 break;
         }
     }
+}
+
+// Word drops a w:t's leading and trailing whitespace unless xml:space preserves it, and draws a line feed as a space.
+export function runText(t: XmlElement): string {
+    const text = xmlText(t);
+    const kept =
+        xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+    return kept.replace(/[\r\n]/g, ' ');
 }
 
 // A complex field keeps its result and drops its code; a HYPERLINK field links its result, a form checkbox is a checkbox.
