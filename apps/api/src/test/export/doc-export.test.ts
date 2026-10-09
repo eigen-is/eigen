@@ -391,7 +391,7 @@ describe('doc export — ordered lists', () => {
         ['i', 'lower-roman'],
         ['I', 'upper-roman'],
     ])('an ol of type %s draws %s', (type, style) => {
-        expect(proseValue(`.eigen-prose ol[type="${type}"]`, 'list-style-type')).toBe(style);
+        expect(proseValue(`.eigen-prose ol[type="${type}" s]`, 'list-style-type')).toBe(style);
     });
 });
 
