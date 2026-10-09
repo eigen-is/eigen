@@ -1342,8 +1342,8 @@ describe('document transform (eigenvector)', () => {
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
 // survive the transfer untouched. Regenerate only for an intentional converter change.
-const GOLDEN_DOCX_PM_JSON_SHA256 = 'eca607c052e459b9339766839db7b5d5c99b9e62004ebe8659f3f58afee6193d';
-const GOLDEN_DOCX_DOCUMENT_SHA256 = 'd1fc48375074a7183b7bb63857373c55c649f6ddc6c5e2b057646cfe66841fe4';
+const GOLDEN_DOCX_PM_JSON_SHA256 = 'a10269abb8310898d89830d5dc5912645b76ce686437d7afa7888a7fe0813860';
+const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde59984c3f50bfb836136c70';
 
 describe('document transform (docx import)', () => {
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {

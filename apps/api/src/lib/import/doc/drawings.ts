@@ -46,7 +46,7 @@ function mediaName(reader: Reader, path: string): string | undefined {
     const contentType = imageType(reader, path);
     const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
     if (!contentType || !extension || !reader.pkg.zip.entry(path)) return undefined;
-    const name = `image-${reader.images.length}.${extension}`;
+    const name = `image-${reader.images.length + 1}.${extension}`;
     reader.images.push({ name, path, contentType });
     reader.imageNames.set(path, name);
     return name;

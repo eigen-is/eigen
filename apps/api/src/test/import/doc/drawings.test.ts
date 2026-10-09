@@ -17,8 +17,8 @@ describe('media', () => {
             contentTypes: '<Default Extension="wmf" ContentType="image/x-wmf"/>',
             media: { 'word/media/image1.wmf': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([['image-0.wmf', 'image/x-wmf']]);
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-0.wmf']);
+        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([['image-1.wmf', 'image/x-wmf']]);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.wmf']);
         expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
     });
 
@@ -29,8 +29,8 @@ describe('media', () => {
             media: { 'word/media/a.gif': BYTES, 'word/media/b.jpg': BYTES },
         });
         expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([
-            ['image-0.gif', 'image/gif'],
-            ['image-1.jpeg', 'image/jpeg'],
+            ['image-1.gif', 'image/gif'],
+            ['image-2.jpeg', 'image/jpeg'],
         ]);
     });
 
@@ -38,8 +38,8 @@ describe('media', () => {
         const { json, images } = await importDocxBody(paragraph(`${picture('rId4')}${picture('rId4')}`));
         expect(images).toHaveLength(1);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
-            'image-0.png',
-            'image-0.png',
+            'image-1.png',
+            'image-1.png',
         ]);
     });
 
@@ -53,7 +53,7 @@ describe('media', () => {
             contentTypes: '<Default Extension="svg" ContentType="image/svg+xml"/>',
             media: { 'word/media/pixel.png': BYTES, 'word/media/image1.svg': new TextEncoder().encode('<svg/>') },
         });
-        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([['image-0.svg', 'image/svg+xml']]);
+        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([['image-1.svg', 'image/svg+xml']]);
     });
 });
 

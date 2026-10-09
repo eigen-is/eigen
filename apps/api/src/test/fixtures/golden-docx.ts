@@ -13,7 +13,7 @@ export const GOLDEN_DOCX_LINK = 'https://example.com/report';
 export const GOLDEN_DOCX_LIST = ['North', 'South', 'East'];
 // The reader names extracted images by encounter order; the importer stores them
 // under this name in the document's media/ folder.
-export const GOLDEN_DOCX_IMAGE_NAME = 'image-0.png';
+export const GOLDEN_DOCX_IMAGE_NAME = 'image-1.png';
 // One inline picture of media/pixel.png, as a run.
 export const GOLDEN_DOCX_IMAGE_RUN = `<w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="1" name="Picture 1" descr="A pixel"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="pixel.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="381000" cy="381000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
 
