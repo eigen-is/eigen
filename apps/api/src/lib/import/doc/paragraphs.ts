@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { bundledFontOf, type FontTable, MONOSPACE_FONT, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -260,6 +260,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             node: { type: 'text', text: list?.suffix === 'nothing' ? label : `${label} ` },
         });
 
+    const captionColor = `#${CAPTION_LOOK.color.toLowerCase()}`;
     const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
@@ -287,6 +288,16 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             quote,
             empty: !visible && !content.some((node) => node.type === 'text' && node.text),
             small: halfTexts.length > 0 && halfTexts.every((piece) => piece.kind === 'node' && piece.small),
+            captionLook:
+                halfTexts.length > 0 &&
+                halfTexts.every(
+                    (piece) =>
+                        piece.kind === 'node' &&
+                        piece.small &&
+                        piece.node.marks?.some(
+                            (mark) => mark.type === 'textStyle' && mark.attrs?.['color'] === captionColor,
+                        ),
+                ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
         };
         if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
@@ -295,6 +306,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         if (label && index === 0) para.labelled = true;
         // A framed paragraph holding only an image is a wrapped figure.
+        if (props.frame) para.frame = props.frame;
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)
                 if (node.attrs && !node.attrs['layout']) node.attrs['layout'] = `wrap-${props.frame}`;

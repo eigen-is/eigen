@@ -28,6 +28,10 @@ export type Para = {
     labelled?: boolean;
     empty: boolean;
     small: boolean;
+    // Every text run in the writer's caption size and color, the Caption style as a Google Docs re-save flattens it.
+    captionLook?: boolean;
+    // The side of the text frame it stands in, which holds a wrapped figure and its caption.
+    frame?: 'left' | 'right';
     hairline: boolean;
 };
 
@@ -122,11 +126,16 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                 item.empty = false;
                 floats = [];
             }
+            // G9: a block figure takes the next line in the Caption style or its look; a wrapped one only a caption in
+            // its own frame.
             const previous = items.at(-1);
-            if (isCaptionLike(item) && previous?.kind === 'para' && isFigureOnly(previous)) {
+            if (previous?.kind === 'para' && isFigureOnly(previous)) {
                 const figures = previous.inlines.filter((node) => node.type === 'figure');
                 const last = figures.at(-1);
-                if (last?.attrs && figures.length === 1 && !last.attrs['caption']) {
+                const caption = last?.attrs?.['layout']
+                    ? !!item.frame && item.frame === previous.frame && isCaptionLike(item)
+                    : !item.empty && !item.list && !item.task && (item.role.kind === 'caption' || !!item.captionLook);
+                if (caption && last?.attrs && figures.length === 1 && !last.attrs['caption']) {
                     last.attrs['caption'] = textOf(item.inlines);
                     continue;
                 }
