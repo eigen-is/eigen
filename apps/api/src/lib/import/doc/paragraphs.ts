@@ -162,8 +162,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
-    if (role.kind === 'heading' && isBodySized(reader, p, mergeRun(styles.docRun, styles.run(styleId)).size ?? 20))
-        role = { kind: 'paragraph' };
+    const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
+    if (role.kind === 'heading' && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;

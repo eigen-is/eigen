@@ -400,6 +400,21 @@ describe('both sides', () => {
         expect(compareTallies(source, imported).features['font']).toEqual(NO_FONT);
     });
 
+    // fontTable.xml's pitch places a font the map doesn't know, on the source side as in the reader.
+    test('an unknown font of fixed pitch is JetBrains Mono on both sides', async () => {
+        const docx = await buildDocxWithBody(`<w:p>${run('Body text ')}${fontRun('other', 'Zed Mono')}</w:p>`, {
+            fontTable: '<w:font w:name="Zed Mono"><w:family w:val="modern"/><w:pitch w:val="fixed"/></w:font>',
+        });
+        const { json } = docxToPmJson(Buffer.from(docx));
+        expect(compareTallies(auditSource(docx), auditImported(json)).features['font']).toEqual({
+            source: 1,
+            imported: 1,
+            matched: 1,
+            invented: 0,
+            kept: 1,
+        });
+    });
+
     test("a heading style's own font is its words' font, as Word draws them", async () => {
         const { source, imported } = await fonts(
             'Calibri',

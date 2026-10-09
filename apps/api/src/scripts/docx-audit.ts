@@ -33,7 +33,7 @@ import {
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
-import { fontMark } from '../lib/import/doc/docx-fonts';
+import { fontMark, readFontTable } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
@@ -566,6 +566,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const endnotes = read(partOf('endnotes'));
     const styles = readStyles(read(partOf('styles')), read(partOf('theme')));
     const numberItem = readNumbering(read(partOf('numbering')));
+    const fontTable = readFontTable(read(partOf('fontTable')));
 
     const elements = new Map<string, number>();
     const stories = [document, footnotes, endnotes, read(partOf('comments'))];
@@ -667,7 +668,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const highlight = val(first(sources, 'highlight'));
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
-        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]));
+        const font = fontMark(fontOf([...direct, ...characterRuns, ...context.styleRuns]), fontTable);
         const marks: [Feature, boolean][] = [
             ['bold', toggle('b')],
             ['italic', toggle('i')],
