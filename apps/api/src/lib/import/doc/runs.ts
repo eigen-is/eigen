@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
+import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
@@ -327,10 +328,12 @@ function marksOf(
             ? props.color
             : undefined;
     const fontFamily = fontMark(font, reader.fontTable);
-    if (color || fontFamily)
+    // Word draws capitals over small caps.
+    const caps: Caps | null = props.caps ? 'all' : props.smallCaps ? 'small' : null;
+    if (color || fontFamily || caps)
         marks.push({
             type: 'textStyle',
-            attrs: { color: color ? `#${color.toLowerCase()}` : null, fontFamily: fontFamily ?? null },
+            attrs: { color: color ? `#${color.toLowerCase()}` : null, fontFamily: fontFamily ?? null, caps },
         });
     if (isFill(shade))
         marks.push({

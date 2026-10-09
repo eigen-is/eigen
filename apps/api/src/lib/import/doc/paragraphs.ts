@@ -356,7 +356,8 @@ function stripLook(pieces: Piece[], toggle: string | undefined, color: string): 
         piece.node.marks = piece.node.marks.flatMap((mark) => {
             if (mark.type === toggle) return [];
             if (mark.type !== 'textStyle' || mark.attrs?.['color'] !== hex) return [mark];
-            return mark.attrs?.['fontFamily'] ? [{ ...mark, attrs: { ...mark.attrs, color: null } }] : [];
+            const attrs = { ...mark.attrs, color: null };
+            return Object.values(attrs).some((value) => value !== null) ? [{ ...mark, attrs }] : [];
         });
         if (piece.node.marks.length === 0) delete piece.node.marks;
     }

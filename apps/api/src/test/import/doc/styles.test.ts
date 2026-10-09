@@ -70,7 +70,7 @@ describe('roles', () => {
         const { json } = await importDocxBody(styled('Heading4', 'Four'), { styles });
         expect(types(json)).toEqual(['heading4']);
         expect(nodesOfType(json, 'text')[0]?.marks).toEqual([
-            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null } },
+            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null, caps: null } },
             { type: 'italic' },
         ]);
     });
