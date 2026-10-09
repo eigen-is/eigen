@@ -290,8 +290,9 @@ function roleOf({ name, language }: Style): Role | undefined {
     return ROLE_BY_NAME.get(name);
 }
 
+// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark.
 export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
-    heading: ['bold', 'italic', 'size'],
+    heading: ['bold', 'size'],
     subtitle: ['bold', 'italic', 'size'],
     quote: ['italic', 'color'],
     code: 'all',

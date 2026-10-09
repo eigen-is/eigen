@@ -59,6 +59,21 @@ describe('roles', () => {
         expect(types(json)).toEqual(['heading2', 'blockquote']);
         expect([...marksOfType(json, 'bold'), ...marksOfType(json, 'italic')]).toEqual([]);
     });
+
+    // A heading draws its own size and weight; Word's italic Heading 4 and its color are looks Eigen's heading lacks.
+    test("a heading style's italic and color stay marks, as its bold and size don't", async () => {
+        const styles = style(
+            'Heading4',
+            'heading 4',
+            '<w:rPr><w:b/><w:i/><w:color w:val="2F5496"/><w:sz w:val="28"/></w:rPr>',
+        );
+        const { json } = await importDocxBody(styled('Heading4', 'Four'), { styles });
+        expect(types(json)).toEqual(['heading4']);
+        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([
+            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null } },
+            { type: 'italic' },
+        ]);
+    });
 });
 
 // G6: a heading set in body-sized text by hand reads as body text in Word; size alone demotes nothing, as Word's
@@ -86,7 +101,11 @@ describe('headings in body-sized text', () => {
     });
 
     test('a Heading 4 at the body size with no direct size stays a heading', async () => {
-        expect(await read(heading('Heading4', sized('Four')))).toEqual({ types: ['heading4'], bold: [], italic: [] });
+        expect(await read(heading('Heading4', sized('Four')))).toEqual({
+            types: ['heading4'],
+            bold: [],
+            italic: ['Four'],
+        });
     });
 
     test('a Heading 4 whose runs carry the body size directly is a bold italic paragraph', async () => {
