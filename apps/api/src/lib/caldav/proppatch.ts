@@ -1,26 +1,23 @@
 import type { Calendar } from '../calendar/calendar';
 import { sanitizeCalendarId } from '../calendar/resource-store';
-import { ApiError } from '../core';
-import { multistatusResponse, propstatOk, response } from '../dav/xml';
-import { isXmlNode, type XmlNode } from '../dav/xml-node';
+import { ApiError, parseXmlRoot, type XmlElement, xmlChild, xmlChildren, xmlTrimmedText } from '../core';
+import { DAV_NAMESPACES, multistatusResponse, propstatOk, response } from '../dav/xml';
 import { calendarHref } from './discovery';
-import { caldavXmlParser } from './xml-parser';
 
-// A prop that carried an attribute (xml:lang) parses to an object holding the value under '#text', not a bare string.
-function textOf(value: unknown): string | null {
-    if (typeof value === 'string') return value;
-    if (isXmlNode(value) && '#text' in value) return String(value['#text']);
-    return null;
-}
+const DAV = DAV_NAMESPACES.D;
 
-// displayname + calendar-color as the client set them, read identically by MKCALENDAR and PROPPATCH.
-function extractCalendarProps(prop: XmlNode): { name?: string; color?: string } {
+// displayname + calendar-color as the client set them, read identically by MKCALENDAR and PROPPATCH: every
+// <set> in order, so a later one wins. supported-calendar-component-set and the rest are ignored.
+function extractCalendarProps(update: XmlElement | null): { name?: string; color?: string } {
     const out: { name?: string; color?: string } = {};
-    // Truthiness, not null-checks: an empty <displayname/> means "not set", never an empty name.
-    const name = textOf(prop['displayname']);
-    if (name) out.name = name;
-    const color = textOf(prop['calendar-color']);
-    if (color) out.color = color;
+    if (!update) return out;
+    for (const prop of xmlChildren(update, DAV, 'set').flatMap((set) => xmlChildren(set, DAV, 'prop'))) {
+        // Truthiness, not null-checks: an empty <displayname/> means "not set", never an empty name.
+        const name = xmlTrimmedText(xmlChild(prop, DAV, 'displayname'));
+        if (name) out.name = name;
+        const color = xmlTrimmedText(xmlChild(prop, DAV_NAMESPACES.ICAL, 'calendar-color'));
+        if (color) out.color = color;
+    }
     return out;
 }
 
@@ -29,22 +26,12 @@ export async function handleMkcalendar(
     calendar: Calendar,
     ownerId: string,
     calendarId: string,
-    body: string,
+    body: Uint8Array,
 ): Promise<Response> {
     const id = sanitizeCalendarId(calendarId);
     if (!id) return new Response('Bad Request', { status: 400 });
 
-    let props: { name?: string; color?: string } = {};
-    if (body?.trim()) {
-        try {
-            const parsed = caldavXmlParser.parse(body);
-            const mkcal = parsed['mkcalendar'] || {};
-            const set = mkcal['set'] || {};
-            props = extractCalendarProps(set['prop'] || {});
-        } catch {
-            // Ignore XML parse errors — fall back to defaults (supported-calendar-component-set is ignored).
-        }
-    }
+    const props = extractCalendarProps(parseXmlRoot(body, DAV_NAMESPACES.C, 'mkcalendar'));
 
     try {
         await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
@@ -77,35 +64,17 @@ export async function handleProppatch(
     calendar: Calendar,
     calendarId: string,
     ownerId: string,
-    body: string,
+    body: Uint8Array,
 ): Promise<Response> {
     const calendarItem = await calendar.getCalendarById(calendarId);
     if (!calendarItem) return new Response('Not Found', { status: 404 });
 
-    const updates: { name?: string; color?: string } = {};
+    const updates = extractCalendarProps(parseXmlRoot(body, DAV, 'propertyupdate'));
     const updatedProps: string[] = [];
+    if (updates.name !== undefined) updatedProps.push('<D:displayname/>');
+    if (updates.color !== undefined) updatedProps.push('<ICAL:calendar-color/>');
 
-    if (body?.trim()) {
-        try {
-            const parsed = caldavXmlParser.parse(body);
-            const propertyupdate = parsed['propertyupdate'] || {};
-            const set = propertyupdate['set'] || {};
-            const props = extractCalendarProps(set['prop'] || {});
-
-            if (props.name !== undefined) {
-                updates.name = props.name;
-                updatedProps.push('<D:displayname/>');
-            }
-            if (props.color !== undefined) {
-                updates.color = props.color;
-                updatedProps.push('<ICAL:calendar-color/>');
-            }
-        } catch {
-            return new Response('Bad Request', { status: 400 });
-        }
-    }
-
-    if (Object.keys(updates).length > 0) {
+    if (updatedProps.length > 0) {
         try {
             await calendar.updateCalendar(calendarId, updates);
         } catch (error) {

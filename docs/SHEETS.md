@@ -233,10 +233,12 @@ The preview (`renderSheetsPreviewHtml`) keeps inline styles, because its body fr
 
 Cell values are schemaless CRDT strings, and stylesheet text is a different escaping context from a style attribute. Two guards keep it inert, each where every field passes through rather than per field:
 
-- `serializeStyleRules` strips what is structural in CSS text from every declaration. `<` and `>` would end the `<style>` element, and DOMPurify keeps what follows, so an `<svg><image href>` becomes a server-side fetch under WeasyPrint. `{` and `}` open rule blocks. `\` starts a CSS escape, which spells `url(` or `@import` invisibly to the sanitizer. `/*` opens a comment that would swallow every later rule, so one odd cell would unstyle the rest of the workbook.
+- `serializeStyleRules` strips what is structural in CSS text from every declaration. `<` and `>` would end the `<style>` element, and DOMPurify keeps what follows, so an `<svg><image href>` becomes a fetch in the HTML download. `{` and `}` open rule blocks. `\` starts a CSS escape, which spells `url(` or `@import` invisibly to the sanitizer. `/*` opens a comment that would swallow every later rule, so one odd cell would unstyle the rest of the workbook.
 - Numeric fields are coerced, not escaped. Row heights and column widths go through `cssLength`, the same `Number()` guard `getSheetContentSize` applies for the `@page` rule.
 
-Values are still `escapeHtml`'d on the way in, except the font family: entity encoding would corrupt a real name like `Bell MT & Co`, so its quotes and backslashes are dropped instead. The sanitizer's data-URI rule and `@import` strip cover style-element text too ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches)).
+Colors are checked, not escaped. A cell's `fc` and `bg`, a rule's colors, a border's and a data bar's reach the CSS, in the export and the preview alike, only as a hex, `rgb()` or transparent value `export/colors.ts` reads, or as a bare keyword such as `red`, which can't add a declaration. Any other string, such as `red;position:fixed;inset:0`, would add declarations of its own and fetch nothing, so the sanitizer would let it through. `cssColor` (`export/sheets/render.ts`) drops it, and a border or a bar draws transparent.
+
+Other values are still `escapeHtml`'d on the way in, except the font family: entity encoding would corrupt a real name like `Bell MT & Co`, so its quotes and backslashes are dropped instead. The sanitizer's data-URI rule and `@import` strip cover style-element text too ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)).
 
 ## The export paints conditional formats with the grid's evaluator
 

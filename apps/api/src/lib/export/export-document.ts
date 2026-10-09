@@ -1,15 +1,17 @@
 import { DOCX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import type {
     DocumentExportFormat,
     EigendocExportFormat,
+    ExportTransformJob,
     SheetExportFormat,
     VectorExportFormat,
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
-import { documentTransformRunner } from '../document/transform/runner';
+import { documentTransformRunner, TRANSFORM_LIMITS } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
@@ -127,12 +129,24 @@ export async function runDocumentExport(
     documentTransformRunner.assertAdmissible('foreground');
 
     // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
-    // cells alone.
+    // cells alone. It spends from the job's deadline (run-transform.ts), and stops once that is spent.
     const prepStart = performance.now();
-    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path);
+    const deadline = AbortSignal.timeout(TRANSFORM_LIMITS.export.deadlineMs);
+    const prepSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format, prepSignal);
     const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
-    // docx document property carries the stripped one, applied in the Worker.
-    const title = job.documentType === 'eigendoc' ? path.name : stripEigenExtension(path.name);
-    return runTransformToBytes(mount, path, { kind: 'export', ...job, title, media }, { prepMs, signal });
+    // docx document property carries the stripped one, applied in the Worker. Root-relative
+    // links take the public origin in every format, none on a checkout's dev server.
+    const request: ExportTransformJob =
+        job.documentType === 'eigendoc'
+            ? {
+                  kind: 'export',
+                  ...job,
+                  title: path.name,
+                  media,
+                  publicOrigin: getPublicOrigin(),
+              }
+            : { kind: 'export', ...job, title: stripEigenExtension(path.name), media };
+    return runTransformToBytes(mount, path, request, { prepMs, signal });
 }

@@ -167,10 +167,21 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
     });
 
+    // Firefox fetches the @import of a data: SVG it loads as a mask, from the HTML download and the drive hero.
+    test('a data: SVG mask in a cell background is stripped from the document and the preview', () => {
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(http://evil.test/i);</style></svg>';
+        const bg = `red;mask:url(data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}#m)`;
+        const sheets = [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg } }])];
+        const preview = sanitizeExportHtml(renderSheetsPreviewHtml(sheets, NO_MEDIA).html, { allowedRefs: new Set() });
+        for (const html of [renderSheetsExportDocument(sheets, 'T', NO_MEDIA), preview]) {
+            expect(html).not.toContain('mask:');
+        }
+    });
+
     // Every value below is a schemaless CRDT string a collaborator (or a crafted xlsx)
     // can set. In a style attribute they were inert; in stylesheet text `</style>` ends
     // the element and whatever follows is live markup — DOMPurify keeps an
-    // <svg><image href>, and WeasyPrint fetches it server-side while rendering the PDF.
+    // <svg><image href>, and a browser opening the HTML download fetches it.
     // Assert on the assembled, sanitized document: the pre-sanitize strings can't show
     // whether the breakout survived.
     const BREAKOUT = '1px}</style><svg><image href=http://169.254.169.254/latest/meta-data/></svg><style>.z{a:b';
@@ -647,14 +658,80 @@ describe('Sheets HTML export — hyperlinks', () => {
 // In class mode they land in CSS text: they must not smuggle markup through the stylesheet
 // or break out of their declaration block.
 describe('Sheets HTML export — hostile values in CSS', () => {
-    test('escapes fc and bg so they cannot inject markup through the stylesheet', () => {
+    test('fc and bg cannot inject markup through the stylesheet', () => {
         const out = renderSheetsHtml(
             [makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: 'red;"><script>alert(1)</script>', bg: 'blue">' } }])],
             NO_MEDIA,
         );
-        expect(out.css).not.toMatch(/<script/i);
-        expect(out.css).toContain('&lt;script');
+        expect(out.css).not.toMatch(/script/i);
         expect(out.html).not.toMatch(/<script/i);
+    });
+
+    // A value that adds declarations of its own fetches nothing, so the sanitizer keeps it, in the HTML download and
+    // the drive hero alike.
+    test('a cell, rule, border or data bar color that is not a color is dropped, in the export and the preview', () => {
+        const injected = 'red;position:fixed;inset:0';
+        const numeric = { t: 'n', fa: 'General' };
+        const sheet: Sheet = {
+            ...makeSheet(
+                [
+                    { r: 0, c: 0, v: { v: 'x', fc: injected, bg: injected } },
+                    { r: 1, c: 0, v: { v: 50, ct: numeric } },
+                    { r: 2, c: 0, v: { v: 10, ct: numeric } },
+                    { r: 3, c: 0, v: { v: 20, ct: numeric } },
+                ],
+                [
+                    {
+                        type: 'default',
+                        cellrange: [{ row: [1, 1], column: [0, 0] }],
+                        format: { textColor: injected, cellColor: injected },
+                        conditionName: 'greaterThan',
+                        conditionRange: [],
+                        conditionValue: [10],
+                    },
+                    { type: 'dataBar', cellrange: [{ row: [2, 3], column: [0, 0] }], format: [injected] },
+                    { type: 'dataBar', cellrange: [{ row: [2, 3], column: [0, 0] }], format: [injected, injected] },
+                ],
+            ),
+            config: { borderInfo: { '0_0': { b: { style: 1, color: injected } } } },
+        };
+        for (const html of [renderSheetsHtml([sheet], NO_MEDIA).css, renderSheetsPreviewHtml([sheet], NO_MEDIA).html]) {
+            expect(html).not.toContain('position:fixed');
+            expect(html).not.toContain('inset');
+        }
+    });
+
+    test.each(['#ff0000', '#F00', 'rgb(255, 0, 0)', 'rgba(0, 0, 255, 0.5)', 'transparent', 'red'])(
+        'a cell keeps the color %s',
+        (color) => {
+            const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', fc: color, bg: color } }])], NO_MEDIA);
+            expect(classesFor(out, `color:${color};background:${color}`)).toHaveLength(1);
+        },
+    );
+
+    // The engine writes a stop between the two as rgb(…).
+    test('a colorGradation keeps the rgb() it computes', () => {
+        const numeric = { t: 'n', fa: 'General' };
+        const out = renderSheetsHtml(
+            [
+                makeSheet(
+                    [
+                        { r: 0, c: 0, v: { v: 1, ct: numeric } },
+                        { r: 1, c: 0, v: { v: 5, ct: numeric } },
+                        { r: 2, c: 0, v: { v: 9, ct: numeric } },
+                    ],
+                    [
+                        {
+                            type: 'colorGradation',
+                            cellrange: [{ row: [0, 2], column: [0, 0] }],
+                            format: ['#00ff00', '#ff0000'],
+                        },
+                    ],
+                ),
+            ],
+            NO_MEDIA,
+        );
+        expect(out.css).toContain('background:rgb(128, 128, 0)');
     });
 
     test('braces in a hostile value cannot open or close CSS rule blocks', () => {

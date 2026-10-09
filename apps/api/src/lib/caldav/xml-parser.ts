@@ -1,6 +1,12 @@
-import { XMLParser } from 'fast-xml-parser';
 import ICAL from 'ical.js';
-import { asArray, asciiLower } from '../dav/xml-node';
+import { ApiError } from '../core/errors';
+import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlTrimmedText } from '../core/xml';
+import { asciiLower } from '../dav/collation';
+import { readHrefs, readSyncToken, UnsupportedFilterError } from '../dav/report-request';
+import { DAV_NAMESPACES } from '../dav/xml';
+
+const DAV = DAV_NAMESPACES.D;
+const CALDAV = DAV_NAMESPACES.C;
 
 // <C:time-range> bounds are RFC 5545 BASIC format, which `new Date()` reads as Invalid Date and empties the REPORT; RFC 4791 makes them UTC either way.
 function parseCalDavDate(value: string): Date | undefined {
@@ -15,52 +21,24 @@ function parseCalDavDate(value: string): Date | undefined {
     }
 }
 
-// parseTagValue stays off: fxp's numeric coercion mangles digit-only values, like a calendar named `0612`.
-export const caldavXmlParser = new XMLParser({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    removeNSPrefix: true,
-    parseTagValue: false,
-    isArray: (name) => ['href', 'comp'].includes(name),
-});
+const compFilters = (node: XmlElement): XmlElement[] => xmlChildren(node, CALDAV, 'comp-filter');
 
-export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collection';
-
-type TextMatch = string | { '#text'?: string; '@_collation'?: string; '@_negate-condition'?: string };
-
-type PropFilter = { '@_name'?: string; 'text-match'?: TextMatch };
-
-type CompFilter = {
-    '@_name'?: string;
-    'is-not-defined'?: unknown;
-    'comp-filter'?: CompFilter | CompFilter[];
-    'prop-filter'?: PropFilter | PropFilter[];
-    'time-range'?: { '@_start'?: string; '@_end'?: string };
-};
-
-function compFilters(node: CompFilter | undefined): CompFilter[] {
-    const nested = node?.['comp-filter'];
-    if (!nested) return [];
-    return Array.isArray(nested) ? nested : [nested];
-}
-
-function named(filters: CompFilter[], name: string): CompFilter | undefined {
-    return filters.find((filter) => String(filter['@_name'] ?? '').toUpperCase() === name);
+function named(filters: XmlElement[], name: string): XmlElement | undefined {
+    return filters.find((filter) => (xmlAttr(filter, '', 'name') ?? '').toUpperCase() === name);
 }
 
 // RFC 4791 § 9.7.5: a substring match, i;ascii-casemap unless the client names i;octet. Another collation narrows nothing.
-function uidMatcher(textMatch: TextMatch): ((uid: string) => boolean) | null {
-    const node = typeof textMatch === 'string' ? { '#text': textMatch } : textMatch;
-    const text = String(node['#text'] ?? '');
-    const negate = node['@_negate-condition'] === 'yes';
-    const collation = node['@_collation'] ?? 'i;ascii-casemap';
+function uidMatcher(textMatch: XmlElement): ((uid: string) => boolean) | null {
+    const text = xmlTrimmedText(textMatch);
+    const negate = xmlAttr(textMatch, '', 'negate-condition') === 'yes';
+    const collation = xmlAttr(textMatch, '', 'collation') ?? 'i;ascii-casemap';
     if (collation === 'i;octet') return (uid) => uid.includes(text) !== negate;
     if (collation === 'i;ascii-casemap') return (uid) => asciiLower(uid).includes(asciiLower(text)) !== negate;
     return null;
 }
 
 // Only VCALENDAR > VEVENT can match. A UID text-match narrows the rows the report reads; any other prop-filter or text-match is ignored rather than refused: RFC 4791 § 9.7 grammar rides on every UID lookup.
-function readFilter(filter: CompFilter | undefined): {
+function readFilter(filter: XmlElement | undefined): {
     matchesEvents: boolean;
     timeRange?: { start: Date; end: Date };
     matchesUid?: (uid: string) => boolean;
@@ -72,23 +50,38 @@ function readFilter(filter: CompFilter | undefined): {
     const components = compFilters(vcalendar);
     if (!components.length) return { matchesEvents: true };
     const vevent = named(components, 'VEVENT');
-    if (!vevent || vevent['is-not-defined'] !== undefined) return { matchesEvents: false };
+    if (!vevent || xmlChild(vevent, CALDAV, 'is-not-defined')) return { matchesEvents: false };
 
-    const uidMatchers = asArray(vevent['prop-filter'])
-        .filter((prop) => String(prop['@_name'] ?? '').toUpperCase() === 'UID')
-        .map((prop) => (prop['text-match'] === undefined ? null : uidMatcher(prop['text-match'])))
+    const uidMatchers = xmlChildren(vevent, CALDAV, 'prop-filter')
+        .filter((prop) => (xmlAttr(prop, '', 'name') ?? '').toUpperCase() === 'UID')
+        .map((prop) => xmlChild(prop, CALDAV, 'text-match'))
+        .map((textMatch) => (textMatch ? uidMatcher(textMatch) : null))
         .filter((match) => match !== null);
 
     // The VEVENT's own window only: a range on a nested VALARM filter bounds the alarms, not the events.
-    const range = vevent['time-range'];
-    const start = range?.['@_start'] ? parseCalDavDate(range['@_start']) : undefined;
-    const end = range?.['@_end'] ? parseCalDavDate(range['@_end']) : undefined;
+    const range = xmlChild(vevent, CALDAV, 'time-range');
+    const startAttr = range && xmlAttr(range, '', 'start');
+    const endAttr = range && xmlAttr(range, '', 'end');
+    const start = startAttr ? parseCalDavDate(startAttr) : undefined;
+    const end = endAttr ? parseCalDavDate(endAttr) : undefined;
     // A malformed bound drops the whole range rather than feeding Invalid Date into rrule.between.
     return {
         matchesEvents: true,
         timeRange: start && end ? { start, end } : undefined,
         matchesUid: (uid) => uidMatchers.every((matches) => matches(uid)),
     };
+}
+
+// On a stack, as parseXml walks: the filter's depth is the client's.
+function hasForeignElement(filter: XmlElement): boolean {
+    const open = [filter];
+    for (let element = open.pop(); element; element = open.pop()) {
+        for (const child of xmlElements(element)) {
+            if (child.ns !== CALDAV) return true;
+            open.push(child);
+        }
+    }
+    return false;
 }
 
 export type ReportRequest =
@@ -102,31 +95,28 @@ export type ReportRequest =
     | { type: 'calendar-multiget'; hrefs: string[]; wantsData: boolean }
     | { type: 'sync-collection'; syncToken?: string; wantsData: boolean };
 
-export function parseReport(xml: string): ReportRequest {
-    const parsed = caldavXmlParser.parse(xml);
+// A blank body or an unknown root throws: defaulting to calendar-query would dump every event's etag.
+export function parseReport(body: Uint8Array): ReportRequest {
+    const root = parseXml(body);
+    if (!root) throw new ApiError(400, 'Empty REPORT');
 
-    // An empty body or an unknown root throws: defaulting to calendar-query would dump every event's etag.
-    let type: ReportType;
-    if (parsed['calendar-query']) type = 'calendar-query';
-    else if (parsed['calendar-multiget']) type = 'calendar-multiget';
-    else if (parsed['sync-collection']) type = 'sync-collection';
-    else throw new Error('Unsupported REPORT type');
-
-    const root = parsed[type];
     // Decided once here so the three handlers cannot read one request differently.
-    const wantsData = Object.keys(root['prop'] || {}).some((p) => p.includes('calendar-data'));
+    const prop = xmlChild(root, DAV, 'prop');
+    const wantsData = prop !== undefined && xmlChild(prop, CALDAV, 'calendar-data') !== undefined;
 
-    if (type === 'calendar-multiget') {
-        const hrefData = root['href'] || [];
-        const hrefs = Array.isArray(hrefData) ? hrefData.map(String) : [String(hrefData)].filter(Boolean);
-        return { type, hrefs, wantsData };
+    if (root.ns === CALDAV && root.local === 'calendar-multiget') {
+        return { type: 'calendar-multiget', hrefs: readHrefs(root), wantsData };
     }
-
-    if (type === 'sync-collection') {
-        const syncToken = root['sync-token'] || undefined;
-        return { type, syncToken: syncToken ? String(syncToken) : undefined, wantsData };
+    if (root.ns === DAV && root.local === 'sync-collection') {
+        return { type: 'sync-collection', syncToken: readSyncToken(root), wantsData };
     }
-
-    // A filter that names no UID matches every one.
-    return { type, matchesUid: () => true, ...readFilter(root['filter']), wantsData };
+    if (root.ns === CALDAV && root.local === 'calendar-query') {
+        const filter = xmlChild(root, CALDAV, 'filter');
+        // A filter element in another namespace is no CalDAV filter: read past, it would answer every event.
+        const foreignFilter = xmlElements(root).some((child) => child.local === 'filter' && child.ns !== CALDAV);
+        if (foreignFilter || (filter && hasForeignElement(filter))) throw new UnsupportedFilterError();
+        // A filter that names no UID matches every one.
+        return { type: 'calendar-query', matchesUid: () => true, ...readFilter(filter), wantsData };
+    }
+    throw new ApiError(400, 'Unsupported REPORT type');
 }

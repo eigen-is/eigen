@@ -4,7 +4,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statS
 import { join } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { getServerDataPath } from '../../lib/config/paths';
-import { getDomain } from '../../lib/config/server-config';
+import { getDomain, getPublicOrigin } from '../../lib/config/server-config';
 import type { SetupLink } from '../../lib/setup/setup-token';
 import { clearSetupToken, createSetupToken, verifySetupToken } from '../../lib/setup/setup-token';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -72,6 +72,15 @@ describe('the web address', () => {
         expect(getDomain()).toBe('localhost');
         delete process.env['DOMAIN'];
         expect(getDomain()).toBe('localhost');
+    });
+
+    test('is the https origin of DOMAIN, and none on localhost', () => {
+        process.env['DOMAIN'] = 'eigen.example.com';
+        expect(getPublicOrigin()).toBe('https://eigen.example.com');
+        process.env['DOMAIN'] = 'localhost';
+        expect(getPublicOrigin()).toBeUndefined();
+        delete process.env['DOMAIN'];
+        expect(getPublicOrigin()).toBeUndefined();
     });
 });
 
@@ -257,6 +266,8 @@ describe('the /setup routes before setup', () => {
 
         const failed = await post('complete', { ...admin, storageType: 's3', setupToken: newer });
         expect(failed.status).toBe(400);
+        const badPrefix = await post('complete', { ...admin, storageType: 's3', s3Prefix: 'a\tb', setupToken: newer });
+        expect(badPrefix.status).toBe(422);
         const badName = await post('complete', { ...admin, adminUsername: 'ada lovelace', setupToken: newer });
         expect(badName.status).toBe(400);
         expect(await badName.text()).toContain('Username must be lowercase alphanumeric');

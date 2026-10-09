@@ -46,6 +46,7 @@ function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]):
         format: 'html',
         title: 'runner-test',
         media: media.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data })),
+        publicOrigin: undefined,
         source: { snapshot: null, updates: [] },
         test: directive,
     };
@@ -250,6 +251,22 @@ describe('DocumentTransformRunner', () => {
         if (!timedOut.ok) expect(timedOut.error.code).toBe('timeout');
 
         // The slot is free again: a follow-up job completes normally.
+        const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+        expect(next.ok).toBe(true);
+        await runner.close();
+    });
+
+    // The media prep spends from the deadline (run-transform.ts), and a spent one leaves no time for a Worker.
+    test.each([0, -50])('a deadline of %d ms times out without spawning a worker', async (deadlineMs) => {
+        const runner = makeRunner();
+        const media = [new Uint8Array([1, 2, 3]).buffer];
+        const response = await runner.run(makeMediaExportRequest({ behavior: 'export-echo-media' }, media), {
+            ...EXPORT_OPTIONS,
+            deadlineMs,
+        });
+        expect(response).toEqual({ ok: false, error: { code: 'timeout', message: 'Document transform timed out' } });
+        expect(media[0].byteLength).toBe(3); // never posted, so never detached
+
         const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
         expect(next.ok).toBe(true);
         await runner.close();

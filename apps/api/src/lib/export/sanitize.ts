@@ -1,6 +1,9 @@
 import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
 import type { VectorScene } from '@workspace/lib/vector';
+import { stripNonXmlChars } from '@workspace/lib/xml';
 import DOMPurify from 'isomorphic-dompurify';
+import { JSDOM } from 'jsdom';
+import { type ExportMedia, toTransferableText } from '../document/transform/protocol';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 
@@ -17,36 +20,104 @@ export type AttrNode = {
     removeAttribute(name: string): void;
 };
 
-const CSS_URL = /url\(\s*(['"]?)([^)'"]*)\1\s*\)/gi;
+// `url(` as the CSS parser reads it, in any case, unless a same-document fragment or a data: URI with no fragment
+// follows: Firefox loads a data: SVG named with one (`mask:url(data:…#m)`) as a document and fetches its @import. A
+// token, never a url()/quote pair, so no paren or quote inside the URL ends a match early. An unquoted URL ends at
+// whitespace, a quote or a paren, a quoted one at its quote. CSS whitespace only: a non-breaking space is part of the
+// URL, which then is a relative path.
+const CSS_URL =
+    /url\((?![\t\n\f\r ]*(?:#|data:[^\t\n\f\r '"()#]*(?:[\t\n\f\r '"()]|$)|'[\t\n\f\r ]*(?:#|data:[^'#]*')|"[\t\n\f\r ]*(?:#|data:[^"#]*")))/gi;
+// One of the exact allowed refs as a whole url(), read where CSS_URL matched; none holds a quote, a paren or whitespace.
+// The ref is never empty, so no two whitespace runs can trade characters: a long run costs one pass, not its square.
+const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy;
+// What fetches without a url(): @import's string form, the image functions that take a string, and attr(), which can
+// read an attribute as a URL. WeasyPrint fails the whole export on `attr(name url)`.
+const CSS_OTHER_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(|attr\(/i;
 const NO_REFS: ReadonlySet<string> = new Set();
+
+// The element hook types its node as a bare Node.
+const isElement = (node: Node): node is Element => node.nodeType === 1;
 
 // Fetched without a click, on any element DOMPurify keeps: `src` (img, video, audio, source,
 // input type=image), `poster`, and the legacy `background`. `srcset` is handled separately.
 const REF_ATTRS = ['src', 'poster', 'background'];
 
+// Only the whitespace a URL parser trims: a leading non-breaking space makes a relative path of the rest. A fragment
+// makes Firefox load a data: SVG as a document, as in a url().
 const isAllowedRef = (value: string, allowed: ReadonlySet<string>): boolean =>
-    /^\s*data:/i.test(value) || allowed.has(value);
+    /^[\t\n\f\r ]*data:[^#]*$/i.test(value) || allowed.has(value);
 
-function restrictCssUrls(css: string, allowed: ReadonlySet<string>): string {
-    return css.replace(CSS_URL, (match, _quote, url: string) => (isAllowedRef(url, allowed) ? match : 'url()'));
+// The elements whose href points into their own document. On another (an image, feImage) a fragment resolves against
+// the document's URL, which is then fetched; SVG 2 gives clipPath and mask no href. Lowercase, as compared.
+const FRAGMENT_REF_TAGS = new Set([
+    'use',
+    'lineargradient',
+    'radialgradient',
+    'pattern',
+    'filter',
+    'textpath',
+    'mpath',
+]);
+
+// A reference into the same document (a gradient, a clip, a <use> glyph) fetches nothing.
+const isFragmentRef = (value: string): boolean => /^[\t\n\f\r ]*#\S*[\t\n\f\r ]*$/.test(value);
+
+// Read as a token, never a pair, as eml-preview.ts reads a message's CSS: a comment after `url(` is no fragment or
+// data: URI, so it fails the lookahead.
+function urlFetches(text: string, allowed: ReadonlySet<string>): boolean {
+    for (const { index } of text.matchAll(CSS_URL)) {
+        CSS_ALLOWED_URL.lastIndex = index;
+        const ref = CSS_ALLOWED_URL.exec(text)?.[2];
+        if (!ref || !allowed.has(ref)) return true;
+    }
+    return false;
+}
+
+// An escape can hide a fetch in any attribute a CSS parser reads: `fill="\75 rl(…)"` spells `url(`, and
+// `url(data:…\23 p)` a fragment. Every fetch needs a function, and no escape spells the `(` that opens one.
+const escapesCss = (value: string): boolean => value.includes('\\') && value.includes('(');
+
+const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
+    CSS_OTHER_FETCHES.test(css) || urlFetches(css, allowed);
+
+// A sheet's top-level statements: a rule or block ends at the `}` that closes it, an at-statement at its `;`.
+// Braces in strings and comments can misplace a cut, which is why the kept text is checked again whole.
+function cssStatements(css: string): string[] {
+    const statements: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}') depth = Math.max(depth - 1, 0);
+        else if (css[i] !== ';') continue;
+        if (depth === 0) {
+            statements.push(css.slice(start, i + 1));
+            start = i + 1;
+        }
+    }
+    statements.push(css.slice(start));
+    return statements;
 }
 
 // Every export resource is embedded as a data: URI (fonts + images) and every preview resource is one
 // of the prepared media URLs, so any other CSS url() or fetching attribute is attacker-injected via
-// schemaless slide/sheet/vector CRDT strings. WeasyPrint fetches those server-side when rendering the
-// PDF (SSRF from the API host), and a preview body is injected as live DOM in the drive hero (a beacon
-// fired at every viewer). Its CLI can't restrict protocols and DOMPurify keeps url()/src by default,
-// so restrict here. <a href> is left alone — link targets aren't fetched during render, and
-// sheets/docs carry legitimate http(s) hyperlinks.
-function restrictToDataRefs(node: AttrNode, allowed: ReadonlySet<string>): void {
-    const style = node.getAttribute('style');
-    if (style != null) {
-        // A CSS escape spells the same token invisibly to a regex (`\75 rl(…)` is
-        // `url(…)` to the parser), so drop backslashes before scanning. Generated
-        // export CSS never contains one.
-        const scanned = style.replace(/\\/g, '');
-        const stripped = scanned.includes('url(') ? restrictCssUrls(scanned, allowed) : scanned;
-        if (stripped !== style) node.setAttribute('style', stripped);
+// schemaless slide/sheet/vector CRDT strings. A browser opening an HTML download fetches those, and a
+// preview body is injected as live DOM in the drive hero (a beacon fired at every viewer). DOMPurify
+// keeps url()/src by default, so restrict here; WeasyPrint's fetcher opens only data: URIs
+// (weasyprint-render.py). <a href> is left alone: a browser follows a link on a click, and sheets/docs
+// carry legitimate http(s) hyperlinks.
+function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
+    // SVG presentation attributes (fill, filter, mask, marker-*) are CSS too, so every value is scanned for `url(`.
+    for (const { name, value } of [...node.attributes]) {
+        if (name === 'style') {
+            // A CSS escape spells the same token invisibly to a regex (`\75 rl(…)` is `url(…)` to the parser), so
+            // backslashes go before the scan. Generated export CSS never contains one.
+            const scanned = value.replace(/\\/g, '');
+            if (cssFetches(scanned, allowed)) node.removeAttribute(name);
+            else if (scanned !== value) node.setAttribute(name, scanned);
+        } else if (urlFetches(value, allowed) || escapesCss(value)) {
+            node.removeAttribute(name);
+        }
     }
     // A srcset candidate list separates candidates with the same comma a data: URI contains, so it is
     // dropped rather than parsed — no renderer here emits one.
@@ -56,23 +127,36 @@ function restrictToDataRefs(node: AttrNode, allowed: ReadonlySet<string>): void 
         if (value != null && !isAllowedRef(value, allowed)) node.removeAttribute(attr);
     }
     // SVG <image>/<use> reference through href (and legacy xlink:href), which DOMPurify
-    // keeps by default and WeasyPrint fetches server-side — the same SSRF as <img src>,
-    // through a different attribute.
+    // keeps by default and a browser fetches — the same beacon as <img src>, through a
+    // different attribute. jsdom names an SVG <a> in lowercase, an HTML one in upper.
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'a') return;
+    const references = FRAGMENT_REF_TAGS.has(tag);
     for (const attr of ['href', 'xlink:href']) {
         const value = node.getAttribute(attr);
-        if (value != null && !isAllowedRef(value, allowed) && node.tagName !== 'A') node.removeAttribute(attr);
+        if (value != null && !isAllowedRef(value, allowed) && !(references && isFragmentRef(value))) {
+            node.removeAttribute(attr);
+        }
     }
 }
 
-// Same restriction for CSS text inside <style> elements (the sheets export emits its class
-// rules there), plus @import — the string form fetches without any url(), and at-rules can
-// only exist in element CSS, never in a declaration-only style attribute.
+// DOMPurify's default profile drops every <use>; one that draws a glyph from its own document fetches nothing.
+function isSameDocumentUse(node: AttrNode): boolean {
+    const refs = [node.getAttribute('href'), node.getAttribute('xlink:href')].filter((ref) => ref !== null);
+    return refs.length > 0 && refs.every(isFragmentRef);
+}
+
+// Same restriction for CSS text inside <style> elements (the sheets export emits its class rules there). Only the
+// statements that fetch go, so the rules beside them survive; a sheet whose kept text still fetches is emptied.
 function restrictStyleTextToDataRefs(node: { textContent: string | null }, allowed: ReadonlySet<string>): void {
     const text = node.textContent;
     if (!text) return;
-    // Backslashes go first for the same reason as in style attributes: `@\69 mport` and
-    // `\75 rl(` are `@import` and `url(` to a CSS parser but not to these regexes.
-    const stripped = restrictCssUrls(text.replace(/\\/g, ''), allowed).replace(/@import\b/gi, '');
+    // Backslashes go first for the same reason as in style attributes: `@\69 mport` and `\75 rl(` are `@import` and
+    // `url(` to a CSS parser but not to the scan.
+    const kept = cssStatements(text.replace(/\\/g, ''))
+        .filter((statement) => !cssFetches(statement, allowed))
+        .join('');
+    const stripped = cssFetches(kept, allowed) ? '' : kept;
     if (stripped !== text) node.textContent = stripped;
 }
 
@@ -84,6 +168,8 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
     DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
         if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs);
+        // Decided per element. DOMPurify's namespace check drops a <use> outside a kept <svg>, whatever the profile.
+        if (data.tagName === 'use') data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
     });
     try {
         return DOMPurify.sanitize(html, { FORCE_BODY: true, ...config }) as string;
@@ -91,6 +177,46 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
         DOMPurify.removeHook('afterSanitizeAttributes');
         DOMPurify.removeHook('uponSanitizeElement');
     }
+}
+
+// A <use> draws its target once per reference, so nested ones multiply (6 levels of 10 is a million copies). One stays
+// only when every target it names exists and holds no <use>, the one level matplotlib's glyphs need, which also ends
+// every cycle. A `%` goes too: a reader may decode it to another id than the one looked up here.
+function dropNestedUses(root: Element): void {
+    const ids = new Set([...root.querySelectorAll('[id]')].map((el) => el.id));
+    const nesting = new Set<string>();
+    for (const use of root.querySelectorAll('use')) {
+        for (let el: Element | null = use; el; el = el.parentElement) if (el.id) nesting.add(el.id);
+    }
+    for (const use of root.querySelectorAll('use')) {
+        const targets = [use.getAttribute('href'), use.getAttribute('xlink:href')]
+            .filter((ref) => ref !== null)
+            .map((ref) => ref.trim().slice(1));
+        if (targets.some((id) => id.includes('%') || !ids.has(id) || nesting.has(id))) use.remove();
+    }
+}
+
+// An .svg is read as XML, where DOMPurify's HTML (an unclosed <br>, an &nbsp;) blanks the drawing. Empty with no <svg>.
+export function toXmlDocument(svg: string): string {
+    const dom = new JSDOM(svg, { contentType: 'text/html' });
+    const root = dom.window.document.querySelector('svg');
+    if (!root) return '';
+    dropNestedUses(root);
+    // The serializer declares the namespaces itself, and a second xmlns is a duplicate attribute.
+    for (const el of root.querySelectorAll('[xmlns]')) el.removeAttribute('xmlns');
+    return stripNonXmlChars(new dom.window.XMLSerializer().serializeToString(root));
+}
+
+// SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. A docx
+// carries it as a part of its own, and WeasyPrint and librsvg draw its every <use>, so every export arm takes it through
+// the data-only pass here, off the event loop, written as XML, which a docx part must be and an .svg data: URI is read
+// as. One with no <svg> in it is no drawing, and is dropped like a failed preview.
+export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
+    return media.flatMap((item) => {
+        if (item.contentType !== 'image/svg+xml') return [item];
+        const svg = toXmlDocument(sanitizeExportHtml(Buffer.from(item.data).toString('utf8')));
+        return svg ? [{ ...item, data: toTransferableText(svg) }] : [];
+    });
 }
 
 // A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the

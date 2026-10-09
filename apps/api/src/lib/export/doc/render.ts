@@ -1,32 +1,35 @@
+import type { JSONContent } from '@tiptap/core';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
+import { common, createLowlight } from 'lowlight';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
 type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
 
-type Lowlight = {
-    registered(lang: string): boolean;
-    highlight(lang: string, code: string): HastNode;
-    highlightAuto(code: string): HastNode;
-};
+// The backend's one highlighter; the main thread imports this module lazily, so its grammars load only to highlight.
+export const lowlight = createLowlight(common);
 
-// The caller passes its lowlight instance so this module stays side-effect-free.
-export function renderCodeBlockNode(
-    node: { attrs: { language?: string | null }; textContent?: string; content?: unknown },
-    lowlight: Lowlight,
-): string {
+export function renderCodeBlockNode(node: {
+    attrs: { language?: string | null };
+    textContent?: string;
+    content?: unknown;
+}): string {
     const language = node.attrs.language || '';
     const code = node.textContent ?? '';
-
-    // Users rarely set a language, so highlightAuto is where nearly all export highlighting comes from.
-    const highlighted =
-        language && lowlight.registered(language)
-            ? hastToHtml(lowlight.highlight(language, code))
-            : hastToHtml(lowlight.highlightAuto(code));
-
+    const highlighted = hastToHtml(highlightCode(language, code));
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
-    return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;
+    // withTrailingBreaks' rule: a code block holds only text, so it ends open when empty or in a newline.
+    const trailingBreak = code === '' || code.endsWith('\n') ? '<br>' : '';
+    return `<pre><code class="hljs${langClass}">${highlighted}${trailingBreak}</code></pre>`;
+}
+
+// The HTML and the docx code blocks highlight alike. Users rarely set a language, so highlightAuto is where nearly all
+// export highlighting comes from.
+export function highlightCode(language: string, code: string): HastNode {
+    return language && lowlight.registered(language)
+        ? lowlight.highlight(language, code)
+        : lowlight.highlightAuto(code);
 }
 
 export type HastNode = {
@@ -63,7 +66,8 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
-// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
+// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview. Spans, which
+// a paragraph can hold, drawn by eigen-prose.css's .figure rules as the editor's node view is.
 export function renderFigureNode(
     attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
@@ -75,7 +79,6 @@ export function renderFigureNode(
     const caption = attrs.caption;
     const rawWidth = attrs.width;
     const width = typeof rawWidth === 'number' && Number.isFinite(rawWidth) ? Math.round(rawWidth) : null;
-    const alignment = attrs.alignment;
 
     const imgSrc = resolveImgSrc(mediaName, src);
 
@@ -84,15 +87,34 @@ export function renderFigureNode(
     const img = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
         : '';
-    const cap = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : '';
+    const cap = caption ? `<span class="figcaption">${escapeHtml(caption)}</span>` : '';
+    const layout = escapeHtml(String(attrs.layout || 'block'));
+    const alignment = escapeHtml(String(attrs.alignment || 'center'));
+    return `<span class="figure" data-layout="${layout}" data-alignment="${alignment}">${img}${cap}</span>`;
+}
 
-    const layout = attrs.layout || 'block';
+// ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
+// with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
+export function withTrailingBreaks(node: JSONContent): JSONContent {
+    const content = node.content?.map(withTrailingBreaks);
+    if (node.type !== 'paragraph' && node.type !== 'heading') return content ? { ...node, content } : node;
+    const last = content?.at(-1);
+    if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
+    return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
+}
 
-    if (layout === 'wrap-left') return `<figure style="float: left; margin: 0.25em 1em 0.5em 0">${img}${cap}</figure>`;
-    if (layout === 'wrap-right')
-        return `<figure style="float: right; margin: 0.25em 0 0.5em 1em">${img}${cap}</figure>`;
+// Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.
+export function absoluteHref(href: string, publicOrigin: string | undefined): string {
+    if (href.startsWith('//')) return `https:${href}`;
+    return publicOrigin && href.startsWith('/') ? `${publicOrigin}${href}` : href;
+}
 
-    const align = alignment || 'center';
-    const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
-    return `<figure style="display: flex; flex-direction: column; align-items: ${justify}">${img}${cap}</figure>`;
+export function withAbsoluteLinks(node: JSONContent, publicOrigin: string | undefined): JSONContent {
+    const content = node.content?.map((child) => withAbsoluteLinks(child, publicOrigin));
+    const marks = node.marks?.map((mark) => {
+        const href = mark.attrs?.['href'];
+        if (mark.type !== 'link' || typeof href !== 'string') return mark;
+        return { ...mark, attrs: { ...mark.attrs, href: absoluteHref(href.trim(), publicOrigin) } };
+    });
+    return { ...node, ...(content && { content }), ...(marks && { marks }) };
 }

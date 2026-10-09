@@ -23,7 +23,7 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 
 | Bun API | Replaces | Where | Effort | Notes |
 |---|---|---|---|---|
-| `Bun.XML` (1.4.0) | `fast-xml-parser` | 5 backend files, e.g. `apps/api/src/lib/dav/propfind.ts`, `apps/api/src/lib/carddav/xml-parser.ts` | M | Removes a backend dependency. Attributes come out as `@name` keys, and WebDAV/CardDAV lean on XML namespaces, so every parser and its tests change. Check namespace handling against the DAV test suites before starting. |
+| `Bun.XML` (1.4.0) | `fast-xml-parser`, `he` | done | | Every DAV body goes through `parseXml` (`apps/api/src/lib/core/xml.ts`), which resolves namespaces over Bun's tree shape and refuses a DOCTYPE. The xlsx import reads its parts the same way, and Bun decodes the character references `he` did. Both packages are gone. |
 | `Bun.markdown` (1.3.8) | `markdown-it` | `apps/api/src/lib/preview/text-preview.ts` | S | Its HTML output is not sanitized; route it through the existing DOMPurify path. The `apps/index` build (`scripts/lib/render-markdown.ts`) also uses `markdown-it-anchor` for heading ids, so that side needs its own heading-id pass or stays on markdown-it. |
 | `Bun.cron` (1.3.11) | the `setInterval` wrapper | `apps/api/src/lib/scheduler/scheduler.ts` | S | Only when a job needs a wall-clock schedule ("03:00 UTC daily"); the file's header already says so. Jobs never overlap, and there is a `tz` option. |
 | `Bun.YAML` | `gray-matter` | `apps/index/scripts/lib/frontmatter.ts` | S | Build tooling only: split the frontmatter block and parse it with `Bun.YAML`. |
@@ -38,7 +38,6 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 ## No Bun equivalent
 
 - `nodemailer`: Bun has no SMTP or mail API.
-- `he`: only `he.decode` is used (`apps/api/src/lib/import/sheets/from-xlsx.ts`); `Bun.escapeHTML` escapes but does not decode.
 - `jszip`: `Bun.Archive` handles tar, not zip.
 - `exiftool-vendored`, `iconv-lite`, `libmime`, `libqp`, `html-to-text`, `isomorphic-dompurify`, `exceljs`, `mammoth`, `ical.js`, `rrule`: domain libraries.
 - Browser-side packages (`nanoid`, `uuid`, `dayjs`, `numeral`, `es-toolkit`) cannot use Bun runtime APIs. The shared `escapeHtml` in `packages/lib/src/core/html.ts` runs on both sides, so it cannot switch to `Bun.escapeHTML`.
@@ -51,4 +50,4 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 
 ## Order
 
-`Bun.XML` first (removes a backend dependency, needs care with namespaces), then `Bun.markdown` for the API text preview, then the `Bun.Image` spike on Linux. The `gray-matter` swap can ride along with any change that touches that file.
+`Bun.markdown` for the API text preview first, then the `Bun.Image` spike on Linux. The `gray-matter` swap can ride along with any change that touches that file.

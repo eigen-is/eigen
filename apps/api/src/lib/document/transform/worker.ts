@@ -7,6 +7,7 @@ import {
     type CollabTransformJob,
     type DocumentTransformRequest,
     type DocumentTransformResponse,
+    type ExportMedia,
     type ExportTransformJob,
     type ImportTransformJob,
     type TransformResult,
@@ -50,24 +51,32 @@ async function renderExport(
     request: ExportTransformJob,
     doc: Y.Doc,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
+    const media = await sanitizeMedia(request.media);
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsExport } = await import('../../export/sheets/transform');
-            return renderEigensheetsExport(doc, request.format, request.title, request.media);
+            return renderEigensheetsExport(doc, request.format, request.title, media);
         }
         case 'eigendoc': {
             const { renderEigendocExport } = await import('../../export/doc/transform');
-            return renderEigendocExport(doc, request.format, request.title, request.media);
+            return renderEigendocExport(doc, request.format, request.title, media, request.publicOrigin);
         }
         case 'eigenslides': {
             const { renderEigenslidesExport } = await import('../../export/canvas/transform');
-            return renderEigenslidesExport(doc, request.format, request.title, request.media);
+            return renderEigenslidesExport(doc, request.format, request.title, media);
         }
         case 'eigenvector': {
             const { renderEigenvectorExport } = await import('../../export/vector/transform');
-            return renderEigenvectorExport(doc, request.format, request.title, request.media);
+            return renderEigenvectorExport(doc, request.format, request.title, media);
         }
     }
+}
+
+// SVG media arrives as the file's own bytes. The sanitizer loads only for one, so an xlsx export never evaluates jsdom.
+async function sanitizeMedia(media: ExportMedia[]): Promise<ExportMedia[]> {
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../../export/sanitize');
+    return sanitizeExportMedia(media);
 }
 
 async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {

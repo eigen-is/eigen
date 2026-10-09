@@ -8,6 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     HomeSizeResponse,
     MountResponse,
+    MountSettings,
     S3HardenResult,
     ServerSettings,
     TeamSettings,
@@ -22,7 +23,7 @@ import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../..
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
-import { assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
+import { addMember, assertJson, authedRequest, createTestUser, driveGet, driveUpload, getTestContext } from '../setup';
 
 describe('Server Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -387,6 +388,101 @@ describe('Team Mount Management', () => {
         expect(updated.maxSizeMB).toBe(250);
         expect(updated.name).toBe('Archives (Expanded)');
         expect(updated.storageType).toBe('local-key');
+    });
+
+    test('a team S3 mount refuses a prefix holding a control character', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            prefix: 'data\u0000',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'S3 Files', storageType: 's3', s3Config }),
+        });
+        expect(add.status).toBe(422);
+
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ s3Config }),
+        });
+        expect(update.status).toBe(422);
+    });
+
+    test('a team S3 mount takes the S3 config every S3 route takes: no blank field, the prefix optional', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        for (const blank of ['endpoint', 'bucket', 'accessKeyId', 'secretAccessKey']) {
+            const body = JSON.stringify({
+                name: 'S3 Files',
+                storageType: 's3',
+                s3Config: { ...s3Config, prefix: 'data', [blank]: '' },
+            });
+            const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+            });
+            expect(add.status).toBe(422);
+            const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+            });
+            expect(update.status).toBe(422);
+        }
+
+        // Past validation, so the missing mount answers.
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/any`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ s3Config }),
+        });
+        expect(update.status).toBe(404);
+    });
+
+    test('a mount update without an S3 config keeps the saved one', async () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+        };
+        // Not an S3 mount, so no connection check stands between the config and the settings.
+        const add = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'Keeps S3', storageType: 'local-key', s3Config }),
+        });
+        const { id } = await assertJson<MountResponse>(add);
+
+        const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: false }),
+        });
+        expect((await assertJson<MountSettings>(update)).s3Config).toEqual({ ...s3Config, prefix: '' });
+    });
+
+    test('only a team admin lists the mounts, S3 secret included', async () => {
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        const members = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/members`);
+        expect(members.status).toBe(200);
+        const denied = await authedRequest(ctx.bob.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
+        expect(denied.status).toBe(403);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
+        const mounts = await assertJson<Record<string, MountSettings>>(res);
+        const keeps = Object.values(mounts).find((m) => m.name === 'Keeps S3');
+        expect(keeps?.s3Config?.secretAccessKey).toBe('secret-example');
     });
 
     test('updating nonexistent mount returns 404', async () => {
@@ -864,6 +960,29 @@ describe('S3 Config Persistence', () => {
         expect(after).toEqual(before);
     });
 
+    test('PUT /settings/s3config rejects a prefix holding a control character before reaching S3', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'checkS3Connection');
+
+        try {
+            const putRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: 'https://s3.example.com',
+                    bucket: 'eigen-test',
+                    prefix: 'data\u0000',
+                    accessKeyId: 'AKIAEXAMPLE',
+                    secretAccessKey: 'secret-example',
+                }),
+            });
+            expect(putRes.status).toBe(422);
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     test('non-admin cannot read or update S3 config', async () => {
         const getRes = await authedRequest(ctx.bob.user.sessionToken, '/settings/s3config');
         expect(getRes.status).toBe(403);
@@ -963,6 +1082,14 @@ describe('S3 Bucket Hardening', () => {
             const res = await harden(ctx.alice.user.sessionToken, { ...hardenBody, noncurrentDays });
             expect(res.status).toBe(422);
         }
+        expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('POST /settings/s3harden rejects a prefix holding a control character', async () => {
+        spy = spyOn(s3Storage, 'hardenS3Bucket');
+
+        const res = await harden(ctx.alice.user.sessionToken, { ...hardenBody, prefix: 'data\nother' });
+        expect(res.status).toBe(422);
         expect(spy).not.toHaveBeenCalled();
     });
 

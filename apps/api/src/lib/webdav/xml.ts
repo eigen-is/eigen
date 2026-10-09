@@ -1,16 +1,14 @@
-import { escapeXml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { escapeXml } from '@workspace/lib/xml';
 import { computeEtag } from '../core/http';
-import { XML_CONTENT_TYPE } from '../dav/xml';
+import { XML_CONTENT_TYPE, XML_DECLARATION } from '../dav/xml';
 import type { Lock } from '../drive/lock-manager';
-
-const XML_HEADER = '<?xml version="1.0" encoding="utf-8"?>';
 
 // The cap on a PROPFIND, PROPPATCH or LOCK body, and on the dead properties one path stores.
 export const MAX_XML_BODY_BYTES = 65_536;
 
 export function multistatus(responses: string[]): string {
-    return `${XML_HEADER}\n<D:multistatus xmlns:D="DAV:">\n${responses.join('\n')}\n</D:multistatus>`;
+    return `${XML_DECLARATION}\n<D:multistatus xmlns:D="DAV:">\n${responses.join('\n')}\n</D:multistatus>`;
 }
 
 export function response(href: string, propstats: string[]): string {
@@ -32,7 +30,7 @@ export function lockdiscoveryProp(locks: Lock[]): string {
     if (locks.length === 0) return '<D:lockdiscovery/>';
     const inner = locks
         .map((l) => {
-            const owner = l.ownerHref ? `<D:owner>${escapeXml(l.ownerHref)}</D:owner>` : '';
+            const owner = l.owner ? `<D:owner>${l.owner}</D:owner>` : '';
             const timeoutSeconds = Math.max(1, Math.floor((l.expiresAt - Date.now()) / 1000));
             const depth = `<D:depth>${l.depth === 0 ? '0' : 'infinity'}</D:depth>`;
             const scope = l.scope === 'shared' ? '<D:shared/>' : '<D:exclusive/>';

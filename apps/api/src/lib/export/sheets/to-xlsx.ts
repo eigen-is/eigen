@@ -1,4 +1,3 @@
-import { escapeXml } from '@workspace/lib/html';
 import {
     BORDER_STYLES,
     type BorderSide,
@@ -15,6 +14,7 @@ import {
     type SingleRange,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { escapeXml } from '@workspace/lib/xml';
 import {
     columnIndexToLabel,
     iscelldata,
@@ -34,6 +34,7 @@ import type {
     Cell as XlsxCell,
 } from 'exceljs';
 import JSZip from 'jszip';
+import { cssColorToHex } from '../colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
 
@@ -47,8 +48,11 @@ const DAY_MS = 86_400_000;
 // Excel's default row height; the importer treats it as "no explicit height".
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
 
-function hexToArgb(hex: string): string {
-    return `FF${hex.replace('#', '')}`;
+// The cell's hex colors and the rgb(…) strings of the editor's CSS pipeline (state/modules/inline-string.ts) alike;
+// undefined for one Office can't hold, which the caller drops.
+function argbOf(color: string): string | undefined {
+    const hex = cssColorToHex(color);
+    return hex && `FF${hex}`;
 }
 
 export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
@@ -286,7 +290,8 @@ function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
 
 function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
     const fontName = resolveFontFamily(v.ff);
-    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1 || typeof v.fs === 'number' || v.fc || fontName) {
+    const fc = v.fc ? argbOf(v.fc) : undefined;
+    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1 || typeof v.fs === 'number' || fc || fontName) {
         cell.font = {
             ...(v.bl === 1 && { bold: true }),
             ...(v.it === 1 && { italic: true }),
@@ -294,17 +299,12 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
             ...(v.cl === 1 && { strike: true }),
             ...(typeof v.fs === 'number' && { size: v.fs }),
             ...(fontName && { name: fontName }),
-            ...(v.fc && { color: { argb: hexToArgb(v.fc) } }),
+            ...(fc && { color: { argb: fc } }),
         };
     }
 
-    if (v.bg) {
-        cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: hexToArgb(v.bg) },
-        };
-    }
+    const bg = v.bg ? argbOf(v.bg) : undefined;
+    if (bg) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
 
     const textRotation = v.rt === 'vertical' ? 'vertical' : isNumericRotation(v) ? v.rt : null;
     if (v.ht != null || v.vt != null || v.tb === '2' || textRotation != null) {
@@ -318,10 +318,8 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
 }
 
 function toBorderSide(side: BorderSide): Partial<Border> {
-    return {
-        style: BORDER_STYLES[side.style]?.name ?? 'thin',
-        color: { argb: hexToArgb(side.color) },
-    };
+    const argb = argbOf(side.color);
+    return { style: BORDER_STYLES[side.style]?.name ?? 'thin', ...(argb && { color: { argb } }) };
 }
 
 // The slash side `s` is OOXML's diagonal border. The canvas paints it top-left → bottom-right
@@ -338,23 +336,13 @@ function toBorder(sides: CellBorderSides): Partial<Borders> | null {
     return Object.keys(border).length > 0 ? border : null;
 }
 
-// Inline-string segments carry the cell's hex defaults or rgb(…) strings produced by
-// the editor's CSS pipeline (state/modules/inline-string.ts).
-function colorToArgb(color: string): string | undefined {
-    if (color.startsWith('#')) return hexToArgb(color);
-    const rgb = color.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
-    if (!rgb) return undefined;
-    const hex = (i: number) => Number(rgb[i]).toString(16).padStart(2, '0').toUpperCase();
-    return `FF${hex(1)}${hex(2)}${hex(3)}`;
-}
-
 function inlineSegmentsToRichText(segments: InlineStringSegment[] | undefined): RichText[] | null {
     if (!segments) return null;
     const runs: RichText[] = [];
     for (const seg of segments) {
         if (!seg.v) continue;
         const fontName = resolveFontFamily(seg.ff);
-        const argb = seg.fc ? colorToArgb(seg.fc) : undefined;
+        const argb = seg.fc ? argbOf(seg.fc) : undefined;
         const font: Partial<Font> = {
             ...(seg.bl === 1 && { bold: true }),
             ...(seg.it === 1 && { italic: true }),
@@ -461,20 +449,15 @@ const CF_TOP10: Record<string, { percent: boolean; bottom: boolean }> = {
 
 function toCfRule(rule: ConditionalFormatRule, priority: number): XlsxCfWriteRule | null {
     if (rule.type === 'dataBar') {
-        return {
-            type: 'dataBar',
-            priority,
-            color: { argb: hexToArgb(rule.format[0]) },
-            cfvo: [{ type: 'min' }, { type: 'max' }],
-        };
+        const argb = argbOf(rule.format[0]);
+        return argb ? { type: 'dataBar', priority, color: { argb }, cfvo: [{ type: 'min' }, { type: 'max' }] } : null;
     }
 
     if (rule.type === 'colorGradation') {
         // The engine's format array is MAX→(MID)→MIN; xlsx colorScale lists MIN→(MID)→MAX.
-        const color = rule.format
-            .slice()
-            .reverse()
-            .map((hex) => ({ argb: hexToArgb(hex) }));
+        const argbs = rule.format.slice().reverse().map(argbOf);
+        if (!argbs.every((argb): argb is string => argb !== undefined)) return null;
+        const color = argbs.map((argb) => ({ argb }));
         const cfvo =
             color.length === 3
                 ? [{ type: 'min' }, { type: 'percentile', value: 50 }, { type: 'max' }]
@@ -543,11 +526,13 @@ function toCfRule(rule: ConditionalFormatRule, priority: number): XlsxCfWriteRul
 
 function toCfStyle(format: DefaultConditionalFormatRule['format']): XlsxCfWriteStyle | undefined {
     const style: XlsxCfWriteStyle = {};
-    if (format.textColor) style.font = { color: { argb: hexToArgb(format.textColor) } };
-    if (format.cellColor) {
+    const textColor = format.textColor ? argbOf(format.textColor) : undefined;
+    const cellColor = format.cellColor ? argbOf(format.cellColor) : undefined;
+    if (textColor) style.font = { color: { argb: textColor } };
+    if (cellColor) {
         // dxf solid fills: Excel reads the visible color from bgColor, our importer
         // prefers fgColor — write the same color into both so either reader resolves it.
-        const color = { argb: hexToArgb(format.cellColor) };
+        const color = { argb: cellColor };
         style.fill = { type: 'pattern', pattern: 'solid', fgColor: color, bgColor: color };
     }
     return style.font || style.fill ? style : undefined;

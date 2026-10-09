@@ -40,4 +40,8 @@ describe('renderEigendocPreviewBody', () => {
         expect(body).toContain('href="https://example.com/report"');
         expect(body).not.toMatch(/<script/i);
     });
+
+    test('an empty paragraph keeps the line the editor shows', () => {
+        expect(previewOf({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe('<p><br></p>');
+    });
 });

@@ -4,9 +4,10 @@ import type { ResourceRow } from '../calendar/dav-store';
 import type { CalendarCollection } from '../calendar/resource-store';
 import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
+import { UnsupportedFilterError } from '../dav/report-request';
 import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { handleSyncCollection } from '../dav/sync-collection';
-import { multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
+import { davError, multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
@@ -17,14 +18,15 @@ export async function handleReport(
     calendarId: string,
     collection: CalendarCollection,
     ownerId: string,
-    body: string,
+    body: Uint8Array,
 ): Promise<Response> {
     let report: ReportRequest;
     try {
         report = parseReport(body);
-    } catch {
-        // Empty body, unparseable XML, or an unknown REPORT root all reject here — never a silent etag dump.
-        return new Response('Bad Request: invalid REPORT', { status: 400 });
+    } catch (e) {
+        // RFC 4791 § 7.8 queries match only: a filter Eigen can't read is refused, never answered with a superset.
+        if (e instanceof UnsupportedFilterError) return davError(403, '<C:supported-filter/>');
+        throw e;
     }
 
     const budget = { left: REPORT_DATA_BUDGET_BYTES };

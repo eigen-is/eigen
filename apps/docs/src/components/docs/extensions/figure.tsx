@@ -1,4 +1,5 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
@@ -26,7 +27,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
     const commentCardId: string | null = node.attrs.commentCardId;
     const commentColor: string | undefined = decorations.find((d) => 'commentColor' in d.spec)?.spec.commentColor;
     const imageRef = useRef<HTMLImageElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLSpanElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
     const imageProcessed = useRef(false);
     // Live preview width during an ObjectTransform drag — never a node write until onCommit.
@@ -179,110 +180,88 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
             ? { x: 0, y: 0, width: displayWidth, height: displayWidth / aspectRatio, angle: 0 }
             : null;
 
-    const alignmentClass = isWrapping
-        ? ''
-        : alignment === 'center'
-          ? 'items-center'
-          : alignment === 'right'
-            ? 'items-end'
-            : 'items-start';
-
-    const wrapperStyle: React.CSSProperties = {
-        cursor: isEditable ? 'grab' : undefined,
-        ...(layout === 'wrap-left'
-            ? { float: 'left', margin: '0.25em 1em 0.5em 0' }
-            : layout === 'wrap-right'
-              ? { float: 'right', margin: '0.25em 0 0.5em 1em' }
-              : undefined),
-    };
-
     return (
         <NodeViewWrapper
             as="span"
-            className={cn('flex flex-col', alignmentClass)}
+            ref={containerRef}
+            className="figure"
+            data-layout={layout}
+            data-alignment={alignment}
             data-drag-handle=""
             draggable={isEditable}
-            style={wrapperStyle}
+            style={{ cursor: isEditable ? 'grab' : undefined }}
+            // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
+            onContextMenu={(e: React.MouseEvent) => {
+                const pos = getPos();
+                if (pos !== undefined) onContextMenu(node, pos, e);
+            }}
         >
-            <figure
-                className="m-0"
-                // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
-                onContextMenu={(e) => {
-                    const pos = getPos();
-                    if (pos !== undefined) onContextMenu(node, pos, e);
-                }}
+            {/* Relative wrapper shrink-wraps the img so the inset-0 ObjectTransform ring
+                lands exactly on the image box. When no transform mounts (placeholder,
+                read-only, pre-load), the same ring shows via the class. */}
+            <div
+                className={cn('relative', selected && !box && 'eigen-selection-ring')}
+                tabIndex={selected && isEditable ? 0 : undefined}
+                aria-label={selected && isEditable ? 'Resize image' : undefined}
+                onKeyDown={selected && isEditable ? handleKeyResize : undefined}
+                // A body click must not move DOM focus out of ProseMirror onto this tabIndex
+                // wrapper (the deleted component's grips preventDefault'd for the same
+                // reason); Tab-focus for keyboard resize is unaffected. Scoped to exactly
+                // when the wrapper is focusable: the figure node is draggable, and a
+                // prevented mousedown suppresses native drag start in spec-following
+                // browsers — with no tabIndex there is no steal, so an unselected (or
+                // read-only) figure's press stays fully native for PM click-select + drag.
+                onMouseDown={selected && isEditable ? (e) => e.preventDefault() : undefined}
             >
-                <div ref={containerRef}>
-                    {/* Relative wrapper shrink-wraps the img so the inset-0 ObjectTransform ring
-                        lands exactly on the image box. When no transform mounts (placeholder,
-                        read-only, pre-load), the same ring shows via the class. */}
-                    <div
-                        className={cn('relative inline-block', selected && !box && 'eigen-selection-ring')}
-                        tabIndex={selected && isEditable ? 0 : undefined}
-                        aria-label={selected && isEditable ? 'Resize image' : undefined}
-                        onKeyDown={selected && isEditable ? handleKeyResize : undefined}
-                        // A body click must not move DOM focus out of ProseMirror onto this tabIndex
-                        // wrapper (the deleted component's grips preventDefault'd for the same
-                        // reason); Tab-focus for keyboard resize is unaffected. Scoped to exactly
-                        // when the wrapper is focusable: the figure node is draggable, and a
-                        // prevented mousedown suppresses native drag start in spec-following
-                        // browsers — with no tabIndex there is no steal, so an unselected (or
-                        // read-only) figure's press stays fully native for PM click-select + drag.
-                        onMouseDown={selected && isEditable ? (e) => e.preventDefault() : undefined}
-                    >
-                        {showPlaceholder ? (
-                            <div
-                                style={{ width: displayWidth ? `${displayWidth}px` : '400px', aspectRatio: '16 / 10' }}
-                            >
-                                <ImagePlaceholder />
-                            </div>
-                        ) : (
-                            <img
-                                ref={imageRef}
-                                src={src}
-                                alt={alt}
-                                className="max-w-full block"
-                                style={{
-                                    width: displayWidth ? `${displayWidth}px` : undefined,
-                                    aspectRatio: aspectRatio ?? undefined,
-                                }}
-                                onLoad={handleImageLoad}
-                                draggable={false}
-                                decoding="async"
-                            />
-                        )}
-                        {box && (
-                            <ObjectTransform
-                                box={box}
-                                boxToStyle={boxToStyle}
-                                screenDeltaToScene={screenDeltaToScene}
-                                showRotate={false}
-                                resizeMode="aspect"
-                                // Default minSize (1): in aspect mode the component floors BOTH dims,
-                                // which would inflate wide images (a 100 floor on a 4:1 banner's height
-                                // forces width 400). The width-only [100, maxWidth] floor is the host
-                                // clamp in handleTransform/handleCommit/handleKeyResize.
-                                onTransform={handleTransform}
-                                onCommit={handleCommit}
-                            />
-                        )}
-                        {/* After the transform, so its NE grip never covers the mark. A button, so
-                            ProseMirror leaves its press alone (no node select, no drag). */}
-                        {commentCardId && (
-                            <button
-                                type="button"
-                                className="absolute top-0 right-0"
-                                onClick={() => onOpenComment(commentCardId)}
-                                aria-label="Open comment"
-                                title="Open comment"
-                            >
-                                <CommentIndicator color={commentColor} className="block" />
-                            </button>
-                        )}
+                {showPlaceholder ? (
+                    <div style={{ width: displayWidth ? `${displayWidth}px` : '400px', aspectRatio: '16 / 10' }}>
+                        <ImagePlaceholder />
                     </div>
-                    {caption && <figcaption>{caption}</figcaption>}
-                </div>
-            </figure>
+                ) : (
+                    <img
+                        ref={imageRef}
+                        src={src}
+                        alt={alt}
+                        className="max-w-full block"
+                        style={{
+                            width: displayWidth ? `${displayWidth}px` : undefined,
+                            aspectRatio: aspectRatio ?? undefined,
+                        }}
+                        onLoad={handleImageLoad}
+                        draggable={false}
+                        decoding="async"
+                    />
+                )}
+                {box && (
+                    <ObjectTransform
+                        box={box}
+                        boxToStyle={boxToStyle}
+                        screenDeltaToScene={screenDeltaToScene}
+                        showRotate={false}
+                        resizeMode="aspect"
+                        // Default minSize (1): in aspect mode the component floors BOTH dims,
+                        // which would inflate wide images (a 100 floor on a 4:1 banner's height
+                        // forces width 400). The width-only [100, maxWidth] floor is the host
+                        // clamp in handleTransform/handleCommit/handleKeyResize.
+                        onTransform={handleTransform}
+                        onCommit={handleCommit}
+                    />
+                )}
+                {/* After the transform, so its NE grip never covers the mark. A button, so
+                    ProseMirror leaves its press alone (no node select, no drag). */}
+                {commentCardId && (
+                    <button
+                        type="button"
+                        className="absolute top-0 right-0"
+                        onClick={() => onOpenComment(commentCardId)}
+                        aria-label="Open comment"
+                        title="Open comment"
+                    >
+                        <CommentIndicator color={commentColor} className="block" />
+                    </button>
+                )}
+            </div>
+            {caption && <span className="figcaption">{caption}</span>}
         </NodeViewWrapper>
     );
 }
@@ -290,6 +269,29 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
 export const Figure = FigureNode.extend<FigureOptions>({
     addOptions() {
         return { onContextMenu: () => {}, onOpenComment: () => {} };
+    },
+    addProseMirrorPlugins() {
+        const name = this.name;
+        return [
+            new Plugin({
+                key: new PluginKey('figureClickBeside'),
+                props: {
+                    // A block figure's box is the column's width, so a click in the empty space beside the image lands
+                    // on the box: it puts the caret on that side, where ProseMirror would select the node.
+                    handleClickOn(view, _pos, node, nodePos, event, direct) {
+                        const box = view.nodeDOM(nodePos)?.firstChild;
+                        if (!direct || node.type.name !== name || event.target !== box || !(box instanceof Element))
+                            return false;
+                        const image = box.firstElementChild?.getBoundingClientRect();
+                        if (!image) return false;
+                        const at = event.clientX < image.left + image.width / 2 ? nodePos : nodePos + node.nodeSize;
+                        view.focus();
+                        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)));
+                        return true;
+                    },
+                },
+            }),
+        ];
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color

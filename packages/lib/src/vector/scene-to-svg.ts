@@ -5,7 +5,7 @@
 // the app as one standalone file. Every per-kind body lives in the registry (kinds/); this module
 // places what a kind draws.
 
-import { escapeXml } from '../core/html';
+import { escapeXml } from '../core/xml';
 import { arrowRoute, sceneBounds } from './elbow-route';
 import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';

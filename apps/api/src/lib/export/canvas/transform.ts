@@ -48,7 +48,7 @@ export function canvasHtmlDocument(opts: {
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
     // A collaborator can put arbitrary strings in a schemaless scene, so the assembled body runs
-    // through the shared sanitizer (the documented SSRF closure); a rich-text box's raw HTML was
+    // through the shared sanitizer (the documented data-only rule); a rich-text box's raw HTML was
     // filtered at the scene. No ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
     const body = sanitizeExportHtml(rendered.join(''));
     const css = mode === 'pdf' ? pdfCss(width, height) : screenCss(width);

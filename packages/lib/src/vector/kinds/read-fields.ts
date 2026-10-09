@@ -3,6 +3,7 @@
 // instead of reaching roughjs, SVG or a layout pass.
 
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
+import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
 
@@ -95,14 +96,11 @@ export function str(v: unknown, fallback: string): string {
     return typeof v === 'string' ? v : fallback;
 }
 
-// Strip XML-invalid control chars (U+0000–U+001F except tab/LF/CR). The HTML-parsed live canvas
-// tolerates them, but librsvg/WeasyPrint/strict SVG viewers reject them — so the reader, the one
-// boundary every consumer shares, cleans them for previews and svg/png/pdf export alike.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping exactly those chars is the point
-const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
-
+// Strip what XML can't hold. The HTML-parsed live canvas tolerates it, but librsvg/WeasyPrint/strict SVG
+// viewers reject it — so the reader, the one boundary every consumer shares, cleans it for previews and
+// svg/png/pdf export alike.
 export function cleanStr(v: unknown, fallback: string): string {
-    return typeof v === 'string' ? v.replace(XML_INVALID, '') : fallback;
+    return typeof v === 'string' ? stripNonXmlChars(v) : fallback;
 }
 
 // Colors come from the ColorPicker: hex or the 'transparent' sentinel (fill.ts owns the vocabulary).

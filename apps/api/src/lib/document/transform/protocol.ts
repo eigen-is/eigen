@@ -1,3 +1,4 @@
+import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 
 // Closed request/response unions crossing the document-transform Worker boundary.
@@ -20,6 +21,13 @@ export type VectorExportFormat = 'svg' | 'pdf-html';
 // (Mount I/O + screen previews), extracted from the upload by a docx import. The
 // bytes always ride as transferred buffers.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
+
+// An export's media; only a docx's raster carries the thumbnail Worker's width and height. The docx arm adds an SVG's
+// size inside the Worker.
+export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
+
+// A docx image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to in the Worker.
+export const DOCX_IMAGE_MAX_SIZE = 2560;
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
@@ -47,22 +55,30 @@ export type ExportTransformJob =
           documentType: 'eigensheets';
           format: SheetExportFormat;
           title: string;
-          media: TransformMedia[];
+          media: ExportMedia[];
       }
-    | { kind: 'export'; documentType: 'eigendoc'; format: EigendocExportFormat; title: string; media: TransformMedia[] }
+    | {
+          kind: 'export';
+          documentType: 'eigendoc';
+          format: EigendocExportFormat;
+          title: string;
+          media: ExportMedia[];
+          // The docx absolutizes root-relative links with it; the Worker reads no config.
+          publicOrigin: string | undefined;
+      }
     | {
           kind: 'export';
           documentType: 'eigenslides';
           format: DocumentExportFormat;
           title: string;
-          media: TransformMedia[];
+          media: ExportMedia[];
       }
     | {
           kind: 'export';
           documentType: 'eigenvector';
           format: VectorExportFormat;
           title: string;
-          media: TransformMedia[];
+          media: ExportMedia[];
       };
 
 // Search reindexing: the same captured document, read for its body text only. The

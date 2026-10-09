@@ -1,13 +1,21 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
-import { hardenS3Bucket, S3Storage, signedS3Request } from '../../lib/storage/s3-storage';
+import { LocalStorage } from '../../lib/storage/local-storage';
+import {
+    abortsIncompleteUploads,
+    checkS3Connection,
+    hardenS3Bucket,
+    S3Storage,
+    signedS3Request,
+} from '../../lib/storage/s3-storage';
+import { FakeS3Server } from '../fake-s3-server';
 
 // Live-S3 suite (audit test-gap 1): pins the network-touching S3Storage surface and the S3-mount
 // trash lifecycle against a real S3 — the scripts/s3-local MinIO harness. Opt-in: set
@@ -180,6 +188,15 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
         expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
     });
 
+    test('hardening again under a prefix holding & and an apostrophe applies nothing', async () => {
+        const config = await createThrowawayBucket("R&D's");
+        await hardenS3Bucket(config, 30);
+
+        const result = await hardenS3Bucket(config, 30);
+        expect(result.applied).toEqual({ versioning: false, lifecycle: false });
+        expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
+    });
+
     test('changing the retention re-PUTs our rule and leaves exactly one', async () => {
         const config = await createThrowawayBucket();
         await hardenS3Bucket(config, 30);
@@ -246,7 +263,7 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
 
 // Network-free: a loopback stub S3 answering the bucket-config PUTs, to pin the reason mapping that
 // a live MinIO can only reach with a restricted user.
-function stubS3Endpoint(status: number, code: string) {
+function stubS3Endpoint(status: number, code: string, message = '') {
     return Bun.serve({
         port: 0,
         fetch(req) {
@@ -254,7 +271,7 @@ function stubS3Endpoint(status: number, code: string) {
                 if (new URL(req.url).search === '?lifecycle') return new Response(null, { status: 404 });
                 return new Response('<VersioningConfiguration></VersioningConfiguration>');
             }
-            return new Response(`<Error><Code>${code}</Code></Error>`, { status });
+            return new Response(`<Error><Code>${code}</Code><Message>${message}</Message></Error>`, { status });
         },
     });
 }
@@ -287,6 +304,197 @@ describe('hardenS3Bucket reason mapping', () => {
         } finally {
             server.stop(true);
         }
+    });
+
+    test('under another status the reason is the error code, not a word in the message', async () => {
+        for (const [code, message, reason] of [
+            ['AccessDenied', '', 'access-denied'],
+            ['NotImplemented', '', 'not-supported'],
+            ['InvalidRequest', 'AccessDenied NotImplemented', 'error'],
+        ] as const) {
+            const server = stubS3Endpoint(400, code, message);
+            try {
+                const result = await hardenS3Bucket(
+                    { ...s3Config, endpoint: `http://localhost:${server.port}`, bucket: 'stub', prefix: '' },
+                    30,
+                );
+                expect(result.reason).toBe(reason);
+            } finally {
+                server.stop(true);
+            }
+        }
+    });
+});
+
+// Network-free: the bucket-config reads against the fake S3, in the shapes providers answer them. AWS answers in the
+// S3 namespace, others in none or their own (GCS), and Go's encoder (MinIO) writes an apostrophe as `&#39;`.
+const S3_XMLNS = 'http://s3.amazonaws.com/doc/2006-03-01/';
+const GCS_XMLNS = 'http://doc.s3.amazonaws.com/2006-03-01';
+const BUCKET_CONFIG_DIR = join(import.meta.dir, `../../../../../data-test/test-s3-bucket-config-${Date.now()}`);
+
+function ourRule(prefix: string, days = 30): string {
+    return (
+        `<Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID><Filter><Prefix>${prefix}</Prefix></Filter><Status>Enabled</Status>` +
+        `<NoncurrentVersionExpiration><NoncurrentDays>${days}</NoncurrentDays></NoncurrentVersionExpiration></Rule>`
+    );
+}
+
+describe('bucket configuration reads (fake S3)', () => {
+    let fake: FakeS3Server;
+    let bucket: S3Config;
+
+    beforeEach(async () => {
+        mkdirSync(BUCKET_CONFIG_DIR, { recursive: true });
+        fake = new FakeS3Server(new LocalStorage(mkdtempSync(join(BUCKET_CONFIG_DIR, 'bucket-'))));
+        bucket = { ...(await fake.start()), prefix: 'team-data' };
+    });
+
+    afterEach(() => fake.stop());
+
+    afterAll(() => rmSync(BUCKET_CONFIG_DIR, { recursive: true, force: true }));
+
+    test('a configuration in the S3 namespace reads as ours, prefixed or as the default', async () => {
+        fake.versioning =
+            `<s3:VersioningConfiguration xmlns:s3="${S3_XMLNS}">` +
+            '<s3:Status>Enabled</s3:Status></s3:VersioningConfiguration>';
+        fake.lifecycle =
+            `<s3:LifecycleConfiguration xmlns:s3="${S3_XMLNS}"><s3:Rule><s3:ID>${S3_LIFECYCLE_RULE_ID}</s3:ID>` +
+            '<s3:Filter><s3:Prefix>team-data/</s3:Prefix></s3:Filter><s3:Status>Enabled</s3:Status>' +
+            '<s3:NoncurrentVersionExpiration><s3:NoncurrentDays>30</s3:NoncurrentDays></s3:NoncurrentVersionExpiration>' +
+            '</s3:Rule></s3:LifecycleConfiguration>';
+        expect(await checkS3Connection(bucket)).toMatchObject({
+            ok: true,
+            versioning: 'enabled',
+            lifecycle: { noncurrentDays: 30 },
+        });
+
+        fake.lifecycle = `<LifecycleConfiguration xmlns="${S3_XMLNS}">${ourRule('team-data/', 14)}</LifecycleConfiguration>`;
+        expect((await checkS3Connection(bucket)).lifecycle).toEqual({ noncurrentDays: 14 });
+    });
+
+    test('a configuration in no namespace reads the same', async () => {
+        fake.versioning = '<VersioningConfiguration><Status>Suspended</Status></VersioningConfiguration>';
+        fake.lifecycle = `<LifecycleConfiguration>${ourRule('team-data/')}</LifecycleConfiguration>`;
+        expect(await checkS3Connection(bucket)).toMatchObject({
+            versioning: 'suspended',
+            lifecycle: { noncurrentDays: 30 },
+        });
+    });
+
+    test('a prefix is compared as S3 decodes it, whichever references the provider wrote', async () => {
+        const config = { ...bucket, prefix: "R&D's" };
+        for (const written of ['R&amp;D&apos;s/', 'R&amp;D&#39;s/', "R&#38;D's/"]) {
+            fake.lifecycle = `<LifecycleConfiguration>${ourRule(written)}</LifecycleConfiguration>`;
+            expect((await checkS3Connection(config)).lifecycle).toEqual({ noncurrentDays: 30 });
+        }
+        fake.lifecycle = `<LifecycleConfiguration>${ourRule('R&amp;D/')}</LifecycleConfiguration>`;
+        expect((await checkS3Connection(config)).lifecycle).toBe('none');
+    });
+
+    test('hardening twice under a prefix holding & writes the rule once', async () => {
+        const config = { ...bucket, prefix: 'R&D' };
+        const first = await hardenS3Bucket(config, 30);
+        expect(first).toMatchObject({
+            ok: true,
+            versioning: 'enabled',
+            lifecycle: { noncurrentDays: 30 },
+            applied: { versioning: true, lifecycle: true },
+        });
+
+        const second = await hardenS3Bucket(config, 30);
+        expect(second).toMatchObject({ ok: true, applied: { versioning: false, lifecycle: false } });
+        expect(fake.lifecyclePuts).toBe(1);
+    });
+
+    test('a configuration that does not parse is unknown, so harden writes neither half', async () => {
+        fake.versioning = '<VersioningConfiguration><Status>Enabled</Status>';
+        fake.lifecycle = `<LifecycleConfiguration>${ourRule('team-data/')}`;
+        const result = await hardenS3Bucket(bucket, 30);
+        expect(result).toMatchObject({
+            ok: false,
+            versioning: 'unknown',
+            lifecycle: 'unknown',
+            applied: { versioning: false, lifecycle: false },
+        });
+        expect(fake.lifecyclePuts).toBe(0);
+    });
+
+    test('a prefix holding a character XML cannot carry gets no rule, which would scope another prefix', async () => {
+        const result = await hardenS3Bucket({ ...bucket, prefix: 'team￿data' }, 30);
+        expect(result.ok).toBe(false);
+        expect(result.message).toContain("The prefix holds a character a lifecycle rule can't carry");
+        expect(result.applied.lifecycle).toBe(false);
+        expect(fake.lifecyclePuts).toBe(0);
+    });
+
+    test("a configuration in another provider's namespace is read in it", async () => {
+        fake.versioning = `<VersioningConfiguration xmlns="${GCS_XMLNS}"><Status>Enabled</Status></VersioningConfiguration>`;
+        fake.lifecycle =
+            `<LifecycleConfiguration xmlns="${GCS_XMLNS}"><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +
+            '<Filter><Prefix>team-data/</Prefix></Filter><Status>Enabled</Status>' +
+            '<NoncurrentVersionExpiration><NoncurrentDays>30</NoncurrentDays></NoncurrentVersionExpiration>' +
+            '</Rule></LifecycleConfiguration>';
+        expect(await checkS3Connection(bucket)).toMatchObject({
+            versioning: 'enabled',
+            lifecycle: { noncurrentDays: 30 },
+        });
+    });
+
+    test("a rule outside the root's namespace, or not a Rule, is foreign even with our ID", async () => {
+        const ours = `<ID>${S3_LIFECYCLE_RULE_ID}</ID><Status>Enabled</Status>`;
+        for (const child of [`<Rule xmlns="">${ours}</Rule>`, `<Foo>${ours}</Foo>`]) {
+            fake.lifecycle = `<LifecycleConfiguration xmlns="${S3_XMLNS}">${child}</LifecycleConfiguration>`;
+            const result = await hardenS3Bucket(bucket, 30);
+            expect(result).toMatchObject({ lifecycle: 'foreign', applied: { lifecycle: false } });
+            expect(fake.lifecyclePuts).toBe(0);
+        }
+    });
+
+    test('a 200 answering with an error or another document is unknown', async () => {
+        for (const body of ['<Error><Code>InternalError</Code></Error>', '<ListBucketResult/>']) {
+            fake.versioning = body;
+            fake.lifecycle = body;
+            expect(await checkS3Connection(bucket)).toMatchObject({ versioning: 'unknown', lifecycle: 'unknown' });
+        }
+    });
+
+    test('an empty 200 is unversioned, but an unknown lifecycle that harden does not overwrite', async () => {
+        fake.versioning = '';
+        fake.lifecycle = '';
+        const result = await hardenS3Bucket(bucket, 30);
+        expect(result).toMatchObject({
+            versioning: 'enabled',
+            lifecycle: 'unknown',
+            applied: { versioning: true, lifecycle: false },
+        });
+        expect(fake.lifecyclePuts).toBe(0);
+    });
+
+    test('our rule scoped to another prefix is re-PUT once', async () => {
+        fake.lifecycle = `<LifecycleConfiguration>${ourRule('other/')}</LifecycleConfiguration>`;
+        expect((await hardenS3Bucket(bucket, 30)).applied.lifecycle).toBe(true);
+        expect((await hardenS3Bucket(bucket, 30)).applied.lifecycle).toBe(false);
+        expect(fake.lifecyclePuts).toBe(1);
+    });
+
+    test('a prefix inside a filter And is read', async () => {
+        fake.lifecycle =
+            `<LifecycleConfiguration><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +
+            '<Filter><And><Prefix>team-data/</Prefix><Tag><Key>k</Key><Value>v</Value></Tag></And></Filter>' +
+            '<Status>Enabled</Status>' +
+            '<NoncurrentVersionExpiration><NoncurrentDays>21</NoncurrentDays></NoncurrentVersionExpiration>' +
+            '</Rule></LifecycleConfiguration>';
+        expect((await checkS3Connection(bucket)).lifecycle).toEqual({ noncurrentDays: 21 });
+    });
+
+    test('an abort rule is found in the S3 namespace, its prefix compared decoded', async () => {
+        fake.lifecycle =
+            `<s3:LifecycleConfiguration xmlns:s3="${S3_XMLNS}"><s3:Rule><s3:ID>abort-parts</s3:ID>` +
+            '<s3:Filter><s3:Prefix>R&amp;D/</s3:Prefix></s3:Filter><s3:Status>Enabled</s3:Status>' +
+            '<s3:AbortIncompleteMultipartUpload><s3:DaysAfterInitiation>1</s3:DaysAfterInitiation>' +
+            '</s3:AbortIncompleteMultipartUpload></s3:Rule></s3:LifecycleConfiguration>';
+        expect(await abortsIncompleteUploads(bucket, 'R&D/nightly/')).toBe(true);
+        expect(await abortsIncompleteUploads(bucket, 'R/nightly/')).toBe(false);
     });
 });
 

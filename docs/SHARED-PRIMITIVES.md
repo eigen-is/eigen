@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1623 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1626 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -891,7 +891,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (768)
+## Utilities & constants (771)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1185,6 +1185,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
+| `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
 | `pageBoxStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pagePx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1219,7 +1220,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isRecord` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
 | `handleHomeSSEvent` | `@workspace/lib/home` | packages/lib/src/core/home/sse-handlers.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
-| `escapeXml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_ATTRS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_BLOCK_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_HREF` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1609,6 +1609,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `escapeXml` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
+| `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
+| `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |

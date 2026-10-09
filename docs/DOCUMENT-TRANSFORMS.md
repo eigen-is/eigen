@@ -24,9 +24,9 @@ Errors come back as a small typed code plus an optional HTTP status, never a clo
 
 ## The Worker graph stays light
 
-A module the Worker imports must never statically reach `preview/preview-cache.ts`. That would drag sharp and the sheet engine into every Worker, and it is why `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread) are separate files.
+A module the Worker imports must never statically reach `preview/preview-cache.ts`. That would drag sharp and the sheet engine into every Worker, and it is why `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread) are separate files. sharp itself loads lazily, only for a docx with an SVG to draw its PNG fallback from.
 
-Inside the Worker graph `ApiError` comes from `core/errors`, never the `core` barrel. The barrel pulls auth, the home relay and ExifTool into the Worker bundle: 10.3 MB against 4.7 MB. `buildfordocker` (`apps/api/package.json`) bundles each Worker entry, and that bundle is how purity is checked. Production runs `src/index.ts` directly, and ExcelJS, Turbodocx and mammoth stay external in `node_modules`.
+Inside the Worker graph `ApiError` comes from `core/errors`, never the `core` barrel. The barrel pulls auth, the home relay and ExifTool into the Worker bundle: 10.3 MB against 4.7 MB. `buildfordocker` (`apps/api/package.json`) bundles each Worker entry, and that bundle is how purity is checked. Production runs `src/index.ts` directly, and ExcelJS, JSZip and mammoth stay external in `node_modules`.
 
 ## A capture is always the whole document
 
@@ -40,7 +40,7 @@ Memory is the limit, not cores: one ExcelJS or Yjs heap exists at a time. A Bun 
 
 The queue holds 16 jobs at two priorities. Foreground is a user waiting. Background is the search extract and a stale preview's regeneration. A queued request holds its HTTP connection open, so foreground admission is capped by predicted wait, the summed admission costs of the queued and active jobs (at most 120 s), not by queue length alone. Background work may hold at most 8 of the 16 slots, so a mass reindex can't starve users. A dropped background job is safe: the next preview request enqueues it again, and so does the `contentDirty` bit, the flag on a `paths` row that marks its body for the search reindex ([SEARCH.md](SEARCH.md)).
 
-`TRANSFORM_LIMITS` (`runner.ts`) gives each kind a kill deadline and an admission cost. The deadline bounds a runaway. The cost is what a job is expected to take from the queue. It is keyed by kind, not document type, so the bytes previews run under the same `preview` row as the collab ones.
+`TRANSFORM_LIMITS` (`runner.ts`) gives each kind a kill deadline and an admission cost. The deadline bounds a runaway. The main-thread prep a caller reports as `prepMs` spends from it for every kind, so a preview's media lookup shortens its deadline as an export's media does, and a job whose prep spent it all times out without spawning a Worker. The cost is what a job is expected to take from the queue. It is keyed by kind, not document type, so the bytes previews run under the same `preview` row as the collab ones.
 
 Admission is checked before the expensive preparation: the Yjs capture, export media, upload copies, the convert source read. A refused job pays for nothing. It gets a readable 503 ("The server is busy…"), which `useExportDocument` shows verbatim.
 
@@ -57,7 +57,7 @@ The measurements behind the choice: a spawn costs 2 to 4 ms, and the real cost i
 Not after a timeout, a crash, an overload or a module that fails to load. A fallback would bring back the server-wide freeze this layer exists to remove.
 
 - A recalc failure returns the replayed values with a `recalc-failed` warning and never fails the job. Only an export recalcs ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
-- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's DOMPurify config plus hooks of its own that strip every reference but an inlined raster image and every CSS fetch, and it forbids more tags, such as `svg` and `video` (`apps/api/src/lib/preview/eml-preview.ts`).
+- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's DOMPurify config plus hooks of its own that strip every reference but an inlined raster image and every CSS fetch, and it forbids more tags, such as `svg` and `video` (`apps/api/src/lib/preview/eml-preview.ts`).
 - The import commit stays on the main thread ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
 
 ## The runner logs one line per job, overload included

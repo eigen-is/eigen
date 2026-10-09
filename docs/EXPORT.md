@@ -1,8 +1,10 @@
 # Document Export and Import
 
-> **TLDR:** One route downloads a doc as docx, PDF or HTML, a sheet as xlsx, PDF or HTML, a deck as PDF or HTML and a drawing as SVG or PDF (`apps/api/src/lib/export/`). Import turns an xlsx into a sheet and a docx into a doc (`lib/import/`). Not obvious from the code: every format but xlsx and SVG is one HTML document, and PDF is that document through WeasyPrint. Every body keeps only `data:` references, because WeasyPrint fetches anything else from the API host. An import writes nothing until the Worker succeeds, and checks write again last.
+> **TLDR:** One route downloads a doc as docx, PDF or HTML, a sheet as xlsx, PDF or HTML, a deck as PDF or HTML and a drawing as SVG or PDF (`apps/api/src/lib/export/`). Import turns an xlsx into a sheet and a docx into a doc (`lib/import/`). Every format but xlsx, docx and SVG is one HTML document, and PDF is that document through WeasyPrint. xlsx and docx each have a writer of their own, and the docx writer takes its look from the same stylesheet the editor draws with. An import writes nothing until the Worker succeeds.
 
 A user exports from the file menu of the docs, sheets, slides and drawing editors, or from a Drive item's menu. Import is a row of the same file menu in docs and sheets (**Import docx file…**, **Import xlsx file…**) and replaces the open document. Convert to Sheet and Convert to Document are file actions on an xlsx or docx, and make a new document from it. Every document that exports is a collab document, so its content is the Yjs state stored in its container's `data.db` ([COLLAB.md](COLLAB.md)), and an export renders that state. The heavy work runs in a one-shot transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)).
+
+The editor, quick look, the HTML download and the PDF draw a doc from one stylesheet, `eigen-prose.css`, so they lay it out block for block alike. The docx writer reads its sizes, spacing and colors from that stylesheet too. The rest of this doc covers how each format is built and kept safe. Three things surprise people: WeasyPrint opens only `data:` URIs, through a fetcher of Eigen's own ([§ WeasyPrint fetches only data: URIs](#weasyprint-fetches-only-data-uris)); every body keeps only `data:` references, so an HTML download fetches nothing either ([§ The sanitizer](#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)); and an import checks write access again as its last step ([§ An import writes nothing](#an-import-writes-nothing-until-the-worker-succeeds)).
 
 ## A type's format list is both the menu and the gate
 
@@ -12,14 +14,14 @@ Export and import both dispatch on the container type, not the mime type. A mime
 
 ## The Worker renders and the main thread prepares
 
-`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) fetches the screen preview of every media child. That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. The xlsx export skips it, because the writer carries cells only.
+`runDocumentExport` is the one main-thread entry. It asks the runner for admission first, so a refused job does not pay for its media. Then `collectExportMedia` (`export/media.ts`) prepares every media child: the screen preview for HTML and PDF, a fresh PNG or JPEG for a docx ([§ A docx image](#a-docx-image-is-a-png-or-jpeg-made-from-its-source)). That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. The prep spends from the export's 120 s transform deadline, so an export is one deadline end to end: once it is spent the prep queues no more media and the job fails as a timed-out one does. The xlsx export skips it, because the writer carries cells only.
 
-The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, renders, sanitizes and, for docx, converts. `@turbodocx/html-to-docx` and ExcelJS load lazily, so an HTML export evaluates neither. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays on the main thread: it is already a separate process.
+The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, then renders and sanitizes the HTML, or writes the docx or xlsx. The docx writer and ExcelJS load lazily, so an HTML export evaluates neither. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays on the main thread: it is already a separate process.
 
 | Outcome | Status |
 |---|---|
-| WeasyPrint not installed (PDF only) | 501 with install instructions |
-| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or 500 with its stderr |
+| WeasyPrint not installed, older than 68 or its import past 5 s (PDF only) | 501 naming the minimum and how to install it |
+| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log |
 | Transform runner saturated | 503, never a main-thread fallback |
 | Empty deck or empty drawing | 400 |
 
@@ -27,26 +29,93 @@ The one-shot Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materiali
 
 The response is silent while the job queues and its Worker runs. Queue wait plus the 120 s transform deadline plus 60 s of WeasyPrint can outlast any server-wide `idleTimeout`, which Bun caps at 255 s. So the export, import and convert routes call `server.timeout(request, 0)`. Without it Bun closes the silent connection, which aborts the signal and kills the job mid-transform. `request.signal` still fires on a real disconnect, and the runner then drops the queued job or terminates its Worker.
 
-## Every format but xlsx and SVG is one HTML document
+## Every format but xlsx, docx and SVG is one HTML document
 
-`html` and `pdf-html` render the identical document, so WeasyPrint prints exactly what the HTML download serves. A doc's docx is that HTML fed to `@turbodocx/html-to-docx` without its doctype, because html-to-docx opens the body with an empty paragraph for one. It turns only a top-level page break into a Word page break ([DOCS.md](DOCS.md#html-to-docx-reads-our-page-break-only-as-a-top-level-page-break-div)). There is one document per type to get right, not one per format. A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
+`html` and `pdf-html` render the identical document, so WeasyPrint prints exactly what the HTML download serves. There is one document per type to get right, not one per format. A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
 
 A doc's page comes from its page setup ([DOCS.md](DOCS.md#one-page-setup-sizes-every-page-a-doc-is-drawn-on)): the HTML's screen page and the PDF's `@page` from `pageStylesheet` (in `PRINT_EXTRAS`, `export/doc/transform.ts`), and the docx's page size and margins from `pageTwips`. So all three match the editor's A4 page and its 2 cm margins.
 
-The document is self-contained, because WeasyPrint and a downloaded file have no app to fetch from. Fonts are WOFF2 files base64'd into `@font-face` rules (`export/fonts.ts`). A doc imports `eigen-prose.css` as text and flattens it at load: WeasyPrint does not read CSS nesting, so nesting is expanded, `.dark` rules are dropped and theme variables become values, so no `var()` survives. The font weights come from `font-weights.css`, rounded to the nearest multiple of 100 because WeasyPrint accepts no other weight: headings and table headers print at 500 and bold at 600.
+The document is self-contained, because WeasyPrint and a downloaded file have no app to fetch from. Fonts are WOFF2 files base64'd into `@font-face` rules (`export/fonts.ts`). A doc embeds `eigen-prose.css`, flattened once at load by `export/doc/prose-css.ts`: WeasyPrint does not read CSS nesting, so nesting is expanded, `.dark` rules are dropped and theme variables become values, so no `var()` survives. The font weights come from `font-weights.css`, rounded to the nearest multiple of 100 because WeasyPrint accepts no other weight: headings and table headers print at 500 and bold at 600.
 
-The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. So a figure with only an external `src` exports empty, with no warning, an open [ROADMAP](ROADMAP.md) row. A task item is rendered by hand, because the static renderer drops `checked`.
+The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview. The module holds the backend's one lowlight, so the main thread imports it lazily. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. So a figure with only an external `src` exports empty, with no warning, an open [ROADMAP](ROADMAP.md) row. A task item is rendered by hand, because the static renderer drops `checked`.
 
-## The sanitizer keeps only data: references, because WeasyPrint fetches
+## The doc renderers write the DOM the editor holds
 
-`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url()` in a `style` attribute or `<style>` element, every `src`, `poster` and `background`, and every SVG `href` must be a `data:` URI. Anything else is stripped, `srcset` is dropped and `@import` is removed from style text.
+A figure is an inline node, so it renders as a `span.figure` with a `span.figcaption`, which a paragraph can hold. A `<figure>` inside a `<p>` closes it in every HTML parser, the sanitizer's and WeasyPrint's, and the paragraph split around it gains margins the editor never draws. `span.figure` parses back with its caption and layout; the `<figure>` rule stays, because the editor's own copy still writes one. Both draw from the shared `.figure` box ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
-Export embeds every resource it needs, so any other reference came from a collaborator's CRDT string: a text box's HTML, a sheet cell. WeasyPrint fetches such references while it renders, from the API host, and its CLI cannot restrict protocols. So the restriction runs inside the Worker on every assembled body, and docx and PDF inherit it.
+`withTrailingBreaks` (`export/doc/render.ts`) gives a paragraph, heading or code block the trailing `<br>` the editor has, in the export and the preview alike ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
-- Backslashes go before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches.
-- `<a href>` is exempt: a link is not fetched during render, and docs and sheets carry real links.
+## A doc's docx is written from its JSON, with the editor's CSS values
+
+`eigendocToDocx` (`export/doc/to-docx.ts`) writes the WordprocessingML by hand from the JSON `readEigendocFromDoc` returns, and zips it with JSZip, the way xlsx is written from the workbook and not from HTML. Fed the export HTML, a converter kept a doc's structure and lost almost every visual property ([PROPOSAL_DOCX.md](proposals/PROPOSAL_DOCX.md)). Every size, margin, color and border comes from `eigen-prose.css` through `proseValue` (`export/doc/prose-css.ts`), so the editor's look lives in one file and the docx keeps the editor's spacing. `proseValue` throws when the CSS sets no such value, so a renamed rule fails the export tests instead of drifting.
+
+No schema checked the CRDT's JSON, so the writer checks attrs where it uses them and never fails on structure: inline content where a block belongs is wrapped in a paragraph, and a nested block is hoisted out. A node or mark it has no mapping for throws, as the HTML export does, and `apps/api/src/test/export/doc-docx.test.ts` exports a doc holding every node and mark of the schema, so a new node fails a test instead of vanishing from the docx. A comment mark writes nothing and its text stays: comments are not exported, an open [ROADMAP](ROADMAP.md) question. Every zip entry carries the DOS epoch as its date, so one doc always exports to the same bytes.
+
+## The docx embeds the faces a doc uses, its 600s in the Bold slot
+
+Word has four slots per family (Regular, Bold, Italic, Bold Italic) and reads no variable font, so the writer embeds static TrueType files that sit beside the variable WOFF2s in `packages/ui/src/assets/fonts/` (`DOCX_FONT_FILES` in `export/fonts.ts`). The editor draws bold at 600. So Inter's and JetBrains Mono's Bold slots hold their 600 files, renamed to Bold so the family stays one name that Word, an import and Google Docs all find. Source Serif 4's holds its 700, and Excalifont has a Regular only, from which Word synthesizes the rest.
+
+Only the faces a doc's runs resolve to are embedded, with the body's Regular always among them, each whole and not subset, so a reader can type new characters. Each is obfuscated as ECMA-376 requires, its first 32 bytes XORed with a GUID key hashed from the face, so the bytes stay stable. MS Gothic, which draws the task checkboxes, joins the font table only with a task list and is not embedded.
+
+## The docx line is a multiple of each font's own line height
+
+CSS sets a line as a multiple of the font size. Word's `auto` line is a multiple of the font's own line height, `(usWinAscent + usWinDescent) / unitsPerEm` from its OS/2 table, and `atLeast` would be read as single spacing by Google Docs. So `autoLine` divides the CSS pitch by that height, and every style's line is the editor's pitch in Word. Word also scales an `auto` line with the tallest face in it, which CSS does not: a paragraph whose runs all draw in one family other than its paragraph mark's gets its line rescaled by that family's height (`familyLine`) when the runs' line is taller than the mark's, and otherwise keeps the style's line, so Source Serif 4, JetBrains Mono and Excalifont keep the editor's pitch.
+
+## A docx image is a PNG or JPEG made from its source
+
+Word for the web and Google Docs show no WebP, so a docx never takes the WebP screen preview. `prepareDocxMedia` (`export/media.ts`) re-encodes each image from its source file in the thumbnail Worker, at most 2560 px on the long side (`DOCX_IMAGE_MAX_SIZE`): PNG for a lossless source (PNG, GIF, a VP8L WebP), JPEG for the rest, and PNG again for a source with alpha. The re-encode drops EXIF, GPS included. It is uncached and runs on the thumbnail semaphore uploads and previews share, which allows 4 workers. `collectExportMedia` loops over the images in sequence, so one export takes one image at a time and queues no more once the client disconnects. The Worker's width and height size the drawing, because a figure stores only its width.
+
+An SVG goes in as itself, an `asvg:svgBlip` that Word and LibreOffice draw, beside a PNG fallback for a reader without SVG. `withSvgFallbacks` (`export/doc/transform.ts`) draws that PNG in the transform Worker from the sanitized XML the `svgBlip` carries ([§ The sanitizer](#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)), so the docx shows what the PDF shows. sharp loads only for a docx that holds an SVG. One librsvg cannot read leaves the docx, its caption staying, and so does one it cannot draw within 30 s. That timeout is sharp's own, because `Worker.terminate()` does not stop libvips: a 310-byte filter chain held the one transform slot for 90 s. sharp reads physical units (`in`, `cm`, `mm`, `pt`, `pc`) at 72 dpi, so `cssSize` scales a side the root `<svg>` gives in one by 96/72, the size the HTML export draws.
+
+Observed in Word's render on 2026-10-08: a 1204×4 px divider drew 466.5 pt wide until its height became whole twips. So the writer rounds the height to whole twips itself. A figure with no media, an external `src` (a docx fetches nothing) or a media item without a size or fallback writes only its caption.
+
+## A wrapped figure is a floating one-cell table
+
+A figure wrapped left or right becomes a borderless floating table of one cell holding the image and its caption, placed before its paragraph, its distances from the text the figure's float margin in `eigen-prose.css`. It is the one wrap that keeps the caption under the image in every reader, and its row cannot split, or Google Docs moves the caption to the next page. In a list or quote a left float starts at the container's text edge, clear of the bullet and the bar.
+
+## The docx writes a figure's margin inside its paragraph's spacing
+
+In the editor a paragraph's own margins collapse with its neighbours', and a figure's 0.75em margin sits inside the paragraph and never collapses. Word and LibreOffice collapse adjacent spacing to the larger, as CSS does, and have no inside margin. So `to-docx.ts` carries the figure's margin as an inset on its paragraphs, and `withInsets` writes the whole gap on the inset paragraph's side: the neighbour's inset, the two spacings collapsed, its own inset. The pieces a figure splits a paragraph into share its margins, the first taking the one above and the last the one below. A paragraph that holds only a wrapped figure keeps its line, as the editor's trailing break does. In a quote, a paragraph whose style isn't Quote (a figure's, its caption's, an item's clearing Spacer, a done task) draws the quote's bar itself at the quote's indent, so the bar runs unbroken past it.
+
+A list item that holds a wrapped figure ends in a clearing break (`w:br w:clear="all"`) on a single-spaced Spacer paragraph, so the next item starts below the float, as in the editor. A nested item clears its own floats, so the item around it writes no second break. On an exact-height Spacer, LibreOffice was observed to ignore the clear. Google Docs ignores the clear too, so the next item draws beside the float there (observed 2026-10-08), while Word and LibreOffice honour it. The cases are pinned in `apps/api/src/test/export/doc-docx.test.ts`.
+
+## Bullet lists share one numbering definition, and each ordered list has its own
+
+Each ordered list gets its own `w:abstractNum` with its start in all nine levels, so two adjacent lists count separately. A bullet counts nothing, so bullet lists at one indent share one definition, which keeps `numbering.xml` small, and a bullet has no counter to restart. Word has nine levels, so a list or quote deeper still indents no further.
+
+## A docx keeps every page break
+
+A page break is a paragraph holding `w:br w:type="page"` wherever it stands, at the top level or in a list item, a task item, a quote or a table cell.
+
+## Every export points root-relative links at the instance
+
+A link's root-relative `href` means nothing outside Eigen, so the docx, the HTML and the PDF prefix it with the public origin (`getPublicOrigin`, none on a `localhost` dev server), and a protocol-relative one gets `https:`, since a downloaded file would open it as `file:`. One rule serves all three: `absoluteHref` in `apps/api/src/lib/export/doc/render.ts`, which the docx writer calls per link and `withAbsoluteLinks` applies to the JSON before the HTML render.
+
+## WeasyPrint fetches only data: URIs
+
+PDF is the HTML document through WeasyPrint, run by `export/weasyprint-render.py` through its Python API rather than its CLI. That script hands WeasyPrint a URL fetcher that opens `data:` URIs and refuses everything else: http(s), `file:`, a plain or relative path, any other scheme. Export embeds every resource it needs as a `data:` URI, so any other reference came from a collaborator's CRDT string, and WeasyPrint would fetch it from the API host while it renders. WeasyPrint's default fetcher opens every one, from a nested `<image href>` in a `data:` SVG to an `<a rel="attachment">`, whose response, or the server file a plain path names, it embeds in the PDF. The fetcher is the boundary for the PDF; the sanitizer is not relied on for it, and `export-pdf-ssrf.test.ts` renders raw hostile bodies to prove it.
+
+- `htmlToPdf` runs the script with the Python that imports WeasyPrint 68 or later: the one the `weasyprint` launcher's shebang names (a pip venv's, Homebrew's own, through `env` or `env -S` too), else `python3`. A pip launcher whose venv path is long or holds a space starts `#!/bin/sh`, so it counts as naming none. When neither imports a recent enough one, a PDF export answers 501. The probe is cached; a spawn that finds the cached interpreter gone, as after a Homebrew upgrade, probes once more. An import that runs past 5 s is killed, because the export routes set no request timeout, and is not cached, so the next export probes again.
+- It runs under `python -I`, so a module in the working directory or on `PYTHONPATH` cannot load in its place. That also drops the user site, so a `pip install --user` WeasyPrint is not found: install it system-wide, in a venv or from the OS package.
+- The script subclasses `URLFetcher`, which WeasyPrint 68 introduced, rather than pass `allowed_protocols={'data'}`: 68.0 takes the text before `://` as the scheme, so it refuses every `data:` URI.
+- The Docker image pins WeasyPrint 70.0 from PyPI in a venv at `/opt/weasyprint`, so it renders with the engine development does. `docker/api/weasyprint-requirements.txt` pins every dependency by hash, for the amd64 and arm64 wheels, and its first line is the command that regenerates it. The build renders a one-line PDF through `weasyprint-render.py`, so a system library the image lacks fails the build instead of every PDF export. Debian 13 ships 62.3, which ignores flex `align-items` and width on the `.figure` box and prints a centred figure left-aligned, its caption squeezed beside it.
+- The document has no base URL, so a relative link stays relative in the PDF instead of becoming a `file://` URL of the server's working directory.
+
+## The sanitizer keeps only data: references, because a browser fetches
+
+`sanitizeExportHtml` (`export/sanitize.ts`) is DOMPurify plus one rule. Every CSS `url(`, every `src`, `poster` and `background`, and every SVG `href` must open a `data:` URI with no fragment. A `url(` may also be fragment-only (`#id`), a reference into the same document, and so may an `href` on the elements that reference with one: `use`, the gradients, `pattern`, `filter`, `textPath` and `mpath`. An `image` or `feImage` loads its `href` as a file, so a fragment there names the document itself. `srcset` is dropped. A `url(` that opens anything else costs the whole attribute it is in, and in a `<style>` element the statement it is in. So do `@import`, the string forms of `image-set()`, `image()`, `cross-fade()` and `element()`, which fetch with no `url(`, and `attr()`, which can read an attribute as a URL: WeasyPrint fails the whole export on `attr(name url)`.
+
+A browser that opens an HTML download fetches what the document names, from the reader's machine, which tells whoever wrote the reference who read it. A preview body is live DOM in the drive hero, the same beacon at every viewer ([PREVIEWS.md](PREVIEWS.md)). So the restriction runs inside the Worker on every assembled body, and every format inherits it. A `data:` URI passes as it came, whatever its type or payload: a browser fetches nothing from an SVG drawn as an image, librsvg draws one from its bytes, and WeasyPrint's fetcher opens nothing but `data:`. The exception is a fragment. Firefox loads a `data:` SVG named with one (`mask:url(data:…#m)`, `fill="url(data:…#p)"`, `<pattern href="data:…#g">`) as a document, not an image, and fetches what that document names, such as its `@import`. So a `data:` URI holding a `#` is refused wherever it stands. A real one never has one: export media is base64, and a `#` in a percent-encoded payload ends it anyway.
+
+- The rule reads the `url(` token, in any case, never a `url(…)` pair. A quoted URL can hold a `)` or a quote, so a pair regex ends early on `url('http://host/a)')` and the CSS parser fetches it. It is the same refusal `eml-preview.ts` makes for a message's CSS.
+- Every attribute value is scanned, not only `style`: an SVG `fill`, `filter`, `mask`, `clip-path` or `marker-*` is CSS too.
+- Backslashes go from `style` and `<style>` text before the scan. A CSS escape spells `url(` or `@import` invisibly to a regex (`\75 rl(`), but not to the parser that fetches. Any other attribute holding both a backslash and a `(` is dropped: an escape spells `url(` (`\75 rl(`) or a fragment (`url(data:…\23 p)`), and every fetch needs the literal `(` that opens a function.
+- `<a href>` keeps its target, because docs and sheets carry real links and a browser follows one only on a click. A link is not inert to WeasyPrint: one with `rel="attachment"` is fetched and embedded in the PDF, which only the fetcher stops. jsdom names an SVG `<a>` in lowercase and an HTML one in uppercase, so the check ignores case.
+- DOMPurify drops every `<use>`. A profile that admits `<svg>` keeps one whose every `href` is fragment-only, because matplotlib draws its text with `<use href="#glyph">`; any other `<use>` goes. Written as XML (`toXmlDocument`: SVG media and a drawing's own SVG), a `<use>` also needs every target to exist and hold no `<use>` of its own. Each reference draws its target again, so nested ones multiply: 1.2 KB of six levels of ten runs WeasyPrint into its 60 s kill. One level is what glyphs need, and it ends every cycle.
+- Only the whitespace a URL or CSS parser trims counts as whitespace. A non-breaking space before `#` or `data:` makes a relative path of the rest.
+- Every token pattern runs in one pass, because a collaborator's string sizes the scan. Two whitespace runs that could trade characters around an empty match cost their square: 256 KB of spaces after a `url(` costs 26 s.
 - The hooks are added and removed around each synchronous call, so they never leak to another DOMPurify user.
-- A media preview serves an SVG as uploaded, and a nested `<image href>` in its `data:` URI is the same SSRF. So `prepareMedia` sanitizes `image/svg+xml` media before the Worker sees it.
+- A media preview serves an SVG as uploaded. A docx carries it as a part of its own, and WeasyPrint and librsvg draw its every `<use>`, so the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML, without the characters XML can't hold; a file with no `<svg>` in it is dropped. The main thread hands over the inlined bytes as they are, because sanitizing a big drawing holds jsdom for seconds. Every format takes any size: the export deadline, sharp's pixel limit and the PNG fallback's timeout ([§ A docx image](#a-docx-image-is-a-png-or-jpeg-made-from-its-source)) bound the work.
 
 Previews pass the same function the exact set of their own preview URLs ([PREVIEWS.md](PREVIEWS.md)). The tests are in `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 
@@ -76,7 +145,7 @@ The `pdf` arm is a single compositor page sized to the content plus 10 px on eac
 
 ## WeasyPrint dictates how a layer references its paint
 
-A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. The sanitizer rewrites a non-`data:` `url()` in CSS to `url()`, so a gradient moved into a style stops painting. And WeasyPrint resolves `url(#id)` only within the same `<svg>`.
+A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. WeasyPrint resolves `url(#id)` only within the same `<svg>`.
 
 An arrow's shaft is hidden under its label by a `<mask>`, because WeasyPrint ignores `clip-rule="evenodd"`. WeasyPrint applies a mask after drawing a node's children, so the reference goes on each shaft `<path>`, never a wrapping `<g>`. See `labelMask` and `maskShaft` in `packages/lib/src/vector/kinds/arrow-render.ts`.
 

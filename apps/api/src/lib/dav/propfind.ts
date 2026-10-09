@@ -1,91 +1,49 @@
-import { escapeXml } from '@workspace/lib/html';
-import { XMLParser } from 'fast-xml-parser';
-import { propstatNotFound, propstatOk } from './xml';
-import { asNode, isXmlNode, type XmlNode } from './xml-node';
+import { escapeXml } from '@workspace/lib/xml';
+import { ApiError } from '../core/errors';
+import { parseXmlRoot, type XmlElement, xmlChild, xmlElements } from '../core/xml';
+import { DAV_NAMESPACES, propstatNotFound, propstatOk } from './xml';
 
-// The shared PROPFIND core both DAV surfaces sit on (RFC 4918 § 9.1): parse the request body into the
-// requested prop list, then select per-row propstats from an ordered name→fragment map. One implementation so
-// CalDAV and CardDAV can't drift.
+// The shared PROPFIND core (RFC 4918 § 9.1): CalDAV and CardDAV parse the request body into the requested prop
+// list and select per-row propstats from an ordered name→fragment map; WebDAV only checks the body.
 
-// One ceiling for every XML request body both DAV surfaces read (PROPFIND, REPORT, MKCALENDAR, PROPPATCH):
-// each is a small prop list or href list, bounded before it reaches a parser.
-export const DAV_BODY_MAX_BYTES = 1_048_576;
+const DAV = DAV_NAMESPACES.D;
 
-// Element local name → XML fragment, in emission order; allprop and the selector share it, so no list can drift.
+// XML fragment by the name it is written with (`D:getetag`), in emission order; allprop and the selector share it,
+// so no list can drift. Each DAV_NAMESPACES prefix stands for one namespace, so the key is namespace and local name.
 export type PropMap = Map<string, string>;
 
-// One requested property. `name` is the local name (prefix stripped) used to match PropMap keys — the same
-// local-name idiom both REPORT parsers use. `prefix`/`ns` are kept only to echo an unknown prop back in its
-// declared namespace inside the 404 propstat.
-type RequestedProp = {
-    name: string;
-    prefix: string;
-    ns: string | null;
-};
+const PREFIXES = new Map<string, string>(Object.entries(DAV_NAMESPACES).map(([prefix, uri]) => [uri, prefix]));
 
-export type PropfindRequest = { allprop: true } | { allprop: false; props: RequestedProp[] };
+// Every unknown prop is echoed in every row, so the list a request may name is bounded.
+const MAX_PROPFIND_PROPS = 1000;
+// Each echoed prop repeats its namespace, so one long URI declared once would be written a thousand times per row.
+const MAX_PROPFIND_ECHO_LENGTH = 64 * 1024;
 
-// removeNSPrefix is deliberately OFF (unlike the REPORT parsers): the 404 echo must reproduce each unknown
-// prop's namespace, and the prefix is the only handle on it. Attributes are kept so xmlns declarations survive.
-const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+// `notFound` holds the 404 propstat per set of found props, so rows of one shape share one string.
+export type PropfindRequest =
+    | { allprop: true }
+    | { allprop: false; props: XmlElement[]; notFound: Map<string, string> };
 
-const localName = (key: string): string => (key.includes(':') ? key.slice(key.indexOf(':') + 1) : key);
-const prefixOf = (key: string): string => (key.includes(':') ? key.slice(0, key.indexOf(':')) : '');
-const isElementKey = (key: string): boolean => !key.startsWith('@_') && key !== '#text';
+// A blank body is allprop; any other must be a DAV:propfind.
+export function parsePropfind(body: Uint8Array): PropfindRequest {
+    const root = parseXmlRoot(body, DAV, 'propfind');
+    if (!root) return { allprop: true };
 
-function findChild(obj: XmlNode, local: string): unknown {
-    for (const key of Object.keys(obj)) {
-        if (key !== '?xml' && isElementKey(key) && localName(key) === local) return obj[key];
-    }
-    return undefined;
-}
-
-// xmlns declarations reachable from the given nodes: default namespace plus prefix→uri. Real clients declare at
-// the document root, so we merge the root, the <prop> node, and the prop element itself — enough coverage
-// without full namespace-scoping machinery.
-function collectNamespaces(nodes: unknown[]): { def: string | null; byPrefix: Map<string, string> } {
-    const byPrefix = new Map<string, string>();
-    let def: string | null = null;
-    for (const node of nodes) {
-        if (!isXmlNode(node)) continue;
-        for (const [k, v] of Object.entries(node)) {
-            if (k === '@_xmlns') def = String(v);
-            else if (k.startsWith('@_xmlns:')) byPrefix.set(k.slice('@_xmlns:'.length), String(v));
-        }
-    }
-    return { def, byPrefix };
-}
-
-export function parsePropfind(xml: string): PropfindRequest {
-    const body = xml.trim();
-    // Absent/empty body → allprop (the compat path every bodyless PROPFIND test rides).
-    if (body === '') return { allprop: true };
-
-    let parsed: XmlNode;
-    try {
-        parsed = asNode(parser.parse(body));
-    } catch {
-        return { allprop: true };
-    }
-
-    const root = findChild(parsed, 'propfind');
-    if (!isXmlNode(root)) return { allprop: true };
-
-    const propNode = findChild(root, 'prop');
+    const prop = xmlChild(root, DAV, 'prop');
     // <allprop/> and <propname/> both land here as "no <prop>" → allprop. Treating <propname/> as allprop is a
     // lenient v1: we serve the values, not the names-only variant.
-    if (!isXmlNode(propNode)) return { allprop: true };
-
-    const ns = collectNamespaces([root, propNode]);
-    const props: RequestedProp[] = [];
-    for (const key of Object.keys(propNode)) {
-        if (!isElementKey(key)) continue;
-        const prefix = prefixOf(key);
-        const own = collectNamespaces([propNode[key]]);
-        const uri = prefix === '' ? (own.def ?? ns.def) : (own.byPrefix.get(prefix) ?? ns.byPrefix.get(prefix) ?? null);
-        props.push({ name: localName(key), prefix, ns: uri });
+    if (!prop) return { allprop: true };
+    const props = new Map<string, XmlElement>();
+    let echoLength = 0;
+    for (const element of xmlElements(prop)) {
+        const key = `${element.local} ${element.ns}`;
+        if (props.has(key)) continue;
+        props.set(key, element);
+        echoLength += echoMissing(element).length;
     }
-    return { allprop: false, props };
+    if (props.size > MAX_PROPFIND_PROPS) throw new ApiError(400, 'Too many props');
+    if (echoLength > MAX_PROPFIND_ECHO_LENGTH) throw new ApiError(400, 'Prop names too long');
+    return { allprop: false, props: [...props.values()], notFound: new Map() };
 }
 
 // RFC 4918 Brief:t and RFC 8144 Prefer:return=minimal both mean "drop the 404 propstat".
@@ -94,20 +52,11 @@ export function wantsBrief(request: Request): boolean {
     return /(^|[\s,])return=minimal([\s,;]|$)/i.test(request.headers.get('Prefer') ?? '');
 }
 
-// fxp accepts tag names XML forbids (`<`, `&`), which would make the echoed element non-well-formed. Letters,
-// digits and marks in any script are XML NameChars; the rarer punctuation NameChars are left out.
-const NCNAME_ISH = /^[\p{L}_][\p{L}\p{N}\p{M}._-]*$/u;
-export function isNcName(name: string): boolean {
-    return NCNAME_ISH.test(name);
-}
-
-// An unknown prop echoed inside the 404 propstat, self-declaring its namespace (<x:name xmlns:x="uri"/>). A
-// default-namespace prop needs a synthetic prefix to be self-declared; an unresolvable namespace or a
-// non-NCName name/prefix is dropped (degrading to today's silence for that one prop).
-function echoMissing(p: RequestedProp): string | null {
-    if (p.ns === null || !isNcName(p.name) || (p.prefix !== '' && !isNcName(p.prefix))) return null;
-    const prefix = p.prefix || 'x';
-    return `<${prefix}:${p.name} xmlns:${prefix}="${escapeXml(p.ns)}"/>`;
+// An unknown prop echoed inside the 404 propstat by the name it was asked with, declaring its own namespace.
+function echoMissing(prop: XmlElement): string {
+    const colon = prop.name.indexOf(':');
+    const declaration = colon < 0 ? 'xmlns' : `xmlns:${prop.name.slice(0, colon)}`;
+    return `<${prop.name} ${declaration}="${escapeXml(prop.ns)}"/>`;
 }
 
 // The propstat blocks for one row: allprop emits every available fragment; a named request emits a 200 propstat
@@ -116,17 +65,24 @@ export function selectProps(available: PropMap, request: PropfindRequest, brief:
     if (request.allprop) return [propstatOk([...available.values()])];
 
     const found: string[] = [];
-    const missing: string[] = [];
-    for (const p of request.props) {
-        const fragment = available.get(p.name);
-        if (fragment !== undefined) found.push(fragment);
-        else {
-            const echo = echoMissing(p);
-            if (echo) missing.push(echo);
-        }
+    const foundAt: number[] = [];
+    for (const [index, prop] of request.props.entries()) {
+        const prefix = PREFIXES.get(prop.ns);
+        const fragment = prefix === undefined ? undefined : available.get(`${prefix}:${prop.local}`);
+        if (fragment === undefined) continue;
+        found.push(fragment);
+        foundAt.push(index);
     }
 
     const propstats = [propstatOk(found)];
-    if (missing.length > 0 && !brief) propstats.push(propstatNotFound(missing));
+    if (found.length === request.props.length || brief) return propstats;
+    const key = foundAt.join(',');
+    let notFound = request.notFound.get(key);
+    if (notFound === undefined) {
+        const served = new Set(foundAt);
+        notFound = propstatNotFound(request.props.filter((_, index) => !served.has(index)).map(echoMissing));
+        request.notFound.set(key, notFound);
+    }
+    propstats.push(notFound);
     return propstats;
 }

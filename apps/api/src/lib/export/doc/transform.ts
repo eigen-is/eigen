@@ -1,79 +1,120 @@
-/// <reference path="../modules.d.ts" />
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import {
     DEFAULT_PAGE_SETUP,
     type FigureAttrs,
     getDocExtensions,
+    PAGE_BREAK_CLASS,
     pageStylesheet,
-    pageTwips,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
-import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
-import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
-import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { toDataUriMap } from '../../document/media';
 import {
+    DOCX_IMAGE_MAX_SIZE,
     type EigendocExportFormat,
-    type TransformMedia,
+    type ExportMedia,
     type TransformWarning,
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { FONT_STACK_MONO, FONT_STACK_SANS } from '../font-stacks';
+import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
-import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
+import { PROSE_CSS } from './prose-css';
+import {
+    lowlight,
+    renderCodeBlockNode,
+    renderFigureNode,
+    renderTaskItemNode,
+    withAbsoluteLinks,
+    withTrailingBreaks,
+} from './render';
+import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
-// Every format renders the same document by design: WeasyPrint and Turbodocx both
-// consume exactly what the HTML download serves. Turbodocx loads lazily — it is an
-// externalized dependency, and an HTML export must not evaluate it.
+// HTML and PDF render the same document by design: WeasyPrint consumes exactly what the
+// HTML download serves. The docx is written from the JSON by to-docx.ts, which loads
+// lazily so an HTML export never evaluates it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
     title: string,
-    media: TransformMedia[],
+    media: ExportMedia[],
+    publicOrigin: string | undefined,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
-    const html = renderEigendocDocument(readEigendocFromDoc(doc), toDataUriMap(media), title);
-    if (format !== 'docx') return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
-
-    // Without the doctype: html-to-docx opens the body with an empty paragraph for it.
-    const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
-    const docx = await HTMLtoDOCX(html, undefined, {
-        title: stripEigenExtension(title),
-        pageSize: { width: PAGE_TWIPS.width, height: PAGE_TWIPS.height },
-        margins: PAGE_TWIPS.margin,
-    });
-    return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
+    const json = readEigendocFromDoc(doc);
+    if (format === 'docx') {
+        const { eigendocToDocx } = await import('./to-docx');
+        const docxMedia = await withSvgFallbacks(media);
+        return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
+    }
+    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title);
+    return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 }
 
-const lowlight = createLowlight(common);
+// The thumbnail Worker's per-image timeout (shared/thumbnails.ts), which the Worker graph cannot import. Worker.terminate()
+// does not stop libvips, so this is what frees the one transform slot from a filter librsvg grinds through for minutes.
+const SVG_FALLBACK_TIMEOUT_SECONDS = 30;
+
+// The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
+// time, for one decode's memory; sharp loads only for an SVG.
+export async function withSvgFallbacks(
+    media: ExportMedia[],
+    timeoutSeconds = SVG_FALLBACK_TIMEOUT_SECONDS,
+): Promise<DocxMedia[]> {
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { default: sharp } = await import('sharp');
+    const prepared: DocxMedia[] = [];
+    for (const item of media) {
+        if (item.contentType !== 'image/svg+xml') {
+            prepared.push(item);
+            continue;
+        }
+        try {
+            const svg = Buffer.from(item.data);
+            const image = sharp(svg);
+            const { width = 0, height = 0 } = await image.metadata();
+            const png = await image
+                .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
+                .png()
+                .timeout({ seconds: timeoutSeconds })
+                .toBuffer();
+            prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
+        } catch {
+            // One librsvg can't read, or not in time, leaves the docx; its caption stays.
+        }
+    }
+    return prepared;
+}
+
+const PHYSICAL_LENGTH = /^\s*[\d.e+-]+\s*(in|cm|mm|pt|pc)\s*$/i;
+
+// sharp reads an SVG's physical units at 72 dpi and CSS at 96, so a 4in drawing is 288 px to it and 384 in the HTML
+// export. Scaled per side, read off the root's start tag; a side the root leaves out follows the other, as sharp
+// derives it from the viewBox.
+function cssSize(svg: Buffer, width: number, height: number): { width: number; height: number } {
+    const root = svg.toString('utf8', 0, svg.indexOf('>') + 1);
+    const scale = (value: string | undefined) =>
+        value === undefined ? undefined : PHYSICAL_LENGTH.test(value) ? 96 / 72 : 1;
+    const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
+    const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
+    return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
+}
+
 const extensions = getDocExtensions({ lowlight });
-
-// The app's weight scale, rounded: WeasyPrint drops any font-weight that is not a multiple of 100.
-const FONT_WEIGHTS = new Map(
-    [...fontWeightsCSSRaw.matchAll(/(--font-weight-[\w-]+):\s*(\d+);/g)].map(([, name, weight]) => [
-        name,
-        String(Math.round(Number(weight) / 100) * 100),
-    ]),
-);
-
-const proseCSS = flattenEigenProseCSS(eigenProseCSSRaw);
 
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
-        content: json,
+        content: withTrailingBreaks(json),
         extensions,
         options: {
             nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
+                codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(node.attrs, (mediaName, src) =>
@@ -91,97 +132,13 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${proseCSS}${PRINT_EXTRAS}</style>
+    <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
 </head>
 <body>
-    <div class="page">
-        <article class="eigen-prose tiptap">
-            ${bodyHtml}
-        </article>
-    </div>
+    <div class="page"><article class="eigen-prose tiptap">${bodyHtml}</article></div>
 </body>
 </html>`;
 }
-
-// ── CSS flattening ──────────────────────────────────────────────────────────
-// The source eigen-prose.css uses modern CSS nesting (.eigen-prose { h1 { … } }).
-// Standalone HTML and WeasyPrint need flat CSS, so we rewrite at init time.
-
-function flattenEigenProseCSS(raw: string): string {
-    let css = raw.replace(/\.eigen-prose,\s*\n\s*\.tiptap\s*\{/g, '.eigen-prose {');
-
-    // Drop .dark overrides (export is always light)
-    css = css.replace(/^\.dark\s+\.eigen-prose[^{]*\{(?:[^{}]|\{[^{}]*\})*\}/gm, '');
-
-    // Flatten CSS nesting for all top-level blocks
-    css = css.replace(/^(\.[a-zA-Z][\w-]*)\s*\{([\s\S]*?)^\}/gm, (_match, selector, body) => {
-        if (body.includes('{')) {
-            return flattenNestedBlock(selector, body);
-        }
-        return `${selector} {${body}}`;
-    });
-
-    // Resolve CSS variables to concrete values
-    css = css
-        .replace(/var\(--font-sans\)/g, FONT_STACK_SANS)
-        .replace(/var\(--font-mono\)/g, FONT_STACK_MONO)
-        .replace(/var\(--color-muted-foreground\)/g, '#6b7280')
-        .replace(/var\(--color-primary\)/g, '#2563eb')
-        .replace(/var\(--color-link,\s*#2563eb\)/g, '#2563eb')
-        .replace(/var\(--color-selected\)/g, '#bfdbfe')
-        .replace(/var\((--font-weight-[\w-]+)\)/g, (match, name: string) => FONT_WEIGHTS.get(name) ?? match);
-
-    return css;
-}
-
-function flattenNestedBlock(parentSelector: string, body: string): string {
-    const results: string[] = [];
-    let depth = 0;
-    let current = '';
-    let inNested = false;
-    let nestedSelector = '';
-
-    for (let i = 0; i < body.length; i++) {
-        const ch = body[i];
-        if (ch === '{') {
-            if (depth === 0) {
-                nestedSelector = current.trim();
-                current = '';
-                inNested = true;
-            } else {
-                current += ch;
-            }
-            depth++;
-        } else if (ch === '}') {
-            depth--;
-            if (depth === 0 && inNested) {
-                const nestedBody = current.trim();
-                if (nestedSelector.startsWith('&')) {
-                    const expanded = nestedSelector.replace(/&/g, parentSelector);
-                    results.push(`${expanded} { ${nestedBody} }`);
-                } else {
-                    results.push(`${parentSelector} ${nestedSelector} { ${nestedBody} }`);
-                }
-                current = '';
-                inNested = false;
-                nestedSelector = '';
-            } else {
-                current += ch;
-            }
-        } else {
-            current += ch;
-        }
-    }
-
-    const topLevelProps = current.trim();
-    if (topLevelProps) {
-        results.unshift(`${parentSelector} { ${topLevelProps} }`);
-    }
-
-    return results.join('\n');
-}
-
-const PAGE_TWIPS = pageTwips(DEFAULT_PAGE_SETUP);
 
 const PRINT_EXTRAS = `
 /* The docs page as the editor draws it; on paper @page draws the margins */
@@ -194,15 +151,7 @@ img, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; color: inherit; background-color: transparent; border-radius: 0; }
 a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
-
-body {
-    font-family: ${FONT_STACK_SANS};
-    font-size: 11pt;
-    line-height: 1.5;
-    color: #1a1a2e;
-    margin: 0;
-    padding: 0;
-}
+h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 
 .page {
     max-width: 100%;
@@ -210,7 +159,9 @@ body {
     overflow-wrap: anywhere;
 }
 
-figure, table, pre, blockquote { page-break-inside: avoid; }
+/* A block holding a page break must split: avoid pushes it whole to a new page and breaks inside it anyway */
+.figure, table, pre, blockquote { page-break-inside: avoid; }
+table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
 

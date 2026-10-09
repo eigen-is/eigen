@@ -13,16 +13,28 @@ FROM oven/bun:${BUN_VERSION}-slim
 
 WORKDIR /app
 
-# Runtime deps + build tools for native modules (sharp, etc.)
+# Runtime deps. No compiler: the install runs no scripts, and sharp ships its own binary.
 RUN apt-get update && apt-get install -y \
     libvips \
     libimage-exiftool-perl \
-    weasyprint \
+    python3-venv \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz-subset0 \
     ffmpeg \
-    make \
-    g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# WeasyPrint from PyPI, pinned with every dependency by hash, so the image renders a PDF with the engine development
+# does. Debian's 62 has no URLFetcher for weasyprint-render.py and draws a centred figure left-aligned. Wheels only, so
+# no compiler.
+COPY docker/api/weasyprint-requirements.txt /tmp/
+RUN python3 -m venv /opt/weasyprint \
+    && /opt/weasyprint/bin/pip install --no-cache-dir --require-hashes --only-binary :all: \
+        -r /tmp/weasyprint-requirements.txt \
+    && /opt/weasyprint/bin/pip uninstall --yes pip \
+    && ln -s /opt/weasyprint/bin/weasyprint /usr/local/bin/weasyprint \
+    && rm /tmp/weasyprint-requirements.txt
 
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
 
@@ -31,6 +43,11 @@ COPY --from=manifests /out/ ./
 RUN bun install --frozen-lockfile --ignore-scripts
 
 COPY . .
+
+# A system library WeasyPrint needs and the image lacks fails the build here, not a PDF export.
+RUN printf '<p>x</p>' | /opt/weasyprint/bin/python3 -I apps/api/src/lib/export/weasyprint-render.py > /tmp/smoke.pdf \
+    && head -c 5 /tmp/smoke.pdf | grep -qx '%PDF-' \
+    && rm /tmp/smoke.pdf
 
 # /run/eigen keeps the control socket out of data/ and away from host users.
 RUN mkdir -p /app/data/home /app/data/server /app/backups /run/eigen \

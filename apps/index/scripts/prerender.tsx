@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { escapeHtml } from '@workspace/lib/html';
+import { escapeXml } from '@workspace/lib/xml';
 import { createServer } from 'vite';
 import { withInlineScriptHashes } from '../../../vite.security-headers';
 import type { ArticleBody, ContentManifest } from './lib/content-types';
@@ -170,8 +171,8 @@ function sitemap(routeList: PrerenderRoute[]): string {
     const urls = routeList
         .flatMap((r) => {
             if (!r.meta.url) return [];
-            const loc = escapeHtml(r.meta.url);
-            const lastmod = r.meta.updated ? `<lastmod>${escapeHtml(r.meta.updated)}</lastmod>` : '';
+            const loc = escapeXml(r.meta.url);
+            const lastmod = r.meta.updated ? `<lastmod>${escapeXml(r.meta.updated)}</lastmod>` : '';
             return [`  <url><loc>${loc}</loc>${lastmod}</url>`];
         })
         .join('\n');

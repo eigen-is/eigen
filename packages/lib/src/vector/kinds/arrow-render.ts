@@ -5,7 +5,7 @@
 import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../../constants/fonts';
-import { escapeXml } from '../../core/html';
+import { escapeXml } from '../../core/xml';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
 import { arrowheadGeometry, distance, type Point, round } from '../geometry';

@@ -1,30 +1,26 @@
-import { XMLParser } from 'fast-xml-parser';
-import { asArray, asNode, isXmlNode, type XmlNode } from '../dav/xml-node';
+import { ApiError } from '../core/errors';
+import {
+    parseXml,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+    xmlTrimmedText,
+} from '../core/xml';
+import { readHrefs, readSyncToken, UnsupportedFilterError } from '../dav/report-request';
+import { DAV_NAMESPACES } from '../dav/xml';
 import {
     assertSupportedCollation,
     type ParamFilter,
     type PropFilter,
     type QueryFilter,
     type TextMatch,
-    UnsupportedFilterError,
 } from './query-filter';
 
-// Same config as caldav/xml-parser.ts (removeNSPrefix drops the D:/CARD: prefixes so lookups stay
-// prefix-agnostic) with one difference the CardDAV reports force: the isArray callback is jPath-aware.
-// `href` is always a list. `prop` is a list ONLY as the partial-retrieval child of `address-data` (jPath
-// `…address-data.prop`) — a name-only isArray('prop') would also turn the top-level <D:prop> request
-// container into an array, and the `Object.keys(root.prop)` idiom that reads the requested prop names
-// (as in caldav/xml-parser.ts) would then come back empty, silently zeroing wantsData/partialProps.
-const parser = new XMLParser({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    removeNSPrefix: true,
-    // Keep element text as text: fxp's default numeric coercion would turn <text-match>0612</text-match>
-    // into 612 and match no phone. nresults, the one genuinely numeric value, is converted explicitly below.
-    parseTagValue: false,
-    isArray: (name, jpath) =>
-        name === 'href' || (name === 'prop' && typeof jpath === 'string' && jpath.endsWith('address-data.prop')),
-});
+const DAV = DAV_NAMESPACES.D;
+const CARDDAV = DAV_NAMESPACES.CARD;
 
 export type CardReportRequest =
     | { type: 'addressbook-multiget'; hrefs: string[]; wantsData: boolean; partialProps: string[] | null }
@@ -37,32 +33,24 @@ export type CardReportRequest =
       }
     | { type: 'sync-collection'; syncToken: string | undefined; wantsData: boolean };
 
-const attr = (node: XmlNode, name: string): string | null => {
-    const v = node[`@_${name}`];
-    return v == null ? null : String(v);
-};
-
 // The requested <D:prop> container: whether address-data was asked for at all, and the CARD:prop name list
 // under it (the partial-retrieval subset) when present. Full retrieval — <CARD:address-data/> with no
 // children — leaves partialProps null, which is the handler's "serve the stored bytes whole" signal.
-function readProps(root: XmlNode): { wantsData: boolean; partialProps: string[] | null } {
-    const prop = asNode(root['prop']);
-    const wantsData = Object.keys(prop).some((k) => k.includes('address-data'));
-    let partialProps: string[] | null = null;
-    const list = asNode(prop['address-data'])['prop'];
-    if (Array.isArray(list)) {
-        const names = list.map((p) => attr(asNode(p), 'name')).filter((n): n is string => n !== null);
-        if (names.length) partialProps = names;
-    }
-    return { wantsData, partialProps };
+function readProps(root: XmlElement): { wantsData: boolean; partialProps: string[] | null } {
+    const prop = xmlChild(root, DAV, 'prop');
+    const addressData = prop && xmlChild(prop, CARDDAV, 'address-data');
+    const names = addressData
+        ? xmlChildren(addressData, CARDDAV, 'prop')
+              .map((p) => xmlAttr(p, '', 'name'))
+              .filter((n) => n !== undefined)
+        : [];
+    return { wantsData: addressData !== undefined, partialProps: names.length ? names : null };
 }
 
-// A node's element children are its keys minus attributes (`@_…`) and text (`#text`). Anything outside the
-// grammar's allow-set is a filter the parser can't map → UnsupportedFilterError (403 supported-filter).
-function assertOnlyChildren(node: XmlNode, allowed: Set<string>): void {
-    for (const key of Object.keys(node)) {
-        if (key.startsWith('@_') || key === '#text') continue;
-        if (!allowed.has(key)) throw new UnsupportedFilterError(key);
+// Anything outside the grammar's allow-set is a filter the parser can't map → UnsupportedFilterError (403 supported-filter).
+function assertOnlyChildren(node: XmlElement, allowed: Set<string>): void {
+    for (const child of xmlElements(node)) {
+        if (child.ns !== CARDDAV || !allowed.has(child.local)) throw new UnsupportedFilterError(child.local);
     }
 }
 
@@ -72,95 +60,81 @@ const FILTER_CHILDREN = new Set(['prop-filter']);
 const PROP_FILTER_CHILDREN = new Set(['is-not-defined', 'text-match', 'param-filter']);
 const PARAM_FILTER_CHILDREN = new Set(['is-not-defined', 'text-match']);
 
-// <text-match collation="…" match-type="…" negate-condition="yes">value</text-match>. A bare
-// `<text-match>value</text-match>` (no attributes) parses to the string value directly (§ 10.5.4 defaults:
-// collation i;unicode-casemap, match-type contains). The collation is validated here so an unsupported one is
-// a book-independent 403.
-function parseTextMatch(node: unknown): TextMatch {
-    if (!isXmlNode(node)) {
-        return { collation: null, matchType: 'contains', negate: false, value: node == null ? '' : String(node) };
-    }
+// <text-match collation="…" match-type="…" negate-condition="yes">value</text-match>. With no attributes the
+// § 10.5.4 defaults apply: collation i;unicode-casemap, match-type contains. The collation is validated here so
+// an unsupported one is a book-independent 403.
+function parseTextMatch(node: XmlElement): TextMatch {
     assertOnlyChildren(node, new Set());
-    const collation = attr(node, 'collation');
+    const collation = xmlAttr(node, '', 'collation') ?? null;
     assertSupportedCollation(collation);
-    const matchTypeAttr = attr(node, 'match-type');
-    const matchType = matchTypeAttr !== null && isMatchType(matchTypeAttr) ? matchTypeAttr : 'contains';
-    const text = node['#text'];
+    const matchTypeAttr = xmlAttr(node, '', 'match-type');
+    const matchType = matchTypeAttr !== undefined && isMatchType(matchTypeAttr) ? matchTypeAttr : 'contains';
     return {
         collation,
         matchType,
-        negate: attr(node, 'negate-condition') === 'yes',
-        value: text == null ? '' : String(text),
+        negate: xmlAttr(node, '', 'negate-condition') === 'yes',
+        value: xmlTrimmedText(node),
     };
 }
 
-function parseParamFilter(raw: unknown): ParamFilter {
-    const node = asNode(raw);
+function parseParamFilter(node: XmlElement): ParamFilter {
     assertOnlyChildren(node, PARAM_FILTER_CHILDREN);
-    const isNotDefined = 'is-not-defined' in node;
-    const textMatches = asArray(node['text-match']);
+    const isNotDefined = xmlChild(node, CARDDAV, 'is-not-defined') !== undefined;
+    const textMatch = xmlChild(node, CARDDAV, 'text-match');
     return {
-        name: (attr(node, 'name') ?? '').toUpperCase(),
+        name: (xmlAttr(node, '', 'name') ?? '').toUpperCase(),
         isNotDefined,
-        textMatch: isNotDefined || textMatches.length === 0 ? null : parseTextMatch(textMatches[0]),
+        textMatch: isNotDefined || !textMatch ? null : parseTextMatch(textMatch),
     };
 }
 
-function parsePropFilter(raw: unknown): PropFilter {
-    const node = asNode(raw);
+function parsePropFilter(node: XmlElement): PropFilter {
     assertOnlyChildren(node, PROP_FILTER_CHILDREN);
-    const isNotDefined = 'is-not-defined' in node;
+    const isNotDefined = xmlChild(node, CARDDAV, 'is-not-defined') !== undefined;
     return {
-        name: (attr(node, 'name') ?? '').toUpperCase(),
-        test: attr(node, 'test') === 'allof' ? 'allof' : 'anyof',
+        name: (xmlAttr(node, '', 'name') ?? '').toUpperCase(),
+        test: xmlAttr(node, '', 'test') === 'allof' ? 'allof' : 'anyof',
         isNotDefined,
         // is-not-defined and text-match/param-filter are mutually exclusive (§ 10.5.1); is-not-defined wins.
-        textMatches: isNotDefined ? [] : asArray(node['text-match']).map(parseTextMatch),
-        paramFilters: isNotDefined ? [] : asArray(node['param-filter']).map(parseParamFilter),
+        textMatches: isNotDefined ? [] : xmlChildren(node, CARDDAV, 'text-match').map(parseTextMatch),
+        paramFilters: isNotDefined ? [] : xmlChildren(node, CARDDAV, 'param-filter').map(parseParamFilter),
     };
 }
 
-function parseFilter(raw: unknown): QueryFilter {
-    const node = asNode(raw);
+function parseFilter(node: XmlElement): QueryFilter {
     assertOnlyChildren(node, FILTER_CHILDREN);
     return {
-        test: attr(node, 'test') === 'allof' ? 'allof' : 'anyof',
-        propFilters: asArray(node['prop-filter']).map(parsePropFilter),
+        test: xmlAttr(node, '', 'test') === 'allof' ? 'allof' : 'anyof',
+        propFilters: xmlChildren(node, CARDDAV, 'prop-filter').map(parsePropFilter),
     };
 }
 
-// Parse a CardDAV REPORT body into one of the three request shapes. An unrecognised root or unparseable XML
-// throws so the handler answers 400 (the caldav report.ts contract). An addressbook-query filter that
-// names an unsupported collation or an unmappable element throws the two typed errors above, which the handler
-// maps to their 403 preconditions.
-export function parseCardReport(xml: string): CardReportRequest {
-    const parsed = parser.parse(xml);
+// Parse a CardDAV REPORT body into one of the three request shapes. A blank body, an unrecognised root or
+// unparseable XML is a 400, as in CalDAV. An addressbook-query filter that names an unsupported collation or an
+// unmappable element throws the two typed errors, which the handler maps to their 403 preconditions.
+export function parseCardReport(body: Uint8Array): CardReportRequest {
+    const root = parseXml(body);
+    if (!root) throw new ApiError(400, 'Empty REPORT');
 
-    // removeNSPrefix strips the D:/CARD: prefixes, so the roots are always unprefixed — no fallback needed.
-    const multiget = parsed['addressbook-multiget'];
-    const query = parsed['addressbook-query'];
-    const sync = parsed['sync-collection'];
-
-    if (multiget) {
-        const { wantsData, partialProps } = readProps(multiget);
-        const hrefs: string[] = (multiget.href ?? []).map(String);
-        return { type: 'addressbook-multiget', hrefs, wantsData, partialProps };
+    if (root.ns === CARDDAV && root.local === 'addressbook-multiget') {
+        const { wantsData, partialProps } = readProps(root);
+        return { type: 'addressbook-multiget', hrefs: readHrefs(root), wantsData, partialProps };
     }
-    if (query) {
-        const { wantsData, partialProps } = readProps(query);
+    if (root.ns === CARDDAV && root.local === 'addressbook-query') {
+        const { wantsData, partialProps } = readProps(root);
         // xs:unsignedLong — ignore a non-numeric/negative limit; floor a fractional one.
-        const nresults = Number(query.limit?.nresults);
+        const limitNode = xmlChild(root, CARDDAV, 'limit');
+        const nresultsNode = limitNode && xmlChild(limitNode, CARDDAV, 'nresults');
+        const nresults = nresultsNode ? Number(xmlText(nresultsNode)) : Number.NaN;
         const limit = Number.isFinite(nresults) && nresults >= 0 ? Math.floor(nresults) : null;
         // RFC 6352 § 8.6 requires a CARDDAV:filter; a body without one parses to null and the handler 400s.
-        const filter = query.filter == null ? null : parseFilter(query.filter);
+        const filterNode = xmlChild(root, CARDDAV, 'filter');
+        const filter = filterNode ? parseFilter(filterNode) : null;
         return { type: 'addressbook-query', filter, limit, wantsData, partialProps };
     }
-    if (sync) {
-        const { wantsData } = readProps(sync);
-        const token = sync['sync-token'];
-        // An empty <D:sync-token/> parses to '' — the initial-full-sync signal (same as caldav/xml-parser.ts).
-        return { type: 'sync-collection', syncToken: token ? String(token) : undefined, wantsData };
+    if (root.ns === DAV && root.local === 'sync-collection') {
+        const { wantsData } = readProps(root);
+        return { type: 'sync-collection', syncToken: readSyncToken(root), wantsData };
     }
-
-    throw new Error('Unsupported REPORT type');
+    throw new ApiError(400, 'Unsupported REPORT type');
 }

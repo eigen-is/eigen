@@ -27,7 +27,7 @@ export const SVG_INLINE_MAX_BYTES = 16 * 1024 * 1024;
 
 // svg-in-svg recursion ceiling: the served svg is depth 0, a referenced sibling svg is depth 1. A
 // sibling svg deeper than this is stripped rather than inlined.
-export const MAX_SVG_INLINE_DEPTH = 3;
+const MAX_SVG_INLINE_DEPTH = 3;
 
 // Sniffed on the raw bytes so a plain drawing with no refs never pays a utf8 decode.
 const SNIFF = Buffer.from(EIGEN_MEDIA_SCHEME);
