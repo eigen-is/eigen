@@ -352,21 +352,22 @@ function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolea
     );
 }
 
-// G8: a code style draws code only where every run holding text is monospace; HTML Preformatted in Times is prose.
+// G8: a code style draws code only where every run holding text is monospace, an empty line where its mark is;
+// HTML Preformatted in Times is prose.
 function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: string | undefined): boolean {
     const { styles } = reader;
     const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
-    return descendants(p, W_NS, 'r').every((run) => {
+    const mono = (font: string | undefined) => bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT;
+    const faces = descendants(p, W_NS, 'r').flatMap((run) => {
         const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
         const props = mergeRun(paraRun, styles.run(direct.style), direct);
-        return xmlElements(run).every(
-            (child) =>
-                !is(child, W_NS, 't') ||
-                byFace(xmlText(child), props.fonts, props).every(
-                    (face) => !face.text.trim() || bundledFontOf(face.font, reader.fontTable) === MONOSPACE_FONT,
-                ),
+        return xmlElements(run).flatMap((child) =>
+            is(child, W_NS, 't') ? byFace(xmlText(child), props.fonts, props).filter((face) => face.text.trim()) : [],
         );
     });
+    if (faces.length > 0) return faces.every((face) => mono(face.font));
+    const mark = mergeRun(paraRun, readRunProps(wChild(wChild(p, 'pPr'), 'rPr'), reader.theme));
+    return mono(byFace(' ', mark.fonts, mark)[0]?.font);
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

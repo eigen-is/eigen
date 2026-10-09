@@ -217,6 +217,16 @@ describe('code blocks', () => {
         expect(await types(paragraph(runs, '<w:pStyle w:val="HTMLPreformatted"/>'))).toEqual(expected);
     });
 
+    // An empty line draws in its mark's face, which tells a blank line of code from a blank line in prose.
+    test.each([
+        ['Times New Roman', ['paragraph', 'paragraph', 'paragraph']],
+        ['Courier New', ['codeBlock']],
+    ])('an empty HTML Preformatted line marked in %s', async (face, expected) => {
+        const line = (text: string) => paragraph(run(text, font(face)), '<w:pStyle w:val="HTMLPreformatted"/>');
+        const empty = paragraph('', `<w:pStyle w:val="HTMLPreformatted"/><w:rPr>${font(face)}</w:rPr>`);
+        expect(await types(`${line('a')}${empty}${line('b')}`)).toEqual(expected);
+    });
+
     test.each([
         ['F3F4F6', ['codeBlock']],
         ['EEEEEE', ['codeBlock']],
