@@ -93,7 +93,7 @@ function readNotes(reader: Reader): JSONContent[] {
     return items;
 }
 
-const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
+export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
 
 // flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {

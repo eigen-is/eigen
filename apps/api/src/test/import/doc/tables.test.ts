@@ -82,6 +82,23 @@ describe('merges', () => {
     });
 });
 
+describe('wrappers', () => {
+    // The block walk's wrappers hold rows and cells too.
+    test('rows and cells inside wrappers are read', async () => {
+        const wrap = (local: string, inner: string) => `<w:${local}>${inner}</w:${local}>`;
+        const body = table([
+            row([cell('A'), wrap('smartTag', cell('B'))]),
+            wrap('smartTag', row([cell('C'), wrap('customXml', cell('D'))])),
+            wrap('ins', row([cell('E'), cell('F')])),
+        ]);
+        expect(await rowTypes(body)).toEqual([
+            ['tableCell', 'tableCell'],
+            ['tableCell', 'tableCell'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
+});
+
 describe("the writer's wrapped figure", () => {
     test('a floating one-cell table holding a picture and its caption is a wrapped figure', async () => {
         const float = `<w:tbl><w:tblPr><w:tblpPr w:tblpXSpec="right"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${paragraph(run('A caption'))}</w:tc></w:tr></w:tbl>`;
