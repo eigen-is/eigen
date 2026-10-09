@@ -126,6 +126,7 @@ describe('a block inside a list item or a quote', () => {
         ['code in a quote', [quote(p('Said'), code('said()'), p('Done'))]],
         ['code in a quote in an item', [ordered([p('One'), quote(p('Said'), code('said()'))], [p('Two')])]],
         ['code opening a quote in an item', [ordered([p('One'), quote(code('said()'), p('Done'))], [p('Two')])]],
+        ['code in an item in a quote', [quote(p('Said'), ordered([p('One'), code('one()')]), p('Done'))]],
         [
             'code and a rule at the margin after a list, code in its last item',
             [ordered([p('One'), code('in()')]), code('after()'), ordered([p('Two')]), rule],

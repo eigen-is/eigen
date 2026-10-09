@@ -60,9 +60,7 @@ export function isWhitespace(node: JSONContent): boolean {
 
 export function build(raw: Item[]): JSONContent[] {
     const items = attachFloatsAndCaptions(joinDeletedMarks(raw));
-    quotesInItems(items);
-    for (const item of items) if (item.kind === 'para') item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
-    assignBreakDepths(items);
+    assignQuotes(items);
     return buildLevel(items, 0);
 }
 
@@ -171,10 +169,11 @@ function paraOf(inlines: JSONContent[]): Para {
 }
 
 // The writer indents a quote or code in a list item from the item's text, so its depth counts from there and it stays
-// in the item.
-function quotesInItems(items: Item[]): void {
+// in the item. A quote's list items carry the list's indent too, so they sit at the depth of the quote around them.
+function assignQuotes(items: Item[]): void {
     let open: Para | undefined;
     let previous: Para | undefined;
+    let plain = 0;
     for (const item of items) {
         if ((item.kind === 'table' || item.kind === 'hr') && !(open && indentedUnder(item.indent, open.indLeft)))
             open = undefined;
@@ -187,33 +186,30 @@ function quotesInItems(items: Item[]): void {
             item.quote = Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
             item.inItem = true;
         } else if (!item.continued && !item.empty) open = undefined;
+        item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
+        if (item.quote > 0) {
+            if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));
+            else plain = item.quote;
+        }
         previous = item;
     }
 }
 
 // The writer sets a code box its own indent in from its container, d quote indents in from the margin or the item's
-// text; other editors indent code as text, so another indent nests it only right after a quote, in that quote.
+// text, past the item's own quotes; other editors indent code as text, so another indent nests it only right after a
+// quote, in that quote.
 function codeDepth(code: Para, open: Para | undefined, previous: Para | undefined): void {
     const box = code.indLeft - CODE_BLOCK_LOOK.indent;
-    const container = open && indentedUnder(box, open.indLeft) ? open.indLeft : 0;
+    const item = open && indentedUnder(box, open.indLeft) ? open : undefined;
+    const container = item?.indLeft ?? 0;
     const depth = Math.round((box - container) / QUOTE_LOOK.indent);
     if (code.boxed && depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
         code.indLeft = box;
-        code.quote = depth;
-        code.inItem = container > 0 && depth > 0;
+        code.quote = (item?.quote ?? 0) + depth;
+        code.inItem = !!item && depth > 0;
     } else if (depth > 0 && previous && previous.quote > 0) {
         code.quote = previous.quote;
         code.inItem = previous.inItem;
-    }
-}
-
-// A quote's list items carry the list's indent too, so they sit at the depth of the quote around them.
-function assignBreakDepths(items: Item[]): void {
-    let plain = 0;
-    for (const item of items) {
-        if (item.kind !== 'para' || item.quote === 0) continue;
-        if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));
-        else plain = item.quote;
     }
 }
 
