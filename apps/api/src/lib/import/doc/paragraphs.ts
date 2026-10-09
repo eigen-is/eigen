@@ -147,7 +147,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const numId = direct.numId ?? styled.numId;
     const ilvl = Math.min(MAX_LEVEL, Math.max(0, direct.ilvl ?? styled.ilvl ?? 0));
     const breakOnly = halves.length > 1 && !halves.some(isShown);
-    const list = numId && numId !== '0' && !breakOnly ? reader.numbering.next(numId, ilvl) : undefined;
+    const list =
+        numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, { indLeft: list?.indLeft }, direct);
 
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
@@ -217,6 +218,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         };
         if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
+        if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         // A framed paragraph holding only an image is a wrapped figure.
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)

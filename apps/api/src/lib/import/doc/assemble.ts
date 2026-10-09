@@ -19,6 +19,8 @@ export type Para = {
     quote: number;
     // A quote inside the list item above it.
     inItem?: boolean;
+    // A tracked deletion of the mark: accepted, the content joins the next paragraph.
+    joinsNext?: boolean;
     empty: boolean;
     small: boolean;
     hairline: boolean;
@@ -53,7 +55,7 @@ export function isWhitespace(node: JSONContent): boolean {
 }
 
 export function build(raw: Item[]): JSONContent[] {
-    const items = attachFloatsAndCaptions(raw);
+    const items = attachFloatsAndCaptions(joinDeletedMarks(raw));
     quotesInItems(items);
     for (const item of items) if (item.kind === 'para') item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
     assignBreakDepths(items);
@@ -86,6 +88,17 @@ function isBlank(item: Item | undefined): boolean {
         item.role.kind !== 'hr' &&
         item.inlines.every(isWhitespace)
     );
+}
+
+// The joined paragraph is the next one, with its own properties: its mark is the one that stays.
+function joinDeletedMarks(raw: Item[]): Item[] {
+    return raw.filter((item, index) => {
+        const next = raw[index + 1];
+        if (item.kind !== 'para' || !item.joinsNext || next?.kind !== 'para') return true;
+        next.inlines = [...item.inlines, ...next.inlines];
+        next.empty &&= item.empty;
+        return false;
+    });
 }
 
 function attachFloatsAndCaptions(raw: Item[]): Item[] {
