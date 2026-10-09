@@ -29,7 +29,7 @@ export type Package = {
     footnotes?: Part;
     endnotes?: Part;
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
-    // A part a drawing names, read when met and charged as the others are; a damaged one is no part.
+    // A part a drawing names, read when met and charged as the others are; a damaged one, or one past a cap, is no part.
     readPart(path: string): XmlElement | undefined;
     // A piece a run's text splits into past its first is a node, which costs what an element does.
     chargePiece(): void;
@@ -63,12 +63,14 @@ export function readPackage(bytes: Uint8Array): Package {
     charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
     const document = readXml(zip, documentPath, budget);
     if (!document) throw new ApiError(400, NOT_A_DOCX);
-    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it.
-    const optional = <T>(read: () => T): T | undefined => {
+    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it, but a
+    // graphic's part is read once every content part is, so a cap it meets costs only the graphic.
+    const optional = <T>(read: () => T, graphic = false): T | undefined => {
         try {
             return read();
         } catch (error) {
             if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
+            if (graphic && error instanceof ApiError && error.status === 413) return undefined;
             throw error;
         }
     };
@@ -89,7 +91,7 @@ export function readPackage(bytes: Uint8Array): Package {
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypes,
-        readPart: (path) => optional(() => readXml(zip, path, budget)),
+        readPart: (path) => optional(() => readXml(zip, path, budget), true),
         chargePiece: () => {
             budget.tags--;
             if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
@@ -122,8 +124,11 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
     try {
         const bytes = zip.read(path);
         if (!bytes) return undefined;
-        for (const byte of bytes) if (byte === LESS_THAN) budget.tags--;
-        if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        let tags = 0;
+        for (const byte of bytes) if (byte === LESS_THAN) tags++;
+        // A part refused leaves the budget to the parts and pieces after it.
+        if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        budget.tags -= tags;
         const root = parseXml(bytes) ?? undefined;
         if (root) toTransitional(root);
         budget.parsed.set(path, root);

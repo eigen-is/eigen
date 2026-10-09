@@ -165,6 +165,13 @@ describe('XML budget', () => {
         expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
     });
 
+    test('a styles.xml past the tag budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_DOCX_XML_TAGS) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    });
+
     test('the budget counts the parts together', async () => {
         const half = padding(MAX_DOCX_XML_BYTES / 2);
         const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
@@ -252,11 +259,37 @@ describe('XML budget', () => {
         expect(texts(json)).toEqual(['Body', '[1]']);
     });
 
-    test('a SmartArt part past the budget is 413', async () => {
-        const error = await rejection(() =>
-            importDocxBody(paragraph(smartArt), smartArtData(padding(MAX_DOCX_XML_BYTES))),
+    // A graphic's part is read once every content part is, so a cap it meets costs the graphic, not the document.
+    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(smartArt)}`,
+            smartArtData(padding(MAX_DOCX_XML_BYTES)),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(texts(json)).toEqual(['Body']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+    });
+
+    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
+        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_DOCX_XML_TAGS / 4);
+        const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const smartArtPart = smartArtData(
+            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
+        );
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
+            {
+                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: {
+                    ...smartArtPart.media,
+                    'word/charts/chart1.xml': new TextEncoder().encode(
+                        `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
+                    ),
+                },
+            },
+        );
+        expect(texts(json)).toEqual(['Body', 'Kept']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
     });
 
     // As a corrupt file is, rather than as a server error.
