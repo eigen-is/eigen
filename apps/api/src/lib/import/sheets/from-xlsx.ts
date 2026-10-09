@@ -29,7 +29,7 @@ import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cel
 import { ApiError } from '../../core/errors';
 import { A_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS, toTransitional } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { openZip, ZipError, type ZipReader } from '../../core/zip';
+import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -74,13 +74,14 @@ type ThemePalette = string[];
 const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
-    const zip = openXlsx(buffer);
+    const checked = repackXlsx(buffer);
 
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    await workbook.xlsx.load(checked);
     assertCellCountWithinBounds(workbook);
 
+    const zip = openZip(checked);
     // One after the other, so their trees are never alive together.
     const theme = readThemePalette(zip);
     const locationLinks = readLocationHyperlinks(zip);
@@ -95,11 +96,17 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 // The upload route bounds only the compressed bytes, and exceljs inflates the whole package, where an out-of-memory
 // can't be caught. So every entry is read once before it: openZip refuses an archive declaring more than the byte cap,
 // and a read inflates no further than its entry declares, so an entry lying small is refused too.
-function openXlsx(buffer: Buffer): ZipReader {
+// exceljs gets those reads stored in a new package, so its own zip reader sees only bytes openZip checked.
+function repackXlsx(buffer: Buffer): Buffer {
     try {
         const zip = openZip(buffer);
-        for (const name of zip.names()) zip.read(name);
-        return zip;
+        const entries: ZipWriteEntry[] = [];
+        for (const name of zip.names()) {
+            const data = zip.read(name);
+            if (data) entries.push({ name, data, store: true });
+        }
+        const packed = writeZip(entries);
+        return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
     } catch (error) {
         if (!(error instanceof ZipError)) throw error;
         const message = error.status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file';

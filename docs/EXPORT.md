@@ -157,7 +157,7 @@ The route checks write before it buffers, but the job can queue for minutes, lon
 
 ## Zip guards run before the parser inflates anything
 
-The upload bound limits compressed bytes, while ExcelJS inflates the whole package, and an out-of-memory inside it cannot be caught. So the xlsx import opens the package with `openZip` (`core/zip.ts`), which refuses a declared total past the byte cap, and reads every entry once before ExcelJS sees it: a read inflates no further than its entry declares, so a forged directory that declares a small size is refused too. The docx reader reads only through `openZip`. A sheet also has a cell cap, which fires only after ExcelJS loads; that is part of why the Worker runs one job at a time.
+The upload bound limits compressed bytes, while ExcelJS inflates the whole package, and an out-of-memory inside it cannot be caught. So the xlsx import opens the package with `openZip` (`core/zip.ts`), which refuses a declared total past the byte cap, and reads every entry once before ExcelJS sees it: a read inflates no further than its entry declares, so a forged directory that declares a small size is refused too. ExcelJS then loads those reads, stored in a package `writeZip` builds, never the upload, so its own zip reader sees only bytes `openZip` checked. The docx reader reads only through `openZip`. A sheet also has a cell cap, which fires only after ExcelJS loads; that is part of why the Worker runs one job at a time.
 
 ## An imported sheet is stored as computed
 

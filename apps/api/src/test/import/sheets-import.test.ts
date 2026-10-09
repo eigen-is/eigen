@@ -1931,6 +1931,32 @@ describe('xlsxToSheets resource guards', () => {
         });
     });
 
+    // JSZip names an entry by its Info-ZIP Unicode Path extra (0x7075), which openZip ignores: an entry openZip reads
+    // as decoy.xml is a second sheet1.xml to JSZip, and the later one wins. exceljs gets the entries openZip read.
+    test('exceljs loads the entries openZip read, not its own reading of the upload', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('S').getCell('A1').value = 1;
+        const zip = openZip(new Uint8Array(await workbookToBuffer(workbook)));
+        const parts = zip.names().map((name) => deflated(name, zip.read(name) ?? ''));
+        const sheet = new TextDecoder().decode(zip.read('xl/worksheets/sheet1.xml'));
+        const decoyName = 'xl/worksheets/decoy.xml';
+        const unicodePath = new TextEncoder().encode('xl/worksheets/sheet1.xml');
+        const extra = new Uint8Array(9 + unicodePath.length);
+        const view = new DataView(extra.buffer);
+        view.setUint16(0, 0x7075, true);
+        view.setUint16(2, 5 + unicodePath.length, true);
+        view.setUint8(4, 1);
+        view.setUint32(5, Bun.hash.crc32(decoyName), true);
+        extra.set(unicodePath, 9);
+        const bytes = build([...parts, { ...deflated(decoyName, sheet.replace('<v>1</v>', '<v>2</v>')), extra }]);
+
+        const jszip = await JSZip.loadAsync(bytes);
+        expect(await jszip.file('xl/worksheets/sheet1.xml')?.async('string')).toContain('<v>2</v>');
+
+        const sheets = await xlsxToSheets(bytes);
+        expect((sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0)?.v?.v).toBe(1);
+    });
+
     test('rejects an xlsx declaring an absurd cell count', async () => {
         // Two far-apart cells span the full Excel grid (1,048,576 × 16,384 ≈ 1.7e10 cells)
         // from a ~6 KB file. exceljs materializes rows sparsely, but building our Sheet
