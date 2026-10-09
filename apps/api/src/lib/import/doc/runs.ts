@@ -193,7 +193,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
 }
 
 // Word drops a w:t's leading and trailing whitespace unless xml:space preserves it, and draws a line feed as a space.
-export function runText(t: XmlElement): string {
+function runText(t: XmlElement): string {
     const text = xmlText(t);
     const kept =
         xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
@@ -286,7 +286,7 @@ const LINK_LOOKS = new Map([
 
 // A link style's colors that are the link look: those, and the defaults of Word's Hyperlink style before themes and of
 // LibreOffice's Internet Link. A link style in any other color is a look of its own, which Word draws.
-export const LINK_STYLE_COLORS = new Set([...LINK_LOOKS.keys(), '0000FF', '000080']);
+const LINK_STYLE_COLORS = new Set([...LINK_LOOKS.keys(), '0000FF', '000080']);
 
 // Word resolves a run's look from the defaults, the table style, the paragraph style, the character style and the
 // run itself, the toggles of the two styles flipping each other. A look the paragraph's node already draws is no mark.

@@ -81,7 +81,7 @@ const HIGHLIGHT_COLORS = new Map([
     ['white', 'FFFFFF'],
 ]);
 
-export const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
+const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
 
 // Six hex digits or nothing: `auto`, a theme name or a typo is an explicit none.
 function hexColor(value: string | undefined): string | undefined {

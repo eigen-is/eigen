@@ -29,7 +29,16 @@ import {
     W14_NS,
     WP_NS,
 } from '../lib/core/ooxml';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
+import {
+    parseXml,
+    XML_NAMESPACE,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
 import {
@@ -42,8 +51,8 @@ import {
     type Script,
 } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { LINK_STYLE_COLORS, runText, SMALL_PRINT } from '../lib/import/doc/runs';
-import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES, LINK_THEME_COLORS } from '../lib/import/doc/styles';
+import { SMALL_PRINT } from '../lib/import/doc/runs';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -197,6 +206,9 @@ const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLow
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
+// The link look's colors, apart from the reader's so the audit never grades the reader by itself.
+const LINK_STYLE_COLORS = new Set(['2563EB', '1155CC', '0563C1', '0000FF', '000080']);
+const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
 
 // Counted per word they touch, and matched as words, so a mark on the wrong words keeps nothing.
 const MARKS = new Set<Feature>([
@@ -291,6 +303,14 @@ function find(root: XmlElement, ns: string, local: string): XmlElement[] {
 // Word renders the first choice it understands; every choice in this corpus's era is one Word 2010 reads.
 function alternative(element: XmlElement): XmlElement | undefined {
     return child(element, 'Choice', MC_NS) ?? child(element, 'Fallback', MC_NS);
+}
+
+// The text Word shows for a w:t, apart from the reader's so the audit never grades the reader by itself.
+function runText(t: XmlElement): string {
+    const text = xmlText(t);
+    const kept =
+        xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+    return kept.replace(/[\r\n]/g, ' ');
 }
 
 // Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
