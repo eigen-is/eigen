@@ -424,6 +424,24 @@ describe('both sides', () => {
         expect([count(source, 'font'), compareTallies(source, imported).features['font']?.kept]).toEqual([1, 1]);
     });
 
+    // Toggles as bold is, and capitals win over small caps on both sides.
+    test("caps and small caps count the words Word draws them on, a Title's included, and the reader keeps them", async () => {
+        const docx = await buildDocxWithBody(
+            `${styled('Title', 'Big Title')}<w:p>${run('both', '<w:caps/><w:smallCaps/>')}${run(' small', '<w:smallCaps/>')}${run(' plain')}</w:p>`,
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:rPr><w:caps/></w:rPr></w:style>',
+            },
+        );
+        const { json } = docxToPmJson(Buffer.from(docx));
+        const tally = auditSource(docx);
+        expect([tally.marks.get('caps'), tally.marks.get('smallCaps')]).toEqual([['Big', 'Title', 'both'], ['small']]);
+        const { features } = compareTallies(tally, auditImported(json));
+        expect([features['caps'], features['smallCaps']]).toEqual([
+            { source: 3, imported: 3, matched: 3, invented: 0, kept: 1 },
+            { source: 1, imported: 1, matched: 1, invented: 0, kept: 1 },
+        ]);
+    });
+
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
     // size, so the photo the doc leaves at its own width has one there.
     test("the writer's docx holds what its doc holds", async () => {

@@ -59,6 +59,8 @@ const FEATURES = [
     ['highlight', 'Highlight (words)'],
     ['font', 'Font family (words)'],
     ['small', 'Small text (words)'],
+    ['caps', 'All caps (words)'],
+    ['smallCaps', 'Small caps (words)'],
     ['code', 'Inline code (words)'],
     ['link', 'Links (words)'],
     ['listItems', 'List items'],
@@ -201,6 +203,8 @@ const MARKS = new Set<Feature>([
     'highlight',
     'font',
     'small',
+    'caps',
+    'smallCaps',
     'code',
     'link',
 ]);
@@ -387,7 +391,8 @@ type Field = { result: boolean; instr: string; link: boolean };
 
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
-// styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font.
+// styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
+// capitals.
 type Inline = {
     scope: Scope;
     paragraph: Paragraph;
@@ -653,11 +658,11 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const direct = rPr ? [rPr] : [];
         const sources = [...direct, ...characterRuns, ...context.runs];
         // Toggles (ECMA-376 17.7.3): direct formatting sets the value; the character and paragraph styles each toggle it.
-        const toggle = (local: string) => {
+        const toggle = (local: string, paragraphRuns = context.runs) => {
             const set = child(rPr, local);
             if (set) return on(set);
             const byCharacter = first(characterRuns, local);
-            const byParagraph = first(context.runs, local);
+            const byParagraph = first(paragraphRuns, local);
             return (!!byCharacter && on(byCharacter)) !== (!!byParagraph && on(byParagraph));
         };
         const linked = context.link || context.scope.fields.some((field) => field.link);
@@ -680,6 +685,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
             ['font', font !== undefined],
             ['small', sizeOf(sources) <= base.size * SMALL_PRINT],
+            ['caps', toggle('caps', context.styleRuns)],
+            ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
             ['link', linked],
         ];
         return {
@@ -1130,6 +1137,8 @@ export function auditImported(json: JSONContent): Tally {
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
                 font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
                 if (font) features.push('font');
+                if (attrs['caps'] === 'all') features.push('caps');
+                if (attrs['caps'] === 'small') features.push('smallCaps');
             }
             spans.push({ text: value, marks: features, font });
         }
@@ -1333,7 +1342,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',
