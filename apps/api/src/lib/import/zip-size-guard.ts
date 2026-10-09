@@ -2,12 +2,11 @@ import type JSZip from 'jszip';
 import { ApiError } from '../core/errors';
 import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 
-// xlsx and docx are both zips, and the upload route only bounds the COMPRESSED bytes
-// (getUploadMaxSize, default 35 MB / mount quota) — so a decompression bomb, a few KB of
-// highly compressible bytes, expands to many GB in memory and OOM-kills the process,
-// dropping every Home on the box. Both parsers (exceljs, mammoth) inflate the whole
-// package unconditionally and that OOM is not catchable, so the caps below run BEFORE the
-// parser sees the buffer.
+// xlsx is a zip, and the upload route only bounds the COMPRESSED bytes (getUploadMaxSize,
+// default 35 MB / mount quota) — so a decompression bomb, a few KB of highly compressible
+// bytes, expands to many GB in memory and OOM-kills the process, dropping every Home on the
+// box. exceljs inflates the whole package unconditionally and that OOM is not catchable, so
+// the caps below run BEFORE the parser sees the buffer. docx reads through core/zip.ts.
 //
 // Byte cap: MAX_DECOMPRESSED_BYTES total inflated bytes across all zip entries, the cap
 // core/zip.ts holds for docx too.

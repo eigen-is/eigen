@@ -1,0 +1,385 @@
+import { type XmlElement, xmlElements } from '../../core/xml';
+import { codeBlockLanguage, STYLE_NAMES, W_NS } from '../../export/doc/ooxml';
+import { lowlight } from '../../export/doc/render';
+import type { Theme } from './docx-fonts';
+import { int, is, onOff, w, wChild } from './package';
+
+// '' is an explicit none (auto color, no highlight), undefined inherits.
+export type RunProps = {
+    style?: string;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    strike?: boolean;
+    vertAlign?: string;
+    color?: string;
+    highlight?: string;
+    shading?: string;
+    font?: string;
+    size?: number;
+    vanish?: boolean;
+};
+
+type Borders = { top?: boolean; left?: boolean; bottom?: boolean; right?: boolean };
+
+export type ParaProps = {
+    style?: string;
+    jc?: string;
+    bidi?: boolean;
+    numId?: string;
+    ilvl?: number;
+    indLeft?: number;
+    pageBreakBefore?: boolean;
+    outlineLvl?: number;
+    borders?: Borders;
+    shading?: string;
+    exactLine?: number;
+    markSize?: number;
+    markHidden?: boolean;
+    // A tracked deletion of the paragraph mark: accepted, the paragraph joins the next.
+    markDeleted?: boolean;
+    sectionBreak?: boolean;
+    frame?: 'left' | 'right';
+};
+
+export const TOGGLES = ['bold', 'italic', 'strike'] as const;
+
+// ST_HighlightColor, the only names Word draws.
+const HIGHLIGHT_COLORS: Record<string, string> = {
+    yellow: 'FFFF00',
+    green: '00FF00',
+    cyan: '00FFFF',
+    magenta: 'FF00FF',
+    blue: '0000FF',
+    red: 'FF0000',
+    darkBlue: '000080',
+    darkCyan: '008080',
+    darkGreen: '008000',
+    darkMagenta: '800080',
+    darkRed: '800000',
+    darkYellow: '808000',
+    darkGray: '808080',
+    lightGray: 'C0C0C0',
+    black: '000000',
+    white: 'FFFFFF',
+};
+
+// Six hex digits or nothing: `auto`, a theme name or a typo is an explicit none.
+function hexColor(value: string | undefined): string | undefined {
+    if (value === undefined) return undefined;
+    return /^[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : '';
+}
+
+export function shadingOf(shd: XmlElement | undefined): string | undefined {
+    if (!shd) return undefined;
+    const fill = hexColor(w(shd, 'fill'));
+    if (fill) return fill;
+    // A solid pattern paints the pattern color.
+    return w(shd, 'val') === 'solid' ? (hexColor(w(shd, 'color')) ?? '') : '';
+}
+
+export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
+    const props: RunProps = {};
+    for (const child of rPr ? xmlElements(rPr) : []) {
+        if (child.ns !== W_NS) continue;
+        switch (child.local) {
+            case 'rStyle':
+                props.style = w(child, 'val');
+                break;
+            case 'b':
+                props.bold = onOff(child);
+                break;
+            case 'i':
+                props.italic = onOff(child);
+                break;
+            case 'strike':
+            case 'dstrike':
+                // A dstrike off must not undo a strike on.
+                if (child.local === 'strike' || onOff(child)) props.strike = onOff(child);
+                break;
+            case 'u':
+                props.underline = w(child, 'val') !== 'none';
+                break;
+            case 'vertAlign':
+                props.vertAlign = w(child, 'val');
+                break;
+            case 'color':
+                props.color = hexColor(w(child, 'val'));
+                break;
+            case 'highlight':
+                props.highlight = HIGHLIGHT_COLORS[w(child, 'val') ?? 'none'] ?? '';
+                break;
+            case 'shd':
+                props.shading = shadingOf(child);
+                break;
+            case 'rFonts': {
+                const themed = w(child, 'asciiTheme') ?? w(child, 'hAnsiTheme');
+                const font = (themed && theme.font(themed)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
+                if (font) props.font = font;
+                break;
+            }
+            case 'sz':
+                props.size = int(w(child, 'val'));
+                break;
+            case 'vanish':
+                props.vanish = onOff(child);
+                break;
+        }
+    }
+    return props;
+}
+
+const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
+
+// A section that starts on a new page; continuous and nextColumn don't, and a missing type is nextPage.
+const PAGE_SECTIONS = ['nextPage', 'oddPage', 'evenPage'];
+
+export function readParaProps(pPr: XmlElement | undefined): ParaProps {
+    const props: ParaProps = {};
+    for (const child of pPr ? xmlElements(pPr) : []) {
+        if (child.ns !== W_NS) continue;
+        switch (child.local) {
+            case 'pStyle':
+                props.style = w(child, 'val');
+                break;
+            case 'jc':
+                props.jc = w(child, 'val');
+                break;
+            case 'bidi':
+                props.bidi = onOff(child);
+                break;
+            case 'numPr': {
+                const numId = w(wChild(child, 'numId'), 'val');
+                if (numId !== undefined) props.numId = numId;
+                const ilvl = int(w(wChild(child, 'ilvl'), 'val'));
+                if (ilvl !== undefined) props.ilvl = ilvl;
+                break;
+            }
+            case 'ind':
+                props.indLeft = int(w(child, 'left') ?? w(child, 'start')) ?? props.indLeft;
+                break;
+            case 'pageBreakBefore':
+                props.pageBreakBefore = onOff(child);
+                break;
+            case 'outlineLvl':
+                props.outlineLvl = int(w(child, 'val'));
+                break;
+            case 'pBdr': {
+                const borders: Borders = {};
+                for (const side of BORDER_SIDES) {
+                    const border = wChild(child, side);
+                    if (border) borders[side] = !['nil', 'none'].includes(w(border, 'val') ?? 'none');
+                }
+                props.borders = borders;
+                break;
+            }
+            case 'shd':
+                props.shading = shadingOf(child);
+                break;
+            case 'spacing': {
+                const line = int(w(child, 'line'));
+                if (w(child, 'lineRule') === 'exact' && line !== undefined) props.exactLine = line;
+                break;
+            }
+            case 'rPr':
+                props.markSize = int(w(wChild(child, 'sz'), 'val'));
+                props.markHidden = onOff(wChild(child, 'vanish'));
+                props.markDeleted = !!(wChild(child, 'del') ?? wChild(child, 'moveFrom'));
+                break;
+            case 'framePr': {
+                const wrap = w(child, 'wrap');
+                if (wrap === 'none' || wrap === 'notBeside') break;
+                const align = w(child, 'xAlign');
+                props.frame = align === 'right' || align === 'outside' ? 'right' : 'left';
+                break;
+            }
+            case 'sectPr': {
+                const type = w(wChild(child, 'type'), 'val');
+                props.sectionBreak = type === undefined || PAGE_SECTIONS.includes(type);
+                break;
+            }
+        }
+    }
+    return props;
+}
+
+export function mergeRun(...layers: RunProps[]): RunProps {
+    return Object.assign({}, ...layers);
+}
+
+export function mergePara(...layers: ParaProps[]): ParaProps {
+    const merged: ParaProps = {};
+    for (const layer of layers) {
+        const { borders, ...rest } = layer;
+        Object.assign(merged, rest);
+        if (borders) merged.borders = { ...merged.borders, ...borders };
+    }
+    return merged;
+}
+
+// Style names as dl/ uses them for code, plus Eigen's own; `Plain Text` is letters and survey routing, no code.
+export const CODE_PARAGRAPH_STYLES = [STYLE_NAMES.CodeBlock, 'HTML Preformatted', 'Source Code', 'Code', 'Macro Text'];
+export const CODE_CHARACTER_STYLES = [
+    STYLE_NAMES.Code,
+    'Verbatim Char',
+    'HTML Code',
+    'Source Text',
+    'Terminal',
+    'Code Char',
+    'HTML Typewriter',
+    'HTML Keyboard',
+];
+
+type Style = {
+    id: string;
+    type: string;
+    // Lowercase: Word keeps the built-in names English but not their case.
+    name: string;
+    // The writer's carrier, from the name: a re-save may rename the id but keeps the name.
+    language?: string;
+    basedOn?: string;
+    pPr: ParaProps;
+    rPr: RunProps;
+    firstRowRun?: RunProps;
+};
+
+// What a paragraph style means in eigendoc. Its look is the node's, so the props it absorbs are no marks.
+export type Role =
+    | { kind: 'heading'; level: number }
+    | { kind: 'subtitle' }
+    | { kind: 'quote' }
+    | { kind: 'code'; language: string | null }
+    | { kind: 'caption' }
+    | { kind: 'taskDone' }
+    | { kind: 'hr' }
+    | { kind: 'structural' }
+    | { kind: 'paragraph' };
+
+const lowercase = (names: string[]) => names.map((name) => name.toLowerCase());
+
+const ROLE_BY_NAME = new Map<string, Role>([
+    // LibreOffice's parent of its numbered headings.
+    ['title', { kind: 'heading', level: 1 }],
+    ['heading', { kind: 'heading', level: 1 }],
+    ['subtitle', { kind: 'subtitle' }],
+    [STYLE_NAMES.Quote.toLowerCase(), { kind: 'quote' }],
+    ['intense quote', { kind: 'quote' }],
+    ...lowercase(CODE_PARAGRAPH_STYLES).map((name): [string, Role] => [name, { kind: 'code', language: null }]),
+    [STYLE_NAMES.Caption.toLowerCase(), { kind: 'caption' }],
+    [STYLE_NAMES.TaskDone.toLowerCase(), { kind: 'taskDone' }],
+    [STYLE_NAMES.HorizontalRule.toLowerCase(), { kind: 'hr' }],
+    [STYLE_NAMES.Spacer.toLowerCase(), { kind: 'structural' }],
+    [STYLE_NAMES.PageBreak.toLowerCase(), { kind: 'structural' }],
+]);
+
+const CODE_CHARACTER_NAMES = new Set(lowercase(CODE_CHARACTER_STYLES));
+
+function roleOf({ name, language }: Style): Role | undefined {
+    const heading = name.match(/^heading ([1-9])$/);
+    if (heading) return { kind: 'heading', level: Math.min(6, Number(heading[1])) };
+    if (language) return { kind: 'code', language: lowlight.registered(language) ? language : null };
+    return ROLE_BY_NAME.get(name);
+}
+
+export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
+    heading: ['bold', 'italic', 'size'],
+    subtitle: ['bold', 'italic', 'size'],
+    quote: ['italic', 'color'],
+    code: 'all',
+    caption: 'all',
+    taskDone: ['strike', 'color'],
+    hr: 'all',
+    structural: 'all',
+    paragraph: [],
+};
+
+export class Styles {
+    private readonly byId = new Map<string, Style>();
+    private readonly runCache = new Map<string, RunProps>();
+    private readonly paraCache = new Map<string, ParaProps>();
+    private readonly roleCache = new Map<string, Role | null>();
+    private readonly codeCache = new Map<string, boolean>();
+    readonly defaultParagraph: string | undefined;
+    readonly docRun: RunProps;
+    readonly docPara: ParaProps;
+
+    constructor(root: XmlElement | undefined, theme: Theme) {
+        let defaultParagraph: string | undefined;
+        const defaults = wChild(root, 'docDefaults');
+        this.docRun = readRunProps(wChild(wChild(defaults, 'rPrDefault'), 'rPr'), theme);
+        this.docPara = readParaProps(wChild(wChild(defaults, 'pPrDefault'), 'pPr'));
+        for (const element of root ? xmlElements(root) : []) {
+            if (!is(element, W_NS, 'style')) continue;
+            const id = w(element, 'styleId') ?? '';
+            const type = w(element, 'type') ?? 'paragraph';
+            const firstRow = xmlElements(element).find(
+                (child) => is(child, W_NS, 'tblStylePr') && w(child, 'type') === 'firstRow',
+            );
+            const name = w(wChild(element, 'name'), 'val') ?? id;
+            this.byId.set(id, {
+                id,
+                type,
+                name: name.toLowerCase(),
+                language: codeBlockLanguage(name),
+                basedOn: w(wChild(element, 'basedOn'), 'val'),
+                pPr: readParaProps(wChild(element, 'pPr')),
+                rPr: readRunProps(wChild(element, 'rPr'), theme),
+                firstRowRun: firstRow && readRunProps(wChild(firstRow, 'rPr'), theme),
+            });
+            if (type === 'paragraph' && ['1', 'true', 'on'].includes(w(element, 'default') ?? ''))
+                defaultParagraph ??= id;
+        }
+        this.defaultParagraph = defaultParagraph ?? (this.byId.has('Normal') ? 'Normal' : undefined);
+    }
+
+    get(id: string | undefined): Style | undefined {
+        return id === undefined ? undefined : this.byId.get(id);
+    }
+
+    // Root first; a cycle stops at the first repeat.
+    private chain(id: string | undefined): Style[] {
+        const chain: Style[] = [];
+        const seen = new Set<string>();
+        for (let style = this.get(id); style && !seen.has(style.id); style = this.get(style.basedOn)) {
+            seen.add(style.id);
+            chain.unshift(style);
+        }
+        return chain;
+    }
+
+    run(id: string | undefined): RunProps {
+        return cached(this.runCache, id ?? '', () => mergeRun(...this.chain(id).map((style) => style.rPr)));
+    }
+
+    para(id: string | undefined): ParaProps {
+        return cached(this.paraCache, id ?? '', () => mergePara(...this.chain(id).map((style) => style.pPr)));
+    }
+
+    // The nearest style in the chain that names a role.
+    role(id: string | undefined): Role | undefined {
+        const role = cached(this.roleCache, id ?? '', () => {
+            for (const style of this.chain(id).reverse()) {
+                const role = roleOf(style);
+                if (role) return role;
+            }
+            return null;
+        });
+        return role ?? undefined;
+    }
+
+    isCodeCharacter(id: string | undefined): boolean {
+        return cached(this.codeCache, id ?? '', () =>
+            this.chain(id).some((style) => CODE_CHARACTER_NAMES.has(style.name)),
+        );
+    }
+}
+
+// Every lookup walks a chain as long as the file makes it, so each answer is computed once.
+function cached<T>(cache: Map<string, T>, key: string, compute: () => T): T {
+    let value = cache.get(key);
+    if (value === undefined) {
+        value = compute();
+        cache.set(key, value);
+    }
+    return value;
+}

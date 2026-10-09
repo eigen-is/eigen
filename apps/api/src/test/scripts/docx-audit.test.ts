@@ -35,7 +35,7 @@ const NUMBERING = `<w:abstractNum w:abstractNumId="7"><w:lvl w:ilvl="0"><w:start
 <w:num w:numId="9"><w:abstractNumId w:val="7"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"/></w:lvlOverride></w:num>`;
 
 async function source(body: string, styles = ''): Promise<Tally> {
-    return auditSource(await buildDocxWithBody(body, '', styles, NUMBERING));
+    return auditSource(await buildDocxWithBody(body, { styles, numbering: NUMBERING }));
 }
 
 function count(tally: Tally, feature: Feature): number {
@@ -383,11 +383,9 @@ describe('runs', () => {
     test('a crash and a timeout are results, and compare names the files the importers differ on', async () => {
         const dir = await corpus('mixed', {
             'hang.docx': await buildDocxWithBody(`<w:p>${run('HANG')}</w:p>`),
-            'nested/throw.docx': await buildDocxWithBody(
-                `<w:p>${run('strong', '<w:rStyle w:val="Strong"/>')}</w:p>`,
-                '',
-                BOLD_STYLES,
-            ),
+            'nested/throw.docx': await buildDocxWithBody(`<w:p>${run('strong', '<w:rStyle w:val="Strong"/>')}</w:p>`, {
+                styles: BOLD_STYLES,
+            }),
         });
         const stub = path.join(scratch, 'stub-importer.ts');
         await Bun.write(

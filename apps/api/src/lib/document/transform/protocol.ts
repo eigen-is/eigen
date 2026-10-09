@@ -92,7 +92,13 @@ export type ExtractTextJob = {
 // destination — no owner, mount, ACL or path. One arm per supported source format,
 // so an impossible pairing (xlsx into an eigendoc) does not compile.
 export type SheetsImportJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType: 'eigensheets' };
-export type DocImportJob = { kind: 'import'; sourceFormat: 'docx'; targetType: 'eigendoc' };
+export type DocImportJob = {
+    kind: 'import';
+    sourceFormat: 'docx';
+    targetType: 'eigendoc';
+    // Links into this instance come back root-relative with it; the Worker reads no config.
+    publicOrigin: string | undefined;
+};
 export type ImportTransformJob = SheetsImportJob | DocImportJob;
 
 // Preview, export and search extraction read the persisted collaborative document; the
@@ -107,7 +113,9 @@ export type DocumentTransformRequest =
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
     | { code: 'corrupt-blobs-skipped'; count: number }
-    | { code: 'byte-guard-truncated'; bytes: number };
+    | { code: 'byte-guard-truncated'; bytes: number }
+    | { code: 'blocks-flattened'; count: number }
+    | { code: 'images-unshown'; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never structured-clone ApiError/Error instances across the boundary.
