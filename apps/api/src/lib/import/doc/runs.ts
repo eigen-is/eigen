@@ -4,7 +4,7 @@ import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { CODE_LOOK, halfPoints, LINK_LOOK, SMALL_LOOK } from '../../export/doc/looks';
+import { CODE_LOOK, LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
 import { fontMark } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -254,8 +254,8 @@ export function pushText(reader: Reader, text: string, direct: RunProps, context
 
 type Marks = NonNullable<JSONContent['marks']>;
 
-// Eigen's small text is 75% of the body (eigen-prose.css), the writer's 9 pt in 11; foreign small print is at most this
-// share of the body size, and a body style a point smaller is still body text.
+// P8: small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
+// smaller is still body text.
 export const SMALL_PRINT = 0.85;
 
 // Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
@@ -313,10 +313,7 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    const size = props.size;
-    const small =
-        (direct.size !== undefined && direct.size <= halfPoints(SMALL_LOOK.sizePt)) ||
-        (size !== undefined && size <= SMALL_PRINT * reader.bodySize);
+    const small = props.size !== undefined && props.size <= SMALL_PRINT * reader.bodySize;
     if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =

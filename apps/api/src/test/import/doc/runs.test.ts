@@ -230,4 +230,11 @@ describe('sizes', () => {
         );
         expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['fine']);
     });
+
+    // P8: small is relative to the body; 9 pt in a 9 pt body is body text.
+    test('9 pt runs on a 9 pt body are not small', async () => {
+        const styles = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="18"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const json = await imported(paragraph(run('body', '<w:sz w:val="18"/>')), { styles });
+        expect(marksOfType(json, 'small')).toEqual([]);
+    });
 });
