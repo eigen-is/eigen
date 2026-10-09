@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
-import { LIST_TYPES, QUOTE_LOOK } from '../../export/doc/ooxml';
+import { CODE_BLOCK_LOOK, LIST_TYPES, QUOTE_LOOK } from '../../export/doc/ooxml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 
@@ -169,18 +169,36 @@ function paraOf(inlines: JSONContent[]): Para {
 // in the item.
 function quotesInItems(items: Item[]): void {
     let open: Para | undefined;
+    let previous: Para | undefined;
     for (const item of items) {
         if ((item.kind === 'table' || item.kind === 'hr') && !(open && indentedUnder(item.indent, open.indLeft)))
             open = undefined;
         if (item.kind !== 'para') continue;
         if (item.list || item.task) open = item;
-        else if (open && item.role.kind === 'code' && indentedUnder(item.indLeft, open.indLeft)) {
-            item.quote = Math.max(0, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
-            item.inItem = item.quote > 0;
+        else if (item.role.kind === 'code') {
+            codeDepth(item, open, previous);
+            if (!(open && indentedUnder(item.indLeft, open.indLeft))) open = undefined;
         } else if (open && item.quote > 0 && item.indLeft > open.indLeft + INDENT_TOLERANCE) {
             item.quote = Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
             item.inItem = true;
         } else if (!item.continued && !item.empty) open = undefined;
+        previous = item;
+    }
+}
+
+// The writer sets a code box its own indent in from its container, d quote indents in from the margin or the item's
+// text; other editors indent code as text, so another indent nests it only right after a quote, in that quote.
+function codeDepth(code: Para, open: Para | undefined, previous: Para | undefined): void {
+    const box = code.indLeft - CODE_BLOCK_LOOK.indent;
+    const container = open && indentedUnder(box, open.indLeft) ? open.indLeft : 0;
+    const depth = Math.round((box - container) / QUOTE_LOOK.indent);
+    if (depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
+        code.indLeft = box;
+        code.quote = depth;
+        code.inItem = container > 0 && depth > 0;
+    } else if (depth > 0 && previous && previous.quote > 0) {
+        code.quote = previous.quote;
+        code.inItem = previous.inItem;
     }
 }
 

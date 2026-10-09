@@ -134,3 +134,44 @@ describe('tracked changes and hidden text', () => {
         expect(await blocks(`${table}${paragraph(run('Last'), deleted)}${EMPTY}`)).toEqual(['Cell', 'Last']);
     });
 });
+
+// Other editors indent code as they indent text: only the writer's own indents nest it in quotes.
+describe('indented code', () => {
+    const PRE =
+        '<w:style w:type="paragraph" w:styleId="HTMLPreformatted"><w:name w:val="HTML Preformatted"/></w:style><w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>';
+    const BULLETS =
+        '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
+    const pre = (text: string) => paragraph(run(text), '<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="720"/>');
+    const text = (value: string) => ({
+        type: 'paragraph',
+        attrs: { textAlign: null },
+        content: [{ type: 'text', text: value }],
+    });
+    const code = { type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text: 'x = 1' }] };
+
+    test('at the margin is code at the margin', async () => {
+        const { json } = await importDocxBody(`${paragraph(run('Before'))}${pre('x = 1')}${paragraph(run('After'))}`, {
+            styles: PRE,
+        });
+        expect(json.content).toEqual([text('Before'), code, text('After')]);
+    });
+
+    test("at a bullet's text is code in the item", async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr>')}${pre('x = 1')}${paragraph(run('After'))}`,
+            { styles: PRE, numbering: BULLETS },
+        );
+        expect(json.content).toEqual([
+            { type: 'bulletList', content: [{ type: 'listItem', content: [text('Item'), code] }] },
+            text('After'),
+        ]);
+    });
+
+    test('right after a quote continues it', async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(run('Said'), '<w:pStyle w:val="Quote"/>')}${pre('x = 1')}${paragraph(run('After'))}`,
+            { styles: PRE },
+        );
+        expect(json.content).toEqual([{ type: 'blockquote', content: [text('Said'), code] }, text('After')]);
+    });
+});
