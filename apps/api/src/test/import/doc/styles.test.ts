@@ -87,7 +87,7 @@ describe('roles', () => {
 // G6: a heading set in body-sized text by hand reads as body text in Word; size alone demotes nothing, as Word's
 // Heading 4 to 6 are 11 pt on an 11 pt Normal.
 describe('headings in body-sized text', () => {
-    const STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Heading1', 'heading 1', '<w:rPr><w:b/><w:sz w:val="32"/></w:rPr>')}${style('Heading4', 'heading 4', '<w:rPr><w:b/><w:i/></w:rPr>')}${style('Heading6', 'heading 6', '<w:rPr><w:sz w:val="20"/></w:rPr>')}`;
+    const STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Heading1', 'heading 1', '<w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>')}${style('Heading4', 'heading 4', '<w:rPr><w:b/><w:i/></w:rPr>')}${style('Heading6', 'heading 6', '<w:rPr><w:sz w:val="20"/></w:rPr>')}`;
     const sized = (text: string, size?: number) =>
         `<w:r>${size ? `<w:rPr><w:sz w:val="${size}"/></w:rPr>` : ''}<w:t xml:space="preserve">${text}</w:t></w:r>`;
     const heading = (id: string, runs: string) => `<w:p><w:pPr><w:pStyle w:val="${id}"/></w:pPr>${runs}</w:p>`;
@@ -133,6 +133,43 @@ describe('headings in body-sized text', () => {
             'heading1',
         ],
     ])('a %s stays a heading', async (_name, body, type) => {
+        expect((await read(body)).types).toEqual([type]);
+    });
+
+    // Word draws complex script at szCs, so an Arabic heading is body-sized by it, not by sz.
+    test.each([
+        [
+            'Arabic at a direct szCs of 9 pt reads as body text',
+            'عنوان صغير',
+            '<w:sz w:val="36"/><w:szCs w:val="18"/>',
+            'paragraph',
+        ],
+        [
+            'Arabic at a direct sz of 9 pt and szCs of 18 pt stays a heading',
+            'عنوان صغير',
+            '<w:sz w:val="18"/><w:szCs w:val="36"/>',
+            'heading1',
+        ],
+        [
+            'Latin and Arabic at a direct sz of 18 pt and szCs of 9 pt stays a heading',
+            'Title عنوان',
+            '<w:sz w:val="36"/><w:szCs w:val="18"/>',
+            'heading1',
+        ],
+        [
+            'Latin and Arabic at a direct sz and szCs of 9 pt reads as body text',
+            'Title عنوان',
+            '<w:sz w:val="18"/><w:szCs w:val="18"/>',
+            'paragraph',
+        ],
+        [
+            'Latin marked rtl at a direct szCs of 9 pt reads as body text',
+            'Title',
+            '<w:rtl/><w:sz w:val="36"/><w:szCs w:val="18"/>',
+            'paragraph',
+        ],
+    ])('a Heading 1 of %s', async (_name, text, rPr, type) => {
+        const body = heading('Heading1', `<w:r><w:rPr>${rPr}</w:rPr><w:t>${text}</w:t></w:r>`);
         expect((await read(body)).types).toEqual([type]);
     });
 

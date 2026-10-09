@@ -62,6 +62,13 @@ describe('source side', () => {
         expect(tally.words).toEqual(['So', 'x2', '+1']);
     });
 
+    test("a w:t's surrounding whitespace counts only where xml:space preserves it, as Word draws it", async () => {
+        const tally = await source(
+            '<w:p><w:r><w:t>question\n</w:t></w:r><w:r><w:t>2</w:t></w:r><w:r><w:t xml:space="preserve"> and</w:t></w:r></w:p>',
+        );
+        expect(tally.words).toEqual(['question2', 'and']);
+    });
+
     test('bold from a paragraph style counts through basedOn, and direct formatting wins over it', async () => {
         const tally = await source(
             `<w:p><w:pPr><w:pStyle w:val="Louder"/></w:pPr>${run('Loud words')}${run(' quiet', '<w:b w:val="0"/>')}</w:p>`,
@@ -347,13 +354,46 @@ describe('both sides', () => {
     test('fonts by script and a Bidi theme font read alike on both sides', async () => {
         const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/><a:cs typeface="Times New Roman"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
         const docx = await buildDocxWithBody(
-            `<w:p>${run('Data 数据', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Courier New"/>')}${run(' Bidi', '<w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>')}</w:p>`,
+            `<w:p>${run('Data 数据', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Courier New"/>')}${run(' Bidi', '<w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>')}${run(' Code كود', '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Courier New"/>')}</w:p>`,
             { theme },
         );
         const source = auditSource(docx);
-        expect(source.marks.get('font')).toEqual(['数据 (JetBrains Mono)', 'Bidi (Source Serif 4)']);
+        expect(source.marks.get('font')).toEqual([
+            '数据 (JetBrains Mono)',
+            'Bidi (Source Serif 4)',
+            'كود (JetBrains Mono)',
+        ]);
         const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
-        expect(features['font']).toEqual({ source: 2, imported: 2, matched: 2, invented: 0, kept: 1 });
+        expect(features['font']).toEqual({ source: 3, imported: 3, matched: 3, invented: 0, kept: 1 });
+    });
+
+    // Word draws a complex script character's bold, italic and size from bCs, iCs and szCs.
+    test('complex script bold and italic read alike on both sides', async () => {
+        const docx = await buildDocxWithBody(
+            `<w:p>${run('مملكة', '<w:bCs/>')}${run(' Spain', '<w:bCs/><w:iCs/>')}${run(' إسبانيا', '<w:b/><w:iCs/>')}${run(' Madrid', '<w:rtl/><w:bCs/>')}</w:p>`,
+        );
+        const source = auditSource(docx);
+        expect([source.marks.get('bold'), source.marks.get('italic')]).toEqual([['مملكة', 'Madrid'], ['إسبانيا']]);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
+    });
+
+    // A link style in a color of its own is Word's look; one in the link look is the link's.
+    test('a link style in a color of its own counts as color and underline on both sides, the link look on neither', async () => {
+        const style = (id: string, color: string) =>
+            `<w:style w:type="character" w:styleId="${id}"><w:name w:val="${id}"/><w:rPr><w:color w:val="${color}"/><w:u w:val="single"/></w:rPr></w:style>`;
+        const linked = (text: string, id: string) =>
+            `<w:hyperlink r:id="rId3">${run(text, `<w:rStyle w:val="${id}"/>`)}</w:hyperlink>`;
+        const docx = await buildDocxWithBody(
+            `<w:p>${linked('pink', 'Pink')}${run(' ')}${linked('blue', 'Blue')}</w:p>`,
+            {
+                styles: `${style('Pink', 'E91D63')}${style('Blue', '0000FF')}`,
+            },
+        );
+        const source = auditSource(docx);
+        expect([source.marks.get('color'), source.marks.get('underline')]).toEqual([['pink'], ['pink']]);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['color']?.invented, features['underline']?.invented]).toEqual([0, 0]);
     });
 
     const fontRun = (text: string, font: string) => run(text, `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`);

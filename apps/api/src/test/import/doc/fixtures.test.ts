@@ -27,7 +27,10 @@ describe('docx fixtures', () => {
             'poi-rtl.docx',
             'google-docs-all-features.docx',
         ];
-        for (const name of names) expect([name, (await imported(name)).warnings]).toEqual([name, []]);
+        for (const name of names) {
+            const { warnings } = await imported(name);
+            expect([name, warnings.filter((warning) => warning.code === 'blocks-flattened')]).toEqual([name, []]);
+        }
     });
 
     test('LibreOffice page breaks: five breaks between six text paragraphs, no blank page', async () => {
@@ -75,8 +78,8 @@ describe('docx fixtures', () => {
         expect(nodesOfType(json, 'bulletList')[0]?.content).toHaveLength(9);
     });
 
-    test('docx4j load-and-save: notes, a table, the SVG as itself and majorBidi as the Arabic face', async () => {
-        const { json, images } = await imported('docx4j-loadAndSave.docx');
+    test("docx4j load-and-save: notes, a table, the SVG as itself, majorBidi as the Arabic face and its chart's title", async () => {
+        const { json, images, warnings } = await imported('docx4j-loadAndSave.docx');
         expect(texts(json)).toContain('[1]');
         // G11: majorBidi with an empty a:cs is the theme's Arab face, Times New Roman, as the default bidi language is ar-SA.
         const fonts = nodesOfType(json, 'text')
@@ -85,5 +88,10 @@ describe('docx fixtures', () => {
         expect(fonts).toEqual(['Source Serif 4']);
         expect(nodesOfType(json, 'table').length).toBeGreaterThan(0);
         expect(images.map((image) => image.contentType)).toContain('image/svg+xml');
+        // Its chart is dropped and keeps its title.
+        expect([texts(json).filter((text) => text === 'A Chart'), warnings]).toEqual([
+            ['A Chart'],
+            [{ code: 'graphics-dropped', count: 1 }],
+        ]);
     });
 });

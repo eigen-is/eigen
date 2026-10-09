@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { hex as dingbat } from 'dingbat-to-unicode';
 import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
 import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT } from './docx-fonts';
@@ -126,7 +126,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
         }
         switch (child.local) {
             case 't':
-                pushText(reader, xmlText(child).replace(/[\r\n]/g, ' '), direct, linked);
+                pushText(reader, runText(child), direct, linked);
                 break;
             case 'tab':
             case 'ptab':
@@ -190,6 +190,14 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
                 break;
         }
     }
+}
+
+// Word drops a w:t's leading and trailing whitespace unless xml:space preserves it, and draws a line feed as a space.
+function runText(t: XmlElement): string {
+    const text = xmlText(t);
+    const kept =
+        xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+    return kept.replace(/[\r\n]/g, ' ');
 }
 
 // A complex field keeps its result and drops its code; a HYPERLINK field links its result, a form checkbox is a checkbox.
@@ -276,6 +284,10 @@ const LINK_LOOKS = new Map([
     ['0563C1', true],
 ]);
 
+// A link style's colors that are the link look: those, and the defaults of Word's Hyperlink style before themes and of
+// LibreOffice's Internet Link. A link style in any other color is a look of its own, which Word draws.
+const LINK_STYLE_COLORS = new Set([...LINK_LOOKS.keys(), '0000FF', '000080']);
+
 // Word resolves a run's look from the defaults, the table style, the paragraph style, the character style and the
 // run itself, the toggles of the two styles flipping each other. A look the paragraph's node already draws is no mark.
 function marksOf(
@@ -289,16 +301,20 @@ function marksOf(
     const absorbed = ABSORBED[role.kind];
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
-    // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look.
-    if (link) {
+    // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
+    // a link style in a color of its own.
+    const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
+    if (link && !ownLook) {
         delete charRun.color;
         delete charRun.linkColor;
         delete charRun.underline;
     }
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
-    const faces = byFace(text, full.fonts, full);
     if (full.vanish) return [];
-    if (absorbed === 'all') return faces.map((face) => ({ ...face, marks: [], small: false }));
+    if (absorbed === 'all') {
+        const faces = byFace(text, full.fonts, full, false, reader.pkg.chargePiece);
+        return faces.map((face) => ({ ...face, marks: [], small: false }));
+    }
     const own = { ...paraRun };
     for (const key of absorbed) delete own[key];
     const props = mergeRun(own, charRun, direct);
@@ -310,18 +326,22 @@ function marksOf(
         props[toggle] = direct[toggle] ?? fromStyles;
     }
 
+    const isSmall = (complex: boolean) => {
+        const size = complex ? props.sizeCs : props.size;
+        return size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
+    };
+    const complexLook =
+        !!props.boldCs !== !!props.bold || !!props.italicCs !== !!props.italic || isSmall(true) !== isSmall(false);
+    const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
+
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
-    if (props.bold) marks.push({ type: 'bold' });
-    if (props.italic) marks.push({ type: 'italic' });
     const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    const small = props.size !== undefined && props.size <= SMALL_PRINT * reader.bodySize;
-    if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =
         props.color &&
@@ -336,7 +356,12 @@ function marksOf(
     const highlight: Marks = isFill(shade)
         ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` } }]
         : [];
-    return faces.map(({ text: part, font }) => {
+    return faces.map(({ text: part, font, complex }) => {
+        const small = isSmall(complex);
+        const shape: Marks = [];
+        if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
+        if (complex ? props.italicCs : props.italic) shape.push({ type: 'italic' });
+        if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
         const code =
@@ -357,6 +382,6 @@ function marksOf(
                       },
                   ]
                 : [];
-        return { text: part, marks: [...marks, ...textStyle, ...highlight], small, font };
+        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font };
     });
 }

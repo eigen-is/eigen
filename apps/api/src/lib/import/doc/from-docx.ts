@@ -44,6 +44,7 @@ export function docxToPmJson(
         if (refused.size > 0) warnings.push({ code: 'blocks-flattened', count: refused.size });
         const unshown = images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
+        if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         return { json: doc.toJSON(), images, warnings };
     } catch (error) {
         // The zip's and the XML's messages speak of archives and markup; the user uploaded a document.

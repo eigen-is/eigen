@@ -1,7 +1,4 @@
-import { afterAll, afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
@@ -12,7 +9,8 @@ import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document
 import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
     buildDocxWithBody,
@@ -44,6 +42,18 @@ const footnote = (id: number, inner: string) => `<w:footnote w:id="${id}">${inne
 const floating = (inner: string) =>
     `<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`;
 
+const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+const smartArt = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="1" name="Diagram 1"/><a:graphic><a:graphicData><dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+const smartArtData = (inner: string) => ({
+    rels: '<Relationship Id="rId20" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData" Target="diagrams/data1.xml"/>',
+    media: {
+        'word/diagrams/data1.xml': new TextEncoder().encode(
+            `<dgm:dataModel xmlns:dgm="${DGM}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><dgm:ptLst>${inner}</dgm:ptLst></dgm:dataModel>`,
+        ),
+    },
+});
+
 const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
 const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
 const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
@@ -63,6 +73,59 @@ function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
         timeout,
     });
     expect(child.exitedDueToTimeout).toBe(false);
+    expect(child.stderr.toString()).toBe('');
+    return JSON.parse(child.stdout.toString());
+}
+
+const MB = 1024 * 1024;
+
+// A process of its own, so its peak RSS is the import's alone, the Yjs update's on request; a refusal reports itself.
+function measuredImport(
+    docx: ArrayBuffer,
+    through: 'reader' | 'transform' = 'reader',
+): {
+    blocks?: number;
+    texts?: number;
+    status?: number;
+    message?: string;
+    rssGrowth: number;
+    cpuMs: number;
+} {
+    const script = `
+        const { docxToPmJson } = await import(process.env.READER);
+        const { importDocxToEigendocUpdate } = await import(process.env.TRANSFORM);
+        const data = await Bun.stdin.arrayBuffer();
+        const peak = process.resourceUsage().maxRSS * 1024;
+        const cpu = process.cpuUsage();
+        const count = (node) => (node.type === 'text' ? 1 : 0) + (node.content ?? []).reduce((sum, child) => sum + count(child), 0);
+        let result;
+        try {
+            if (process.env.THROUGH === 'transform') {
+                importDocxToEigendocUpdate(data, undefined);
+                result = {};
+            } else {
+                const { json } = docxToPmJson(Buffer.from(data));
+                result = { blocks: json.content.length, texts: count(json) };
+            }
+        } catch (error) {
+            result = { status: error.status, message: error.message };
+        }
+        const used = process.cpuUsage(cpu);
+        console.log(JSON.stringify({
+            ...result,
+            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
+            cpuMs: (used.user + used.system) / 1000,
+        }));
+    `;
+    const child = Bun.spawnSync([process.execPath, '-e', script], {
+        env: {
+            ...process.env,
+            READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
+            TRANSFORM: Bun.resolveSync('../../../lib/import/doc/transform', import.meta.dir),
+            THROUGH: through,
+        },
+        stdin: new Uint8Array(docx),
+    });
     expect(child.stderr.toString()).toBe('');
     return JSON.parse(child.stdout.toString());
 }
@@ -117,6 +180,13 @@ describe('XML budget', () => {
         );
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
         expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+    });
+
+    test('a styles.xml past the tag budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_DOCX_XML_TAGS) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
     test('the budget counts the parts together', async () => {
@@ -206,6 +276,39 @@ describe('XML budget', () => {
         expect(texts(json)).toEqual(['Body', '[1]']);
     });
 
+    // A graphic's part is read once every content part is, so a cap it meets costs the graphic, not the document.
+    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(smartArt)}`,
+            smartArtData(padding(MAX_DOCX_XML_BYTES)),
+        );
+        expect(texts(json)).toEqual(['Body']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+    });
+
+    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
+        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_DOCX_XML_TAGS / 4);
+        const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const smartArtPart = smartArtData(
+            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
+        );
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
+            {
+                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: {
+                    ...smartArtPart.media,
+                    'word/charts/chart1.xml': new TextEncoder().encode(
+                        `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
+                    ),
+                },
+            },
+        );
+        expect(texts(json)).toEqual(['Body', 'Kept']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
+    });
+
     // As a corrupt file is, rather than as a server error.
     test('a reader slip on a file is 400', async () => {
         const docx = await buildDocxWithBody(paragraph(run('Body')));
@@ -225,6 +328,76 @@ describe('XML budget', () => {
         });
         const error = await rejection(() => docxToPmJson(build(parts)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+    });
+});
+
+// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its own.
+describe('text pieces', () => {
+    test('Latin and Arabic in one face and one look are one piece', async () => {
+        const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
+        expect(result.texts).toBe(1);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    test('Arabic words in one look are one piece', async () => {
+        const result = measuredImport(await buildDocxWithBody(paragraph(run('كلمة '.repeat(1_400_000)))));
+        expect(result.texts).toBe(1);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    const alternating = 'aب'.repeat(2_000_000);
+    const faces = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Times New Roman"/>';
+    test.each([
+        ['complex bold', paragraph(run(alternating, '<w:bCs/>'))],
+        ['a complex face of its own', paragraph(run(alternating, faces))],
+        ['a complex face of its own in a code style', paragraph(run(alternating, faces), '<w:pStyle w:val="Code"/>')],
+    ])(
+        'Latin and Arabic alternating in %s past the piece cap are 413',
+        async (_, body) => {
+            const styles = '<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/></w:style>';
+            const result = measuredImport(await buildDocxWithBody(body, { styles }));
+            expect(result.status).toBe(413);
+            expect(result.rssGrowth).toBeLessThan(256 * MB);
+        },
+        30_000,
+    );
+
+    test('a marked run split past the piece cap is 413 through the Yjs update', async () => {
+        const rich =
+            '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Times New Roman"/><w:b/><w:i/><w:strike/><w:caps/><w:u w:val="single"/><w:color w:val="FF0000"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>';
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('aب'.repeat(MAX_DOCX_PIECES), rich)}</w:hyperlink>`);
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com" TargetMode="External"/>`;
+        const result = measuredImport(await buildDocxWithBody(body, { rels }), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    // A graphic's part reads through the tags, and a run's pieces are no XML, so neither spends what the other needs.
+    test.each(['before', 'after'])(
+        'a chart that takes nearly every tag %s a split run leaves each its own',
+        async (order) => {
+            const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+            const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+            const chart = paragraph(
+                `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+            );
+            const title = '<c:title><c:tx><c:rich><a:p><a:r><a:t>Kept</a:t></a:r></a:p></c:rich></c:tx></c:title>';
+            const part = `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}${'<c:pt/>'.repeat(MAX_DOCX_XML_TAGS - 5000)}</c:chart></c:chartSpace>`;
+            const split = paragraph(run('aب'.repeat(5000), '<w:bCs/>'));
+            const { json } = await importDocxBody(order === 'before' ? `${chart}${split}` : `${split}${chart}`, {
+                rels: `<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: { 'word/charts/chart1.xml': new TextEncoder().encode(part) },
+            });
+            expect(texts(json)).toContain('Kept');
+            expect(texts(json)).toHaveLength(10_001);
+        },
+        30_000,
+    );
+
+    test('alternating looks within the piece cap keep each', async () => {
+        const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
+        expect(texts(json)).toHaveLength(2000);
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(Array(1000).fill('ب'));
     });
 });
 
@@ -369,6 +542,19 @@ describe('structure', () => {
         expect(texts(json.content?.[0] ?? {})).toEqual(['[1]'.repeat(400)]);
     }, 20_000);
 
+    test('a SmartArt that 1,000 graphics name is read once', async () => {
+        const points = Array.from(
+            { length: 1000 },
+            (_, index) =>
+                `<dgm:pt modelId="${index}"><dgm:t><a:p><a:r><a:t>P${index}</a:t></a:r></a:p></dgm:t></dgm:pt>`,
+        ).join('');
+        const started = performance.now();
+        const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(texts(json)).toHaveLength(1000);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
+    }, 60_000);
+
     test('20,000 notes stay linear', async () => {
         const count = 20_000;
         const ids = Array.from({ length: count }, (_, index) => index + 1);
@@ -435,6 +621,18 @@ describe('structure', () => {
         await imported(body, { numbering, styles });
         expect(performance.now() - started).toBeLessThan(2000);
     }, 60_000);
+
+    // y-tiptap passes a paragraph's children to one call: 740,000 overflowed the stack.
+    test('a paragraph past the inline node cap is 413 through the Yjs update', async () => {
+        const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2 + 1)}</w:r>`);
+        const result = measuredImport(await buildDocxWithBody(body), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    test('a paragraph at the inline node cap imports', async () => {
+        const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2)}</w:r>`);
+        expect(nodesOfType(await imported(body), 'hardBreak')).toHaveLength(MAX_INLINE_NODES / 2);
+    });
 
     test('fields left open cost each run what one field does', async () => {
         const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
@@ -557,7 +755,6 @@ describe('figures and media', () => {
 });
 
 describe('links', () => {
-    const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
     const linked = (target: string) =>
         importDocxBody(paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`), {
             rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="${target}" TargetMode="External"/>`,
@@ -612,23 +809,6 @@ function honestBody(): string {
 }
 
 describe.skipIf(!runSlow)('an honest document just under the budget', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'docx-budget-'));
-    afterAll(() => rmSync(dir, { recursive: true, force: true }));
-    // A process of its own, so its peak RSS is the import's alone.
-    const script = `
-        const { docxToPmJson } = await import(process.env.READER);
-        const bytes = Buffer.from(await Bun.file(process.env.DOCX).arrayBuffer());
-        const peak = process.resourceUsage().maxRSS * 1024;
-        const cpu = process.cpuUsage();
-        const { json } = docxToPmJson(bytes);
-        const used = process.cpuUsage(cpu);
-        console.log(JSON.stringify({
-            blocks: json.content.length,
-            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
-            cpuMs: (used.user + used.system) / 1000,
-        }));
-    `;
-
     // A Worker's stack takes a spread of no more than about 500,000 arguments.
     test('600,000 paragraphs inside one content control import in the Worker', async () => {
         const body = `<w:sdt><w:sdtContent>${'<w:p/>'.repeat(600_000)}</w:sdtContent></w:sdt>`;
@@ -646,19 +826,30 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
     }, 120_000);
 
     test('imports within 1 GB of peak RSS and 10 s of CPU', async () => {
-        const path = join(dir, 'report.docx');
-        writeFileSync(path, new Uint8Array(await buildDocxWithBody(honestBody())));
-        const child = Bun.spawnSync([process.execPath, '-e', script], {
-            env: {
-                ...process.env,
-                READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
-                DOCX: path,
-            },
-        });
-        expect(child.stderr.toString()).toBe('');
-        const result: { blocks: number; rssGrowth: number; cpuMs: number } = JSON.parse(child.stdout.toString());
+        const result = measuredImport(await buildDocxWithBody(honestBody()));
         expect(result.blocks).toBeGreaterThan(10_000);
-        expect(result.rssGrowth).toBeLessThan(1024 * 1024 * 1024);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
+    }, 120_000);
+});
+
+describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
+    // y-tiptap passes a block's children to one call, which 700,000 paragraphs in one cell overflow.
+    test('a block of too many children is 413, not a stack overflow', async () => {
+        const body = `<w:tbl><w:tr><w:tc>${'<w:p/>'.repeat(700_000)}</w:tc></w:tr></w:tbl>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                data: await buildDocxWithBody(body),
+            },
+            { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
+        );
+        expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
+            413,
+            'Document too large',
+        ]);
     }, 120_000);
 });

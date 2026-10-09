@@ -10,6 +10,9 @@ export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 // most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes.
 export const MAX_DOCX_XML_TAGS = 750_000;
 
+// A piece past a run's first is a text node and its marks, up to 9 KB in the Yjs update; the corpus's most is 1,055.
+export const MAX_DOCX_PIECES = 75_000;
+
 export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
@@ -28,6 +31,10 @@ export type Package = {
     footnotes?: Part;
     endnotes?: Part;
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
+    // A part a drawing names, read when met and charged as the others are; a damaged one, or one past a cap, is no part.
+    readPart(path: string): XmlElement | undefined;
+    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
+    chargePiece(): void;
 };
 
 // An encrypted docx is an OLE compound file holding the package as a stream of this name.
@@ -43,6 +50,7 @@ export function readPackage(bytes: Uint8Array): Package {
     const budget: Budget = {
         left: MAX_DOCX_XML_BYTES,
         tags: MAX_DOCX_XML_TAGS,
+        pieces: MAX_DOCX_PIECES,
         charged: new Set(),
         parsed: new Map(),
         failed: new Map(),
@@ -58,12 +66,14 @@ export function readPackage(bytes: Uint8Array): Package {
     charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
     const document = readXml(zip, documentPath, budget);
     if (!document) throw new ApiError(400, NOT_A_DOCX);
-    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it.
-    const optional = <T>(read: () => T): T | undefined => {
+    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it, but a
+    // graphic's part is read once every content part is, so a cap it meets costs only the graphic.
+    const optional = <T>(read: () => T, graphic = false): T | undefined => {
         try {
             return read();
         } catch (error) {
             if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
+            if (graphic && error instanceof ApiError && error.status === 413) return undefined;
             throw error;
         }
     };
@@ -84,6 +94,11 @@ export function readPackage(bytes: Uint8Array): Package {
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypes,
+        readPart: (path) => optional(() => readXml(zip, path, budget), true),
+        chargePiece: () => {
+            budget.pieces--;
+            if (budget.pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        },
     };
 }
 
@@ -91,6 +106,7 @@ export function readPackage(bytes: Uint8Array): Package {
 type Budget = {
     left: number;
     tags: number;
+    pieces: number;
     charged: Set<string>;
     parsed: Map<string, XmlElement | undefined>;
     failed: Map<string, unknown>;
@@ -112,8 +128,11 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
     try {
         const bytes = zip.read(path);
         if (!bytes) return undefined;
-        for (const byte of bytes) if (byte === LESS_THAN) budget.tags--;
-        if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        let tags = 0;
+        for (const byte of bytes) if (byte === LESS_THAN) tags++;
+        // A part refused leaves the budget to the parts after it.
+        if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        budget.tags -= tags;
         const root = parseXml(bytes) ?? undefined;
         if (root) toTransitional(root);
         budget.parsed.set(path, root);

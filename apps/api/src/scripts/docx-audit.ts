@@ -29,18 +29,19 @@ import {
     W14_NS,
     WP_NS,
 } from '../lib/core/ooxml';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
+import {
+    parseXml,
+    XML_NAMESPACE,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/export/colors';
-import {
-    byFace,
-    FONT_SLOTS,
-    type Fonts,
-    fontMark,
-    readFontTable,
-    readTheme,
-    type Script,
-} from '../lib/import/doc/docx-fonts';
+import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
@@ -197,6 +198,9 @@ const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLow
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
+// The link look's colors, apart from the reader's so the audit never grades the reader by itself.
+const LINK_STYLE_COLORS = new Set(['2563EB', '1155CC', '0563C1', '0000FF', '000080']);
+const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
 
 // Counted per word they touch, and matched as words, so a mark on the wrong words keeps nothing.
 const MARKS = new Set<Feature>([
@@ -291,6 +295,39 @@ function find(root: XmlElement, ns: string, local: string): XmlElement[] {
 // Word renders the first choice it understands; every choice in this corpus's era is one Word 2010 reads.
 function alternative(element: XmlElement): XmlElement | undefined {
     return child(element, 'Choice', MC_NS) ?? child(element, 'Fallback', MC_NS);
+}
+
+// The text Word shows for a w:t, apart from the reader's so the audit never grades the reader by itself.
+function runText(t: XmlElement): string {
+    const text = xmlText(t);
+    const kept =
+        xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+    return kept.replace(/[\r\n]/g, ' ');
+}
+
+// Word's face per character, apart from the reader's byFace so the audit never grades the reader by itself.
+const EAST_ASIAN_SCRIPT =
+    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}\u3000-\u303f\uff00-\uffef]/u;
+const COMPLEX_SCRIPT =
+    /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gurmukhi}\p{Script=Gujarati}\p{Script=Oriya}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Sinhala}\p{Script=Thai}\p{Script=Lao}\p{Script=Tibetan}\p{Script=Myanmar}\p{Script=Khmer}]/u;
+
+function facesOf(text: string, fonts: Fonts, script: Script): { text: string; font?: string; complex: boolean }[] {
+    const faces: { text: string; font?: string; complex: boolean }[] = [];
+    for (const char of text) {
+        const complex = !!script.complex || COMPLEX_SCRIPT.test(char);
+        const eastAsia = !complex && (EAST_ASIAN_SCRIPT.test(char) || (char > '\x7f' && script.hint === 'eastAsia'));
+        const font = complex
+            ? fonts.cs
+            : eastAsia
+              ? fonts.eastAsia
+              : char <= '\x7f'
+                ? (fonts.ascii ?? fonts.hAnsi)
+                : (fonts.hAnsi ?? fonts.ascii);
+        const last = faces.at(-1);
+        if (last && last.font === font && last.complex === complex) last.text += char;
+        else faces.push({ text: char, font, complex });
+    }
+    return faces;
 }
 
 // Soft hyphens show only at a line end; the importer spells a non-breaking hyphen U+2011. A word carries every mark any of
@@ -409,8 +446,16 @@ type Inline = {
     link: boolean;
 };
 
-// marks: all but the font, which each face of the run's text carries on its own.
-type RunLook = { hidden: boolean; code: boolean; marks: Feature[]; fonts: Fonts; script: Script };
+// marks: all but the font, which each face of the run's text carries on its own; complexMarks: a complex script face's,
+// whose bold, italic and size Word reads from bCs, iCs and szCs.
+type RunLook = {
+    hidden: boolean;
+    code: boolean;
+    marks: Feature[];
+    complexMarks: Feature[];
+    fonts: Fonts;
+    script: Script;
+};
 
 type Boxed = { element: XmlElement; boxed: boolean };
 
@@ -716,7 +761,12 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
-    const base = { color: colorOf(plain), size: sizeOf(plain), indent };
+    const base = {
+        color: colorOf(plain),
+        size: sizeOf(plain),
+        sizeCs: Number(val(first(plain, 'szCs')) ?? sizeOf(plain)),
+        indent,
+    };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
         const chain = styles.chain(val(child(rPr, 'rStyle')) ?? styles.character);
@@ -732,7 +782,14 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             return (!!byCharacter && on(byCharacter)) !== (!!byParagraph && on(byParagraph));
         };
         const linked = context.link || context.scope.fields.some((field) => field.link);
-        const own = linked ? direct : sources;
+        // A link style in a color of its own is a look Word draws; the link look is the link's.
+        const styleColor = first(characterRuns, 'color');
+        const styleHex = val(styleColor)?.toUpperCase() ?? '';
+        const ownLook =
+            /^[0-9A-F]{6}$/.test(styleHex) &&
+            !LINK_STYLE_COLORS.has(styleHex) &&
+            !LINK_THEME_COLORS.has((styleColor && xmlAttr(styleColor, W_NS, 'themeColor')) ?? '');
+        const own = linked && !ownLook ? direct : sources;
         // MS-OI29500 2.1.100: a w:u without w:val takes the style hierarchy's, and none at its end.
         const underline = own.map((source) => val(child(source, 'u'))).find((value) => value !== undefined);
         const vertAlign = val(first(sources, 'vertAlign'));
@@ -740,24 +797,33 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
         const faces = [...direct, ...characterRuns, ...context.styleRuns];
-        const marks: [Feature, boolean][] = [
-            ['bold', toggle('b', context.weightRuns)],
-            ['italic', toggle('i')],
+        const sized = [...direct, ...characterRuns, ...context.weightRuns];
+        const sizeCs = val(first(sized, 'szCs'));
+        const shape = (bold: string, italic: string, small: boolean): [Feature, boolean][] => [
+            ['bold', toggle(bold, context.weightRuns)],
+            ['italic', toggle(italic)],
+            ['small', small],
+        ];
+        const common: [Feature, boolean][] = [
             ['underline', underline !== undefined && underline !== 'none'],
             ['strike', toggle('strike') || toggle('dstrike')],
             ['subscript', vertAlign === 'subscript'],
             ['superscript', vertAlign === 'superscript'],
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
-            ['small', sizeOf([...direct, ...characterRuns, ...context.weightRuns]) <= base.size * SMALL_PRINT],
             ['caps', toggle('caps', context.styleRuns)],
             ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
             ['link', linked],
         ];
+        const set = (marks: [Feature, boolean][]) => marks.filter(([, shown]) => shown).map(([feature]) => feature);
         return {
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
-            marks: marks.filter(([, set]) => set).map(([feature]) => feature),
+            marks: set([...shape('b', 'i', sizeOf(sized) <= base.size * SMALL_PRINT), ...common]),
+            complexMarks: set([
+                ...shape('bCs', 'iCs', sizeCs !== undefined && Number(sizeCs) <= base.sizeCs * SMALL_PRINT),
+                ...common,
+            ]),
             fonts: fontsOf(faces),
             script: scriptOf(sources),
         };
@@ -782,9 +848,10 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             context.paragraph.spans.push({ text: value, marks: [] });
             return;
         }
-        for (const face of byFace(value, look.fonts, look.script)) {
+        for (const face of facesOf(value, look.fonts, look.script)) {
             const font = fontMark(face.font, fontTable);
-            const own: Feature[] = font ? [...look.marks, 'font'] : look.marks;
+            const shown = face.complex ? look.complexMarks : look.marks;
+            const own: Feature[] = font ? [...shown, 'font'] : shown;
             const marks: readonly Feature[] = !context.marks ? [] : look.code ? ['code'] : own;
             context.paragraph.spans.push({ text: face.text, marks, font });
         }
@@ -838,7 +905,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             const shown = visible(context.scope) && !look.hidden;
             switch (node.local) {
                 case 't':
-                    if (shown) text(xmlText(node), context, look);
+                    if (shown) text(runText(node), context, look);
                     break;
                 case 'noBreakHyphen':
                     if (shown) text('-', context, look);
@@ -1427,9 +1494,9 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
-        'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
+        'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',
         '| Feature | Files | Source | Imported | Kept | Invented |',
         '|---|---:|---:|---:|---:|---:|',

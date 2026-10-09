@@ -165,3 +165,77 @@ describe('captions', () => {
         });
     });
 });
+
+// SmartArt's text is the document's, read in place; a chart keeps its title. Each counts as a graphic dropped.
+describe('SmartArt and charts', () => {
+    const RELS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+    const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+    const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+    const encode = (text: string) => new TextEncoder().encode(text);
+    const frame = (graphic: string) =>
+        `<w:r><w:drawing><wp:inline><wp:extent cx="2575560" cy="964504"/><wp:docPr id="3" name="Graphic 3"/><a:graphic><a:graphicData>${graphic}</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+    const diagram = `<dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20" r:lo="rId21" r:qs="rId22" r:cs="rId23"/>`;
+    const point = (id: number, text: string, type = '') =>
+        `<dgm:pt modelId="${id}"${type && ` type="${type}"`}><dgm:t><a:bodyPr/><a:p><a:r><a:t>${text}</a:t></a:r></a:p></dgm:t></dgm:pt>`;
+    const data = (ext: string) =>
+        `<dgm:dataModel xmlns:dgm="${DGM}" xmlns:a="${A}"><dgm:ptLst><dgm:pt modelId="0" type="doc"/>${point(1, 'from')}${point(2, 'link', 'sibTrans')}${point(3, 'model')}</dgm:ptLst>${ext}</dgm:dataModel>`;
+    const DRAWING_EXT = `<dgm:extLst><a:ext uri="http://schemas.microsoft.com/office/drawing/2008/diagram"><dsp:dataModelExt xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" relId="rId24"/></a:ext></dgm:extLst>`;
+    const shape = (paragraphs: string) => `<dsp:sp><dsp:txBody><a:bodyPr/>${paragraphs}</dsp:txBody></dsp:sp>`;
+    const drawing = `<dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" xmlns:a="${A}"><dsp:spTree>${shape('<a:p><a:r><a:t>foo</a:t></a:r></a:p>')}${shape('<a:p><a:endParaRPr/></a:p>')}${shape('<a:p><a:r><a:t>bar</a:t></a:r><a:br/><a:fld type="slidenum"><a:t>baz</a:t></a:fld></a:p><a:p><a:r><a:t>qux</a:t></a:r></a:p>')}</dsp:spTree></dsp:drawing>`;
+    const diagramRels = `<Relationship Id="rId20" Type="${RELS}/diagramData" Target="diagrams/data1.xml"/><Relationship Id="rId24" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="diagrams/drawing1.xml"/>`;
+    const lines = (json: Parameters<typeof nodesOfType>[0]) =>
+        nodesOfType(json, 'paragraph')
+            .map((node) => (node.content ?? []).map((child) => child.text ?? '\n').join(''))
+            .filter(Boolean);
+
+    test("a SmartArt's shapes read as paragraphs in place, from its drawing part", async () => {
+        const { json, warnings } = await importDocxBody(
+            `${paragraph('<w:r><w:t>Before</w:t></w:r>')}${paragraph(frame(diagram))}${paragraph('<w:r><w:t>After</w:t></w:r>')}`,
+            {
+                rels: diagramRels,
+                media: {
+                    'word/diagrams/data1.xml': encode(data(DRAWING_EXT)),
+                    'word/diagrams/drawing1.xml': encode(drawing),
+                },
+            },
+        );
+        expect(lines(json)).toEqual(['Before', 'foo', 'bar\nbaz', 'qux', 'After']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+    });
+
+    test('without a drawing part its data model gives the text of its points', async () => {
+        const { json } = await importDocxBody(paragraph(frame(diagram)), {
+            rels: diagramRels,
+            media: { 'word/diagrams/data1.xml': encode(data('')) },
+        });
+        expect(lines(json)).toEqual(['from', 'model']);
+    });
+
+    test("a chart keeps its title's text or its cell's, a chart with none leaves nothing", async () => {
+        const chart = (id: string) => `<c:chart xmlns:c="${C}" r:id="${id}"/>`;
+        const part = (title: string) =>
+            `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}<c:plotArea><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Axis</a:t></a:r></a:p></c:rich></c:tx></c:title></c:valAx></c:plotArea></c:chart></c:chartSpace>`;
+        const { json, warnings } = await importDocxBody(
+            paragraph(`${frame(chart('rId20'))}${frame(chart('rId21'))}${frame(chart('rId22'))}`),
+            {
+                rels: `<Relationship Id="rId20" Type="${RELS}/chart" Target="charts/chart1.xml"/><Relationship Id="rId21" Type="${RELS}/chart" Target="charts/chart2.xml"/><Relationship Id="rId22" Type="${RELS}/chart" Target="charts/chart3.xml"/>`,
+                media: {
+                    'word/charts/chart1.xml': encode(
+                        part(
+                            '<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales </a:t></a:r><a:r><a:t>2024</a:t></a:r></a:p></c:rich></c:tx></c:title>',
+                        ),
+                    ),
+                    'word/charts/chart2.xml': encode(part('<c:title><c:overlay val="0"/></c:title>')),
+                    'word/charts/chart3.xml': encode(
+                        part(
+                            '<c:title><c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx></c:title>',
+                        ),
+                    ),
+                },
+            },
+        );
+        expect(lines(json)).toEqual(['Sales 2024', 'Revenue']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 3 }]);
+    });
+});

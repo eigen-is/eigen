@@ -211,6 +211,29 @@ describe('links', () => {
         expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['color'])).toEqual(['#ff0000']);
     });
 
+    // Word draws a custom Hyperlink style's color and underline; only a known link look is the editor's to draw.
+    test("a Hyperlink style in a color of its own keeps its color and underline; Word's link look leaves the paragraph's", async () => {
+        const hyperlink = (id: string, color: string) =>
+            `<w:style w:type="character" w:styleId="${id}"><w:name w:val="${id}"/><w:rPr><w:color ${color}/><w:u w:val="single"/></w:rPr></w:style>`;
+        const linked = (text: string, style: string) =>
+            `<w:hyperlink r:id="rId9">${run(text, `<w:rStyle w:val="${style}"/>`)}</w:hyperlink>`;
+        const json = await imported(
+            paragraph(
+                `${linked('Pink', 'Hyperlink')}${linked('Word', 'WordLink')}${linked('Old', 'OldLink')}${linked('Navy', 'InternetLink')}${linked('Theme', 'ThemeLink')}`,
+                '<w:pStyle w:val="Red"/>',
+            ),
+            {
+                styles: `<w:style w:type="paragraph" w:styleId="Red"><w:name w:val="Red"/><w:rPr><w:color w:val="FF0000"/></w:rPr></w:style>${hyperlink('Hyperlink', 'w:val="E91D63"')}${hyperlink('WordLink', 'w:val="0563C1"')}${hyperlink('OldLink', 'w:val="0000FF"')}${hyperlink('InternetLink', 'w:val="000080"')}${hyperlink('ThemeLink', 'w:val="467886" w:themeColor="hyperlink"')}`,
+                rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+            },
+        );
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Pink', '#e91d63'],
+            ['WordOldNavyTheme', '#ff0000'],
+        ]);
+        expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Pink']);
+    });
+
     test('a HYPERLINK field links its result and drops its code', async () => {
         const json = await imported(
             paragraph(
@@ -221,6 +244,18 @@ describe('links', () => {
         expect(marksOfType(json, 'link').map((mark) => [mark.attrs['href'], mark.attrs['title']])).toEqual([
             ['https://example.com/', 'Tip'],
         ]);
+    });
+});
+
+describe('text', () => {
+    // Pandoc ends a w:t with a line feed and no xml:space; Word shows question2, not question 2.
+    test("a w:t's surrounding whitespace is dropped unless xml:space preserves it", async () => {
+        const json = await imported(
+            paragraph(
+                '<w:r><w:t>question\n</w:t></w:r><w:r><w:t>2</w:t></w:r><w:r><w:t xml:space="preserve"> and </w:t></w:r><w:r><w:t>\t more\nthan\u00a0</w:t></w:r><w:r><w:t> </w:t></w:r><w:r><w:t>one</w:t></w:r>',
+            ),
+        );
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['question2 and more than\u00a0one']);
     });
 });
 
@@ -258,5 +293,40 @@ describe('sizes', () => {
         const styles = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="18"/></w:rPr></w:rPrDefault></w:docDefaults>';
         const json = await imported(paragraph(run('body', '<w:sz w:val="18"/>')), { styles });
         expect(marksOfType(json, 'small')).toEqual([]);
+    });
+});
+
+describe('complex script', () => {
+    // Word draws a complex script character, and every character of a run marked rtl, with bCs, iCs and szCs.
+    test('an Arabic run with bCs alone is bold, a Latin one is not, and an rtl run is complex throughout', async () => {
+        const json = await imported(
+            paragraph(
+                `${run('إسبانيا', '<w:bCs/><w:rtl/>')}${run(' Spain ', '<w:bCs/>')}${run('مملكة', '<w:b/>')}${run(' (Reino)', '<w:bCs/><w:rtl/>')}`,
+            ),
+        );
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['إسبانيا', ' (Reino)']);
+    });
+
+    test('in one run Arabic takes iCs and szCs, Latin i and sz, either splitting the run alone', async () => {
+        const styles =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const json = await imported(
+            `${paragraph(run('Spain مملكة', '<w:i/>'))}${paragraph(run('Spain مملكة', '<w:szCs w:val="14"/>'))}`,
+            { styles },
+        );
+        expect(marksOfType(json, 'italic').map((mark) => mark.text)).toEqual(['Spain ']);
+        expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['مملكة']);
+    });
+
+    test("bCs toggles through the styles as b does, and a heading's is its own", async () => {
+        const styles = `<w:style w:type="paragraph" w:styleId="Loud"><w:name w:val="Loud"/><w:rPr><w:bCs/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="Strong"><w:name w:val="Strong"/><w:rPr><w:bCs/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="Heading 2"/><w:rPr><w:bCs/></w:rPr></w:style>`;
+        const json = await imported(
+            `${paragraph(`${run('مملكة')}${run(' إسبانيا', '<w:rStyle w:val="Strong"/>')}`, '<w:pStyle w:val="Loud"/>')}${paragraph(run('عنوان'), '<w:pStyle w:val="Heading2"/>')}`,
+            { styles },
+        );
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['مملكة']);
+        expect(nodesOfType(json, 'heading')).toHaveLength(1);
     });
 });

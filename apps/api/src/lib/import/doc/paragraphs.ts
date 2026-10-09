@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
@@ -16,8 +17,8 @@ import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import {
     alternative,
+    DOCUMENT_TOO_LARGE,
     descendants,
-    halfPoints,
     is,
     isAlternateContent,
     type Package,
@@ -56,8 +57,12 @@ export type Reader = {
     // By type and id, in the order first referenced: a note is read once however often it is referenced.
     notes: Map<string, NoteRef>;
     fields: Field[];
-    // The body's size in half-points and its color, which no run needs a mark for.
+    // Charts and SmartArt, whose graphic the schema can't hold, and the parts of theirs read: each is read once.
+    graphicsDropped: number;
+    graphicParts: Set<string>;
+    // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
+    bodySizeCs: number;
     baseColor: string | undefined;
     columnTwips: number;
     publicOrigin: string | undefined;
@@ -92,8 +97,11 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         imageNames: new Map(),
         notes: new Map(),
         fields: [],
+        graphicsDropped: 0,
+        graphicParts: new Set(),
         // Word's default is 10 pt.
         bodySize: body.size ?? 20,
+        bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color,
         columnTwips:
             (twips(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
@@ -151,6 +159,9 @@ function readNotes(reader: Reader): JSONContent[] {
 
 export const WRAPPERS = new Set(['customXml', 'ins', 'moveTo', 'smartTag']);
 
+// y-tiptap spreads a paragraph's children into one call, which overflows near 500,000; the corpus's most is 274.
+export const MAX_INLINE_NODES = 50_000;
+
 // flatMap, not a spread push: a body inside one content control can hold more items than a call takes arguments.
 export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope): Item[] {
     return elements.flatMap((element): Item[] => {
@@ -181,11 +192,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
-    const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
+    const headingRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
-    if (role.kind === 'heading' && !listed && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
+    if (role.kind === 'heading' && !listed && isBodySized(reader, p, headingRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, scope, styleId)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
@@ -290,6 +301,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     for (const [index, half] of halves.entries()) {
         if (index > 0) items.push({ kind: 'break' });
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
+        if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const visible = isShown(half);
         const isRule = half.some((piece) => piece.kind === 'hr');
         if ((split || markHidden || direct.markDeleted) && !visible && !isRule) continue;
@@ -343,13 +355,25 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 }
 
 // G6: every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
-// text; the style's bold and italic then stay as marks. A run's text box is not searched.
-function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolean {
-    const sizes = descendants(p, W_NS, 'r')
-        .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
-        .map((run) => halfPoints(w(wChild(wChild(run, 'rPr'), 'sz'), 'val')));
+// text, complex script at its szCs; the style's bold and italic then stay as marks. A run's text box is not searched.
+function isBodySized(reader: Reader, p: XmlElement, heading: RunProps): boolean {
+    const headingSize = heading.size ?? 20;
+    const headingSizeCs = heading.sizeCs ?? headingSize;
+    const faces = descendants(p, W_NS, 'r').flatMap((run) => {
+        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
+        return xmlElements(run)
+            .filter((child) => is(child, W_NS, 't'))
+            .flatMap((t) => byFace(xmlText(t), undefined, direct, true, reader.pkg.chargePiece))
+            .filter((face) => face.text.trim())
+            .map(({ complex }) =>
+                complex
+                    ? { size: direct.sizeCs, heading: headingSizeCs, body: reader.bodySizeCs }
+                    : { size: direct.size, heading: headingSize, body: reader.bodySize },
+            );
+    });
     return (
-        sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
+        faces.length > 0 &&
+        faces.every(({ size, heading, body }) => size !== undefined && size < heading && size <= body)
     );
 }
 
@@ -362,13 +386,14 @@ function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: strin
     const faces = descendants(p, W_NS, 'r').flatMap((run) => {
         const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
         const props = mergeRun(paraRun, styles.run(direct.style), direct);
-        return xmlElements(run).flatMap((child) =>
-            is(child, W_NS, 't') ? byFace(xmlText(child), props.fonts, props).filter((face) => face.text.trim()) : [],
-        );
+        return xmlElements(run)
+            .filter((child) => is(child, W_NS, 't'))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, false, reader.pkg.chargePiece))
+            .filter((face) => face.text.trim());
     });
     if (faces.length > 0) return faces.every((face) => mono(face.font));
     const mark = mergeRun(paraRun, readRunProps(wChild(wChild(p, 'pPr'), 'rPr'), reader.theme));
-    return mono(byFace(' ', mark.fonts, mark)[0]?.font);
+    return mono(byFace(' ', mark.fonts, mark, false)[0]?.font);
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

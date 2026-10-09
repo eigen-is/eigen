@@ -115,7 +115,8 @@ export type TransformWarning =
     | { code: 'corrupt-blobs-skipped'; count: number }
     | { code: 'byte-guard-truncated'; bytes: number }
     | { code: 'blocks-flattened'; count: number }
-    | { code: 'images-unshown'; count: number };
+    | { code: 'images-unshown'; count: number }
+    | { code: 'graphics-dropped'; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never structured-clone ApiError/Error instances across the boundary.
