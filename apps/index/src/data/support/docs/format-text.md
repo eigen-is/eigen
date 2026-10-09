@@ -3,10 +3,10 @@ title: "Format text"
 description: "Apply bold, headings, lists, alignment, colors, and fonts to text in a Docs document using the toolbar."
 type: how-to
 category: Editing
-tags: [docs, formatting, fonts, headings, lists, color, alignment]
+tags: [docs, formatting, fonts, headings, lists, color, alignment, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-06-08
+updated: 2026-10-09
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or
@@ -50,6 +50,15 @@ Select the text you want to change, then click the button in the toolbar:
 
 Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside
 styled text, the button appears highlighted, so you can see what is active.
+
+## Set text in capitals
+
+Select the text, then click **All caps** (or Cmd+Shift+A / Ctrl+Shift+A) or **Small caps** in the toolbar. All caps
+shows every letter as a capital. Small caps shows lowercase letters as smaller capitals. The letters you typed stay as
+they are, so clicking the button again brings them back. On a narrow screen, open **Format**, then **Text**, and
+choose **All caps** or **Small caps**.
+
+In a PDF, small caps show only in the **Source Serif 4** font. In the other fonts the text prints as you typed it.
 
 ## Set a text color
 

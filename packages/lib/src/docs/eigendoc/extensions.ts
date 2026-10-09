@@ -8,6 +8,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import { Color, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
 import StarterKit from '@tiptap/starter-kit';
+import { TextCaps } from './nodes/caps';
 import { CommentMarkSchema } from './nodes/comment-mark';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
@@ -34,6 +35,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextStyle,
         Color,
         EigenFontFamily,
+        TextCaps,
         TaskList,
         TaskItem.configure({ nested: true }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),

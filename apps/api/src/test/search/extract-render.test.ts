@@ -42,6 +42,22 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
+    // Caps draw capitals over the letters; search finds what was typed.
+    test('eigendoc: text in caps indexes as typed', async () => {
+        const doc = new Y.Doc();
+        const caps = (text: string, value: string) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { caps: value } }],
+        });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [caps('Typed Words', 'all'), caps(' Small Caps', 'small')] }],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Typed Words  Small Caps');
+        doc.destroy();
+    });
+
     test('eigenslides: rich text in slide order, tag-free, image elements skipped', async () => {
         const doc = new Y.Doc();
         seedDeckDoc(doc, buildGoldenDeckScene());

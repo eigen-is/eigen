@@ -643,6 +643,14 @@ describe('docx writer — marks', () => {
         );
     });
 
+    // CT_RPr puts caps and smallCaps between i and strike.
+    test('all caps is w:caps and small caps w:smallCaps, in schema order', async () => {
+        expect(await runProps({ type: 'textStyle', attrs: { caps: 'all' } })).toEqual([['caps']]);
+        expect(
+            await runProps({ type: 'strike' }, { type: 'textStyle', attrs: { caps: 'small' } }, { type: 'italic' }),
+        ).toEqual([['i'], ['iCs'], ['smallCaps'], ['strike']]);
+    });
+
     test('a named color and an unknown font are dropped', async () => {
         expect(await runProps({ type: 'textStyle', attrs: { color: 'red', fontFamily: 'Comic Sans' } })).toEqual([]);
     });

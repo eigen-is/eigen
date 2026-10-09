@@ -51,6 +51,10 @@ A figure is an inline node, so it renders as a `span.figure` with a `span.figcap
 
 No schema checked the CRDT's JSON, so the writer checks attrs where it uses them and never fails on structure: inline content where a block belongs is wrapped in a paragraph, and a nested block is hoisted out. A node or mark it has no mapping for throws, as the HTML export does, and `apps/api/src/test/export/doc-docx.test.ts` exports a doc holding every node and mark of the schema, so a new node fails a test instead of vanishing from the docx. A comment mark writes nothing and its text stays: comments are not exported, an open [ROADMAP](ROADMAP.md) question. Every zip entry carries the DOS epoch as its date, so one doc always exports to the same bytes.
 
+## Caps cross the docx as Word's toggles
+
+The writer puts a `textStyle`'s caps on the run as `w:caps` or `w:smallCaps`, and the reader turns them back into the attribute, so the letters stay as typed both ways ([DOCS.md](DOCS.md#caps-are-an-attribute-of-the-fonts-mark-drawn-over-the-letters-as-typed)). Both are toggle properties (ECMA-376 §17.7.3), read as bold and italic are: a character style flips the paragraph style's, and the run's own setting wins. No node draws capitals, so a style's caps, a Title's say, become the mark on its runs.
+
 ## The docx embeds the faces a doc uses, its 600s in the Bold slot
 
 Word has four slots per family (Regular, Bold, Italic, Bold Italic) and reads no variable font, so the writer embeds static TrueType files that sit beside the variable WOFF2s in `packages/ui/src/assets/fonts/` (`DOCX_FONT_FILES` in `export/fonts.ts`). The editor draws bold at 600. So Inter's and JetBrains Mono's Bold slots hold their 600 files, renamed to Bold so the family stays one name that Word, an import and Google Docs all find. Source Serif 4's holds its 700, and Excalifont has a Regular only, from which Word synthesizes the rest.

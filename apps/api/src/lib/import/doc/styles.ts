@@ -9,6 +9,8 @@ export type RunProps = {
     style?: string;
     bold?: boolean;
     italic?: boolean;
+    caps?: boolean;
+    smallCaps?: boolean;
     underline?: boolean;
     strike?: boolean;
     vertAlign?: string;
@@ -46,7 +48,7 @@ export type ParaProps = {
     frame?: 'left' | 'right';
 };
 
-export const TOGGLES = ['bold', 'italic', 'strike'] as const;
+export const TOGGLES = ['bold', 'italic', 'caps', 'smallCaps', 'strike'] as const;
 
 // ST_HighlightColor, the only names Word draws.
 const HIGHLIGHT_COLORS = new Map([
@@ -102,6 +104,12 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 break;
             case 'i':
                 props.italic = onOff(child);
+                break;
+            case 'caps':
+                props.caps = onOff(child);
+                break;
+            case 'smallCaps':
+                props.smallCaps = onOff(child);
                 break;
             case 'strike':
             case 'dstrike':

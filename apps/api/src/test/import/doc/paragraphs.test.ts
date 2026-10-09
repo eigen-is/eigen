@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CODE_BLOCK_LOOK } from '../../../lib/export/doc/looks';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -403,5 +403,19 @@ describe('indents', () => {
             styles: STYLES,
         });
         expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
+    });
+});
+
+describe("a node's look", () => {
+    // Google Docs writes a quote's color on its runs; the color goes, what else the run's textStyle holds stays.
+    test("a quote's color goes from a run in caps, its caps stay", async () => {
+        const { json } = await importDocxBody(
+            paragraph(run('Said', `<w:caps/><w:color w:val="${QUOTE_LOOK.color}"/>`), '<w:pStyle w:val="Quote"/>'),
+            { styles: '<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>' },
+        );
+        expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs)).toEqual([
+            { color: null, fontFamily: null, caps: 'all' },
+        ]);
     });
 });

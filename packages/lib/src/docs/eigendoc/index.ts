@@ -1,4 +1,5 @@
 export { getDocExtensions } from './extensions';
+export type { Caps } from './nodes/caps';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export type { FigureAttrs, FigureLayout } from './nodes/figure';
 export { FigureNode } from './nodes/figure';

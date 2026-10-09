@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
 import { CODE_LOOK } from '../../../lib/export/doc/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
@@ -81,6 +82,43 @@ describe('toggles', () => {
             { styles },
         );
         expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['direct']);
+    });
+});
+
+describe('caps', () => {
+    const capsOf = (json: JSONContent) =>
+        marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['caps'], mark.attrs['fontFamily']]);
+
+    // Word draws capitals over both; the letters stay as typed.
+    test('w:caps is all caps, w:smallCaps small caps, and caps win over both', async () => {
+        const json = await imported(
+            paragraph(
+                `${run('Caps', '<w:caps/>')}${run('Small', `${font('Source Serif 4')}<w:smallCaps/>`)}${run('Both', '<w:smallCaps/><w:caps/>')}${run('Off', '<w:caps w:val="0"/>')}`,
+            ),
+        );
+        expect(capsOf(json)).toEqual([
+            ['Caps', 'all', null],
+            ['Small', 'small', 'Source Serif 4'],
+            ['Both', 'all', null],
+        ]);
+    });
+
+    // A Title in caps is a heading whose runs carry the style's caps: no node draws capitals.
+    test("a style's caps are its runs' through basedOn, toggled by a character style, and the run's own setting wins", async () => {
+        const styles = `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:rPr><w:caps/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Names"><w:name w:val="Names"/><w:rPr><w:smallCaps/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="MoreNames"><w:name w:val="More Names"/><w:basedOn w:val="Names"/></w:style>
+<w:style w:type="character" w:styleId="Shout"><w:name w:val="Shout"/><w:rPr><w:caps/></w:rPr></w:style>`;
+        const json = await imported(
+            `${paragraph(`${run('Title')}${run(' plain', '<w:caps w:val="0"/>')}`, '<w:pStyle w:val="Title"/>')}${paragraph(run('Ada'), '<w:pStyle w:val="MoreNames"/>')}${paragraph(`${run('both', '<w:rStyle w:val="Shout"/>')}${run('direct', '<w:rStyle w:val="Shout"/><w:caps/>')}`, '<w:pStyle w:val="Title"/>')}`,
+            { styles },
+        );
+        expect(nodesOfType(json, 'heading')).toHaveLength(2);
+        expect(capsOf(json)).toEqual([
+            ['Title', 'all', null],
+            ['Ada', 'small', null],
+            ['direct', 'all', null],
+        ]);
     });
 });
 

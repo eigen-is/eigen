@@ -43,6 +43,8 @@ import {
     AlignRight,
     Baseline,
     Bold,
+    CaseSensitive,
+    CaseUpper,
     CheckSquare,
     ChevronDown,
     Code,
@@ -272,6 +274,16 @@ export const EditorToolbar = ({
                                                 onClick={() => editor.chain().focus().toggleSmall().run()}
                                             >
                                                 <ALargeSmall className="h-4 w-4 mr-2" /> Small
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleCaps('all').run()}
+                                            >
+                                                <CaseUpper className="h-4 w-4 mr-2" /> All caps
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleCaps('small').run()}
+                                            >
+                                                <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
                                             </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
@@ -532,6 +544,20 @@ export const EditorToolbar = ({
                                     active={editor.isActive('small')}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleSmall().run()}
+                                />
+                                <TooltipButton
+                                    icon={CaseUpper}
+                                    tooltipText={`All caps (${formatForDisplay('Mod+Shift+A')})`}
+                                    active={editor.isActive('textStyle', { caps: 'all' })}
+                                    preventFocusLoss
+                                    onClick={() => editor.chain().focus().toggleCaps('all').run()}
+                                />
+                                <TooltipButton
+                                    icon={CaseSensitive}
+                                    tooltipText="Small caps"
+                                    active={editor.isActive('textStyle', { caps: 'small' })}
+                                    preventFocusLoss
+                                    onClick={() => editor.chain().focus().toggleCaps('small').run()}
                                 />
                             </div>
 
