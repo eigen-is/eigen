@@ -14,7 +14,6 @@ import {
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -22,6 +21,7 @@ import * as collabSchema from '../../lib/collab/schema';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
+import { openZip } from '../../lib/core/zip';
 import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -778,7 +778,7 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '87d876f26660b097e8aa472ebcf3fc8aceae880f4a7de55b0bd001bf53b458f6';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '87d876f26660b097e8aa472ebcf3fc8aceae880f4a7de55b0bd001bf53b458f6';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '2ed332f8c234d467b5cdb3985dca57cc32d56505db6f86c41162ac57a6e5130d';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '206ea61b5647d3f54cdc7c8bf6e95f528b11219e7819eb62c372133356346f20';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';
@@ -962,10 +962,11 @@ describe('document transform (eigendoc)', () => {
             },
             EXPORT_OPTIONS,
         );
-        const zip = await JSZip.loadAsync(exportBytes(response));
-        const part = (pattern: RegExp) => zip.file(pattern)[0]?.async('nodebuffer') ?? Buffer.alloc(0);
-        const xml = await part(/^word\/media\/.*\.svg$/);
-        const png = await part(/^word\/media\/.*\.png$/);
+        const zip = openZip(new Uint8Array(exportBytes(response)));
+        const part = (pattern: RegExp) =>
+            Buffer.from(zip.read(zip.names().find((name) => pattern.test(name)) ?? '') ?? []);
+        const xml = part(/^word\/media\/.*\.svg$/);
+        const png = part(/^word\/media\/.*\.png$/);
         expect(xml.toString('utf8')).toContain('a b');
         const raw = (bytes: Buffer) => sharp(bytes).ensureAlpha().raw().toBuffer();
         expect((await raw(png)).equals(await raw(xml))).toBe(true);
