@@ -45,24 +45,24 @@ export type ParaProps = {
 export const TOGGLES = ['bold', 'italic', 'strike'] as const;
 
 // ST_HighlightColor, the only names Word draws.
-const HIGHLIGHT_COLORS: Record<string, string> = {
-    yellow: 'FFFF00',
-    green: '00FF00',
-    cyan: '00FFFF',
-    magenta: 'FF00FF',
-    blue: '0000FF',
-    red: 'FF0000',
-    darkBlue: '000080',
-    darkCyan: '008080',
-    darkGreen: '008000',
-    darkMagenta: '800080',
-    darkRed: '800000',
-    darkYellow: '808000',
-    darkGray: '808080',
-    lightGray: 'C0C0C0',
-    black: '000000',
-    white: 'FFFFFF',
-};
+const HIGHLIGHT_COLORS = new Map([
+    ['yellow', 'FFFF00'],
+    ['green', '00FF00'],
+    ['cyan', '00FFFF'],
+    ['magenta', 'FF00FF'],
+    ['blue', '0000FF'],
+    ['red', 'FF0000'],
+    ['darkBlue', '000080'],
+    ['darkCyan', '008080'],
+    ['darkGreen', '008000'],
+    ['darkMagenta', '800080'],
+    ['darkRed', '800000'],
+    ['darkYellow', '808000'],
+    ['darkGray', '808080'],
+    ['lightGray', 'C0C0C0'],
+    ['black', '000000'],
+    ['white', 'FFFFFF'],
+]);
 
 // Six hex digits or nothing: `auto`, a theme name or a typo is an explicit none.
 function hexColor(value: string | undefined): string | undefined {
@@ -107,7 +107,7 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 props.color = hexColor(w(child, 'val'));
                 break;
             case 'highlight':
-                props.highlight = HIGHLIGHT_COLORS[w(child, 'val') ?? 'none'] ?? '';
+                props.highlight = HIGHLIGHT_COLORS.get(w(child, 'val') ?? 'none') ?? '';
                 break;
             case 'shd':
                 props.shading = shadingOf(child);
@@ -293,12 +293,15 @@ export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
     paragraph: [],
 };
 
+// How far a basedOn or numStyleLink chain is followed: deeper than any a person builds, and each walk stays short.
+export const MAX_CHAIN = 32;
+
+// What a style answers once its basedOn chain is merged.
+type Resolved = { run: RunProps; para: ParaProps; role: Role | undefined; code: boolean };
+
 export class Styles {
     private readonly byId = new Map<string, Style>();
-    private readonly runCache = new Map<string, RunProps>();
-    private readonly paraCache = new Map<string, ParaProps>();
-    private readonly roleCache = new Map<string, Role | null>();
-    private readonly codeCache = new Map<string, boolean>();
+    private readonly resolved = new Map<string, Resolved>();
     readonly defaultParagraph: string | undefined;
     readonly docRun: RunProps;
     readonly docPara: ParaProps;
@@ -336,50 +339,42 @@ export class Styles {
         return id === undefined ? undefined : this.byId.get(id);
     }
 
-    // Root first; a cycle stops at the first repeat.
-    private chain(id: string | undefined): Style[] {
+    // Its chain, nearest first, ends at MAX_CHAIN or at the first repeat of a cycle.
+    private resolve(id: string | undefined): Resolved {
+        let resolved = this.resolved.get(id ?? '');
+        if (resolved) return resolved;
         const chain: Style[] = [];
-        const seen = new Set<string>();
-        for (let style = this.get(id); style && !seen.has(style.id); style = this.get(style.basedOn)) {
-            seen.add(style.id);
-            chain.unshift(style);
-        }
-        return chain;
+        for (
+            let style = this.get(id);
+            style && !chain.includes(style) && chain.length < MAX_CHAIN;
+            style = this.get(style.basedOn)
+        )
+            chain.push(style);
+        const rootFirst = [...chain].reverse();
+        resolved = {
+            run: mergeRun(...rootFirst.map((style) => style.rPr)),
+            para: mergePara(...rootFirst.map((style) => style.pPr)),
+            // The nearest style in the chain that names a role.
+            role: chain.map(roleOf).find((role) => role !== undefined),
+            code: chain.some((style) => CODE_CHARACTER_NAMES.has(style.name)),
+        };
+        this.resolved.set(id ?? '', resolved);
+        return resolved;
     }
 
     run(id: string | undefined): RunProps {
-        return cached(this.runCache, id ?? '', () => mergeRun(...this.chain(id).map((style) => style.rPr)));
+        return this.resolve(id).run;
     }
 
     para(id: string | undefined): ParaProps {
-        return cached(this.paraCache, id ?? '', () => mergePara(...this.chain(id).map((style) => style.pPr)));
+        return this.resolve(id).para;
     }
 
-    // The nearest style in the chain that names a role.
     role(id: string | undefined): Role | undefined {
-        const role = cached(this.roleCache, id ?? '', () => {
-            for (const style of this.chain(id).reverse()) {
-                const role = roleOf(style);
-                if (role) return role;
-            }
-            return null;
-        });
-        return role ?? undefined;
+        return this.resolve(id).role;
     }
 
     isCodeCharacter(id: string | undefined): boolean {
-        return cached(this.codeCache, id ?? '', () =>
-            this.chain(id).some((style) => CODE_CHARACTER_NAMES.has(style.name)),
-        );
+        return this.resolve(id).code;
     }
-}
-
-// Every lookup walks a chain as long as the file makes it, so each answer is computed once.
-function cached<T>(cache: Map<string, T>, key: string, compute: () => T): T {
-    let value = cache.get(key);
-    if (value === undefined) {
-        value = compute();
-        cache.set(key, value);
-    }
-    return value;
 }

@@ -1,7 +1,7 @@
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { W_NS } from '../../export/doc/ooxml';
 import { int, is, w, wChild } from './package';
-import { readParaProps, type Styles } from './styles';
+import { MAX_CHAIN, readParaProps, type Styles } from './styles';
 
 // Word's counters, emulated in document order: lists sharing a definition continue, a start override restarts once.
 
@@ -67,14 +67,15 @@ export class Numbering {
 
     // A numbering style's abstractNum holds no levels of its own: it links to the style, whose numPr names the real one.
     private abstractOf(numId: string): { id: string; levels: Map<number, Level> } | undefined {
-        const seen = new Set<string>();
+        const seen = [numId];
         for (let id = numId; ; ) {
-            seen.add(id);
             const num = this.nums.get(id);
             const abstract = num && this.abstracts.get(num.abstractId);
             if (!num || !abstract) return undefined;
             const linked = abstract.styleLink && this.styles.para(abstract.styleLink).numId;
-            if (!linked || seen.has(linked)) return { id: num.abstractId, levels: abstract.levels };
+            if (!linked || seen.includes(linked) || seen.length === MAX_CHAIN)
+                return { id: num.abstractId, levels: abstract.levels };
+            seen.push(linked);
             id = linked;
         }
     }
@@ -94,7 +95,7 @@ export class Numbering {
         const startKey = `${numId}:${ilvl}`;
         const current = counters[ilvl];
         if (override?.start !== undefined && !this.started.has(startKey)) counters[ilvl] = override.start;
-        else counters[ilvl] = current === undefined ? level.start : current + 1;
+        else counters[ilvl] = current === undefined ? level.start : current < MAX_START ? current + 1 : 1;
         this.started.add(startKey);
         for (let deeper = ilvl + 1; deeper <= MAX_LEVEL; deeper++) {
             const restart = (num.overrides.get(deeper)?.level ?? abstract.levels.get(deeper))?.restart;
@@ -106,7 +107,7 @@ export class Numbering {
             ordered: level.format !== 'bullet',
             format: level.format,
             number: counters[ilvl] ?? level.start,
-            // Text and level numbers alternate; building stops at the cap, so a long lvlText costs what a short one does.
+            // Text and level numbers alternate; building stops at the cap, as a letter count grows with every item.
             label: () => {
                 let label = '';
                 for (const [index, piece] of level.text.split(/%([1-9])/).entries()) {
@@ -137,7 +138,8 @@ function readLevel(lvl: XmlElement): Level {
     return {
         start: startOf(wChild(lvl, 'start')) ?? 1,
         format: w(wChild(lvl, 'numFmt'), 'val') ?? 'decimal',
-        text: w(wChild(lvl, 'lvlText'), 'val') ?? '',
+        // Cut once, so a long lvlText costs each label what a short one does.
+        text: (w(wChild(lvl, 'lvlText'), 'val') ?? '').slice(0, MAX_LABEL_CHARS),
         indLeft: readParaProps(wChild(lvl, 'pPr')).indLeft,
         restart: int(w(wChild(lvl, 'lvlRestart'), 'val')),
         suffix: w(wChild(lvl, 'suff'), 'val') ?? 'tab',

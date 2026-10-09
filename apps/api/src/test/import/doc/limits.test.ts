@@ -251,6 +251,15 @@ describe('structure', () => {
         expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
     }, 20_000);
 
+    test('a 4 MB lvlText costs a heading what a short one does', async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="${'%1'.repeat(2_000_000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
+        const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
+        const started = performance.now();
+        const json = await imported(heading.repeat(200), { numbering });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'heading')).toHaveLength(200);
+    }, 30_000);
+
     test('a footnote that references itself, or one that references it back, is read once', async () => {
         const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(1)}${noteRef(3)}`), {
             footnotes: [
@@ -304,6 +313,43 @@ describe('structure', () => {
         expect(texts(json)).toEqual(['Core']);
     }, 20_000);
 
+    test('a 10,000-deep basedOn chain costs each paragraph style no more than a short one', async () => {
+        const count = 10_000;
+        const styles = Array.from(
+            { length: count },
+            (_, index) =>
+                `<w:style w:type="paragraph" w:styleId="s${index}">${index > 0 ? `<w:basedOn w:val="s${index - 1}"/>` : '<w:rPr><w:b/></w:rPr>'}</w:style>`,
+        ).join('');
+        const body = Array.from({ length: 300 }, (_, index) =>
+            paragraph(run('Text'), `<w:pStyle w:val="s${count - 1 - index}"/>`),
+        ).join('');
+        const started = performance.now();
+        const json = await imported(body, { styles });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'paragraph')).toHaveLength(300);
+    }, 60_000);
+
+    test('a 5,000-link numStyleLink chain is walked once, not per item', async () => {
+        const links = 5000;
+        const chain = Array.from({ length: links }, (_, index) => 10 + index);
+        const numbering = chain
+            .map(
+                (id) =>
+                    `<w:num w:numId="${id}"><w:abstractNumId w:val="${id}"/></w:num><w:abstractNum w:abstractNumId="${id}"><w:numStyleLink w:val="S${id}"/></w:abstractNum>`,
+            )
+            .join('');
+        const styles = chain
+            .map(
+                (id) =>
+                    `<w:style w:type="numbering" w:styleId="S${id}"><w:pPr><w:numPr><w:numId w:val="${id + 1}"/></w:numPr></w:pPr></w:style>`,
+            )
+            .join('');
+        const body = paragraph(run('Item'), ordered(10)).repeat(10_000);
+        const started = performance.now();
+        await imported(body, { numbering, styles });
+        expect(performance.now() - started).toBeLessThan(2000);
+    }, 60_000);
+
     test('fields left open cost each run what one field does', async () => {
         const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
         const body = paragraph(`<w:r>${open.repeat(40_000)}${'<w:t>x</w:t>'.repeat(40_000)}</w:r>`);
@@ -325,10 +371,13 @@ describe('values', () => {
         expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['color'])).toEqual(['#c0392b']);
     });
 
-    test.each(['purple', 'none'])('w:highlight %s is no highlight', async (value) => {
-        const json = await imported(paragraph(run('Text', `<w:highlight w:val="${value}"/>`)));
-        expect(marksOfType(json, 'highlight')).toEqual([]);
-    });
+    test.each(['purple', 'none', 'valueOf', 'hasOwnProperty', '__proto__'])(
+        'w:highlight %s is no highlight',
+        async (value) => {
+            const json = await imported(paragraph(run('Text', `<w:highlight w:val="${value}"/>`)));
+            expect(marksOfType(json, 'highlight')).toEqual([]);
+        },
+    );
 
     test('a named highlight and a six-hex shading are highlights', async () => {
         const json = await imported(
@@ -352,6 +401,12 @@ describe('values', () => {
     ])('w:start %s starts the list at %d', async (start, expected) => {
         const json = await imported(paragraph(run('Item'), ordered(5)), { numbering: numberedFrom(start) });
         expect(nodesOfType(json, 'orderedList')[0]?.attrs?.['start']).toBe(expected);
+    });
+
+    test('a list that continues past 32,767 starts again at 1', async () => {
+        const body = `${paragraph(run('Last'), ordered(5))}${paragraph(run('Between'))}${paragraph(run('Next'), ordered(5))}`;
+        const json = await imported(body, { numbering: numberedFrom('32767') });
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([32767, 1]);
     });
 
     test('a column width stays between the narrowest column and the text column', async () => {

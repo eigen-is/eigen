@@ -8,29 +8,29 @@ import { linkOf, pushText, type RunContext } from './runs';
 
 // The image types a part may be stored as, each under its own extension. WMF and EMF are kept though no browser or
 // sharp draws them: the figure shows its alt text in a broken image, and an export leaves it out.
-export const IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
-    'image/png': 'png',
-    'image/jpeg': 'jpeg',
-    'image/gif': 'gif',
-    'image/webp': 'webp',
-    'image/svg+xml': 'svg',
-    'image/tiff': 'tiff',
-    'image/bmp': 'bmp',
-    'image/x-wmf': 'wmf',
-    'image/x-emf': 'emf',
-};
+const IMAGE_EXTENSION_BY_MIME = new Map([
+    ['image/png', 'png'],
+    ['image/jpeg', 'jpeg'],
+    ['image/gif', 'gif'],
+    ['image/webp', 'webp'],
+    ['image/svg+xml', 'svg'],
+    ['image/tiff', 'tiff'],
+    ['image/bmp', 'bmp'],
+    ['image/x-wmf', 'wmf'],
+    ['image/x-emf', 'emf'],
+]);
 
 // A part the package gives no type takes its extension's, and image/jpg is a common misspelling; both only through
 // the allowlist, so a part declared as anything else is still never stored.
 const MIME_BY_EXTENSION = new Map([
-    ...Object.entries(IMAGE_EXTENSION_BY_MIME).map(([mime, extension]): [string, string] => [extension, mime]),
+    ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
     ['jpg', 'image/jpeg'],
 ]);
-const MIME_ALIASES: Record<string, string> = { 'image/jpg': 'image/jpeg' };
+const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
 function imageType(reader: Reader, path: string): string | undefined {
     const declared = contentTypeOf(reader.pkg, path);
-    if (declared) return MIME_ALIASES[declared] ?? declared;
+    if (declared) return MIME_ALIASES.get(declared) ?? declared;
     return MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
 }
 
@@ -44,7 +44,7 @@ function mediaName(reader: Reader, path: string): string | undefined {
     const known = reader.imageNames.get(path);
     if (known) return known;
     const contentType = imageType(reader, path);
-    const extension = contentType && IMAGE_EXTENSION_BY_MIME[contentType];
+    const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
     if (!contentType || !extension || !reader.pkg.zip.entry(path)) return undefined;
     const name = `image-${reader.images.length}.${extension}`;
     reader.images.push({ name, path, contentType });
@@ -167,11 +167,17 @@ function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, str
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 
-const PX_PER_UNIT: Record<string, number> = { px: 1, pt: 4 / 3, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
+const PX_PER_UNIT = new Map([
+    ['px', 1],
+    ['pt', 4 / 3],
+    ['in', 96],
+    ['cm', 96 / 2.54],
+    ['mm', 96 / 25.4],
+]);
 
 function vmlWidthPx(style: string): number | null {
     const match = style.match(/(?:^|;)\s*width\s*:\s*([\d.]+)(pt|px|in|cm|mm)?/i);
     if (!match) return null;
-    const px = Number(match[1]) * (PX_PER_UNIT[(match[2] ?? 'px').toLowerCase()] ?? 1);
+    const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
     return Number.isFinite(px) && px > 0 ? widthPx(px) : null;
 }
