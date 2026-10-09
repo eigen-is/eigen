@@ -211,6 +211,29 @@ describe('links', () => {
         expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['color'])).toEqual(['#ff0000']);
     });
 
+    // Word draws a custom Hyperlink style's color and underline; only a known link look is the editor's to draw.
+    test("a Hyperlink style in a color of its own keeps its color and underline; Word's link look leaves the paragraph's", async () => {
+        const hyperlink = (id: string, color: string) =>
+            `<w:style w:type="character" w:styleId="${id}"><w:name w:val="${id}"/><w:rPr><w:color ${color}/><w:u w:val="single"/></w:rPr></w:style>`;
+        const linked = (text: string, style: string) =>
+            `<w:hyperlink r:id="rId9">${run(text, `<w:rStyle w:val="${style}"/>`)}</w:hyperlink>`;
+        const json = await imported(
+            paragraph(
+                `${linked('Pink', 'Hyperlink')}${linked('Word', 'WordLink')}${linked('Old', 'OldLink')}${linked('Navy', 'InternetLink')}${linked('Theme', 'ThemeLink')}`,
+                '<w:pStyle w:val="Red"/>',
+            ),
+            {
+                styles: `<w:style w:type="paragraph" w:styleId="Red"><w:name w:val="Red"/><w:rPr><w:color w:val="FF0000"/></w:rPr></w:style>${hyperlink('Hyperlink', 'w:val="E91D63"')}${hyperlink('WordLink', 'w:val="0563C1"')}${hyperlink('OldLink', 'w:val="0000FF"')}${hyperlink('InternetLink', 'w:val="000080"')}${hyperlink('ThemeLink', 'w:val="467886" w:themeColor="hyperlink"')}`,
+                rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+            },
+        );
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Pink', '#e91d63'],
+            ['WordOldNavyTheme', '#ff0000'],
+        ]);
+        expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Pink']);
+    });
+
     test('a HYPERLINK field links its result and drops its code', async () => {
         const json = await imported(
             paragraph(

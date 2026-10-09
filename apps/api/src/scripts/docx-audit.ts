@@ -42,8 +42,8 @@ import {
     type Script,
 } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { runText, SMALL_PRINT } from '../lib/import/doc/runs';
-import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+import { LINK_STYLE_COLORS, runText, SMALL_PRINT } from '../lib/import/doc/runs';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES, LINK_THEME_COLORS } from '../lib/import/doc/styles';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -745,7 +745,14 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             return (!!byCharacter && on(byCharacter)) !== (!!byParagraph && on(byParagraph));
         };
         const linked = context.link || context.scope.fields.some((field) => field.link);
-        const own = linked ? direct : sources;
+        // A link style in a color of its own is a look Word draws; the link look is the link's.
+        const styleColor = first(characterRuns, 'color');
+        const styleHex = val(styleColor)?.toUpperCase() ?? '';
+        const ownLook =
+            /^[0-9A-F]{6}$/.test(styleHex) &&
+            !LINK_STYLE_COLORS.has(styleHex) &&
+            !LINK_THEME_COLORS.has((styleColor && xmlAttr(styleColor, W_NS, 'themeColor')) ?? '');
+        const own = linked && !ownLook ? direct : sources;
         // MS-OI29500 2.1.100: a w:u without w:val takes the style hierarchy's, and none at its end.
         const underline = own.map((source) => val(child(source, 'u'))).find((value) => value !== undefined);
         const vertAlign = val(first(sources, 'vertAlign'));
@@ -1450,7 +1457,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',

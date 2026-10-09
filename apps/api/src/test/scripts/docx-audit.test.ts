@@ -374,6 +374,24 @@ describe('both sides', () => {
         expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
     });
 
+    // A link style in a color of its own is Word's look; one in the link look is the link's.
+    test('a link style in a color of its own counts as color and underline on both sides, the link look on neither', async () => {
+        const style = (id: string, color: string) =>
+            `<w:style w:type="character" w:styleId="${id}"><w:name w:val="${id}"/><w:rPr><w:color w:val="${color}"/><w:u w:val="single"/></w:rPr></w:style>`;
+        const linked = (text: string, id: string) =>
+            `<w:hyperlink r:id="rId3">${run(text, `<w:rStyle w:val="${id}"/>`)}</w:hyperlink>`;
+        const docx = await buildDocxWithBody(
+            `<w:p>${linked('pink', 'Pink')}${run(' ')}${linked('blue', 'Blue')}</w:p>`,
+            {
+                styles: `${style('Pink', 'E91D63')}${style('Blue', '0000FF')}`,
+            },
+        );
+        const source = auditSource(docx);
+        expect([source.marks.get('color'), source.marks.get('underline')]).toEqual([['pink'], ['pink']]);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['color']?.invented, features['underline']?.invented]).toEqual([0, 0]);
+    });
+
     const fontRun = (text: string, font: string) => run(text, `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`);
 
     // A body in `font` with one word in `other`, read by the audit and imported by the reader.

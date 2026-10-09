@@ -284,6 +284,10 @@ const LINK_LOOKS = new Map([
     ['0563C1', true],
 ]);
 
+// A link style's colors that are the link look: those, and the defaults of Word's Hyperlink style before themes and of
+// LibreOffice's Internet Link. A link style in any other color is a look of its own, which Word draws.
+export const LINK_STYLE_COLORS = new Set([...LINK_LOOKS.keys(), '0000FF', '000080']);
+
 // Word resolves a run's look from the defaults, the table style, the paragraph style, the character style and the
 // run itself, the toggles of the two styles flipping each other. A look the paragraph's node already draws is no mark.
 function marksOf(
@@ -297,8 +301,10 @@ function marksOf(
     const absorbed = ABSORBED[role.kind];
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
-    // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look.
-    if (link) {
+    // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
+    // a link style in a color of its own.
+    const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
+    if (link && !ownLook) {
         delete charRun.color;
         delete charRun.linkColor;
         delete charRun.underline;
