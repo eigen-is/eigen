@@ -175,6 +175,10 @@ The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later
 
 `from-docx.ts` converts through mammoth, sanitizes with DOMPurify and parses with the eigendoc schema. A Word page break splits its paragraph on the way in ([DOCS.md](DOCS.md#a-word-page-break-splits-its-paragraph-on-import)). `writeEigendocUpdateToYjs` clears the fragment first, so an import replaces rather than appends. The images are written after the commit under deterministic names (`image-0.png`, …), so a repeat import overwrites them instead of failing after the content committed.
 
+## An imported doc is stored as the editor leaves it on open
+
+The editor repairs some content the moment it loads: prosemirror-tables pads a row short of its table's columns, and on the next pass gives the new cells their column's width, and StarterKit's TrailingNode appends an empty paragraph to a doc that ends in anything else. Each repair is a Yjs update nobody typed, and two people opening a fresh import together write it twice. So `importDocxToEigendocUpdate` (`import/doc/transform.ts`) runs `fixTables` until it finds nothing and ends the doc in a paragraph before it encodes the update. The reader avoids the ragged rows in the first place: `w:gridAfter` gets a filler cell as `w:gridBefore` does, and a row of vMerge continuations only is dropped with the cells above spanning one row less. `apps/api/src/test/import/doc/transform.test.ts` opens the stored doc with the editor's plugins and expects no change.
+
 ## Contacts and calendar export splice stored bytes
 
 `POST /contacts/:ownerId/export` concatenates the stored vCards and `POST /calendar/:ownerId/export` splices the stored VCALENDAR lines. There is no renderer, Worker or sanitizer, because the stored bytes are already the format. See [CONTACTS.md](CONTACTS.md#import-replays-each-card-through-the-carddav-put) and [CALENDAR.md](CALENDAR.md#export-splices-the-stored-lines).

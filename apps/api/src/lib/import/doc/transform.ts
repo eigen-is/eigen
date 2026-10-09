@@ -1,4 +1,7 @@
-import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
+import type { Node } from '@tiptap/pm/model';
+import { EditorState } from '@tiptap/pm/state';
+import { fixTables } from '@tiptap/pm/tables';
+import { prosemirrorToYDoc } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import {
     type DocImportWorkerResult,
@@ -18,7 +21,7 @@ export function importDocxToEigendocUpdate(
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
     const { json, images, warnings } = docxToPmJson(Buffer.from(data), { publicOrigin });
 
-    const tempDoc = prosemirrorJSONToYDoc(docSchema, json, 'default');
+    const tempDoc = prosemirrorToYDoc(asOpened(docSchema.nodeFromJSON(json)), 'default');
     const update = Y.encodeStateAsUpdate(tempDoc);
     tempDoc.destroy();
 
@@ -31,4 +34,15 @@ export function importDocxToEigendocUpdate(
         })),
         warnings,
     };
+}
+
+// The doc as the editor leaves it on open, or the first open writes an edit nobody made, twice when two open it
+// together: prosemirror-tables pads a ragged table and then gives the new cells their column's width, and
+// TrailingNode ends the doc in a paragraph.
+function asOpened(doc: Node): Node {
+    let state = EditorState.create({ doc });
+    for (let tr = fixTables(state); tr; tr = fixTables(state)) state = state.apply(tr);
+    const { paragraph } = docSchema.nodes;
+    if (state.doc.lastChild?.type === paragraph) return state.doc;
+    return state.doc.copy(state.doc.content.addToEnd(paragraph.create()));
 }

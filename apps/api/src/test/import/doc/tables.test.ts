@@ -202,6 +202,46 @@ describe('merges', () => {
         ]);
     });
 
+    // A row of nothing but continuations has no cell of its own to hold, so the cells above stop short of it.
+    test('a row of vMerge continuations only is dropped, and the cells above span one row less', async () => {
+        const body = table([
+            row([cell('A', '<w:vMerge w:val="restart"/>'), cell('B', '<w:vMerge w:val="restart"/>')]),
+            row([cell('', '<w:vMerge/>'), cell('', '<w:vMerge/>')]),
+            row([cell('C'), cell('D')]),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => node.attrs?.['rowspan']),
+            ),
+        ).toEqual([
+            [1, 1],
+            [1, 1],
+        ]);
+    });
+
+    test('w:gridAfter fills the columns a row leaves empty at its end, as w:gridBefore does at its start', async () => {
+        const body = table([
+            row([cell('A')], '<w:gridAfter w:val="1"/>'),
+            row([cell('B')], '<w:gridBefore w:val="1"/>'),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['colwidth']]),
+            ),
+        ).toEqual([
+            [
+                [1, [200]],
+                [1, [200]],
+            ],
+            [
+                [1, [200]],
+                [1, [200]],
+            ],
+        ]);
+    });
+
     test('a cell whose paragraphs share one alignment is an aligned cell', async () => {
         const centered = `<w:tc>${paragraph(run('a'), '<w:jc w:val="center"/>')}${paragraph(run('b'), '<w:jc w:val="center"/>')}</w:tc>`;
         const { json } = await importDocxBody(table([row([centered, cell('c')])]));
