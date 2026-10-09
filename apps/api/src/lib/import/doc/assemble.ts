@@ -177,7 +177,10 @@ function assignQuotes(items: Item[]): void {
     for (const item of items) {
         if ((item.kind === 'table' || item.kind === 'hr') && !(open && indentedUnder(item.indent, open.indLeft)))
             open = undefined;
-        if (item.kind !== 'para') continue;
+        if (item.kind !== 'para') {
+            previous = undefined;
+            continue;
+        }
         if (item.list || item.task) open = item;
         else if (item.role.kind === 'code') {
             codeDepth(item, open, previous);

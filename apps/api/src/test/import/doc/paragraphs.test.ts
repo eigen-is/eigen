@@ -192,6 +192,15 @@ describe('indented code', () => {
         expect(json.content).toEqual([{ type: 'blockquote', content: [text('Said'), code] }, text('After')]);
     });
 
+    test('after a quote and a table is code at the margin', async () => {
+        const table = `<w:tbl><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`;
+        const { json } = await importDocxBody(
+            `${paragraph(run('Said'), '<w:pStyle w:val="Quote"/>')}${table}${pre('x = 1')}`,
+            { styles: PRE },
+        );
+        expect(json.content?.map((node) => node.type)).toEqual(['blockquote', 'table', 'codeBlock']);
+    });
+
     // 567 is 1 cm, 2160 Google Docs' 1.5": each within INDENT_TOLERANCE of the writer's code box in whole quotes.
     const atIndent = (style: string, indent: number) =>
         paragraph(run('x = 1'), `<w:pStyle w:val="${style}"/><w:ind w:left="${indent}"/>`);
