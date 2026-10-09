@@ -41,7 +41,8 @@ export type Item =
     | Para
     | { kind: 'break' }
     | { kind: 'boundary' }
-    | { kind: 'hr'; indent: number }
+    // A rule's quote: the writer indents a rule in a quote to the quote's text.
+    | { kind: 'hr'; indent: number; quote?: number }
     | { kind: 'table'; node: JSONContent; indent: number }
     | { kind: 'block'; node: JSONContent; inItem?: boolean }
     | { kind: 'float'; figure: JSONContent };
@@ -186,7 +187,15 @@ function assignQuotes(items: Item[]): void {
     let previous: Para | undefined;
     let plain = 0;
     for (const item of items) {
-        // A table or rule ends a quote (depths); a page break doesn't.
+        if (item.kind === 'hr' && previous && previous.inItem === undefined) {
+            const depth = Math.round(item.indent / QUOTE_LOOK.indent);
+            const atText = Math.abs(item.indent - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE;
+            if (depth > 0 && depth <= previous.quote && atText) {
+                item.quote = depth;
+                continue;
+            }
+        }
+        // A table or a rule off the quote's text ends a quote (depths); a page break doesn't.
         if (item.kind === 'table' || item.kind === 'hr') {
             previous = undefined;
             if (!(open && indentedUnder(item.indent, open.indLeft))) open = undefined;
@@ -228,14 +237,15 @@ function codeDepth(code: Para, open: Para | undefined, previous: Para | undefine
     }
 }
 
-// A break or boundary sits in the shallower of the quotes around it; a table or rule between ends a quote.
+// A break or boundary sits in the shallower of the quotes around it; a table or a rule outside a quote ends it.
 function depths(items: Item[]): number[] {
     const nearest = (order: Item[]) => {
         let quote = 0;
         return order.map((item) => {
             const before = quote;
             if (item.kind === 'para') quote = item.quote;
-            else if (item.kind === 'table' || item.kind === 'hr') quote = 0;
+            else if (item.kind === 'hr') quote = item.quote ?? 0;
+            else if (item.kind === 'table') quote = 0;
             return before;
         });
     };
@@ -243,6 +253,7 @@ function depths(items: Item[]): number[] {
     const after = nearest([...items].reverse()).reverse();
     return items.map((item, index) => {
         if (item.kind === 'para') return item.quote;
+        if (item.kind === 'hr') return item.quote ?? 0;
         if (item.kind === 'break' || item.kind === 'boundary') return Math.min(before[index] ?? 0, after[index] ?? 0);
         return 0;
     });
