@@ -114,6 +114,37 @@ describe('links', () => {
         expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Own']);
     });
 
+    // Word 2007's theme draws a link in 0000FF, Office 2023's in 467886: the run names the theme's color as well.
+    test("a color from the theme's hyperlink colors is the link look, a link's own color is not", async () => {
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`;
+        const json = await imported(
+            paragraph(
+                `<w:hyperlink r:id="rId9">${run('New', '<w:color w:val="467886" w:themeColor="hyperlink"/><w:u w:val="single"/>')}${run('Old', '<w:color w:val="0000FF" w:themeColor="hyperlink"/><w:u w:val="single"/>')}${run('Visited', '<w:color w:val="954F72" w:themeColor="followedHyperlink"/><w:u w:val="single"/>')}${run('Own', '<w:color w:val="FF0000"/>')}</w:hyperlink>`,
+            ),
+            { rels },
+        );
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Own', '#ff0000'],
+        ]);
+        expect(marksOfType(json, 'underline')).toEqual([]);
+    });
+
+    test("the Hyperlink style's theme color leaves the paragraph's color on a link", async () => {
+        const styles =
+            '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1" w:themeColor="hyperlink"/><w:u w:val="single"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Red"><w:name w:val="Red"/><w:rPr><w:color w:val="FF0000"/></w:rPr></w:style>';
+        const json = await imported(
+            paragraph(
+                `<w:hyperlink r:id="rId9">${run('Red', '<w:rStyle w:val="Hyperlink"/>')}</w:hyperlink>`,
+                '<w:pStyle w:val="Red"/>',
+            ),
+            {
+                styles,
+                rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+            },
+        );
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['color'])).toEqual(['#ff0000']);
+    });
+
     test('a HYPERLINK field links its result and drops its code', async () => {
         const json = await imported(
             paragraph(

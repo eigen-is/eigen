@@ -246,7 +246,8 @@ export function pushText(reader: Reader, text: string, direct: RunProps, context
 type Marks = NonNullable<JSONContent['marks']>;
 
 // Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
-// Word's Hyperlink style. The editor draws its own, so on a link they are no mark.
+// Word's Hyperlink style; any color from the theme's link colors underlines too. The editor draws its own, so on a link
+// they are no mark.
 const LINK_LOOKS = new Map([
     [LINK_LOOK.color, false],
     ['1155CC', true],
@@ -268,6 +269,7 @@ function marksOf(
     // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look.
     if (link) {
         delete charRun.color;
+        delete charRun.linkColor;
         delete charRun.underline;
     }
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
@@ -295,7 +297,7 @@ function marksOf(
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
     if (props.bold) marks.push({ type: 'bold' });
     if (props.italic) marks.push({ type: 'italic' });
-    const linkLook = link ? LINK_LOOKS.get(props.color ?? '') : undefined;
+    const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });

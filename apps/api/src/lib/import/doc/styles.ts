@@ -13,6 +13,8 @@ export type RunProps = {
     strike?: boolean;
     vertAlign?: string;
     color?: string;
+    // The color is one of the theme's link colors, which Word's link look names.
+    linkColor?: boolean;
     highlight?: string;
     shading?: string;
     font?: string;
@@ -64,6 +66,8 @@ const HIGHLIGHT_COLORS = new Map([
     ['white', 'FFFFFF'],
 ]);
 
+const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
+
 // Six hex digits or nothing: `auto`, a theme name or a typo is an explicit none.
 function hexColor(value: string | undefined): string | undefined {
     if (value === undefined) return undefined;
@@ -105,6 +109,7 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 break;
             case 'color':
                 props.color = hexColor(w(child, 'val'));
+                props.linkColor = LINK_THEME_COLORS.has(w(child, 'themeColor') ?? '');
                 break;
             case 'highlight':
                 props.highlight = HIGHLIGHT_COLORS.get(w(child, 'val') ?? 'none') ?? '';
