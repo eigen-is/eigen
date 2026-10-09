@@ -1,7 +1,4 @@
-import { afterAll, afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
@@ -74,6 +71,44 @@ function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
         timeout,
     });
     expect(child.exitedDueToTimeout).toBe(false);
+    expect(child.stderr.toString()).toBe('');
+    return JSON.parse(child.stdout.toString());
+}
+
+const MB = 1024 * 1024;
+
+// A process of its own, so its peak RSS is the import's alone; a refusal reports its status.
+function measuredImport(docx: ArrayBuffer): {
+    blocks?: number;
+    texts?: number;
+    status?: number;
+    rssGrowth: number;
+    cpuMs: number;
+} {
+    const script = `
+        const { docxToPmJson } = await import(process.env.READER);
+        const bytes = Buffer.from(await Bun.stdin.arrayBuffer());
+        const peak = process.resourceUsage().maxRSS * 1024;
+        const cpu = process.cpuUsage();
+        const count = (node) => (node.type === 'text' ? 1 : 0) + (node.content ?? []).reduce((sum, child) => sum + count(child), 0);
+        let result;
+        try {
+            const { json } = docxToPmJson(bytes);
+            result = { blocks: json.content.length, texts: count(json) };
+        } catch (error) {
+            result = { status: error.status };
+        }
+        const used = process.cpuUsage(cpu);
+        console.log(JSON.stringify({
+            ...result,
+            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
+            cpuMs: (used.user + used.system) / 1000,
+        }));
+    `;
+    const child = Bun.spawnSync([process.execPath, '-e', script], {
+        env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },
+        stdin: new Uint8Array(docx),
+    });
     expect(child.stderr.toString()).toBe('');
     return JSON.parse(child.stdout.toString());
 }
@@ -243,6 +278,45 @@ describe('XML budget', () => {
         });
         const error = await rejection(() => docxToPmJson(build(parts)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+    });
+});
+
+// A run's text splits where its face or its look changes, and each piece is a node charged as an element: a piece per
+// character of 'aب' × 4.8M took 6.5 GB.
+describe('text pieces', () => {
+    test('Latin and Arabic in one face and one look are one piece', async () => {
+        const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
+        expect(result.texts).toBe(1);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    test('Arabic words in one look are one piece', async () => {
+        const result = measuredImport(await buildDocxWithBody(paragraph(run('كلمة '.repeat(1_400_000)))));
+        expect(result.texts).toBe(1);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    const alternating = 'aب'.repeat(2_000_000);
+    const faces = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Times New Roman"/>';
+    test.each([
+        ['complex bold', paragraph(run(alternating, '<w:bCs/>'))],
+        ['a complex face of its own', paragraph(run(alternating, faces))],
+        ['a complex face of its own in a code style', paragraph(run(alternating, faces), '<w:pStyle w:val="Code"/>')],
+    ])(
+        'Latin and Arabic alternating in %s past the tag budget are 413',
+        async (_, body) => {
+            const styles = '<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/></w:style>';
+            const result = measuredImport(await buildDocxWithBody(body, { styles }));
+            expect(result.status).toBe(413);
+            expect(result.rssGrowth).toBeLessThan(256 * MB);
+        },
+        30_000,
+    );
+
+    test('alternating looks within the budget keep each', async () => {
+        const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
+        expect(texts(json)).toHaveLength(2000);
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(Array(1000).fill('ب'));
     });
 });
 
@@ -643,23 +717,6 @@ function honestBody(): string {
 }
 
 describe.skipIf(!runSlow)('an honest document just under the budget', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'docx-budget-'));
-    afterAll(() => rmSync(dir, { recursive: true, force: true }));
-    // A process of its own, so its peak RSS is the import's alone.
-    const script = `
-        const { docxToPmJson } = await import(process.env.READER);
-        const bytes = Buffer.from(await Bun.file(process.env.DOCX).arrayBuffer());
-        const peak = process.resourceUsage().maxRSS * 1024;
-        const cpu = process.cpuUsage();
-        const { json } = docxToPmJson(bytes);
-        const used = process.cpuUsage(cpu);
-        console.log(JSON.stringify({
-            blocks: json.content.length,
-            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
-            cpuMs: (used.user + used.system) / 1000,
-        }));
-    `;
-
     // A Worker's stack takes a spread of no more than about 500,000 arguments.
     test('600,000 paragraphs inside one content control import in the Worker', async () => {
         const body = `<w:sdt><w:sdtContent>${'<w:p/>'.repeat(600_000)}</w:sdtContent></w:sdt>`;
@@ -677,19 +734,9 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
     }, 120_000);
 
     test('imports within 1 GB of peak RSS and 10 s of CPU', async () => {
-        const path = join(dir, 'report.docx');
-        writeFileSync(path, new Uint8Array(await buildDocxWithBody(honestBody())));
-        const child = Bun.spawnSync([process.execPath, '-e', script], {
-            env: {
-                ...process.env,
-                READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
-                DOCX: path,
-            },
-        });
-        expect(child.stderr.toString()).toBe('');
-        const result: { blocks: number; rssGrowth: number; cpuMs: number } = JSON.parse(child.stdout.toString());
+        const result = measuredImport(await buildDocxWithBody(honestBody()));
         expect(result.blocks).toBeGreaterThan(10_000);
-        expect(result.rssGrowth).toBeLessThan(1024 * 1024 * 1024);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
     }, 120_000);
 });

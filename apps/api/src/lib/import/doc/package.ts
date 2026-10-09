@@ -7,7 +7,8 @@ import { openZip, ZipError, type ZipReader } from '../../core/zip';
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
 // A tree costs per element too: 16 MB of empty paragraphs is 2.8 million of them and would take 3.5 GB. The corpus's
-// most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes.
+// most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes, and
+// a run's text piece past its first as one: the corpus's most is 1,055.
 export const MAX_DOCX_XML_TAGS = 750_000;
 
 export const DOCUMENT_TOO_LARGE = 'Document too large';
@@ -30,6 +31,8 @@ export type Package = {
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
     // A part a drawing names, read when met and charged as the others are; a damaged one is no part.
     readPart(path: string): XmlElement | undefined;
+    // A piece a run's text splits into past its first is a node, which costs what an element does.
+    chargePiece(): void;
 };
 
 // An encrypted docx is an OLE compound file holding the package as a stream of this name.
@@ -87,6 +90,10 @@ export function readPackage(bytes: Uint8Array): Package {
         endnotes: part('endnotes'),
         contentTypes,
         readPart: (path) => optional(() => readXml(zip, path, budget)),
+        chargePiece: () => {
+            budget.tags--;
+            if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        },
     };
 }
 

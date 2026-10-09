@@ -811,7 +811,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             context.paragraph.spans.push({ text: value, marks: [] });
             return;
         }
-        for (const face of byFace(value, look.fonts, look.script)) {
+        for (const face of byFace(value, look.fonts, look.script, true)) {
             const font = fontMark(face.font, fontTable);
             const shown = face.complex ? look.complexMarks : look.marks;
             const own: Feature[] = font ? [...shown, 'font'] : shown;

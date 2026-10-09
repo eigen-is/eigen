@@ -310,9 +310,11 @@ function marksOf(
         delete charRun.underline;
     }
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
-    const faces = byFace(text, full.fonts, full);
     if (full.vanish) return [];
-    if (absorbed === 'all') return faces.map((face) => ({ ...face, marks: [], small: false }));
+    if (absorbed === 'all') {
+        const faces = byFace(text, full.fonts, full, false, reader.pkg.chargePiece);
+        return faces.map((face) => ({ ...face, marks: [], small: false }));
+    }
     const own = { ...paraRun };
     for (const key of absorbed) delete own[key];
     const props = mergeRun(own, charRun, direct);
@@ -323,6 +325,14 @@ function marksOf(
                 : !!own[toggle] !== !!charRun[toggle];
         props[toggle] = direct[toggle] ?? fromStyles;
     }
+
+    const isSmall = (complex: boolean) => {
+        const size = complex ? props.sizeCs : props.size;
+        return size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
+    };
+    const complexLook =
+        !!props.boldCs !== !!props.bold || !!props.italicCs !== !!props.italic || isSmall(true) !== isSmall(false);
+    const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
@@ -347,8 +357,7 @@ function marksOf(
         ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` } }]
         : [];
     return faces.map(({ text: part, font, complex }) => {
-        const size = complex ? props.sizeCs : props.size;
-        const small = size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
+        const small = isSmall(complex);
         const shape: Marks = [];
         if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
         if (complex ? props.italicCs : props.italic) shape.push({ type: 'italic' });

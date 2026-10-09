@@ -77,25 +77,39 @@ function faceOf(fonts: Fonts | undefined, slot: (typeof FONT_SLOTS)[number]): st
     return fonts?.[slot];
 }
 
-// A run's text in the faces Word draws it in, split where the face changes or complex script, which draws in the
-// complex script's bold, italic and size, starts or ends; Latin text in one face is one piece.
+// A run's text in the faces Word draws it in, split where the face changes or, where the complex script draws in a
+// look of its own (its bold, italic and size), where complex script starts or ends; Latin text in one face is one
+// piece. split charges each piece past the first before it is built.
 export function byFace(
     text: string,
     fonts: Fonts | undefined,
     script: Script,
+    complexLook: boolean,
+    split?: () => void,
 ): { text: string; font?: string; complex: boolean }[] {
     const latin = !script.complex && !SCRIPTED.test(text) && (script.hint !== 'eastAsia' || !NON_ASCII.test(text));
     if (latin && faceOf(fonts, 'ascii') === faceOf(fonts, 'hAnsi'))
         return [{ text, font: faceOf(fonts, 'ascii'), complex: false }];
     const pieces: { text: string; font?: string; complex: boolean }[] = [];
+    let start = 0;
+    let end = 0;
     for (const char of text) {
         const slot = fontSlot(char, script);
         const font = faceOf(fonts, slot);
-        const complex = slot === 'cs';
+        const complex = complexLook && slot === 'cs';
         const last = pieces.at(-1);
-        if (last && last.font === font && last.complex === complex) last.text += char;
-        else pieces.push({ text: char, font, complex });
+        if (!last || last.font !== font || last.complex !== complex) {
+            if (last) {
+                split?.();
+                last.text = text.slice(start, end);
+                start = end;
+            }
+            pieces.push({ text: '', font, complex });
+        }
+        end += char.length;
     }
+    const last = pieces.at(-1);
+    if (last) last.text = text.slice(start);
     return pieces;
 }
 

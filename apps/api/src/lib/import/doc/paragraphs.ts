@@ -369,13 +369,14 @@ function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: strin
     const faces = descendants(p, W_NS, 'r').flatMap((run) => {
         const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
         const props = mergeRun(paraRun, styles.run(direct.style), direct);
-        return xmlElements(run).flatMap((child) =>
-            is(child, W_NS, 't') ? byFace(xmlText(child), props.fonts, props).filter((face) => face.text.trim()) : [],
-        );
+        return xmlElements(run)
+            .filter((child) => is(child, W_NS, 't'))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, false, reader.pkg.chargePiece))
+            .filter((face) => face.text.trim());
     });
     if (faces.length > 0) return faces.every((face) => mono(face.font));
     const mark = mergeRun(paraRun, readRunProps(wChild(wChild(p, 'pPr'), 'rPr'), reader.theme));
-    return mono(byFace(' ', mark.fonts, mark)[0]?.font);
+    return mono(byFace(' ', mark.fonts, mark, false)[0]?.font);
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

@@ -307,10 +307,13 @@ describe('complex script', () => {
         expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['إسبانيا', ' (Reino)']);
     });
 
-    test('in one run Arabic takes iCs and szCs, Latin i and sz', async () => {
+    test('in one run Arabic takes iCs and szCs, Latin i and sz, either splitting the run alone', async () => {
         const styles =
             '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
-        const json = await imported(paragraph(run('Spain مملكة', '<w:i/><w:szCs w:val="14"/>')), { styles });
+        const json = await imported(
+            `${paragraph(run('Spain مملكة', '<w:i/>'))}${paragraph(run('Spain مملكة', '<w:szCs w:val="14"/>'))}`,
+            { styles },
+        );
         expect(marksOfType(json, 'italic').map((mark) => mark.text)).toEqual(['Spain ']);
         expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['مملكة']);
     });
