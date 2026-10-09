@@ -27,6 +27,7 @@ const FEATURES = [
     ['heading5', 'Heading 5'],
     ['heading6', 'Heading 6'],
     ['heading7', 'Heading 7 to 9'],
+    ['numberedHeadings', 'Numbered headings'],
     ['bold', 'Bold (characters)'],
     ['italic', 'Italic (characters)'],
     ['underline', 'Underline (characters)'],
@@ -768,7 +769,10 @@ export async function auditSource(bytes: ArrayBuffer | Uint8Array): Promise<Tall
             code: look.code,
         };
         chain.carry = '';
-        const item = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
+        const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
+        // A heading can't stand in an Eigen list: its outline number survives as its text or not at all.
+        if (numbered && look.heading !== undefined) add(tally, 'numberedHeadings');
+        const item = look.heading === undefined ? numbered : undefined;
         if (item) {
             add(tally, 'listItems');
             add(tally, item.ordered ? 'orderedItems' : 'bulletItems');
@@ -937,6 +941,9 @@ const MARK_FEATURES = new Map<string | undefined, Feature>([
     ['link', 'link'],
 ]);
 
+// 1, 1.2, 1.2.3., 4), a., (b), iv., B): how Word spells a number a heading starts with.
+const NUMBER_LABEL = /^\s*(?:\d+(?:\.\d+)*[.)]?|\(?(?:[a-z]+|[A-Z]+)[.)])\s/;
+
 type Place = { depth: number; table: boolean; quote: boolean; align?: unknown };
 
 export function auditImported(json: JSONContent): Tally {
@@ -998,8 +1005,10 @@ export function auditImported(json: JSONContent): Tally {
         add(tally, 'paragraphs');
         if (!hasText) return;
         const level = node.attrs?.['level'];
-        if (node.type === 'heading' && typeof level === 'number')
+        if (node.type === 'heading' && typeof level === 'number') {
             add(tally, HEADINGS[Math.min(Math.max(level, 1), 7) - 1]);
+            if (NUMBER_LABEL.test(text)) add(tally, 'numberedHeadings');
+        }
         // A cell's alignment aligns its paragraphs.
         const alignment = ALIGNMENTS.get(String(node.attrs?.['textAlign'] ?? align));
         if (alignment) add(tally, alignment);
@@ -1166,7 +1175,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count non-space characters, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts characters in another font than the body text's, small text characters at most 85% of its size, text color characters in another color. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. Kept sums each file's min(imported, source) over the source; text and ordered item numbers match as multisets. A crash or timeout keeps nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count non-space characters, so run splitting can't skew them. Formatting a structure draws (a heading's, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark. Font family counts characters in another font than the body text's, small text characters at most 85% of its size, text color characters in another color. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading, kept when its imported text starts with a number. Kept sums each file's min(imported, source) over the source; text and ordered item numbers match as multisets. A crash or timeout keeps nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',

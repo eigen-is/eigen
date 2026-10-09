@@ -130,6 +130,23 @@ describe('source side', () => {
             0,
         ]);
     });
+
+    test('a numbered heading is a heading whose number is its text, not a list item', async () => {
+        const tally = await source(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>${run('Scope')}</w:p>`,
+        );
+        const imported = (text: string) =>
+            auditImported({
+                type: 'doc',
+                content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text }] }],
+            });
+        expect([count(tally, 'numberedHeadings'), count(tally, 'listItems'), count(tally, 'heading1')]).toEqual([
+            1, 0, 1,
+        ]);
+        expect([count(imported('1. Scope'), 'numberedHeadings'), count(imported('Scope'), 'numberedHeadings')]).toEqual(
+            [1, 0],
+        );
+    });
 });
 
 describe('both sides', () => {
