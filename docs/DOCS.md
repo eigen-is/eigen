@@ -113,6 +113,16 @@ Content wider than the text column would overflow the page and the export. So `t
 
 The `textStyle` mark stores a font's name, and renders it as a CSS stack. A doc that still holds a stack is collapsed to names by `normalizeFontFamilyMarks` when an editor with write access opens it, outside the undo history. The reasons are in [TYPOGRAPHY.md](TYPOGRAPHY.md#docs-and-the-canvas-store-a-font-name-never-a-css-stack).
 
+## Caps are an attribute of the font's mark, drawn over the letters as typed
+
+All caps and small caps are the `caps` attribute of the `textStyle` mark (`packages/lib/src/docs/eigendoc/nodes/caps.ts`), `'all'` or `'small'`, beside the font's name. The typed letters never change: the editor and every export draw the capitals with CSS, `text-transform: uppercase` and `font-variant-caps: small-caps`. So search, a plain-text copy and toggling caps off all get back what was typed, as with Word's `w:caps` and `w:smallCaps`. One attribute holds both because Word's two properties exclude each other, and where a paste or a docx sets both, all caps wins, as Word draws it. Small caps are written as the longhand, because the `font-variant` shorthand would turn the ligatures the editor switches off back on.
+
+Mod-Shift-A toggles all caps, as in Word. Small caps get no key: Word's Mod-Shift-K reaches the command palette, whose listener takes Mod+K with or without Shift (`use-palette-shortcuts.ts`).
+
+## Small caps print only in Source Serif 4
+
+A browser fakes small caps in a font that has none, so the editor, quick look and the HTML download show them in every font. WeasyPrint fakes nothing, and of the bundled fonts only Source Serif 4's upright face has small-caps glyphs (the OpenType `smcp` feature). So the PDF prints small caps in Inter, JetBrains Mono, Excalifont or Source Serif 4's italic as the letters were typed ([ROADMAP](ROADMAP.md)). All caps print in every font. Word fakes small caps itself, so the docx shows them everywhere.
+
 ## See also
 
 - [COLLAB.md](COLLAB.md): the collab document, the socket and the `loaded` gate the editor waits on
