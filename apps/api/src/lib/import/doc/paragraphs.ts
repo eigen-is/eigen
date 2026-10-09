@@ -1,11 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
-import { type XmlElement, xmlElements } from '../../core/xml';
+import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK, STYLE_NAMES, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { MAX_LEVEL, Numbering } from './numbering';
-import { alternative, int, isAlternateContent, type Package, type Part, w, wChild } from './package';
+import { alternative, descendants, int, is, isAlternateContent, type Package, type Part, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import { mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
 import { isFill, readTable } from './tables';
@@ -150,6 +150,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
+    if (role.kind === 'heading' && isBodySized(reader, p, mergeRun(styles.docRun, styles.run(styleId)).size ?? 20))
+        role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -273,6 +275,17 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     for (const item of context.pending) items.push(item);
     if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
     return items;
+}
+
+// G6: every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
+// text; the style's bold and italic then stay as marks. A run's text box is not searched.
+function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolean {
+    const sizes = descendants(p, W_NS, 'r')
+        .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
+        .map((run) => int(w(wChild(wChild(run, 'rPr'), 'sz'), 'val')));
+    return (
+        sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
+    );
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {
