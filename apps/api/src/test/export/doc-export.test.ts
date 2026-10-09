@@ -5,6 +5,7 @@ import * as Y from 'yjs';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { proseValue } from '../../lib/export/doc/prose-css';
 import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
+import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { seedEigendoc } from '../fixtures/golden-documents';
 
@@ -344,4 +345,92 @@ describe('doc export — docx SVG fallback timeout', () => {
         );
         expect(media.map(({ name, png }) => [name, png !== undefined])).toEqual([['fast.svg', true]]);
     }, 30_000);
+});
+
+function listItem(text: string, ...nested: JSONContent[]): JSONContent {
+    return { type: 'listItem', content: [paragraph(text), ...nested] };
+}
+
+function orderedList(attrs: { start?: number; type?: string }, ...items: JSONContent[]): JSONContent {
+    return { type: 'orderedList', attrs, content: items };
+}
+
+async function pdfHtml(...content: JSONContent[]): Promise<string> {
+    const doc = seededDoc({ type: 'doc', content });
+    const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+    return new TextDecoder().decode(data);
+}
+
+// WeasyPrint applies <ol start> only as a presentational hint, which the renderer leaves off, so the list's first number
+// is a counter-reset on the ol itself.
+describe('doc export — ordered lists', () => {
+    test.each(['html', 'pdf-html'] as const)(
+        '%s resets the counter on an ol that does not start at 1',
+        async (format) => {
+            const doc = seededDoc({
+                type: 'doc',
+                content: [orderedList({ start: 3 }, listItem('a')), orderedList({ start: 1 }, listItem('b'))],
+            });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const html = new TextDecoder().decode(data);
+            expect(html).toContain('<ol start="3" style="counter-reset: list-item 2">');
+            expect(html).not.toContain('list-item 0');
+            expect(html.match(/counter-reset: list-item/g)).toHaveLength(1);
+        },
+    );
+
+    test('a nested ol resets its own counter', async () => {
+        const html = await pdfHtml(orderedList({ start: 3 }, listItem('a', orderedList({ start: 5 }, listItem('b')))));
+        expect(html).toContain('list-item 2">');
+        expect(html).toContain('list-item 4">');
+    });
+
+    test.each([
+        ['a', 'lower-alpha'],
+        ['A', 'upper-alpha'],
+        ['i', 'lower-roman'],
+        ['I', 'upper-roman'],
+    ])('an ol of type %s draws %s', (type, style) => {
+        expect(proseValue(`.eigen-prose ol[type="${type}"]`, 'list-style-type')).toBe(style);
+    });
+});
+
+const weasyPrint = await isWeasyPrintAvailable();
+const launcher = Bun.which('weasyprint');
+const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
+
+// The text of every list marker WeasyPrint lays out for the page the PDF is written from.
+const MARKER_SCRIPT = `
+import sys, weasyprint
+def walk(box):
+    yield box
+    for child in getattr(box, 'children', None) or []:
+        yield from walk(child)
+for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
+    for box in walk(page._page_box):
+        if 'marker' in str(getattr(box, 'element_tag', '')) and hasattr(box, 'text'):
+            print(box.text.strip())
+`;
+
+async function markers(html: string): Promise<string[]> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    const proc = Bun.spawn([python, '-I', '-c', MARKER_SCRIPT], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
+    proc.stdin.write(html);
+    await proc.stdin.end();
+    return (await new Response(proc.stdout).text()).trim().split('\n');
+}
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
+    test('a start, a nested start and the letter and roman types are drawn', async () => {
+        const html = await pdfHtml(
+            orderedList(
+                { start: 3 },
+                listItem('a', orderedList({ start: 5, type: 'i' }, listItem('b'))),
+                listItem('c'),
+            ),
+            orderedList({ start: 2, type: 'a' }, listItem('d'), listItem('e')),
+            orderedList({ type: 'I' }, listItem('f')),
+        );
+        expect(await markers(html)).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+    }, 60_000);
 });
