@@ -94,6 +94,17 @@ describe('XML budget', () => {
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Body']);
     });
 
+    // As a malformed one does: the text is the document's, a theme only its looks.
+    test('a corrupt optional part costs its looks, not the document', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const parts = golden.names().map((name) => {
+            const data = golden.read(name) ?? new Uint8Array();
+            return name === 'word/styles.xml' ? { ...stored(name, data), crc: 0 } : stored(name, data);
+        });
+        const { json } = await docxToPmJson(build(parts));
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Body']);
+    });
+
     test('a part that inflates past its declared size is a corrupt file, 400', async () => {
         const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
         const parts = golden.names().map((name) => {

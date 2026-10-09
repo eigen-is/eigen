@@ -1,6 +1,6 @@
 import { ApiError } from '../../core/errors';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { openZip, type ZipReader } from '../../core/zip';
+import { openZip, ZipError, type ZipReader } from '../../core/zip';
 import {
     A_NS,
     CONTENT_TYPES_NS,
@@ -63,12 +63,12 @@ export function readPackage(bytes: Uint8Array): Package {
     charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
     const document = readXml(zip, documentPath, budget);
     if (!document) throw new ApiError(400, NOT_A_DOCX);
-    // A damaged optional part costs its looks, not the document.
+    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it.
     const optional = (path: string) => {
         try {
             return readXml(zip, path, budget);
         } catch (error) {
-            if (error instanceof XmlError) return undefined;
+            if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
             throw error;
         }
     };
