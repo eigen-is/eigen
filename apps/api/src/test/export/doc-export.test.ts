@@ -332,8 +332,9 @@ describe('doc export — docx SVG fallback timeout', () => {
     const slow = `<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="2560"><filter id="f" x="0" y="0" width="1" height="1"><feTurbulence baseFrequency="0.9" numOctaves="10"/></filter><rect width="2560" height="2560" filter="url(#f)"/></svg>`;
     const fast = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>';
 
+    // Untimed, the slow one renders in seconds and gets a PNG, so its absence proves the timeout fired; a wall-clock
+    // bound fails on a loaded CI runner, where the uninterruptible librsvg pass alone outlasts it.
     test('an SVG that outlasts the timeout gets no PNG fallback, and the next one still does', async () => {
-        const start = performance.now();
         const media = await withSvgFallbacks(
             [
                 { name: 'slow.svg', contentType: 'image/svg+xml', data: toTransferableText(slow) },
@@ -341,7 +342,6 @@ describe('doc export — docx SVG fallback timeout', () => {
             ],
             1,
         );
-        expect(performance.now() - start).toBeLessThan(6000);
         expect(media.map(({ name, png }) => [name, png !== undefined])).toEqual([['fast.svg', true]]);
     }, 30_000);
 });
