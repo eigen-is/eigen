@@ -21,6 +21,8 @@ export type Para = {
     inItem?: boolean;
     // A tracked deletion of the mark: accepted, the content joins the next paragraph.
     joinsNext?: boolean;
+    // The first inline is a numbered heading's number.
+    labelled?: boolean;
     empty: boolean;
     small: boolean;
     hairline: boolean;
@@ -95,7 +97,8 @@ function joinDeletedMarks(raw: Item[]): Item[] {
     return raw.filter((item, index) => {
         const next = raw[index + 1];
         if (item.kind !== 'para' || !item.joinsNext || next?.kind !== 'para') return true;
-        next.inlines = [...item.inlines, ...next.inlines];
+        const at = next.labelled ? 1 : 0;
+        next.inlines = [...next.inlines.slice(0, at), ...item.inlines, ...next.inlines.slice(at)];
         next.empty &&= item.empty;
         return false;
     });

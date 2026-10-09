@@ -238,6 +238,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
+        if (label && index === 0) para.labelled = true;
         // A framed paragraph holding only an image is a wrapped figure.
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)

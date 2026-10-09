@@ -128,6 +128,22 @@ describe('tracked changes and hidden text', () => {
         ]);
     });
 
+    test("text joined into a numbered heading follows the heading's number", async () => {
+        const numbering =
+            '<w:abstractNum w:abstractNumId="7"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="7"><w:abstractNumId w:val="7"/></w:num>';
+        const { json } = await importDocxBody(
+            `${paragraph(run('Joined '), '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>')}${paragraph(run('Title'), '<w:pStyle w:val="Heading1"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr>')}`,
+            { numbering },
+        );
+        expect(json.content).toEqual([
+            {
+                type: 'heading',
+                attrs: { level: 1, textAlign: null },
+                content: [{ type: 'text', text: '1. Joined Title' }],
+            },
+        ]);
+    });
+
     test("text joined into the body's last, empty paragraph after a table stays", async () => {
         const table = `<w:tbl><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`;
         const deleted = '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>';
