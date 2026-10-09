@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, nodesOfType } from '../../fixtures/golden-docx';
+import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
 
@@ -54,6 +54,23 @@ describe('header rows', () => {
             ['tableHeader', 'tableHeader'],
             ['tableCell', 'tableCell'],
         ]);
+    });
+});
+
+describe('table style first row', () => {
+    const styles =
+        '<w:style w:type="table" w:styleId="Grid"><w:name w:val="Grid"/><w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr></w:tblStylePr></w:style>';
+    const styled = (look: string) =>
+        table([row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])], `<w:tblStyle w:val="Grid"/>${look}`);
+
+    test.each(['1', 'true', 'on'])('w:firstRow="%s" in tblLook applies the style\'s first row look', async (value) => {
+        const { json } = await importDocxBody(styled(`<w:tblLook w:firstRow="${value}"/>`), { styles });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+    });
+
+    test('w:firstRow="false" in tblLook does not', async () => {
+        const { json } = await importDocxBody(styled('<w:tblLook w:firstRow="false"/>'), { styles });
+        expect(marksOfType(json, 'bold')).toEqual([]);
     });
 });
 

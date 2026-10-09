@@ -7,7 +7,7 @@ import { rootRelativeHref } from '../../export/doc/render';
 import type { Item } from './assemble';
 import { fontMark, MONOSPACE_FONT } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
-import { alternative, descendants, isAlternateContent, onOff, w, wChild } from './package';
+import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { ABSORBED, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
 
@@ -79,7 +79,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
                 if (checkbox) {
                     const checked = xmlChild(checkbox, W14_NS, 'checked');
                     const value = checked && xmlAttr(checked, W14_NS, 'val');
-                    context.pieces.push({ kind: 'checkbox', checked: value === '1' || value === 'true' });
+                    context.pieces.push({ kind: 'checkbox', checked: isOn(value) === true });
                     break;
                 }
                 walkInline(reader, xmlElements(wChild(element, 'sdtContent') ?? element), context);

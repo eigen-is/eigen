@@ -2,7 +2,7 @@ import { type XmlElement, xmlElements } from '../../core/xml';
 import { codeBlockLanguage, STYLE_NAMES, W_NS } from '../../export/doc/ooxml';
 import { lowlight } from '../../export/doc/render';
 import type { Theme } from './docx-fonts';
-import { int, is, onOff, w, wChild } from './package';
+import { int, is, isOn, onOff, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type RunProps = {
@@ -329,8 +329,7 @@ export class Styles {
                 rPr: readRunProps(wChild(element, 'rPr'), theme),
                 firstRowRun: firstRow && readRunProps(wChild(firstRow, 'rPr'), theme),
             });
-            if (type === 'paragraph' && ['1', 'true', 'on'].includes(w(element, 'default') ?? ''))
-                defaultParagraph ??= id;
+            if (type === 'paragraph' && isOn(w(element, 'default'))) defaultParagraph ??= id;
         }
         this.defaultParagraph = defaultParagraph ?? (this.byId.has('Normal') ? 'Normal' : undefined);
     }

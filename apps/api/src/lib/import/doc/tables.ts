@@ -3,7 +3,7 @@ import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TWIPS_PER_PX, W_NS } from '../../export/doc/ooxml';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
-import { int, is, onOff, w, wChild } from './package';
+import { int, is, isOn, onOff, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { mergeRun, shadingOf } from './styles';
 
@@ -28,7 +28,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
     const firstRowOn = look
-        ? w(look, 'firstRow') === '1' || (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0
+        ? isOn(w(look, 'firstRow')) || (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
     const cellItems = (cell: XmlElement, rowIndex: number): Item[] => {

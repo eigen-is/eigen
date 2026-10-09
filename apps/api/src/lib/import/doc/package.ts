@@ -245,11 +245,17 @@ export function is(element: XmlElement, ns: string, local: string): boolean {
     return element.ns === ns && element.local === local;
 }
 
-// ST_OnOff: a bare element is on.
+// ST_OnOff attribute value: 1, true, on / 0, false, off; anything else is no answer.
+export function isOn(value: string | undefined): boolean | undefined {
+    if (value === undefined) return undefined;
+    if (['1', 'true', 'on'].includes(value)) return true;
+    return ['0', 'false', 'off'].includes(value) ? false : undefined;
+}
+
+// A bare element is on.
 export function onOff(element: XmlElement | undefined): boolean | undefined {
     if (!element) return undefined;
-    const value = w(element, 'val');
-    return value === undefined || !['0', 'false', 'off', 'none'].includes(value);
+    return isOn(w(element, 'val')) ?? true;
 }
 
 export function int(value: string | undefined): number | undefined {
