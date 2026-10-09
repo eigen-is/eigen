@@ -1,5 +1,5 @@
+import { spellNumber, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { W_NS } from '../../export/doc/ooxml';
 import { int, is, w, wChild } from './package';
 import { MAX_CHAIN, readParaProps, type Styles } from './styles';
 
@@ -116,7 +116,7 @@ export class Numbering {
                     label +=
                         index % 2 === 0
                             ? piece
-                            : formatNumber(shown[counter] ?? abstract.levels.get(counter)?.start ?? 1, format);
+                            : spellNumber(shown[counter] ?? abstract.levels.get(counter)?.start ?? 1, format);
                     if (label.length >= MAX_LABEL_CHARS) break;
                 }
                 return label.slice(0, MAX_LABEL_CHARS);
@@ -144,56 +144,4 @@ function readLevel(lvl: XmlElement): Level {
         restart: int(w(wChild(lvl, 'lvlRestart'), 'val')),
         suffix: w(wChild(lvl, 'suff'), 'val') ?? 'tab',
     };
-}
-
-function formatNumber(value: number, format: string): string {
-    switch (format) {
-        case 'lowerLetter':
-        case 'upperLetter': {
-            const index = Math.max(1, value) - 1;
-            const letters = String.fromCharCode(97 + (index % 26)).repeat(Math.floor(index / 26) + 1);
-            return format === 'upperLetter' ? letters.toUpperCase() : letters;
-        }
-        case 'lowerRoman':
-        case 'upperRoman': {
-            const roman = toRoman(value);
-            return format === 'upperRoman' ? roman : roman.toLowerCase();
-        }
-        case 'decimalZero':
-            return value < 10 ? `0${value}` : String(value);
-        case 'bullet':
-        case 'none':
-            return '';
-        default:
-            return String(value);
-    }
-}
-
-const ROMAN_NUMERALS: [number, string][] = [
-    [1000, 'M'],
-    [900, 'CM'],
-    [500, 'D'],
-    [400, 'CD'],
-    [100, 'C'],
-    [90, 'XC'],
-    [50, 'L'],
-    [40, 'XL'],
-    [10, 'X'],
-    [9, 'IX'],
-    [5, 'V'],
-    [4, 'IV'],
-    [1, 'I'],
-];
-
-function toRoman(value: number): string {
-    if (value <= 0 || value >= 4000) return String(value);
-    let rest = value;
-    let roman = '';
-    for (const [amount, numeral] of ROMAN_NUMERALS) {
-        while (rest >= amount) {
-            roman += numeral;
-            rest -= amount;
-        }
-    }
-    return roman;
 }

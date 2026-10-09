@@ -1,14 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { common, createLowlight } from 'lowlight';
+import { lowlight } from '../../document/lowlight';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
 type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
-
-// The backend's one highlighter; the main thread imports this module lazily, so its grammars load only to highlight.
-export const lowlight = createLowlight(common);
 
 export function renderCodeBlockNode(node: {
     attrs: { language?: string | null };
@@ -123,13 +120,6 @@ export function withTrailingBreaks(node: JSONContent): JSONContent {
 export function absoluteHref(href: string, publicOrigin: string | undefined): string {
     if (href.startsWith('//')) return `https:${href}`;
     return publicOrigin && href.startsWith('/') ? `${publicOrigin}${href}` : href;
-}
-
-// The import's inverse: a link into this instance comes back root-relative, never as `//host`, which leaves it.
-export function rootRelativeHref(href: string, publicOrigin: string | undefined): string {
-    if (!publicOrigin || !href.startsWith(publicOrigin)) return href;
-    const path = href.slice(publicOrigin.length);
-    return /^\/(?![/\\])/.test(path) ? path : href;
 }
 
 export function withAbsoluteLinks(node: JSONContent, publicOrigin: string | undefined): JSONContent {

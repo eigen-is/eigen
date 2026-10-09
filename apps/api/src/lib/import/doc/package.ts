@@ -1,17 +1,7 @@
 import { ApiError } from '../../core/errors';
+import { CONTENT_TYPES_NS, MC_NS, PACKAGE_RELATIONSHIPS_NS, toTransitional, W_NS } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
-import {
-    A_NS,
-    CONTENT_TYPES_NS,
-    M_NS,
-    MC_NS,
-    PACKAGE_RELATIONSHIPS_NS,
-    PIC_NS,
-    R_NS,
-    W_NS,
-    WP_NS,
-} from '../../export/doc/ooxml';
 
 // The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
@@ -190,28 +180,6 @@ function resolvePath(base: string, target: string): string {
         else if (segment !== '.' && segment !== '') parts.push(segment);
     }
     return parts.join('/');
-}
-
-// Strict OOXML names the same vocabulary in other namespaces; read as transitional, it reads the same.
-const STRICT_NAMESPACES = new Map([
-    ['http://purl.oclc.org/ooxml/wordprocessingml/main', W_NS],
-    ['http://purl.oclc.org/ooxml/officeDocument/relationships', R_NS],
-    ['http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing', WP_NS],
-    ['http://purl.oclc.org/ooxml/drawingml/main', A_NS],
-    ['http://purl.oclc.org/ooxml/drawingml/picture', PIC_NS],
-    ['http://purl.oclc.org/ooxml/officeDocument/math', M_NS],
-]);
-
-export function toTransitional(root: XmlElement): void {
-    const stack = [root];
-    for (let element = stack.pop(); element; element = stack.pop()) {
-        element.ns = STRICT_NAMESPACES.get(element.ns) ?? element.ns;
-        if (Object.values(element.attributeNs).some((ns) => STRICT_NAMESPACES.has(ns)))
-            element.attributeNs = Object.fromEntries(
-                Object.entries(element.attributeNs).map(([name, ns]) => [name, STRICT_NAMESPACES.get(ns) ?? ns]),
-            );
-        for (const child of xmlElements(element)) stack.push(child);
-    }
 }
 
 // mc:Choice prefixes whose content this reader understands; any other Choice falls back.

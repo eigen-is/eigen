@@ -1,6 +1,7 @@
 import { bundledFont, EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { A_NS, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlChild, xmlElements } from '../../core/xml';
-import { A_NS, BODY, W_NS } from '../../export/doc/ooxml';
+import { BODY } from '../../export/doc/looks';
 import { descendants, is, w, wChild } from './package';
 
 // Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.

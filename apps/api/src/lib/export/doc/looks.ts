@@ -2,82 +2,8 @@ import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
 import { cssColorToHex } from '../colors';
 import { proseValue } from './prose-css';
 
-// The WordprocessingML the docx writer writes and the docx reader recognises, one source both ways: namespaces, style
-// names, units and the editor's look in OOXML values, which a reader that drops custom styles keeps as direct formatting.
-
-// ── Namespaces ──────────────────────────────────────────────────────────────────────────────────────────────────
-
-export const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-export const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-export const WP_NS = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
-export const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-export const PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
-export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
-export const MC_NS = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
-export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
-export const V_NS = 'urn:schemas-microsoft-com:vml';
-export const O_NS = 'urn:schemas-microsoft-com:office:office';
-export const M_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
-export const PACKAGE_RELATIONSHIPS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
-export const CONTENT_TYPES_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
-
-// ── Styles: Word lists a style by its name, which a re-save keeps where an id may change ────────────────────────────
-
-export const STYLE_NAMES = {
-    Normal: 'Normal',
-    DefaultParagraphFont: 'Default Paragraph Font',
-    TableNormal: 'Normal Table',
-    NoList: 'No List',
-    Quote: 'Quote',
-    CodeBlock: 'Code Block',
-    Caption: 'caption',
-    HorizontalRule: 'Horizontal Rule',
-    PageBreak: 'Page Break',
-    Spacer: 'Spacer',
-    TaskDone: 'Task Done',
-    Hyperlink: 'Hyperlink',
-    Code: 'Code',
-} as const;
-
-export type StyleId = keyof typeof STYLE_NAMES | `Heading${number}` | `CodeBlock-${string}`;
-
-export function headingStyleName(level: number): string {
-    return `heading ${level}`;
-}
-
-// A code block's language rides on a hidden style of its own, based on Code Block.
-export function codeBlockStyle(language: string): { id: `CodeBlock-${string}`; name: string } {
-    return { id: `CodeBlock-${language}`, name: `${STYLE_NAMES.CodeBlock} (${language})` };
-}
-
-const CODE_BLOCK_LANGUAGE = new RegExp(`^${STYLE_NAMES.CodeBlock} \\((.+)\\)$`, 'i');
-
-export function codeBlockLanguage(styleName: string): string | undefined {
-    return CODE_BLOCK_LANGUAGE.exec(styleName)?.[1];
-}
-
-// ── Lists ──────────────────────────────────────────────────────────────────────────────────────────────────────
-
-// An ordered list's type as Word's numFmt, and back; decimal is the default, which reads back as no type.
-export const LIST_FORMATS = new Map([
-    ['1', 'decimal'],
-    ['a', 'lowerLetter'],
-    ['A', 'upperLetter'],
-    ['i', 'lowerRoman'],
-    ['I', 'upperRoman'],
-]);
-
-export const LIST_TYPES = new Map(
-    [...LIST_FORMATS].flatMap(([type, format]) => (format === 'decimal' ? [] : [[format, type] as const])),
-);
-
-// ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
-
-export const TWIPS_PER_PX = 15;
-
-export const EMU_PER_PX = 9525;
-
-export const EMU_PER_TWIP = 635;
+// The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
+// re-save drops the writer's styles and keeps it as direct formatting.
 
 // rem against the 16 px root, px at 96 dpi, em against the element's own size.
 export function cssPt(length: string, emPt: number): number {

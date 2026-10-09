@@ -10,6 +10,7 @@ import {
 import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
+import { lowlight } from '../../document/lowlight';
 import { toDataUriMap } from '../../document/media';
 import {
     DOCX_IMAGE_MAX_SIZE,
@@ -24,7 +25,6 @@ import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
 import {
-    lowlight,
     renderCodeBlockNode,
     renderFigureNode,
     renderOrderedListNode,

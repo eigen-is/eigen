@@ -1,21 +1,17 @@
 import { describe, expect, test } from 'bun:test';
+import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { openZip } from '../../../lib/core/zip';
 import {
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
     CODE_LOOK,
-    codeBlockLanguage,
-    codeBlockStyle,
     HEADER_CELL_LOOK,
     halfPoints,
-    headingStyleName,
     LINK_LOOK,
     QUOTE_LOOK,
-    STYLE_NAMES,
     TASK_DONE_LOOK,
-    W_NS,
-} from '../../../lib/export/doc/ooxml';
+} from '../../../lib/export/doc/looks';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 
@@ -52,7 +48,7 @@ function descendants(root: XmlElement, local: string): XmlElement[] {
     ]);
 }
 
-describe('ooxml — the writer names its styles by the vocabulary', () => {
+describe('the writer names its styles by the vocabulary', () => {
     test('every style the writer defines carries its vocabulary name', () => {
         const names = new Map<string, string>(Object.entries(STYLE_NAMES));
         for (const level of [1, 2, 3, 4, 5, 6]) names.set(`Heading${level}`, headingStyleName(level));
@@ -67,7 +63,7 @@ describe('ooxml — the writer names its styles by the vocabulary', () => {
     });
 });
 
-describe('ooxml — the writer draws the editor look from the vocabulary', () => {
+describe('the writer draws the editor look from the vocabulary', () => {
     test('a quote: its bar, indent, italic and color', () => {
         const bar = prop('Quote', 'pPr', 'pBdr', 'left');
         expect([w(bar, 'sz'), w(bar, 'space'), w(bar, 'color')]).toEqual([
@@ -111,22 +107,5 @@ describe('ooxml — the writer draws the editor look from the vocabulary', () =>
         );
         expect(fills).toContain(HEADER_CELL_LOOK.fill);
         expect(new Set(fills.filter((fill) => fill !== undefined))).toEqual(new Set([HEADER_CELL_LOOK.fill]));
-    });
-});
-
-describe('ooxml — the code block language carrier', () => {
-    test('a language is a style of its own, named after Code Block', () => {
-        expect(codeBlockStyle('javascript')).toEqual({ id: 'CodeBlock-javascript', name: 'Code Block (javascript)' });
-    });
-
-    test('its name reads back as the language, in any case', () => {
-        expect(codeBlockLanguage(codeBlockStyle('javascript').name)).toBe('javascript');
-        expect(codeBlockLanguage('code block (plaintext)')).toBe('plaintext');
-    });
-
-    test('any other style carries no language', () => {
-        expect(codeBlockLanguage(STYLE_NAMES.CodeBlock)).toBeUndefined();
-        expect(codeBlockLanguage('Code Block ()')).toBeUndefined();
-        expect(codeBlockLanguage('HTML Preformatted')).toBeUndefined();
     });
 });

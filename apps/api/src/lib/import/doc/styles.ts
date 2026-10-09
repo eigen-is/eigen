@@ -1,6 +1,6 @@
+import { codeBlockLanguage, headingLevel, PAGE_SECTION_TYPES, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { codeBlockLanguage, STYLE_NAMES, W_NS } from '../../export/doc/ooxml';
-import { lowlight } from '../../export/doc/render';
+import { lowlight } from '../../document/lowlight';
 import type { Theme } from './docx-fonts';
 import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
 
@@ -139,9 +139,6 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
 
 const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
 
-// A section that starts on a new page; continuous and nextColumn don't, and a missing type is nextPage.
-const PAGE_SECTIONS = ['nextPage', 'oddPage', 'evenPage'];
-
 export function readParaProps(pPr: XmlElement | undefined): ParaProps {
     const props: ParaProps = {};
     for (const child of pPr ? xmlElements(pPr) : []) {
@@ -209,7 +206,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
             }
             case 'sectPr': {
                 const type = w(wChild(child, 'type'), 'val');
-                props.sectionBreak = type === undefined || PAGE_SECTIONS.includes(type);
+                props.sectionBreak = type === undefined || PAGE_SECTION_TYPES.has(type);
                 break;
             }
         }
@@ -292,8 +289,8 @@ const ROLE_BY_NAME = new Map<string, Role>([
 const CODE_CHARACTER_NAMES = new Set(lowercase(CODE_CHARACTER_STYLES));
 
 function roleOf({ name, language }: Style): Role | undefined {
-    const heading = name.match(/^heading ([1-9])$/);
-    if (heading) return { kind: 'heading', level: Math.min(6, Number(heading[1])) };
+    const level = headingLevel(name);
+    if (level) return { kind: 'heading', level: Math.min(6, level) };
     if (language) return { kind: 'code', language: lowlight.registered(language) ? language : null };
     return ROLE_BY_NAME.get(name);
 }

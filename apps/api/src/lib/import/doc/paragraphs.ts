@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
+import { CHECKBOX_GLYPHS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, STYLE_NAMES, TASK_DONE_LOOK, W_NS } from '../../export/doc/ooxml';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -144,10 +145,10 @@ export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope)
     });
 }
 
-const CHECKBOX_GLYPHS = new Map([
-    ['☐', false],
+const CHECKBOXES = new Map([
+    [CHECKBOX_GLYPHS.unchecked, false],
     ['☑', true],
-    ['☒', true],
+    [CHECKBOX_GLYPHS.checked, true],
 ]);
 
 function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
@@ -177,7 +178,10 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     if (task?.checked && role.kind === 'paragraph') role = { kind: 'taskDone' };
     for (const [index, piece] of pieces.entries())
         if (piece.kind === 'checkbox')
-            pieces[index] = { kind: 'node', node: { type: 'text', text: piece.checked ? '☒' : '☐' } };
+            pieces[index] = {
+                kind: 'node',
+                node: { type: 'text', text: piece.checked ? CHECKBOX_GLYPHS.checked : CHECKBOX_GLYPHS.unchecked },
+            };
     const halves = splitAtBreaks(pieces);
 
     // A paragraph holding nothing but a page break gives no item: the break joins the open one, and the number stays free.
@@ -325,7 +329,7 @@ function taskOf(pieces: Piece[]): { checked: boolean } | undefined {
     }
     if (opener?.kind !== 'node' || opener.node.type !== 'text') return undefined;
     const text = opener.node.text ?? '';
-    const checked = CHECKBOX_GLYPHS.get(text.charAt(0));
+    const checked = CHECKBOXES.get(text.charAt(0));
     if (checked === undefined || (text.length > 1 && !/^[\t {2}]/.test(text.slice(1)))) return undefined;
     const rest = text.slice(1).replace(/^[\t {2}]/, '');
     if (rest) opener.node.text = rest;

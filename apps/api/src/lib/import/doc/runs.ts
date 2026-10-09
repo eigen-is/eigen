@@ -1,9 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { hex as dingbat } from 'dingbat-to-unicode';
+import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { CODE_LOOK, LINK_LOOK, M_NS, R_NS, W_NS, W14_NS } from '../../export/doc/ooxml';
-import { rootRelativeHref } from '../../export/doc/render';
+import { CODE_LOOK, LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
 import { fontMark, MONOSPACE_FONT } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -218,6 +218,13 @@ function linkTo(reader: Reader, href: string, tooltip: string | undefined): Link
     return { href: rootRelativeHref(trimmed, reader.publicOrigin), title: tooltip || null };
 }
 
+// The writer's absoluteHref inverted: a link into this instance comes back root-relative, never as `//host`, which leaves it.
+function rootRelativeHref(href: string, publicOrigin: string | undefined): string {
+    if (!publicOrigin || !href.startsWith(publicOrigin)) return href;
+    const path = href.slice(publicOrigin.length);
+    return /^\/(?![/\\])/.test(path) ? path : href;
+}
+
 // HYPERLINK "target" [\l "anchor"] [\o "tooltip"]
 function hyperlinkField(reader: Reader, code: string): Link | undefined {
     const match = code.trim().match(/^HYPERLINK\b(.*)$/i);
@@ -324,6 +331,9 @@ function marksOf(
             attrs: { color: color ? `#${color.toLowerCase()}` : null, fontFamily: fontFamily ?? null },
         });
     if (isFill(shade))
-        marks.push({ type: 'highlight', attrs: { color: shade === 'FFFF00' ? null : `#${shade.toLowerCase()}` } });
+        marks.push({
+            type: 'highlight',
+            attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` },
+        });
     return { marks, small, font, hidden: false };
 }

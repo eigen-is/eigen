@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
-import { CODE_BLOCK_LOOK, LIST_TYPES, QUOTE_LOOK } from '../../export/doc/ooxml';
+import { LIST_TYPES } from '../../core/ooxml';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../export/doc/looks';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 

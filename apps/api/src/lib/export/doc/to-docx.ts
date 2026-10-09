@@ -6,47 +6,56 @@ import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@wor
 import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
+import {
+    A_NS,
+    ASVG_NS,
+    CHECKBOX_GLYPHS,
+    CONTENT_TYPES_NS,
+    CORE_PROPERTIES_NS,
+    codeBlockStyle,
+    DC_NS,
+    DEFAULT_HIGHLIGHT,
+    EMU_PER_PX,
+    EMU_PER_TWIP,
+    headingStyleName,
+    LIST_FORMATS,
+    LIST_LEVELS,
+    MC_NS,
+    PACKAGE_RELATIONSHIPS_NS,
+    PIC_NS,
+    R_NS,
+    STYLE_NAMES,
+    type StyleId,
+    TWIPS_PER_PX,
+    W_NS,
+    W14_NS,
+    WORD_SETTINGS_URI,
+    WP_NS,
+} from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
+import { lowlight } from '../../document/lowlight';
 import type { ExportMedia } from '../../document/transform/protocol';
 import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import {
-    A_NS,
-    ASVG_NS,
     BODY,
     type Border,
     boxSide,
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
     CODE_LOOK,
-    CONTENT_TYPES_NS,
-    codeBlockStyle,
     cssPt,
-    EMU_PER_PX,
-    EMU_PER_TWIP,
     HEADER_CELL_LOOK,
     halfPoints,
-    headingStyleName,
     LINK_LOOK,
-    LIST_FORMATS,
-    MC_NS,
-    PACKAGE_RELATIONSHIPS_NS,
-    PIC_NS,
     proseBorder,
     proseColor,
     QUOTE_LOOK,
-    R_NS,
-    STYLE_NAMES,
-    type StyleId,
     TASK_DONE_LOOK,
-    TWIPS_PER_PX,
     twips,
-    W_NS,
-    W14_NS,
-    WP_NS,
-} from './ooxml';
+} from './looks';
 import { proseValue, proseValueIfSet } from './prose-css';
-import { absoluteHref, type HastNode, highlightCode, lowlight } from './render';
+import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
 export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
@@ -85,7 +94,7 @@ export async function eigendocToDocx(
         ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
         [
             'docProps/core.xml',
-            `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${escapeXml(stripEigenExtension(title))}</dc:title></cp:coreProperties>`,
+            `<cp:coreProperties xmlns:cp="${CORE_PROPERTIES_NS}" xmlns:dc="${DC_NS}"><dc:title>${escapeXml(stripEigenExtension(title))}</dc:title></cp:coreProperties>`,
             'application/vnd.openxmlformats-package.core-properties+xml',
         ],
         [
@@ -197,7 +206,7 @@ const HEADER_DISTANCE = 709;
 const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(HEADER_DISTANCE, PAGE.margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
-const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
+const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
 
 const FONT_FAMILY: Record<EigenFont['category'], string> = {
     'sans-serif': 'swiss',
@@ -806,9 +815,7 @@ const CLEAR_FLOATS = '<w:r><w:br w:type="textWrapping" w:clear="all"/></w:r>';
 
 const LIST_LEVEL = proseTwips('.eigen-prose ul', 'padding-left');
 
-// Word's nine levels; a list or quote deeper still indents no further.
-const LIST_LEVELS = 9;
-
+// A list or quote deeper than Word's levels indents no further.
 function itemIndent(context: Context): number {
     return context.indent + (context.depth < LIST_LEVELS ? LIST_LEVEL : 0);
 }
@@ -831,10 +838,11 @@ const CHECKBOX_FONT = 'MS Gothic';
 
 // Word's checkbox in MS Gothic, as Inter has no ballot box; the tab is unstruck, so Task Done's line starts at text.
 function checkboxXml(checked: boolean): string {
-    const state = (name: string, glyph: string) => `<w14:${name} w14:val="${glyph}" w14:font="${CHECKBOX_FONT}"/>`;
+    const state = (name: string, glyph: string) =>
+        `<w14:${name} w14:val="${glyph.codePointAt(0)?.toString(16).toUpperCase()}" w14:font="${CHECKBOX_FONT}"/>`;
     return [
-        `<w:sdt><w:sdtPr><w14:checkbox><w14:checked w14:val="${checked ? 1 : 0}"/>${state('checkedState', '2612')}${state('uncheckedState', '2610')}</w14:checkbox></w:sdtPr>`,
-        `<w:sdtContent><w:r><w:rPr>${rPrXml({ font: CHECKBOX_FONT, strike: false })}</w:rPr><w:t>${checked ? '☒' : '☐'}</w:t></w:r></w:sdtContent></w:sdt>`,
+        `<w:sdt><w:sdtPr><w14:checkbox><w14:checked w14:val="${checked ? 1 : 0}"/>${state('checkedState', CHECKBOX_GLYPHS.checked)}${state('uncheckedState', CHECKBOX_GLYPHS.unchecked)}</w14:checkbox></w:sdtPr>`,
+        `<w:sdtContent><w:r><w:rPr>${rPrXml({ font: CHECKBOX_FONT, strike: false })}</w:rPr><w:t>${checked ? CHECKBOX_GLYPHS.checked : CHECKBOX_GLYPHS.unchecked}</w:t></w:r></w:sdtContent></w:sdt>`,
         `<w:r><w:rPr>${rPrXml({ strike: false })}</w:rPr><w:tab/></w:r>`,
     ].join('');
 }
@@ -1279,7 +1287,9 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     [
         'highlight',
         ({ color }) =>
-            typeof color === 'string' && isTransparentCssColor(color) ? {} : { shading: colorOf(color) ?? 'FFFF00' },
+            typeof color === 'string' && isTransparentCssColor(color)
+                ? {}
+                : { shading: colorOf(color) ?? DEFAULT_HIGHLIGHT },
     ],
     // The w:hyperlink around the runs carries it.
     ['link', () => ({})],

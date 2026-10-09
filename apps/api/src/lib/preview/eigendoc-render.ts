@@ -2,14 +2,9 @@ import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
+import { lowlight } from '../document/lowlight';
 import type { TransformWarning } from '../document/transform/protocol';
-import {
-    lowlight,
-    renderCodeBlockNode,
-    renderFigureNode,
-    renderTaskItemNode,
-    withTrailingBreaks,
-} from '../export/doc/render';
+import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode, withTrailingBreaks } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
