@@ -14,18 +14,7 @@ import {
 } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
-import {
-    alternative,
-    descendants,
-    halfPoints,
-    is,
-    isAlternateContent,
-    type Package,
-    type Part,
-    twips,
-    w,
-    wChild,
-} from './package';
+import { alternative, descendants, is, isAlternateContent, type Package, type Part, twips, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
     isFill,
@@ -188,11 +177,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
-    const headingSize = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId)).size ?? 20;
+    const headingRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
-    if (role.kind === 'heading' && !listed && isBodySized(reader, p, headingSize)) role = { kind: 'paragraph' };
+    if (role.kind === 'heading' && !listed && isBodySized(reader, p, headingRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, scope, styleId)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
@@ -350,13 +339,25 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 }
 
 // G6: every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
-// text; the style's bold and italic then stay as marks. A run's text box is not searched.
-function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolean {
-    const sizes = descendants(p, W_NS, 'r')
-        .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
-        .map((run) => halfPoints(w(wChild(wChild(run, 'rPr'), 'sz'), 'val')));
+// text, complex script at its szCs; the style's bold and italic then stay as marks. A run's text box is not searched.
+function isBodySized(reader: Reader, p: XmlElement, heading: RunProps): boolean {
+    const headingSize = heading.size ?? 20;
+    const headingSizeCs = heading.sizeCs ?? headingSize;
+    const faces = descendants(p, W_NS, 'r').flatMap((run) => {
+        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
+        return xmlElements(run)
+            .filter((child) => is(child, W_NS, 't'))
+            .flatMap((t) => byFace(xmlText(t), undefined, direct, true, reader.pkg.chargePiece))
+            .filter((face) => face.text.trim())
+            .map(({ complex }) =>
+                complex
+                    ? { size: direct.sizeCs, heading: headingSizeCs, body: reader.bodySizeCs }
+                    : { size: direct.size, heading: headingSize, body: reader.bodySize },
+            );
+    });
     return (
-        sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
+        faces.length > 0 &&
+        faces.every(({ size, heading, body }) => size !== undefined && size < heading && size <= body)
     );
 }
 
