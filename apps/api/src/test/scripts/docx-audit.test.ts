@@ -274,6 +274,18 @@ describe('source side', () => {
         expect([count(ended, 'orderedLists'), count(continued, 'orderedLists')]).toEqual([2, 1]);
     });
 
+    test('a checkbox control around a paragraph, a row or a cell is a task, and its glyph no text', async () => {
+        const box = (content: string, checked = false) =>
+            `<w:sdt><w:sdtPr><w14:checkbox xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w14:checked w14:val="${checked ? 1 : 0}"/></w14:checkbox></w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+        const cell = (text: string) => `<w:tc>${paragraph(text)}</w:tc>`;
+        const table = (rows: string) => `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>${rows}</w:tbl>`;
+        const tally = await source(
+            `${box(paragraph('☒'), true)}${table(`<w:tr>${cell('Agree')}${box(cell('☐'))}</w:tr>${box(`<w:tr>${cell('☐')}</w:tr>`)}`)}${paragraph('End')}`,
+        );
+        expect([count(tally, 'taskItems'), count(tally, 'checkedTasks'), count(tally, 'cells')]).toEqual([3, 1, 3]);
+        expect(tally.words).toEqual(['Agree', 'End']);
+    });
+
     test('a Strict package reads as its transitional twin', () => {
         const strict = 'http://purl.oclc.org/ooxml';
         const rel = (id: string, type: string, target: string) =>

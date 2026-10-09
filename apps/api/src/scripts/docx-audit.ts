@@ -382,6 +382,8 @@ type Inline = { scope: Scope; paragraph: Paragraph; runs: XmlElement[]; marks: b
 
 type RunLook = { hidden: boolean; code: boolean; marks: Feature[] };
 
+type Boxed = { element: XmlElement; boxed: boolean };
+
 const newChain = (): Chain => ({ lists: [], carry: [] });
 
 function readStyles(root: XmlElement | undefined, theme: XmlElement | undefined): Styles {
@@ -705,6 +707,17 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const visible = (scope: Scope) => scope.fields.every((field) => field.result);
 
+    // A checkbox control at any level shows its box: Word restricts its content to the glyph, which is no text.
+    const checkbox = (sdt: XmlElement, scope: Scope) => {
+        const box = child(child(sdt, 'sdtPr'), 'checkbox', W14);
+        if (box && visible(scope)) {
+            add(tally, 'taskItems');
+            const checked = child(box, 'checked', W14);
+            if (checked && ['1', 'true'].includes(xmlAttr(checked, W14, 'val') ?? '')) add(tally, 'checkedTasks');
+        }
+        return !!box;
+    };
+
     const text = (value: string, context: Inline, look: RunLook | undefined) => {
         const marks: readonly Feature[] = !context.marks || !look ? [] : look.code ? ['code'] : look.marks;
         context.paragraph.spans.push({ text: value, marks });
@@ -845,16 +858,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                     });
                     break;
                 case 'sdt': {
-                    const box = child(child(node, 'sdtPr'), 'checkbox', W14);
-                    if (!box) {
-                        const content = child(node, 'sdtContent');
-                        if (content) inline(content, context);
-                    } else if (visible(context.scope)) {
-                        add(tally, 'taskItems');
-                        const checked = child(box, 'checked', W14);
-                        if (checked && ['1', 'true'].includes(xmlAttr(checked, W14, 'val') ?? ''))
-                            add(tally, 'checkedTasks');
-                    }
+                    const content = child(node, 'sdtContent');
+                    if (!checkbox(node, context.scope) && content) inline(content, context);
                     break;
                 }
                 case 'del':
@@ -962,23 +967,24 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         chain.rule = undefined;
     };
 
-    // Rows and cells may sit in content controls or custom XML.
-    const within = (element: XmlElement, local: string): XmlElement[] =>
+    // Rows and cells may sit in content controls or custom XML; boxed when a checkbox control holds them.
+    const within = (element: XmlElement, local: string, scope: Scope, boxed = false): Boxed[] =>
         xmlElements(element).flatMap((node) => {
             if (node.ns !== W) return [];
-            if (node.local === local) return [node];
+            if (node.local === local) return [{ element: node, boxed }];
             if (node.local === 'sdt') {
                 const content = child(node, 'sdtContent');
-                return content ? within(content, local) : [];
+                const box = checkbox(node, scope);
+                return content ? within(content, local, scope, boxed || box) : [];
             }
-            return node.local === 'customXml' ? within(node, local) : [];
+            return node.local === 'customXml' ? within(node, local, scope, boxed) : [];
         });
 
     // False for a floating figure, which stands outside the flow around it.
     const table = (element: XmlElement, scope: Scope): boolean => {
-        const rows = within(element, 'tr').filter((row) => !child(child(row, 'trPr'), 'del'));
-        const cells = rows.map((row) => within(row, 'tc'));
-        const only = cells.length === 1 && cells[0].length === 1 ? cells[0][0] : undefined;
+        const rows = within(element, 'tr', scope).filter((row) => !child(child(row.element, 'trPr'), 'del'));
+        const cells = rows.map((row) => within(row.element, 'tc', scope, row.boxed));
+        const only = cells.length === 1 && cells[0].length === 1 ? cells[0][0].element : undefined;
         // The writer's wrapped figure, and Word's floating picture-in-a-table: a figure, not a table.
         if (
             only &&
@@ -994,27 +1000,33 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const grid = xmlChildren(child(element, 'tblGrid') ?? element, W, 'gridCol');
         if (grid.some((column) => Number(xmlAttr(column, W, 'w')) > 0)) add(tally, 'columnWidths');
         const placed = rows.map((row, index) => {
-            const trPr = child(row, 'trPr');
+            const trPr = child(row.element, 'trPr');
             const header = child(trPr, 'tblHeader');
             if (header && on(header)) add(tally, 'headerRows');
             let column = Number(val(child(trPr, 'gridBefore')) ?? 0);
-            return cells[index].map((cell) => {
+            return cells[index].map(({ element: cell, boxed }) => {
                 const tcPr = child(cell, 'tcPr');
                 const span = Number(val(child(tcPr, 'gridSpan')) ?? 1) || 1;
                 const merge = child(tcPr, 'vMerge');
-                const at = { cell, column, span, merge: merge && (val(merge) === 'restart' ? 'restart' : 'continue') };
+                const at = {
+                    cell,
+                    boxed,
+                    column,
+                    span,
+                    merge: merge && (val(merge) === 'restart' ? 'restart' : 'continue'),
+                };
                 column += span;
                 return at;
             });
         });
         for (const [index, row] of placed.entries()) {
-            for (const { cell, column, span, merge } of row) {
+            for (const { cell, boxed, column, span, merge } of row) {
                 if (merge === 'continue') continue;
                 add(tally, 'cells');
                 if (span > 1) add(tally, 'colspanCells');
                 const below = placed[index + 1]?.find((next) => next.column === column);
                 if (merge === 'restart' && below?.merge === 'continue') add(tally, 'rowspanCells');
-                blocks(cell, { ...scope, chain: newChain(), cell: true });
+                if (!boxed) blocks(cell, { ...scope, chain: newChain(), cell: true });
             }
         }
         return true;
@@ -1028,6 +1040,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 continue;
             }
             if (node.ns === W && node.local === 'p') paragraph(node, scope);
+            else if (node.ns === W && node.local === 'sdt' && checkbox(node, scope)) continue;
             else if (node.ns === W && node.local === 'tbl') {
                 settle(scope.chain);
                 if (table(node, scope)) {
