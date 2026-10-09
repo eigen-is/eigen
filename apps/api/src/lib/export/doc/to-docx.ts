@@ -357,6 +357,8 @@ type RunProps = {
     font?: string;
     bold?: true;
     italic?: true;
+    caps?: true;
+    smallCaps?: true;
     // false undoes a style's strike.
     strike?: boolean;
     color?: string;
@@ -421,12 +423,15 @@ function bordersXml<Side extends string>(sides: readonly Side[], borders: Partia
 }
 
 function rPrXml(props: RunProps): string {
-    const { style, font, bold, italic, strike, color, spacing, size, underline, shading, vertAlign } = props;
+    const { style, font, bold, italic, caps, smallCaps, strike, color, spacing, size, underline, shading, vertAlign } =
+        props;
     return [
         style && `<w:rStyle w:val="${style}"/>`,
         font && `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>`,
         bold && '<w:b/><w:bCs/>',
         italic && '<w:i/><w:iCs/>',
+        caps && '<w:caps/>',
+        smallCaps && '<w:smallCaps/>',
         strike === true && '<w:strike/>',
         strike === false && '<w:strike w:val="0"/>',
         color && `<w:color w:val="${color}"/>`,
@@ -1270,9 +1275,14 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ],
     [
         'textStyle',
-        ({ color, fontFamily }) => {
+        ({ color, fontFamily, caps }) => {
             const name = typeof fontFamily === 'string' ? getFontName(fontFamily) : undefined;
-            return { color: colorOf(color), font: name && EIGEN_FONT_NAMES.includes(name) ? name : undefined };
+            return {
+                color: colorOf(color),
+                font: name && EIGEN_FONT_NAMES.includes(name) ? name : undefined,
+                caps: caps === 'all' || undefined,
+                smallCaps: caps === 'small' || undefined,
+            };
         },
     ],
     // A transparent color shades nothing; no color, or one Office can't spell (a named one), is the UA's yellow <mark>.
