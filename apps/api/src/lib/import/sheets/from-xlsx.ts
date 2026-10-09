@@ -26,11 +26,10 @@ import {
     update,
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
-import JSZip from 'jszip';
 import { ApiError } from '../../core/errors';
 import { A_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS, toTransitional } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
+import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -75,12 +74,7 @@ type ThemePalette = string[];
 const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
-    // One JSZip pass, reused for the size guard AND the theme and hyperlink reads below. loadAsync
-    // reads the central directory without decompressing, so the guard can run BEFORE
-    // exceljs's xlsx.load — the OOM a bomb triggers happens inside load() and is not
-    // catchable, so a post-load check would never fire.
-    const zip = await JSZip.loadAsync(buffer);
-    await assertDecompressedSizeWithinBounds(zip, 'Spreadsheet too large');
+    const zip = openXlsx(buffer);
 
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
@@ -88,14 +82,29 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     assertCellCountWithinBounds(workbook);
 
     // One after the other, so their trees are never alive together.
-    const theme = await readThemePalette(zip);
-    const locationLinks = await readLocationHyperlinks(zip);
+    const theme = readThemePalette(zip);
+    const locationLinks = readLocationHyperlinks(zip);
 
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
         sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name)));
     }
     return sheets;
+}
+
+// The upload route bounds only the compressed bytes, and exceljs inflates the whole package, where an out-of-memory
+// can't be caught. So every entry is read once before it: openZip refuses an archive declaring more than the byte cap,
+// and a read inflates no further than its entry declares, so an entry lying small is refused too.
+function openXlsx(buffer: Buffer): ZipReader {
+    try {
+        const zip = openZip(buffer);
+        for (const name of zip.names()) zip.read(name);
+        return zip;
+    } catch (error) {
+        if (!(error instanceof ZipError)) throw error;
+        const message = error.status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file';
+        throw new ApiError(error.status, message, { cause: error });
+    }
 }
 
 function assertCellCountWithinBounds(workbook: Workbook): void {
@@ -801,12 +810,12 @@ function mapHyperlink(target: string | undefined): { linkType: string; linkAddre
 // attribute at all. Excel itself authors internal links in exactly this form
 // (<hyperlink ref location=…> without a rel), so recover them straight from the
 // worksheet XML. Returns sheet name → (anchor cell ref → location target).
-// Reuses the zip loaded by xlsxToSheets — no second decompression pass.
-export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Map<string, string>>> {
+export function readLocationHyperlinks(zip: ZipReader): Map<string, Map<string, string>> {
     const bySheet = new Map<string, Map<string, string>>();
     // One sheet at a time: each is decoded whole, and together they can reach the decompressed cap.
-    for (const { name, path } of (await readSheetPaths(zip)) ?? []) {
-        const text = await zip.file(path)?.async('string');
+    for (const { name, path } of readSheetPaths(zip) ?? []) {
+        const bytes = zip.read(path);
+        const text = bytes && new TextDecoder().decode(bytes);
         const hyperlinks = text && readHyperlinksBlock(text);
         if (!hyperlinks) continue;
         const links = new Map<string, string>();
@@ -822,9 +831,9 @@ export async function readLocationHyperlinks(zip: JSZip): Promise<Map<string, Ma
 }
 
 // Each sheet's name and part path, as plain values: the workbook and rels trees are gone before any sheet is read.
-async function readSheetPaths(zip: JSZip): Promise<{ name: string; path: string }[] | undefined> {
-    const workbook = await readPart(zip, 'xl/workbook.xml');
-    const rels = await readPart(zip, 'xl/_rels/workbook.xml.rels');
+function readSheetPaths(zip: ZipReader): { name: string; path: string }[] | undefined {
+    const workbook = readPart(zip, 'xl/workbook.xml');
+    const rels = readPart(zip, 'xl/_rels/workbook.xml.rels');
     const sheets = workbook?.ns === SML_NS ? xmlChild(workbook, SML_NS, 'sheets') : undefined;
     if (!sheets || !rels) return undefined;
 
@@ -897,8 +906,8 @@ function readHyperlinksBlock(sheet: string): XmlElement | undefined {
     return wrapped ? xmlChild(wrapped, SML_NS, 'hyperlinks') : undefined;
 }
 
-async function readPart(zip: JSZip, path: string): Promise<XmlElement | null> {
-    const bytes = await zip.file(path)?.async('uint8array');
+function readPart(zip: ZipReader, path: string): XmlElement | null {
+    const bytes = zip.read(path);
     return bytes && withinParseBound([bytes], PART_BOUND) ? parsePart(bytes) : null;
 }
 
@@ -1289,8 +1298,8 @@ const CLR_SCHEME_ELEMENTS = [
 ] as const;
 const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
-async function readThemePalette(zip: JSZip): Promise<ThemePalette> {
-    const theme = await readPart(zip, 'xl/theme/theme1.xml');
+function readThemePalette(zip: ZipReader): ThemePalette {
+    const theme = readPart(zip, 'xl/theme/theme1.xml');
     const elements = theme?.ns === A_NS ? xmlChild(theme, A_NS, 'themeElements') : undefined;
     const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
     if (!scheme) return [];

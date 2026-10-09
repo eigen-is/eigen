@@ -318,7 +318,6 @@ describe('source side', () => {
     test('the source is read with core/zip, not JSZip', () => {
         const script = fs.readFileSync(new URL('../../scripts/docx-audit.ts', import.meta.url), 'utf8');
         expect(script).not.toContain("from 'jszip'");
-        expect(script).not.toContain('zip-size-guard');
         expect(script).toContain("from '../lib/core/zip'");
     });
 

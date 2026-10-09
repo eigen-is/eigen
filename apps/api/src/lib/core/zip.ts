@@ -5,8 +5,8 @@ import { ApiError } from './errors';
 // when the archive opens and every inflate stops at its entry's declared size, so a lying entry can't grow
 // past it. Inflating is synchronous: callers run in a transform Worker.
 
-// The bytes an archive may declare in total, for docx here and xlsx in zip-size-guard.ts. A dense sheet at the
-// importer's cell cap inflates to ~140 MB (~35 bytes per cell); an honest 35 MB upload of zeros declares ~36 GB.
+// The bytes an archive may declare in total, for docx and xlsx. A dense sheet at the importer's cell cap inflates to
+// ~140 MB (~35 bytes per cell); an honest 35 MB upload of zeros declares ~36 GB.
 export const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
 // The corpus's most is 1,714 parts, in a LibreOffice test file; its real documents stay under 100.
 export const MAX_ZIP_ENTRIES = 10_000;
