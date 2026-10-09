@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
 import { toTransferableText } from '../../lib/document/transform/protocol';
@@ -101,6 +102,38 @@ describe('doc export — the stylesheet', () => {
         expect(css).toContain('.figure, table, pre, blockquote { page-break-inside: avoid; }');
         expect(css).toContain('table:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
     });
+});
+
+describe('doc export — tasks', () => {
+    // A line-through reaches every descendant and none can undo it, so what each strike rule hits is what prints struck.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s strikes a done task but not the open task inside it',
+        async (format) => {
+            const task = (checked: boolean, text: string, nested: JSONContent[] = []): JSONContent => ({
+                type: 'taskItem',
+                attrs: { checked },
+                content: [paragraph(text), ...nested],
+            });
+            const doc = seededDoc({
+                type: 'doc',
+                content: [
+                    {
+                        type: 'taskList',
+                        content: [task(true, 'Done', [{ type: 'taskList', content: [task(false, 'Still open')] }])],
+                    },
+                ],
+            });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { window } = new JSDOM(new TextDecoder().decode(data));
+            const { document } = window;
+            const struck = [...document.styleSheets]
+                .flatMap((sheet) => [...sheet.cssRules])
+                .filter((rule) => rule instanceof window.CSSStyleRule)
+                .filter((rule) => rule.style.getPropertyValue('text-decoration').includes('line-through'))
+                .flatMap((rule) => [...document.querySelectorAll(rule.selectorText)].map((node) => node.textContent));
+            expect(struck).toEqual(['Done']);
+        },
+    );
 });
 
 describe('doc export — figures', () => {
