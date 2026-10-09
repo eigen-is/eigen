@@ -131,6 +131,38 @@ describe('XML budget', () => {
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Body']);
     });
 
+    test('a part every relationship names is parsed once', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const types = ['styles', 'numbering', 'theme', 'footnotes', 'endnotes'];
+        const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${types
+            .map(
+                (type) =>
+                    `<Relationship Id="${type}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="document.xml"/>`,
+            )
+            .join('')}</Relationships>`;
+        const parts = golden.names().map((name) => {
+            const data = golden.read(name) ?? new Uint8Array();
+            return stored(name, name === 'word/_rels/document.xml.rels' ? new TextEncoder().encode(rels) : data);
+        });
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const { json } = await docxToPmJson(build(parts));
+        expect(texts(json)).toEqual(['Body']);
+        const size = golden.entry('word/document.xml')?.size;
+        expect(parses.mock.calls.filter(([input]) => input.length === size)).toHaveLength(1);
+    });
+
+    // As a corrupt file is, rather than as a server error.
+    test('a reader slip on a file is 400', async () => {
+        const docx = await buildDocxWithBody(paragraph(run('Body')));
+        const parses = spyOn(xml, 'parseXml').mockImplementationOnce(() => {
+            throw new TypeError('slip');
+        });
+        spies.push(parses);
+        const error = await rejection(docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+    });
+
     test('a part that inflates past its declared size is a corrupt file, 400', async () => {
         const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
         const parts = golden.names().map((name) => {
@@ -429,6 +461,15 @@ describe('figures and media', () => {
             ['image-0.png', null],
         ]);
         expect(images.map((image) => image.name)).toEqual(['image-0.png']);
+    });
+
+    // A file may hold 200 MB of media; each image is the bytes the zip read, not a copy of them.
+    test('an image is a view of the bytes read, not a copy', async () => {
+        const media = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media })));
+        const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
+        const { images } = await docxToPmJson(input);
+        expect(images[0]?.data.buffer).toBe(input.buffer);
     });
 
     test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {

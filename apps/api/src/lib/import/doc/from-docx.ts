@@ -35,11 +35,11 @@ export async function docxToPmJson(
             content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }],
         });
         doc.check();
-        const images = reader.images.map(({ name, path, contentType }) => ({
-            name,
-            contentType,
-            data: Buffer.from(pkg.zip.read(path) ?? new Uint8Array()),
-        }));
+        const images = reader.images.map(({ name, path, contentType }) => {
+            // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
+            const data = pkg.zip.read(path) ?? new Uint8Array();
+            return { name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) };
+        });
         const warnings: TransformWarning[] = [];
         if (refused.size > 0) warnings.push({ code: 'blocks-flattened', count: refused.size });
         const unshown = images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
@@ -49,7 +49,9 @@ export async function docxToPmJson(
         // The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
         if (error instanceof ZipError)
             throw new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
-        if (error instanceof XmlError) throw new ApiError(400, NOT_A_DOCX, { cause: error });
+        // A file the reader slips on is refused as one it can't read, not as a server error.
+        if (error instanceof XmlError || !(error instanceof ApiError))
+            throw new ApiError(400, NOT_A_DOCX, { cause: error });
         throw error;
     }
 }

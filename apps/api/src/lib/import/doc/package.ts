@@ -50,7 +50,7 @@ export function readPackage(bytes: Uint8Array): Package {
     if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte) && Buffer.from(bytes).includes(ENCRYPTED_PACKAGE))
         throw new ApiError(400, PASSWORD_PROTECTED);
     const zip = openZip(bytes);
-    const budget: Budget = { left: MAX_DOCX_XML_BYTES, tags: MAX_DOCX_XML_TAGS, charged: new Set() };
+    const budget: Budget = { left: MAX_DOCX_XML_BYTES, tags: MAX_DOCX_XML_TAGS, charged: new Set(), parsed: new Map() };
     const contentTypes = readContentTypes(readXml(zip, '[Content_Types].xml', budget));
     const documentPath = relOfType(readRels(zip, '', budget), 'officeDocument') ?? 'word/document.xml';
     const documentRels = readRels(zip, documentPath, budget);
@@ -90,7 +90,8 @@ export function readPackage(bytes: Uint8Array): Package {
     };
 }
 
-type Budget = { left: number; tags: number; charged: Set<string> };
+// A part several relationships name is charged and parsed once, and they share its tree.
+type Budget = { left: number; tags: number; charged: Set<string>; parsed: Map<string, XmlElement | undefined> };
 
 // Declared sizes are the cap: a read inflates no further than its entry declares (core/zip), so nothing parsed passes it.
 function charge(zip: ZipReader, paths: string[], budget: Budget): void {
@@ -102,14 +103,16 @@ function charge(zip: ZipReader, paths: string[], budget: Budget): void {
 }
 
 function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | undefined {
+    if (budget.parsed.has(path)) return budget.parsed.get(path);
     charge(zip, [path], budget);
     const bytes = zip.read(path);
     if (!bytes) return undefined;
     for (const byte of bytes) if (byte === LESS_THAN) budget.tags--;
     if (budget.tags < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-    const root = parseXml(bytes);
+    const root = parseXml(bytes) ?? undefined;
     if (root) toTransitional(root);
-    return root ?? undefined;
+    budget.parsed.set(path, root);
+    return root;
 }
 
 const LESS_THAN = 0x3c;
