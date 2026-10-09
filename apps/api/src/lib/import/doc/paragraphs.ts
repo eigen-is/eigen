@@ -3,7 +3,15 @@ import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxm
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { bundledFontOf, type FontTable, MONOSPACE_FONT, readFontTable, readTheme, type Theme } from './docx-fonts';
+import {
+    bundledFontOf,
+    byFace,
+    type FontTable,
+    MONOSPACE_FONT,
+    readFontTable,
+    readTheme,
+    type Theme,
+} from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import {
@@ -68,7 +76,8 @@ export type Scope = {
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
-    const theme = readTheme(pkg.theme, w(wChild(defaults, 'lang'), 'bidi'));
+    const lang = wChild(defaults, 'lang');
+    const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
@@ -347,13 +356,17 @@ function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolea
 function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: string | undefined): boolean {
     const { styles } = reader;
     const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
-    return descendants(p, W_NS, 'r')
-        .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
-        .every((run) => {
-            const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
-            const { font } = mergeRun(paraRun, styles.run(direct.style), direct);
-            return bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT;
-        });
+    return descendants(p, W_NS, 'r').every((run) => {
+        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
+        const props = mergeRun(paraRun, styles.run(direct.style), direct);
+        return xmlElements(run).every(
+            (child) =>
+                !is(child, W_NS, 't') ||
+                byFace(xmlText(child), props.fonts, props).every(
+                    (face) => !face.text.trim() || bundledFontOf(face.font, reader.fontTable) === MONOSPACE_FONT,
+                ),
+        );
+    });
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

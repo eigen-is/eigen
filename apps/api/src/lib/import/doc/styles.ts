@@ -1,7 +1,7 @@
 import { codeBlockLanguage, headingLevel, PAGE_SECTION_TYPES, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
-import type { Theme } from './docx-fonts';
+import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
 import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
@@ -19,10 +19,10 @@ export type RunProps = {
     linkColor?: boolean;
     highlight?: string;
     shading?: string;
-    font?: string;
+    fonts?: Fonts;
     size?: number;
     vanish?: boolean;
-};
+} & Script;
 
 // The left border's width in eighths of a point, which tells the writer's quote bar from a rule beside the text.
 type Borders = {
@@ -150,12 +150,28 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 props.shading = shadingOf(child);
                 break;
             case 'rFonts': {
-                const themed = w(child, 'asciiTheme') ?? w(child, 'hAnsiTheme');
-                const bidiLanguage = w(wChild(rPr, 'lang'), 'bidi');
-                const font = (themed && theme.font(themed, bidiLanguage)) ?? w(child, 'ascii') ?? w(child, 'hAnsi');
-                if (font) props.font = font;
+                const lang = wChild(rPr, 'lang');
+                const fonts: Fonts = {};
+                for (const slot of FONT_SLOTS) {
+                    const themed = w(child, slot === 'cs' ? 'cstheme' : `${slot}Theme`);
+                    const language = themed?.endsWith('Bidi')
+                        ? w(lang, 'bidi')
+                        : themed?.endsWith('EastAsia')
+                          ? w(lang, 'eastAsia')
+                          : undefined;
+                    const font = (themed && theme.font(themed, language)) ?? w(child, slot);
+                    if (font) fonts[slot] = font;
+                }
+                props.fonts = fonts;
+                const hint = w(child, 'hint');
+                if (hint) props.hint = hint;
                 break;
             }
+            case 'cs':
+            case 'rtl':
+                // Either marks the run complex script, drawn all in its cs face; an rtl off leaves a cs on.
+                if (child.local === 'cs' || onOff(child)) props.complex = onOff(child);
+                break;
             case 'sz':
                 props.size = halfPoints(w(child, 'val'));
                 break;
@@ -247,7 +263,13 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
 }
 
 export function mergeRun(...layers: RunProps[]): RunProps {
-    return Object.assign({}, ...layers);
+    const merged: RunProps = {};
+    for (const layer of layers) {
+        const { fonts, ...rest } = layer;
+        Object.assign(merged, rest);
+        if (fonts) merged.fonts = { ...merged.fonts, ...fonts };
+    }
+    return merged;
 }
 
 export function mergePara(...layers: ParaProps[]): ParaProps {
