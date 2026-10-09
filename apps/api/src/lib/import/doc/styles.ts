@@ -351,13 +351,13 @@ function roleOf({ name, language }: Style): Role | undefined {
 }
 
 // What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark; a subtitle
-// draws as a paragraph.
+// draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
 export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
     heading: ['bold', 'size'],
     subtitle: [],
     quote: ['italic', 'color'],
     code: 'all',
-    caption: 'all',
+    caption: [],
     taskDone: ['strike', 'color'],
     hr: 'all',
     structural: 'all',
