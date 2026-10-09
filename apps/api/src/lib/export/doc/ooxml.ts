@@ -56,6 +56,21 @@ export function codeBlockLanguage(styleName: string): string | undefined {
     return CODE_BLOCK_LANGUAGE.exec(styleName)?.[1];
 }
 
+// ── Lists ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// An ordered list's type as Word's numFmt, and back; decimal is the default, which reads back as no type.
+export const LIST_FORMATS = new Map([
+    ['1', 'decimal'],
+    ['a', 'lowerLetter'],
+    ['A', 'upperLetter'],
+    ['i', 'lowerRoman'],
+    ['I', 'upperRoman'],
+]);
+
+export const LIST_TYPES = new Map(
+    [...LIST_FORMATS].flatMap(([type, format]) => (format === 'decimal' ? [] : [[format, type] as const])),
+);
+
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const TWIPS_PER_PX = 15;

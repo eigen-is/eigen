@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
-import { QUOTE_LOOK } from '../../export/doc/ooxml';
-import { type ListRef, ORDERED_TYPES } from './numbering';
+import { LIST_TYPES, QUOTE_LOOK } from '../../export/doc/ooxml';
+import type { ListRef } from './numbering';
 import type { Role } from './styles';
 
 // Items → blocks: floats and captions join their paragraph, quotes nest by depth, lists by level, code lines join.
@@ -439,7 +439,7 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
         if (deeper) break;
     }
     const attrs =
-        kind === 'orderedList' ? { start: number, type: ORDERED_TYPES[para.list?.format ?? ''] ?? null } : undefined;
+        kind === 'orderedList' ? { start: number, type: LIST_TYPES.get(para.list?.format ?? '') ?? null } : undefined;
     const level: Open = {
         list: { type: kind, ...(attrs && { attrs }), content: [item] },
         item,
