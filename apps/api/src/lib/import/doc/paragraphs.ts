@@ -5,7 +5,18 @@ import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assem
 import { type FontTable, isMonospace, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { MAX_LEVEL, Numbering } from './numbering';
-import { alternative, descendants, int, is, isAlternateContent, type Package, type Part, w, wChild } from './package';
+import {
+    alternative,
+    descendants,
+    halfPoints,
+    is,
+    isAlternateContent,
+    type Package,
+    type Part,
+    twips,
+    w,
+    wChild,
+} from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import { mergePara, mergeRun, type Role, type RunProps, readParaProps, Styles } from './styles';
 import { isFill, readTable } from './tables';
@@ -65,9 +76,9 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         bodySize: body.size ?? 20,
         baseColor: body.color,
         columnTwips:
-            (int(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
-            (int(w(margin, 'left')) ?? 1440) -
-            (int(w(margin, 'right')) ?? 1440),
+            (twips(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
+            (twips(w(margin, 'left')) ?? 1440) -
+            (twips(w(margin, 'right')) ?? 1440),
         publicOrigin,
     };
 }
@@ -282,7 +293,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 function isBodySized(reader: Reader, p: XmlElement, headingSize: number): boolean {
     const sizes = descendants(p, W_NS, 'r')
         .filter((run) => xmlElements(run).some((child) => is(child, W_NS, 't') && xmlText(child).trim()))
-        .map((run) => int(w(wChild(wChild(run, 'rPr'), 'sz'), 'val')));
+        .map((run) => halfPoints(w(wChild(wChild(run, 'rPr'), 'sz'), 'val')));
     return (
         sizes.length > 0 && sizes.every((size) => size !== undefined && size < headingSize && size <= reader.bodySize)
     );

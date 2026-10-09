@@ -194,6 +194,29 @@ describe('indented code', () => {
         ]);
     });
 
+    // Strict OOXML gives lengths in universal measures: 36pt is 720 twips, half an inch.
+    test.each([
+        [
+            "at a bullet's text",
+            '36pt',
+            '0.5in',
+            [{ type: 'bulletList', content: [{ type: 'listItem', content: [text('Item'), code] }] }],
+        ],
+        [
+            "left of a bullet's text",
+            '1in',
+            '36pt',
+            [{ type: 'bulletList', content: [{ type: 'listItem', content: [text('Item')] }] }, code],
+        ],
+    ])('in points %s', async (_name, bullet, indent, expected) => {
+        const numbering = BULLETS.replace('w:left="720" w:hanging="360"', `w:start="${bullet}" w:hanging="18pt"`);
+        const { json } = await importDocxBody(
+            `${paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr>')}${paragraph(run('x = 1'), `<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="${indent}"/>`)}`,
+            { styles: PRE, numbering },
+        );
+        expect(json.content).toEqual(expected);
+    });
+
     test('right after a quote continues it', async () => {
         const { json } = await importDocxBody(
             `${paragraph(run('Said'), '<w:pStyle w:val="Quote"/>')}${pre('x = 1')}${paragraph(run('After'))}`,

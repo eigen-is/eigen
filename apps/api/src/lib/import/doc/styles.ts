@@ -2,7 +2,7 @@ import { type XmlElement, xmlElements } from '../../core/xml';
 import { codeBlockLanguage, STYLE_NAMES, W_NS } from '../../export/doc/ooxml';
 import { lowlight } from '../../export/doc/render';
 import type { Theme } from './docx-fonts';
-import { int, is, isOn, onOff, w, wChild } from './package';
+import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type RunProps = {
@@ -125,7 +125,7 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 break;
             }
             case 'sz':
-                props.size = int(w(child, 'val'));
+                props.size = halfPoints(w(child, 'val'));
                 break;
             case 'vanish':
                 props.vanish = onOff(child);
@@ -162,7 +162,7 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 break;
             }
             case 'ind':
-                props.indLeft = int(w(child, 'left') ?? w(child, 'start')) ?? props.indLeft;
+                props.indLeft = twips(w(child, 'left') ?? w(child, 'start')) ?? props.indLeft;
                 break;
             case 'pageBreakBefore':
                 props.pageBreakBefore = onOff(child);
@@ -183,12 +183,12 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 props.shading = shadingOf(child);
                 break;
             case 'spacing': {
-                const line = int(w(child, 'line'));
+                const line = twips(w(child, 'line'));
                 if (w(child, 'lineRule') === 'exact' && line !== undefined) props.exactLine = line;
                 break;
             }
             case 'rPr':
-                props.markSize = int(w(wChild(child, 'sz'), 'val'));
+                props.markSize = halfPoints(w(wChild(child, 'sz'), 'val'));
                 props.markHidden = onOff(wChild(child, 'vanish'));
                 props.markDeleted = !!(wChild(child, 'del') ?? wChild(child, 'moveFrom'));
                 break;

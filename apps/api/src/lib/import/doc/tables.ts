@@ -3,7 +3,7 @@ import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TWIPS_PER_PX, W_NS } from '../../export/doc/ooxml';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
-import { int, is, isOn, onOff, w, wChild } from './package';
+import { int, is, isOn, onOff, twips, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { mergeRun, shadingOf } from './styles';
 
@@ -22,7 +22,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tblPr = wChild(table, 'tblPr');
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => is(col, W_NS, 'gridCol'))
-        .map((col) => int(w(col, 'w')) ?? 0)
+        .map((col) => twips(w(col, 'w')) ?? 0)
         .slice(0, MAX_COLUMNS);
     const columns = grid.length || MAX_COLUMNS;
     const columnPx = scaled(grid, scope.room ?? COLUMN_PX);
@@ -107,7 +107,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (cells.length > 0) rowNodes.push({ type: 'tableRow', content: cells });
     }
     if (rowNodes.length === 0) return [];
-    const indent = int(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
+    const indent = twips(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
     return [{ kind: 'table', node: { type: 'table', content: rowNodes }, indent }];
 }
 
@@ -155,7 +155,7 @@ function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: 
     if (!figure || figures.length !== 1 || rest.length > 0) return undefined;
     if (image?.inlines.some((node) => node.type !== 'figure' && !isWhitespace(node))) return undefined;
     const spec = w(float, 'tblpXSpec');
-    const x = int(w(float, 'tblpX')) ?? 0;
+    const x = twips(w(float, 'tblpX')) ?? 0;
     const width = grid.reduce((sum, col) => sum + col, 0);
     const right =
         spec === 'right' || spec === 'outside' || (spec === undefined && x + width / 2 > reader.columnTwips / 2);

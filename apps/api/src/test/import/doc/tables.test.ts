@@ -90,7 +90,7 @@ describe('table style first row', () => {
 });
 
 describe('column widths', () => {
-    const gridded = (grid: number[], cells: string[]) =>
+    const gridded = (grid: (number | string)[], cells: string[]) =>
         `<w:tbl><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(cells)}</w:tbl>`;
     const colwidths = (json: JSONContent) => nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth']);
 
@@ -105,6 +105,11 @@ describe('column widths', () => {
     test('a grid that fits keeps its widths', async () => {
         const { json } = await importDocxBody(gridded([3000, 4500], [cell('a'), cell('b')]));
         expect(colwidths(json)).toEqual([[200], [300]]);
+    });
+
+    test('a grid in universal measures, as Strict OOXML writes it, is read in points', async () => {
+        const { json } = await importDocxBody(gridded(['150pt', '2in'], [cell('a'), cell('b')]));
+        expect(colwidths(json)).toEqual([[200], [192]]);
     });
 
     test("a nested table scales down to its cell's width", async () => {
