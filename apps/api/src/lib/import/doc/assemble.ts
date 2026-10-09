@@ -38,6 +38,9 @@ export const COLUMN_PX = Math.floor(PAGE.width - PAGE.margin.left - PAGE.margin.
 // Deeper quotes join the deepest, so a hostile indent can't nest without end.
 export const MAX_QUOTE_DEPTH = 8;
 
+// Word's levels; lists of other definitions nest by indent, which a hostile file can deepen without end.
+export const MAX_LIST_DEPTH = 9;
+
 const INDENT_TOLERANCE = 60;
 
 const ASCII_WHITESPACE = /^[ \t\r\n]*$/;
@@ -385,8 +388,9 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
             return;
         }
         const deeper = sameList ? top.ilvl < ilvl : indent > top.indent + INDENT_TOLERANCE;
-        if (deeper) break;
+        if (deeper && stack.length < MAX_LIST_DEPTH) break;
         pop();
+        if (deeper) break;
     }
     const attrs =
         kind === 'orderedList' ? { start: number, type: ORDERED_TYPES[para.list?.format ?? ''] ?? null } : undefined;

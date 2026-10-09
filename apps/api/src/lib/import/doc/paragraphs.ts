@@ -31,8 +31,8 @@ export type Reader = {
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, and the table style around it.
-export type Scope = { part: Part; inNote: boolean; tableRun?: RunProps };
+// Per part: its relationships, whether its breaks page, the tables around it and the table style.
+export type Scope = { part: Part; inNote: boolean; tables: number; tableRun?: RunProps };
 
 export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
     const theme = readTheme(pkg.theme);
@@ -63,7 +63,9 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
 export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
-    const blocks = build(readBlocks(reader, xmlElements(body), { part: reader.pkg.document, inNote: false }));
+    const blocks = build(
+        readBlocks(reader, xmlElements(body), { part: reader.pkg.document, inNote: false, tables: 0 }),
+    );
     const notes = readNotes(reader);
     if (notes.length > 0) blocks.push({ type: 'orderedList', attrs: { start: 1, type: null }, content: notes });
     return blocks;
@@ -77,7 +79,7 @@ function readNotes(reader: Reader): JSONContent[] {
         const note = part && xmlElements(part.root).find((el) => el.local === ref.type && w(el, 'id') === ref.id);
         if (!part || !note) continue;
         reader.fields.length = 0;
-        const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true }));
+        const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true, tables: 0 }));
         const back: JSONContent[] = [
             { type: 'text', text: ' ' },
             { type: 'text', text: '↑', marks: [{ type: 'link', attrs: { href: `#${ref.type}-ref-${ref.id}` } }] },

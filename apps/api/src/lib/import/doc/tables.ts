@@ -12,7 +12,13 @@ type Row = { trPr?: XmlElement; cells: XmlElement[] };
 // Word's column limit: a span is walked column by column, so a gridSpan of 2e9 would hold the Worker to its deadline.
 const MAX_COLUMNS = 63;
 
+// Each table nests three nodes deep; 1,000 nested tables overflowed the Worker's stack.
+export const MAX_TABLE_DEPTH = 8;
+
 export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item[] {
+    const rows = tableRows(table);
+    if (scope.tables >= MAX_TABLE_DEPTH)
+        return rows.flatMap((row) => row.cells.flatMap((cell) => readBlocks(reader, cellContent(cell), scope)));
     const tblPr = wChild(table, 'tblPr');
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => is(col, W_NS, 'gridCol'))
@@ -26,7 +32,6 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
 
-    const rows = tableRows(table);
     const float = wChild(tblPr, 'tblpPr');
     const [onlyRow] = rows;
     if (float && rows.length === 1 && onlyRow?.cells.length === 1) {
@@ -64,7 +69,11 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 }
             }
             const first = rowIndex === 0 && firstRowOn && tableStyle?.firstRowRun;
-            const cellScope: Scope = { ...scope, tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun };
+            const cellScope: Scope = {
+                ...scope,
+                tables: scope.tables + 1,
+                tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
+            };
             const content = build(readBlocks(reader, cellContent(cell), cellScope));
             const fill = shadingOf(wChild(tcPr, 'shd'));
             const node: JSONContent = {

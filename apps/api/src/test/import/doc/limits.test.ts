@@ -7,9 +7,10 @@ import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
-import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { COLUMN_PX, MAX_LIST_DEPTH, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
     buildDocxWithBody,
     GOLDEN_DOCX_IMAGE_RUN,
@@ -156,6 +157,31 @@ describe('structure', () => {
         for (let node = json.content?.[0]; node?.type === 'blockquote'; node = node.content?.[0]) depth++;
         expect(depth).toBe(MAX_QUOTE_DEPTH);
     }, 5000);
+
+    // Each list of its own definition nests under the item above by indent; 3,000 deep overflowed the Worker's stack.
+    test('lists nest at most nine deep, deeper items opening lists at the deepest level', async () => {
+        const count = 50;
+        const numbering = Array.from(
+            { length: count },
+            (_, index) =>
+                `<w:abstractNum w:abstractNumId="${100 + index}"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum><w:num w:numId="${100 + index}"><w:abstractNumId w:val="${100 + index}"/></w:num>`,
+        ).join('');
+        const body = Array.from({ length: count }, (_, index) =>
+            paragraph(run(`Item ${index}`), `${ordered(100 + index)}<w:ind w:left="${720 * (index + 1)}"/>`),
+        ).join('');
+        const json = await imported(body, { numbering });
+        const depth = (node: JSONContent): number =>
+            (node.type === 'bulletList' ? 1 : 0) + Math.max(0, ...(node.content ?? []).map(depth));
+        expect(depth(json)).toBe(MAX_LIST_DEPTH);
+        expect(nodesOfType(json, 'listItem')).toHaveLength(count);
+    });
+
+    test('tables nest at most eight deep, a deeper one reading as its cells', async () => {
+        const body = `${'<w:tbl><w:tr><w:tc>'.repeat(50)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(50)}`;
+        const json = await imported(body);
+        expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Core']);
+    });
 
     test('a level outside 0 to 8 is read within it', async () => {
         const json = await imported(paragraph(run('Item'), ordered(2, -3)));
