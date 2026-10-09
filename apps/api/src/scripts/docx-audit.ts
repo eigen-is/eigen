@@ -627,7 +627,9 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
 
     const tally = newTally();
     const paragraphLook = (pPr: XmlElement | undefined): ParagraphLook => {
-        const chain = styles.chain(val(child(pPr, 'pStyle')) ?? styles.paragraph);
+        // Word draws a paragraph naming a style the file lacks in the default paragraph style.
+        const named = styles.chain(val(child(pPr, 'pStyle')));
+        const chain = named.length > 0 ? named : styles.chain(styles.paragraph);
         const names = chain.map(styleName);
         const pPrs = [pPr, ...chain.map((style) => child(style, 'pPr')), styles.pPr].flatMap((p) => p ?? []);
         // Word's Title is H1 in Eigen (PROPOSAL_DOCX.md, Decision 8). The nearest style that names a level decides,
