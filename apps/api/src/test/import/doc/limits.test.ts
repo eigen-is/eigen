@@ -152,6 +152,46 @@ describe('XML budget', () => {
         expect(parses.mock.calls.filter(([input]) => input.length === size)).toHaveLength(1);
     });
 
+    test('a corrupt part every relationship names is parsed once and costs only its looks', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const types = ['styles', 'numbering', 'theme', 'footnotes', 'endnotes'];
+        const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${types
+            .map(
+                (type) =>
+                    `<Relationship Id="${type}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="broken.xml"/>`,
+            )
+            .join('')}</Relationships>`;
+        const broken = new TextEncoder().encode('<w:styles><w:style></w:styles>');
+        const parts = [
+            ...golden.names().map((name) => {
+                const data = golden.read(name) ?? new Uint8Array();
+                return stored(name, name === 'word/_rels/document.xml.rels' ? new TextEncoder().encode(rels) : data);
+            }),
+            stored('word/broken.xml', broken),
+        ];
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const { json } = await docxToPmJson(build(parts));
+        expect(texts(json)).toEqual(['Body']);
+        expect(parses.mock.calls.filter(([input]) => input.length === broken.length)).toHaveLength(1);
+    });
+
+    // The second name reads the part's error, not a part without relationships.
+    test('a corrupt part fails alike for every name that reads it', async () => {
+        const encode = (text: string) => new TextEncoder().encode(text);
+        const notes = `<w:notes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:endnote w:id="1">${paragraph(run('Note'))}</w:endnote></w:notes>`;
+        const { json } = await importDocxBody(paragraph(`${run('Body')}<w:r><w:endnoteReference w:id="1"/></w:r>`), {
+            rels: ['footnotes', 'endnotes']
+                .map(
+                    (type) =>
+                        `<Relationship Id="${type}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="notes.xml"/>`,
+                )
+                .join(''),
+            media: { 'word/notes.xml': encode(notes), 'word/_rels/notes.xml.rels': encode('<Relationships>') },
+        });
+        expect(texts(json)).toEqual(['Body', '[1]']);
+    });
+
     // As a corrupt file is, rather than as a server error.
     test('a reader slip on a file is 400', async () => {
         const docx = await buildDocxWithBody(paragraph(run('Body')));
