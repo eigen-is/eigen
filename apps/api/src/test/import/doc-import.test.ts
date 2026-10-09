@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { writeZip } from '../../lib/core/zip';
 import { readEigendocFromDoc } from '../../lib/document/doc';
@@ -160,6 +161,25 @@ describe('Eigendoc docx import/convert', () => {
         expect(nodeTypes(await readDocJson(docPath.id))).toEqual(['heading', 'paragraph', 'bulletList', 'paragraph']);
         expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(altBytes));
     }, 120_000);
+
+    // The Worker reads no config: the job carries the origin, so a link into this instance comes back root-relative.
+    test('import makes a link to this instance root-relative', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'origin-import-target' },
+        );
+        const docx = await buildDocxWithBody(
+            '<w:p><w:hyperlink r:id="rId9"><w:r><w:t>Home</w:t></w:r></w:hyperlink></w:p>',
+            {
+                rels: `<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${getPublicOrigin()}/doc/x?y#z" TargetMode="External"/>`,
+            },
+        );
+        expect((await assertJson<{ success: boolean }>(await importRequest(docPath.id, docx))).success).toBe(true);
+        expect(JSON.stringify(await readDocJson(docPath.id))).toContain('"href":"/doc/x?y#z"');
+    }, 60_000);
 
     test('convert rejects non-.docx files', async () => {
         const uploaded = await upload('not a document', 'notes.txt', 'text/plain');
