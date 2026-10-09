@@ -39,10 +39,11 @@ const DOCUMENT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/pixel.png"/>
 </Relationships>`;
 
-const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+const stylesXml = (extra: string): string => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading 1"/></w:style>
 <w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/></w:style>
+${extra}
 </w:styles>`;
 
 const NUMBERING = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -81,18 +82,18 @@ export async function buildGoldenDocx(imageBytes: Uint8Array): Promise<ArrayBuff
 }
 
 // The golden package around a body of the caller's own: its Heading1 style, bullets as numId 1 and
-// decimal numbers, two levels deep, as numId 2. Footnotes, when given, land in word/footnotes.xml.
-export async function buildDocxWithBody(body: string, footnotes = ''): Promise<ArrayBuffer> {
-    return zipDocx(documentXml(body), new Uint8Array(), footnotes);
+// decimal numbers, two levels deep, as numId 2. Footnotes, when given, land in word/footnotes.xml; styles join styles.xml.
+export async function buildDocxWithBody(body: string, footnotes = '', styles = ''): Promise<ArrayBuffer> {
+    return zipDocx(documentXml(body), new Uint8Array(), footnotes, styles);
 }
 
-async function zipDocx(document: string, imageBytes: Uint8Array, footnotes = ''): Promise<ArrayBuffer> {
+async function zipDocx(document: string, imageBytes: Uint8Array, footnotes = '', styles = ''): Promise<ArrayBuffer> {
     const zip = new JSZip();
     zip.file('[Content_Types].xml', CONTENT_TYPES, { date: EPOCH });
     zip.file('_rels/.rels', PACKAGE_RELS, { date: EPOCH });
     zip.file('word/document.xml', document, { date: EPOCH });
     zip.file('word/_rels/document.xml.rels', DOCUMENT_RELS, { date: EPOCH });
-    zip.file('word/styles.xml', STYLES, { date: EPOCH });
+    zip.file('word/styles.xml', stylesXml(styles), { date: EPOCH });
     zip.file('word/numbering.xml', NUMBERING, { date: EPOCH });
     zip.file('word/media/pixel.png', imageBytes, { date: EPOCH });
     if (footnotes) zip.file('word/footnotes.xml', footnotesXml(footnotes), { date: EPOCH });
