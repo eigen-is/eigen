@@ -409,8 +409,16 @@ type Inline = {
     link: boolean;
 };
 
-// marks: all but the font, which each face of the run's text carries on its own.
-type RunLook = { hidden: boolean; code: boolean; marks: Feature[]; fonts: Fonts; script: Script };
+// marks: all but the font, which each face of the run's text carries on its own; complexMarks: a complex script face's,
+// whose bold, italic and size Word reads from bCs, iCs and szCs.
+type RunLook = {
+    hidden: boolean;
+    code: boolean;
+    marks: Feature[];
+    complexMarks: Feature[];
+    fonts: Fonts;
+    script: Script;
+};
 
 type Boxed = { element: XmlElement; boxed: boolean };
 
@@ -716,7 +724,12 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
-    const base = { color: colorOf(plain), size: sizeOf(plain), indent };
+    const base = {
+        color: colorOf(plain),
+        size: sizeOf(plain),
+        sizeCs: Number(val(first(plain, 'szCs')) ?? sizeOf(plain)),
+        indent,
+    };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
         const chain = styles.chain(val(child(rPr, 'rStyle')) ?? styles.character);
@@ -740,24 +753,33 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
         const faces = [...direct, ...characterRuns, ...context.styleRuns];
-        const marks: [Feature, boolean][] = [
-            ['bold', toggle('b', context.weightRuns)],
-            ['italic', toggle('i')],
+        const sized = [...direct, ...characterRuns, ...context.weightRuns];
+        const sizeCs = val(first(sized, 'szCs'));
+        const shape = (bold: string, italic: string, small: boolean): [Feature, boolean][] => [
+            ['bold', toggle(bold, context.weightRuns)],
+            ['italic', toggle(italic)],
+            ['small', small],
+        ];
+        const common: [Feature, boolean][] = [
             ['underline', underline !== undefined && underline !== 'none'],
             ['strike', toggle('strike') || toggle('dstrike')],
             ['subscript', vertAlign === 'subscript'],
             ['superscript', vertAlign === 'superscript'],
             ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
-            ['small', sizeOf([...direct, ...characterRuns, ...context.weightRuns]) <= base.size * SMALL_PRINT],
             ['caps', toggle('caps', context.styleRuns)],
             ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
             ['link', linked],
         ];
+        const set = (marks: [Feature, boolean][]) => marks.filter(([, shown]) => shown).map(([feature]) => feature);
         return {
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
-            marks: marks.filter(([, set]) => set).map(([feature]) => feature),
+            marks: set([...shape('b', 'i', sizeOf(sized) <= base.size * SMALL_PRINT), ...common]),
+            complexMarks: set([
+                ...shape('bCs', 'iCs', sizeCs !== undefined && Number(sizeCs) <= base.sizeCs * SMALL_PRINT),
+                ...common,
+            ]),
             fonts: fontsOf(faces),
             script: scriptOf(sources),
         };
@@ -784,7 +806,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         }
         for (const face of byFace(value, look.fonts, look.script)) {
             const font = fontMark(face.font, fontTable);
-            const own: Feature[] = font ? [...look.marks, 'font'] : look.marks;
+            const shown = face.complex ? look.complexMarks : look.marks;
+            const own: Feature[] = font ? [...shown, 'font'] : shown;
             const marks: readonly Feature[] = !context.marks ? [] : look.code ? ['code'] : own;
             context.paragraph.spans.push({ text: face.text, marks, font });
         }
@@ -1427,7 +1450,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), headers, footers and comments.',
         '',

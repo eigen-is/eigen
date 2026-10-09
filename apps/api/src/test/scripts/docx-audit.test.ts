@@ -356,6 +356,17 @@ describe('both sides', () => {
         expect(features['font']).toEqual({ source: 2, imported: 2, matched: 2, invented: 0, kept: 1 });
     });
 
+    // Word draws a complex script character's bold, italic and size from bCs, iCs and szCs.
+    test('complex script bold and italic read alike on both sides', async () => {
+        const docx = await buildDocxWithBody(
+            `<w:p>${run('مملكة', '<w:bCs/>')}${run(' Spain', '<w:bCs/><w:iCs/>')}${run(' إسبانيا', '<w:b/><w:iCs/>')}</w:p>`,
+        );
+        const source = auditSource(docx);
+        expect([source.marks.get('bold'), source.marks.get('italic')]).toEqual([['مملكة'], ['إسبانيا']]);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
+    });
+
     const fontRun = (text: string, font: string) => run(text, `<w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>`);
 
     // A body in `font` with one word in `other`, read by the audit and imported by the reader.

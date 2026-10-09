@@ -9,6 +9,10 @@ export type RunProps = {
     style?: string;
     bold?: boolean;
     italic?: boolean;
+    // A complex script character's own: Word draws Arabic or Hebrew, and all of a run marked rtl, with these.
+    boldCs?: boolean;
+    italicCs?: boolean;
+    sizeCs?: number;
     caps?: boolean;
     smallCaps?: boolean;
     underline?: boolean;
@@ -55,7 +59,7 @@ export type ParaProps = {
     frame?: 'left' | 'right';
 };
 
-export const TOGGLES = ['bold', 'italic', 'caps', 'smallCaps', 'strike'] as const;
+export const TOGGLES = ['bold', 'boldCs', 'italic', 'italicCs', 'caps', 'smallCaps', 'strike'] as const;
 
 // ST_HighlightColor, the only names Word draws.
 const HIGHLIGHT_COLORS = new Map([
@@ -119,6 +123,12 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
             case 'i':
                 props.italic = onOff(child);
                 break;
+            case 'bCs':
+                props.boldCs = onOff(child);
+                break;
+            case 'iCs':
+                props.italicCs = onOff(child);
+                break;
             case 'caps':
                 props.caps = onOff(child);
                 break;
@@ -174,6 +184,9 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 break;
             case 'sz':
                 props.size = halfPoints(w(child, 'val'));
+                break;
+            case 'szCs':
+                props.sizeCs = halfPoints(w(child, 'val'));
                 break;
             case 'vanish':
                 props.vanish = onOff(child);
@@ -353,9 +366,9 @@ function roleOf({ name, language }: Style): Role | undefined {
 // What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark; a subtitle
 // draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
 export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
-    heading: ['bold', 'size'],
+    heading: ['bold', 'boldCs', 'size', 'sizeCs'],
     subtitle: [],
-    quote: ['italic', 'color'],
+    quote: ['italic', 'italicCs', 'color'],
     code: 'all',
     caption: [],
     taskDone: ['strike', 'color'],

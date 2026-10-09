@@ -77,16 +77,24 @@ function faceOf(fonts: Fonts | undefined, slot: (typeof FONT_SLOTS)[number]): st
     return fonts?.[slot];
 }
 
-// A run's text in the faces Word draws it in, split where the face changes; Latin text in one face is one piece.
-export function byFace(text: string, fonts: Fonts | undefined, script: Script): { text: string; font?: string }[] {
+// A run's text in the faces Word draws it in, split where the face changes or complex script, which draws in the
+// complex script's bold, italic and size, starts or ends; Latin text in one face is one piece.
+export function byFace(
+    text: string,
+    fonts: Fonts | undefined,
+    script: Script,
+): { text: string; font?: string; complex: boolean }[] {
     const latin = !script.complex && !SCRIPTED.test(text) && (script.hint !== 'eastAsia' || !NON_ASCII.test(text));
-    if (latin && faceOf(fonts, 'ascii') === faceOf(fonts, 'hAnsi')) return [{ text, font: faceOf(fonts, 'ascii') }];
-    const pieces: { text: string; font?: string }[] = [];
+    if (latin && faceOf(fonts, 'ascii') === faceOf(fonts, 'hAnsi'))
+        return [{ text, font: faceOf(fonts, 'ascii'), complex: false }];
+    const pieces: { text: string; font?: string; complex: boolean }[] = [];
     for (const char of text) {
-        const font = faceOf(fonts, fontSlot(char, script));
+        const slot = fontSlot(char, script);
+        const font = faceOf(fonts, slot);
+        const complex = slot === 'cs';
         const last = pieces.at(-1);
-        if (last && last.font === font) last.text += char;
-        else pieces.push({ text: char, font });
+        if (last && last.font === font && last.complex === complex) last.text += char;
+        else pieces.push({ text: char, font, complex });
     }
     return pieces;
 }

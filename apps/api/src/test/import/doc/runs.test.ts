@@ -260,3 +260,35 @@ describe('sizes', () => {
         expect(marksOfType(json, 'small')).toEqual([]);
     });
 });
+
+describe('complex script', () => {
+    // Word draws a complex script character, and every character of a run marked rtl, with bCs, iCs and szCs.
+    test('an Arabic run with bCs alone is bold, a Latin one is not, and an rtl run is complex throughout', async () => {
+        const json = await imported(
+            paragraph(
+                `${run('إسبانيا', '<w:bCs/><w:rtl/>')}${run(' Spain ', '<w:bCs/>')}${run('مملكة', '<w:b/>')}${run(' (Reino)', '<w:bCs/><w:rtl/>')}`,
+            ),
+        );
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['إسبانيا', ' (Reino)']);
+    });
+
+    test('in one run Arabic takes iCs and szCs, Latin i and sz', async () => {
+        const styles =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const json = await imported(paragraph(run('Spain مملكة', '<w:i/><w:szCs w:val="14"/>')), { styles });
+        expect(marksOfType(json, 'italic').map((mark) => mark.text)).toEqual(['Spain ']);
+        expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['مملكة']);
+    });
+
+    test("bCs toggles through the styles as b does, and a heading's is its own", async () => {
+        const styles = `<w:style w:type="paragraph" w:styleId="Loud"><w:name w:val="Loud"/><w:rPr><w:bCs/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="Strong"><w:name w:val="Strong"/><w:rPr><w:bCs/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="Heading 2"/><w:rPr><w:bCs/></w:rPr></w:style>`;
+        const json = await imported(
+            `${paragraph(`${run('مملكة')}${run(' إسبانيا', '<w:rStyle w:val="Strong"/>')}`, '<w:pStyle w:val="Loud"/>')}${paragraph(run('عنوان'), '<w:pStyle w:val="Heading2"/>')}`,
+            { styles },
+        );
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['مملكة']);
+        expect(nodesOfType(json, 'heading')).toHaveLength(1);
+    });
+});

@@ -56,8 +56,9 @@ export type Reader = {
     // By type and id, in the order first referenced: a note is read once however often it is referenced.
     notes: Map<string, NoteRef>;
     fields: Field[];
-    // The body's size in half-points and its color, which no run needs a mark for.
+    // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
+    bodySizeCs: number;
     baseColor: string | undefined;
     columnTwips: number;
     publicOrigin: string | undefined;
@@ -94,6 +95,7 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         fields: [],
         // Word's default is 10 pt.
         bodySize: body.size ?? 20,
+        bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color,
         columnTwips:
             (twips(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -

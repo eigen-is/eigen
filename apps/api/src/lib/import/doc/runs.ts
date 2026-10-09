@@ -313,15 +313,11 @@ function marksOf(
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
     if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
-    if (props.bold) marks.push({ type: 'bold' });
-    if (props.italic) marks.push({ type: 'italic' });
     const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    const small = props.size !== undefined && props.size <= SMALL_PRINT * reader.bodySize;
-    if (small) marks.push({ type: 'small' });
     // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
     const color =
         props.color &&
@@ -336,7 +332,13 @@ function marksOf(
     const highlight: Marks = isFill(shade)
         ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` } }]
         : [];
-    return faces.map(({ text: part, font }) => {
+    return faces.map(({ text: part, font, complex }) => {
+        const size = complex ? props.sizeCs : props.size;
+        const small = size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
+        const shape: Marks = [];
+        if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
+        if (complex ? props.italicCs : props.italic) shape.push({ type: 'italic' });
+        if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
         const code =
@@ -357,6 +359,6 @@ function marksOf(
                       },
                   ]
                 : [];
-        return { text: part, marks: [...marks, ...textStyle, ...highlight], small, font };
+        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font };
     });
 }
