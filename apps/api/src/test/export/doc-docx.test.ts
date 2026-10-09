@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { getSchema, type JSONContent } from '@tiptap/core';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import JSZip from 'jszip';
 import { common, createLowlight } from 'lowlight';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
@@ -368,8 +369,7 @@ describe('docx writer — package', () => {
         const [first, second] = await Promise.all([docx(buildAllFeaturesDocJson()), docx(buildAllFeaturesDocJson())]);
         expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
         // Two runs inside one zip time tick agree on a clock date too, so the date is pinned on its own.
-        const zip = openZip(first);
-        const dates = zip.names().map((name) => zip.entry(name)?.date.toISOString());
+        const dates = Object.values((await JSZip.loadAsync(first)).files).map((file) => file.date.toISOString());
         expect(new Set(dates)).toEqual(new Set(['1980-01-01T00:00:00.000Z']));
     });
 
