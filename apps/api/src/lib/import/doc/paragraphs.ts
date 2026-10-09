@@ -186,7 +186,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list =
         numId && numId !== '0' && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
-    const props = mergePara(styled, { indLeft: list?.indLeft }, direct);
+    const props = mergePara(styled, list?.indLeft === undefined ? {} : { indLeft: list.indLeft }, direct);
 
     // Google Docs flattens the Code Block style: a shaded paragraph all in a monospace font.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
@@ -213,7 +213,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 !!borders.left &&
                 !!borders.bottom &&
                 !!borders.right));
-    const indLeft = props.indLeft ?? 0;
+    // A hanging first line starts left of the text, where Word draws a bar and an indent nests; an item's holds its
+    // number or checkbox, so an item is at its text.
+    const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
     // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.

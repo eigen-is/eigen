@@ -31,6 +31,8 @@ export type ParaProps = {
     numId?: string;
     ilvl?: number;
     indLeft?: number;
+    // The first line's offset from the left indent: firstLine to the right, hanging (negative) to the left.
+    indFirst?: number;
     pageBreakBefore?: boolean;
     outlineLvl?: number;
     borders?: Borders;
@@ -161,9 +163,15 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 if (ilvl !== undefined) props.ilvl = ilvl;
                 break;
             }
-            case 'ind':
-                props.indLeft = twips(w(child, 'left') ?? w(child, 'start')) ?? props.indLeft;
+            case 'ind': {
+                // Each attribute inherits on its own: a w:ind of only a hanging keeps the style's left.
+                const left = twips(w(child, 'left') ?? w(child, 'start'));
+                if (left !== undefined) props.indLeft = left;
+                const hanging = twips(w(child, 'hanging'));
+                const first = hanging === undefined ? twips(w(child, 'firstLine')) : -hanging;
+                if (first !== undefined) props.indFirst = first;
                 break;
+            }
             case 'pageBreakBefore':
                 props.pageBreakBefore = onOff(child);
                 break;
