@@ -461,6 +461,20 @@ describe('both sides', () => {
         ]);
     });
 
+    test("a heading style's color and italic are its words' marks, its bold the heading's", async () => {
+        const docx = await buildDocxWithBody(`${styled('Heading2', 'Blue Aims')}${paragraph('Body text')}`, {
+            styles: '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:rPr><w:b/><w:i/><w:color w:val="2F5496"/><w:sz w:val="32"/></w:rPr></w:style>',
+        });
+        const tally = auditSource(docx);
+        expect([tally.marks.get('color'), tally.marks.get('italic'), count(tally, 'bold')]).toEqual([
+            ['Blue', 'Aims'],
+            ['Blue', 'Aims'],
+            0,
+        ]);
+        const { features } = compareTallies(tally, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['color']?.invented, features['italic']?.invented]).toEqual([0, 0]);
+    });
+
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
     // size, so the photo the doc leaves at its own width has one there.
     test("the writer's docx holds what its doc holds", async () => {
