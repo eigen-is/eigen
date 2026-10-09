@@ -1,6 +1,6 @@
 /// <reference path="../modules.d.ts" />
 
-import { EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { bundledFont } from '@workspace/lib/constants/fonts';
 import { formatInputDate } from '@workspace/lib/date';
 import type {
     BorderSide,
@@ -70,57 +70,6 @@ const VERTICAL_MAP: Record<NonNullable<Alignment['vertical']>, 0 | 1 | 2> = {
     distributed: 0,
     justify: 0,
 };
-
-// XLSX cells routinely carry fonts we don't bundle (Calibri, Arial, Times, Courier, …).
-// Only the four bundled fonts have face data inlined into the HTML / PDF export, so unmapped
-// fonts fall back to the browser's generic family — inconsistent with the editor. Map common
-// Office defaults to the closest bundled category; anything unrecognized leaves `ff` unset so
-// the document default (Inter) is used.
-const FONT_CATEGORY_MAP: Record<string, EigenFont['category']> = {
-    inter: 'sans-serif',
-    'source serif 4': 'serif',
-    'source serif pro': 'serif',
-    'jetbrains mono': 'monospace',
-    excalifont: 'hand-drawn',
-    // sans-serif
-    calibri: 'sans-serif',
-    'calibri light': 'sans-serif',
-    arial: 'sans-serif',
-    helvetica: 'sans-serif',
-    'helvetica neue': 'sans-serif',
-    verdana: 'sans-serif',
-    tahoma: 'sans-serif',
-    'segoe ui': 'sans-serif',
-    'trebuchet ms': 'sans-serif',
-    // serif
-    'times new roman': 'serif',
-    times: 'serif',
-    georgia: 'serif',
-    cambria: 'serif',
-    garamond: 'serif',
-    'book antiqua': 'serif',
-    palatino: 'serif',
-    'palatino linotype': 'serif',
-    // monospace
-    'courier new': 'monospace',
-    courier: 'monospace',
-    consolas: 'monospace',
-    monaco: 'monospace',
-    'lucida console': 'monospace',
-    menlo: 'monospace',
-    // hand-drawn
-    'comic sans ms': 'hand-drawn',
-    'comic sans': 'hand-drawn',
-};
-
-// The one bundled font per visual category, sourced from the canonical registry so a font
-// rename never drifts from what the export embeds.
-const BUNDLED_FONT_BY_CATEGORY = new Map(EIGEN_FONTS.map((font) => [font.category, font.name]));
-
-function mapToSupportedFont(name: string): string | null {
-    const category = FONT_CATEGORY_MAP[name.trim().toLowerCase()];
-    return (category && BUNDLED_FONT_BY_CATEGORY.get(category)) ?? null;
-}
 
 // xlsx style name → ordinal, derived from the shared ordinal table (the reverse of its `name`).
 const BORDER_STYLE_MAP: Record<string, number> = Object.fromEntries(
@@ -1261,7 +1210,7 @@ function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): v
         if (font.strike) target.cl = 1;
         if (typeof font.size === 'number') target.fs = font.size;
         if (typeof font.name === 'string' && font.name.length > 0) {
-            const mapped = mapToSupportedFont(font.name);
+            const mapped = bundledFont(font.name);
             if (mapped) target.ff = mapped;
         }
         const fc = resolveColor(font.color, theme);

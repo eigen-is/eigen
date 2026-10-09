@@ -903,7 +903,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('3:0')?.rt).toBe(-90);
         expect(byCoord.get('4:0')?.rt).toBe('vertical');
         // Georgia is a serif font → mapped to the bundled Source Serif 4. See FONT_CATEGORY_MAP
-        // in apps/api/src/lib/import/sheets/from-xlsx.ts; only the four supported faces
+        // in packages/lib/src/constants/fonts.ts; only the four supported faces
         // ship as embedded webfonts, so unsupported families collapse to the closest one.
         expect(byCoord.get('0:1')?.ff).toBe('Source Serif 4');
     });
@@ -929,6 +929,61 @@ describe('Sheets xlsx conversion fidelity', () => {
         // Unrecognized → no ff (falls back to body default, which is Inter).
         expect(byCoord.get('3:0')?.ff).toBeUndefined();
         expect(byCoord.get('4:0')?.ff).toBe('Inter');
+    });
+
+    test('convert maps each known font by its name, in any case and padding', async () => {
+        const expected: [name: string, ff: string][] = [
+            ['Inter', 'Inter'],
+            ['Source Serif 4', 'Source Serif 4'],
+            ['Source Serif Pro', 'Source Serif 4'],
+            ['JetBrains Mono', 'JetBrains Mono'],
+            ['Excalifont', 'Excalifont'],
+            ...[
+                'Calibri',
+                'Calibri Light',
+                'Arial',
+                'Helvetica',
+                'Helvetica Neue',
+                'Verdana',
+                'Tahoma',
+                'Segoe UI',
+                'Trebuchet MS',
+            ].map((name): [string, string] => [name, 'Inter']),
+            ...[
+                'Times New Roman',
+                'Times',
+                'Georgia',
+                'Cambria',
+                'Garamond',
+                'Book Antiqua',
+                'Palatino',
+                'Palatino Linotype',
+            ].map((name): [string, string] => [name, 'Source Serif 4']),
+            ...['Courier New', 'Courier', 'Consolas', 'Monaco', 'Lucida Console', 'Menlo'].map(
+                (name): [string, string] => [name, 'JetBrains Mono'],
+            ),
+            ['Comic Sans MS', 'Excalifont'],
+            ['Comic Sans', 'Excalifont'],
+            ['  TIMES NEW ROMAN ', 'Source Serif 4'],
+        ];
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        for (const [index, [name]] of expected.entries()) {
+            ws.getCell(index + 1, 1).value = name;
+            ws.getCell(index + 1, 1).font = { name };
+        }
+        const sheets = await parseWorkbook(workbook);
+        const ff = new Map((sheets[0].celldata ?? []).map((c) => [c.r, c.v?.ff] as const));
+        expect(expected.map(([name], index) => [name, ff.get(index)])).toEqual(expected);
+    });
+
+    test('convert reads the shared font map', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        ws.getCell('A1').value = 'serif';
+        ws.getCell('A1').font = { name: 'Lora' };
+        const sheets = await parseWorkbook(workbook);
+        expect(sheets[0].celldata?.[0]?.v?.ff).toBe('Source Serif 4');
     });
 
     test('convert handles multi-sheet workbooks', async () => {

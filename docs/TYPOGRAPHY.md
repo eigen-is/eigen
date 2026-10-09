@@ -42,7 +42,7 @@ The name expands to CSS only where it renders. A sheet cell is looser: it stores
 
 ## Foreign fonts map onto the bundled ones
 
-Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. xlsx import maps a cell's Office font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category, and leaves `ff` unset for one it doesn't know (`FONT_CATEGORY_MAP` in `apps/api/src/lib/import/sheets/from-xlsx.ts`). Pasted HTML in docs does the same for common desktop fonts (`transformPastedHTML` in `apps/docs/src/components/docs/editor.tsx`).
+Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. One map sends a foreign font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category: `FONT_CATEGORY_MAP` and `bundledFont` in `packages/lib/src/constants/fonts.ts`. xlsx import sets that font as a cell's `ff`, and leaves `ff` unset for a font the map doesn't know. Pasted HTML in docs reads the same map (`cleanPastedHTML` in `apps/docs/src/components/docs/paste.ts`), and drops a font that maps to Inter, the document font.
 
 ## One picker serves every app
 
