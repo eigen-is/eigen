@@ -21,7 +21,7 @@ This proposal replaces the docs app's docx export with a writer of our own and i
 - Font size, line spacing, indents and cell shading as schema features. Those are editor decisions. Until they exist, import keeps the text and drops the style.
 - pptx. That is its own row in [ROADMAP-POST-1.md](../ROADMAP-POST-1.md).
 
-## Current state
+## Current state (2026-10-06, before the build)
 
 **Export goes through HTML.** `renderEigendocExport` (`apps/api/src/lib/export/doc/transform.ts`) renders the doc to the export HTML, and for docx feeds it to `@turbodocx/html-to-docx` 1.22.2 with a title and the page size and margins from the page setup (§ One page setup). It runs in the transform Worker and loads lazily ([EXPORT.md](../EXPORT.md)). EXPORT.md's rule "every format but xlsx and SVG is one HTML document" holds docx inside the HTML path today.
 
@@ -41,7 +41,7 @@ The rest is main-thread data, prepared beside the media and passed to the Worker
 - **The replies** are in the container's chat. `readChatContent` (`apps/api/src/lib/document/chat.ts`) is the wrong shape: one byte-capped string, newest first, for search. A new query over `messages` beside it returns author, date and body per message, oldest first.
 - **Names and initials.** A card's `creator` and a reply's `authorEmail` are emails, so the names come from a user lookup. `creator` is optional; a card without one gets an empty author, which Word accepts.
 
-### What survives today
+### What survives today (2026-10-06, before the build)
 
 P preserved, D degraded, L lost.
 
@@ -226,7 +226,7 @@ The tests: the round trip (export, import, compare the ProseMirror JSON) for a d
 6. Export, edit in Word, import again is a supported workflow. (Owner, 2026-10-06.)
 7. The schema gains a page break; anything else waits for the corpus. (Owner, 2026-10-06.)
 8. Word's Title becomes H1, Subtitle a paragraph, Quote a blockquote. H1 exports as Heading 1. (Owner, 2026-10-06.)
-9. The writer emits the XML by hand with JSZip, through the one escape module `@workspace/lib/xml`; no `docx` package. Every XML read goes through `Bun.XML.parse` with `{ compact: false }` behind `apps/api/src/lib/core/xml.ts`, which refuses a DOCTYPE before parsing and maps parse errors to 400; the compact shape isn't used. Tests parse every generated part with it, and it is the scanner's test oracle. (Owner, 2026-10-06; reworded 2026-10-07. The writer zips with our own `writeZip` since Decision 21, and the reader in Decision 17 has no scanner.)
+9. The writer emits the XML by hand and zips it with `writeZip`, through the one escape module `@workspace/lib/xml`; no `docx` package. Every XML read goes through `Bun.XML.parse` with `{ compact: false }` behind `apps/api/src/lib/core/xml.ts`, which refuses a DOCTYPE before parsing and maps parse errors to 400; the compact shape isn't used. Tests parse every generated part with it, and it is the scanner's test oracle. (Owner, 2026-10-06; reworded 2026-10-07 and 2026-10-10. The reader in Decision 17 has no scanner.)
 10. The rewrite before mammoth is a text scanner that inserts synthesized styles; no parse and rebuild. (Owner, 2026-10-06; superseded by Decision 17.)
 11. Column widths ride a synthesized table style, list numbers a synthesized list-item paragraph style. (Owner, 2026-10-06; superseded by Decision 17.)
 12. Embed the fonts a document uses, per style used, whole: about 530 KB for a typical doc, 1.83 MB for all four families. (Owner, 2026-10-06.)
