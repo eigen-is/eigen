@@ -33,6 +33,9 @@ export class FakeS3Server {
     // Keyed by object key.
     readonly faults = new Map<string, S3Fault>();
     readonly gets = new Map<string, number>();
+    readonly heads = new Map<string, number>();
+    // How many of a key's next HEADs and GETs answer 503 SlowDown, as Hetzner sheds load.
+    readonly slowDowns = new Map<string, number>();
     // Held requests whose client closed the connection itself.
     abandoned = 0;
     // Answer a GET without a signature, as a bucket anyone may read does.
@@ -68,6 +71,7 @@ export class FakeS3Server {
     // Clear every fault and answer every held request in full, as a provider recovering would.
     heal(): void {
         this.faults.clear();
+        this.slowDowns.clear();
         const resumes = [...this.held.values()];
         this.held.clear();
         for (const resume of resumes) resume();
@@ -164,6 +168,13 @@ export class FakeS3Server {
             return;
         }
         if (method === 'GET') this.gets.set(key, (this.gets.get(key) ?? 0) + 1);
+        if (method === 'HEAD') this.heads.set(key, (this.heads.get(key) ?? 0) + 1);
+        const slowDowns = this.slowDowns.get(key) ?? 0;
+        if (slowDowns > 0 && (method === 'GET' || method === 'HEAD')) {
+            this.slowDowns.set(key, slowDowns - 1);
+            reply(socket, method, '503 Slow Down', 'SlowDown');
+            return;
+        }
         if (fault === 'stall') {
             this.held.set(socket, () => {
                 this.serve(socket, method, key, head, undefined).catch(() => socket.destroy());

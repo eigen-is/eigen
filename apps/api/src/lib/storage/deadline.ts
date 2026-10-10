@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { ApiError } from '../core/errors';
 import type { StorageFile } from './types';
 
@@ -33,15 +34,58 @@ export function isMissingObjectCause(error: unknown): error is ApiError {
     return code === 'NoSuchKey' || code === 'ENOENT';
 }
 
-// A request Bun's S3Client cannot abort keeps running in the background; only the caller stops waiting.
-export function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
+// A request Bun's S3Client cannot abort keeps running in the background; only the caller stops waiting, and the
+// signal tells a retry to stop too.
+export function withStorageDeadline<T>(request: (deadline: AbortSignal) => Promise<T>): Promise<T> {
+    const deadline = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     return Promise.race([
-        request,
+        request(deadline.signal),
         new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(storageUnavailable()), storageTimeoutMs);
+            timer = setTimeout(() => {
+                deadline.abort();
+                reject(storageUnavailable());
+            }, storageTimeoutMs);
         }),
     ]).finally(() => clearTimeout(timer));
+}
+
+const READ_ATTEMPTS = 3;
+const FIRST_RETRY_WAIT_MS = 200;
+
+// Bun's S3Client reports a HEAD's 5xx and 403 alike as UnknownError, as a HEAD has no body: both are retried.
+const TRANSIENT_S3_CODES = new Set([
+    'SlowDown',
+    'ServiceUnavailable',
+    'InternalError',
+    'RequestTimeout',
+    'UnknownError',
+    'ConnectionRefused',
+    'ConnectionClosed',
+]);
+
+// Bun's S3Client never retries a read, and a provider shedding load (Hetzner's 503 SlowDown) answers the same
+// request a second later. A wait stops at the signal, and the last failure is what the caller sees. Only `canRetry`
+// knows whether a failed attempt left nothing behind to redo.
+export async function retryStorageRead<T>(
+    op: string,
+    key: string,
+    read: () => Promise<T>,
+    { signal, canRetry }: { signal?: AbortSignal; canRetry?: () => boolean } = {},
+): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await read();
+        } catch (error) {
+            const code = errnoOf(error instanceof ApiError ? error.cause : error);
+            const transient = code !== null && TRANSIENT_S3_CODES.has(code);
+            if (!transient || attempt === READ_ATTEMPTS || signal?.aborted || canRetry?.() === false) throw error;
+            console.warn(`Storage ${op} of ${key} failed with ${code} on attempt ${attempt}, retrying`);
+            const wait = FIRST_RETRY_WAIT_MS * 4 ** (attempt - 1);
+            await sleep(wait + Math.random() * (wait / 2), undefined, { signal }).catch(() => {});
+            if (signal?.aborted) throw error;
+        }
+    }
 }
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
@@ -113,13 +157,24 @@ export async function consumeStream(
     }
 }
 
-// consumeStream over a StorageFile, under the storage idle deadline.
+// consumeStream over a StorageFile, under the storage idle deadline. A GET that failed before its first byte is
+// retried; one that stalled into the deadline is not, its 503 carrying no cause.
 export function streamStorageFile(
     file: StorageFile,
     onChunk: (chunk: Uint8Array) => void,
     opts: { maxBytes?: number; signal?: AbortSignal; yields?: boolean } = {},
 ): Promise<number> {
-    return consumeStream(file.stream(), onChunk, { ...opts, idleMs: storageTimeoutMs });
+    let started = false;
+    const read = () =>
+        consumeStream(
+            file.stream(),
+            (chunk) => {
+                started = true;
+                onChunk(chunk);
+            },
+            { ...opts, idleMs: storageTimeoutMs },
+        );
+    return retryStorageRead('read', file.name ?? '', read, { signal: opts.signal, canRetry: () => !started });
 }
 
 // file.arrayBuffer() as a storage read, for a body held whole in memory.
