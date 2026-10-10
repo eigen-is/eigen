@@ -85,8 +85,15 @@ export class ZipReader {
 
     read(name: string): Uint8Array | undefined {
         const located = this.#entries.get(name);
-        if (!located) return undefined;
-        const { entry, dataStart } = located;
+        return located && this.#inflate(located);
+    }
+
+    // Every entry with its bytes, in the directory's order.
+    *files(): Generator<[name: string, data: Uint8Array]> {
+        for (const [name, located] of this.#entries) yield [name, this.#inflate(located)];
+    }
+
+    #inflate({ entry, dataStart }: Located): Uint8Array {
         const raw = this.#bytes.subarray(dataStart, dataStart + entry.compressedSize);
         const data = entry.method === 0 ? raw : inflate(raw, entry.size);
         if (data.length !== entry.size) throw new ZipError('bad-size');

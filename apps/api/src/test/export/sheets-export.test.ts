@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
+import * as zip from '../../lib/core/zip';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 
@@ -1256,6 +1257,29 @@ describe('Sheets xlsx export — hyperlinks', () => {
         // The stripped form still round-trips through our own importer.
         const rt = await xlsxToSheets(buffer);
         expect(rt[0].hyperlink?.['1_0']).toEqual({ linkType: 'cellrange', linkAddress: "'My Sheet'!A1" });
+    });
+
+    // The rewrite reopens exceljs's package, which openZip holds to the upload caps.
+    test('a workbook past the upload caps is exported with its links as exceljs writes them', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [{ r: 0, c: 0, v: { v: 'jump', m: 'jump' } }],
+                hyperlink: { '0_0': { linkType: 'sheet', linkAddress: 'My Sheet' } },
+            },
+            { name: 'My Sheet', celldata: [] },
+        ];
+        const refuse = spyOn(zip, 'openZip').mockImplementationOnce(() => {
+            throw new zip.ZipError('too-large');
+        });
+        try {
+            const buffer = await sheetsToXlsx(sheets);
+            expect(refuse).toHaveBeenCalledTimes(1);
+            const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+            expect(xml.match(/<hyperlink\b[^>]*>/g)?.[0]).toContain('r:id');
+        } finally {
+            refuse.mockRestore();
+        }
     });
 
     test('drops the link on formula cells — exceljs models a hyperlink as the cell value', async () => {

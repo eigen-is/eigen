@@ -1,6 +1,3 @@
-/// <reference path="../modules.d.ts" />
-/// <reference path="../exceljs-internals.d.ts" />
-
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { formatInputDate } from '@workspace/lib/date';
 import type {
@@ -109,9 +106,7 @@ function repackXlsx(buffer: Buffer): Buffer {
             mergedCells: 0,
             validationKeys: 0,
         };
-        for (const name of zip.names()) {
-            const data = zip.read(name);
-            if (!data) continue;
+        for (const [name, data] of zip.files()) {
             const bytes = canonicalPart(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
             if (WORKSHEET_PART.test(name)) tallySheet(bytes, tally);
             else if (STRINGS_OR_STYLES_PART.test(name)) tallyElements(bytes, tally);
@@ -187,7 +182,7 @@ function tallySheet(bytes: Buffer, tally: ExpansionTally): void {
     tally.sheets += 1;
     if (tally.sheets > MAX_SHEETS) throw tooLarge();
     tally.cells += countTags(bytes, CELL_OPEN, MAX_CELLS - tally.cells);
-    if (tally.cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+    if (tally.cells > MAX_CELLS) throw tooManyCells();
     tally.rows += countTags(bytes, ROW_OPEN, MAX_ROWS - tally.rows);
     if (tally.rows > MAX_ROWS) throw tooLarge();
     tallyElements(bytes, tally);
@@ -279,6 +274,10 @@ function tooLarge(): ApiError {
     return new ApiError(413, 'Spreadsheet too large');
 }
 
+function tooManyCells(): ApiError {
+    return new ApiError(413, 'Spreadsheet has too many cells');
+}
+
 // exceljs's own Range, whose bounds read a missing row or column as 1, so a range counts the cells exceljs walks; it
 // throws, as exceljs does, past column XFD.
 function rangeArea(ref: string): number {
@@ -333,12 +332,12 @@ function assertCellCountWithinBounds(workbook: Workbook): void {
     let cells = 0;
     for (const worksheet of workbook.worksheets) {
         // A row past the grid needs no cell, and every walk to the last row visits each row number before it.
-        if (worksheet.rowCount > REFERENCE_ROW_COUNT) throw new ApiError(413, 'Spreadsheet has too many cells');
+        if (worksheet.rowCount > REFERENCE_ROW_COUNT) throw tooManyCells();
         // Each row walks every column up to its last cell, in columnCount and in the conversion, so those come first.
         for (let n = 1; n <= worksheet.rowCount; n++) slots += worksheet.findRow(n)?.cellCount ?? 0;
-        if (slots > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+        if (slots > MAX_CELLS) throw tooManyCells();
         cells += worksheet.rowCount * worksheet.columnCount;
-        if (cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+        if (cells > MAX_CELLS) throw tooManyCells();
     }
 }
 
@@ -481,7 +480,7 @@ type XlsxCfColor = { argb?: string; theme?: number; tint?: number };
 // list four), `duplicateValues`/`uniqueValues`/`beginsWith`/… pass through as raw type
 // strings, formulae entries are raw formula text, and dataBar `color` is a single object
 // while colorScale's is an array.
-type XlsxCfRule = {
+export type XlsxCfRule = {
     type: string;
     priority: number;
     operator?: string;
@@ -758,7 +757,7 @@ function autoFilterToFilterRange(autoFilter: AutoFilter | undefined): SingleRang
 // pre-coerces formulae on read: whole/textLength → parseInt, decimal → parseFloat,
 // date → JS Date, list/custom → raw formula string; `operator` defaults to 'between'
 // for the operand-carrying types.
-type XlsxDataValidation = {
+export type XlsxDataValidation = {
     type: string;
     operator?: string;
     formulae?: unknown[];
@@ -767,14 +766,6 @@ type XlsxDataValidation = {
     prompt?: string;
     errorStyle?: string;
 };
-
-// Real Worksheet properties (lib/doc/worksheet.js) that exceljs's typings omit.
-declare module 'exceljs' {
-    interface Worksheet {
-        conditionalFormattings?: { ref: string; rules: XlsxCfRule[] }[];
-        dataValidations?: { model?: Record<string, XlsxDataValidation> };
-    }
-}
 
 const DV_TYPE: Record<string, string> = {
     list: 'dropdown',

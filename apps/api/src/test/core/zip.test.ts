@@ -316,6 +316,13 @@ describe('openZip refuses', () => {
 });
 
 describe('openZip reads', () => {
+    test('every entry with its bytes, in the order of the directory', () => {
+        const zip = openZip(build([TYPES, REAL]));
+        expect([...zip.files()].map(([name, data]) => [name, utf8.decode(data)])).toEqual(
+            zip.names().map((name) => [name, utf8.decode(zip.read(name))]),
+        );
+    });
+
     test('stored and deflated entries, with their sizes', () => {
         const zip = openZip(build([TYPES, REAL]));
         expect(zip.names()).toEqual(['[Content_Types].xml', 'word/document.xml']);
