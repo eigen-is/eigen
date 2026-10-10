@@ -310,14 +310,26 @@ describe('XML budget', () => {
     });
 
     // As a corrupt file is, rather than as a server error.
-    test('a reader slip on a file is 400', async () => {
+    // The cause stays in the Worker, so the slip is logged there; a corrupt zip or XML is the file's fault and isn't.
+    test('a reader slip on a file is 400, and logged with its stack', async () => {
         const docx = await buildDocxWithBody(paragraph(run('Body')));
         const parses = spyOn(xml, 'parseXml').mockImplementationOnce(() => {
             throw new TypeError('slip');
         });
-        spies.push(parses);
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(parses, warns);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).toHaveBeenCalledTimes(1);
+        expect(String(warns.mock.calls[0]?.[1])).toStartWith('TypeError: slip\n');
+    });
+
+    test('a document.xml that is no XML is 400, and not logged', async () => {
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(warns);
+        const error = await rejection(async () => docxToPmJson(Buffer.from(await buildDocxWithBody('<w:p>'))));
+        expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).not.toHaveBeenCalled();
     });
 
     test('a part that inflates past its declared size is a corrupt file, 400', async () => {
@@ -326,8 +338,11 @@ describe('XML budget', () => {
             const data = golden.read(name) ?? new Uint8Array();
             return name === 'word/document.xml' ? { ...deflated(name, data), size: 10 } : stored(name, data);
         });
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(warns);
         const error = await rejection(() => docxToPmJson(build(parts)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).not.toHaveBeenCalled();
     });
 });
 
