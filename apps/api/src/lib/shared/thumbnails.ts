@@ -5,6 +5,7 @@ import { Semaphore } from '../../utils/semaphore';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
 import { readStorageFile, type StorageFile } from '../storage';
+import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import type { ImageResult, WorkerInput, WorkerOutput } from './thumbnail-worker';
 
 // Each generateImagePreview spawns a Worker that loads sharp; export/media.ts fans out
@@ -70,7 +71,7 @@ export async function generateImagePreview(
                     console.error(`[thumbnail-worker] Timeout for ${pathId}`);
                     cleanup();
                     resolve(null);
-                }, 30_000);
+                }, THUMBNAIL_TIMEOUT_SECONDS * 1000);
 
                 worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
                     cleanup();

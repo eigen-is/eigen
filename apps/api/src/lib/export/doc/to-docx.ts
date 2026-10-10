@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import {
@@ -1010,17 +1010,12 @@ const RASTER_EXTENSIONS = new Map([
     ['image/jpeg', 'jpeg'],
 ]);
 
-const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
-    const attrs = node.attrs ?? {};
-    const layout = attrs['layout'];
+    const { layout, alignment, caption, mediaName, width, alt } = readFigureAttrs(node.attrs ?? {});
     const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
-    const alignment = attrs['alignment'];
-    const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
-    const caption = attrs['caption'];
-    const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
+    const jc = side ? 'center' : (alignment ?? 'center');
+    const captionRuns = caption ? textXml(caption) : '';
     if (captionRuns) useFace(context.pkg, {}, 'Caption');
     const margin = proseValue('.eigen-prose .figure', 'margin');
     const top = twips(cssPt(boxSide(margin, 'top'), BODY.sizePt));
@@ -1037,22 +1032,19 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const mediaName = attrs['mediaName'];
-    const image = typeof mediaName === 'string' ? imageOf(mediaName, context.pkg) : undefined;
+    const image = mediaName ? imageOf(mediaName, context.pkg) : undefined;
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);
-    const width = attrs['width'];
-    const set = typeof width === 'number' && Number.isFinite(width) ? Math.round(width) : 0;
+    const set = Math.round(width ?? 0);
     const natural = Math.min(image.width, side ? Math.floor(columnPx / 2) : columnPx);
     const cx = Math.max(1, Math.round(set > 0 ? Math.min(set, columnPx) : natural)) * EMU_PER_PX;
-    const alt = attrs['alt'];
     const drawing = drawingXml(
         image,
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        typeof alt === 'string' ? alt : '',
+        alt ?? '',
         context.pkg,
     );
     if (!side) {

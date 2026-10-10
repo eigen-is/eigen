@@ -29,14 +29,21 @@ import fontSerifItalic from '@workspace/ui/assets/fonts/source-serif/SourceSerif
     type: 'file',
 };
 
-const FONT_FILES = [
+// smallCaps: the face has the OpenType smcp glyphs, the only small caps WeasyPrint draws.
+type FontFile = { family: string; path: string; weight: string; style: 'normal' | 'italic'; smallCaps?: true };
+
+const FONT_FILES: readonly FontFile[] = [
     { family: 'Inter', path: fontInterRegular, weight: '100 900', style: 'normal' },
     { family: 'Inter', path: fontInterItalic, weight: '100 900', style: 'italic' },
-    { family: 'Source Serif 4', path: fontSerifRegular, weight: '200 900', style: 'normal' },
+    { family: 'Source Serif 4', path: fontSerifRegular, weight: '200 900', style: 'normal', smallCaps: true },
     { family: 'Source Serif 4', path: fontSerifItalic, weight: '200 900', style: 'italic' },
     { family: 'JetBrains Mono', path: fontMonoRegular, weight: '100 800', style: 'normal' },
     { family: 'Excalifont', path: fontExcalifont, weight: '400', style: 'normal' },
-] as const;
+];
+
+export function hasSmallCaps(family: string, style: FontFile['style']): boolean {
+    return FONT_FILES.some((font) => font.family === family && font.style === style && font.smallCaps);
+}
 
 export type DocxFontFiles = { Regular: string; Italic?: string; Bold?: string; BoldItalic?: string };
 
@@ -90,9 +97,9 @@ export function getFontFaceCSSForFamilies(families: Iterable<string>): string {
 // Read + base64 once per bundled font (~2 MB resident): the main-thread SVG preview path
 // asks for faces on every request, while a one-shot export Worker pays it once anyway.
 // A bundled asset that cannot be read is a build defect, so the read is unguarded.
-const faceCSSByFont = new Map<(typeof FONT_FILES)[number], string>();
+const faceCSSByFont = new Map<FontFile, string>();
 
-function fontFaceCSS(font: (typeof FONT_FILES)[number]): string {
+function fontFaceCSS(font: FontFile): string {
     let css = faceCSSByFont.get(font);
     if (css === undefined) {
         const dataUri = `data:font/woff2;base64,${fs.readFileSync(font.path).toString('base64')}`;

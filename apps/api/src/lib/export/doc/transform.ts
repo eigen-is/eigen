@@ -1,6 +1,4 @@
-import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace/lib/docs/eigendoc';
-import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
@@ -10,12 +8,13 @@ import {
     DOCX_IMAGE_MAX_SIZE,
     type EigendocExportFormat,
     type ExportMedia,
+    htmlExportMode,
     type TransformWarning,
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { getFontCSS } from '../fonts';
-import { sanitizeExportHtml } from '../sanitize';
+import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
+import { exportHtmlDocument } from '../html-document';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -23,9 +22,9 @@ import type { DocxMedia } from './to-docx';
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
-// HTML and PDF render the same document by design: WeasyPrint consumes exactly what the
-// HTML download serves. The docx is written from the JSON by to-docx.ts, which loads
-// lazily so an HTML export never evaluates it, its styles or its fonts.
+// HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
+// serves, but for the small caps the PDF fakes (render.ts). The docx is written from the JSON by
+// to-docx.ts, which loads lazily so an HTML export never evaluates it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -39,20 +38,23 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks(media);
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
-    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title);
-    return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
+    const dataUriMap = toDataUriMap(media);
+    const body = renderDocHtml(
+        withAbsoluteLinks(json, publicOrigin),
+        (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+        { synthesizeSmallCaps: htmlExportMode(format) === 'pdf' },
+    );
+    const html = exportHtmlDocument({
+        title,
+        css: `${PROSE_CSS}${PRINT_EXTRAS}`,
+        body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
+    });
+    return { data: toTransferableText(html), warnings: [] };
 }
-
-// The thumbnail Worker's per-image timeout (shared/thumbnails.ts), which the Worker graph cannot import. Worker.terminate()
-// does not stop libvips, so this is what frees the one transform slot from a filter librsvg grinds through for minutes.
-const SVG_FALLBACK_TIMEOUT_SECONDS = 30;
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
-export async function withSvgFallbacks(
-    media: ExportMedia[],
-    timeoutSeconds = SVG_FALLBACK_TIMEOUT_SECONDS,
-): Promise<DocxMedia[]> {
+async function withSvgFallbacks(media: ExportMedia[]): Promise<DocxMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
     const { default: sharp } = await import('sharp');
     const prepared: DocxMedia[] = [];
@@ -68,7 +70,7 @@ export async function withSvgFallbacks(
             const png = await image
                 .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
-                .timeout({ seconds: timeoutSeconds })
+                .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
                 .toBuffer();
             prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
         } catch {
@@ -90,24 +92,6 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
     const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
-}
-
-function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
-    const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src));
-    return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
-}
-
-function wrapInDocument(title: string, bodyHtml: string): string {
-    return `<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
-</head>
-<body>
-    <div class="page"><article class="eigen-prose tiptap">${bodyHtml}</article></div>
-</body>
-</html>`;
 }
 
 const PRINT_EXTRAS = `

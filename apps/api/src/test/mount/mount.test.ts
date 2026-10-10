@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { ApiError, type DatabaseConfig, eventLoopTurn, storageGone } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import {
     CONTENT_REINDEX_CAP_SECONDS,
@@ -14,26 +14,18 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
-import { storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import { createGetLocalDatabase, FaultStorage } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
 
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        relativePath: string,
-    ): Promise<ManagedDatabase<S>> => {
-        const fullPath = join(baseDir, relativePath);
-        const db = new ManagedDatabase(config, fullPath);
-        await db.open(0);
-        return db;
-    };
+function sha256(content: string): string {
+    return new Bun.CryptoHasher('sha256').update(content).digest('hex');
 }
 
 beforeAll(() => {
@@ -133,6 +125,22 @@ describe('downloadToTemp', () => {
         await mount.createDatabase(guardConfig, dataDbId);
         await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('live working copy');
         await mount.closeDatabase(dataDbId);
+    });
+
+    // handleApiError answers a raw error 500; a 503 would read as a storage outage.
+    test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
+        const data = Buffer.from('snapshot-bytes-local-failure');
+        const fileId = await mount.createFile(rootId, 'snap3.db', 'application/octet-stream', data.length, data);
+        const tempId = randomUUID();
+        // A non-empty directory at the temp path: the rename of the downloaded side file onto it fails.
+        mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
+        const before = readdirSync(mount.tmpDir);
+
+        const error = await mount.downloadToTemp(fileId, tempId).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(ApiError);
+        expect(readdirSync(mount.tmpDir)).toEqual(before);
+        rmSync(mount.getTempPath(tempId), { recursive: true });
     });
 });
 
@@ -331,6 +339,52 @@ describe('Mount (local-key storage)', () => {
         expect(file!.size).toBe(15);
     });
 
+    test('writeFile refuses a file trashed with its folder and keeps its bytes', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedWithFolder');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        await mount.trashPath(folderId);
+        await expect(mount.writeFile(fileId, Buffer.from('new'))).rejects.toMatchObject({
+            status: 404,
+            message: 'File is in trash',
+        });
+        expect(await (await mount.readFile(fileId))!.text()).toBe('old');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 3, hash: sha256('old') });
+    });
+
+    test('a plain overwrite queued while its folder is trashed writes nothing', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedWhileQueued');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const hold = Promise.withResolvers<void>();
+        const held = mount.withPathLock(fileId, () => hold.promise);
+        const write = mount.writeFile(fileId, Buffer.from('new'));
+        await mount.trashPath(folderId);
+        hold.resolve();
+        await held;
+
+        await expect(write).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
+        expect(await (await mount.readFile(fileId))!.text()).toBe('old');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 3, hash: sha256('old') });
+    });
+
+    test('an overwrite whose folder is trashed mid-upload records the new bytes, then refuses', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedMidUpload');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const fault = new FaultStorage(mount.storage);
+        fault.parkWrites = true;
+        mount.storage = fault;
+        try {
+            const write = mount.writeFile(fileId, Buffer.from('newer'));
+            await fault.waitForParked(() => true);
+            await mount.trashPath(folderId);
+            await fault.releaseOldestParked();
+            await expect(write).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
+        } finally {
+            mount.storage = fault.inner;
+        }
+        expect(await (await mount.readFile(fileId))!.text()).toBe('newer');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 5, hash: sha256('newer') });
+    });
+
     test('getChildByName is case-insensitive', async () => {
         const folderId = await mount.createFolder(rootId, 'FindMe');
         const found = await mount.getChildByName(rootId, 'findme');
@@ -367,6 +421,39 @@ describe('Mount (local path-based storage)', () => {
         const root = await mount.getRootFolder();
         expect(root).not.toBeNull();
         rootId = root!.id;
+    });
+
+    // A backup's own Mount of a disabled mount and the drive's Mount after an enable are two objects over one folder.
+    test("a second Mount over the same folder waits on the first one's path and tree locks", async () => {
+        const twin = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createTestMountConfig('test-local', 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        const order: string[] = [];
+        const release = Promise.withResolvers<void>();
+        const held = mount.withPathLock(rootId, () =>
+            mount.withTreeShared(async () => {
+                order.push('first');
+                await release.promise;
+                order.push('first done');
+            }),
+        );
+        const tried = await twin.tryWithPathLock(rootId, async () => 'ran');
+        const path = twin.withPathLock(rootId, async () => order.push('path'));
+        const tree = twin.withTreeExclusive(async () => order.push('tree'));
+        // A failed expect must still release: the locks are the folder's, shared with the rest of the file.
+        try {
+            await eventLoopTurn();
+            expect(tried).toBeNull();
+            expect(order).toEqual(['first']);
+        } finally {
+            release.resolve();
+        }
+        await Promise.all([held, path, tree]);
+        expect(order.slice(0, 2)).toEqual(['first', 'first done']);
+        expect(order.slice(2).sort()).toEqual(['path', 'tree']);
     });
 
     test('create folder creates physical directory', async () => {
@@ -435,6 +522,17 @@ describe('Mount (local path-based storage)', () => {
         await mount.deletePath(folderId);
         expect(await mount.getPath(subId)).toBeNull();
         expect(await mount.getPath(fileId)).toBeNull();
+    });
+
+    test('a create into a deleted folder answers 404 and leaves the root file of that name', async () => {
+        const rootFileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 9, Buffer.from('root-text'));
+        const folderId = await mount.createFolder(rootId, 'DeletedParent');
+        await mount.deletePath(folderId);
+
+        await expect(
+            mount.createFile(folderId, 'notes.txt', 'text/plain', 6, Buffer.from('orphan')),
+        ).rejects.toMatchObject({ status: 404 });
+        expect(await (await mount.readFile(rootFileId))!.text()).toBe('root-text');
     });
 
     test('duplicate name in same folder throws', async () => {

@@ -11,13 +11,6 @@ type ToolbarState = {
     bold: boolean;
     italic: boolean;
     underline: boolean;
-    strike: boolean;
-    code: boolean;
-    superscript: boolean;
-    subscript: boolean;
-    small: boolean;
-    allCaps: boolean;
-    smallCaps: boolean;
     highlight: boolean;
     alignLeft: boolean;
     alignCenter: boolean;
@@ -25,13 +18,11 @@ type ToolbarState = {
     bulletList: boolean;
     orderedList: boolean;
     taskList: boolean;
-    blockquote: boolean;
-    codeBlock: boolean;
     link: boolean;
     selectionEmpty: boolean;
 };
 
-// Each check walks every node a range spans, some 25 per transaction, and a collaborator's edit or caret is one too.
+// Each check walks every node a range spans, some 20 per transaction, and a collaborator's edit or caret is one too.
 const MAX_READ_RANGE = 10_000;
 
 // useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it.
@@ -62,13 +53,6 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 bold: active('bold'),
                 italic: active('italic'),
                 underline: active('underline'),
-                strike: active('strike'),
-                code: active('code'),
-                superscript: active('superscript'),
-                subscript: active('subscript'),
-                small: active('small'),
-                allCaps: active('textStyle', { caps: 'all' }),
-                smallCaps: active('textStyle', { caps: 'small' }),
                 highlight: active('highlight'),
                 alignLeft: active(null, { textAlign: 'left' }),
                 alignCenter: active(null, { textAlign: 'center' }),
@@ -76,8 +60,6 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 taskList: active('taskList'),
-                blockquote: active('blockquote'),
-                codeBlock: active('codeBlock'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
             };

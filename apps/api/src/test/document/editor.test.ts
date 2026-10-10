@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     DRIVE_MIME_DOC,
     type DrivePath,
@@ -165,6 +165,51 @@ describe('Editor', () => {
             expect(data?.conflict).toBe(true);
             if (data?.conflict !== true) throw new Error('expected a conflict');
             expect(data.currentUpdatedAt).toBeDefined();
+        });
+
+        test('of two saves from one updatedAt, the one that writes second is a conflict', async () => {
+            const uploaded = await uploadTextFile('race.txt', 'original');
+            // updatedAt has second precision: a save in the upload's second would carry the same value
+            await new Promise((r) => setTimeout(r, 1100));
+            const { data: initial } = await editorGet(uploaded.id);
+
+            // Hold the file's lock until both saves have passed every check before it and wait on it.
+            const { mount } = await (await getHome(ctx.alice.user.id)).drive.resolveFile(mountId, uploaded.id);
+            const hold = Promise.withResolvers<void>();
+            const held = mount.withPathLock(uploaded.id, () => hold.promise);
+            const bothWaiting = Promise.withResolvers<void>();
+            let waiting = 0;
+            const withPathLock = mount.withPathLock.bind(mount);
+            const lock = spyOn(mount, 'withPathLock').mockImplementation(<T>(pathId: string, fn: () => Promise<T>) => {
+                if (pathId === uploaded.id && ++waiting === 2) bothWaiting.resolve();
+                return withPathLock(pathId, fn);
+            });
+            let results: Awaited<ReturnType<typeof editorPut>>[];
+            try {
+                const saves = Promise.all(
+                    ['first', 'second'].map((content) =>
+                        editorPut(uploaded.id, { content, expectedUpdatedAt: initial.updatedAt }),
+                    ),
+                );
+                await bothWaiting.promise;
+                hold.resolve();
+                await held;
+                results = await saves;
+            } finally {
+                hold.resolve();
+                lock.mockRestore();
+            }
+
+            expect(results.map((r) => r.status)).toEqual([200, 200]);
+            const saved = results.filter((r) => r.data?.conflict === false);
+            const conflicts = results.filter((r) => r.data?.conflict === true);
+            expect(saved).toHaveLength(1);
+            expect(conflicts).toHaveLength(1);
+
+            const { data: reloaded } = await editorGet(uploaded.id);
+            expect(reloaded.content).toBe(results.indexOf(saved[0]) === 0 ? 'first' : 'second');
+            if (conflicts[0].data?.conflict !== true) throw new Error('expected a conflict');
+            expect(new Date(conflicts[0].data.currentUpdatedAt).getTime()).toBe(new Date(reloaded.updatedAt).getTime());
         });
 
         test('force save ignores stale updatedAt', async () => {

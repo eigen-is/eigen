@@ -69,6 +69,11 @@ describe('renderEigenslidesExport', () => {
         expect(html).toContain('<p>hi</p>');
     });
 
+    test('the html download opens a text box link in a new tab, as the canvas does', () => {
+        const link = '<p><a href="https://a.example/" target="_blank" rel="noopener noreferrer">a</a></p>';
+        expect(deckExportHtml('html', link)).toContain(link);
+    });
+
     test('keeps the embedded font faces the document needs', () => {
         expect(deckExportHtml('html', '<p>hi</p>')).toContain('@font-face');
     });

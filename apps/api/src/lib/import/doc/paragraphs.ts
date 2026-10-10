@@ -95,7 +95,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         // Word's default is 10 pt.
         bodySize: body.size ?? 20,
         bodySizeCs: body.sizeCs ?? body.size ?? 20,
-        baseColor: body.color,
+        baseColor: body.color?.hex,
         columnTwips:
             (twipsOf(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
             (twipsOf(w(margin, 'left')) ?? 1440) -

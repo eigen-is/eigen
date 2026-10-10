@@ -37,9 +37,11 @@ The schema turns TipTap's own undo off (`undoRedo: false`), and y-prosemirror's 
 
 A figure is an inline, atomic node (`packages/lib/src/docs/eigendoc/nodes/figure.ts`): it sits in a paragraph, its contents are not editable, and it can be dragged. Its durable reference is `mediaName`. `src` is only for an external image, and the export strips that ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)). The other attributes are `alt`, `caption`, `alignment`, `layout` (block, or wrapped left or right), `commentCardId` and `width`.
 
-The browser starts a drag only from a press nobody prevented, selected figure included. A selected figure's image wrapper takes Tab focus for keyboard resize, so a press would move focus there and away from ProseMirror's keys; the wrapper hands a focus that isn't `:focus-visible` back to the editor instead of preventing the press. A drop that leaves the figure's own paragraph empty removes it (`figureDragOut` in the `Figure` extension).
+The browser starts a drag only from a press nobody prevented, selected figure included, so nothing on the figure itself prevents a press or takes focus from the editor. A drop that leaves the figure's own paragraph empty removes it (`figureDragOut` in the `Figure` extension). A cut keeps that empty paragraph, as Word and Google Docs do.
 
 A figure stores its width and never its height, so the height always follows the image's own ratio. The width is in the page's layout pixels, measured with `clientWidth` on the page element, which a CSS `scale()` does not change. So a doc edited on a narrow, scaled-down page stores the same width as on a wide one. The node view (`apps/docs/src/components/docs/extensions/figure.tsx`) sets the width on the image's first load, capped at the text column (half of it for a wrapped image), and resizing clamps between 100 px and that cap.
+
+Shift and an arrow key resize a selected figure by 10 px, Right and Up wider, Left and Down narrower, with the same clamp. It is a keymap on the figure's node selection (`addKeyboardShortcuts` in the `Figure` extension), so the keys never leave the editor. Shift and an arrow would otherwise extend the selection, and on a text selection of the figure, the one Shift+ArrowRight from beside it makes, they still do.
 
 ## The node view and the export draw one figure box
 
@@ -67,7 +69,7 @@ File → **Page setup…** shows the page in a dialog whose controls are all dis
 
 The `pageBreak` node (`packages/lib/src/docs/eigendoc/nodes/page-break.ts`) is an atomic block with no content. It renders as `<div class="page-break">` and parses that div back when it holds no text, so a heading, table or `div` with text that carries the class keeps its content. `PAGE_BREAK_CLASS` holds the class, and `eigen-prose.css` draws and pages at the same class.
 
-The toolbar button, the **Insert** menu of the narrow toolbar and Mod-Enter insert it the way the horizontal rule is inserted: the caret lands after it, on a new paragraph when the break ends the doc. Mid-paragraph the break splits it, and the caret waits at the start of the second half. Before a table or a rule the caret waits in a gap cursor instead, so the first Backspace selects the break and the second removes it, and the table stays. A gap cursor needs a closed block on both sides, so before a list or a quote, which open on a paragraph, the caret goes into its first paragraph. A selected image is an inline node with no room for a block beside it, so the break splits its paragraph after the image.
+The **Insert** menu and Mod-Enter insert it the way the horizontal rule is inserted: the caret lands after it, on a new paragraph when the break ends the doc. Mid-paragraph the break splits it, and the caret waits at the start of the second half. Before a table or a rule the caret waits in a gap cursor instead, so the first Backspace selects the break and the second removes it, and the table stays. A gap cursor needs a closed block on both sides, so before a list or a quote, which open on a paragraph, the caret goes into its first paragraph. A selected image is an inline node with no room for a block beside it, so the break splits its paragraph after the image.
 
 On selected table cells, or a selected node with no place for a break, Mod-Enter does nothing. StarterKit's hard break binds Mod-Enter too, so the node's shortcut runs at priority 101 to win, and it swallows the key where no break fits, because the hard break would empty a cell or replace the selected node. In a code block Mod-Enter still exits the block, and Shift-Enter stays the line break. `packages/lib/src/test/docs/eigendoc/nodes/page-break.test.ts` pins the keys.
 
@@ -99,19 +101,23 @@ The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter:
 
 Selecting a figure or a table opens its properties panel, for a user who can write, in the slot the comments and activity panels use. An open comments or activity panel keeps the slot, and moving the caret out of the figure or table closes the properties panel. A phone shows no right-side panels: comments and activity open as a pane that hides the editor ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)), and the properties panels have no phone form.
 
+So a write from the Image panel must keep the figure selected. TipTap's `updateAttributes` writes with `setNodeMarkup`, which replaces a leaf node, and the node selection maps to a text selection, which closes the panel. The figure node's `updateFigure` command and every write in the node view go through `setFigureAttributes` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`), which sets each attribute with `setNodeAttribute` instead, a step that moves no position. Such a write fires no `selectionUpdate` and `useEditor` re-renders on no transaction, so the panel reads the figure through `useEditorState`.
+
 ## A long selection's toolbar shows what its start holds
 
-The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 25 checks per transaction, so a select-all of 20,000 paragraphs cost 70 ms on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads the selection's first `MAX_READ_RANGE` positions instead, which costs a fixed walk. A button still acts on the whole range, so Bold, lit by a first 10,000 positions that are all bold, bolds the rest.
+The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 20 checks per transaction, so a select-all of 20,000 paragraphs cost tens of milliseconds on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads the selection's first `MAX_READ_RANGE` positions instead, which costs a fixed walk. A button still acts on the whole range, so Bold, lit by a first 10,000 positions that are all bold, bolds the rest.
 
 ## A comment anchors on text as a mark and on a figure as an attribute
 
 A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
 
-## A docs copy writes image items, and a paste places them one by one
+## A docs copy with an image writes its items in order, and a docs paste reads its HTML
 
-A copy whose selection holds a figure writes the eigen clipboard payload: one image item per figure whose file resolves, beside ProseMirror's own HTML and the plain text. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
+A copy or cut whose selection holds a figure writes the eigen clipboard payload, beside ProseMirror's own HTML and the plain text (`writeDocsClipboard`, `apps/docs/src/components/docs/clipboard.ts`). It runs in the editor's `handleDOMEvents`, before ProseMirror's own handler, because that handler deletes a cut's selection before any later listener could read it. So it makes the cut's delete itself. In document order the payload holds an image item per figure whose file resolves, and the text between them as a text item, a line per paragraph. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
 
-On paste, a payload with an image item is placed item by item: a figure from another document's `media/` is re-uploaded into this one first and is skipped if that fails. A docs copy of text plus an image therefore pastes the image alone ([ROADMAP](ROADMAP.md)).
+ProseMirror's own HTML writes a figure as spans, `span.figure` with a `span.figcaption`, the form the export writes. A `<figure>` inside a `<p>` closes the paragraph in every HTML parser, so a pasted copy would split its paragraph around the image.
+
+On paste, a payload with an image item goes through `insertEigenItems`. A docs copy, whose HTML ProseMirror marked with `data-pm-slice`, pastes through that HTML, because a text item is plain and would drop the headings, lists and marks. First each figure takes the name its image item gives: a figure from another document's `media/` is re-uploaded into this one, and a figure with no item or a failed re-upload is removed, so none pastes broken. The re-uploads run at once, one per file, so an image pasted twice uploads once, and the paste lands when they have all settled. Any other payload, from slides or sheets, is placed item by item: a text item lands as a paragraph per line, and beside text an image takes a paragraph of its own.
 
 ## Pasted content is fitted to the page
 
@@ -127,9 +133,9 @@ All caps and small caps are the `caps` attribute of the `textStyle` mark (`packa
 
 Mod-Shift-A toggles all caps, as in Word. Small caps get no key: Word's Mod-Shift-K reaches the command palette, whose listener takes Mod+K with or without Shift (`use-palette-shortcuts.ts`).
 
-## Small caps print only in Source Serif 4
+## The PDF fakes small caps where the font has none
 
-A browser fakes small caps in a font that has none, so the editor, quick look and the HTML download show them in every font. WeasyPrint fakes nothing, and of the bundled fonts only Source Serif 4's upright face has small-caps glyphs (the OpenType `smcp` feature). So the PDF prints small caps in Inter, JetBrains Mono, Excalifont or Source Serif 4's italic as the letters were typed ([ROADMAP](ROADMAP.md)). All caps print in every font. Word fakes small caps itself, so the docx shows them everywhere.
+A browser fakes small caps in a font that has none, so the editor, quick look and the HTML download show them in every font. WeasyPrint fakes nothing: it draws `font-variant-caps` only from a font's own small-caps glyphs (the OpenType `smcp` feature), which of the bundled fonts only Source Serif 4's upright face has, marked `smallCaps` in the fonts table (`FONT_FILES`, `apps/api/src/lib/export/fonts.ts`). So the PDF's HTML fakes them itself: in Inter, JetBrains Mono, Excalifont and italic Source Serif 4, a small-caps run's lowercase letters are written as capitals in a span at 0.7em, the size Chromium and WebKit fake them at. Its capitals and everything else stay as typed. Upright Source Serif 4 keeps its real small caps. A run counts as italic under the italic mark, or in a blockquote while eigen-prose.css sets a quote in italic (`QUOTE_LOOK`, `apps/api/src/lib/document/looks.ts`). `renderDocHtml` does this behind its `synthesizeSmallCaps` option, which `renderEigendocExport` sets for the `pdf-html` format only, so the HTML download keeps the letters as typed. Word fakes small caps itself, so the docx shows them everywhere.
 
 ## See also
 

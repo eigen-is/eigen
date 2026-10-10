@@ -27,9 +27,8 @@ export type DocxRunProps = {
     underline?: boolean;
     strike?: boolean;
     vertAlign?: string;
-    color?: string;
-    // The color is one of the theme's link colors, which Word's link look names.
-    linkColor?: boolean;
+    // link: the color is one of the theme's link colors, which Word's link look names.
+    color?: { hex: string; link: boolean };
     highlight?: string;
     shading?: string;
     fonts?: Fonts;
@@ -181,10 +180,11 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRun
             case 'vertAlign':
                 props.vertAlign = w(child, 'val');
                 break;
-            case 'color':
-                props.color = hexColor(w(child, 'val'));
-                props.linkColor = LINK_THEME_COLORS.has(w(child, 'themeColor') ?? '');
+            case 'color': {
+                const hex = hexColor(w(child, 'val'));
+                if (hex !== undefined) props.color = { hex, link: LINK_THEME_COLORS.has(w(child, 'themeColor') ?? '') };
                 break;
+            }
             case 'highlight':
                 props.highlight = HIGHLIGHT_COLORS.get(w(child, 'val') ?? 'none') ?? '';
                 break;

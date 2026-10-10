@@ -6,17 +6,13 @@ import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
-import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
-    buildImageClipboardItem,
     classifyPaste,
     clipboardTextItemHasContent,
     hasRichHtmlBeyondMarker,
     materializeClipboardSvg,
     needsReUpload,
-    readClipboardBox,
     reUploadImage,
-    writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
@@ -36,19 +32,12 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { htmlToPlainText } from '@workspace/lib/html-dom';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type {
-    EigenClipboardData,
-    EigenClipboardImageItem,
-    EigenClipboardItem,
-    EigenClipboardTextItem,
-} from '@workspace/lib/types/clipboard';
+import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
@@ -71,6 +60,7 @@ import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
+import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
@@ -114,27 +104,6 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
     });
 }
 
-// The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
-// the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
-// clientWidth, not getBoundingClientRect: layout px are the space the stored width lives in (the
-// identity mapping in extensions/figure.tsx), while a narrow viewport puts a `scale()` on the page.
-// Height comes from the image's own intrinsic ratio rather than its laid-out height, so a mid-load
-// layout can't skew it. Nothing measurable (node view not mounted, image not loaded) → the stored
-// width at the shared default ratio, the single fallback.
-function figureClipboardBox(editor: Editor, pos: number, storedWidth: unknown): ClipboardBox {
-    const dom = editor.view.nodeDOM(pos);
-    const img = dom instanceof HTMLElement ? dom.querySelector('img') : null;
-    if (img && img.clientWidth > 0 && img.clientHeight > 0) {
-        const ratio =
-            img.naturalWidth > 0 && img.naturalHeight > 0
-                ? img.naturalWidth / img.naturalHeight
-                : img.clientWidth / img.clientHeight;
-        return { width: img.clientWidth, height: img.clientWidth / ratio };
-    }
-    const width = typeof storedWidth === 'number' && storedWidth > 0 ? storedWidth : DEFAULT_IMAGE_BOX.width;
-    return { width, height: (width * DEFAULT_IMAGE_BOX.height) / DEFAULT_IMAGE_BOX.width };
-}
-
 // The textStyle `fontFamily` attr is an EIGEN_FONTS name, but a stored doc may hold a full CSS stack and
 // y-prosemirror hydrates without parseHTML, so this pass collapses a known stack to its name on editable
 // load. renderHTML maps the name back to the same stack. Kept out of the undo history.
@@ -164,9 +133,6 @@ function normalizeFontFamilyMarks(editor: Editor) {
 }
 
 const lowlight = createLowlight(common);
-
-// Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
-const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 
 // The page at 96 dpi, for the layout math below and the text column before the page mounts.
 const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
@@ -297,6 +263,8 @@ const TiptapEditor = ({
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
+    const resolveMediaPathRef = useRef(resolveMediaPath);
+    resolveMediaPathRef.current = resolveMediaPath;
 
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
@@ -387,7 +355,12 @@ const TiptapEditor = ({
                 attributes: {
                     class: 'eigen-prose',
                 },
-                transformPastedHTML: (html: string) => cleanPastedHTML(html, getEditorMaxWidth()),
+                handleDOMEvents: {
+                    copy: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
+                    cut: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
+                },
+                transformPastedHTML: (html: string) =>
+                    cleanPastedHTML(html, getEditorMaxWidth(), new Set(Object.keys(cardsRef.current))),
                 handleDrop: (view, event) => {
                     if (!event.dataTransfer) return false;
                     const files = Array.from(event.dataTransfer.files);
@@ -422,16 +395,24 @@ const TiptapEditor = ({
                     }
 
                     if (paste.eigen) {
-                        // Images take this path for the cross-mount re-upload; text only when text/html
-                        // is marker-only (a canvas text copy), so a sheets table still parses in PM. Claimed
-                        // only with an item this editor can place, or ⌘V on a bare `elements` item is dead.
+                        // Images take this path for the cross-mount re-upload, a docs copy's through its own
+                        // HTML; text only when text/html is marker-only (a canvas text copy), so a sheets table
+                        // still parses in PM. Claimed only with an item this editor can place, or ⌘V on a bare
+                        // `elements` item is dead.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
                         const hasText = paste.eigen.items.some(
                             (i) => i.type === 'text' && clipboardTextItemHasContent(i),
                         );
                         if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
                             event.preventDefault();
-                            handleEigenItemsPaste(paste.eigen.items).catch(() => {});
+                            if (editorRef.current) {
+                                insertEigenItems(
+                                    editorRef.current,
+                                    paste.eigen.items,
+                                    paste.html,
+                                    pastedMediaName,
+                                ).catch(() => {});
+                            }
                             return true;
                         }
                     }
@@ -478,7 +459,7 @@ const TiptapEditor = ({
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
         const { pendingName, promise } = startUpload(file);
         // Reset width so the new image's aspect ratio is recomputed on load
-        editorRef.current.chain().focus().updateAttributes('figure', { mediaName: pendingName, width: null }).run();
+        editorRef.current.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
         const result = await promise;
         if (!editorRef.current) return;
         swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
@@ -497,127 +478,31 @@ const TiptapEditor = ({
 
     const handleReplaceImageFromDrive = async (paths: DrivePath[]) => {
         if (!mediaFolderIdRef.current || !editorRef.current || paths.length === 0) return;
+        const replaced = editorRef.current.getAttributes('figure').mediaName;
         const result = await copyToMediaFolder
             .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
             .catch(() => null);
-        if (result?.[0]) {
-            editorRef.current
-                .chain()
-                .focus()
-                .updateAttributes('figure', { mediaName: result[0].name, width: null })
-                .run();
+        // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
+        if (result?.[0] && editorRef.current?.isActive('figure', { mediaName: replaced })) {
+            editorRef.current.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
         }
     };
 
-    const handleEigenImagePaste = async (item: EigenClipboardImageItem, width?: number) => {
+    // The name a pasted image item is stored under: another document's file is re-uploaded into this
+    // one's media/ first, and skipped if that fails rather than falling back to an unresolvable name.
+    const pastedMediaName = async (item: EigenClipboardImageItem): Promise<string | null> => {
         const currentMediaFolderId = mediaFolderIdRef.current;
-        if (needsReUpload(item.sourceParentId, currentMediaFolderId) && currentMediaFolderId) {
-            const result = await reUploadImage(
-                item.sourcePathId,
-                item.sourceOwnerId,
-                item.sourceMountId,
-                currentMediaFolderId,
-                uploadFile.mutateAsync,
-                item.mediaName,
-            );
-            // Re-upload failed: skip insertion, don't fall through to the source doc's unresolvable mediaName.
-            if (!result) return;
-            if (editorRef.current) {
-                editorRef.current
-                    .chain()
-                    .focus()
-                    .setFigure({ mediaName: result.mediaName, width, caption: item.caption })
-                    .run();
-            }
-            return;
-        }
-        if (editorRef.current) {
-            editorRef.current
-                .chain()
-                .focus()
-                .setFigure({ mediaName: item.mediaName, width, caption: item.caption })
-                .run();
-        }
+        if (!needsReUpload(item.sourceParentId, currentMediaFolderId) || !currentMediaFolderId) return item.mediaName;
+        const result = await reUploadImage(
+            item.sourcePathId,
+            item.sourceOwnerId,
+            item.sourceMountId,
+            currentMediaFolderId,
+            uploadFile.mutateAsync,
+            item.mediaName,
+        );
+        return result?.mediaName ?? null;
     };
-
-    // A text item lands as one paragraph at the caret, with the typography docs models; it has no
-    // fontSize, letter-spacing or line-height. htmlToPlainText guards against a non-conforming payload.
-    const insertEigenTextItem = (item: EigenClipboardTextItem) => {
-        if (!editorRef.current) return;
-        const text = htmlToPlainText(item.text);
-        if (!text.trim()) return;
-        const typo = item.typography;
-        const textStyleAttrs: Record<string, string> = {};
-        if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
-        if (typo?.color) textStyleAttrs.color = typo.color;
-        const marks: { type: string; attrs?: Record<string, string> }[] = [];
-        if (Object.keys(textStyleAttrs).length > 0) marks.push({ type: 'textStyle', attrs: textStyleAttrs });
-        if (typo?.fontWeight === 'bold') marks.push({ type: 'bold' });
-        if (typo?.fontStyle === 'italic') marks.push({ type: 'italic' });
-        if (typo?.textDecoration === 'underline') marks.push({ type: 'underline' });
-        if (typo?.textDecoration === 'line-through') marks.push({ type: 'strike' });
-        const paragraph = {
-            type: 'paragraph',
-            ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
-            content: [{ type: 'text', text, ...(marks.length > 0 ? { marks } : {}) }],
-        };
-        editorRef.current.chain().focus().insertContent(paragraph).run();
-    };
-
-    // Consume every eigen item in wire order so a mixed slides selection keeps its paragraph/figure
-    // sequence at the caret. Image inserts await the per-item re-upload seam (skip-on-failure), so the
-    // loop stays ordered; text inserts are synchronous.
-    const handleEigenItemsPaste = async (items: EigenClipboardItem[]) => {
-        for (const item of items) {
-            if (item.type === 'text') {
-                insertEigenTextItem(item);
-            } else if (item.type === 'image') {
-                const { width } = readClipboardBox(item);
-                await handleEigenImagePaste(item, width);
-            }
-        }
-    };
-
-    useEffect(() => {
-        if (!editor) return;
-        const handleCopyOrCut = (e: ClipboardEvent) => {
-            if (!editor.isFocused) return;
-            const { from, to } = editor.state.selection;
-            if (from === to) return;
-
-            const items: EigenClipboardData['items'] = [];
-            editor.state.doc.nodesBetween(from, to, (node, pos) => {
-                if (node.type.name === 'figure' && node.attrs.mediaName) {
-                    const mediaPath = resolveMediaPath(node.attrs.mediaName);
-                    if (mediaPath) {
-                        items.push(
-                            buildImageClipboardItem({
-                                mediaName: node.attrs.mediaName,
-                                source: mediaPath,
-                                box: figureClipboardBox(editor, pos, node.attrs.width),
-                                caption: node.attrs.caption || undefined,
-                            }),
-                        );
-                    }
-                }
-            });
-
-            if (items.length > 0) {
-                const text = editor.state.doc.textBetween(from, to, '\n').trim();
-                // PM's own serialization keeps figures and typography as rich HTML for every other host;
-                // the helper puts the eigen marker before it.
-                const { dom } = editor.view.serializeForClipboard(editor.state.selection.content());
-                e.preventDefault();
-                writeEigenClipboard(e, { version: 1, items }, text || undefined, dom.innerHTML);
-            }
-        };
-        document.addEventListener('copy', handleCopyOrCut);
-        document.addEventListener('cut', handleCopyOrCut);
-        return () => {
-            document.removeEventListener('copy', handleCopyOrCut);
-            document.removeEventListener('cut', handleCopyOrCut);
-        };
-    }, [editor, resolveMediaPath]);
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;
@@ -924,10 +809,7 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {/* Unmounted when closed: the properties panels key-remount per caret move.
-                                    The stable gutter is as wide as the scroll box's scrollbar and draws
-                                    none, so the panel ends left of that scrollbar, where the shift math
-                                    already puts its edge. */}
+                                {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. */}
                                 {showSidebar && (
                                     <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
                                         <div className="pointer-events-auto absolute inset-y-0 right-0">
@@ -935,7 +817,6 @@ const TiptapEditor = ({
                                                 <PanelColumn activePanel={panel} {...panelProps} />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
-                                                    key={editor.state.selection.from}
                                                     editor={editor}
                                                     onReplaceImage={handleReplaceImage}
                                                     onReplaceImageFromDrive={handleReplaceImageFromDrive}

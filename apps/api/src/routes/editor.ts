@@ -1,6 +1,7 @@
 import type { EditorSaveResult } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { enforceMountQuota } from '../lib/config/enforcement';
+import { StaleWriteError } from '../lib/core';
 import { getSharedDrive } from '../lib/drive';
 import { getEditableContent, prepareSaveContent } from '../lib/drive/inline-edit';
 import { betterAuth } from './auth';
@@ -25,18 +26,23 @@ export const editorRouter = new Elysia({ name: 'editor' })
         async ({ params, body, user }): Promise<EditorSaveResult> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            const result = prepareSaveContent(
-                path,
-                body.content,
-                body.frontmatter ?? null,
-                body.expectedUpdatedAt,
-                body.force ?? false,
-            );
-            if (result.conflict) return { conflict: true, currentUpdatedAt: result.currentUpdatedAt };
+            const data = prepareSaveContent(path, body.content, body.frontmatter ?? null);
             // Quota pre-check at the route boundary, where the Buffer length is known (mirrors WebDAV PUT).
-            await enforceMountQuota(params.ownerId, params.mountId, result.data.length, path.size);
-            const updated = await drive.writeFileContent(params.mountId, params.pathId, result.data, user);
-            return { conflict: false, updatedAt: updated.updatedAt };
+            await enforceMountQuota(params.ownerId, params.mountId, data.length, path.size);
+            const expectedUpdatedAt = body.force ? undefined : body.expectedUpdatedAt;
+            try {
+                const updated = await drive.writeFileContent(
+                    params.mountId,
+                    params.pathId,
+                    data,
+                    user,
+                    expectedUpdatedAt,
+                );
+                return { conflict: false, updatedAt: updated.updatedAt };
+            } catch (e) {
+                if (e instanceof StaleWriteError) return { conflict: true, currentUpdatedAt: e.currentUpdatedAt };
+                throw e;
+            }
         },
         {
             body: t.Object({

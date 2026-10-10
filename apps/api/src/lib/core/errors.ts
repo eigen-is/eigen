@@ -10,6 +10,30 @@ export class ApiError extends Error {
     }
 }
 
+// The one 503 a storage outage answers; an ApiError already on its way out passes through.
+export function storageUnavailable(cause?: unknown): ApiError {
+    if (cause instanceof ApiError) return cause;
+    return new ApiError(503, 'Storage unavailable', cause === undefined ? undefined : { cause });
+}
+
+// A stored object that is gone for good, after the temp and the staged copy were checked: 410, as the row
+// still resolves.
+export function storageGone(cause?: unknown): ApiError {
+    return new ApiError(410, 'Stored data not found', cause === undefined ? undefined : { cause });
+}
+
+// The one 413 a body or a read past its cap answers.
+export function payloadTooLarge(): ApiError {
+    return new ApiError(413, 'Upload too large');
+}
+
+// An overwrite whose base updatedAt the file no longer carries; the inline editor answers it as a conflict.
+export class StaleWriteError extends ApiError {
+    constructor(readonly currentUpdatedAt: Date) {
+        super(409, 'File changed since it was loaded');
+    }
+}
+
 type ErrorHandlerContext = { error: unknown; code: unknown; set: Context['set']; request: Request };
 
 export function handleApiError({ error, code, set, request }: ErrorHandlerContext): string | undefined {

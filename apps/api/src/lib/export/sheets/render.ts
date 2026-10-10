@@ -30,8 +30,8 @@ import {
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
-import { getFontCSS } from '../fonts';
-import { sanitizeExportHtml } from '../sanitize';
+import type { HtmlExportMode } from '../../document/transform/protocol';
+import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
@@ -108,41 +108,44 @@ function fontQuote(forStylesheet: boolean): string {
 // Dimensions are schemaless at the Yjs boundary — a collaborator can store a string.
 // Coerced at the source rather than left to the structural strip above, because these
 // reach the width/height declarations and, through getSheetContentSize, the @page rule
-// wrapInDocument derives from them and never sanitizes.
+// pdfPageCss derives from them and never sanitizes.
 function cssLength(value: number | undefined, fallback: number): number {
     const n = Number(value ?? fallback);
     return Number.isFinite(n) ? n : fallback;
 }
 
-// Runs inside the transform Worker (worker.ts owns execution; the format logic
-// stays here in export/).
-export function renderSheetsExportDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
+// The workbook as one document: the screen's prints landscape, the PDF's on a page that fits its widest and tallest
+// sheet, so WeasyPrint never clips a wide grid.
+export function sheetsHtmlDocument({
+    title,
+    sheets,
+    mediaUrls,
+    mode,
+}: {
+    title: string;
+    sheets: Sheet[];
+    mediaUrls: MediaUrls;
+    mode: HtmlExportMode;
+}): string {
     const { html, css } = renderSheetsHtml(sheets, mediaUrls);
-    // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
-    // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
-    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, { ADD_ATTR: ['target'] });
-    return wrapInDocument(title, sanitized);
+    const page = mode === 'pdf' ? pdfPageCss(sheets) : '@page { size: landscape; margin: 1.5cm; }';
+    return exportHtmlDocument({
+        title,
+        css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
+        body: `<style>${css}</style>\n${html}`,
+    });
 }
 
-// Runs inside the transform Worker. The page is sized to the widest/tallest sheet
-// so WeasyPrint never clips a wide grid. Unlike the HTML export this sanitizes
-// with no options — no `target` on anchors in a PDF.
-export function renderSheetsPdfDocument(sheets: Sheet[], title: string, mediaUrls: MediaUrls): string {
-    let maxW = 0;
-    let maxH = 0;
+function pdfPageCss(sheets: Sheet[]): string {
+    let width = 0;
+    let height = 0;
     for (const sheet of sheets) {
         const size = getSheetContentSize(sheet);
-        if (size.width > maxW) maxW = size.width;
-        if (size.height > maxH) maxH = size.height;
+        width = Math.max(width, size.width);
+        height = Math.max(height, size.height);
     }
-
-    const { html, css } = renderSheetsHtml(sheets, mediaUrls);
-    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`);
-    const pageSize = {
-        width: Math.min(maxW + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX),
-        height: Math.min(maxH + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX),
-    };
-    return wrapInDocument(title, sanitized, pageSize);
+    const side = (content: number) => Math.min(content + 2 * PAGE_MARGIN + PAGE_SLACK, MAX_PDF_PAGE_PX);
+    return `@page { size: ${side(width)}px ${side(height)}px; margin: ${PAGE_MARGIN}px; }`;
 }
 
 // Preview budget (docs/PREVIEWS.md § An Eigen document previews a slice, off the event loop): rendered from
@@ -717,23 +720,6 @@ function getRenderBounds(
         minRow++;
     }
     return { ...bounds, minRow, minCol };
-}
-
-function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {
-    const pageCSS = pageSize
-        ? `@page { size: ${pageSize.width}px ${pageSize.height}px; margin: 40px; }`
-        : '@page { size: landscape; margin: 1.5cm; }';
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${SHEET_CSS_BASE}${pageCSS}${SHEET_CSS_PRINT}</style>
-</head>
-<body>
-    ${bodyHtml}
-</body>
-</html>`;
 }
 
 const SHEET_CSS_BASE = `

@@ -2,7 +2,7 @@
 // useVCardPreview reads a route that serves contact birthdays, and a Date here reaches
 // ContactDetailCard's formatDateOnly, which splits a string; useEmlPreview reads a route whose `date`
 // is an ISO string the payload type declares as one.
-import { afterAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -13,7 +13,6 @@ installHappyDom();
 const g = globalThis as any;
 
 // The real Eden client, so the reviver the hook reads through is the one under test.
-const realFetch = g.fetch;
 const emlPayload = {
     subject: 'Engine notes',
     from: { value: [{ name: 'Ada Lovelace', address: 'ada@example.com' }], text: 'ada@example.com' },
@@ -71,10 +70,6 @@ g.fetch = async (input: string | URL | Request) => {
     if (url.includes('ics-preview')) return Response.json(icsPayload);
     return Response.json(payload);
 };
-
-afterAll(() => {
-    g.fetch = realFetch;
-});
 
 // Render one read hook and hand back its settled result.
 async function settled<T extends { data: unknown }>(useHook: () => T): Promise<T> {

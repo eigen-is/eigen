@@ -1,9 +1,13 @@
 import type { JSONContent } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { getFontName } from '@workspace/lib/constants/fonts';
+import { type FigureAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
+import { BODY, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
+import { hasSmallCaps } from '../fonts';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
@@ -72,24 +76,16 @@ function renderFigureNode(
     resolveImgSrc: FigureImgSrcResolver,
     options?: { lazy?: boolean },
 ): string {
-    const mediaName = attrs.mediaName ?? null;
-    const src = attrs.src ?? null;
-    const alt = escapeHtml(String(attrs.alt || ''));
-    const caption = attrs.caption;
-    const rawWidth = attrs.width;
-    const width = typeof rawWidth === 'number' && Number.isFinite(rawWidth) ? Math.round(rawWidth) : null;
-
-    const imgSrc = resolveImgSrc(mediaName, src);
-
+    const imgSrc = resolveImgSrc(attrs.mediaName ?? null, attrs.src ?? null);
+    const alt = escapeHtml(attrs.alt ?? '');
+    const width = Math.round(attrs.width ?? 0);
     const imgStyle = width ? `width: ${width}px; ` : '';
     const lazy = options?.lazy ? ' loading="lazy"' : '';
     const img = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
         : '';
-    const cap = caption ? `<span class="figcaption">${escapeHtml(caption)}</span>` : '';
-    const layout = escapeHtml(String(attrs.layout || 'block'));
-    const alignment = escapeHtml(String(attrs.alignment || 'center'));
-    return `<span class="figure" data-layout="${layout}" data-alignment="${alignment}">${img}${cap}</span>`;
+    const cap = attrs.caption ? `<span class="figcaption">${escapeHtml(attrs.caption)}</span>` : '';
+    return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${img}${cap}</span>`;
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
@@ -102,21 +98,67 @@ function withTrailingBreaks(node: JSONContent): JSONContent {
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }
 
-// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds.
+// The size Chromium and WebKit draw the small caps they synthesize at, so the PDF's match the editor's.
+const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';
+
+const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+// WeasyPrint draws small caps only from a font's own smcp glyphs and fakes none, so where the face has none
+// (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals.
+function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
+    const quoted = new Set<Node>();
+    doc.descendants((node) => {
+        if (node.type.name !== 'blockquote') return true;
+        node.descendants((child) => {
+            if (child.isText) quoted.add(child);
+        });
+        return false;
+    });
+    return ({ node }) => {
+        const text = node.text ?? '';
+        const style = node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs;
+        if (style?.['caps'] !== 'small') return escapeHtml(text);
+        const font = style['fontFamily'];
+        const family = typeof font === 'string' ? getFontName(font) : BODY.font;
+        const italic =
+            (QUOTE_LOOK.italic && quoted.has(node)) || node.marks.some((mark) => mark.type.name === 'italic');
+        if (hasSmallCaps(family, italic ? 'italic' : 'normal')) return escapeHtml(text);
+        let html = '';
+        let capitals = '';
+        for (const { segment } of GRAPHEMES.segment(text)) {
+            const upper = segment.toUpperCase();
+            if (upper !== segment) {
+                capitals += upper;
+            } else {
+                html += smaller(capitals) + escapeHtml(segment);
+                capitals = '';
+            }
+        }
+        return html + smaller(capitals);
+    };
+}
+
+function smaller(capitals: string): string {
+    return capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
+}
+
+// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
+// small caps.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean },
+    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean },
 ): string {
+    const content = inEditorMarkOrder(withTrailingBreaks(json));
     return renderToHTMLString({
-        content: inEditorMarkOrder(withTrailingBreaks(json)),
+        content,
         extensions: docExtensions(),
         options: {
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
-                    renderFigureNode(node.attrs, resolveImgSrc, options),
+                figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
+                ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },
     });

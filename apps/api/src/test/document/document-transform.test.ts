@@ -461,8 +461,8 @@ describe('document transform (eigensheets preview)', () => {
 // wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
 // change — last moved by the default cell size becoming the editor's 100 × 20 (2026-09-15),
 // one constant shared by the grid, the importer and this renderer.
-const GOLDEN_EXPORT_HTML_SHA256 = 'f2f65cfdbfd0af4556382d43010db959fa9c940d3aca9e0f1725b3fd2e6713d4';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'ef17ebd0f2cc893d7e8329a68e5fd6b87b500cffdff738af4297a50c34788f0f';
+const GOLDEN_EXPORT_HTML_SHA256 = 'f1ff5a76ce0a250cd5e80df381b275e72d9b7fcdd6b35c5541ab236d0f89c2fa';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'da0451eba08df85751fefd322d88d3bf3a9596e19fdf5070e7511b0301e43e11';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -778,13 +778,15 @@ describe('document transform (xlsx import)', () => {
 // The HTML hashes moved when the print CSS named .figure and let a table or quote holding a page break split.
 // And again when a done task's strike moved from its content div to the blocks in it but a nested task list: that rule.
 // And again when an ordered list took its marker style inline and eigen-prose.css lost its four ol[type] rules: those.
+// All six html and pdf-html hashes (sheets, doc, deck) moved when the export documents gained the Content-Security-Policy meta after the charset meta: that line, and nothing else (the old hashes come back with it stripped).
+// The sheets pdf-html and both doc hashes moved when one builder sanitized every export body keeping link targets: a target="_blank" on each link, and nothing else (the old hashes come back with it stripped; WeasyPrint prints the same PDF bytes).
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '871ca431ef2853502e223a6f2bdcffae3d284130cb5e68152c646d0330302332';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '871ca431ef2853502e223a6f2bdcffae3d284130cb5e68152c646d0330302332';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'dac0730732bfa901458d7a2ebca344516901e706678bd5091a9a4da5355873ea';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'dac0730732bfa901458d7a2ebca344516901e706678bd5091a9a4da5355873ea';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '206ea61b5647d3f54cdc7c8bf6e95f528b11219e7819eb62c372133356346f20';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '579f6e82398e059009dd823d8b68445d7feb3dc593b5e196309d28b0ee434e80';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '8e95237c637e358447508983b2fb27d3d7a20dd81a6622c976d188e57f7c61e4';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.

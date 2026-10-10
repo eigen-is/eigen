@@ -153,6 +153,22 @@ describe('Comment search', () => {
         expect(res.some((m) => m.id === 'thread-whisper.eigenchat')).toBe(false);
     });
 
+    test('a built-in emote is indexed as the sentence a bystander reads, not its stored key', async () => {
+        const t5 = await createThread(ctx, mountId, chatFolderId, 'thread-emote');
+        await postComment(ctx, mountId, t5.id, `/mindblown ${CHARLIE_EMAIL}`);
+
+        const sentence = await assertJson<DocCommentMatch[]>(
+            await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'temples'),
+        );
+        const hit = findOrFail(sentence, (m: DocCommentMatch) => m.id === 'thread-emote.eigenchat');
+        expect(hit.label).toContain('touches their temples');
+
+        const key = await assertJson<DocCommentMatch[]>(
+            await commentSearch(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'mindblown'),
+        );
+        expect(key.some((m) => m.id === 'thread-emote.eigenchat')).toBe(false);
+    });
+
     // The 403 comes from getCommentIndex → SharedDrive.getPath → withReadPermission,
     // not from the route handler — the sibling-route ACL pattern.
     describe('permissions (SharedDrive read ACL)', () => {

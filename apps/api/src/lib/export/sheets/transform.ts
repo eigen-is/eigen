@@ -2,6 +2,7 @@ import type * as Y from 'yjs';
 import { toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
 import {
+    htmlExportMode,
     type SheetExportFormat,
     type TransformMedia,
     type TransformWarning,
@@ -26,16 +27,16 @@ export async function renderEigensheetsExport(
     if (recalcError) warnings.push({ code: 'recalc-failed', message: recalcError });
 
     switch (format) {
-        case 'html': {
-            const { renderSheetsExportDocument } = await import('./render');
-            return {
-                data: toTransferableText(renderSheetsExportDocument(sheets, title, toDataUriMap(media))),
-                warnings,
-            };
-        }
+        case 'html':
         case 'pdf-html': {
-            const { renderSheetsPdfDocument } = await import('./render');
-            return { data: toTransferableText(renderSheetsPdfDocument(sheets, title, toDataUriMap(media))), warnings };
+            const { sheetsHtmlDocument } = await import('./render');
+            const html = sheetsHtmlDocument({
+                title,
+                sheets,
+                mediaUrls: toDataUriMap(media),
+                mode: htmlExportMode(format),
+            });
+            return { data: toTransferableText(html), warnings };
         }
         case 'xlsx': {
             const { sheetsToXlsx } = await import('./to-xlsx');

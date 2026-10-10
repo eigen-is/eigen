@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
-import { eventLoopTurn, hashFile, isMissingObjectCause, type StorageFile, writeTempWithHash } from '../storage';
+import { eventLoopTurn } from '../core';
+import { hashFile, isMissingObjectCause, type StorageFile, writeTempWithHash } from '../storage';
 
 // Copy one file into the archive folder and return its manifest entry. The sha256 is taken on the
 // bytes as they stream through, so nothing is read a second time to hash it.

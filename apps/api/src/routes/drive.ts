@@ -21,6 +21,7 @@ import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
+import { EXPORT_CSP } from '../lib/export/sanitize';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import {
     assertEmlPreviewable,
@@ -231,6 +232,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const result = await exportDocument(mount, path, params.format, request.signal);
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
+            set.headers['Content-Security-Policy'] = EXPORT_CSP;
             return result.data;
         },
         { auth: true },
@@ -271,7 +273,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
             const bytes = await readBoundedBodyBytes(request, maxSize);
-            if (bytes === null) throw new ApiError(413, 'Upload too large');
             await importIntoDocument(
                 drive,
                 mount,

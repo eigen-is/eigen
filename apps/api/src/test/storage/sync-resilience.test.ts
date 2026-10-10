@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
+import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
@@ -498,6 +498,28 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         await mountB.drainPendingUploads({ flushNow: true });
         expect(mountB.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mountB, dataDbId, TEST_DIR)).toBe(1);
+    });
+
+    // downloadToTemp's staged branch, as mount.test.ts pins its stored one: handleApiError answers a raw error 500.
+    test('a local tmp/ failure reading a pending staged copy is no storage outage', async () => {
+        const { mount, fault } = createS3Mount('download-staged-local-failure');
+        fault.failNextWrites = 9999;
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(mount.pendingStagedCopy(await mount.getStorageKey(dataDbId))).not.toBeNull();
+
+        const tempId = randomUUID();
+        // A non-empty directory at the temp path: the rename of the staged copy's side file onto it fails.
+        mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
+        const before = readdirSync(mount.tmpDir);
+        const error = await mount.downloadToTemp(dataDbId, tempId).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(ApiError);
+        expect(readdirSync(mount.tmpDir)).toEqual(before);
     });
 
     test("a delayed restart preserves an open doc's crash-recovery temp but sweeps stale transient temps", async () => {

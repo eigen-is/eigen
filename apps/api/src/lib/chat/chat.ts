@@ -4,7 +4,7 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -12,7 +12,7 @@ import type { Drive } from '../drive';
 import type { Home } from '../home';
 import { relayEventToMembers, sendToHome } from '../home/home-relay';
 import { getUserByEmail, type User } from '../user/';
-import { formatEmoteForViewer, parseCommand } from './commands';
+import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
 import { type CommentIndex, openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
@@ -451,23 +451,22 @@ export class ChatRoom {
     // not append — deleted messages leave the index, edits don't duplicate; threads are short).
     private async buildRecentText(): Promise<string> {
         const rows = await this.db
-            .select({ content: schema.messages.content })
+            .select({
+                type: schema.messages.type,
+                content: schema.messages.content,
+                authorEmail: schema.messages.authorEmail,
+            })
             .from(schema.messages)
-            .where(
-                and(
-                    isNull(schema.messages.deletedAt),
-                    ne(schema.messages.type, 'whisper'),
-                    ne(schema.messages.content, ''),
-                ),
-            )
-            .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
+            .where(and(schema.SEARCHABLE_MESSAGES, ne(schema.messages.content, '')))
+            .orderBy(...schema.NEWEST_FIRST)
             // Empty messages are filtered out above, so every row adds at least one char and
             // RECENT_TEXT_CAP rows always fill the byte cap — bound the fetch instead of scanning the thread.
             .limit(RECENT_TEXT_CAP)
             .all();
         let text = '';
         for (const row of rows) {
-            text = text ? `${text}\n${row.content}` : row.content;
+            const content = searchableMessageText(row);
+            text = text ? `${text}\n${content}` : content;
             if (text.length >= RECENT_TEXT_CAP) break;
         }
         return text.slice(0, RECENT_TEXT_CAP);

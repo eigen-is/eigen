@@ -18,7 +18,15 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
+import {
+    ApiError,
+    type DatabaseConfig,
+    type ManagedDatabase,
+    PATHS,
+    type SchemaType,
+    StaleWriteError,
+    storageGone,
+} from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import {
@@ -26,8 +34,6 @@ import {
     readStorageFile,
     type StorageBackend,
     type StorageFile,
-    storageGone,
-    storageUnavailable,
     writeTempWithHash,
 } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
@@ -56,11 +62,26 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     relativePath: string,
 ) => Promise<ManagedDatabase<S>>;
 
+type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
+
+// By mount folder, not Mount object: a backup's own Mount of a disabled mount and the Mount an enable or a
+// storage re-point builds lock with the drive's. One small entry per folder, kept for the process.
+const folderLocks = new Map<string, FolderLocks>();
+
+function locksFor(folder: string): FolderLocks {
+    let locks = folderLocks.get(folder);
+    if (!locks) {
+        locks = { paths: new Map(), tree: new RWLock() };
+        folderLocks.set(folder, locks);
+    }
+    return locks;
+}
+
 export class Mount {
     readonly id: string;
     readonly config: MountConfig;
 
-    private baseDir: string;
+    private readonly baseDir: string;
     storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
     // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + drive/history.ts
     // (the last one constructor-injected)
@@ -71,8 +92,8 @@ export class Mount {
     documentDbs: Map<string, DocumentDbSlot> = new Map();
     // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
     closing = false; // internal — used by mount/*.ts
-    private pathLocks: Map<string, Promise<void>> = new Map();
-    private treeLock = new RWLock();
+    private readonly pathLocks: Map<string, Promise<void>>;
+    private readonly treeLock: RWLock;
 
     // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
@@ -110,6 +131,7 @@ export class Mount {
         this.id = config.id;
         this.config = config;
         this.baseDir = path.join(baseDir, PATHS.DRIVE.ROOT, config.id);
+        ({ paths: this.pathLocks, tree: this.treeLock } = locksFor(this.baseDir));
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
 
@@ -720,13 +742,14 @@ export class Mount {
                     wroteUnderLock = true;
                     await this.withPathLock(pathId, () =>
                         this.withTreeExclusive(async () => {
-                            const oldPath = await this.resolveStoragePath(pathId);
+                            const oldPath = await this.getStorageKey(pathId);
+                            // Only the root's key is '': a rename or move of the mount itself writes nothing.
                             if (!oldPath) return;
                             if (updates.name !== undefined) {
                                 values.file = targetName;
                             }
                             await writeRow();
-                            const newPath = await this.resolveStoragePath(pathId);
+                            const newPath = await this.getStorageKey(pathId);
                             if (oldPath !== newPath) {
                                 await renameFn.call(this.storage, oldPath, newPath);
                             }
@@ -744,17 +767,23 @@ export class Mount {
         return updated;
     }
 
+    // For a missing row an id key is still the id, so a read of a deleted file finds no object. A name path is a
+    // 404, never the root's '': a create into a deleted folder would write at the mount root.
     // internal — used by mount/*.ts + versioning/snapshot.ts
     async getStorageKey(pathId: string): Promise<string> {
-        if (!this.isPathBased) {
-            const row = await this.db.select({ file: paths.file }).from(paths).where(eq(paths.id, pathId)).get();
-            return row?.file || pathId;
-        }
-        return this.resolveStoragePath(pathId);
+        const storageKey = await this.findStorageKey(pathId);
+        if (storageKey !== null) return storageKey;
+        if (!this.isPathBased) return pathId;
+        throw new ApiError(404, 'Path not found');
     }
 
-    // internal — used by mount/*.ts
-    async resolveStoragePath(pathId: string): Promise<string> {
+    // Null once the row is gone, for a caller racing a permanent delete, which takes no path lock.
+    // internal — used by mount/*.ts + lib/backup
+    async findStorageKey(pathId: string): Promise<string | null> {
+        if (!this.isPathBased) {
+            const row = await this.db.select({ file: paths.file }).from(paths).where(eq(paths.id, pathId)).get();
+            return row ? row.file || pathId : null;
+        }
         const rows = await this.db
             .select({
                 id: paths.id,
@@ -765,7 +794,7 @@ export class Mount {
             .where(sql`${paths.id} IN (${ancestorIds(pathId)})`)
             .all();
 
-        if (rows.length === 0) return '';
+        if (rows.length === 0) return null;
 
         const byId = new Map(rows.map((r) => [r.id, r]));
         const segments: string[] = [];
@@ -780,7 +809,7 @@ export class Mount {
     }
 
     private async resolveStoragePathForNew(parentId: string, fileValue: string): Promise<string> {
-        const parentPath = await this.resolveStoragePath(parentId);
+        const parentPath = await this.getStorageKey(parentId);
         return parentPath ? `${parentPath}/${fileValue}` : fileValue;
     }
 
@@ -796,15 +825,22 @@ export class Mount {
 
         // DB delete before storage cleanup (crash safety: orphaned file > orphaned row)
         const deleteDir = this.storage.deleteDir;
+        // A null key or no row deleted: a concurrent delete of the same row got there first.
         if (pathEntry.type === 'file') {
             await this.withTreeShared(async () => {
-                const storageKey = await this.getStorageKey(pathId);
-                await this.db.delete(paths).where(eq(paths.id, pathId));
-                await this.removeObject(pathId, storageKey);
+                const storageKey = await this.findStorageKey(pathId);
+                if (storageKey === null) return;
+                const deleted = await this.db
+                    .delete(paths)
+                    .where(eq(paths.id, pathId))
+                    .returning({ id: paths.id })
+                    .get();
+                if (deleted) await this.removeObject(pathId, storageKey);
             });
         } else if (this.isPathBased && deleteDir) {
             await this.withTreeExclusive(async () => {
-                const storageKey = await this.getStorageKey(pathId);
+                const storageKey = await this.findStorageKey(pathId);
+                if (storageKey === null) return;
                 const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
                 for (const { id } of files) {
                     await deleteThumbnail(this.thumbsDir, id);
@@ -962,7 +998,11 @@ export class Mount {
         return !!row && isSearchableTextFile(row.mimeType, row.name);
     }
 
-    async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    async writeFile(
+        pathId: string,
+        data: Buffer | Uint8Array | ArrayBuffer | BunFile,
+        expectedUpdatedAt?: Date,
+    ): Promise<number> {
         let size: number;
         if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
             size = data.length;
@@ -975,6 +1015,7 @@ export class Mount {
 
         return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
+                await this.assertOverwritable(pathId, expectedUpdatedAt);
                 const storageKey = await this.getStorageKey(pathId);
                 const written = await this.storage.write(storageKey, data);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
@@ -985,9 +1026,16 @@ export class Mount {
 
     // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
     // Mirrors createFileFromTemp on the create side and avoids re-hashing.
-    async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
+    async writeFileFromTemp(
+        pathId: string,
+        tempId: string,
+        size: number,
+        hash: string,
+        expectedUpdatedAt?: Date,
+    ): Promise<void> {
         await this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
+                await this.assertOverwritable(pathId, expectedUpdatedAt);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
@@ -995,23 +1043,37 @@ export class Mount {
         );
     }
 
+    // Before any byte lands, so a trashed file keeps the bytes it was trashed with. Under the path lock
+    // every overwrite takes, so of two saves from one base only the first writes, and under the tree
+    // lock, so an ancestor's trash on `local` can't land between the check and the write.
+    private async assertOverwritable(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
+        const { updatedAt } = await this.getActivePath(pathId);
+        if (expectedUpdatedAt && updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+            throw new StaleWriteError(updatedAt);
+        }
+    }
+
     // Runs under the path lock after the PUT landed. deletePath doesn't wait on that lock, so a
-    // delete that ran during the PUT left the bytes behind.
+    // delete that ran during the PUT left the bytes behind. Off `local` an ancestor's trash takes no
+    // lock the overwrite holds either: the row still records the bytes its object now holds, then refuses.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<void> {
-        if (!(await this.getPath(pathId))) {
+        const searchable = await this.isSearchableRow(pathId);
+        if (searchable) this.reindexQueue?.bumpGeneration(pathId);
+        const committed = await this.db
+            .update(paths)
+            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
+            .where(eq(paths.id, pathId))
+            .returning({ trashedAt: paths.trashedAt })
+            .get();
+        if (!committed) {
             if (!(await this.storage.delete(storageKey))) {
                 console.warn(`[Mount] overwrite of deleted ${pathId} left its object ${storageKey} behind`);
             }
             throw new ApiError(404, 'File not found');
         }
-        const searchable = await this.isSearchableRow(pathId);
-        if (searchable) this.reindexQueue?.bumpGeneration(pathId);
-        await this.db
-            .update(paths)
-            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
-            .where(eq(paths.id, pathId));
         await this.invalidateAncestorsOf(pathId);
         if (searchable) this.reindexQueue?.kick();
+        if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
     }
 
     getTempPath(pathId: string): string {
@@ -1043,7 +1105,7 @@ export class Mount {
                     // A staged copy the queue's ack unlinked mid-read now sits in the bucket: fall through.
                     if (!isMissingObjectCause(err)) {
                         console.error(`[Mount] download of staged ${storageKey} failed:`, err);
-                        throw err instanceof ApiError ? err : storageUnavailable();
+                        throw err;
                     }
                 }
             }
@@ -1065,9 +1127,9 @@ export class Mount {
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
             // Only the GET body tells a gone object (410) from an outage (503). The read's own failures
-            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT is not a gone object.
+            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), so a 500, and its ENOENT is not a gone object.
             if (isMissingObjectCause(err)) throw storageGone(err.cause);
-            throw err instanceof ApiError ? err : storageUnavailable();
+            throw err;
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -1082,11 +1144,11 @@ export class Mount {
         let size: number;
         try {
             ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
+            fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         } catch (err) {
             await this.cleanupTemp(sideId);
             throw err;
         }
-        fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         return size;
     }
 

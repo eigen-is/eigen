@@ -11,7 +11,13 @@ import { SERVER_DATABASES } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
-import { type ArchiveMember, readArchiveMember, readArchiveMembers } from './archive';
+import {
+    type ArchiveMember,
+    type ArchiveMemberAt,
+    listArchiveMembers,
+    readArchiveMember,
+    readArchiveMembers,
+} from './archive';
 import {
     archivePath,
     checkArchivedPathRows,
@@ -263,6 +269,19 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
     return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
 }
 
+// The manifest a whole-server archive closes with, or why it has none.
+async function readClosingManifest(members: ArchiveMemberAt[]): Promise<ServerArchiveManifest | string> {
+    const last = members.at(-1);
+    if (last?.name !== ARCHIVE_MANIFEST_FILE) return `${ARCHIVE_MANIFEST_FILE} is not the last member`;
+    let text: string;
+    try {
+        text = new TextDecoder().decode(await readArchiveMember(last));
+    } catch (error) {
+        return describeError(error);
+    }
+    return parseServerArchiveManifest(text) ?? `${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`;
+}
+
 // A whole-server archive as one read finds it: every member hashed, the manifest it closes with,
 // and the transport verdict. The manifest is null unless it parses; the members are what the read
 // got through before it failed.
@@ -271,6 +290,14 @@ type ReadServerArchive = {
     members: ArchiveMember[];
     manifest: ServerArchiveManifest | null;
 };
+
+// How a member differs from its manifest entry, or null. A null sha256 checks the size alone, for a reader that has
+// not read the bytes yet.
+function memberMismatch(entry: ServerArchiveManifest['entries'][number], bytes: number, sha256: string | null) {
+    if (bytes !== entry.bytes) return `${entry.path}: ${bytes} bytes, the manifest says ${entry.bytes}`;
+    if (sha256 !== null && sha256 !== entry.sha256) return `${entry.path}: sha256 does not match the manifest`;
+    return null;
+}
 
 // The transport check of a whole-server archive: its last member is the manifest, and every other
 // member is there with the bytes and sha256 the manifest names. No member is unpacked; each one
@@ -293,19 +320,8 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
         // A cut-off or foreign tar is a verdict on the archive, not an error of the check.
         return failed([describeError(error)]);
     }
-    const last = members.at(-1);
-    if (last?.name !== ARCHIVE_MANIFEST_FILE)
-        return failed([`${ARCHIVE_MANIFEST_FILE} is not the last member`], members);
-    let text: string;
-    try {
-        text = new TextDecoder().decode(await readArchiveMember(last));
-    } catch (error) {
-        return failed([describeError(error)], members);
-    }
-    const manifest = parseServerArchiveManifest(text);
-    if (!manifest) {
-        return failed([`${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`], members);
-    }
+    const manifest = await readClosingManifest(members);
+    if (typeof manifest === 'string') return failed([manifest], members);
 
     // A reader takes one of two same-named members and the manifest cannot say which, so their bytes do not matter.
     const present = new Map<string, ArchiveMember>();
@@ -325,13 +341,48 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
         present.delete(entry.path);
         if (!member) {
             failures.push(`${entry.path}: missing from the archive`);
-        } else if (member.bytes !== entry.bytes) {
-            failures.push(`${entry.path}: ${member.bytes} bytes, the manifest says ${entry.bytes}`);
-        } else if (member.sha256 !== entry.sha256) {
-            failures.push(`${entry.path}: sha256 does not match the manifest`);
+        } else {
+            const mismatch = memberMismatch(entry, member.bytes, member.sha256);
+            if (mismatch) failures.push(mismatch);
         }
     }
     for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
     const status = failures.length === 0 ? 'verified' : 'failed';
     return { verify: { status, checkedAt, failures }, members, manifest };
+}
+
+// One member of a whole-server archive, its bytes checked against the manifest, and no other member read: what
+// `restore --env` takes on a new machine, before the stage reads and checks them all. Bytes null: no such member.
+export async function readServerArchiveMember(
+    archivePath: string,
+    name: string,
+): Promise<{ bytes: Uint8Array | null } | { failure: string }> {
+    let members: ArchiveMemberAt[];
+    try {
+        members = await listArchiveMembers(archivePath);
+    } catch (error) {
+        return { failure: describeError(error) };
+    }
+    const manifest = await readClosingManifest(members);
+    if (typeof manifest === 'string') return { failure: manifest };
+    const named = members.filter((member) => member.name === name);
+    const entry = manifest.entries.find((candidate) => candidate.path === name);
+    const [member] = named;
+    if (named.length > 1) return { failure: `${name}: appears more than once in the archive` };
+    if (!member && !entry) return { bytes: null };
+    if (!member) return { failure: `${name}: missing from the archive` };
+    if (!entry) return { failure: `${name}: not in the manifest` };
+    const sizeMismatch = memberMismatch(entry, member.bytes, null);
+    if (sizeMismatch) return { failure: sizeMismatch };
+    try {
+        const bytes = await readArchiveMember(member);
+        const mismatch = memberMismatch(
+            entry,
+            bytes.length,
+            new Bun.CryptoHasher('sha256').update(bytes).digest('hex'),
+        );
+        return mismatch ? { failure: mismatch } : { bytes };
+    } catch (error) {
+        return { failure: describeError(error) };
+    }
 }

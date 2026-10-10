@@ -857,6 +857,40 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'with mail off, by the .env.production of the archive or, without one, of this install, the stage says nothing of DKIM or mail TLS',
+        async () => {
+            const mailOff = join(scratch('restore-mail-off-'), 'mail-off.env');
+            writeFileSync(mailOff, `${ARCHIVED_ENV}MAIL_ENABLED=0\n`);
+            const noMail = { drop: (name: string) => name.startsWith('dkim/') || name.startsWith('certs/') };
+            const fields = (m: Omit<ServerArchiveManifest, 'entries'>) => ({ ...m, dkim: false, certs: false });
+            const ofMailOff = await craft(fullArchive, {
+                ...noMail,
+                replace: { '.env.production': mailOff },
+                manifest: fields,
+            });
+            const withoutEnv = await craft(fullArchive, {
+                drop: (name) => noMail.drop(name) || name === '.env.production',
+                manifest: (m) => ({ ...fields(m), envFile: false }),
+            });
+            for (const [archive, env] of [
+                [ofMailOff, RELEASE_ENV],
+                [withoutEnv, `${RELEASE_ENV}MAIL_ENABLED=0\n`],
+            ]) {
+                const dir = install(env);
+                const staged = await stage(dir, archive);
+                expect(staged.code).toBe(0);
+                expect(staged.stdout).toContain(`A full archive of Eigen ${pkg.version}`);
+                expect(staged.stdout).not.toContain('DKIM');
+                expect(staged.stdout).not.toContain('mail TLS');
+            }
+            const mailOn = await stage(install(), basename(fullArchive));
+            expect(mailOn.stdout).toContain('The DKIM key from the archive');
+            expect(mailOn.stdout).toContain('The mail TLS certificate from the archive');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'a Light archive is refused before anything moves where this install has a folder in place of its file',
         async () => {
             const dir = install();
@@ -1223,6 +1257,35 @@ describe('restore --env, the first step on a fresh machine', () => {
             expect(result.code).toBe(1);
             expect(result.stderr).toContain('is not a whole Eigen server archive');
             expect(readdirSync(dir)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // A copy of the full archive with one byte of `member` changed, its size and the manifest as they were.
+    async function damaged(member: string): Promise<string> {
+        const { members } = await readServerManifest(fullArchive);
+        const { offset } = members.find(({ name }) => name === member)!;
+        const bytes = readFileSync(fullArchive);
+        bytes[offset] ^= 0xff;
+        const copy = join(scratch('restore-damaged-'), basename(fullArchive));
+        writeFileSync(copy, bytes);
+        return copy;
+    }
+
+    test(
+        'checks the .env.production it takes against the manifest, and leaves the other members to the stage',
+        async () => {
+            const refused = fresh();
+            const result = await restoreCli(refused, [await damaged('.env.production'), '--env']);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('.env.production: sha256 does not match the manifest');
+            expect(readdirSync(refused)).toEqual([]);
+
+            const taken = fresh();
+            const elsewhere = await restoreCli(taken, [await damaged(SERVER_ARCHIVE_SERVER_MEMBER), '--env']);
+            expect(elsewhere.stderr).toBe('');
+            expect(elsewhere.code).toBe(0);
+            expect(readFileSync(join(taken, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
         },
         JOB_TIMEOUT_MS,
     );

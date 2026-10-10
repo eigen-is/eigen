@@ -17,6 +17,14 @@ export type EigendocExportFormat = DocumentExportFormat | 'docx';
 // Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
 export type VectorExportFormat = 'svg' | 'pdf-html';
 
+// What an HTML export is for: the download a browser opens, or the document WeasyPrint prints.
+export type HtmlExportMode = 'screen' | 'pdf';
+
+// Out of html-document.ts, which loads jsdom, so an xlsx export never evaluates it.
+export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
+    return format === 'pdf-html' ? 'pdf' : 'screen';
+}
+
 // Document media crossing the boundary: prepared on the main thread for an export
 // (Mount I/O + screen previews), extracted from the upload by a docx import. The
 // bytes always ride as transferred buffers.

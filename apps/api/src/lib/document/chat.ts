@@ -1,12 +1,13 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { and, isNull, sql } from 'drizzle-orm';
+import { and, sql } from 'drizzle-orm';
+import { searchableMessageText } from '../chat/commands';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
-import { messages, NEWEST_FIRST, olderThan } from '../chat/schema';
+import { messages, NEWEST_FIRST, olderThan, SEARCHABLE_MESSAGES } from '../chat/schema';
 import type { Mount } from '../mount';
 
 const CHAT_CONTENT_PAGE = 512;
 
-// Drive-wide view of a chat: the NEWEST messages up to capBytes (most relevant for
+// Drive-wide view of a chat: the NEWEST searchable messages up to capBytes (most relevant for
 // "find the chat that mentioned X"). Reads the tail cheaply via idx_messages_createdAt;
 // no full scan, no Yjs (chat's data.db is a relational ManagedDatabase).
 export async function readChatContent(mount: Mount, drivePath: DrivePath, capBytes: number): Promise<string> {
@@ -22,18 +23,19 @@ export async function readChatContent(mount: Mount, drivePath: DrivePath, capByt
     while (out.length < capBytes) {
         const page = managedDb.db
             .select({
+                type: messages.type,
                 content: messages.content,
                 authorEmail: messages.authorEmail,
                 createdAt: messages.createdAt,
                 rowid: sql<number>`rowid`,
             })
             .from(messages)
-            .where(and(isNull(messages.deletedAt), before && olderThan(before)))
+            .where(and(SEARCHABLE_MESSAGES, before && olderThan(before)))
             .orderBy(...NEWEST_FIRST)
             .limit(CHAT_CONTENT_PAGE)
             .all();
         for (const row of page) {
-            const piece = `${row.authorEmail}: ${row.content}\n`;
+            const piece = `${row.authorEmail}: ${searchableMessageText(row)}\n`;
             if (out.length + piece.length > capBytes) return out;
             out += piece;
         }

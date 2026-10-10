@@ -39,7 +39,7 @@ Each fact lives where its writer is. Text, color and creator change in the edito
 
 A docs image anchors through an attribute, not the mark, because the Yjs binding persists marks only on text: a mark on the figure would vanish on reload and never reach a peer. `nodeCommentCardId` (`apps/docs/src/components/docs/extensions/comment-mark.ts`) reads either form, and everything outside the figure's node view goes through it: the active set, the decorations, scroll-to and delete. A text selection that spans a figure marks only the text. The figure reads as "Image" in a card's anchor text, so a comment on an image alone has something to quote.
 
-A cut image keeps its card, because the cut serializes the figure's `data-comment-id` like the mark. A copied image pastes through the eigen clipboard's image item, which carries no card, so a copy starts without comments. A canvas paste clears `commentCardIds` for the same result.
+A cut image keeps its card, because the cut serializes the figure's `data-comment-id` like the mark and the card stays in the document's `comments` map. A paste keeps only the anchors that map holds: `cleanPastedHTML` (`apps/docs/src/components/docs/paste.ts`) strips every other `data-comment-id`, so content copied from another document arrives without anchors to cards this one lacks. A docs-to-docs paste of an image goes through the copy's HTML too, so in its own document a copied image keeps its card like copied text does. Pasted into a slide or a sheet, it arrives as an image item, which carries no card. A canvas paste clears `commentCardIds`, so a canvas copy starts without comments.
 
 ## A docs image opens its own menu and paints its own mark
 
@@ -71,7 +71,7 @@ A status or assignee write first checks that the name resolves to a real `.eigen
 
 ## Search reads a recomputed tail of each thread
 
-`recentText` holds the newest 8 KB of a thread's messages, and the FTS5 table `comments_fts` indexes it for the in-document find bar ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md#comment-threads-are-searched-on-the-server)). It is rebuilt from the live messages on every indexed write, not appended to, so a deleted message stops matching and an edit never matches twice. Whispers stay out of it and out of the index entirely. Text past the cap is not searchable; the full history lives in the thread's own `data.db`, out of reach of a query on `comments.db`. The FTS update trigger fires only when `recentText` changes, so status, count and assignee writes never re-index the body. The migrations are pinned in `apps/api/src/test/comments/`.
+`recentText` holds the newest 8 KB of a thread's messages, and the FTS5 table `comments_fts` indexes it for the in-document find bar ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md#comment-threads-are-searched-on-the-server)). It is rebuilt from the live messages on every indexed write, not appended to, so a deleted message stops matching and an edit never matches twice. Whispers stay out of it and out of the index entirely. A built-in emote goes in as the third-person sentence a bystander reads (`searchableMessageText`), not its stored key, so a search for its words finds it. Text past the cap is not searchable; the full history lives in the thread's own `data.db`, out of reach of a query on `comments.db`. The FTS update trigger fires only when `recentText` changes, so status, count and assignee writes never re-index the body. The migrations are pinned in `apps/api/src/test/comments/`.
 
 ## Assignment is a member's email, set by the server
 

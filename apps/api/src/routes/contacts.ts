@@ -236,7 +236,6 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             // last one lands — longer than any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, VCARD_MAX_BYTES);
-            if (bytes === null) throw new ApiError(413, 'Upload too large');
             return await contacts.importCards(bytes);
         },
         { auth: true, parse: 'none' },

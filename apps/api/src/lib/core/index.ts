@@ -10,6 +10,7 @@ export * from './mailer';
 export * from './managed-database';
 export * from './ooxml';
 export * from './path-utils';
+export * from './stream';
 export * from './transfer';
 export * from './window-limiter';
 export * from './xml';

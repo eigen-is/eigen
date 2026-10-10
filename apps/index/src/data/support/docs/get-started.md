@@ -7,7 +7,7 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time. This page is a quick tour of what you can do.
@@ -25,10 +25,10 @@ The document opens on an A4 page with 2 cm margins. At the top you will find the
 The toolbar has three areas:
 
 - **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing one, import a Word file, download, rename, share, email collaborators, view version history, see the page setup, print, and move the document to the trash.
-- **Formatting controls**, in the center. Change the font, heading level (Normal text, Heading 1 through Heading 4), and character formatting: **Bold**, **Italic**, **Underline**, **Strikethrough**, and more. You can also set text color, highlight color, alignment, and list style (bulleted, numbered, or checklist) here, and insert a horizontal rule, a page break, a link, a table, or an image.
+- **Formatting controls**, in the center. Change the heading level (Normal text, Heading 1 through Heading 4) and the font, make text **Bold**, **Italic**, or **Underline**, set text color and highlight color, insert a link or an image, and set alignment and list style (bulleted, numbered, or checklist).
 - **Share** and **Comments** buttons, on the right.
 
-On a narrow screen the formatting controls move into **Format** and **Insert** dropdown menus to save space.
+The **Format** and **Insert** menus sit next to **File** and **Edit** on every screen. They hold every formatting option, including strikethrough, capitals, and quotes, and everything you can insert, such as a horizontal rule, a page break, or a table. On a narrower window the center shows fewer controls, dropping them from the right, and on a small screen none. Use the menus for the rest.
 
 ## Your changes save automatically
 

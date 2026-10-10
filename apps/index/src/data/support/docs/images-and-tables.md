@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-08
+updated: 2026-10-10
 ---
 
 You can insert images and tables anywhere in a document. Images can come from your device or from Drive.
@@ -13,7 +13,7 @@ Tables start as a 3×3 grid and you can grow them from there.
 
 ## Insert an image
 
-### On desktop
+### On a wide screen
 
 1. Place your cursor where you want the image to appear.
 2. Click the **Insert image** button in the toolbar (the image icon with a plus symbol).
@@ -24,12 +24,14 @@ Tables start as a 3×3 grid and you can grow them from there.
 
 You can also drag an image file from your computer and drop it straight onto the document.
 
-### On mobile
+### From the Insert menu
+
+This works on any screen.
 
 1. Place your cursor where you want the image.
-2. Tap **Insert** in the toolbar.
-3. Tap **Image**.
-4. The **Insert image** dialog opens. Choose **Upload from device** to pick a file, or browse Drive and tap **Select**.
+2. Click **Insert** in the toolbar.
+3. Choose **Image**.
+4. The **Insert image** dialog opens. Choose **Upload from device** to pick a file, or browse Drive and click **Select**.
 
 ### Paste an image
 
@@ -37,7 +39,7 @@ If you have an image on the clipboard (copied from another app or from elsewhere
 
 ## Resize and position an image
 
-Click an image to select it. Resize handles appear at the edges. Drag a handle to change the width. The height adjusts to keep the proportions. To place the cursor before or after an image that sits on its own line, click in the empty space to its left or right.
+Click an image to select it. Resize handles appear at the edges. Drag a handle to change the width. The height adjusts to keep the proportions. To resize with the keyboard, select the image and hold Shift while you press an arrow key: Right or Up makes it wider, Left or Down makes it narrower. To place the cursor before or after an image that sits on its own line, click in the empty space to its left or right.
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
@@ -55,17 +57,9 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 
 ## Insert a table
 
-### On desktop
-
 1. Place your cursor where you want the table.
-2. Click the **Insert table** button in the toolbar (the grid icon).
-3. A 3×3 table with a header row is inserted straight away.
-
-### On mobile
-
-1. Place your cursor where you want the table.
-2. Tap **Insert** in the toolbar.
-3. Tap **Table**.
+2. Click **Insert** in the toolbar.
+3. Choose **Table**. A 3×3 table with a header row is inserted straight away.
 
 ## Edit a table
 

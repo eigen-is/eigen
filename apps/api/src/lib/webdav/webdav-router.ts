@@ -1,6 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
-import { readDavBody } from '../dav/body';
+import { readBoundedBodyBytes } from '../core/http';
 import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
 import { decodeHref } from './path';
@@ -40,7 +40,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: '/',
             depth,
-            body: await readDavBody(request, MAX_XML_BODY_BYTES),
+            body: await readBoundedBodyBytes(request, MAX_XML_BODY_BYTES),
         });
     })
     .route('PROPFIND', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -52,7 +52,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: pathStrFromParams(params['*']),
             depth,
-            body: await readDavBody(request, MAX_XML_BODY_BYTES),
+            body: await readBoundedBodyBytes(request, MAX_XML_BODY_BYTES),
         });
     })
     .route('GET', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -154,7 +154,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ownerId: params.ownerId,
             mountId: params.mountId,
             pathStr: pathStrFromParams(params['*']),
-            body: await readDavBody(request, MAX_XML_BODY_BYTES),
+            body: await readBoundedBodyBytes(request, MAX_XML_BODY_BYTES),
             ifHeader: request.headers.get('If'),
         });
     })
@@ -165,7 +165,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ownerId: params.ownerId,
             mountId: params.mountId,
             pathStr: pathStrFromParams(params['*']),
-            body: await readDavBody(request, MAX_XML_BODY_BYTES),
+            body: await readBoundedBodyBytes(request, MAX_XML_BODY_BYTES),
             timeoutHeader: request.headers.get('Timeout'),
             ifHeader: request.headers.get('If'),
             depthHeader: request.headers.get('Depth'),

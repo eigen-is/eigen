@@ -1,13 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
+import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
@@ -286,19 +287,66 @@ describe('doc export — whitespace', () => {
 });
 
 describe('doc export — caps', () => {
-    test.each(['html', 'pdf-html'] as const)('%s draws caps in CSS over the letters as typed', async (format) => {
-        const caps = (text: string, value: string) => ({
-            type: 'text',
-            text,
-            marks: [{ type: 'textStyle', attrs: { caps: value } }],
-        });
-        const doc = seededDoc({
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [caps('Title', 'all'), caps(' Name', 'small')] }],
-        });
-        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
-        expect(new TextDecoder().decode(data)).toContain(
-            '<p><span style="text-transform: uppercase">Title</span><span style="font-variant-caps: small-caps"> Name</span></p>',
+    const caps = (text: string, value: string, fontFamily: string | null = null, italic = false): JSONContent => ({
+        type: 'text',
+        text,
+        marks: [{ type: 'textStyle', attrs: { caps: value, fontFamily } }, ...(italic ? [{ type: 'italic' }] : [])],
+    });
+
+    async function exportBody(format: 'html' | 'pdf-html', content: JSONContent[]): Promise<string> {
+        const { data } = await renderEigendocExport(
+            seededDoc({ type: 'doc', content }),
+            format,
+            'Report.eigendoc',
+            [],
+            undefined,
+        );
+        return new TextDecoder().decode(data);
+    }
+
+    test.each(['html', 'pdf-html'] as const)('%s draws all caps in CSS over the letters as typed', async (format) => {
+        expect(await exportBody(format, [{ type: 'paragraph', content: [caps('Title', 'all')] }])).toContain(
+            '<p><span style="text-transform: uppercase">Title</span></p>',
+        );
+    });
+
+    test('html draws small caps in CSS over the letters as typed', async () => {
+        expect(await exportBody('html', [{ type: 'paragraph', content: [caps(' Name', 'small')] }])).toContain(
+            '<p><span style="font-variant-caps: small-caps"> Name</span></p>',
+        );
+    });
+
+    // WeasyPrint draws small caps only from a font's smcp glyphs, which only upright Source Serif 4 has.
+    test('the pdf draws small caps in a font without them as smaller capitals', async () => {
+        const small = (text: string) => `<span style="font-size: 0.7em">${text}</span>`;
+        const html = await exportBody('pdf-html', [
+            { type: 'paragraph', content: [caps('Mac Straße é 1 👍🏽x', 'small')] },
+            { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4', true)] },
+            {
+                type: 'blockquote',
+                content: [
+                    { type: 'paragraph', content: [caps('Quote', 'small', 'Source Serif 4')] },
+                    { type: 'paragraph', content: [caps('Mono', 'small', 'JetBrains Mono')] },
+                    { type: 'paragraph', content: [caps('Body', 'small')] },
+                ],
+            },
+        ]);
+
+        expect(html).toContain(
+            `<p><span style="font-variant-caps: small-caps">M${small('AC')} S${small('TRASSE')} ${small('É')} 1 👍🏽${small('X')}</span></p>`,
+        );
+        expect(html).toContain(`S${small('ERIF')}`);
+        expect(html).toContain(`Q${small('UOTE')}`);
+        expect(html).toContain(`M${small('ONO')}`);
+        expect(html).toContain(`B${small('ODY')}`);
+    });
+
+    test('the pdf keeps upright Source Serif 4 small caps as typed', async () => {
+        const html = await exportBody('pdf-html', [
+            { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },
+        ]);
+        expect(html).toContain(
+            `<p><span style="font-family: 'Source Serif 4', serif; font-variant-caps: small-caps">Serif</span></p>`,
         );
     });
 });
@@ -363,9 +411,26 @@ describe('doc export — links', () => {
         const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
         const { document } = new JSDOM(new TextDecoder().decode(data)).window;
         expect([...document.querySelectorAll('article p > *')].map((node) => node.outerHTML)).toEqual([
-            `<a rel="noopener noreferrer" href="${href}">plain</a>`,
-            `<a rel="noopener noreferrer" href="${href}"><span style="color: #ff00aa"><u>pink</u></span></a>`,
+            `<a target="_blank" rel="noopener noreferrer" href="${href}">plain</a>`,
+            `<a target="_blank" rel="noopener noreferrer" href="${href}"><span style="color: #ff00aa"><u>pink</u></span></a>`,
         ]);
+    });
+
+    test('the html download opens a link in a new tab, as the editor does', async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'a', marks: [{ type: 'link', attrs: { href: 'https://a.example/' } }] },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        expect(document.querySelector('article a')?.getAttribute('target')).toBe('_blank');
     });
 
     test('a root-relative href stays relative without a public origin', async () => {
@@ -415,17 +480,32 @@ describe('doc export — docx SVG fallback timeout', () => {
     const slow = `<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="2560"><filter id="f" x="0" y="0" width="1" height="1"><feTurbulence baseFrequency="0.9" numOctaves="10"/></filter><rect width="2560" height="2560" filter="url(#f)"/></svg>`;
     const fast = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>';
 
+    const figure = (mediaName: string): JSONContent => ({
+        type: 'paragraph',
+        content: [{ type: 'figure', attrs: { mediaName } }],
+    });
+
     // Untimed, the slow one renders in seconds and gets a PNG, so its absence proves the timeout fired; a wall-clock
     // bound fails on a loaded CI runner, where the uninterruptible librsvg pass alone outlasts it.
-    test('an SVG that outlasts the timeout gets no PNG fallback, and the next one still does', async () => {
-        const media = await withSvgFallbacks(
-            [
+    test('an SVG that outlasts the timeout leaves the docx, and the next one is still drawn', async () => {
+        const original = { ...thumbnailTimeout };
+        mock.module('../../lib/shared/thumbnail-timeout', () => ({ THUMBNAIL_TIMEOUT_SECONDS: 1 }));
+        try {
+            const media = [
                 { name: 'slow.svg', contentType: 'image/svg+xml', data: toTransferableText(slow) },
                 { name: 'fast.svg', contentType: 'image/svg+xml', data: toTransferableText(fast) },
-            ],
-            1,
-        );
-        expect(media.map(({ name, png }) => [name, png !== undefined])).toEqual([['fast.svg', true]]);
+            ];
+            const doc = seededDoc({ type: 'doc', content: [figure('slow.svg'), figure('fast.svg')] });
+            const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
+            const zip = openZip(new Uint8Array(data));
+            expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([
+                'word/media/image1.png',
+                'word/media/image1.svg',
+            ]);
+            expect(new TextDecoder().decode(zip.read('word/media/image1.svg'))).toContain('width="10"');
+        } finally {
+            mock.module('../../lib/shared/thumbnail-timeout', () => original);
+        }
     }, 30_000);
 });
 

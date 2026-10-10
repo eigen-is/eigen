@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
-import { getDocExtensions } from '../../../../docs/eigendoc';
+import { getDocExtensions, readFigureAttrs } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
@@ -16,7 +16,7 @@ describe('figure HTML', () => {
     // The clipboard carries a cut image as this HTML, so a commented image keeps its card like commented text.
     test("a figure's comment card survives the HTML round-trip", () => {
         const html = generateHTML(figureDoc({ mediaName: 'a.png', commentCardId: 'card-1' }), extensions);
-        expect(html).toContain('<figure data-comment-id="card-1">');
+        expect(html).toContain('<span class="figure" data-comment-id="card-1">');
         const ids: unknown[] = [];
         createDocument(html, getSchema(extensions)).descendants((node) => {
             if (node.type.name === 'figure') ids.push(node.attrs.commentCardId);
@@ -56,5 +56,29 @@ describe('figure parse', () => {
                 '<figure data-layout="wrap-right" data-alignment="left"><img src="a.png"><figcaption>Old</figcaption></figure>',
             ),
         ).toMatchObject([{ src: 'a.png', caption: 'Old', layout: 'wrap-right', alignment: 'left' }]);
+    });
+});
+
+describe('readFigureAttrs', () => {
+    test('reads the attributes a figure stores', () => {
+        expect(readFigureAttrs({ mediaName: 'a.png', width: 320, alignment: 'right', layout: 'wrap-left' })).toEqual({
+            mediaName: 'a.png',
+            src: null,
+            alt: null,
+            caption: null,
+            width: 320,
+            alignment: 'right',
+            layout: 'wrap-left',
+            commentCardId: null,
+        });
+    });
+
+    test('reads a value of the wrong type as unset', () => {
+        expect(readFigureAttrs({ caption: 7, width: '320', alignment: 'middle', layout: 'float' })).toMatchObject({
+            caption: null,
+            width: null,
+            alignment: null,
+            layout: null,
+        });
     });
 });

@@ -41,9 +41,9 @@ import {
     stageBytesNeeded,
     stageServerArchive,
 } from '../lib/backup/restore-server';
-import { describeFailures, readServerArchive } from '../lib/backup/verify';
+import { describeFailures, readServerArchive, readServerArchiveMember } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
-import { getEnvFile } from '../lib/config/env';
+import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
     getDataRoot,
     homeDirUnder,
@@ -271,15 +271,17 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     const envMember = archived.members.get(SERVER_ARCHIVE_ENV_MEMBER);
     const current = getEnvFile();
     const hasCurrent = current !== undefined && existsSync(current);
-    if (envMember) await copyArchiveMember(envMember, join(restoring, ENV_PATH));
-    else if (!hasCurrent) {
+    // The one Eigen runs with once restored.
+    const envFile = envMember ? join(restoring, ENV_PATH) : hasCurrent ? current : undefined;
+    if (!envFile) {
         return refuse(`${name} holds no ${ENV_PATH}, and this install has none.`, `Restore an archive that holds one.`);
     }
+    if (envMember) await copyArchiveMember(envMember, envFile);
     // A release install runs the images its .env.production pins; a local build builds its own and pins none.
     if (envMember && current && hasCurrent) {
         const install = (env: string) =>
             readEnvFile(env).has('EIGEN_VERSION') ? 'a release install' : 'a local build';
-        const [theirs, ours] = [install(join(restoring, ENV_PATH)), install(current)];
+        const [theirs, ours] = [install(envFile), install(current)];
         if (theirs !== ours) {
             return refuse(
                 `${name} is an archive of ${theirs}; this is ${ours}.`,
@@ -297,11 +299,16 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         `A ${manifest.level} archive of Eigen ${manifest.appVersion} for ${manifest.domain}, made on ${formatDate(manifest.createdAt)}, ${formatTimeAgo(manifest.createdAt)}`,
         `${homes.length} homes${failed.length ? `; not in it: ${failed.join(', ')}` : ''}${warned.length ? `; with warnings: ${warned.join(', ')}` : ''}`,
         envMember ? `${ENV_PATH} from the archive` : `No ${ENV_PATH}: the one here stays`,
-        manifest.dkim ? 'The DKIM key from the archive' : 'No DKIM key: the one here stays, or mail needs new DNS',
-        manifest.certs
-            ? 'The mail TLS certificate from the archive'
-            : 'No mail TLS certificate: the one here stays, or the mail server makes a self-signed one',
     ];
+    // Mail off, Eigen reads neither the DKIM key nor the mail TLS certificate.
+    if (isMailEnabled(Object.fromEntries(readEnvFile(envFile)))) {
+        lines.push(
+            manifest.dkim ? 'The DKIM key from the archive' : 'No DKIM key: the one here stays, or mail needs new DNS',
+            manifest.certs
+                ? 'The mail TLS certificate from the archive'
+                : 'No mail TLS certificate: the one here stays, or the mail server makes a self-signed one',
+        );
+    }
     if (manifest.level === 'light') {
         const bare = homes.filter((home) => !existsSync(homeDirUnder(dataRoot, home.ownerId))).length;
         lines.push(
@@ -654,22 +661,23 @@ async function takeEnv(archive: string | undefined): Promise<void> {
     if (existsSync(ENV_PATH)) {
         return ui.fail(`This folder has a ${ENV_PATH} already.`, `./eigen restore restores ${name} onto it.`);
     }
-    const read = await readServerArchive(archive);
-    if (!read.manifest || read.verify.status !== 'verified') {
-        return ui.fail(
-            `${name} is not a whole Eigen server archive: ${describeFailures(read.verify)}.`,
-            'Restore another archive.',
-        );
+    const read = await readServerArchiveMember(archive, SERVER_ARCHIVE_ENV_MEMBER);
+    if ('failure' in read) {
+        return ui.fail(`${name} is not a whole Eigen server archive: ${read.failure}.`, 'Restore another archive.');
     }
-    const member = read.members.find(({ name }) => name === SERVER_ARCHIVE_ENV_MEMBER);
-    if (!member) {
+    if (!read.bytes) {
         return ui.fail(
             `${name} holds no ${ENV_PATH}, so it cannot be restored on a fresh machine.`,
             'Run ./eigen setup first, then ./eigen restore.',
         );
     }
     const temporary = `${ENV_PATH}.${process.pid}.tmp`;
-    await copyArchiveMember(member, temporary);
+    try {
+        writeFileSync(temporary, read.bytes, { mode: 0o600 });
+    } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+    }
     if (!readEnvFile(temporary).has(API_IMAGE_KEY)) {
         rmSync(temporary);
         return ui.fail(
