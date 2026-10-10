@@ -1,5 +1,5 @@
 // Audits a docx importer on a corpus: per file, what Word shows, counted from the OOXML with the style chain resolved,
-// beside what reached the imported eigendoc JSON, and the raw OOXML elements the file holds (PROPOSAL_DOCX.md § The corpus).
+// beside what reached the imported eigendoc JSON, and the raw OOXML elements the file holds.
 //
 // Usage:
 //   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
@@ -14,7 +14,9 @@ import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import {
     A_NS,
+    BORDER_SIDES,
     C_NS,
+    FLOATING_WRAPS,
     headingLevel,
     isOn,
     LINK_THEME_COLORS,
@@ -46,6 +48,7 @@ import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
+import { descendants } from '../lib/import/doc/package';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
@@ -199,7 +202,6 @@ const ALIGNMENTS = new Map<string, Feature>([
 const QUOTE_STYLES = new Set(['quote', 'intense quote', 'block text']);
 const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
-const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
 // The link look's colors, apart from the reader's so the audit never grades the reader by itself.
 const LINK_STYLE_COLORS = new Set(['2563EB', '1155CC', '0563C1', '0000FF', '000080']);
@@ -280,18 +282,6 @@ function val(element: XmlElement | undefined): string | undefined {
 // An on/off property present without w:val is on.
 function on(element: XmlElement): boolean {
     return isOn(val(element)) !== false;
-}
-
-// Not into a match, nor into a text box: its content is walked by its own drawing, once.
-function find(root: XmlElement, ns: string, local: string): XmlElement[] {
-    const found: XmlElement[] = [];
-    const stack = xmlElements(root).reverse();
-    for (let element = stack.pop(); element; element = stack.pop()) {
-        if (element.ns === ns && element.local === local) found.push(element);
-        else if (!(element.ns === W_NS && element.local === 'txbxContent'))
-            stack.push(...xmlElements(element).reverse());
-    }
-    return found;
 }
 
 // Word renders the first choice it understands; every choice in this corpus's era is one Word 2010 reads.
@@ -686,7 +676,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const chain = named.length > 0 ? named : styles.chain(styles.paragraph);
         const names = chain.map(styleName);
         const pPrs = [pPr, ...chain.map((style) => child(style, 'pPr')), styles.pPr].flatMap((p) => p ?? []);
-        // Word's Title is H1 in Eigen (PROPOSAL_DOCX.md, Decision 8). The nearest style that names a level decides,
+        // Word's Title is H1 in Eigen. The nearest style that names a level decides,
         // and outline level 9 is body text, as a TOC Heading based on Heading 1 sets it.
         let heading: number | undefined;
         for (const [index, style] of chain.entries()) {
@@ -700,7 +690,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const numPr = (local: string) => val(pPrs.map((p) => child(child(p, 'numPr'), local)).find(Boolean));
         const pageBreakBefore = first(pPrs, 'pageBreakBefore');
         const pBdr = first(pPrs, 'pBdr');
-        const drawn = ['top', 'left', 'bottom', 'right', 'between'].flatMap((side) => {
+        const drawn = [...BORDER_SIDES, 'between'].flatMap((side) => {
             const border = child(pBdr, side);
             const style = val(border);
             return border && style && !['none', 'nil'].includes(style) ? [{ side, border, style }] : [];
@@ -872,24 +862,24 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const drawing = (element: XmlElement, context: Inline) => {
         for (const holder of xmlElements(element)) {
             if (holder.ns !== WP_NS) continue;
-            const blips = find(holder, A_NS, 'blip').filter(
+            const blips = descendants(holder, A_NS, 'blip').filter(
                 (blip) => xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link'),
             );
             const extent = child(holder, 'extent', WP_NS);
             if (blips.length > 0) {
                 add(tally, 'images', blips.length);
                 if (Number(extent && xmlAttr(extent, '', 'cx')) > 0) add(tally, 'imageWidths', blips.length);
-                if (holder.local === 'anchor' && WRAPS.some((wrap) => child(holder, wrap, WP_NS))) {
+                if (holder.local === 'anchor' && [...FLOATING_WRAPS].some((wrap) => child(holder, wrap, WP_NS))) {
                     add(tally, 'wrapped', blips.length);
                 } else context.paragraph.image = true;
             }
-            for (const box of find(holder, W_NS, 'txbxContent'))
+            for (const box of descendants(holder, W_NS, 'txbxContent'))
                 blocks(box, { ...context.scope, chain: newChain(), fields: [] });
         }
     };
 
     const vml = (element: XmlElement, context: Inline) => {
-        const shapes = [...find(element, V_NS, 'shape'), ...find(element, V_NS, 'rect')];
+        const shapes = [...descendants(element, V_NS, 'shape'), ...descendants(element, V_NS, 'rect')];
         if (shapes.some((shape) => ['t', 'true'].includes(xmlAttr(shape, O_NS, 'hr') ?? ''))) add(tally, 'rules');
         for (const shape of shapes) {
             const image = child(shape, 'imagedata', V_NS);
@@ -900,7 +890,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             if (wrap && ['square', 'tight', 'through'].includes(xmlAttr(wrap, '', 'type') ?? '')) add(tally, 'wrapped');
             else context.paragraph.image = true;
         }
-        for (const box of find(element, W_NS, 'txbxContent'))
+        for (const box of descendants(element, W_NS, 'txbxContent'))
             blocks(box, { ...context.scope, chain: newChain(), fields: [] });
     };
 
@@ -1044,7 +1034,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             look.code ||
             caption ||
             scope.note ||
-            find(element, W14_NS, 'checkbox').length > 0;
+            descendants(element, W14_NS, 'checkbox').length > 0;
         const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
         // A heading can't stand in an Eigen list: Word shows its number as text, which survives as text or not at all.
         const label = look.heading !== undefined && numbered?.ordered ? numbered.label : undefined;
@@ -1148,7 +1138,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         if (
             only &&
             child(child(element, 'tblPr'), 'tblpPr') &&
-            (find(only, A_NS, 'blip').length > 0 || find(only, V_NS, 'imagedata').length > 0)
+            (descendants(only, A_NS, 'blip').length > 0 || descendants(only, V_NS, 'imagedata').length > 0)
         ) {
             add(tally, 'wrapped');
             blocks(only, { ...scope, chain: newChain(), float: true });
@@ -1508,7 +1498,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most ${SMALL_PRINT * 100}% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',

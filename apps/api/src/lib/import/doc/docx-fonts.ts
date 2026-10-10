@@ -1,6 +1,6 @@
-import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT, type EigenFont } from '@workspace/lib/constants/fonts';
+import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
-import { A_NS, W_NS } from '../../core/ooxml';
+import { A_NS, FONT_FAMILY, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlChild, xmlElements } from '../../core/xml';
 import { descendants, is, w, wChild } from './package';
 
@@ -129,10 +129,9 @@ export type FontTable = Map<string, string>;
 
 // Word writes roman with pitch default for a font it has no metrics of (ArialMT, MinionPro-Regular), and modern for
 // some variable sans, so a family counts only beside a known variable pitch. Script, decorative and auto are unknown.
-const FAMILY_CATEGORIES = new Map<string, EigenFont['category']>([
-    ['roman', 'serif'],
-    ['swiss', 'sans-serif'],
-]);
+const FAMILY_CATEGORIES = new Map(
+    (['serif', 'sans-serif'] as const).map((category) => [FONT_FAMILY[category], category]),
+);
 
 export function readFontTable(root: XmlElement | undefined): FontTable {
     const table: FontTable = new Map();

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, type EigenFont, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
@@ -18,6 +18,7 @@ import {
     DEFAULT_HIGHLIGHT,
     EMU_PER_PX,
     EMU_PER_TWIP,
+    FONT_FAMILY,
     headingStyleName,
     LIST_FORMATS,
     LIST_LEVELS,
@@ -214,13 +215,6 @@ const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"$
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
 const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
-
-const FONT_FAMILY: Record<EigenFont['category'], string> = {
-    'sans-serif': 'swiss',
-    serif: 'roman',
-    monospace: 'modern',
-    'hand-drawn': 'script',
-};
 
 // The ECMA-376 order of a font's embed elements.
 const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfies readonly (keyof DocxFontFiles)[];

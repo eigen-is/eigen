@@ -13,10 +13,10 @@ type Row = { trPr?: XmlElement; cells: XmlElement[] };
 // Word's column limit, on the grid and every row: a span is walked by column, the widest row sets every row's width.
 const MAX_COLUMNS = 63;
 
-// findWidth rescans the rows above each row after a rowspan: a table that merges splits here, at most 0.9 s a part.
+// findWidth rescans the rows above each row after a rowspan, so a table that merges splits here.
 export const MAX_MERGED_ROWS = 2000;
 
-// Each table nests three nodes deep; 1,000 nested tables overflowed the Worker's stack.
+// Each table nests three nodes deep, and deep nesting overflows the Worker's stack.
 export const MAX_TABLE_DEPTH = 8;
 
 export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item[] {

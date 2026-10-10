@@ -5,10 +5,9 @@ import { ApiError } from './errors';
 // when the archive opens and every inflate stops at its entry's declared size, so a lying entry can't grow
 // past it. Inflating is synchronous: callers run in a transform Worker.
 
-// The bytes an archive may declare in total, for docx and xlsx. A dense sheet at the importer's cell cap inflates to
-// ~140 MB (~35 bytes per cell); an honest 35 MB upload of zeros declares ~36 GB.
+// The bytes an archive may declare in total, for docx and xlsx: room for a dense sheet at the importer's cell cap.
 export const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
-// The corpus's most is 1,714 parts, in a LibreOffice test file; its real documents stay under 100.
+// Far past the parts a real document holds.
 export const MAX_ZIP_ENTRIES = 10_000;
 
 export type ZipErrorCode =
@@ -41,7 +40,7 @@ export class ZipError extends ApiError {
     }
 }
 
-export type ZipEntry = {
+type ZipEntry = {
     name: string;
     method: 0 | 8;
     crc32: number;
@@ -156,7 +155,7 @@ export function openZip(bytes: Uint8Array): ZipReader {
         const next = extraStart + extraLength + u16(at + 32);
         if (next > directoryEnd) throw new ZipError('corrupt');
         const nameBytes = bytes.subarray(at + 46, extraStart);
-        // As JSZip does: OOXML names are ASCII, so the CP437 reading of a name without the UTF-8 flag is moot.
+        // UTF-8 whatever the flag: OOXML names are ASCII, which CP437 reads alike, and a name is found only exactly.
         const name = utf8.decode(nameBytes);
         if (flags & ENCRYPTED_FLAGS) throw new ZipError('encrypted');
         if (method !== 0 && method !== 8) throw new ZipError('unsupported-method');

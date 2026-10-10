@@ -66,15 +66,9 @@ const BORDER_STYLE_MAP: Record<string, number> = Object.fromEntries(
 
 type ThemePalette = string[];
 
-// Belt against a tiny file DECLARING an enormous grid (far-apart cells span the full Excel
-// bounding box): walking rowCount×columnCount to build the Sheet output would blow up, and
-// exceljs's fully-materialized in-memory model (~800 bytes per cell) is itself the
-// dominant memory term. 4 M cells (e.g. 40k rows × 100 cols) exceeds any realistic import;
-// a dense, styled sheet at the cap peaks at ~5 GB to convert, ~3 GB of it exceljs's model.
-// The byte cap holds ~7.5M valued cells, so the cells a part holds count against this cap
-// before exceljs loads (tallyExpansions), and the grid they span after. The byte cap
-// independently catches a LOW-cell-count bomb (repeated bytes in one entry, or a forged
-// xl/media/* blob) the cell cap can't see.
+// exceljs's model per cell dominates memory, and a tiny file can declare far-apart cells whose grid the conversion walks:
+// the cells the parts hold count before exceljs loads (tallySheet), the grid they span after. The byte cap catches a bomb
+// of few cells.
 export const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
@@ -133,9 +127,8 @@ function repackXlsx(buffer: Buffer): Buffer {
     }
 }
 
-// exceljs builds these while it loads, before MAX_CELLS can count anything: a model per <c> and <row>; a merge's cells, each
-// merge checked against every earlier one; a validation's sqref as a model key per cell; a <col> as a column object
-// per column up to its min or max.
+// What exceljs builds while it loads, before MAX_CELLS can count anything: a model per sheet, <c>, <row> and element; a
+// merge's cells, each merge checked against every earlier one; a validation's sqref as a model key per cell.
 type ExpansionTally = {
     sheets: number;
     cells: number;
@@ -146,7 +139,7 @@ type ExpansionTally = {
     validationKeys: number;
 };
 
-// Merged cells count against MAX_CELLS, as cells. exceljs takes 2.4 s to check 10k merges pairwise, 27 s for 30k.
+// Merged cells count against MAX_CELLS, as cells; exceljs checks each merge against every earlier one.
 export const MAX_MERGES = 10_000;
 // A validation key costs ~300 B, so 5M keys is ~1.5 GB, what 1M ordinary cells cost; four column-wide validations fit.
 export const MAX_VALIDATION_KEYS = 5_000_000;
@@ -154,7 +147,7 @@ export const MAX_VALIDATION_KEYS = 5_000_000;
 export const MAX_ROWS = 2 * REFERENCE_ROW_COUNT;
 // A sheet holds a column object per column up to its last, ~3 MB at XFD; real workbooks hold under 50 sheets.
 export const MAX_SHEETS = 500;
-// exceljs's sheet list walks every id up to the largest (50M: 1.2 GB); real ids stay under 33,000.
+// exceljs's sheet list walks every id up to the largest; real ids stay far below.
 export const MAX_SHEET_ID = 1_000_000;
 // exceljs builds up to ~270 B per element, ~1 GB at the cap; real sheets, shared strings and styles hold under 70,000
 // past the cell grid.
@@ -268,8 +261,8 @@ function withSpacedTags(bytes: Buffer): Buffer {
     return spaced;
 }
 
-// Eigen drops defined names, and exceljs expands each one's range per cell, 614M cells in one GOV.UK workbook. It
-// matches the element by its exact name at any depth, so renaming every start and end tag hides it, still well-formed.
+// Eigen drops defined names, and exceljs expands each one's range per cell. It matches the element by its exact name at
+// any depth, so renaming every start and end tag hides it, still well-formed.
 const DEFINED_NAMES_TAG = /<(\/?)definedNames/g;
 
 function withoutDefinedNames(bytes: Buffer): Buffer {

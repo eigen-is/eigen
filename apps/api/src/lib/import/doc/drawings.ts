@@ -7,6 +7,7 @@ import {
     DSP_NS,
     EMU_PER_PX,
     EMU_PER_TWIP,
+    FLOATING_WRAPS,
     O_NS,
     PIC_NS,
     R_NS,
@@ -215,9 +216,7 @@ function onShape(scope: Scope): Scope {
 
 // Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
 function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, string> {
-    const wrapped = xmlElements(anchor).some(
-        (child) => child.ns === WP_NS && ['wrapSquare', 'wrapTight', 'wrapThrough'].includes(child.local),
-    );
+    const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
