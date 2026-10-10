@@ -2,7 +2,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import { useIsCompactToolbar } from '@workspace/lib/media';
+import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import {
@@ -32,7 +32,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPickerButton } from '@workspace/ui/components/media';
+import { ColorPickerButton, ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
@@ -124,9 +124,12 @@ export const EditorToolbar = ({
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const active = useToolbarState(editor);
     const { exportPath, isExporting } = useDocumentExport();
-    // Docs' inline toolbar is the widest in the suite (~30 controls), so it folds earlier than the
-    // shared 1200px default.
-    const isCompact = useIsCompactToolbar(1400);
+    // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
+    // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Heading 4") its three cuts
+    // sit centered beside the menus from 862, 1044 and 1303px.
+    const showsRow = useMediaQuery('(min-width: 900px)');
+    const showsMiddle = useMediaQuery('(min-width: 1100px)');
+    const showsAll = useMediaQuery('(min-width: 1400px)');
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -156,6 +159,22 @@ export const EditorToolbar = ({
     // Radix restore focus to the menu trigger, which would swallow the next keystrokes.
     const keepEditorFocus = (e: Event) => {
         if (editor.isFocused) e.preventDefault();
+    };
+
+    const setTextColor = (color: string) => {
+        if (color) {
+            editor.chain().focus().setColor(color).run();
+        } else {
+            editor.chain().focus().unsetColor().run();
+        }
+    };
+
+    const setHighlightColor = (color: string) => {
+        if (color) {
+            editor.chain().focus().toggleHighlight({ color }).run();
+        } else {
+            editor.chain().focus().unsetHighlight().run();
+        }
     };
 
     const clearFormatting = () => {
@@ -198,7 +217,7 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                         />
 
-                        {isCompact && canWrite && (
+                        {canWrite && (
                             <>
                                 <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuSub>
@@ -265,12 +284,30 @@ export const EditorToolbar = ({
                                                 onClick={() => editor.chain().focus().toggleCaps('all').run()}
                                             >
                                                 <CaseUpper className="h-4 w-4 mr-2" /> All caps
+                                                <DropdownMenuShortcut>
+                                                    {formatForDisplay('Mod+Shift+A')}
+                                                </DropdownMenuShortcut>
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleCaps('small').run()}
                                             >
                                                 <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
                                             </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <ColorPickerMenuItem
+                                                icon={Baseline}
+                                                label="Text color"
+                                                value={active.color}
+                                                resetLabel="Default"
+                                                onChange={setTextColor}
+                                            />
+                                            <ColorPickerMenuItem
+                                                icon={Highlighter}
+                                                label="Highlight color"
+                                                value={active.highlightColor}
+                                                resetLabel="None"
+                                                onChange={setHighlightColor}
+                                            />
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
                                     <DropdownMenuSeparator />
@@ -303,6 +340,12 @@ export const EditorToolbar = ({
                                                 onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
                                             >
                                                 <Heading4 className="mr-2 h-4 w-4" /> Heading 4
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                                            >
+                                                <Quote className="mr-2 h-4 w-4" /> Quote
                                             </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
@@ -406,16 +449,8 @@ export const EditorToolbar = ({
                 }
                 center={
                     canWrite &&
-                    !isCompact && (
+                    showsRow && (
                         <div className="flex">
-                            <ToolbarSeparator />
-
-                            {/* Font family selector */}
-                            <FontPicker
-                                value={active.fontName}
-                                onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
-                            />
-
                             <ToolbarSeparator />
 
                             {/* Heading / paragraph selector */}
@@ -467,6 +502,14 @@ export const EditorToolbar = ({
 
                             <ToolbarSeparator />
 
+                            {/* Font family selector */}
+                            <FontPicker
+                                value={active.fontName}
+                                onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
+                            />
+
+                            <ToolbarSeparator />
+
                             {/* Text formatting toggle group */}
                             <div className="flex items-center gap-0.5">
                                 <TooltipButton
@@ -490,226 +533,124 @@ export const EditorToolbar = ({
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleUnderline().run()}
                                 />
-                                <TooltipButton
-                                    icon={Strikethrough}
-                                    tooltipText="Strikethrough"
-                                    active={active.strike}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleStrike().run()}
-                                />
-                                <TooltipButton
-                                    icon={Code}
-                                    tooltipText="Inline code"
-                                    active={active.code}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleCode().run()}
-                                />
-                                <TooltipButton
-                                    icon={Superscript}
-                                    tooltipText="Superscript"
-                                    active={active.superscript}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleSuperscript().run()}
-                                />
-                                <TooltipButton
-                                    icon={Subscript}
-                                    tooltipText="Subscript"
-                                    active={active.subscript}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleSubscript().run()}
-                                />
-                                <TooltipButton
-                                    icon={ALargeSmall}
-                                    tooltipText="Small"
-                                    active={active.small}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleSmall().run()}
-                                />
-                                <TooltipButton
-                                    icon={CaseUpper}
-                                    tooltipText={`All caps (${formatForDisplay('Mod+Shift+A')})`}
-                                    active={active.allCaps}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleCaps('all').run()}
-                                />
-                                <TooltipButton
-                                    icon={CaseSensitive}
-                                    tooltipText="Small caps"
-                                    active={active.smallCaps}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleCaps('small').run()}
-                                />
                             </div>
 
-                            <ToolbarSeparator />
+                            {showsMiddle && (
+                                <>
+                                    <ToolbarSeparator />
 
-                            {/* Text color */}
-                            <ColorPickerButton
-                                icon={Baseline}
-                                tooltipText="Text color"
-                                value={active.color}
-                                resetLabel="Default"
-                                showSwatch
-                                onChange={(color) => {
-                                    if (color) {
-                                        editor.chain().focus().setColor(color).run();
-                                    } else {
-                                        editor.chain().focus().unsetColor().run();
-                                    }
-                                }}
-                            />
-
-                            {/* Highlight color */}
-                            <ColorPickerButton
-                                icon={Highlighter}
-                                tooltipText="Highlight"
-                                active={active.highlight}
-                                value={active.highlightColor}
-                                resetLabel="None"
-                                onChange={(color) => {
-                                    if (color) {
-                                        editor.chain().focus().toggleHighlight({ color }).run();
-                                    } else {
-                                        editor.chain().focus().unsetHighlight().run();
-                                    }
-                                }}
-                            />
-
-                            <ToolbarSeparator />
-
-                            {/* Alignment toggle group */}
-                            <div className="flex items-center gap-0.5">
-                                <TooltipButton
-                                    icon={AlignLeft}
-                                    tooltipText="Align left"
-                                    active={active.alignLeft}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                />
-                                <TooltipButton
-                                    icon={AlignCenter}
-                                    tooltipText="Align center"
-                                    active={active.alignCenter}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                />
-                                <TooltipButton
-                                    icon={AlignRight}
-                                    tooltipText="Align right"
-                                    active={active.alignRight}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                />
-                            </div>
-
-                            <ToolbarSeparator />
-
-                            {/* Lists toggle group */}
-                            <div className="flex items-center gap-0.5">
-                                <TooltipButton
-                                    icon={List}
-                                    tooltipText="Bulleted list"
-                                    active={active.bulletList}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleBulletList().run()}
-                                />
-                                <TooltipButton
-                                    icon={ListOrdered}
-                                    tooltipText="Numbered list"
-                                    active={active.orderedList}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                                />
-                                <TooltipButton
-                                    icon={CheckSquare}
-                                    tooltipText="Checklist"
-                                    active={active.taskList}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleTaskList().run()}
-                                />
-                            </div>
-
-                            <ToolbarSeparator />
-
-                            {/* Block elements */}
-                            <div className="flex items-center gap-0.5">
-                                <TooltipButton
-                                    icon={Quote}
-                                    tooltipText="Blockquote"
-                                    active={active.blockquote}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                                />
-                                <TooltipButton
-                                    icon={CodeXml}
-                                    tooltipText="Code block"
-                                    active={active.codeBlock}
-                                    preventFocusLoss
-                                    onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                                />
-                            </div>
-                            <TooltipButton
-                                icon={Minus}
-                                tooltipText="Horizontal rule"
-                                preventFocusLoss
-                                onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                            />
-                            <TooltipButton
-                                icon={SeparatorHorizontal}
-                                tooltipText={`Page break (${formatForDisplay('Mod+Enter')})`}
-                                preventFocusLoss
-                                onClick={() => editor.chain().focus().setPageBreak().run()}
-                            />
-
-                            <ToolbarSeparator />
-
-                            {/* Insert actions */}
-                            <div className="flex items-center gap-0.5">
-                                <TooltipButton
-                                    icon={Link}
-                                    tooltipText="Add link"
-                                    active={active.link}
-                                    preventFocusLoss
-                                    onClick={handleLinkOperation}
-                                />
-                                {active.link && (
-                                    <TooltipButton
-                                        icon={Link2Off}
-                                        tooltipText="Remove link"
-                                        preventFocusLoss
-                                        onClick={() => editor.chain().focus().unsetLink().run()}
+                                    <ColorPickerButton
+                                        icon={Baseline}
+                                        tooltipText="Text color"
+                                        value={active.color}
+                                        resetLabel="Default"
+                                        showSwatch
+                                        onChange={setTextColor}
                                     />
-                                )}
-
-                                {/* Table */}
-                                <TooltipButton
-                                    icon={Table}
-                                    tooltipText="Insert table"
-                                    preventFocusLoss
-                                    onClick={() =>
-                                        editor
-                                            .chain()
-                                            .focus()
-                                            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                                            .run()
-                                    }
-                                />
-
-                                {/* Image upload */}
-                                {onImageUpload && (
-                                    <TooltipButton
-                                        icon={ImagePlus}
-                                        tooltipText="Insert image"
-                                        onClick={() => setImagePickerOpen(true)}
+                                    <ColorPickerButton
+                                        icon={Highlighter}
+                                        tooltipText="Highlight"
+                                        active={active.highlight}
+                                        value={active.highlightColor}
+                                        resetLabel="None"
+                                        onChange={setHighlightColor}
                                     />
-                                )}
 
-                                <TooltipButton
-                                    icon={RemoveFormatting}
-                                    tooltipText="Clear formatting"
-                                    onClick={clearFormatting}
-                                />
-                            </div>
+                                    <ToolbarSeparator />
+
+                                    {/* Insert actions */}
+                                    <div className="flex items-center gap-0.5">
+                                        <TooltipButton
+                                            icon={Link}
+                                            tooltipText="Add link"
+                                            active={active.link}
+                                            preventFocusLoss
+                                            onClick={handleLinkOperation}
+                                        />
+                                        {active.link && (
+                                            <TooltipButton
+                                                icon={Link2Off}
+                                                tooltipText="Remove link"
+                                                preventFocusLoss
+                                                onClick={() => editor.chain().focus().unsetLink().run()}
+                                            />
+                                        )}
+                                        {onImageUpload && (
+                                            <TooltipButton
+                                                icon={ImagePlus}
+                                                tooltipText="Insert image"
+                                                onClick={() => setImagePickerOpen(true)}
+                                            />
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            {showsAll && (
+                                <>
+                                    <ToolbarSeparator />
+
+                                    {/* Alignment toggle group */}
+                                    <div className="flex items-center gap-0.5">
+                                        <TooltipButton
+                                            icon={AlignLeft}
+                                            tooltipText="Align left"
+                                            active={active.alignLeft}
+                                            preventFocusLoss
+                                            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                                        />
+                                        <TooltipButton
+                                            icon={AlignCenter}
+                                            tooltipText="Align center"
+                                            active={active.alignCenter}
+                                            preventFocusLoss
+                                            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                                        />
+                                        <TooltipButton
+                                            icon={AlignRight}
+                                            tooltipText="Align right"
+                                            active={active.alignRight}
+                                            preventFocusLoss
+                                            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                                        />
+                                    </div>
+
+                                    <ToolbarSeparator />
+
+                                    {/* Lists toggle group */}
+                                    <div className="flex items-center gap-0.5">
+                                        <TooltipButton
+                                            icon={List}
+                                            tooltipText="Bulleted list"
+                                            active={active.bulletList}
+                                            preventFocusLoss
+                                            onClick={() => editor.chain().focus().toggleBulletList().run()}
+                                        />
+                                        <TooltipButton
+                                            icon={ListOrdered}
+                                            tooltipText="Numbered list"
+                                            active={active.orderedList}
+                                            preventFocusLoss
+                                            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                                        />
+                                        <TooltipButton
+                                            icon={CheckSquare}
+                                            tooltipText="Checklist"
+                                            active={active.taskList}
+                                            preventFocusLoss
+                                            onClick={() => editor.chain().focus().toggleTaskList().run()}
+                                        />
+                                    </div>
+
+                                    <ToolbarSeparator />
+
+                                    <TooltipButton
+                                        icon={RemoveFormatting}
+                                        tooltipText="Clear formatting"
+                                        onClick={clearFormatting}
+                                    />
+                                </>
+                            )}
                         </div>
                     )
                 }

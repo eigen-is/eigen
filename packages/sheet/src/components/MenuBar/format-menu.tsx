@@ -6,6 +6,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Check } from 'lucide-react';
 import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -34,7 +35,6 @@ import {
     numberMenuPresets,
     updateFormat,
 } from '../../state';
-import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 import { ConditionRules, type ConditionRuleType, RULE_COPY } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
@@ -165,6 +165,7 @@ function TextSubmenu() {
                     label="Font color"
                     value={textColor}
                     resetLabel="Default"
+                    contentClassName="sheet-mousedown-cancel"
                     onChange={(color) => {
                         setContext((ctx) => {
                             handleTextColor(ctx, refs.cellInput.current!, color);
@@ -360,6 +361,7 @@ function FillColorItem() {
             label="Fill color"
             value={fillColor}
             resetLabel="Default"
+            contentClassName="sheet-mousedown-cancel"
             onChange={(color) => {
                 setContext((ctx) => {
                     handleTextBackground(ctx, refs.cellInput.current!, color);

@@ -21,7 +21,9 @@ export function ToolbarMenu({ label, children, open, onOpenChange, onCloseAutoFo
     return (
         <DropdownMenu open={open} onOpenChange={onOpenChange}>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost">{label}</Button>
+                <Button variant="ghost" size="sm">
+                    {label}
+                </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" onCloseAutoFocus={onCloseAutoFocus}>
                 {children}

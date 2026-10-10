@@ -40,7 +40,7 @@ If you have read-only access, the formatting tools are hidden and you can view b
 A page break makes the text after it start on a new page when you print the document or download it as a PDF or Word file.
 
 1. Place your cursor where the new page should start.
-2. Click the **Page break** button in the toolbar, or press Cmd+Enter (Mac) or Ctrl+Enter (Windows). The button sits next to **Horizontal rule** and shows a line with an arrow above and below it. Hover over it to see the shortcut. On a narrow screen, open the **Insert** menu and choose **Page break**.
+2. Open the **Insert** menu and choose **Page break**, or press Cmd+Enter (Mac) or Ctrl+Enter (Windows).
 
 In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print. In a code block, the shortcut leaves the block instead.
 

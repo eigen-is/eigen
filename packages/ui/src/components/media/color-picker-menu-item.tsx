@@ -5,19 +5,23 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { DEFAULT_COLORS } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, RotateCcw } from 'lucide-react';
+import { Check, type LucideIcon, RotateCcw } from 'lucide-react';
+import { DEFAULT_COLORS } from './color-picker';
 
-type Props = {
+type ColorPickerMenuItemProps = {
     label: string;
     value: string;
     onChange: (color: string) => void;
+    // Leads the row in a menu whose items carry icons (docs' Format › Text).
+    icon?: LucideIcon;
     resetLabel?: string;
     showReset?: boolean;
     // CustomBorder composes color + style + border type in one open menu, like its
     // sibling style items; everything else closes on pick like a normal menu item.
     keepMenuOpen?: boolean;
+    // Extra class for the submenu content — sheets pass `sheet-mousedown-cancel`.
+    contentClassName?: string;
 };
 
 // A menu row that opens the shared color grid as a real submenu — the menu-item
@@ -27,17 +31,27 @@ type Props = {
 // markup mirrors ColorPicker (menu items can't come out of its button grid,
 // and menu-item context needs size-* icons to dodge the [&_svg] default) —
 // keep the two visually in sync.
-export function ColorPickerMenuItem({ label, value, onChange, resetLabel, showReset = true, keepMenuOpen }: Props) {
+export function ColorPickerMenuItem({
+    label,
+    value,
+    onChange,
+    icon: Icon,
+    resetLabel,
+    showReset = true,
+    keepMenuOpen,
+    contentClassName,
+}: ColorPickerMenuItemProps) {
     const normalizedValue = value.toLowerCase();
     const keepOpen = keepMenuOpen ? (e: Event) => e.preventDefault() : undefined;
 
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
+                {Icon && <Icon className="h-4 w-4 mr-2" />}
                 <span>{label}</span>
                 <span className="ml-auto h-3 w-6 rounded border" style={{ backgroundColor: value || 'transparent' }} />
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="sheet-mousedown-cancel flex flex-col gap-2 p-3">
+            <DropdownMenuSubContent className={cn('flex flex-col gap-2 p-3', contentClassName)}>
                 {showReset && (
                     <DropdownMenuItem className="-mx-1" onSelect={keepOpen} onClick={() => onChange('')}>
                         <RotateCcw className="size-4" />
@@ -46,7 +60,6 @@ export function ColorPickerMenuItem({ label, value, onChange, resetLabel, showRe
                 )}
                 {DEFAULT_COLORS.map((row, rowIdx) => (
                     <div
-                        // biome-ignore lint/suspicious/noArrayIndexKey: static palette rows — order is meaningful, no stable id
                         key={rowIdx}
                         className="grid gap-1"
                         style={{ gridTemplateColumns: `repeat(${row.length}, 1fr)` }}
@@ -80,3 +93,5 @@ export function ColorPickerMenuItem({ label, value, onChange, resetLabel, showRe
         </DropdownMenuSub>
     );
 }
+
+export type { ColorPickerMenuItemProps };

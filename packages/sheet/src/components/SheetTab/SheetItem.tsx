@@ -5,6 +5,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -20,7 +21,6 @@ import {
     getSheetIndex,
     type Sheet,
 } from '../../state';
-import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 
 const NO_MORE_SHEET =
     'The workbook contains at least one visual worksheet. To delete the selected worksheet, please insert a new worksheet or show a hidden worksheet.';
@@ -206,6 +206,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     label="Change color"
                     value={sheet.color ?? ''}
                     resetLabel="Reset color"
+                    contentClassName="sheet-mousedown-cancel"
                     onChange={(color) => {
                         if (context.allowEdit === false || !sheet?.id) return;
                         setContext((ctx) => {
