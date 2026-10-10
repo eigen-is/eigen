@@ -51,6 +51,8 @@ A list item that holds a wrapped figure is its own formatting context (`display:
 
 An insert, a drop or a pasted image file writes the figure with the pending name `startUpload` returns, so the image shows on the next frame. When the upload settles, `swapFigureMediaName` rewrites every figure still holding that name to the real one, or removes the figure if the upload failed. A figure whose name never resolves shows `ImagePlaceholder`. The mechanics, and the sweep that clears a pending name a closed tab left behind, are in [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md#a-new-upload-renders-from-a-pending-name).
 
+A docx import (`apps/api/src/lib/import/import-document.ts`) saves every image to `media/` before it writes the update that names them. A tab looks up a name it lacks once (`useFolderLookup`, `packages/lib/src/core/drive/hooks/reads.ts`), as the update reaches it, and no event refetches the folder after that. So an image saved after the update spins until a reload, and on S3, where each save takes a round trip, it usually is.
+
 ## One page setup sizes every page a doc is drawn on
 
 Every doc is an A4 page with 2 cm margins. One `PageSetup` in millimetres describes it (`DEFAULT_PAGE_SETUP`, `packages/lib/src/docs/eigendoc/page.ts`), and every surface derives its page from it: the editor's page and its layout math, browser print, quick look, the Drive thumbnail, the HTML export, the PDF and the docx. Each takes the unit it needs: pixels at 96 dpi for layout math (`pagePx`), a width and padding for a page box on screen (`pageBoxStyle`), a stylesheet for a page that also prints (`pageStylesheet`) and twips for the docx (`pageTwips`). One value means no surface can disagree with another, so what prints is what the editor shows.
