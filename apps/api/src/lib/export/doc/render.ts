@@ -1,5 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { getFontName } from '@workspace/lib/constants/fonts';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
@@ -102,14 +104,58 @@ function withTrailingBreaks(node: JSONContent): JSONContent {
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }
 
-// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds.
+// The size Chromium and WebKit draw the small caps they synthesize at, so the PDF's match the editor's.
+const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';
+
+const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+// WeasyPrint draws small caps only from a font's smcp glyphs and fakes none, and of the bundled faces only upright
+// Source Serif 4 has them. Elsewhere the PDF writes a small-caps text's lowercase as smaller capitals. eigen-prose.css
+// sets a blockquote in italic.
+function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
+    const quoted = new Set<Node>();
+    doc.descendants((node) => {
+        if (node.type.name !== 'blockquote') return true;
+        node.descendants((child) => {
+            if (child.isText) quoted.add(child);
+        });
+        return false;
+    });
+    return ({ node }) => {
+        const text = node.text ?? '';
+        const style = node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs;
+        if (style?.['caps'] !== 'small') return escapeHtml(text);
+        const font = style['fontFamily'];
+        const italic = quoted.has(node) || node.marks.some((mark) => mark.type.name === 'italic');
+        if (!italic && typeof font === 'string' && getFontName(font) === 'Source Serif 4') return escapeHtml(text);
+        let html = '';
+        let capitals = '';
+        for (const { segment } of GRAPHEMES.segment(text)) {
+            const upper = segment.toUpperCase();
+            if (upper !== segment) {
+                capitals += upper;
+            } else {
+                html += smaller(capitals) + escapeHtml(segment);
+                capitals = '';
+            }
+        }
+        return html + smaller(capitals);
+    };
+}
+
+const smaller = (capitals: string): string =>
+    capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
+
+// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
+// small caps.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean },
+    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean },
 ): string {
+    const content = inEditorMarkOrder(withTrailingBreaks(json));
     return renderToHTMLString({
-        content: inEditorMarkOrder(withTrailingBreaks(json)),
+        content,
         extensions: docExtensions(),
         options: {
             nodeMapping: {
@@ -117,6 +163,7 @@ export function renderDocHtml(
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(node.attrs, resolveImgSrc, options),
+                ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },
     });
