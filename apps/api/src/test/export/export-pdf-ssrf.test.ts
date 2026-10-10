@@ -889,7 +889,7 @@ suite('PDF export SSRF (the data-only fetcher, sanitizer bypassed)', () => {
                 const html = Buffer.from(
                     (await renderEigendocExport(doc, 'pdf-html', 'Doc', [], undefined)).data,
                 ).toString();
-                expect(html).toContain(`<a rel="attachment" href="${href}"`);
+                expect(html).toContain(`rel="attachment" href="${href}"`);
                 return html;
             });
             expectNothingFetched(result);

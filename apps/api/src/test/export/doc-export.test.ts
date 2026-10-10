@@ -404,9 +404,26 @@ describe('doc export — links', () => {
         const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
         const { document } = new JSDOM(new TextDecoder().decode(data)).window;
         expect([...document.querySelectorAll('article p > *')].map((node) => node.outerHTML)).toEqual([
-            `<a rel="noopener noreferrer" href="${href}">plain</a>`,
-            `<a rel="noopener noreferrer" href="${href}"><span style="color: #ff00aa"><u>pink</u></span></a>`,
+            `<a target="_blank" rel="noopener noreferrer" href="${href}">plain</a>`,
+            `<a target="_blank" rel="noopener noreferrer" href="${href}"><span style="color: #ff00aa"><u>pink</u></span></a>`,
         ]);
+    });
+
+    test('the html download opens a link in a new tab, as the editor does', async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'a', marks: [{ type: 'link', attrs: { href: 'https://a.example/' } }] },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        expect(document.querySelector('article a')?.getAttribute('target')).toBe('_blank');
     });
 
     test('a root-relative href stays relative without a public origin', async () => {

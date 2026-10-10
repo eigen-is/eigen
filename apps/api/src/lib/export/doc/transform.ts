@@ -14,7 +14,6 @@ import {
 } from '../../document/transform/protocol';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
-import { sanitizeExportHtml } from '../sanitize';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -47,7 +46,7 @@ export async function renderEigendocExport(
     const html = exportHtmlDocument({
         title,
         css: `${PROSE_CSS}${PRINT_EXTRAS}`,
-        body: `<div class="page"><article class="eigen-prose tiptap">${sanitizeExportHtml(body)}</article></div>`,
+        body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
 }

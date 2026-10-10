@@ -31,7 +31,6 @@ import {
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { exportHtmlDocument, type HtmlExportMode } from '../html-document';
-import { sanitizeExportHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
@@ -128,14 +127,12 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
 }): string {
     const { html, css } = renderSheetsHtml(sheets, mediaUrls);
-    // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
-    // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
-    const body = sanitizeExportHtml(
-        `<style>${css}</style>\n${html}`,
-        mode === 'screen' ? { ADD_ATTR: ['target'] } : {},
-    );
     const page = mode === 'pdf' ? pdfPageCss(sheets) : '@page { size: landscape; margin: 1.5cm; }';
-    return exportHtmlDocument({ title, css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`, body });
+    return exportHtmlDocument({
+        title,
+        css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
+        body: `<style>${css}</style>\n${html}`,
+    });
 }
 
 function pdfPageCss(sheets: Sheet[]): string {

@@ -12,7 +12,7 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { exportHtmlDocument, type HtmlExportMode } from '../html-document';
-import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
+import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
 
@@ -46,10 +46,9 @@ export function canvasHtmlDocument(opts: {
     // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
-    // A collaborator can put arbitrary strings in a schemaless scene, so the assembled body runs
-    // through the shared sanitizer (the documented data-only rule); a rich-text box's raw HTML was
-    // filtered at the scene. No ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
-    const body = sanitizeExportHtml(rendered.join(''));
+    // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
+    // compositor emits ordinary HTML, never a foreignObject.
+    const body = rendered.join('');
     const css = mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
     return exportHtmlDocument({
         title,
