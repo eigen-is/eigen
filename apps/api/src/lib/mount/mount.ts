@@ -770,6 +770,7 @@ export class Mount {
         return this.resolveStoragePath(pathId);
     }
 
+    // A missing row is a 404, never the root's '': a create into a deleted folder would write at the mount root.
     // internal — used by mount/*.ts
     async resolveStoragePath(pathId: string): Promise<string> {
         const rows = await this.db
@@ -782,7 +783,7 @@ export class Mount {
             .where(sql`${paths.id} IN (${ancestorIds(pathId)})`)
             .all();
 
-        if (rows.length === 0) return '';
+        if (rows.length === 0) throw new ApiError(404, 'Path not found');
 
         const byId = new Map(rows.map((r) => [r.id, r]));
         const segments: string[] = [];

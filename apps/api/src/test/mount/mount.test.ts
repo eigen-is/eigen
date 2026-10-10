@@ -497,6 +497,17 @@ describe('Mount (local path-based storage)', () => {
         expect(await mount.getPath(fileId)).toBeNull();
     });
 
+    test('a create into a deleted folder answers 404 and leaves the root file of that name', async () => {
+        const rootFileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 9, Buffer.from('root-text'));
+        const folderId = await mount.createFolder(rootId, 'DeletedParent');
+        await mount.deletePath(folderId);
+
+        await expect(
+            mount.createFile(folderId, 'notes.txt', 'text/plain', 6, Buffer.from('orphan')),
+        ).rejects.toMatchObject({ status: 404 });
+        expect(await (await mount.readFile(rootFileId))!.text()).toBe('root-text');
+    });
+
     test('duplicate name in same folder throws', async () => {
         await mount.createFolder(rootId, 'Unique');
         await expect(mount.createFolder(rootId, 'Unique')).rejects.toThrow();

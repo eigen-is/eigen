@@ -143,7 +143,7 @@ export async function snapshotMountData(
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
-            // no bytes anywhere. A gone row is never read: on a by-name mount its key resolves to the data/ folder.
+            // no bytes anywhere. A gone row is never read.
             const source = await mount
                 .withPathLock(container.id, async () =>
                     (await isGone()) ? null : stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
