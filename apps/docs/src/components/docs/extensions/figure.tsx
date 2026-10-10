@@ -1,10 +1,10 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { NodeSelection, Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Mapping } from '@tiptap/pm/transform';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { FigureNode } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
@@ -16,23 +16,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 // The figure's resize floor (px).
 const FIGURE_MIN_WIDTH = 100;
-// A Shift+Arrow resize step (px).
-const FIGURE_KEY_STEP = 10;
-const FIGURE_RESIZE_KEYS = 'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown';
-
-declare module '@tiptap/core' {
-    interface Commands<ReturnType> {
-        figureAttributes: {
-            updateFigure: (attributes: FigureAttrs) => ReturnType;
-        };
-    }
-}
-
-// An AttrStep maps no position, so a NodeSelection on the figure survives, and with it the Image panel.
-// updateAttributes's setNodeMarkup replaces the leaf, which maps that selection to a text selection.
-function setFigureAttributes(tr: Transaction, pos: number, attributes: FigureAttrs) {
-    for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
-}
+// The width a figure draws at when neither it nor its page gives one (px).
+const FIGURE_DEFAULT_WIDTH = 400;
+// What Shift and each arrow key do to a selected figure's width (px).
+const FIGURE_RESIZE_STEPS = { ArrowLeft: -10, ArrowRight: 10, ArrowUp: 10, ArrowDown: -10 };
+const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
+    .map((key) => `Shift+${key}`)
+    .join(' ');
 
 // The text column, or half of it for a wrapped figure: the widest a resize makes it.
 function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
@@ -143,7 +133,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         // SVGs without explicit dimensions report 0x0 — set a width, then read
         // the rendered aspect ratio after the browser lays out using the viewBox
         if (!node.attrs.width) {
-            setAttributes({ width: Math.round(maxWidth === Infinity ? 400 : maxWidth) });
+            setAttributes({ width: Math.round(maxWidth === Infinity ? FIGURE_DEFAULT_WIDTH : maxWidth) });
         }
         requestAnimationFrame(() => {
             if (!imageRef.current) return;
@@ -184,6 +174,10 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
     );
 
     const displayWidth = previewWidth ?? width;
+    // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes, so its box takes 10rem,
+    // or all its container gives: a fixed minimum would push a narrow table cell wider. The wrapper takes it too, as a
+    // wrapped figure floats and shrinks to fit. With no alt text the image would draw 0 px tall, so it keeps a line.
+    const failed = failedSrc === src;
     // Mount the shared transform chrome only once we have a resolvable px box (loaded, sized,
     // editable, not a pending placeholder). Otherwise a selected figure shows the plain ring.
     const box: Box | null =
@@ -195,7 +189,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         <NodeViewWrapper
             as="span"
             ref={containerRef}
-            className="figure"
+            className={cn('figure', failed && 'min-w-[min(10rem,100%)]')}
             data-layout={layout}
             data-alignment={alignment}
             data-drag-handle=""
@@ -212,13 +206,17 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
                 read-only, pre-load), the same ring shows via the class. It takes no focus: the
                 editor's keymap resizes the selected figure, and a press stays free to start a drag. */}
             <div
-                className={cn('relative', selected && !box && 'eigen-selection-ring')}
+                className={cn(
+                    'relative',
+                    failed && 'min-w-[min(10rem,100%)]',
+                    selected && !box && 'eigen-selection-ring',
+                )}
                 role={selected && isEditable ? 'group' : undefined}
                 aria-label={selected && isEditable ? 'Resize image' : undefined}
                 aria-keyshortcuts={selected && isEditable ? FIGURE_RESIZE_KEYS : undefined}
             >
                 {showPlaceholder ? (
-                    <div style={{ width: displayWidth ? `${displayWidth}px` : '400px', aspectRatio: '16 / 10' }}>
+                    <div style={{ width: `${displayWidth || FIGURE_DEFAULT_WIDTH}px`, aspectRatio: '16 / 10' }}>
                         <ImagePlaceholder />
                     </div>
                 ) : (
@@ -226,8 +224,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
                         ref={imageRef}
                         src={src}
                         alt={alt}
-                        // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes.
-                        className={cn('max-w-full block', failedSrc === src && 'min-w-40')}
+                        className={cn('max-w-full block', failed && 'min-w-full min-h-10 bg-muted')}
                         style={{
                             width: displayWidth ? `${displayWidth}px` : undefined,
                             aspectRatio: aspectRatio ?? undefined,
@@ -288,32 +285,17 @@ export const Figure = FigureNode.extend<FigureOptions>({
                 !this.editor.isEditable
             )
                 return false;
-            const maxWidth = figureMaxWidth(this.editor.view.nodeDOM(selection.from), selection.node.attrs.layout);
-            const width = Math.min(maxWidth, (selection.node.attrs.width || 300) + delta);
+            const figure = this.editor.view.nodeDOM(selection.from);
+            const maxWidth = figureMaxWidth(figure, selection.node.attrs.layout);
+            // With no width stored, the image draws at its own width, and a placeholder at the default.
+            const drawn =
+                (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;
+            const width = Math.min(maxWidth, (selection.node.attrs.width || drawn) + delta);
             return this.editor.commands.updateFigure({ width: Math.round(Math.max(FIGURE_MIN_WIDTH, width)) });
         };
-        return {
-            'Shift-ArrowRight': resize(FIGURE_KEY_STEP),
-            'Shift-ArrowUp': resize(FIGURE_KEY_STEP),
-            'Shift-ArrowLeft': resize(-FIGURE_KEY_STEP),
-            'Shift-ArrowDown': resize(-FIGURE_KEY_STEP),
-        };
-    },
-    addCommands() {
-        return {
-            ...this.parent?.(),
-            updateFigure:
-                (attributes) =>
-                ({ tr, dispatch }) => {
-                    const { from, to } = tr.selection;
-                    const positions: number[] = [];
-                    tr.doc.nodesBetween(from, to, (node, pos) => {
-                        if (node.type.name === this.name && pos >= from) positions.push(pos);
-                    });
-                    if (dispatch) for (const pos of positions) setFigureAttributes(tr, pos, attributes);
-                    return positions.length > 0;
-                },
-        };
+        return Object.fromEntries(
+            Object.entries(FIGURE_RESIZE_STEPS).map(([key, step]) => [`Shift-${key}`, resize(step)]),
+        );
     },
     addProseMirrorPlugins() {
         const name = this.name;

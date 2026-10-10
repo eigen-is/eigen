@@ -45,6 +45,15 @@ async function mount() {
     return editor;
 }
 
+const field = (placeholder: string) => {
+    const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
+    if (!input) throw new Error(`no ${placeholder} field`);
+    return input;
+};
+
+// React tracks an input's value on the instance; the prototype setter leaves its tracker stale, as a keystroke does.
+const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+
 // The Style toggles, own line, wrap left and wrap right, come before Align's.
 const styleToggles = () => [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].slice(0, 3);
 
@@ -64,16 +73,39 @@ test.each([
     ['Caption', 'caption', 'Figure 1'],
 ])('Enter in the %s field writes it and keeps the figure selected', async (placeholder, attribute, value) => {
     const editor = await mount();
-    const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
-    if (!input) throw new Error(`no ${placeholder} field`);
+    const input = field(placeholder);
 
     await act(async () => {
         input.focus();
-        input.value = value;
+        nativeValueSetter?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
 
     expect(editor.state.doc.nodeAt(2)?.attrs[attribute]).toBe(value);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
     expect(document.activeElement).toBe(input);
+    expect(input.value).toBe(value);
 });
+
+// A collaborator typing above the figure moves it, and the selection with it.
+test.each(['Alt text', 'Caption'])(
+    'an edit above the figure leaves a half-typed %s and its focus alone',
+    async (placeholder) => {
+        const editor = await mount();
+        const input = field(placeholder);
+        await act(async () => {
+            input.focus();
+            nativeValueSetter?.call(input, 'A ch');
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
+        await act(async () => {
+            editor.view.dispatch(editor.state.tr.insertText('x', 1));
+        });
+
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 3 });
+        expect(document.activeElement).toBe(field(placeholder));
+        expect(field(placeholder).value).toBe('A ch');
+    },
+);

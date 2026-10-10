@@ -1,6 +1,8 @@
 import { type CommandProps, Node } from '@tiptap/core';
+import type { Transaction } from '@tiptap/pm/state';
 
 export type FigureLayout = 'block' | 'wrap-left' | 'wrap-right';
+export type FigureAlignment = 'left' | 'center' | 'right';
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null).
 export type FigureAttrs = {
@@ -9,7 +11,7 @@ export type FigureAttrs = {
     alt?: string | null;
     caption?: string | null;
     width?: number | null;
-    alignment?: string | null;
+    alignment?: FigureAlignment | null;
     layout?: FigureLayout | null;
     commentCardId?: string | null;
 };
@@ -18,11 +20,18 @@ declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         figure: {
             setFigure: (options: FigureAttrs & { mediaName: string }) => ReturnType;
+            updateFigure: (attributes: FigureAttrs) => ReturnType;
         };
     }
 }
 
-// Attributes of a `<figure>` or the export's `span.figure`; no img, no figure. Layout and width parse on their own.
+// An AttrStep maps no position, so a node selection on the figure survives, and with it the editor's Image panel.
+// TipTap's updateAttributes writes with setNodeMarkup, which replaces the leaf and maps that selection to a text one.
+export function setFigureAttributes(tr: Transaction, pos: number, attributes: FigureAttrs) {
+    for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
+}
+
+// Attributes of a `<figure>` or a `span.figure`; no img, no figure. Layout, alignment and width parse on their own.
 function figureAttrsOf(dom: HTMLElement): FigureAttrs | false {
     const img = dom.querySelector('img');
     if (!img) return false;
@@ -31,7 +40,6 @@ function figureAttrsOf(dom: HTMLElement): FigureAttrs | false {
         alt: img.getAttribute('alt'),
         mediaName: img.getAttribute('data-media-name'),
         caption: dom.querySelector('figcaption, .figcaption')?.textContent || null,
-        alignment: dom.getAttribute('data-alignment') || 'center',
         commentCardId: dom.getAttribute('data-comment-id'),
     };
 }
@@ -67,7 +75,10 @@ export const FigureNode = Node.create({
                     return null;
                 },
             },
-            alignment: { default: 'center' },
+            alignment: {
+                default: 'center',
+                parseHTML: (element: HTMLElement) => element.getAttribute('data-alignment'),
+            },
             layout: {
                 default: 'block' as FigureLayout,
                 parseHTML: (element: HTMLElement) => {
@@ -85,7 +96,7 @@ export const FigureNode = Node.create({
     parseHTML() {
         return [
             { tag: 'figure', getAttrs: figureAttrsOf, priority: 60 },
-            // The export's figure: spans, which a paragraph can hold.
+            // The figure as the schema and the export write it: spans, which a paragraph can hold.
             { tag: 'span.figure', getAttrs: figureAttrsOf, priority: 60 },
             {
                 tag: 'img[data-media-name]',
@@ -158,6 +169,18 @@ export const FigureNode = Node.create({
                         type: this.name,
                         attrs: options,
                     });
+                },
+            // Every figure the selection holds, or the one it selects.
+            updateFigure:
+                (attributes) =>
+                ({ tr, dispatch }: CommandProps) => {
+                    const { from, to } = tr.selection;
+                    const positions: number[] = [];
+                    tr.doc.nodesBetween(from, to, (node, pos) => {
+                        if (node.type.name === this.name && pos >= from) positions.push(pos);
+                    });
+                    if (dispatch) for (const pos of positions) setFigureAttributes(tr, pos, attributes);
+                    return positions.length > 0;
                 },
         };
     },
