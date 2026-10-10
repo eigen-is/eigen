@@ -362,19 +362,27 @@ function buildFlow(items: Item[]): JSONContent[] {
         const item = items[index];
         if (item && item.kind !== 'break' && item.kind !== 'boundary') ahead = item;
     }
-    const continues = (index: number): boolean => {
+    // The item the block past a break goes on in, which holds the break: an item of an open list or nesting under the
+    // open item, or a paragraph, code, a rule or a table at an open item's text.
+    const breakHost = (index: number): Open | undefined => {
         const following = next[index];
-        if (following?.kind !== 'para') return false;
-        const outer = stack[0];
-        return (
-            !!following.list ||
-            !!following.task ||
-            following.continued ||
-            (!!outer &&
-                following.role.kind === 'paragraph' &&
-                !following.empty &&
-                indentedUnder(following.indLeft, outer.indent))
-        );
+        const top = stack.at(-1);
+        if (!following || !top) return undefined;
+        if (following.kind === 'hr' || following.kind === 'table')
+            return stack.findLast((open) => indentedUnder(following.indent, open.indent));
+        if (following.kind === 'block') return following.inItem ? top : undefined;
+        if (following.kind !== 'para') return undefined;
+        const { list } = following;
+        if (following.task || list) {
+            const joins = following.task
+                ? stack.some((open) => open.kind === 'taskList')
+                : stack.some((open) => open.key === list?.key);
+            return joins || nestsUnder(following, top) ? top : undefined;
+        }
+        if (following.continued) return top;
+        if (following.empty || (following.role.kind !== 'paragraph' && following.role.kind !== 'code'))
+            return undefined;
+        return stack.findLast((open) => indentedUnder(following.indLeft, open.indent));
     };
 
     // Within the open lists: the next is an item of one of them, or a paragraph at the open text, which goes on with it.
@@ -402,9 +410,9 @@ function buildFlow(items: Item[]): JSONContent[] {
         }
         flushCode();
         if (item.kind === 'break') {
-            const current = stack.at(-1);
-            if (current && continues(index)) {
-                current.item.content?.push({ type: 'pageBreak' });
+            const host = breakHost(index);
+            if (host) {
+                host.item.content?.push({ type: 'pageBreak' });
                 continue;
             }
             closeLists();
@@ -440,7 +448,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             continue;
         }
         // The writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
-        if (isBreakOnly(item) && continues(index) && holdsWrapped(stack.at(-1)?.item)) continue;
+        if (isBreakOnly(item) && breakHost(index) && holdsWrapped(stack.at(-1)?.item)) continue;
         if (stack.length > 0 && item.role.kind !== 'heading') {
             // A blank line between two items of one list stays in the item above, so the list stays one.
             const host =
@@ -477,6 +485,13 @@ function holdsWrapped(item: JSONContent | undefined): boolean {
 // An unnumbered paragraph indented to an item's text continues the item; at no indent it ends the list.
 function indentedUnder(indent: number, itemIndent: number): boolean {
     return indent > 0 && itemIndent > 0 && indent >= itemIndent - INDENT_TOLERANCE;
+}
+
+// Across lists an item nests by where its number starts, at or right of the open item's text; a task by its indent.
+function nestsUnder(para: Para, open: Open): boolean {
+    return para.numberAt !== undefined && open.kind !== 'taskList'
+        ? para.numberAt >= open.indent - INDENT_TOLERANCE
+        : para.indLeft > open.indent + INDENT_TOLERANCE;
 }
 
 function textblockOf(para: Para): JSONContent {
@@ -535,11 +550,7 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
             top.item = item;
             return;
         }
-        const deeper = sameList
-            ? top.ilvl < ilvl
-            : para.numberAt !== undefined && top.kind !== 'taskList'
-              ? para.numberAt >= top.indent - INDENT_TOLERANCE
-              : indent > top.indent + INDENT_TOLERANCE;
+        const deeper = sameList ? top.ilvl < ilvl : nestsUnder(para, top);
         // No deeper than Word's levels: lists of other definitions nest by indent, which a hostile file can deepen.
         if (deeper && stack.length < LIST_LEVELS) break;
         pop();

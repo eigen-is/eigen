@@ -98,6 +98,7 @@ const code = (text: string) => ({
     content: [{ type: 'text', text }],
 });
 const rule = { type: 'horizontalRule' };
+const pageBreak = { type: 'pageBreak' };
 const table = {
     type: 'table',
     content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [p('Cell')] }] }],
@@ -110,6 +111,10 @@ const ordered = (...items: JSONContent[][]) => ({
 const bullets = (...items: JSONContent[][]) => ({
     type: 'bulletList',
     content: items.map((content) => ({ type: 'listItem', content })),
+});
+const tasks = (...items: JSONContent[][]) => ({
+    type: 'taskList',
+    content: items.map((content) => ({ type: 'taskItem', attrs: { checked: false }, content })),
 });
 
 // The source as the schema stores it, and what an import of its docx gives back.
@@ -153,7 +158,7 @@ describe('a block inside a list item or a quote', () => {
         ['a rule in a quote two deep', [quote(p('Said'), quote(p('Deep'), rule, p('Deeper')), p('Done'))]],
         ['a table in a quote', [quote(p('Said'), table, p('Done'))]],
         ['a table in a quote two deep', [quote(quote(p('Deep'), table))]],
-        ['a page break after a table in a quote', [quote(p('Said'), table, { type: 'pageBreak' }, p('Done'))]],
+        ['a page break after a table in a quote', [quote(p('Said'), table, pageBreak, p('Done'))]],
         ['a table in an item in a quote', [quote(ordered([p('One'), table]))]],
         ['a rule and a paragraph in an item in a quote', [quote(bullets([p('One'), rule, p('More')]))]],
         ['a table and a rule in a quote in an item', [bullets([p('One'), quote(p('Said'), table, rule)])]],
@@ -181,7 +186,28 @@ describe('lists side by side', () => {
     test.each<[string, JSONContent[]]>([
         ['two bullet lists', [bullets([p('One')]), bullets([p('Two')])]],
         ['two bullet lists in an item', [ordered([p('One'), bullets([p('a')]), bullets([p('b')])])]],
+        ['a bullet and an ordered list across a page break', [bullets([p('One')]), pageBreak, ordered([p('Two')])]],
+        ['two bullet lists across a page break', [bullets([p('One')]), pageBreak, bullets([p('Two')])]],
     ])('%s come back apart', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// The writer sets a page break at the margin, so the block after it says which item holds it.
+describe('a page break in an item', () => {
+    test.each<[string, JSONContent[]]>([
+        ['before a nested list', [ordered([p('One'), pageBreak, bullets([p('a')])], [p('Two')])]],
+        [
+            'before a paragraph after a nested list',
+            [bullets([p('One'), ordered([p('a')]), pageBreak, p('More')], [p('Two')])],
+        ],
+        ['before code', [ordered([p('One'), pageBreak, code('one()')], [p('Two')])]],
+        ['before a rule', [ordered([p('One'), pageBreak, rule], [p('Two')])]],
+        ['before a quote', [ordered([p('One'), pageBreak, quote(p('Said'))], [p('Two')])]],
+        ['before a table', [ordered([p('One'), pageBreak, table], [p('Two')])]],
+        ['between two tasks', [tasks([p('One'), pageBreak], [p('Two')])]],
+    ])('%s stays in the item', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
