@@ -1,7 +1,7 @@
 // seed-demo.ts — builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance.
 //
 // Offline, in-process seeder. Boots the API in the same process (as the test harness does),
-// runs first-run setup, creates a ~20-persona crew in one org + team, and fills a lived-in
+// runs first-run setup, creates a ~20-persona crew in one org + its default team, and fills a lived-in
 // workspace — team drive, docs, a budget sheet, a slides deck, a stickies board and a site-plan
 // drawing, mail, calendar, chat and contacts — driving the REAL product surfaces as the personas so
 // activity panels, file history and notifications populate for free. Docs are written as HTML and parsed
@@ -307,7 +307,7 @@ async function main(): Promise<void> {
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new Error('orgId missing after setup');
 
-    // Admin session — addTeamMember requires request headers with a valid session.
+    // Admin session — updateTeam requires request headers with a valid session.
     const signIn = await auth.api.signInEmail({
         returnHeaders: true,
         body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
@@ -319,15 +319,14 @@ async function main(): Promise<void> {
     if (!cookieMatch) throw new Error('Could not obtain an admin session token');
     const adminHeaders = new Headers({ cookie: cookieMatch[0] });
 
-    // --- Team + membership (the whole crew shares one workspace). ---
-    const team = await auth.api.createTeam({ body: { name: TEAM_NAME, organizationId: orgId } });
-    const teamId = team.id;
-    for (const persona of PERSONAS) {
-        await auth.api.addTeamMember({
-            body: { teamId, userId: userByKey.get(persona.key)!.id, organizationId: orgId },
-            headers: adminHeaders,
-        });
-    }
+    // --- Team (the whole crew shares one workspace): the default team, which every persona joined
+    // with the org, renamed from the org's name to the crew's. ---
+    const teamId = getServerConfig()?.defaultTeamId;
+    if (!teamId) throw new Error('defaultTeamId missing after setup');
+    await auth.api.updateTeam({
+        body: { teamId, data: { name: TEAM_NAME, organizationId: orgId } },
+        headers: adminHeaders,
+    });
 
     // --- Team avatar: the festival logo through the same pipeline as the avatar route
     // (512px cover webp). Resilient like the persona avatars: logged, never fatal. ---

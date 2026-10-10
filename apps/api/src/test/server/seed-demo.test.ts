@@ -134,11 +134,18 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const avatarFiles = readdirSync(join(root, 'server', 'avatars')).filter((f) => f.endsWith('.webp'));
             expect(avatarFiles.length).toBeGreaterThanOrEqual(20);
 
-            // The organization plugin auto-creates a default team, whose home can also materialize a
-            // mounts/ dir during seeding — select the seeder's crew team by its name, not by disk layout.
-            const teams = query<{ id: string }>(usersDb, `SELECT id FROM team WHERE name = '${TEAM_NAME}'`);
-            expect(teams.length).toBe(1);
+            // One team: the default team setup made with the org, renamed to the crew, with every member in it.
+            const teams = query<{ id: string; name: string }>(usersDb, 'SELECT id, name FROM team');
+            expect(teams).toHaveLength(1);
             const teamId = teams[0].id;
+            expect(teams[0].name).toBe(TEAM_NAME);
+            const serverConfig = JSON.parse(readFileSync(join(root, 'server', 'config.json'), 'utf8'));
+            expect(serverConfig.defaultTeamId).toBe(teamId);
+            const outsideTeam = query<{ n: number }>(
+                usersDb,
+                'SELECT count(*) AS n FROM member m WHERE m.user_id NOT IN (SELECT user_id FROM team_member)',
+            );
+            expect(outsideTeam[0].n).toBe(0);
             expect(existsSync(join(root, 'team', teamId, 'mounts'))).toBe(true);
 
             // Team avatar: the festival logo fixture went through the same 512px-cover pipeline
