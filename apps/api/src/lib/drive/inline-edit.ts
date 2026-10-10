@@ -46,13 +46,7 @@ export async function getEditableContent(mount: Mount, path: DrivePath): Promise
     return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt };
 }
 
-export function prepareSaveContent(
-    path: DrivePath,
-    content: string,
-    frontmatter: string | null,
-    expectedUpdatedAt: Date,
-    force: boolean,
-): { conflict: true; currentUpdatedAt: Date } | { conflict: false; data: Buffer } {
+export function prepareSaveContent(path: DrivePath, content: string, frontmatter: string | null): Buffer {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
     // Same editability gate as getEditableContent, else a write collaborator could overwrite a binary (a container's data.db) with text
@@ -60,12 +54,8 @@ export function prepareSaveContent(
         throw new ApiError(400, 'File type not supported for inline editing');
     }
 
-    if (path.updatedAt.getTime() !== expectedUpdatedAt.getTime() && !force) {
-        return { conflict: true, currentUpdatedAt: path.updatedAt };
-    }
-
     const data = Buffer.from(reattachFrontmatter(content, frontmatter), 'utf-8');
     // Same cap as the read side (getEditableContent) — a save past it would open a 413 next time.
     if (data.length > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
-    return { conflict: false, data };
+    return data;
 }

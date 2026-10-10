@@ -10,6 +10,13 @@ export class ApiError extends Error {
     }
 }
 
+// An overwrite whose base updatedAt the file no longer carries; the inline editor answers it as a conflict.
+export class StaleWriteError extends ApiError {
+    constructor(readonly currentUpdatedAt: Date) {
+        super(409, 'File changed since it was loaded');
+    }
+}
+
 type ErrorHandlerContext = { error: unknown; code: unknown; set: Context['set']; request: Request };
 
 export function handleApiError({ error, code, set, request }: ErrorHandlerContext): string | undefined {

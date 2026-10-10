@@ -171,9 +171,10 @@ export default class SharedDrive {
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
         _user?: User,
+        expectedUpdatedAt?: Date,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.writeFileContent(mountId, pathId, data, this.user),
+            this.sharedDrive.writeFileContent(mountId, pathId, data, this.user, expectedUpdatedAt),
         );
     }
 
