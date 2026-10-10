@@ -32,7 +32,7 @@ The selection becomes plain text in the default font and size, with no heading s
 
 ## Clear formatting from the Format menu
 
-The **Format** menu works on any screen, also when the toolbar doesn't show the formatting buttons.
+The **Format** menu works on any screen, also when the toolbar doesn't show the **Clear formatting** button.
 
 1. Select the text you want to clean up.
 2. Click the **Format** menu in the toolbar.

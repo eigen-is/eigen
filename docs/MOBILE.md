@@ -12,7 +12,7 @@ This doc governs how the apps behave on a phone, a tablet and a touch screen. Re
 | 769 to 1024px | `useIsTablet` | the sidebar is a `w-16` rail (`SidebarProps.condensed`) |
 | from 1025px | `useIsDesktop` | the full `w-64` sidebar and every column side by side |
 
-An editor toolbar folds its format rows into its menus on its own, wider gate, `useIsCompactToolbar` (1200px). Docs folds its icon row at 1780px, the width it needs beside the File, Edit, Format and Insert menus, which a writer always sees. It is density only and says nothing about touch.
+An editor toolbar folds its format rows into its menus on its own, wider gate, `useIsCompactToolbar` (1200px). Docs folds its icon row from the right beside the File, Edit, Format and Insert menus, which a writer always sees: the whole row from 1400px, style to image from 1100px, style to underline from 900px, none below. It is density only and says nothing about touch.
 
 Touch affordances never key on width. An iPad in landscape gets the desktop layout but has no hover, and a narrow desktop window has a mouse. So a hover-revealed action rests visible under `pointer-coarse:` ([LAYOUT.md](LAYOUT.md#hover-revealed-affordances-rest-visible-on-touch)), long-press arms only for a `touch` pointer, and Drive's Move to trash confirms first on a coarse pointer, where there is no hover cue and a mis-tap is easy.
 

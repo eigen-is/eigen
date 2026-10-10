@@ -43,6 +43,7 @@ export function ColorPickerButton({
                     variant={active ? 'secondary' : 'ghost'}
                     size="icon"
                     className="h-8 w-8"
+                    aria-label={tooltipText}
                     onMouseDown={(e) => e.preventDefault()}
                 >
                     <Tooltip>

@@ -4,8 +4,8 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { useState } from 'react';
-import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 
 // The border-style vocabulary is owned by BORDER_STYLES (@workspace/lib/sheets), keyed by the
 // same ordinals in `text`. Only the SVG preview geometry is local — double (7) and slantDashDot
@@ -39,6 +39,7 @@ export function CustomBorder({ onPick }: Props) {
                 value={changeColor}
                 showReset={false}
                 keepMenuOpen
+                contentClassName="sheet-mousedown-cancel"
                 onChange={(color) => {
                     setChangeColor(color);
                     onPick(color, changeStyle);

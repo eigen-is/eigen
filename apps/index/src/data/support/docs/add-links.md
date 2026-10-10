@@ -30,7 +30,7 @@ This works on any screen.
 
 ## Remove a link
 
-Click anywhere inside the linked text, then click the **Add link** button again. The link is removed and the text stays in place.
+Click anywhere inside the linked text, then click the **Add link** button again, or choose **Link** from the **Insert** menu. The link is removed and the text stays in place.
 
 You can also click the **Remove link** button (the broken-chain icon) that appears in the toolbar when your cursor is on a link.
 

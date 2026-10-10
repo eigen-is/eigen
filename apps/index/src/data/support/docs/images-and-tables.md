@@ -57,19 +57,9 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 
 ## Insert a table
 
-### On a wide screen
-
-1. Place your cursor where you want the table.
-2. Click the **Insert table** button in the toolbar (the grid icon).
-3. A 3×3 table with a header row is inserted straight away.
-
-### From the Insert menu
-
-This works on any screen.
-
 1. Place your cursor where you want the table.
 2. Click **Insert** in the toolbar.
-3. Choose **Table**.
+3. Choose **Table**. A 3×3 table with a header row is inserted straight away.
 
 ## Edit a table
 
