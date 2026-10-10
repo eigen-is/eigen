@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { XmlError } from '../../core/xml';
@@ -28,10 +29,19 @@ export const MAX_DOCX_WEIGHT = 150_000;
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 const CHARS_PER_UNIT = 512;
 
+// The doc as JSON, for the audit and the tests; the import encodes the doc itself, with no copy between.
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
 ): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
+    const { doc, images, warnings } = readDocx(buffer, options);
+    return { json: doc.toJSON(), images, warnings };
+}
+
+export function readDocx(
+    buffer: Buffer,
+    options: { publicOrigin?: string } = {},
+): { doc: Node; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
@@ -63,7 +73,7 @@ export function docxToPmJson(
         const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        return { json: doc.toJSON(), images, warnings };
+        return { doc, images, warnings };
     } catch (error) {
         // The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
         if (error instanceof ZipError)

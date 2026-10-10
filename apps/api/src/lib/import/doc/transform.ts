@@ -9,7 +9,7 @@ import {
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
-import { docSchema, docxToPmJson } from './from-docx';
+import { docSchema, readDocx } from './from-docx';
 import { DOCUMENT_TOO_LARGE } from './package';
 
 // Uploaded docx bytes → the Yjs update the main thread commits, plus the extracted
@@ -21,9 +21,9 @@ export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { json, images, warnings } = docxToPmJson(Buffer.from(data), { publicOrigin });
+    const { doc, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
 
-    const tempDoc = prosemirrorToYDoc(asOpened(docSchema.nodeFromJSON(json)), 'default');
+    const tempDoc = prosemirrorToYDoc(asOpened(doc), 'default');
     const update = Y.encodeStateAsUpdate(tempDoc);
     tempDoc.destroy();
 
