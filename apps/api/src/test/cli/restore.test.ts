@@ -857,6 +857,40 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'with mail off, by the .env.production of the archive or, without one, of this install, the stage says nothing of DKIM or mail TLS',
+        async () => {
+            const mailOff = join(scratch('restore-mail-off-'), 'mail-off.env');
+            writeFileSync(mailOff, `${ARCHIVED_ENV}MAIL_ENABLED=0\n`);
+            const noMail = { drop: (name: string) => name.startsWith('dkim/') || name.startsWith('certs/') };
+            const fields = (m: Omit<ServerArchiveManifest, 'entries'>) => ({ ...m, dkim: false, certs: false });
+            const ofMailOff = await craft(fullArchive, {
+                ...noMail,
+                replace: { '.env.production': mailOff },
+                manifest: fields,
+            });
+            const withoutEnv = await craft(fullArchive, {
+                drop: (name) => noMail.drop(name) || name === '.env.production',
+                manifest: (m) => ({ ...fields(m), envFile: false }),
+            });
+            for (const [archive, env] of [
+                [ofMailOff, RELEASE_ENV],
+                [withoutEnv, `${RELEASE_ENV}MAIL_ENABLED=0\n`],
+            ]) {
+                const dir = install(env);
+                const staged = await stage(dir, archive);
+                expect(staged.code).toBe(0);
+                expect(staged.stdout).toContain(`A full archive of Eigen ${pkg.version}`);
+                expect(staged.stdout).not.toContain('DKIM');
+                expect(staged.stdout).not.toContain('mail TLS');
+            }
+            const mailOn = await stage(install(), basename(fullArchive));
+            expect(mailOn.stdout).toContain('The DKIM key from the archive');
+            expect(mailOn.stdout).toContain('The mail TLS certificate from the archive');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'a Light archive is refused before anything moves where this install has a folder in place of its file',
         async () => {
             const dir = install();
