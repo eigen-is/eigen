@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/sheet/engine';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, toA1 } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
 import {
     MAX_CELLS,
     MAX_MERGES,
     MAX_ROWS,
+    MAX_TEXT,
     MAX_VALIDATION_KEYS,
     xlsxToSheets,
 } from '../../../lib/import/sheets/from-xlsx';
@@ -20,9 +21,20 @@ const PACKAGE_REL = 'http://schemas.openxmlformats.org/package/2006/relationship
 type Part = { name: string; xml: string; version?: string };
 
 // One sheet holding A1; `after` follows the sheet data, `before` precedes it, `names` sits in the workbook, and
-// `version` is the sheet's XML version.
+// `version` is the sheet's XML version. `sheets` are the bodies of more sheets, `sheetId` the first sheet's id and
+// `entries` more <sheet> entries.
 function xlsx(
-    sheet: { before?: string; data?: string; after?: string; names?: string; workbookPart?: string; version?: string },
+    sheet: {
+        before?: string;
+        data?: string;
+        after?: string;
+        names?: string;
+        workbookPart?: string;
+        version?: string;
+        sheets?: string[];
+        sheetId?: number;
+        entries?: string;
+    },
     extra: Part[] = [],
 ): Buffer {
     const {
@@ -32,7 +44,11 @@ function xlsx(
         names = '',
         workbookPart = 'xl/workbook.xml',
         version = '1.0',
+        sheets = [],
+        sheetId = 1,
+        entries = '',
     } = sheet;
+    const more = sheets.map((_, i) => i + 2);
     const parts: Part[] = [
         {
             name: '[Content_Types].xml',
@@ -44,17 +60,21 @@ function xlsx(
         },
         {
             name: workbookPart,
-            xml: `<workbook xmlns="${SML}" xmlns:r="${REL}"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets>${names}</workbook>`,
+            xml: `<workbook xmlns="${SML}" xmlns:r="${REL}"><sheets><sheet name="S" sheetId="${sheetId}" r:id="rId1"/>${more.map((n) => `<sheet name="S${n}" sheetId="${n + sheetId}" r:id="rId${n}"/>`).join('')}${entries}</sheets>${names}</workbook>`,
         },
         {
             name: 'xl/_rels/workbook.xml.rels',
-            xml: `<Relationships xmlns="${PACKAGE_REL}"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+            xml: `<Relationships xmlns="${PACKAGE_REL}">${[1, ...more].map((n) => `<Relationship Id="rId${n}" Type="${REL}/worksheet" Target="worksheets/sheet${n}.xml"/>`).join('')}</Relationships>`,
         },
         {
             name: 'xl/worksheets/sheet1.xml',
             xml: `<worksheet xmlns="${SML}">${before}<sheetData>${data}</sheetData>${after}</worksheet>`,
             version,
         },
+        ...sheets.map((body, i) => ({
+            name: `xl/worksheets/sheet${i + 2}.xml`,
+            xml: `<worksheet xmlns="${SML}">${body}</worksheet>`,
+        })),
         ...extra,
     ];
     return build(
@@ -408,4 +428,81 @@ describe('defined names never reach exceljs', () => {
         expect(result.rssGrowth).toBeLessThan(64 * MB);
         expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
+});
+
+// What exceljs or the conversion builds per element, per sheet or per character, past what the cell grid counts.
+describe('what else the import builds is refused before it costs', () => {
+    const sst = (body: string) => ({ name: 'xl/sharedStrings.xml', xml: `<sst xmlns="${SML}">${body}</sst>` });
+    const sharedCells = (count: number) =>
+        Array.from({ length: count }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="s"><v>0</v></c></row>`).join('');
+
+    // One shared string is copied into every cell that names it: 2,000 cells of a 1 MB rich string reached 9.7 GB.
+    test('text past its cap is 413 at no cost', () => {
+        const text = 'a'.repeat(1_000_000);
+        const cells = Math.ceil(MAX_TEXT / (2 * text.length)) + 1;
+        const result = measuredImport(
+            xlsx({ data: sharedCells(cells) }, [sst(`<si><r><t>${text}</t></r><r><t>b</t></r></si>`)]),
+        );
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    // Counting a row's last column walks every slot before it: 50,000 rows ending at XFD took 14.5 s.
+    test('rows reaching far columns are 413 at no cost', () => {
+        const rows = Array.from(
+            { length: 50_000 },
+            (_, i) => `<row r="${i + 1}"><c r="XFD${i + 1}"><v>1</v></c></row>`,
+        );
+        const result = measuredImport(xlsx({ data: rows.join('') }));
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    // Each sheet entry read its part's hyperlinks again: 1,000 entries naming one 190 MB part took 140 s.
+    test('sheets naming one part read it once', () => {
+        const entries = Array.from({ length: 200 }, (_, i) => `<sheet name="T${i}" sheetId="${i + 2}" r:id="rId1"/>`);
+        const result = measuredImport(xlsx({ entries: entries.join(''), after: `<!--${'x'.repeat(50_000_000)}-->` }));
+        expect(result.cells).toEqual([1]);
+        expect(result.cpuMs).toBeLessThan(5_000);
+    }, 30_000);
+
+    test('emitted text may reach its cap across the workbook', async () => {
+        // A plain shared string reaches every cell as one string, its value and its display.
+        const text = 'a'.repeat(1_000_000);
+        const cells = MAX_TEXT / (2 * text.length);
+        const half = Math.floor(cells / 2);
+        const file = (more: string) =>
+            xlsx({ data: sharedCells(half), sheets: [`<sheetData>${sharedCells(cells - half)}${more}</sheetData>`] }, [
+                sst(`<si><t>${text}</t></si><si><t>b</t></si>`),
+            ]);
+        expect(await outcome(file(''))).toBe('imported');
+        expect(await outcome(file(`<row r="${cells + 1}"><c r="A${cells + 1}" t="s"><v>1</v></c></row>`))).toEqual(
+            TOO_LARGE,
+        );
+    }, 30_000);
+
+    // A row walks every column up to its last cell, styled or not; rows without a value cost exceljs no cell.
+    test('the columns rows reach may add up to the cell cap', async () => {
+        const styled = (row: number, column: number) =>
+            `<row r="${row}"><c r="${toA1(row - 1, column - 1)}" s="1"/></row>`;
+        const file = (last: number) =>
+            xlsx({
+                data: `<row r="1"><c r="A1"><v>1</v></c></row>${Array.from({ length: 249 }, (_, i) => styled(i + 2, 16_000)).join('')}${styled(251, last)}`,
+            });
+        expect(1 + 249 * 16_000 + 15_999).toBe(MAX_CELLS);
+        expect(await outcome(file(15_999))).toBe('imported');
+        expect(await outcome(file(16_000))).toEqual(TOO_MANY_CELLS);
+    }, 30_000);
+
+    test('a part named by two sheets takes the name exceljs gives it, the last', async () => {
+        const sheets = await xlsxToSheets(
+            xlsx({
+                entries: '<sheet name="B" sheetId="2" r:id="rId1"/>',
+                after: '<hyperlinks><hyperlink ref="A1" location="B!A1"/></hyperlinks>',
+            }),
+        );
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['B']);
+        expect(sheets[0].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'B!A1' } });
+    });
 });

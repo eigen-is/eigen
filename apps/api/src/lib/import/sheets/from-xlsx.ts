@@ -90,9 +90,10 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const theme = readThemePalette(zip);
     const locationLinks = readLocationHyperlinks(zip);
 
+    const emitted = { text: 0 };
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
-        sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name)));
+        sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name), emitted));
     }
     return sheets;
 }
@@ -134,6 +135,9 @@ export const MAX_MERGES = 10_000;
 export const MAX_VALIDATION_KEYS = 5_000_000;
 // An empty row costs ~600 B: two full sheets of rows is ~1.3 GB, and real workbooks hold under 1.1M row elements.
 export const MAX_ROWS = 2 * REFERENCE_ROW_COUNT;
+// A cell's text, value and display, is a copy per cell for a rich string and in the snapshot for any; real workbooks
+// emit under 120M characters.
+export const MAX_TEXT = 250_000_000;
 
 // Every part is counted, not only those exceljs reads as sheets: a byte search, as a sheet may be the decompressed cap.
 function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
@@ -218,6 +222,10 @@ function withoutDefinedNames(bytes: Buffer): Buffer {
     return Buffer.from(bytes.toString('latin1').replace(DEFINED_NAMES_TAG, '<$1ignoredNames'), 'latin1');
 }
 
+function textLength(value: unknown): number {
+    return typeof value === 'string' ? value.length : 0;
+}
+
 function tooLarge(): ApiError {
     return new ApiError(413, 'Spreadsheet too large');
 }
@@ -271,10 +279,14 @@ function unescapeXml(value: string): string {
 }
 
 function assertCellCountWithinBounds(workbook: Workbook): void {
+    let slots = 0;
     let cells = 0;
     for (const worksheet of workbook.worksheets) {
         // A row past the grid needs no cell, and every walk to the last row visits each row number before it.
         if (worksheet.rowCount > REFERENCE_ROW_COUNT) throw new ApiError(413, 'Spreadsheet has too many cells');
+        // Each row walks every column up to its last cell, in columnCount and in the conversion, so those come first.
+        for (let n = 1; n <= worksheet.rowCount; n++) slots += worksheet.findRow(n)?.cellCount ?? 0;
+        if (slots > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
         cells += worksheet.rowCount * worksheet.columnCount;
         if (cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
     }
@@ -285,6 +297,7 @@ function worksheetToSheet(
     index: number,
     theme: ThemePalette,
     locationLinks: Map<string, string> | undefined,
+    emitted: { text: number },
 ): Sheet {
     const sheetId = `sheet-${index}`;
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
@@ -336,6 +349,8 @@ function worksheetToSheet(
             const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
             if (!mergeAnchor && isEmptyCell(converted)) return;
+            emitted.text += textLength(converted.v) + textLength(converted.m);
+            if (emitted.text > MAX_TEXT) throw tooLarge();
             celldata.push({ r, c, v: converted });
 
             maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, converted, c, r, merge, colWidthPx));
@@ -1008,16 +1023,17 @@ function readSheetPaths(zip: ZipReader): { name: string; path: string }[] | unde
         const target = xmlAttr(rel, '', 'Target');
         if (id != null && target != null) relTargets.set(id, target);
     }
-    const paths: { name: string; path: string }[] = [];
+    // exceljs reads each part once and names it by the last sheet naming it.
+    const names = new Map<string, string>();
     for (const sheet of xmlChildren(sheets, SML_NS, 'sheet')) {
         const name = xmlAttr(sheet, '', 'name');
         const rId = xmlAttr(sheet, R_NS, 'id');
         const target = rId != null ? relTargets.get(rId) : undefined;
         if (name == null || target == null) continue;
         // Workbook-rel targets are relative to xl/ unless rooted.
-        paths.push({ name, path: target.startsWith('/') ? target.slice(1) : `xl/${target}` });
+        names.set(target.startsWith('/') ? target.slice(1) : `xl/${target}`, name);
     }
-    return paths;
+    return [...names].map(([path, name]) => ({ name, path }));
 }
 
 // A tree costs far more heap than its input, so what is parsed is bounded by length and by its `<` and `=` counts; past any bound a part is skipped like a malformed one.
