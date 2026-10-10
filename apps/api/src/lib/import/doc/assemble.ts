@@ -17,8 +17,7 @@ export type Para = {
     // A half after a page break, which continues its item rather than numbering again.
     continued: boolean;
     indLeft: number;
-    // Where an item's number or checkbox starts, which says whether a list of another definition nests under the open
-    // item.
+    // Where an item's number or checkbox starts: at or right of the open item's text, it nests there.
     numberAt?: number;
     quote: number;
     // A quote inside a list item above it: that item, whose quote depth it sits at.
@@ -267,8 +266,7 @@ function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefin
     const depth = quotesPast(block.indent, host?.indLeft ?? 0);
     if (depth === undefined) return;
     const quote = (host?.quote ?? 0) + depth;
-    // The quotes still open where the previous paragraph sits: those in the host, or outside any item those outside the
-    // item it is quoted in.
+    // The quotes open around the previous paragraph, outside its item where the block has no host.
     const open = host
         ? previous?.inItem === host
             ? previous.quote
@@ -342,9 +340,7 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         quoted = [];
     };
     const itemDepths = depths(items);
-    // Code, a table or a deeper quote: the writer's Spacer between two of them stands in the quote around them, as one
-    // between two quotes always has a quote's text on one side. After code it parts boxes of one container: the code's
-    // box is its text, a deeper quote's first line a quote's indent per quote in from it.
+    // The writer's Spacer between two boxes stands in their quote; after code, only before a box of the code's container.
     const isBox = (index: number) => {
         const near = items[index];
         const nearDepth = itemDepths[index] ?? 0;
@@ -369,8 +365,7 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
             continue;
         }
         const [first] = quoted;
-        // The writer's page break sits at the margin: between quotes of two items, or an item's and another, it stands
-        // between them.
+        // The writer's page break sits at the margin, so between quotes of two items it stands outside both.
         const parts =
             item.kind === 'break' &&
             first?.kind === 'para' &&
@@ -427,8 +422,7 @@ function buildFlow(items: Item[]): JSONContent[] {
         const item = items[index];
         if (item && item.kind !== 'break' && item.kind !== 'boundary') ahead = item;
     }
-    // The item the block past a break goes on in, which holds the break: an item of an open list or nesting under the
-    // open item, or a block at an open item's text.
+    // The item the block past a break goes on in holds the break.
     const breakHost = (index: number): Open | undefined => {
         const following = next[index];
         const top = stack.at(-1);
