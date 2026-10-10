@@ -30,8 +30,8 @@ import {
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
-import { getFontCSS } from '../fonts';
-import { EXPORT_CSP_META, sanitizeExportHtml } from '../sanitize';
+import { exportHtmlDocument } from '../html-document';
+import { sanitizeExportHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
@@ -723,18 +723,7 @@ function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: num
     const pageCSS = pageSize
         ? `@page { size: ${pageSize.width}px ${pageSize.height}px; margin: 40px; }`
         : '@page { size: landscape; margin: 1.5cm; }';
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    ${EXPORT_CSP_META}
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${SHEET_CSS_BASE}${pageCSS}${SHEET_CSS_PRINT}</style>
-</head>
-<body>
-    ${bodyHtml}
-</body>
-</html>`;
+    return exportHtmlDocument({ title, css: `${SHEET_CSS_BASE}${pageCSS}${SHEET_CSS_PRINT}`, body: bodyHtml });
 }
 
 const SHEET_CSS_BASE = `

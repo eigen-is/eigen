@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { openZip } from '../../lib/core/zip';
-import { EXPORT_CSP, EXPORT_CSP_META } from '../../lib/export/sanitize';
+import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -72,7 +72,7 @@ describe('Eigendoc export route — response contract', () => {
 
         const html = await res.text();
         expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
-        expect(html).toContain(EXPORT_CSP_META);
+        expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`);
         // The document <title> carries the UNstripped container name — frozen output,
         // not a bug to fix while moving the transform off-thread.
         expect(html).toContain('<title>Doc Contract.eigendoc</title>');
@@ -116,7 +116,7 @@ describe('Eigenslides export route — response contract', () => {
 
         const html = await res.text();
         expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
-        expect(html).toContain(EXPORT_CSP_META);
+        expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`);
         expect(html).toContain('<title>Deck Contract</title>');
         // Every slide renders (no 8-slide preview cap), media embeds as a data URI,
         // and the injected script never survives into the download.

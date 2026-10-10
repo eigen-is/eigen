@@ -1,6 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace/lib/docs/eigendoc';
-import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
@@ -16,8 +15,8 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
-import { getFontCSS } from '../fonts';
-import { EXPORT_CSP_META, sanitizeExportHtml } from '../sanitize';
+import { exportHtmlDocument } from '../html-document';
+import { sanitizeExportHtml } from '../sanitize';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -42,7 +41,7 @@ export async function renderEigendocExport(
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
     const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title, format);
-    return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
+    return { data: toTransferableText(html), warnings: [] };
 }
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
@@ -99,21 +98,11 @@ function renderEigendocDocument(
     const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src), {
         synthesizeSmallCaps: format === 'pdf-html',
     });
-    return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
-}
-
-function wrapInDocument(title: string, bodyHtml: string): string {
-    return `<html lang="en">
-<head>
-    <meta charset="utf-8">
-    ${EXPORT_CSP_META}
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
-</head>
-<body>
-    <div class="page"><article class="eigen-prose tiptap">${bodyHtml}</article></div>
-</body>
-</html>`;
+    return exportHtmlDocument({
+        title,
+        css: `${PROSE_CSS}${PRINT_EXTRAS}`,
+        body: `<div class="page"><article class="eigen-prose tiptap">${sanitizeExportHtml(bodyHtml)}</article></div>`,
+    });
 }
 
 const PRINT_EXTRAS = `
