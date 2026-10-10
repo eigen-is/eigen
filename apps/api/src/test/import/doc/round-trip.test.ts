@@ -99,6 +99,7 @@ const code = (text: string) => ({
 });
 const rule = { type: 'horizontalRule' };
 const pageBreak = { type: 'pageBreak' };
+const heading = (text: string) => ({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text }] });
 const table = {
     type: 'table',
     content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [p('Cell')] }] }],
@@ -175,6 +176,8 @@ describe('a block inside a list item or a quote', () => {
             'a quote holding an item of two paragraphs in an item',
             [bullets([p('One'), quote(bullets([p('a'), p('More')]))], [p('Two')])],
         ],
+        ['a heading in an item', [ordered([p('One'), heading('Part')], [p('Two')])]],
+        ['a heading in an item in a quote', [quote(ordered([p('One'), heading('Part')], [p('Two')]))]],
         ['code after a nested list', [ordered([p('One'), bullets([p('a')]), code('one()')], [p('Two')])]],
         ['code after a nested task list', [ordered([p('One'), tasks([p('a')]), code('one()')], [p('Two')])]],
         ['a quote after a nested list', [bullets([p('One'), ordered([p('a')]), quote(p('Said'))], [p('Two')])]],
@@ -251,6 +254,7 @@ describe('a page break in an item', () => {
         ['before a rule', [ordered([p('One'), pageBreak, rule], [p('Two')])]],
         ['before a quote', [ordered([p('One'), pageBreak, quote(p('Said'))], [p('Two')])]],
         ['before a table', [ordered([p('One'), pageBreak, table], [p('Two')])]],
+        ['before a heading', [ordered([p('One'), pageBreak, heading('Part')], [p('Two')])]],
         ['between two tasks', [tasks([p('One'), pageBreak], [p('Two')])]],
     ])('%s stays in the item', async (_name, content) => {
         const { source, json } = await roundTrip(content);

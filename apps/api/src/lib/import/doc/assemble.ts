@@ -389,7 +389,7 @@ function buildFlow(items: Item[]): JSONContent[] {
         if (item && item.kind !== 'break' && item.kind !== 'boundary') ahead = item;
     }
     // The item the block past a break goes on in, which holds the break: an item of an open list or nesting under the
-    // open item, or a paragraph, code, a rule or a table at an open item's text.
+    // open item, or a block at an open item's text.
     const breakHost = (index: number): Open | undefined => {
         const following = next[index];
         const top = stack.at(-1);
@@ -405,9 +405,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             return joins || nestsUnder(following, top.indent, top.kind === 'taskList') ? top : undefined;
         }
         if (following.continued) return top;
-        if (following.empty || (following.role.kind !== 'paragraph' && following.role.kind !== 'code'))
-            return undefined;
-        return hostAt(following.indLeft);
+        return following.empty ? undefined : hostAt(following.indLeft);
     };
 
     // Within the open lists: the next is an item of one of them, or a paragraph at the open text, which goes on with it.
@@ -474,7 +472,7 @@ function buildFlow(items: Item[]): JSONContent[] {
         }
         // The writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
         if (isBreakOnly(item) && breakHost(index) && holdsWrapped(stack.at(-1)?.item)) continue;
-        if (stack.length > 0 && item.role.kind !== 'heading') {
+        if (stack.length > 0) {
             // A blank line between two items of one list stays in the item above, so the list stays one.
             const host =
                 item.continued || (item.empty && item.role.kind === 'paragraph' && betweenItems(index))
