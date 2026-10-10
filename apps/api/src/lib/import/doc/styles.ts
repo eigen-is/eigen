@@ -1,8 +1,17 @@
-import { codeBlockLanguage, headingLevel, PAGE_SECTION_TYPES, STYLE_NAMES, W_NS } from '../../core/ooxml';
+import {
+    BORDER_SIDES,
+    codeBlockLanguage,
+    headingLevel,
+    isOn,
+    LINK_THEME_COLORS,
+    PAGE_SECTION_TYPES,
+    STYLE_NAMES,
+    W_NS,
+} from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
-import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
+import { halfPoints, int, is, onOff, twips, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type RunProps = {
@@ -80,8 +89,6 @@ const HIGHLIGHT_COLORS = new Map([
     ['black', '000000'],
     ['white', 'FFFFFF'],
 ]);
-
-const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
 
 // Six hex digits, after a '#' some converters write, or nothing: `auto`, a theme name or a typo is an explicit none.
 function hexColor(value: string | undefined): string | undefined {
@@ -210,8 +217,6 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
     }
     return props;
 }
-
-const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
 
 export function readParaProps(pPr: XmlElement | undefined): ParaProps {
     const props: ParaProps = {};

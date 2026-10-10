@@ -10,13 +10,14 @@ import {
     O_NS,
     PIC_NS,
     R_NS,
+    TWIPS_PER_PX,
     V_NS,
     W_NS,
     WP_NS,
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { COLUMN_PX, type Item, isCaptionLike, isFigureOnly, type Para, paraOf, textOf } from './assemble';
-import { contentTypeOf, descendants, int } from './package';
+import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
 
@@ -230,16 +231,16 @@ function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, str
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 
+// A point is 20 twips.
 const PX_PER_UNIT = new Map([
     ['px', 1],
-    ['pt', 4 / 3],
-    ['in', 96],
-    ['cm', 96 / 2.54],
-    ['mm', 96 / 25.4],
+    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, (points * 20) / TWIPS_PER_PX]),
 ]);
 
+const VML_WIDTH = new RegExp(`(?:^|;)\\s*width\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
+
 function vmlWidthPx(style: string): number | null {
-    const match = style.match(/(?:^|;)\s*width\s*:\s*([\d.]+)(pt|px|in|cm|mm)?/i);
+    const match = style.match(VML_WIDTH);
     if (!match) return null;
     const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
     return Number.isFinite(px) && px > 0 ? widthPx(px) : null;

@@ -1,5 +1,5 @@
 import { ApiError } from '../../core/errors';
-import { CONTENT_TYPES_NS, MC_NS, PACKAGE_RELATIONSHIPS_NS, toTransitional, W_NS } from '../../core/ooxml';
+import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, toTransitional, W_NS } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
@@ -252,14 +252,6 @@ export function is(element: XmlElement, ns: string, local: string): boolean {
     return element.ns === ns && element.local === local;
 }
 
-// ST_OnOff attribute value: 1, true, on / 0, false, off, whitespace around it allowed; anything else is no answer.
-export function isOn(value: string | undefined): boolean | undefined {
-    const trimmed = value?.trim();
-    if (trimmed === undefined) return undefined;
-    if (['1', 'true', 'on'].includes(trimmed)) return true;
-    return ['0', 'false', 'off'].includes(trimmed) ? false : undefined;
-}
-
 // A bare element is on.
 export function onOff(element: XmlElement | undefined): boolean | undefined {
     if (!element) return undefined;
@@ -273,7 +265,7 @@ export function int(value: string | undefined): number | undefined {
 }
 
 // ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
-const POINTS_PER_UNIT = new Map([
+export const POINTS_PER_UNIT = new Map([
     ['pt', 1],
     ['pc', 12],
     ['pi', 12],

@@ -15,7 +15,7 @@ export type Languages = { bidi?: string; eastAsia?: string };
 
 // *Bidi names the complex script face: the theme's a:cs, else its a:font for the script of the run's bidi language,
 // which the document's default language answers when the run names none; *EastAsia the a:ea face the same way.
-export function readTheme(root: XmlElement | undefined, defaults: Languages = {}): Theme {
+export function readTheme(root: XmlElement | undefined, defaults: Languages): Theme {
     const [scheme] = root ? descendants(root, A_NS, 'fontScheme') : [];
     const typeface = (font: XmlElement | undefined) => font?.attributes['typeface'] || undefined;
     const faces = (local: string) => {

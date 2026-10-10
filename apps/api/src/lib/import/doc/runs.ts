@@ -1,13 +1,13 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
-import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
+import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
 import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
-import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
+import { alternative, descendants, isAlternateContent, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import {
     ABSORBED,
