@@ -11,6 +11,7 @@ import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
 import * as timing from '../utils/timing';
+import { FakeS3Server } from './fake-s3-server';
 
 // Shared storage double for the resilience suites (upload queue, mutation sync, create/open paths):
 // a StorageBackend over a real LocalStorage whose writes can fail, be delayed, hang or be parked,
@@ -220,6 +221,33 @@ export function createHomeFaultMount(
     return { mount, fault };
 }
 
+export type FakeS3Mount = { drive: Drive; mount: Mount; fake: FakeS3Server };
+
+// An s3 mount whose real S3Storage talks to a FakeS3Server over `baseDir`, registered in the home's Drive so
+// Drive.create, the routes and the collab socket reach it.
+export async function createFakeS3Mount(home: Home, baseDir: string, id: string): Promise<FakeS3Mount> {
+    const fake = new FakeS3Server(new LocalStorage(join(baseDir, 'backing')));
+    const s3Config = await fake.start();
+    const mount = new FaultMount(
+        home.user.id,
+        baseDir,
+        { ...createS3MountConfig(id), s3Config },
+        createGetLocalDatabase(baseDir),
+    );
+    await mount.init();
+    registerFaultMount(home.drive, mount);
+    return { drive: home.drive, mount, fake };
+}
+
+// Heals first, so no held request outlives the teardown; the documents close before their databases do.
+export async function removeFakeS3Mount({ drive, mount, fake }: FakeS3Mount, openDocIds: string[] = []): Promise<void> {
+    fake.heal();
+    for (const id of openDocIds) await drive.closeCollabDocument(mount.id, id).catch(() => {});
+    unregisterFaultMount(drive, mount.id);
+    await mount.closeAllDatabases();
+    await fake.stop();
+}
+
 // Drive keeps its mounts in a private map, and a fault mount only reaches Drive.create (or the
 // collab routes) once it is in there. One cast, one place.
 function driveMounts(drive: Drive): Map<string, Mount> {
@@ -312,6 +340,9 @@ export const SETTLE_BOUND_MS = 1_500;
 
 // The storage deadline a test shrinks to (setStorageTimeoutMs), so it fires inside STALL_BOUND_MS.
 export const SHRUNK_STORAGE_TIMEOUT_MS = 100;
+
+// The retry waits every test file starts with (preload.ts): an injected 5xx would otherwise cost a second per read.
+export const SHRUNK_RETRY_WAITS_MS = [1, 1];
 
 // Bounded deadlock detector, not synchronization: on the green path the promises settle at once and
 // the timer is cleared; only a real wedge runs it out. A rejection propagates like a plain await.

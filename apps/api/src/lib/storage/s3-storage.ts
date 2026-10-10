@@ -3,7 +3,7 @@ import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError, parseXml, type XmlElement, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
-import { errnoOf, retryStorageRead, storageUnavailable, withStorageDeadline } from './deadline';
+import { errnoOf, storageRead, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
 // `refusePublic` also fails a bucket that answers an unsigned GET of the probe: a backup bucket must be private.
@@ -364,9 +364,7 @@ export class S3Storage implements StorageBackend {
         // A missing object resolves false; a throw is the provider failing. 503 is the shape the
         // create (rollback) and open (1013 close) paths speak, so the outage reads as one and not as a 500.
         try {
-            return await withStorageDeadline((signal) =>
-                retryStorageRead('exists', key, () => this.read(key).exists(), { signal }),
-            );
+            return await storageRead('exists', key, () => this.read(key).exists());
         } catch (error) {
             console.error(`S3 exists probe failed for ${key}:`, error);
             throw storageUnavailable(error);
@@ -379,9 +377,7 @@ export class S3Storage implements StorageBackend {
         const keys: string[] = [];
         let continuationToken: string | undefined;
         do {
-            const page = await withStorageDeadline((signal) =>
-                retryStorageRead('list', base, () => this.client.list({ prefix: base, continuationToken }), { signal }),
-            );
+            const page = await storageRead('list', base, () => this.client.list({ prefix: base, continuationToken }));
             for (const { key } of page.contents ?? []) keys.push(key.slice(base.length));
             continuationToken = page.isTruncated ? page.nextContinuationToken : undefined;
         } while (continuationToken);
@@ -389,16 +385,12 @@ export class S3Storage implements StorageBackend {
     }
 
     async size(key: string): Promise<number | null> {
-        // stat() throws NoSuchKey on a missing object; any failure but the deadline maps to null, like LocalStorage.
+        // A missing object is null, like LocalStorage; any other failure is the provider failing, as in exists().
         try {
-            return (
-                await withStorageDeadline((signal) =>
-                    retryStorageRead('size', key, () => this.read(key).stat(), { signal }),
-                )
-            ).size;
+            return (await storageRead('size', key, () => this.read(key).stat())).size;
         } catch (error) {
-            if (error instanceof ApiError) throw error;
-            return null;
+            if (errnoOf(error) === 'NoSuchKey') return null;
+            throw storageUnavailable(error);
         }
     }
 }

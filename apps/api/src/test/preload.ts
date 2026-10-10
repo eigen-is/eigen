@@ -3,6 +3,10 @@ import './test-env';
 import { afterAll } from 'bun:test';
 import { clearSucroseCache } from 'elysia/sucrose';
 import { shutdownAllHomes } from '../lib/home';
+import { setRetryWaitsMs } from '../lib/storage/deadline';
+import { SHRUNK_RETRY_WAITS_MS } from './fault-storage-helpers';
+
+setRetryWaitsMs(SHRUNK_RETRY_WAITS_MS);
 
 // Every file runs in a fresh global (--isolate), so this hook runs once per file. An unref'd timer still
 // holds its callback until it fires, and two of them reach the whole module graph: each Home's idle

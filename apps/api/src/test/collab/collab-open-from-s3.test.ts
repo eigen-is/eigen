@@ -7,16 +7,13 @@ import { MESSAGE_AWARENESS, MESSAGE_SYNC } from '../../lib/collab/collabDocument
 import type Drive from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
-import { LocalStorage } from '../../lib/storage/local-storage';
 import type { User } from '../../lib/user';
-import { FakeS3Server } from '../fake-s3-server';
+import type { FakeS3Server } from '../fake-s3-server';
 import {
-    createGetLocalDatabase,
-    createS3MountConfig,
-    FaultMount,
-    registerFaultMount,
+    createFakeS3Mount,
+    type FakeS3Mount,
+    removeFakeS3Mount,
     settleContainer,
-    unregisterFaultMount,
     waitFor,
 } from '../fault-storage-helpers';
 import { getTestContext } from '../setup';
@@ -33,6 +30,7 @@ let drive: Drive;
 let mount: Mount;
 let user: User;
 let fakeS3: FakeS3Server;
+let s3: FakeS3Mount;
 let ownerId: string;
 let token: string;
 let port: number;
@@ -71,20 +69,10 @@ beforeAll(async () => {
     token = ctx.alice.user.sessionToken;
     mkdirSync(TEST_DIR, { recursive: true });
 
-    fakeS3 = new FakeS3Server(new LocalStorage(join(TEST_DIR, 'backing')));
-    const s3Config = await fakeS3.start();
-
     const home = await getHome(ownerId);
-    drive = home.drive;
+    s3 = await createFakeS3Mount(home, TEST_DIR, MOUNT_ID);
+    ({ drive, mount, fake: fakeS3 } = s3);
     user = home.user;
-    mount = new FaultMount(
-        ownerId,
-        TEST_DIR,
-        { ...createS3MountConfig(MOUNT_ID), s3Config },
-        createGetLocalDatabase(TEST_DIR),
-    );
-    await mount.init();
-    registerFaultMount(drive, mount);
     rootId = (await mount.getRootFolder())!.id;
 
     const listenPort = ctx.app.listen(0).server?.port;
@@ -94,11 +82,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
     ctx.app.stop();
-    fakeS3.heal();
-    for (const docId of openedDocIds) await drive.closeCollabDocument(MOUNT_ID, docId).catch(() => {});
-    unregisterFaultMount(drive, MOUNT_ID);
-    await mount.closeAllDatabases();
-    await fakeS3.stop();
+    await removeFakeS3Mount(s3, openedDocIds);
     rmSync(TEST_DIR, { recursive: true, force: true });
 });
 

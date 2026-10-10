@@ -2,15 +2,17 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    RETRY_WAITS_MS,
     readStorageFile,
     STORAGE_TIMEOUT_MS,
+    setRetryWaitsMs,
     setStorageTimeoutMs,
     streamStorageFile,
 } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
-import { STALL_BOUND_MS, waitFor } from '../fault-storage-helpers';
+import { SHRUNK_RETRY_WAITS_MS, STALL_BOUND_MS, waitFor } from '../fault-storage-helpers';
 
 // The real S3Storage against a fake S3 that answers 503 SlowDown, as Hetzner does under load. Bun's S3Client never
 // retries a read itself.
@@ -39,41 +41,34 @@ afterEach(async () => {
 afterAll(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 
 describe('S3 reads retry a throttled answer', () => {
-    test('a HEAD answered 503 SlowDown once finds the object on the next attempt', async () => {
+    test.each([
+        ['a HEAD', 'finds the object', () => storage.exists('image.png'), true, () => fake.heads.get(key)],
+        ['a stat', 'reads the size', () => storage.size('image.png'), BYTES.length, () => fake.heads.get(key)],
+        [
+            'a GET',
+            'reads the whole body',
+            async () => new Uint8Array(await readStorageFile(storage.read('image.png'))),
+            BYTES,
+            () => fake.gets.get(key),
+        ],
+    ])('%s answered 503 SlowDown once %s on the next attempt', async (_request, _outcome, read, expected, requests) => {
         fake.slowDowns.set(key, 1);
-        expect(await storage.exists('image.png')).toBe(true);
-        expect(fake.heads.get(key)).toBe(2);
+        expect(await read()).toEqual(expected);
+        expect(requests()).toBe(2);
     });
 
-    test('a stat answered 503 SlowDown once reads the size on the next attempt', async () => {
-        fake.slowDowns.set(key, 1);
-        expect(await storage.size('image.png')).toBe(BYTES.length);
-        expect(fake.heads.get(key)).toBe(2);
-    });
-
-    test('a GET answered 503 SlowDown once reads the whole body on the next attempt', async () => {
-        fake.slowDowns.set(key, 1);
-        expect(new Uint8Array(await readStorageFile(storage.read('image.png')))).toEqual(BYTES);
-        expect(fake.gets.get(key)).toBe(2);
-    });
-
-    test('three SlowDowns in a row answer 503 Storage unavailable after exactly three HEADs', async () => {
-        fake.slowDowns.set(key, 3);
-        await expect(storage.exists('image.png')).rejects.toMatchObject({
-            status: 503,
-            message: 'Storage unavailable',
-        });
-        expect(fake.heads.get(key)).toBe(3);
-    });
-
-    test('three SlowDowns in a row answer 503 Storage unavailable after exactly three GETs', async () => {
-        fake.slowDowns.set(key, 3);
-        await expect(readStorageFile(storage.read('image.png'))).rejects.toMatchObject({
-            status: 503,
-            message: 'Storage unavailable',
-        });
-        expect(fake.gets.get(key)).toBe(3);
-    });
+    test.each([
+        ['HEADs', () => storage.exists('image.png'), () => fake.heads.get(key)],
+        ['stats', () => storage.size('image.png'), () => fake.heads.get(key)],
+        ['GETs', () => readStorageFile(storage.read('image.png')), () => fake.gets.get(key)],
+    ])(
+        'three SlowDowns in a row answer 503 Storage unavailable after exactly three %s',
+        async (_requests, read, requests) => {
+            fake.slowDowns.set(key, 3);
+            await expect(read()).rejects.toMatchObject({ status: 503, message: 'Storage unavailable' });
+            expect(requests()).toBe(3);
+        },
+    );
 });
 
 describe('S3 reads do not retry a definite answer', () => {
@@ -109,7 +104,11 @@ describe('S3 reads do not retry a definite answer', () => {
     });
 });
 
+// Real waits: these pin where a wait falls against the deadline and the signal.
 describe('a retry stays inside the storage deadline', () => {
+    beforeEach(() => setRetryWaitsMs(RETRY_WAITS_MS));
+    afterEach(() => setRetryWaitsMs(SHRUNK_RETRY_WAITS_MS));
+
     test('a HEAD stops retrying when the deadline fires during its wait', async () => {
         setStorageTimeoutMs(RETRY_DEADLINE_MS);
         fake.slowDowns.set(key, 3);
