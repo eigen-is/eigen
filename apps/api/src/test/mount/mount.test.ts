@@ -405,10 +405,14 @@ describe('Mount (local path-based storage)', () => {
         const tried = await twin.tryWithPathLock(rootId, async () => 'ran');
         const path = twin.withPathLock(rootId, async () => order.push('path'));
         const tree = twin.withTreeExclusive(async () => order.push('tree'));
-        await eventLoopTurn();
-        expect(tried).toBeNull();
-        expect(order).toEqual(['first']);
-        release.resolve();
+        // A failed expect must still release: the locks are the folder's, shared with the rest of the file.
+        try {
+            await eventLoopTurn();
+            expect(tried).toBeNull();
+            expect(order).toEqual(['first']);
+        } finally {
+            release.resolve();
+        }
         await Promise.all([held, path, tree]);
         expect(order.slice(0, 2)).toEqual(['first', 'first done']);
         expect(order.slice(2).sort()).toEqual(['path', 'tree']);

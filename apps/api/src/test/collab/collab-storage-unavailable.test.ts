@@ -18,9 +18,9 @@ import type { FakeS3Server } from '../fake-s3-server';
 import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount, settleContainer } from '../fault-storage-helpers';
 import { authedRequest, getTestContext } from '../setup';
 
-// Unreachable storage closes the collab WS with 1013 'storage-unavailable', a stored object that is gone
-// with 4410 'storage-gone', every other failed open with 1008. The mount's real S3Storage talks to a
-// FakeS3Server. Needs a real listening server: app.handle() never completes the upgrade.
+// Any server-side (5xx) failure closes the collab WS with 1013 'storage-unavailable', unreachable storage
+// or a local one, a stored object that is gone with 4410 'storage-gone', every other failed open with 1008.
+// The mount's real S3Storage talks to a FakeS3Server. Needs a real listening server: app.handle() never completes the upgrade.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-collab-unavailable-${Date.now()}`);
 const MOUNT_ID = 'fault-collab';
@@ -132,13 +132,16 @@ describe('Collab WS open under unreachable storage', () => {
         });
     });
 
-    // A local failure is a 500, not an outage: the open fails as any other, and never as storage-gone.
-    test('a failed local temp write on an intact object closes as a failed open, not storage-gone', async () => {
+    // A local failure is a 500, not an outage, but still server-side: the tab retries, and never reads storage-gone.
+    test('a failed local temp write on an intact object closes storage-unavailable, not storage-gone', async () => {
         const { docId } = await createDoc('TmpGone');
         const parked = `${mount.tmpDir}.parked`;
         renameSync(mount.tmpDir, parked);
         try {
-            expect(await openCollabClient(docId).closed).toEqual({ code: 1008, reason: 'Failed to open document' });
+            expect(await openCollabClient(docId).closed).toEqual({
+                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
+            });
         } finally {
             rmSync(mount.tmpDir, { recursive: true, force: true });
             renameSync(parked, mount.tmpDir);
