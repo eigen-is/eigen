@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_CELLS, MAX_MERGES, MAX_VALIDATION_KEYS, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import {
+    MAX_CELLS,
+    MAX_MERGES,
+    MAX_ROWS,
+    MAX_VALIDATION_KEYS,
+    xlsxToSheets,
+} from '../../../lib/import/sheets/from-xlsx';
 import { build, deflated } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted xlsx meets before exceljs loads it: exceljs expands a range per cell while it loads, before
@@ -191,6 +197,14 @@ describe('what exceljs expands per cell is refused before it loads', () => {
         expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
 
+    // exceljs builds a model per row too: 30M empty rows in 787 KB peaked at 17.4 GB.
+    test('more rows than the cap are 413 at no cost', () => {
+        const result = measuredImport(xlsx({ data: '<row/>'.repeat(MAX_ROWS + 1) }));
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
     // An empty row far down passes the cell cap, and every walk to the last row took 84 s at row 1,000,000,000.
     test('a row past the grid is 413 at no cost', () => {
         const result = measuredImport(xlsx({ data: '<row r="1000000000" hidden="1"/>' }));
@@ -229,6 +243,20 @@ describe('each cap', () => {
         // The sheet holds A1 too.
         expect(await outcome(file(MAX_CELLS - 1))).toBe('imported');
         expect(await outcome(file(MAX_CELLS))).toEqual(TOO_MANY_CELLS);
+    }, 30_000);
+
+    // exceljs skips what an extension holds, so these rows cost it nothing; a row break is no row.
+    test('rows in the sheets are counted against their cap across the workbook before the load', async () => {
+        const rows = (count: number) =>
+            `<rowBreaks count="0"/><extLst><ext uri="x">${'<row/>'.repeat(count)}</ext></extLst>`;
+        const half = MAX_ROWS / 2;
+        // Sheet 1 holds row 1 too; exceljs reads sheet2.xml as a sheet part though no sheet names it.
+        const file = (count: number) =>
+            xlsx({ after: rows(half) }, [
+                { name: 'xl/worksheets/sheet2.xml', xml: `<worksheet xmlns="${SML}">${rows(count)}</worksheet>` },
+            ]);
+        expect(await outcome(file(half - 1))).toBe('imported');
+        expect(await outcome(file(half))).toEqual(TOO_LARGE);
     }, 30_000);
 
     test('a range missing its column counts as column A, as exceljs walks it', async () => {
