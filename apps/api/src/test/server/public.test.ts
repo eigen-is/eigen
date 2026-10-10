@@ -76,25 +76,19 @@ describe('Public Routes', () => {
         });
     });
 
-    describe('/p/user/:emailOrId', () => {
-        test('returns public user info by email', async () => {
-            const response = await ctx.app.handle(new Request(`http://localhost/p/user/${ctx.alice.user.email}`));
-            const data = await assertJson<PublicUser>(response);
-            expect(data.name).toBe('Alice Test');
-            expect(data.email).toBe('alice@test.eigen.is');
-            expect(data.avatar).toContain('p/avatar/');
-        });
-
-        test('returns public user info by id', async () => {
-            const response = await ctx.app.handle(new Request(`http://localhost/p/user/${ctx.alice.user.id}`));
-            const data = await assertJson<PublicUser>(response);
-            expect(data.name).toBe('Alice Test');
-            expect(data.email).toBe('alice@test.eigen.is');
-        });
-
-        test('returns 404 for non-existent user', async () => {
-            const response = await ctx.app.handle(new Request('http://localhost/p/user/nobody@test.eigen.is'));
-            expect(response.status).toBe(404);
+    describe('/p/users', () => {
+        test('resolves a user by email and by id, and omits an id without an account', async () => {
+            const ids = [ctx.alice.user.email, ctx.alice.user.id, 'nobody@test.eigen.is'];
+            const response = await ctx.app.handle(
+                new Request('http://localhost/p/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids }),
+                }),
+            );
+            const users = await assertJson<Record<string, PublicUser>>(response);
+            const alice = { name: 'Alice Test', email: 'alice@test.eigen.is', avatar: `p/avatar/${ctx.alice.user.id}` };
+            expect(users).toEqual({ [ctx.alice.user.email]: alice, [ctx.alice.user.id]: alice });
         });
     });
 
