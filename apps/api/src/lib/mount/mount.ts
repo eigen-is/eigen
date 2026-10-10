@@ -18,7 +18,14 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
+import {
+    ApiError,
+    type DatabaseConfig,
+    type ManagedDatabase,
+    PATHS,
+    type SchemaType,
+    storageUnavailable,
+} from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import {
@@ -27,7 +34,6 @@ import {
     type StorageBackend,
     type StorageFile,
     storageGone,
-    storageUnavailable,
     writeTempWithHash,
 } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';

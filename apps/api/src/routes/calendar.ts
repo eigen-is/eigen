@@ -419,7 +419,6 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             // A thousand-event file writes a row apiece before this answers, longer than any server-wide idleTimeout.
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
-            if (bytes === null) throw new ApiError(413, 'Upload too large');
             return cal.importEvents(query.calendarId, bytes);
         },
         { query: ImportQuerySchema, auth: true, parse: 'none' },

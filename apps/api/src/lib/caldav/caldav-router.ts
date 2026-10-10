@@ -2,8 +2,8 @@ import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { EVENT_MAX_BYTES } from '../calendar/resource-store';
 import { requireSelf } from '../core/access';
-import { readBoundedBody } from '../core/http';
-import { DAV_BODY_MAX_BYTES, readDavBody } from '../dav/body';
+import { readBoundedBody, readBoundedBodyBytes } from '../core/http';
+import { DAV_BODY_MAX_BYTES } from '../dav/body';
 import { parseCollectionPath } from '../dav/href';
 import { parsePropfind, wantsBrief } from '../dav/propfind';
 import { davError } from '../dav/xml';
@@ -19,12 +19,12 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav', async ({ request }) => {
         const user = await authenticateBasic(request);
         // Discovery serves its props whatever the body names, but a bad body is still a 400 (RFC 4918 § 9.1).
-        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
+        parsePropfind(await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES));
         return handleRootPropfind(user.id);
     })
     .route('PROPFIND', '/dav/', async ({ request }) => {
         const user = await authenticateBasic(request);
-        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
+        parsePropfind(await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES));
         return handleRootPropfind(user.id);
     })
 
@@ -32,13 +32,13 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/principals/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
+        parsePropfind(await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES));
         return handlePrincipalPropfind(params.ownerId);
     })
     .route('PROPFIND', '/dav/principals/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        parsePropfind(await readDavBody(request, DAV_BODY_MAX_BYTES));
+        parsePropfind(await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES));
         return handlePrincipalPropfind(params.ownerId);
     })
 
@@ -46,7 +46,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/calendars/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         const home = await getHome(params.ownerId);
         const calendars = await home.calendar.getCollections();
         const depth = request.headers.get('Depth') || '0';
@@ -60,7 +60,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
-        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
         const home = await getHome(params.ownerId);
@@ -157,7 +157,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const collection = await home.calendar.getCollection(parsed.collection);
         if (!collection) return new Response('Not Found', { status: 404 });
 
-        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         return handleReport(home.calendar, parsed.collection, collection, params.ownerId, body);
     })
 
@@ -169,7 +169,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.collection || parsed.resource) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         return handleMkcalendar(home.calendar, params.ownerId, parsed.collection, body);
     })
 
@@ -181,6 +181,6 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!parsed.ok || !parsed.collection) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await readDavBody(request, DAV_BODY_MAX_BYTES);
+        const body = await readBoundedBodyBytes(request, DAV_BODY_MAX_BYTES);
         return handleProppatch(home.calendar, parsed.collection, params.ownerId, body);
     });

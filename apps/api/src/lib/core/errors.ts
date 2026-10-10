@@ -10,6 +10,12 @@ export class ApiError extends Error {
     }
 }
 
+// The one 503 a storage outage answers; an ApiError already on its way out passes through.
+export function storageUnavailable(cause?: unknown): ApiError {
+    if (cause instanceof ApiError) return cause;
+    return new ApiError(503, 'Storage unavailable', cause === undefined ? undefined : { cause });
+}
+
 type ErrorHandlerContext = { error: unknown; code: unknown; set: Context['set']; request: Request };
 
 export function handleApiError({ error, code, set, request }: ErrorHandlerContext): string | undefined {

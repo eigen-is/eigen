@@ -430,7 +430,6 @@ export const mailRouter = new Elysia({ name: 'mail' })
             // that outlasts any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, EML_MAX_BYTES);
-            if (bytes === null) throw new ApiError(413, 'Upload too large');
             return await (await getMailClient(user)).messageImport(Buffer.from(bytes));
         },
         { auth: true, parse: 'none' },
