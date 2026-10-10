@@ -41,9 +41,9 @@ export type Item =
     | Para
     | { kind: 'break' }
     | { kind: 'boundary' }
-    // A rule's quote: the writer indents a rule in a quote to the quote's text.
+    // A rule's or a table's quote: the writer indents either in a quote to the quote's text.
     | { kind: 'hr'; indent: number; quote?: number }
-    | { kind: 'table'; node: JSONContent; indent: number }
+    | { kind: 'table'; node: JSONContent; indent: number; quote?: number }
     | { kind: 'block'; node: JSONContent; inItem?: boolean }
     | { kind: 'float'; figure: JSONContent };
 
@@ -181,27 +181,33 @@ export function paraOf(inlines: JSONContent[]): Para {
 }
 
 // The writer indents a quote or code in a list item from the item's text, so its depth counts from there and it stays
-// in the item. A quote's list items carry the list's indent too, so they sit at the depth of the quote around them.
+// in the item. A quote's list items carry the list's indent too, so their depth is the numbering level's base.
 function assignQuotes(items: Item[]): void {
     let open: Para | undefined;
     let previous: Para | undefined;
     let plain = 0;
     for (const item of items) {
-        if (item.kind === 'hr' && previous && previous.inItem === undefined) {
-            const depth = Math.round(item.indent / QUOTE_LOOK.indent);
-            const atText = Math.abs(item.indent - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE;
-            if (depth > 0 && depth <= previous.quote && atText) {
-                item.quote = depth;
-                continue;
-            }
-        }
-        // A table or a rule off the quote's text ends a quote (depths); a page break doesn't.
         if (item.kind === 'table' || item.kind === 'hr') {
-            previous = undefined;
-            if (!(open && indentedUnder(item.indent, open.indLeft))) open = undefined;
+            const host = open && indentedUnder(item.indent, open.indLeft) ? open : undefined;
+            blockDepth(item, host, previous);
+            if (!host) open = undefined;
+            if (!item.quote) previous = undefined;
+            continue;
         }
         if (item.kind !== 'para') continue;
-        if (item.list || item.task) open = item;
+        const listed = item.list && item.quote > 0 ? listDepth(item.list) : undefined;
+        // A paragraph at a quoted item's text goes on with the item, in its quotes.
+        const goesOn =
+            open && open.quote > 0 && item.quote > 0 && Math.abs(item.indLeft - open.indLeft) <= INDENT_TOLERANCE
+                ? open
+                : undefined;
+        if (listed !== undefined) {
+            item.quote = listed;
+            // Its number at or right of the open item's text: a quote in that item holds it.
+            if (open && listed > open.quote && (item.numberAt ?? 0) >= open.indLeft - INDENT_TOLERANCE)
+                item.inItem = open.quote;
+            open = item;
+        } else if (item.list || item.task) open = item;
         else if (item.role.kind === 'code') {
             codeDepth(item, open, previous);
             if (!(open && indentedUnder(item.indLeft, open.indLeft))) open = undefined;
@@ -209,14 +215,34 @@ function assignQuotes(items: Item[]): void {
             // Past the quotes the item itself sits in.
             item.quote = open.quote + Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
             item.inItem = open.quote;
-        } else if (!item.continued && !item.empty) open = undefined;
+        } else if (goesOn) item.quote = goesOn.quote;
+        else if (!item.continued && !item.empty) open = undefined;
         item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
-        if (item.quote > 0) {
+        if (item.quote > 0 && listed === undefined) {
             if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));
             else if (item.inItem === undefined) plain = item.quote;
         }
         previous = item;
     }
+}
+
+// The writer numbers a level from a base, the quotes' indent around the list, its hanging indent per level past it
+// (to-docx.ts numberingXml); a base off a quote's text is another editor's.
+function listDepth(list: NonNullable<Para['list']>): number | undefined {
+    const base = (list.pPr.indLeft ?? 0) + (list.pPr.indFirst ?? 0) * (list.ilvl + 1);
+    const depth = Math.round(base / QUOTE_LOOK.indent);
+    return depth > 0 && Math.abs(base - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE ? depth : undefined;
+}
+
+// The writer indents a table or a rule to its container's text, a quote's indent per quote past the item it sits in.
+// Nothing else marks it, so it joins a deeper quote only after a paragraph in it.
+function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefined, previous: Para | undefined): void {
+    const container = host?.indLeft ?? 0;
+    const depth = Math.round((block.indent - container) / QUOTE_LOOK.indent);
+    if (depth < 0 || Math.abs(block.indent - container - depth * QUOTE_LOOK.indent) > INDENT_TOLERANCE) return;
+    const quote = (host?.quote ?? 0) + depth;
+    if (depth === 0 || (previous !== undefined && previous.inItem === host?.quote && previous.quote >= quote))
+        block.quote = quote;
 }
 
 // The writer sets a code box its own indent in from its container, and each quote around it a quote's indent in from
@@ -244,8 +270,7 @@ function depths(items: Item[]): number[] {
         return order.map((item) => {
             const before = quote;
             if (item.kind === 'para') quote = item.quote;
-            else if (item.kind === 'hr') quote = item.quote ?? 0;
-            else if (item.kind === 'table') quote = 0;
+            else if (item.kind === 'hr' || item.kind === 'table') quote = item.quote ?? 0;
             return before;
         });
     };
@@ -253,7 +278,7 @@ function depths(items: Item[]): number[] {
     const after = nearest([...items].reverse()).reverse();
     return items.map((item, index) => {
         if (item.kind === 'para') return item.quote;
-        if (item.kind === 'hr') return item.quote ?? 0;
+        if (item.kind === 'hr' || item.kind === 'table') return item.quote ?? 0;
         if (item.kind === 'break' || item.kind === 'boundary') return Math.min(before[index] ?? 0, after[index] ?? 0);
         return 0;
     });
