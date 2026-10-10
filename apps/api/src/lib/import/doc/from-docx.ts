@@ -9,6 +9,7 @@ import type { TransformWarning } from '../../document/transform/protocol';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
+import { missingCells, openTable } from './tables';
 
 // docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
 
@@ -20,6 +21,14 @@ export type DocxImage = {
 
 export const docSchema = getSchema(getDocExtensions({ lowlight }));
 
+// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
+// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
+// heaviest weighs 57,688.
+export const MAX_DOCX_WEIGHT = 150_000;
+
+// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
+const CHARS_PER_UNIT = 512;
+
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
@@ -28,6 +37,10 @@ export function docxToPmJson(
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
+        const tables: JSONContent[] = [];
+        if (weightOf(content, tables) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        // Weighed, the cells the editor would fill in on open are filled in now.
+        for (const table of tables) openTable(table);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema.nodeFromJSON({
@@ -55,6 +68,27 @@ export function docxToPmJson(
             throw new ApiError(400, NOT_A_DOCX, { cause: error });
         throw error;
     }
+}
+
+// Every node and mark, and the cells prosemirror-tables fills a ragged table with on open, each with its paragraph.
+function weightOf(nodes: JSONContent[], tables: JSONContent[]): number {
+    let weight = 0;
+    const strings = (attrs: Record<string, unknown> | undefined) => {
+        for (const value of Object.values(attrs ?? {}))
+            if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+    };
+    const stack = [...nodes];
+    for (let node = stack.pop(); node; node = stack.pop()) {
+        weight += 1 + (node.marks?.length ?? 0);
+        strings(node.attrs);
+        for (const mark of node.marks ?? []) strings(mark.attrs);
+        if (node.type === 'table') {
+            weight += 2 * missingCells(node);
+            tables.push(node);
+        }
+        for (const child of node.content ?? []) stack.push(child);
+    }
+    return weight;
 }
 
 function fits(block: JSONContent): boolean {

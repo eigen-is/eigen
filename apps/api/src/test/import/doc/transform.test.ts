@@ -6,7 +6,8 @@ import { yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
 import { lowlight } from '../../../lib/document/lowlight';
-import { importDocxToEigendocUpdate } from '../../../lib/import/doc/transform';
+import { docSchema } from '../../../lib/import/doc/from-docx';
+import { asOpened, importDocxToEigendocUpdate, MAX_TABLE_REPAIRS } from '../../../lib/import/doc/transform';
 import { buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
 
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
@@ -70,5 +71,34 @@ describe('an imported doc is stored as the editor leaves it on open', () => {
     ])('%s', async (name) => {
         const json = stored(await Bun.file(join(import.meta.dir, '../../fixtures/docx', name)).arrayBuffer());
         expect(opened(json)).toEqual(json);
+    });
+});
+
+// The reader opens its tables itself; fixTables, the safety net, keeps a copy of the table per repair.
+describe('the repairs on open are bounded', () => {
+    const cell = { type: 'tableCell', content: [{ type: 'paragraph' }] };
+    // Every row but the first a cell short: a repair per row.
+    const ragged = (rows: number) =>
+        docSchema.nodeFromJSON({
+            type: 'doc',
+            content: [
+                {
+                    type: 'table',
+                    content: Array.from({ length: rows }, (_, index) => ({
+                        type: 'tableRow',
+                        content: index === 0 ? [cell, cell] : [cell],
+                    })),
+                },
+            ],
+        });
+    const side = Math.floor(Math.sqrt(MAX_TABLE_REPAIRS));
+
+    test('a table with repairs times rows within the bound is repaired', () => {
+        const doc = asOpened(ragged(side));
+        expect(nodesOfType(doc.toJSON(), 'tableRow').every((row) => row.content?.length === 2)).toBe(true);
+    });
+
+    test('a table past it is 413', () => {
+        expect(() => asOpened(ragged(side + 2))).toThrow('Document too large');
     });
 });

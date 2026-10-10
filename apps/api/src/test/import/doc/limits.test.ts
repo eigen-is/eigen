@@ -8,7 +8,7 @@ import { openZip, ZipReader } from '../../../lib/core/zip';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
@@ -401,6 +401,79 @@ describe('text pieces', () => {
     });
 });
 
+// What the reader emits costs the Yjs conversion per node and per mark, so the document's output weighs against one budget.
+describe('output budget', () => {
+    const rich =
+        '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Times New Roman"/><w:b/><w:i/><w:strike/><w:caps/><w:u w:val="single"/><w:color w:val="FF0000"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>';
+    const linked = (pairs: number, rPr = '') =>
+        paragraph(
+            `<w:hyperlink r:id="rId9"><w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${'<w:tab/><w:br/>'.repeat(pairs)}</w:r></w:hyperlink>`,
+        );
+    const linkTo = (href: string) =>
+        `<Relationship Id="rId9" Type="${HYPERLINK}" Target="${href}" TargetMode="External"/>`;
+
+    test('a body of empty paragraphs at the budget imports, one more is 413', async () => {
+        const at = docxToPmJson(Buffer.from(await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_WEIGHT))));
+        expect(at.json.content).toHaveLength(MAX_DOCX_WEIGHT);
+        const past = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_WEIGHT + 1));
+        const error = await rejection(() => docxToPmJson(Buffer.from(past)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    // A tab in a link with eight looks is a text node and nine marks; 360,000 of them took 4.4 GB.
+    test('marked tabs and breaks past the budget are 413 through the Yjs update', async () => {
+        const docx = await buildDocxWithBody(linked(MAX_DOCX_WEIGHT / 10 + 1000, rich), {
+            rels: linkTo('https://example.com'),
+        });
+        const result = measuredImport(docx, 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // The update spells a link's href out for every text node it marks.
+    test('a long href weighs by its length', async () => {
+        const href = `https://example.com/${'x'.repeat(16 * 1024)}`;
+        const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // The editor fills a short row with a cell and its paragraph per column.
+    test('the cells a ragged table is filled with weigh', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const docx = await buildDocxWithBody(
+            `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1300)}</w:tbl>`,
+        );
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+});
+
+// The reader stores a table as the editor opens it; fixTables' transaction kept a copy of the table per repair.
+describe('tables the editor would repair', () => {
+    test('a row of 63 cells over 1,000 rows of one is filled in one pass through the Yjs update', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const docx = await buildDocxWithBody(
+            `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(3000);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+    }, 60_000);
+
+    // A cell spanning a column of no width has none, where the column's other cells have one.
+    test('20,000 rows whose widths disagree with their column import through the Yjs update', async () => {
+        const grid = '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="0"/></w:tblGrid>';
+        const wide = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr></w:tc></w:tr>';
+        const docx = await buildDocxWithBody(`<w:tbl>${grid}<w:tr><w:tc/><w:tc/></w:tr>${wide.repeat(20_000)}</w:tbl>`);
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(3000);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+    }, 60_000);
+});
+
 describe('structure', () => {
     // Word's column limit; a looped gridSpan of 2e9 would hold the Worker to its deadline.
     test('a gridSpan past the grid spans the grid', async () => {
@@ -555,8 +628,8 @@ describe('structure', () => {
         expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
     }, 60_000);
 
-    test('20,000 notes stay linear', async () => {
-        const count = 20_000;
+    test('12,000 notes stay linear', async () => {
+        const count = 12_000;
         const ids = Array.from({ length: count }, (_, index) => index + 1);
         const body = paragraph(ids.map(noteRef).join(''));
         const footnotes = ids.map((id) => footnote(id, paragraph(run(`N${id}`)))).join('');
@@ -784,8 +857,8 @@ describe('links', () => {
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 
 // What a long report holds: headings, sentences in styled runs, links, lists two deep and tables, repeated up to
-// whichever budget it meets first.
-function honestBody(): string {
+// whichever budget it meets first: the output's, a node and a mark weighing one each.
+async function honestBody(): Promise<string> {
     const sentence = 'The committee reviewed the quarterly figures and agreed on the next steps for the project. ';
     const blocks = [
         paragraph(run('Section heading on the review'), '<w:pStyle w:val="Heading1"/>'),
@@ -804,13 +877,17 @@ function honestBody(): string {
         ),
     ].join('');
     const tags = blocks.split('<').length - 1;
+    const weigh = (node: JSONContent): number =>
+        (node.marks?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + 1 + weigh(child), 0);
+    const weight = weigh((await importDocxBody(blocks)).json);
     const margin = 0.98;
-    return blocks.repeat(Math.floor(margin * Math.min(MAX_DOCX_XML_BYTES / blocks.length, MAX_DOCX_XML_TAGS / tags)));
+    const fits = Math.min(MAX_DOCX_XML_BYTES / blocks.length, MAX_DOCX_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
+    return blocks.repeat(Math.floor(margin * fits));
 }
 
 describe.skipIf(!runSlow)('an honest document just under the budget', () => {
-    // A Worker's stack takes a spread of no more than about 500,000 arguments.
-    test('600,000 paragraphs inside one content control import in the Worker', async () => {
+    // A Worker's stack takes a spread of no more than about 500,000 arguments; one the reader overflowed would be 400.
+    test('600,000 paragraphs inside one content control are read in the Worker and weighed', async () => {
         const body = `<w:sdt><w:sdtContent>${'<w:p/>'.repeat(600_000)}</w:sdtContent></w:sdt>`;
         const response = await documentTransformRunner.run(
             {
@@ -822,11 +899,14 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
         );
-        expect(response.ok || response.error).toBe(true);
+        expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
+            413,
+            'Document too large',
+        ]);
     }, 120_000);
 
     test('imports within 1 GB of peak RSS and 10 s of CPU', async () => {
-        const result = measuredImport(await buildDocxWithBody(honestBody()));
+        const result = measuredImport(await buildDocxWithBody(await honestBody()));
         expect(result.blocks).toBeGreaterThan(10_000);
         expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
@@ -834,7 +914,7 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
 });
 
 describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
-    // y-tiptap passes a block's children to one call, which 700,000 paragraphs in one cell overflow.
+    // y-tiptap passes a block's children to one call, which 700,000 paragraphs in one cell overflow: the budget comes first.
     test('a block of too many children is 413, not a stack overflow', async () => {
         const body = `<w:tbl><w:tr><w:tc>${'<w:p/>'.repeat(700_000)}</w:tc></w:tr></w:tbl>`;
         const response = await documentTransformRunner.run(

@@ -7,10 +7,11 @@ import { openZip, ZipError, type ZipReader } from '../../core/zip';
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
 // A tree costs per element too: 16 MB of empty paragraphs is 2.8 million of them and would take 3.5 GB. The corpus's
-// most is 611,000 (a 178-page report); at this cap the densest file takes about 1 GB. Counted as '<' in the bytes.
+// most is 611,000 (a 178-page report); at this cap 740,000 empty paragraphs peak at 1.25 GB before the output budget
+// refuses them. Counted as '<' in the bytes.
 export const MAX_DOCX_XML_TAGS = 750_000;
 
-// A piece past a run's first is a text node and its marks, up to 9 KB in the Yjs update; the corpus's most is 1,055.
+// A piece past a run's first is a node no tag counts, held before the output is weighed; the corpus's most is 1,055.
 export const MAX_DOCX_PIECES = 75_000;
 
 export const DOCUMENT_TOO_LARGE = 'Document too large';
