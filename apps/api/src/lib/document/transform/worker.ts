@@ -88,7 +88,8 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
         }
         case 'docx': {
             const { importDocxToEigendocUpdate } = await import('../../import/doc/transform');
-            return { ok: true, result: await importDocxToEigendocUpdate(request.data), warnings: [] };
+            const { warnings, ...result } = importDocxToEigendocUpdate(request.data, request.publicOrigin);
+            return { ok: true, result, warnings };
         }
     }
 }

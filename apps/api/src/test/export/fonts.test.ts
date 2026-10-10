@@ -105,6 +105,16 @@ test('the renamed docx faces carry the family and slot names, with no typographi
     }
 });
 
+// A face filed under another font would embed that font's glyphs under this one's name.
+test('every docx face names the font it is filed under', () => {
+    for (const face of docxFaces) {
+        const name = face.tables.get('name');
+        if (!name) throw new Error(`${face.file} has no name table`);
+        const families = nameRecords(name).filter((record) => record.startsWith('1 3/1/1033 '));
+        expect({ file: face.file, families }).toEqual({ file: face.file, families: [`1 3/1/1033 ${face.family}`] });
+    }
+});
+
 // Installable or editable: a docx embedding a print-and-preview face opens read-only in Word.
 test('every docx font file may be embedded for editing', () => {
     const usage = (face: (typeof docxFaces)[number]) => (face.tables.get('OS/2')?.readUInt16BE(8) ?? 0x0002) & 0x000f;

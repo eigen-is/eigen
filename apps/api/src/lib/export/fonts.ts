@@ -1,6 +1,4 @@
 import * as fs from 'node:fs';
-import type { EigenFont } from '@workspace/lib/constants/fonts';
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import docxExcalifontRegular from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.ttf' with { type: 'file' };
 import fontExcalifont from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.woff2' with { type: 'file' };
 import docxInterBold from '@workspace/ui/assets/fonts/inter/Inter-Bold-renamed.ttf' with { type: 'file' };
@@ -42,23 +40,23 @@ const FONT_FILES = [
 
 export type DocxFontFiles = { Regular: string; Italic?: string; Bold?: string; BoldItalic?: string };
 
+// The static faces a docx embeds per EIGEN_FONTS name, in its order; Word synthesizes a slot a family has no file for.
 // Inter's and JetBrains Mono's Bold slots hold their 600s renamed Bold, the weight the editor draws bold in.
-const DOCX_FONT_FILES_BY_CATEGORY: Record<EigenFont['category'], DocxFontFiles> = {
-    'sans-serif': {
-        Regular: docxInterRegular,
-        Italic: docxInterItalic,
-        Bold: docxInterBold,
-        BoldItalic: docxInterBoldItalic,
-    },
-    serif: { Regular: docxSerifRegular, Italic: docxSerifItalic, Bold: docxSerifBold, BoldItalic: docxSerifBoldItalic },
-    monospace: { Regular: docxMonoRegular, Italic: docxMonoItalic, Bold: docxMonoBold, BoldItalic: docxMonoBoldItalic },
-    'hand-drawn': { Regular: docxExcalifontRegular },
-};
-
-// The static faces a docx embeds per EIGEN_FONTS name; Word synthesizes a slot a family has no file for.
-export const DOCX_FONT_FILES: ReadonlyMap<string, DocxFontFiles> = new Map(
-    EIGEN_FONTS.map((font) => [font.name, DOCX_FONT_FILES_BY_CATEGORY[font.category]]),
-);
+export const DOCX_FONT_FILES: ReadonlyMap<string, DocxFontFiles> = new Map([
+    [
+        'Inter',
+        { Regular: docxInterRegular, Italic: docxInterItalic, Bold: docxInterBold, BoldItalic: docxInterBoldItalic },
+    ],
+    [
+        'Source Serif 4',
+        { Regular: docxSerifRegular, Italic: docxSerifItalic, Bold: docxSerifBold, BoldItalic: docxSerifBoldItalic },
+    ],
+    [
+        'JetBrains Mono',
+        { Regular: docxMonoRegular, Italic: docxMonoItalic, Bold: docxMonoBold, BoldItalic: docxMonoBoldItalic },
+    ],
+    ['Excalifont', { Regular: docxExcalifontRegular }],
+]);
 
 // A bounded read of the sfnt table directory: a table past the end of the file throws instead of reading short.
 export function sfntTables(bytes: Buffer): Map<string, Buffer> {

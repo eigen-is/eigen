@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import JSZip from 'jszip';
+import { openZip } from '../../lib/core/zip';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -91,8 +91,8 @@ describe('Eigendoc export route — response contract', () => {
         expect(buffer.subarray(0, 2).toString()).toBe('PK');
         // Unlike the HTML <title>, the docx document property carries the STRIPPED
         // container name — frozen output, and the conversion now runs in the Worker.
-        const zip = await JSZip.loadAsync(buffer);
-        expect(await zip.file('docProps/core.xml')?.async('string')).toContain('<dc:title>Doc Contract</dc:title>');
+        const core = new TextDecoder().decode(openZip(buffer).read('docProps/core.xml'));
+        expect(core).toContain('<dc:title>Doc Contract</dc:title>');
     }, 120_000);
 
     test('an unsupported format is rejected with 400', async () => {

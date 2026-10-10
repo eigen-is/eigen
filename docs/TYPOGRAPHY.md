@@ -27,7 +27,7 @@ One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--f
 
 ## The registry's order is load-bearing
 
-`EIGEN_FONTS` holds each font's name, CSS stack, category and weights. Each category has exactly one font. xlsx import picks the bundled font by category (`BUNDLED_FONT_BY_CATEGORY`), and a second font in a category would take its imports over, since the last entry wins. Its order matters for two reasons:
+`EIGEN_FONTS` holds each font's name, CSS stack, category and weights. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
 
 - A sheet cell's `ff` may be an index into the list rather than a name. `packages/sheet/src/state/modules/fonts.ts` derives `FONT_ARRAY` and `FONT_INDEX_BY_NAME` (lowercased name to index) from `EIGEN_FONTS`, and a paste into a sheet stores such an index. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
 - `EIGEN_FONTS[0]` is the fallback font in docs and sheets. There is no separate default-font constant for them. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.
@@ -42,7 +42,15 @@ The name expands to CSS only where it renders. A sheet cell is looser: it stores
 
 ## Foreign fonts map onto the bundled ones
 
-Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. xlsx import maps a cell's Office font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category, and leaves `ff` unset for one it doesn't know (`FONT_CATEGORY_MAP` in `apps/api/src/lib/import/sheets/from-xlsx.ts`). Pasted HTML in docs does the same for common desktop fonts (`transformPastedHTML` in `apps/docs/src/components/docs/editor.tsx`).
+Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. One map sends a foreign font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category: `bundledFont` in `packages/lib/src/constants/fonts.ts`, over the map that module keeps. Three readers share it: the xlsx import, which sets the font as a cell's `ff` and leaves `ff` unset for a font the map doesn't know; a paste in docs (`cleanPastedHTML` in `apps/docs/src/components/docs/paste.ts`); and the docx reader (`apps/api/src/lib/import/doc/docx-fonts.ts`).
+
+A doc's text draws in the document font, `DOCUMENT_FONT` (Inter), without a mark. So a paste or a docx import gives a font that maps to Inter no mark, and every other bundled font its `textStyle` mark: a Word file set in Calibri imports with no font marks, one set in Times New Roman with Source Serif 4 on every run. A run in a foreign monospace font, Courier New in a sentence, gets the JetBrains Mono mark and stays prose. Only a code style or the editor's code look on a light grey makes a run inline code, because a grey chip on every Courier run would invent code the author never marked.
+
+## The docx reader picks a font per script and falls back on the font table
+
+Word gives a run four faces and draws each character in the one for its script: `w:ascii` for ASCII, `w:hAnsi` for the rest of Latin, Greek and Cyrillic, `w:eastAsia` for East Asian text, and `w:cs` for complex script (Arabic, Hebrew, the Indic scripts, Thai and the like), which has its own bold, italic and size. The reader does the same, so an Arabic word in a Latin sentence gets its own face and look (`byFace` in `docx-fonts.ts`). A theme font resolves through the file's theme, and its complex-script and East Asian faces through the script of the run's language.
+
+A name the map doesn't know falls back on its entry in the file's `fontTable.xml`: a fixed pitch is monospace, and a variable pitch is serif for the family `roman` and sans-serif for `swiss`. Anything else maps to nothing, and the text keeps the document font. The family counts only beside a variable pitch, because Word writes `roman` with the default pitch for a font it has no metrics for. The corpus audit (`apps/api/src/scripts/docx-audit.ts`) imports this rule to count the words Word draws in a bundled font.
 
 ## One picker serves every app
 
@@ -52,11 +60,11 @@ Only the bundled faces are embedded in an export, so a font Eigen doesn't ship w
 
 The registry drives the pickers and the sheet lists. The other places keep their own list of faces, so a new font touches six:
 
-1. The woff2 files and the font's `OFL.txt` in `packages/ui/src/assets/fonts/<font-name>/`.
+1. The woff2 files, the static TrueType faces the docx embeds and the font's `OFL.txt` in `packages/ui/src/assets/fonts/<font-name>/`.
 2. Its `@font-face` rules in `fonts.css`.
 3. The entry in `EIGEN_FONTS`, appended at the end.
 4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's.
-5. `FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback. `apps/api/src/test/export/fonts.test.ts` fails when it and `fonts.css` disagree, and pins the count of faces at six, so a new face updates the test too.
+5. `FONT_FILES` and `DOCX_FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback; the docx embeds the static faces, keyed by the font's name ([EXPORT.md](EXPORT.md#the-docx-embeds-the-faces-a-doc-uses-its-600s-in-the-bold-slot)). `apps/api/src/test/export/fonts.test.ts` fails when `FONT_FILES` and `fonts.css` disagree, when `DOCX_FONT_FILES` misses a font, or when a face names another family, and pins the count of faces, so a new face updates the test too.
 6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
 
 A `--font-*` token in `globals.css` is needed only when the font fills a new category.

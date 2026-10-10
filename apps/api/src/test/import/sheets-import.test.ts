@@ -9,12 +9,14 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
+import { openZip, type ZipReader } from '../../lib/core/zip';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import { normalizeMonthMinuteTokens, readLocationHyperlinks, xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { getUserById } from '../../lib/user';
+import { build, deflated } from '../fixtures/raw-zip';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
     assertJson,
@@ -104,6 +106,10 @@ async function injectLocationHyperlinks(
         : xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`);
     zip.file(path, patched);
     return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+async function reader(zip: JSZip): Promise<ZipReader> {
+    return openZip(await zip.generateAsync({ type: 'uint8array' }));
 }
 
 async function replacePart(buffer: ArrayBuffer, path: string, edit: (xml: string) => string): Promise<ArrayBuffer> {
@@ -377,7 +383,7 @@ describe('Sheets xlsx import/convert', () => {
             await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
             'bomb-target.xlsx',
         );
-        const bomb = await buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
+        const bomb = buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
@@ -902,8 +908,8 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('2:0')?.rt).toBe(-45);
         expect(byCoord.get('3:0')?.rt).toBe(-90);
         expect(byCoord.get('4:0')?.rt).toBe('vertical');
-        // Georgia is a serif font → mapped to the bundled Source Serif 4. See FONT_CATEGORY_MAP
-        // in apps/api/src/lib/import/sheets/from-xlsx.ts; only the four supported faces
+        // Georgia is a serif font → mapped to the bundled Source Serif 4. See bundledFont
+        // in packages/lib/src/constants/fonts.ts; only the four supported faces
         // ship as embedded webfonts, so unsupported families collapse to the closest one.
         expect(byCoord.get('0:1')?.ff).toBe('Source Serif 4');
     });
@@ -929,6 +935,61 @@ describe('Sheets xlsx conversion fidelity', () => {
         // Unrecognized → no ff (falls back to body default, which is Inter).
         expect(byCoord.get('3:0')?.ff).toBeUndefined();
         expect(byCoord.get('4:0')?.ff).toBe('Inter');
+    });
+
+    test('convert maps each known font by its name, in any case and padding', async () => {
+        const expected: [name: string, ff: string][] = [
+            ['Inter', 'Inter'],
+            ['Source Serif 4', 'Source Serif 4'],
+            ['Source Serif Pro', 'Source Serif 4'],
+            ['JetBrains Mono', 'JetBrains Mono'],
+            ['Excalifont', 'Excalifont'],
+            ...[
+                'Calibri',
+                'Calibri Light',
+                'Arial',
+                'Helvetica',
+                'Helvetica Neue',
+                'Verdana',
+                'Tahoma',
+                'Segoe UI',
+                'Trebuchet MS',
+            ].map((name): [string, string] => [name, 'Inter']),
+            ...[
+                'Times New Roman',
+                'Times',
+                'Georgia',
+                'Cambria',
+                'Garamond',
+                'Book Antiqua',
+                'Palatino',
+                'Palatino Linotype',
+            ].map((name): [string, string] => [name, 'Source Serif 4']),
+            ...['Courier New', 'Courier', 'Consolas', 'Monaco', 'Lucida Console', 'Menlo'].map(
+                (name): [string, string] => [name, 'JetBrains Mono'],
+            ),
+            ['Comic Sans MS', 'Excalifont'],
+            ['Comic Sans', 'Excalifont'],
+            ['  TIMES NEW ROMAN ', 'Source Serif 4'],
+        ];
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        for (const [index, [name]] of expected.entries()) {
+            ws.getCell(index + 1, 1).value = name;
+            ws.getCell(index + 1, 1).font = { name };
+        }
+        const sheets = await parseWorkbook(workbook);
+        const ff = new Map((sheets[0].celldata ?? []).map((c) => [c.r, c.v?.ff] as const));
+        expect(expected.map(([name], index) => [name, ff.get(index)])).toEqual(expected);
+    });
+
+    test('convert reads the shared font map', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        ws.getCell('A1').value = 'serif';
+        ws.getCell('A1').font = { name: 'Lora' };
+        const sheets = await parseWorkbook(workbook);
+        expect(sheets[0].celldata?.[0]?.v?.ff).toBe('Source Serif 4');
     });
 
     test('convert handles multi-sheet workbooks', async () => {
@@ -1644,7 +1705,7 @@ describe('Sheets xlsx conversion fidelity', () => {
                 );
             }
 
-            expect(await readLocationHyperlinks(zip)).toEqual(
+            expect(readLocationHyperlinks(await reader(zip))).toEqual(
                 new Map([['Q1 – "A" & B', new Map([['B2', 'Other!A1']])]]),
             );
         }
@@ -1660,11 +1721,11 @@ describe('Sheets xlsx conversion fidelity', () => {
         const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
             xml.replace('</worksheet>', `<extLst><ext uri="x">${'<a/>'.repeat(1_000_000)}</ext></extLst></worksheet>`),
         );
-        const zip = await JSZip.loadAsync(buffer);
+        const zip = openZip(new Uint8Array(buffer));
 
         Bun.gc(true);
         const before = process.memoryUsage().heapUsed;
-        const links = await readLocationHyperlinks(zip);
+        const links = readLocationHyperlinks(zip);
         const grown = process.memoryUsage().heapUsed - before;
 
         expect(links).toEqual(new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]));
@@ -1690,11 +1751,11 @@ describe('Sheets xlsx conversion fidelity', () => {
             `<?xml version="1.0"?><worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="B2" location="Broken!A1"/></hyperlinks><extLst/></worksheet>`,
         );
 
-        expect(await readLocationHyperlinks(zip)).toEqual(new Map([['Kept', new Map([['B2', 'Broken!A1']])]]));
+        expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map([['Kept', new Map([['B2', 'Broken!A1']])]]));
 
         const workbook = (await zip.file('xl/workbook.xml')?.async('string')) ?? '';
         zip.file('xl/workbook.xml', `${workbook}${'<!---->'.repeat(10_000)}`);
-        expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+        expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
     });
 
     test('location hyperlinks keep all of the 66,530 Excel allows a sheet', async () => {
@@ -1710,7 +1771,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`),
         );
 
-        const links = (await readLocationHyperlinks(await JSZip.loadAsync(buffer))).get('Sheet1');
+        const links = readLocationHyperlinks(openZip(new Uint8Array(buffer))).get('Sheet1');
         expect(links?.size).toBe(66_530);
         expect(links?.get('A66530')).toBe("'Sheet 2'!B66530");
     });
@@ -1725,7 +1786,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             xml.replace('<sheetData', '<!-- <hyperlinks> --><sheetData'),
         );
 
-        expect(await readLocationHyperlinks(await JSZip.loadAsync(buffer))).toEqual(
+        expect(readLocationHyperlinks(openZip(new Uint8Array(buffer)))).toEqual(
             new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]),
         );
     });
@@ -1793,8 +1854,10 @@ describe('xlsxToSheets resource guards', () => {
             let buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
                 { ref: 'A1', location: 'T!A1' },
             ]);
+            // Past MAX_ELEMENTS a sheet's tags are refused before the load (sheets/limits.test.ts).
+            const sheetFill = fill.slice(0, 8_000_000);
             buffer = await replacePart(buffer, 'xl/worksheets/sheet1.xml', (xml) =>
-                xml.replace('</hyperlinks>', `${fill}</hyperlinks>`),
+                xml.replace('</hyperlinks>', `${sheetFill}</hyperlinks>`),
             );
             buffer = await replacePart(buffer, 'xl/workbook.xml', (xml) =>
                 xml.replace('</workbook>', `<extLst><ext uri="x">${fill}</ext></extLst></workbook>`),
@@ -1817,7 +1880,7 @@ describe('xlsxToSheets resource guards', () => {
             zip.file('xl/_rels/workbook.xml.rels', rels.replace('</Relationships>', `${fill}</Relationships>`));
             Bun.gc(true);
             const relsBefore = process.memoryUsage().heapUsed;
-            expect(await readLocationHyperlinks(zip)).toEqual(new Map());
+            expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
             expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(128 * 1024 * 1024);
         }
     });
@@ -1837,7 +1900,7 @@ describe('xlsxToSheets resource guards', () => {
         const longBlock = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
             xml.replace('</hyperlinks>', `${'a'.repeat(34_000_000)}</hyperlinks>`),
         );
-        expect(await readLocationHyperlinks(await JSZip.loadAsync(longBlock))).toEqual(new Map());
+        expect(readLocationHyperlinks(openZip(new Uint8Array(longBlock)))).toEqual(new Map());
 
         const longTheme = await replacePart(linked, 'xl/theme/theme1.xml', (xml) =>
             xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${'a'.repeat(2_000_000)}</a:ext></a:extLst></a:theme>`),
@@ -1849,29 +1912,52 @@ describe('xlsxToSheets resource guards', () => {
         expect(sheets[0].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'T!A1' } });
     });
 
-    test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
-        // The declared-size guard reads each entry's uncompressedSize straight from the zip
-        // central directory and never decompresses, so it needs no real bomb payload — the
-        // fixture forges a tiny entry's declared size just over the 200 MB cap. The guard runs
-        // before any inflation (that OOM is uncatchable, so a post-load check is useless), so
-        // this 413 comes from the declared-size pass.
-        const bomb = await buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
-
-        let error: unknown;
-        try {
-            await xlsxToSheets(bomb);
-        } catch (e) {
-            error = e;
-        }
+    // exceljs inflates the whole package and its out-of-memory can't be caught, so both refusals come before it: the
+    // declared total past the cap, with nothing inflated, and an entry inflating past the size it declares.
+    test.each([
+        ['declaring more than the cap', buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024), 413],
+        [
+            'holding an entry that lies small',
+            build([{ ...deflated('xl/worksheets/sheet1.xml', '<row/>'.repeat(100_000)), size: 64 }]),
+            400,
+        ],
+    ])('rejects an xlsx %s', async (_name, bytes, status) => {
+        const error = await xlsxToSheets(bytes).then(
+            () => undefined,
+            (reason: unknown) => reason,
+        );
         expect(error).toBeInstanceOf(ApiError);
-        expect((error as ApiError).status).toBe(413);
+        expect(error).toMatchObject({
+            status,
+            message: status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file',
+        });
     });
 
-    // NOTE: the streaming actual-size guard (the forged-header bomb defense) has no test here —
-    // exercising it needs >200 MB of genuine inflation, whose fixture can't be built in under
-    // ~2 s without hand-rolling a native-zlib zip. The declared guard above and the cell-count
-    // guard below stay covered; the byte-cap logic is one shared MAX_DECOMPRESSED_BYTES constant
-    // across both passes in lib/import/zip-size-guard.ts.
+    // JSZip names an entry by its Info-ZIP Unicode Path extra (0x7075), which openZip ignores: an entry openZip reads
+    // as decoy.xml is a second sheet1.xml to JSZip, and the later one wins. exceljs gets the entries openZip read.
+    test('exceljs loads the entries openZip read, not its own reading of the upload', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('S').getCell('A1').value = 1;
+        const zip = openZip(new Uint8Array(await workbookToBuffer(workbook)));
+        const parts = zip.names().map((name) => deflated(name, zip.read(name) ?? ''));
+        const sheet = new TextDecoder().decode(zip.read('xl/worksheets/sheet1.xml'));
+        const decoyName = 'xl/worksheets/decoy.xml';
+        const unicodePath = new TextEncoder().encode('xl/worksheets/sheet1.xml');
+        const extra = new Uint8Array(9 + unicodePath.length);
+        const view = new DataView(extra.buffer);
+        view.setUint16(0, 0x7075, true);
+        view.setUint16(2, 5 + unicodePath.length, true);
+        view.setUint8(4, 1);
+        view.setUint32(5, Bun.hash.crc32(decoyName), true);
+        extra.set(unicodePath, 9);
+        const bytes = build([...parts, { ...deflated(decoyName, sheet.replace('<v>1</v>', '<v>2</v>')), extra }]);
+
+        const jszip = await JSZip.loadAsync(bytes);
+        expect(await jszip.file('xl/worksheets/sheet1.xml')?.async('string')).toContain('<v>2</v>');
+
+        const sheets = await xlsxToSheets(bytes);
+        expect((sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0)?.v?.v).toBe(1);
+    });
 
     test('rejects an xlsx declaring an absurd cell count', async () => {
         // Two far-apart cells span the full Excel grid (1,048,576 × 16,384 ≈ 1.7e10 cells)

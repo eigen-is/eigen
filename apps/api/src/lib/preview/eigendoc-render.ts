@@ -1,19 +1,9 @@
-import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
 import type { TransformWarning } from '../document/transform/protocol';
-import {
-    lowlight,
-    renderCodeBlockNode,
-    renderFigureNode,
-    renderTaskItemNode,
-    withTrailingBreaks,
-} from '../export/doc/render';
+import { renderDocHtml } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
-
-const extensions = getDocExtensions({ lowlight });
 
 const PREVIEW_MAX_BLOCKS = 20;
 
@@ -39,21 +29,8 @@ export function renderEigendocPreviewBody(
     const truncated = blocks.length > PREVIEW_MAX_BLOCKS;
     const content = truncated ? { ...json, content: blocks.slice(0, PREVIEW_MAX_BLOCKS) } : json;
 
-    const html = renderToHTMLString({
-        content: withTrailingBreaks(content),
-        extensions,
-        options: {
-            nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node),
-                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
-                    renderFigureNode(
-                        node.attrs,
-                        (mediaName, src) => (mediaName ? (mediaUrls.get(mediaName) ?? null) : src),
-                        { lazy: true },
-                    ),
-            },
-        },
+    const html = renderDocHtml(content, (mediaName, src) => (mediaName ? (mediaUrls.get(mediaName) ?? null) : src), {
+        lazy: true,
     });
 
     const warnings: TransformWarning[] = [];

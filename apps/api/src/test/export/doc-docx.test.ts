@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
-import { getSchema, type JSONContent } from '@tiptap/core';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import type { JSONContent } from '@tiptap/core';
 import JSZip from 'jszip';
-import { common, createLowlight } from 'lowlight';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
+import { openZip, type ZipReader } from '../../lib/core/zip';
+import { docSchema } from '../../lib/document/doc-schema';
+import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
-import { proseValue, proseValueIfSet } from '../../lib/export/doc/prose-css';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
@@ -20,19 +20,24 @@ const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawi
 // U+FFFE, which XML can't hold; the formatter would unescape it into an invisible literal.
 const NONCHARACTER = String.fromCharCode(0xfffe);
 
-const schema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
+const schema = docSchema();
 
 // Every doc gets the all-features media; the writer embeds only what a figure shows.
 function docx(json: JSONContent, publicOrigin?: string, media = buildAllFeaturesDocMedia()): Promise<Uint8Array> {
     return eigendocToDocx(json, media, 'Report.eigendoc', publicOrigin);
 }
 
-async function unzip(json: JSONContent, publicOrigin?: string, media?: ExportMedia[]): Promise<JSZip> {
-    return JSZip.loadAsync(await docx(json, publicOrigin, media));
+async function unzip(json: JSONContent, publicOrigin?: string, media?: ExportMedia[]): Promise<ZipReader> {
+    return openZip(await docx(json, publicOrigin, media));
 }
 
-async function part(zip: JSZip, path: string): Promise<XmlElement> {
-    const text = await zip.file(path)?.async('string');
+function entryText(zip: ZipReader, path: string): string | undefined {
+    const data = zip.read(path);
+    return data && new TextDecoder().decode(data);
+}
+
+async function part(zip: ZipReader, path: string): Promise<XmlElement> {
+    const text = entryText(zip, path);
     const root = text === undefined ? null : parseXml(text);
     if (!root) throw new Error(`${path} missing or blank`);
     return root;
@@ -239,7 +244,7 @@ describe('docx writer — package', () => {
 
     test('every part is written, parses and has a content type', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
-        const paths = Object.keys(zip.files);
+        const paths = zip.names();
         expect(paths.sort()).toEqual([...PARTS, ...MEDIA_PARTS, 'word/media/image3.svg', ...FONT_PARTS].sort());
 
         const types = await part(zip, '[Content_Types].xml');
@@ -276,7 +281,7 @@ describe('docx writer — package', () => {
             expect(ids.size).toBe(relationships.length);
             for (const rel of relationships) {
                 if (xmlAttr(rel, '', 'TargetMode') === 'External') continue;
-                expect(zip.file(`${folder}${xmlAttr(rel, '', 'Target')}`)).not.toBeNull();
+                expect(zip.entry(`${folder}${xmlAttr(rel, '', 'Target')}`)).toBeDefined();
             }
             if (!source) continue;
             for (const id of relationshipRefs(await part(zip, source))) expect(ids).toContain(id);
@@ -365,6 +370,12 @@ describe('docx writer — package', () => {
         // Two runs inside one zip time tick agree on a clock date too, so the date is pinned on its own.
         const dates = Object.values((await JSZip.loadAsync(first)).files).map((file) => file.date.toISOString());
         expect(new Set(dates)).toEqual(new Set(['1980-01-01T00:00:00.000Z']));
+    });
+
+    test('the writer zips with core/zip, not JSZip', () => {
+        const source = fs.readFileSync(new URL('../../lib/export/doc/to-docx.ts', import.meta.url), 'utf8');
+        expect(source).not.toContain("from 'jszip'");
+        expect(source).toContain("from '../../core/zip'");
     });
 
     test('the title is the name without its extension', async () => {
@@ -631,6 +642,14 @@ describe('docx writer — marks', () => {
         );
     });
 
+    // CT_RPr puts caps and smallCaps between i and strike.
+    test('all caps is w:caps and small caps w:smallCaps, in schema order', async () => {
+        expect(await runProps({ type: 'textStyle', attrs: { caps: 'all' } })).toEqual([['caps']]);
+        expect(
+            await runProps({ type: 'strike' }, { type: 'textStyle', attrs: { caps: 'small' } }, { type: 'italic' }),
+        ).toEqual([['i'], ['iCs'], ['smallCaps'], ['strike']]);
+    });
+
     test('a named color and an unknown font are dropped', async () => {
         expect(await runProps({ type: 'textStyle', attrs: { color: 'red', fontFamily: 'Comic Sans' } })).toEqual([]);
     });
@@ -875,7 +894,7 @@ describe('docx writer — lists', () => {
         expect(nums.map((num) => w(child(num, 'abstractNumId'), 'val'))).toEqual(['0', '1']);
     });
 
-    test('bullet lists of one indent share one abstractNum and num, a nested one a level in; ordered ones keep their own', async () => {
+    test('each list is a num of its own; bullet lists of one indent share one abstractNum, a nested one a level in; ordered ones keep their own', async () => {
         const json = doc(
             ul(li(p(text('a')), ul(li(p(text('b')))))),
             ul(li(p(text('c')))),
@@ -887,11 +906,11 @@ describe('docx writer — lists', () => {
         expect(descendants(body, W, 'numPr').map(xmlOf)).toEqual(
             [
                 [0, 1],
-                [1, 1],
-                [0, 1],
-                [0, 2],
+                [1, 2],
                 [0, 3],
                 [0, 4],
+                [0, 5],
+                [0, 6],
             ].map(([ilvl, numId]) => `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`),
         );
         const numbering = await numberingOf(json);
@@ -899,7 +918,9 @@ describe('docx writer — lists', () => {
             xmlChildren(numbering, W, 'abstractNum').map((list) => w(child(child(list, 'lvl'), 'numFmt'), 'val')),
         ).toEqual(['bullet', 'decimal', 'decimal', 'bullet']);
         expect(xmlChildren(numbering, W, 'num').map(xmlOf)).toEqual(
-            [0, 1, 2, 3].map((index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${index}"/></w:num>`),
+            [0, 0, 0, 1, 2, 3].map(
+                (abstract, index) => `<w:num w:numId="${index + 1}"><w:abstractNumId w:val="${abstract}"/></w:num>`,
+            ),
         );
     });
 
@@ -979,14 +1000,53 @@ describe('docx writer — task lists', () => {
         ]);
     });
 
-    test('a checked item strikes all its content, nested items included', async () => {
+    test('a checked item strikes its own blocks, never a nested open task', async () => {
         const paragraphs = await paragraphsOf(
             doc(tasks(task(true, p(text('done')), p(text('more')), tasks(task(false, p(text('nested'))))))),
         );
         expect(paragraphs.slice(1)).toEqual([
             `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="0"/><w:ind w:left="330"/></w:pPr>${run('more')}</w:p>`,
-            `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="220"/><w:ind w:left="660" w:hanging="330"/></w:pPr>${checkbox(false)}${run('nested')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="220"/><w:ind w:left="660" w:hanging="330"/></w:pPr>${checkbox(false)}${run('nested')}</w:p>`,
         ]);
+    });
+
+    test('an open task restores the style around the done task it sits in, its nested content too', async () => {
+        const body = await bodyOf(
+            doc(
+                quote(
+                    tasks(
+                        task(
+                            true,
+                            p(text('done')),
+                            ul(li(p(text('bullet')))),
+                            tasks(task(true, p(text('inner done')), tasks(task(false, p(text('inner open')))))),
+                            tasks(
+                                task(
+                                    false,
+                                    p(text('open')),
+                                    ul(li(p(text('open bullet')))),
+                                    tasks(task(true, p(text('deep done'))), task(false, p(text('deep open')))),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        );
+        const styles = xmlChildren(body, W, 'p').map((paragraph) => [
+            texts(paragraph).replace(/^[☐☒]/, ''),
+            w(child(child(paragraph, 'pPr'), 'pStyle'), 'val'),
+        ]);
+        expect(Object.fromEntries(styles)).toEqual({
+            done: 'TaskDone',
+            bullet: 'TaskDone',
+            'inner done': 'TaskDone',
+            'inner open': 'Quote',
+            open: 'Quote',
+            'open bullet': 'Quote',
+            'deep done': 'TaskDone',
+            'deep open': 'Quote',
+        });
     });
 
     test('the Task Done style strikes in the muted color', async () => {
@@ -1275,7 +1335,7 @@ describe('docx writer — code blocks', () => {
     async function codeLines(json: JSONContent): Promise<(string | undefined)[][][]> {
         const paragraphs = xmlChildren(await bodyOf(json), W, 'p');
         for (const paragraph of paragraphs) {
-            expect(w(child(child(paragraph, 'pPr'), 'pStyle'), 'val')).toBe('CodeBlock');
+            expect(w(child(child(paragraph, 'pPr'), 'pStyle'), 'val')).toStartWith('CodeBlock-');
         }
         return paragraphs.map((paragraph) =>
             xmlChildren(paragraph, W, 'r').map((r) => {
@@ -1323,15 +1383,38 @@ describe('docx writer — code blocks', () => {
         const body = await bodyOf(doc(code('a\r\nb\u000Bc\n\n\td', 'plaintext')));
         const paragraphs = xmlChildren(body, W, 'p');
         expect(paragraphs.map(texts)).toEqual(['a', 'b', 'c', '', 'd']);
-        expect(xmlOf(paragraphs[3] ?? body)).toBe('<w:p><w:pPr><w:pStyle w:val="CodeBlock"/></w:pPr></w:p>');
+        expect(xmlOf(paragraphs[3] ?? body)).toBe('<w:p><w:pPr><w:pStyle w:val="CodeBlock-plaintext"/></w:pPr></w:p>');
         expect(shape(child(paragraphs[4], 'r') ?? body)).toEqual(['tab', 't']);
     });
 
-    test('the language is not written, and one lowlight lacks is highlighted automatically, as in the HTML', async () => {
+    test('a language lowlight knows rides on a hidden style of its own, based on Code Block, on every line', async () => {
+        const json = doc(code('a\nb', 'javascript'), p(text('x')), code('c', 'javascript'), code('d', 'js'));
+        expect(descendants(await bodyOf(json), W, 'pStyle').map((pStyle) => w(pStyle, 'val'))).toEqual([
+            'CodeBlock-javascript',
+            'CodeBlock-javascript',
+            'CodeBlock-javascript',
+            'Spacer',
+            'CodeBlock-js',
+        ]);
+        const all = await styles(json);
+        expect(xmlOf(style(all, 'CodeBlock-javascript'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="CodeBlock-javascript"><w:name w:val="Code Block (javascript)"/><w:basedOn w:val="CodeBlock"/><w:semiHidden/></w:style>',
+        );
+        expect([...all.keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([
+            'CodeBlock-javascript',
+            'CodeBlock-js',
+        ]);
+    });
+
+    test('no language, or one lowlight lacks, is highlighted automatically, as in the HTML, and writes no style', async () => {
         const auto = await paragraphsOf(doc(code('const a = 1;')));
         expect(await paragraphsOf(doc(code('const a = 1;', 'no-such-language')))).toEqual(auto);
+        expect(await paragraphsOf(doc(code('const a = 1;', '"/><w:b/>')))).toEqual(auto);
+        expect(auto.join('')).toContain('<w:pStyle w:val="CodeBlock"/>');
         expect(auto.join('')).toContain('w:color');
-        expect(auto.join('')).not.toContain('no-such-language');
+        const json = doc(code('a'), p(text('x')), code('b', 'no-such-language'), p(text('y')), code('c', '"/><w:b/>'));
+        expect([...(await styles(json)).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
+        expect([...(await styles()).keys()].filter((id) => id.startsWith('CodeBlock-'))).toEqual([]);
     });
 
     test("the Code Block style is the editor's dark box: borders as its padding, shading, mono at 286 auto", async () => {
@@ -1354,7 +1437,7 @@ describe('docx writer — code blocks', () => {
     test("a code block in a list item moves its box to the item's text", async () => {
         const paragraphs = await paragraphsOf(doc(ul(li(p(text('x')), code('a', 'plaintext')), li(p(text('y'))))));
         expect(paragraphs[1]).toBe(
-            '<w:p><w:pPr><w:pStyle w:val="CodeBlock"/><w:ind w:left="620" w:right="290"/></w:pPr><w:r><w:t xml:space="preserve">a</w:t></w:r></w:p>',
+            '<w:p><w:pPr><w:pStyle w:val="CodeBlock-plaintext"/><w:ind w:left="620" w:right="290"/></w:pPr><w:r><w:t xml:space="preserve">a</w:t></w:r></w:p>',
         );
     });
 });
@@ -1386,7 +1469,7 @@ describe('docx writer — quotes', () => {
     // The editor's margins collapse to the larger, 0.75em below a code block, 1em below a quote, none above one; the
     // Spacer's 1 pt line is part of the gap. Word runs a quote's bar through its after, so the gap is the Spacer's.
     const codeLine = (value: string, spacing: string) =>
-        `<w:p><w:pPr><w:pStyle w:val="CodeBlock"/>${spacing}</w:pPr>${run(value)}</w:p>`;
+        `<w:p><w:pPr><w:pStyle w:val="CodeBlock-plaintext"/>${spacing}</w:pPr>${run(value)}</w:p>`;
     const spacer = (before: number) =>
         `<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="${before}"/></w:pPr></w:p>`;
 
@@ -1486,7 +1569,7 @@ describe('docx writer — figures', () => {
         return descendants(await bodyOf(json), WP, 'extent').map((extent) => Number(xmlAttr(extent, '', 'cx')) / 9525);
     }
 
-    async function relationshipsOf(zip: JSZip) {
+    async function relationshipsOf(zip: ZipReader) {
         return xmlChildren(await part(zip, 'word/_rels/document.xml.rels'), RELS, 'Relationship').map((rel) => [
             xmlAttr(rel, '', 'Id'),
             xmlAttr(rel, '', 'Type'),
@@ -1867,7 +1950,7 @@ describe('docx writer — figures', () => {
             ['rId6', IMAGE_REL, 'media/image1.svg'],
         ]);
         expect((await part(zip, 'word/media/image1.svg')).local).toBe('svg');
-        expect(await zip.file('word/media/image1.png')?.async('string')).toBe('diagram png');
+        expect(entryText(zip, 'word/media/image1.png')).toBe('diagram png');
     });
 
     test('a raster is its PNG or JPEG part as prepared, and no WebP type is declared', async () => {
@@ -1876,7 +1959,7 @@ describe('docx writer — figures', () => {
             ['rId5', IMAGE_REL, 'media/image1.jpeg'],
             ['rId6', IMAGE_REL, 'media/image2.png'],
         ]);
-        expect(await zip.file('word/media/image1.jpeg')?.async('string')).toBe('photo jpeg');
+        expect(entryText(zip, 'word/media/image1.jpeg')).toBe('photo jpeg');
         // Stored, not deflated: the bytes stand in the zip as prepared.
         const bytes = await docx(doc(p(figure({ mediaName: 'photo.jpeg' }))));
         expect(Buffer.from(bytes).includes('photo jpeg')).toBe(true);
@@ -1891,9 +1974,7 @@ describe('docx writer — figures', () => {
             doc(p(figure({ ...CHART, width: 100 })), p(figure({ ...CHART, width: 200, layout: 'wrap-left' }))),
         );
         expect((await relationshipsOf(zip)).slice(4)).toEqual([['rId5', IMAGE_REL, 'media/image1.png']]);
-        expect(Object.keys(zip.files).filter((path) => path.startsWith('word/media/'))).toEqual([
-            'word/media/image1.png',
-        ]);
+        expect(zip.names().filter((path) => path.startsWith('word/media/'))).toEqual(['word/media/image1.png']);
         const document = await part(zip, 'word/document.xml');
         expect(descendants(document, WP, 'docPr').map((docPr) => xmlAttr(docPr, '', 'id'))).toEqual(['1', '2']);
         expect(
@@ -1929,10 +2010,10 @@ describe('docx writer — figures', () => {
         const json = doc(p(text('a'), figure(attrs), text('b')), p(figure(attrs)));
         expect(await blocksOf(json, prepared)).toEqual([`<w:p>${run('a')}${run('b')}</w:p>`, '<w:p/>']);
         const zip = await unzip(json, undefined, prepared);
-        expect(Object.keys(zip.files).filter((path) => path.startsWith('word/media/'))).toEqual([]);
+        expect(zip.names().filter((path) => path.startsWith('word/media/'))).toEqual([]);
         expect((await relationshipsOf(zip)).map(([, type]) => type)).not.toContain(IMAGE_REL);
         const plain = await unzip(json, undefined, media({}));
-        expect(Object.keys(plain.files).filter((path) => path.startsWith('word/media/'))).toEqual(
+        expect(plain.names().filter((path) => path.startsWith('word/media/'))).toEqual(
             'mediaName' in attrs && attrs.mediaName === 'x' ? ['word/media/image1.png'] : [],
         );
     });
@@ -2300,7 +2381,7 @@ describe('docx writer — fonts', () => {
                 const xor = Array.from({ length: 16 }, (_, i) =>
                     Number.parseInt(hex.slice(30 - 2 * i, 32 - 2 * i), 16),
                 );
-                const stored = (await zip.file(`word/${target}`)?.async('nodebuffer')) ?? Buffer.alloc(0);
+                const stored = Buffer.from(zip.read(`word/${target}`) ?? []);
                 const original = fs.readFileSync(file);
                 expect(stored.equals(original)).toBe(false);
                 const restored = Buffer.from(stored.map((byte, i) => (i < 32 ? byte ^ (xor[i % 16] ?? 0) : byte)));
@@ -2344,9 +2425,8 @@ describe('docx writer — bounds', () => {
     async function xmlBytes(json: JSONContent): Promise<number> {
         const zip = await unzip(json);
         // The embedded fonts are whole files, the same for every doc.
-        const parts = Object.values(zip.files).filter((file) => !file.name.endsWith('.odttf'));
-        const sizes = await Promise.all(parts.map(async (file) => (await file.async('string')).length));
-        return sizes.reduce((sum, size) => sum + size, 0);
+        const parts = zip.names().filter((name) => !name.endsWith('.odttf'));
+        return parts.reduce((sum, name) => sum + (entryText(zip, name)?.length ?? 0), 0);
     }
 
     // What the walk amplifies: a row of wide cells widens the grid every later row is filled to, and every list
@@ -2370,8 +2450,7 @@ describe('docx writer — bounds', () => {
 
     test('a block of more blocks than a call takes arguments exports', async () => {
         const lines = 'x\n'.repeat(1_100_000);
-        const zip = await JSZip.loadAsync(await docx(doc(code(lines, 'plaintext'))));
-        const document = (await zip.file('word/document.xml')?.async('string')) ?? '';
-        expect(document.split('w:val="CodeBlock"').length - 1).toBe(1_100_001);
+        const document = entryText(await unzip(doc(code(lines, 'plaintext'))), 'word/document.xml') ?? '';
+        expect(document.split('w:val="CodeBlock-plaintext"').length - 1).toBe(1_100_001);
     });
 });

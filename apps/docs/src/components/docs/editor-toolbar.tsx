@@ -1,6 +1,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import { EIGEN_FONTS, getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -43,6 +43,8 @@ import {
     AlignRight,
     Baseline,
     Bold,
+    CaseSensitive,
+    CaseUpper,
     CheckSquare,
     ChevronDown,
     Code,
@@ -74,6 +76,7 @@ import {
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useToolbarState } from './hooks/use-toolbar-state';
 import { PageSetupDialog } from './page-setup-dialog';
 
 type EditorToolbarProps = {
@@ -119,8 +122,7 @@ export const EditorToolbar = ({
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
-    // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
-    const [insertMenuOpen, setInsertMenuOpen] = useState(false);
+    const active = useToolbarState(editor);
     const { exportPath, isExporting } = useDocumentExport();
     // Docs' inline toolbar is the widest in the suite (~30 controls), so it folds earlier than the
     // shared 1200px default.
@@ -164,20 +166,6 @@ export const EditorToolbar = ({
         const file = files[0];
         if (file && onImageUpload) onImageUpload(file);
     };
-
-    const activeHeadingLabel = editor.isActive('heading', { level: 1 })
-        ? 'Heading 1'
-        : editor.isActive('heading', { level: 2 })
-          ? 'Heading 2'
-          : editor.isActive('heading', { level: 3 })
-            ? 'Heading 3'
-            : editor.isActive('heading', { level: 4 })
-              ? 'Heading 4'
-              : 'Normal';
-
-    // Docs stores the fontFamily attr as an EIGEN_FONTS name now; getFontName also collapses any
-    // legacy full-stack value a not-yet-normalized doc still carries.
-    const activeFontName = getFontName(editor.getAttributes('textStyle').fontFamily || '') || EIGEN_FONTS[0].name;
 
     return (
         <>
@@ -273,6 +261,16 @@ export const EditorToolbar = ({
                                             >
                                                 <ALargeSmall className="h-4 w-4 mr-2" /> Small
                                             </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleCaps('all').run()}
+                                            >
+                                                <CaseUpper className="h-4 w-4 mr-2" /> All caps
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleCaps('small').run()}
+                                            >
+                                                <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
+                                            </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
                                     <DropdownMenuSeparator />
@@ -359,12 +357,7 @@ export const EditorToolbar = ({
                                     </DropdownMenuItem>
                                 </ToolbarMenu>
 
-                                <ToolbarMenu
-                                    label="Insert"
-                                    open={insertMenuOpen}
-                                    onOpenChange={setInsertMenuOpen}
-                                    onCloseAutoFocus={keepEditorFocus}
-                                >
+                                <ToolbarMenu label="Insert" onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuItem onClick={handleLinkOperation}>
                                         <Link className="h-4 w-4 mr-2" /> Link
                                     </DropdownMenuItem>
@@ -401,10 +394,7 @@ export const EditorToolbar = ({
                                     {onAddComment && (
                                         <>
                                             <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                disabled={editor.state.selection.empty}
-                                                onClick={onAddComment}
-                                            >
+                                            <DropdownMenuItem disabled={active.selectionEmpty} onClick={onAddComment}>
                                                 <MessageSquarePlus className="h-4 w-4 mr-2" /> Comment
                                             </DropdownMenuItem>
                                         </>
@@ -422,7 +412,7 @@ export const EditorToolbar = ({
 
                             {/* Font family selector */}
                             <FontPicker
-                                value={activeFontName}
+                                value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
                             />
 
@@ -437,7 +427,9 @@ export const EditorToolbar = ({
                                         className="h-8 px-2 gap-1"
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
-                                        <span className="text-xs whitespace-nowrap">{activeHeadingLabel}</span>
+                                        <span className="text-xs whitespace-nowrap">
+                                            {active.headingLevel ? `Heading ${active.headingLevel}` : 'Normal'}
+                                        </span>
                                         <ChevronDown className="h-3 w-3" />
                                     </Button>
                                 </DropdownMenuTrigger>
@@ -480,58 +472,72 @@ export const EditorToolbar = ({
                                 <TooltipButton
                                     icon={Bold}
                                     tooltipText={`Bold (${formatForDisplay('Mod+B')})`}
-                                    active={editor.isActive('bold')}
+                                    active={active.bold}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleBold().run()}
                                 />
                                 <TooltipButton
                                     icon={Italic}
                                     tooltipText={`Italic (${formatForDisplay('Mod+I')})`}
-                                    active={editor.isActive('italic')}
+                                    active={active.italic}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleItalic().run()}
                                 />
                                 <TooltipButton
                                     icon={Underline}
                                     tooltipText={`Underline (${formatForDisplay('Mod+U')})`}
-                                    active={editor.isActive('underline')}
+                                    active={active.underline}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleUnderline().run()}
                                 />
                                 <TooltipButton
                                     icon={Strikethrough}
                                     tooltipText="Strikethrough"
-                                    active={editor.isActive('strike')}
+                                    active={active.strike}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleStrike().run()}
                                 />
                                 <TooltipButton
                                     icon={Code}
                                     tooltipText="Inline code"
-                                    active={editor.isActive('code')}
+                                    active={active.code}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleCode().run()}
                                 />
                                 <TooltipButton
                                     icon={Superscript}
                                     tooltipText="Superscript"
-                                    active={editor.isActive('superscript')}
+                                    active={active.superscript}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleSuperscript().run()}
                                 />
                                 <TooltipButton
                                     icon={Subscript}
                                     tooltipText="Subscript"
-                                    active={editor.isActive('subscript')}
+                                    active={active.subscript}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleSubscript().run()}
                                 />
                                 <TooltipButton
                                     icon={ALargeSmall}
                                     tooltipText="Small"
-                                    active={editor.isActive('small')}
+                                    active={active.small}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleSmall().run()}
+                                />
+                                <TooltipButton
+                                    icon={CaseUpper}
+                                    tooltipText={`All caps (${formatForDisplay('Mod+Shift+A')})`}
+                                    active={active.allCaps}
+                                    preventFocusLoss
+                                    onClick={() => editor.chain().focus().toggleCaps('all').run()}
+                                />
+                                <TooltipButton
+                                    icon={CaseSensitive}
+                                    tooltipText="Small caps"
+                                    active={active.smallCaps}
+                                    preventFocusLoss
+                                    onClick={() => editor.chain().focus().toggleCaps('small').run()}
                                 />
                             </div>
 
@@ -541,7 +547,7 @@ export const EditorToolbar = ({
                             <ColorPickerButton
                                 icon={Baseline}
                                 tooltipText="Text color"
-                                value={editor.getAttributes('textStyle').color || ''}
+                                value={active.color}
                                 resetLabel="Default"
                                 showSwatch
                                 onChange={(color) => {
@@ -557,10 +563,8 @@ export const EditorToolbar = ({
                             <ColorPickerButton
                                 icon={Highlighter}
                                 tooltipText="Highlight"
-                                active={editor.isActive('highlight')}
-                                value={
-                                    editor.isActive('highlight') ? editor.getAttributes('highlight').color || '' : ''
-                                }
+                                active={active.highlight}
+                                value={active.highlightColor}
                                 resetLabel="None"
                                 onChange={(color) => {
                                     if (color) {
@@ -578,21 +582,21 @@ export const EditorToolbar = ({
                                 <TooltipButton
                                     icon={AlignLeft}
                                     tooltipText="Align left"
-                                    active={editor.isActive({ textAlign: 'left' })}
+                                    active={active.alignLeft}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().setTextAlign('left').run()}
                                 />
                                 <TooltipButton
                                     icon={AlignCenter}
                                     tooltipText="Align center"
-                                    active={editor.isActive({ textAlign: 'center' })}
+                                    active={active.alignCenter}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().setTextAlign('center').run()}
                                 />
                                 <TooltipButton
                                     icon={AlignRight}
                                     tooltipText="Align right"
-                                    active={editor.isActive({ textAlign: 'right' })}
+                                    active={active.alignRight}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().setTextAlign('right').run()}
                                 />
@@ -605,21 +609,21 @@ export const EditorToolbar = ({
                                 <TooltipButton
                                     icon={List}
                                     tooltipText="Bulleted list"
-                                    active={editor.isActive('bulletList')}
+                                    active={active.bulletList}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleBulletList().run()}
                                 />
                                 <TooltipButton
                                     icon={ListOrdered}
                                     tooltipText="Numbered list"
-                                    active={editor.isActive('orderedList')}
+                                    active={active.orderedList}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleOrderedList().run()}
                                 />
                                 <TooltipButton
                                     icon={CheckSquare}
                                     tooltipText="Checklist"
-                                    active={editor.isActive('taskList')}
+                                    active={active.taskList}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleTaskList().run()}
                                 />
@@ -632,14 +636,14 @@ export const EditorToolbar = ({
                                 <TooltipButton
                                     icon={Quote}
                                     tooltipText="Blockquote"
-                                    active={editor.isActive('blockquote')}
+                                    active={active.blockquote}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleBlockquote().run()}
                                 />
                                 <TooltipButton
                                     icon={CodeXml}
                                     tooltipText="Code block"
-                                    active={editor.isActive('codeBlock')}
+                                    active={active.codeBlock}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleCodeBlock().run()}
                                 />
@@ -664,11 +668,11 @@ export const EditorToolbar = ({
                                 <TooltipButton
                                     icon={Link}
                                     tooltipText="Add link"
-                                    active={editor.isActive('link')}
+                                    active={active.link}
                                     preventFocusLoss
                                     onClick={handleLinkOperation}
                                 />
-                                {editor.isActive('link') && (
+                                {active.link && (
                                     <TooltipButton
                                         icon={Link2Off}
                                         tooltipText="Remove link"

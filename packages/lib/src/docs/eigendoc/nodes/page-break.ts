@@ -12,7 +12,7 @@ declare module '@tiptap/core' {
     }
 }
 
-// The HTML and PDF exports page at exactly this class; the docx import's hr carries it too.
+// The HTML and PDF exports page at exactly this class.
 export const PAGE_BREAK_CLASS = 'page-break';
 
 export const PageBreakNode = Node.create({
@@ -22,15 +22,14 @@ export const PageBreakNode = Node.create({
 
     atom: true,
 
-    // Above StarterKit's hard break, whose Mod-Enter would otherwise win when it is listed later. Above the
-    // horizontal rule too, so the schema lists this node first and hr.page-break parses before the bare hr rule.
+    // Above StarterKit's hard break, whose Mod-Enter would otherwise win when it is listed later.
     priority: 101,
 
     parseHTML() {
         // Any other element carrying the class, or a div with text, parses as itself and keeps its content.
         return [
             {
-                tag: `div.${PAGE_BREAK_CLASS}, hr.${PAGE_BREAK_CLASS}`,
+                tag: `div.${PAGE_BREAK_CLASS}`,
                 getAttrs: (node) => (node.textContent ? false : null),
             },
         ];

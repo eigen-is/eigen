@@ -506,7 +506,8 @@ ul[data-type="taskList"] li > div {
     min-width: 0;
 }
 
-ul[data-type="taskList"] li[data-checked="true"] > div {
+/* The item's own blocks: a line-through on the div would strike its nested tasks, and no descendant can undo one. */
+ul[data-type="taskList"] li[data-checked="true"] > div > :not([data-type="taskList"]) {
     text-decoration: line-through;
     color: var(--color-muted-foreground);
 }

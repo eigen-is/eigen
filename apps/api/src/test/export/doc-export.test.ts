@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import JSZip from 'jszip';
+import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
+import { openZip } from '../../lib/core/zip';
+import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { proseValue } from '../../lib/export/doc/prose-css';
 import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
+import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { seedEigendoc } from '../fixtures/golden-documents';
 
@@ -22,9 +24,9 @@ function brokenDoc(): Y.Doc {
     return seededDoc({ type: 'doc', content: [paragraph('Before'), { type: 'pageBreak' }, paragraph('After')] });
 }
 
-async function docxDocumentXml(doc: Y.Doc): Promise<string | undefined> {
+async function docxDocumentXml(doc: Y.Doc): Promise<string> {
     const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
-    return (await JSZip.loadAsync(data)).file('word/document.xml')?.async('string');
+    return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
 async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
@@ -46,16 +48,16 @@ describe('doc export — the page', () => {
     test('docx is an A4 page with 2 cm margins', async () => {
         const xml = await docxDocumentXml(seededDoc());
 
-        const pgSz = xml?.match(/<w:pgSz\b[^>]*>/)?.[0];
+        const pgSz = xml.match(/<w:pgSz\b[^>]*>/)?.[0];
         expect(pgSz).toContain('w:w="11906"');
         expect(pgSz).toContain('w:h="16838"');
-        const pgMar = xml?.match(/<w:pgMar\b[^>]*>/)?.[0];
+        const pgMar = xml.match(/<w:pgMar\b[^>]*>/)?.[0];
         for (const side of ['top', 'right', 'bottom', 'left']) expect(pgMar).toContain(`w:${side}="1134"`);
     });
 
     test('docx opens on the first paragraph, not an empty one', async () => {
         const xml = await docxDocumentXml(seededDoc());
-        expect(xml?.match(/<w:body>[\s\S]*?<\/w:p>/)?.[0]).toContain('Hello');
+        expect(xml.match(/<w:body>[\s\S]*?<\/w:p>/)?.[0]).toContain('Hello');
     });
 });
 
@@ -100,6 +102,38 @@ describe('doc export — the stylesheet', () => {
         expect(css).toContain('.figure, table, pre, blockquote { page-break-inside: avoid; }');
         expect(css).toContain('table:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
     });
+});
+
+describe('doc export — tasks', () => {
+    // A line-through reaches every descendant and none can undo it, so what each strike rule hits is what prints struck.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s strikes a done task but not the open task inside it',
+        async (format) => {
+            const task = (checked: boolean, text: string, nested: JSONContent[] = []): JSONContent => ({
+                type: 'taskItem',
+                attrs: { checked },
+                content: [paragraph(text), ...nested],
+            });
+            const doc = seededDoc({
+                type: 'doc',
+                content: [
+                    {
+                        type: 'taskList',
+                        content: [task(true, 'Done', [{ type: 'taskList', content: [task(false, 'Still open')] }])],
+                    },
+                ],
+            });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { window } = new JSDOM(new TextDecoder().decode(data));
+            const { document } = window;
+            const struck = [...document.styleSheets]
+                .flatMap((sheet) => [...sheet.cssRules])
+                .filter((rule) => rule instanceof window.CSSStyleRule)
+                .filter((rule) => rule.style.getPropertyValue('text-decoration').includes('line-through'))
+                .flatMap((rule) => [...document.querySelectorAll(rule.selectorText)].map((node) => node.textContent));
+            expect(struck).toEqual(['Done']);
+        },
+    );
 });
 
 describe('doc export — figures', () => {
@@ -232,7 +266,7 @@ describe('doc export — page breaks', () => {
 
     test('a docx export imports back to the same blocks', async () => {
         const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
-        const { json } = await docxToPmJson(Buffer.from(data));
+        const { json } = docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
     });
 });
@@ -249,6 +283,24 @@ describe('doc export — whitespace', () => {
             expect(html).toContain('</p></article>');
         },
     );
+});
+
+describe('doc export — caps', () => {
+    test.each(['html', 'pdf-html'] as const)('%s draws caps in CSS over the letters as typed', async (format) => {
+        const caps = (text: string, value: string) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { caps: value } }],
+        });
+        const doc = seededDoc({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [caps('Title', 'all'), caps(' Name', 'small')] }],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        expect(new TextDecoder().decode(data)).toContain(
+            '<p><span style="text-transform: uppercase">Title</span><span style="font-variant-caps: small-caps"> Name</span></p>',
+        );
+    });
 });
 
 // The docx writer's rule (doc-docx.test.ts), so a link to another Eigen file works in every format.
@@ -285,6 +337,37 @@ describe('doc export — links', () => {
         },
     );
 
+    // The editor draws a link's own color: its <a> holds the colored span, so .eigen-prose a's color has nothing to draw.
+    test.each(['html', 'pdf-html'] as const)('%s nests a colored link as the editor does', async (format) => {
+        const href = 'https://a.example/';
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'plain', marks: [{ type: 'link', attrs: { href } }] },
+                        {
+                            type: 'text',
+                            text: 'pink',
+                            marks: [
+                                { type: 'textStyle', attrs: { color: '#ff00aa' } },
+                                { type: 'underline' },
+                                { type: 'link', attrs: { href } },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        expect([...document.querySelectorAll('article p > *')].map((node) => node.outerHTML)).toEqual([
+            `<a rel="noopener noreferrer" href="${href}">plain</a>`,
+            `<a rel="noopener noreferrer" href="${href}"><span style="color: #ff00aa"><u>pink</u></span></a>`,
+        ]);
+    });
+
     test('a root-relative href stays relative without a public origin', async () => {
         expect(await hrefsOf('html')).toEqual(['/drive/x?id=1', 'https://host/x', 'https://a.example/', '#frag']);
     });
@@ -302,7 +385,7 @@ describe('doc export — docx SVG size', () => {
         });
         const media = [{ name: 'd.svg', contentType: 'image/svg+xml', data: toTransferableText(svg(attrs)) }];
         const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
-        const xml = (await (await JSZip.loadAsync(data)).file('word/document.xml')?.async('string')) ?? '';
+        const xml = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
         const [, cx = '0', cy = '0'] = xml.match(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/) ?? [];
         return [Number(cx) / 9525, Number(cy) / 9525];
     }
@@ -344,4 +427,104 @@ describe('doc export — docx SVG fallback timeout', () => {
         );
         expect(media.map(({ name, png }) => [name, png !== undefined])).toEqual([['fast.svg', true]]);
     }, 30_000);
+});
+
+function listItem(text: string, ...nested: JSONContent[]): JSONContent {
+    return { type: 'listItem', content: [paragraph(text), ...nested] };
+}
+
+function orderedList(attrs: { start?: number; type?: string }, ...items: JSONContent[]): JSONContent {
+    return { type: 'orderedList', attrs, content: items };
+}
+
+async function pdfHtml(...content: JSONContent[]): Promise<string> {
+    const doc = seededDoc({ type: 'doc', content });
+    const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+    return new TextDecoder().decode(data);
+}
+
+// WeasyPrint applies <ol start> only as a presentational hint, which the renderer leaves off, so the list's first number
+// is a counter-reset on the ol itself.
+describe('doc export — ordered lists', () => {
+    test.each(['html', 'pdf-html'] as const)(
+        '%s resets the counter on an ol that does not start at 1',
+        async (format) => {
+            const doc = seededDoc({
+                type: 'doc',
+                content: [orderedList({ start: 3 }, listItem('a')), orderedList({ start: 1 }, listItem('b'))],
+            });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const html = new TextDecoder().decode(data);
+            expect(html).toContain('<ol start="3" style="counter-reset: list-item 2">');
+            expect(html).not.toContain('list-item 0');
+            expect(html.match(/counter-reset: list-item/g)).toHaveLength(1);
+        },
+    );
+
+    test('a nested ol resets its own counter', async () => {
+        const html = await pdfHtml(orderedList({ start: 3 }, listItem('a', orderedList({ start: 5 }, listItem('b')))));
+        expect(html).toContain('list-item 2">');
+        expect(html).toContain('list-item 4">');
+    });
+
+    test.each([
+        ['a', 'lower-alpha'],
+        ['A', 'upper-alpha'],
+        ['i', 'lower-roman'],
+        ['I', 'upper-roman'],
+    ])('an ol of type %s draws %s on itself', async (type, style) => {
+        const html = await pdfHtml(orderedList({ start: 2, type }, listItem('b')));
+        expect(html).toContain(
+            `<ol start="2" type="${type}" style="counter-reset: list-item 1; list-style-type: ${style}">`,
+        );
+    });
+
+    test('a decimal ol draws no marker style of its own', async () => {
+        const html = await pdfHtml(
+            orderedList({ type: '1' }, listItem('a')),
+            orderedList({ type: 'x' }, listItem('b')),
+        );
+        expect(html).toContain('<ol type="x">');
+        expect(html).not.toMatch(/<ol [^>]*style=/);
+    });
+});
+
+const weasyPrint = await isWeasyPrintAvailable();
+const launcher = Bun.which('weasyprint');
+const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
+
+// The text of every list marker WeasyPrint lays out for the page the PDF is written from.
+const MARKER_SCRIPT = `
+import sys, weasyprint
+def walk(box):
+    yield box
+    for child in getattr(box, 'children', None) or []:
+        yield from walk(child)
+for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
+    for box in walk(page._page_box):
+        if 'marker' in str(getattr(box, 'element_tag', '')) and hasattr(box, 'text'):
+            print(box.text.strip())
+`;
+
+async function markers(html: string): Promise<string[]> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    const proc = Bun.spawn([python, '-I', '-c', MARKER_SCRIPT], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
+    proc.stdin.write(html);
+    await proc.stdin.end();
+    return (await new Response(proc.stdout).text()).trim().split('\n');
+}
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
+    test('a start, a nested start and the letter and roman types are drawn', async () => {
+        const html = await pdfHtml(
+            orderedList(
+                { start: 3 },
+                listItem('a', orderedList({ start: 5, type: 'i' }, listItem('b'))),
+                listItem('c'),
+            ),
+            orderedList({ start: 2, type: 'a' }, listItem('d'), listItem('e')),
+            orderedList({ type: 'I' }, listItem('f')),
+        );
+        expect(await markers(html)).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+    }, 60_000);
 });

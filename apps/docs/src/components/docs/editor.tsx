@@ -26,7 +26,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
-import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
+import { getFontName } from '@workspace/lib/constants/fonts';
 import { DEFAULT_PAGE_SETUP, getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -77,6 +77,7 @@ import { Figure } from './extensions/figure';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
+import { cleanPastedHTML } from './paste';
 import { TablePropertiesPanel } from './table-properties-panel';
 
 function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
@@ -386,39 +387,7 @@ const TiptapEditor = ({
                 attributes: {
                     class: 'eigen-prose',
                 },
-                transformPastedHTML: (html: string) => {
-                    const maxWidth = getEditorMaxWidth();
-                    const doc = new DOMParser().parseFromString(html, 'text/html');
-
-                    const fontMap: Record<string, string> = {
-                        'Times New Roman': getFontFamily('Source Serif 4'),
-                        Georgia: getFontFamily('Source Serif 4'),
-                        Palatino: getFontFamily('Source Serif 4'),
-                        'Palatino Linotype': getFontFamily('Source Serif 4'),
-                        'Courier New': getFontFamily('JetBrains Mono'),
-                        Consolas: getFontFamily('JetBrains Mono'),
-                        'Comic Sans MS': getFontFamily('Excalifont'),
-                    };
-                    doc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
-                        const ff = el.style.fontFamily.replace(/['"]/g, '').trim();
-                        el.style.fontFamily = fontMap[ff] ?? '';
-                    });
-
-                    doc.querySelectorAll<HTMLElement>('img, table').forEach((el) => {
-                        const attrWidth = el.getAttribute('width');
-                        const styleWidth = el.style.width;
-                        let w = 0;
-                        if (attrWidth) w = parseInt(attrWidth, 10) || 0;
-                        if (!w && styleWidth?.endsWith('px')) w = parseInt(styleWidth, 10) || 0;
-
-                        if (w > maxWidth) {
-                            el.setAttribute('width', String(Math.round(maxWidth)));
-                            el.style.width = `${Math.round(maxWidth)}px`;
-                        }
-                    });
-
-                    return doc.body.innerHTML;
-                },
+                transformPastedHTML: (html: string) => cleanPastedHTML(html, getEditorMaxWidth()),
                 handleDrop: (view, event) => {
                     if (!event.dataTransfer) return false;
                     const files = Array.from(event.dataTransfer.files);

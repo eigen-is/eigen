@@ -1,0 +1,1094 @@
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
+import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { ApiError } from '../../../lib/core/errors';
+import { LIST_LEVELS } from '../../../lib/core/ooxml';
+import * as xml from '../../../lib/core/xml';
+import { openZip, ZipReader } from '../../../lib/core/zip';
+import { docSchema } from '../../../lib/document/doc-schema';
+import { QUOTE_LOOK } from '../../../lib/document/looks';
+import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
+import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
+import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
+import {
+    buildDocxWithBody,
+    GOLDEN_DOCX_IMAGE_RUN,
+    importDocxBody,
+    marksOfType,
+    nodesOfType,
+} from '../../fixtures/golden-docx';
+import { build, deflated, stored } from '../../fixtures/raw-zip';
+
+// The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
+
+const run = (text: string, rPr = '') => `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t>${text}</w:t></w:r>`;
+const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
+const cell = (text: string, tcPr = '') => `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}${paragraph(run(text))}</w:tc>`;
+const table = (grid: number[], rows: string[][]) =>
+    `<w:tbl><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${rows
+        .map((cells) => `<w:tr>${cells.join('')}</w:tr>`)
+        .join('')}</w:tbl>`;
+const picture = (cx: number | string) =>
+    GOLDEN_DOCX_IMAGE_RUN.replace('<wp:extent cx="381000"', `<wp:extent cx="${cx}"`);
+const ordered = (numId: number, level = 0) =>
+    `<w:numPr><w:ilvl w:val="${level}"/><w:numId w:val="${numId}"/></w:numPr>`;
+const numberedFrom = (start: string) =>
+    `<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:start w:val="${start}"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>`;
+
+const noteRef = (id: number) => `<w:r><w:footnoteReference w:id="${id}"/></w:r>`;
+const footnote = (id: number, inner: string) => `<w:footnote w:id="${id}">${inner}</w:footnote>`;
+const floating = (inner: string) =>
+    `<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${inner}</w:tc></w:tr></w:tbl>`;
+
+const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+const smartArt = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="1" name="Diagram 1"/><a:graphic><a:graphicData><dgm:relIds xmlns:dgm="${DGM}" r:dm="rId20"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+const smartArtData = (inner: string) => ({
+    rels: '<Relationship Id="rId20" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData" Target="diagrams/data1.xml"/>',
+    media: {
+        'word/diagrams/data1.xml': new TextEncoder().encode(
+            `<dgm:dataModel xmlns:dgm="${DGM}" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><dgm:ptLst>${inner}</dgm:ptLst></dgm:dataModel>`,
+        ),
+    },
+});
+
+const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
+const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
+const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
+// The notes list closes the document, one item per note.
+const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
+
+// A process of its own with a deadline, for a file that could hold the reader in a loop.
+function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
+    const script = `
+        const { docxToPmJson } = await import(process.env.READER);
+        const { json } = docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
+        console.log(JSON.stringify(json));
+    `;
+    const child = Bun.spawnSync([process.execPath, '-e', script], {
+        env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },
+        stdin: new Uint8Array(docx),
+        timeout,
+    });
+    expect(child.exitedDueToTimeout).toBe(false);
+    expect(child.stderr.toString()).toBe('');
+    return JSON.parse(child.stdout.toString());
+}
+
+const MB = 1024 * 1024;
+
+// A process of its own, so its peak RSS is the import's alone, the Yjs update's on request; a refusal reports itself.
+function measuredImport(
+    docx: ArrayBuffer,
+    through: 'reader' | 'transform' = 'reader',
+): {
+    blocks?: number;
+    texts?: number;
+    status?: number;
+    message?: string;
+    rssGrowth: number;
+    cpuMs: number;
+} {
+    const script = `
+        const { docxToPmJson } = await import(process.env.READER);
+        const { importDocxToEigendocUpdate } = await import(process.env.TRANSFORM);
+        const data = await Bun.stdin.arrayBuffer();
+        const peak = process.resourceUsage().maxRSS * 1024;
+        const cpu = process.cpuUsage();
+        const count = (node) => (node.type === 'text' ? 1 : 0) + (node.content ?? []).reduce((sum, child) => sum + count(child), 0);
+        let result;
+        try {
+            if (process.env.THROUGH === 'transform') {
+                importDocxToEigendocUpdate(data, undefined);
+                result = {};
+            } else {
+                const { json } = docxToPmJson(Buffer.from(data));
+                result = { blocks: json.content.length, texts: count(json) };
+            }
+        } catch (error) {
+            result = { status: error.status, message: error.message };
+        }
+        const used = process.cpuUsage(cpu);
+        console.log(JSON.stringify({
+            ...result,
+            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
+            cpuMs: (used.user + used.system) / 1000,
+        }));
+    `;
+    const child = Bun.spawnSync([process.execPath, '-e', script], {
+        env: {
+            ...process.env,
+            READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
+            TRANSFORM: Bun.resolveSync('../../../lib/import/doc/transform', import.meta.dir),
+            THROUGH: through,
+        },
+        stdin: new Uint8Array(docx),
+    });
+    expect(child.stderr.toString()).toBe('');
+    return JSON.parse(child.stdout.toString());
+}
+
+async function rejection(read: () => unknown): Promise<ApiError> {
+    const error = await Promise.resolve()
+        .then(read)
+        .then(
+            () => undefined,
+            (reason: unknown) => reason,
+        );
+    if (!(error instanceof ApiError)) throw new Error(`expected an ApiError, got ${String(error)}`);
+    return error;
+}
+
+describe('XML budget', () => {
+    afterEach(() => {
+        for (const spy of spies) spy.mockRestore();
+        spies.length = 0;
+    });
+    const spies: { mockRestore(): void }[] = [];
+    const padding = (bytes: number) => `<!--${'x'.repeat(bytes)}-->`;
+
+    test('a document.xml past the budget is 413 before it inflates or parses', async () => {
+        const docx = await buildDocxWithBody(`${paragraph(run('Body'))}${padding(MAX_DOCX_XML_BYTES)}`);
+        const reads = spyOn(ZipReader.prototype, 'read');
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(reads, parses);
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        // The package's structure was read through the spies; the body was not.
+        expect(parses).toHaveBeenCalled();
+        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(MAX_DOCX_XML_BYTES);
+    });
+
+    // Memory follows the elements, not the bytes: 4.5 MB of empty paragraphs would cost more than 16 MB of prose.
+    test('a body past the tag budget is 413 before it parses', async () => {
+        const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_XML_TAGS));
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
+    });
+
+    test('a fontTable.xml past the budget is 413 before the body inflates', async () => {
+        const reads = spyOn(ZipReader.prototype, 'read');
+        spies.push(reads);
+        const error = await rejection(() =>
+            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_DOCX_XML_BYTES) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+    });
+
+    test('a styles.xml past the tag budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_DOCX_XML_TAGS) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    });
+
+    test('the budget counts the parts together', async () => {
+        const half = padding(MAX_DOCX_XML_BYTES / 2);
+        const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    });
+
+    test('a 23 MB webSettings.xml beside a small body imports: the reader never parses it', async () => {
+        const webSettings = `<w:webSettings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${padding(23 * 1024 * 1024)}</w:webSettings>`;
+        const { json } = await importDocxBody(paragraph(run('Body')), {
+            rels: '<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings" Target="webSettings.xml"/>',
+            media: { 'word/webSettings.xml': new TextEncoder().encode(webSettings) },
+        });
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Body']);
+    });
+
+    // As a malformed one does: the text is the document's, a theme only its looks.
+    test('a corrupt optional part costs its looks, not the document', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const parts = golden.names().map((name) => {
+            const data = golden.read(name) ?? new Uint8Array();
+            return name === 'word/styles.xml' ? { ...stored(name, data), crc: 0 } : stored(name, data);
+        });
+        const { json } = docxToPmJson(build(parts));
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Body']);
+    });
+
+    test('a part every relationship names is parsed once', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const types = ['styles', 'numbering', 'theme', 'footnotes', 'endnotes'];
+        const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${types
+            .map(
+                (type) =>
+                    `<Relationship Id="${type}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="document.xml"/>`,
+            )
+            .join('')}</Relationships>`;
+        const parts = golden.names().map((name) => {
+            const data = golden.read(name) ?? new Uint8Array();
+            return stored(name, name === 'word/_rels/document.xml.rels' ? new TextEncoder().encode(rels) : data);
+        });
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const { json } = docxToPmJson(build(parts));
+        expect(texts(json)).toEqual(['Body']);
+        const size = golden.entry('word/document.xml')?.size;
+        expect(parses.mock.calls.filter(([input]) => input.length === size)).toHaveLength(1);
+    });
+
+    test('a corrupt part every relationship names is parsed once and costs only its looks', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const types = ['styles', 'numbering', 'theme', 'footnotes', 'endnotes'];
+        const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${types
+            .map(
+                (type) =>
+                    `<Relationship Id="${type}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="broken.xml"/>`,
+            )
+            .join('')}</Relationships>`;
+        const broken = new TextEncoder().encode('<w:styles><w:style></w:styles>');
+        const parts = [
+            ...golden.names().map((name) => {
+                const data = golden.read(name) ?? new Uint8Array();
+                return stored(name, name === 'word/_rels/document.xml.rels' ? new TextEncoder().encode(rels) : data);
+            }),
+            stored('word/broken.xml', broken),
+        ];
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const { json } = docxToPmJson(build(parts));
+        expect(texts(json)).toEqual(['Body']);
+        expect(parses.mock.calls.filter(([input]) => input.length === broken.length)).toHaveLength(1);
+    });
+
+    // The second name reads the part's error, not a part without relationships.
+    test('a corrupt part fails alike for every name that reads it', async () => {
+        const encode = (text: string) => new TextEncoder().encode(text);
+        const notes = `<w:notes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:endnote w:id="1">${paragraph(run('Note'))}</w:endnote></w:notes>`;
+        const { json } = await importDocxBody(paragraph(`${run('Body')}<w:r><w:endnoteReference w:id="1"/></w:r>`), {
+            rels: ['footnotes', 'endnotes']
+                .map(
+                    (type) =>
+                        `<Relationship Id="${type}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="notes.xml"/>`,
+                )
+                .join(''),
+            media: { 'word/notes.xml': encode(notes), 'word/_rels/notes.xml.rels': encode('<Relationships>') },
+        });
+        expect(texts(json)).toEqual(['Body', '[1]']);
+    });
+
+    // A graphic's part is read once every content part is, so a cap it meets costs the graphic, not the document.
+    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(smartArt)}`,
+            smartArtData(padding(MAX_DOCX_XML_BYTES)),
+        );
+        expect(texts(json)).toEqual(['Body']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+    });
+
+    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
+        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_DOCX_XML_TAGS / 4);
+        const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const smartArtPart = smartArtData(
+            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
+        );
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
+            {
+                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: {
+                    ...smartArtPart.media,
+                    'word/charts/chart1.xml': new TextEncoder().encode(
+                        `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
+                    ),
+                },
+            },
+        );
+        expect(texts(json)).toEqual(['Body', 'Kept']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
+    });
+
+    // As a corrupt file is, rather than as a server error.
+    // The cause stays in the Worker, so the slip is logged there; a corrupt zip or XML is the file's fault and isn't.
+    test('a reader slip on a file is 400, and logged with its stack', async () => {
+        const docx = await buildDocxWithBody(paragraph(run('Body')));
+        const parses = spyOn(xml, 'parseXml').mockImplementationOnce(() => {
+            throw new TypeError('slip');
+        });
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(parses, warns);
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).toHaveBeenCalledTimes(1);
+        expect(String(warns.mock.calls[0]?.[1])).toStartWith('TypeError: slip\n');
+    });
+
+    test('a document.xml that is no XML is 400, and not logged', async () => {
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(warns);
+        const error = await rejection(async () => docxToPmJson(Buffer.from(await buildDocxWithBody('<w:p>'))));
+        expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).not.toHaveBeenCalled();
+    });
+
+    test('a part that inflates past its declared size is a corrupt file, 400', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(run('Body')))));
+        const parts = golden.names().map((name) => {
+            const data = golden.read(name) ?? new Uint8Array();
+            return name === 'word/document.xml' ? { ...deflated(name, data), size: 10 } : stored(name, data);
+        });
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(warns);
+        const error = await rejection(() => docxToPmJson(build(parts)));
+        expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).not.toHaveBeenCalled();
+    });
+});
+
+// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its own.
+describe('text pieces', () => {
+    test('Latin and Arabic in one face and one look are one piece', async () => {
+        const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
+        expect(result.texts).toBe(1);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    test('Arabic words in one look are one piece', async () => {
+        const result = measuredImport(await buildDocxWithBody(paragraph(run('كلمة '.repeat(1_400_000)))));
+        expect(result.texts).toBe(1);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    const alternating = 'aب'.repeat(2_000_000);
+    const faces = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Times New Roman"/>';
+    test.each([
+        ['complex bold', paragraph(run(alternating, '<w:bCs/>'))],
+        ['a complex face of its own', paragraph(run(alternating, faces))],
+        ['a complex face of its own in a code style', paragraph(run(alternating, faces), '<w:pStyle w:val="Code"/>')],
+    ])(
+        'Latin and Arabic alternating in %s past the piece cap are 413',
+        async (_, body) => {
+            const styles = '<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/></w:style>';
+            const result = measuredImport(await buildDocxWithBody(body, { styles }));
+            expect(result.status).toBe(413);
+            expect(result.rssGrowth).toBeLessThan(256 * MB);
+        },
+        30_000,
+    );
+
+    test('a marked run split past the piece cap is 413 through the Yjs update', async () => {
+        const rich =
+            '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Times New Roman"/><w:b/><w:i/><w:strike/><w:caps/><w:u w:val="single"/><w:color w:val="FF0000"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>';
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('aب'.repeat(MAX_DOCX_PIECES), rich)}</w:hyperlink>`);
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com" TargetMode="External"/>`;
+        const result = measuredImport(await buildDocxWithBody(body, { rels }), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    // A graphic's part reads through the tags, and a run's pieces are no XML, so neither spends what the other needs.
+    test.each(['before', 'after'])(
+        'a chart that takes nearly every tag %s a split run leaves each its own',
+        async (order) => {
+            const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+            const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+            const chart = paragraph(
+                `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+            );
+            const title = '<c:title><c:tx><c:rich><a:p><a:r><a:t>Kept</a:t></a:r></a:p></c:rich></c:tx></c:title>';
+            const part = `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}${'<c:pt/>'.repeat(MAX_DOCX_XML_TAGS - 5000)}</c:chart></c:chartSpace>`;
+            const split = paragraph(run('aب'.repeat(5000), '<w:bCs/>'));
+            const { json } = await importDocxBody(order === 'before' ? `${chart}${split}` : `${split}${chart}`, {
+                rels: `<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: { 'word/charts/chart1.xml': new TextEncoder().encode(part) },
+            });
+            expect(texts(json)).toContain('Kept');
+            expect(texts(json)).toHaveLength(10_001);
+        },
+        30_000,
+    );
+
+    test('alternating looks within the piece cap keep each', async () => {
+        const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
+        expect(texts(json)).toHaveLength(2000);
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(Array(1000).fill('ب'));
+    });
+});
+
+// What the reader emits costs the Yjs conversion per node and per mark, so the document's output weighs against one budget.
+describe('output budget', () => {
+    const rich =
+        '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Times New Roman"/><w:b/><w:i/><w:strike/><w:caps/><w:u w:val="single"/><w:color w:val="FF0000"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>';
+    const linked = (pairs: number, rPr = '') =>
+        paragraph(
+            `<w:hyperlink r:id="rId9"><w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${'<w:tab/><w:br/>'.repeat(pairs)}</w:r></w:hyperlink>`,
+        );
+    const linkTo = (href: string) =>
+        `<Relationship Id="rId9" Type="${HYPERLINK}" Target="${href}" TargetMode="External"/>`;
+
+    test('a body of empty paragraphs at the budget imports, one more is 413', async () => {
+        const at = docxToPmJson(Buffer.from(await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_WEIGHT))));
+        expect(at.json.content).toHaveLength(MAX_DOCX_WEIGHT);
+        const past = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_WEIGHT + 1));
+        const error = await rejection(() => docxToPmJson(Buffer.from(past)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    // A tab in a link with eight looks is a text node and nine marks; 360,000 of them took 4.4 GB.
+    test('marked tabs and breaks past the budget are 413 through the Yjs update', async () => {
+        const docx = await buildDocxWithBody(linked(MAX_DOCX_WEIGHT / 10 + 1000, rich), {
+            rels: linkTo('https://example.com'),
+        });
+        const result = measuredImport(docx, 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // The update spells a link's href out for every text node it marks.
+    test('a long href weighs by its length', async () => {
+        const href = `https://example.com/${'x'.repeat(16 * 1024)}`;
+        const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+});
+
+// The reader stores a table as the editor opens it; fixTables' transaction kept a copy of the table per repair.
+describe('tables the editor would repair', () => {
+    test('a row of 63 cells over 1,000 rows of one imports through the Yjs update', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const docx = await buildDocxWithBody(
+            `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(3000);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+    }, 60_000);
+
+    // A cell spanning a column of no width has none, where the column's other cells have one.
+    test('20,000 rows whose widths disagree with their column import through the Yjs update', async () => {
+        const grid = '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="0"/></w:tblGrid>';
+        const wide = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr></w:tc></w:tr>';
+        const docx = await buildDocxWithBody(`<w:tbl>${grid}<w:tr><w:tc/><w:tc/></w:tr>${wide.repeat(20_000)}</w:tbl>`);
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(3000);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+    }, 60_000);
+
+    // A continuation under a span's last column extended the cell above, which the next row's span overlapped: the
+    // editor added cells by the triangle per row, past the budget, 2.08 million from 12 KB.
+    test.each([
+        [100, 30],
+        [300, 10],
+    ])(
+        '%i rows of a span beside a continuation under the merged cell above import small',
+        async (rows, columns) => {
+            const tc = (tcPr: string) => `<w:tc><w:tcPr>${tcPr}</w:tcPr><w:p/></w:tc>`;
+            const grid = `<w:tblGrid>${'<w:gridCol w:w="500"/>'.repeat(columns + 1)}</w:tblGrid>`;
+            const first = `<w:tr>${tc('')}${tc(`<w:gridSpan w:val="${columns}"/><w:vMerge w:val="restart"/>`)}</w:tr>`;
+            const next = `<w:tr>${tc(`<w:gridSpan w:val="${columns}"/>`)}${tc('<w:vMerge/>')}</w:tr>`;
+            const docx = await buildDocxWithBody(`<w:tbl>${grid}${first}${next.repeat(rows - 1)}</w:tbl>`);
+            const result = measuredImport(docx, 'transform');
+            expect(result.status).toBeUndefined();
+            expect(result.cpuMs).toBeLessThan(2000);
+            expect(result.rssGrowth).toBeLessThan(128 * MB);
+        },
+        60_000,
+    );
+});
+
+// The TableMap the editor builds for every table: a slot per column per row, and findWidth's rescans under a rowspan.
+describe("the editor's TableMap", () => {
+    // A row ran on past the grid a column per cell and padded every other row to its width: 2.3 GB at 5,000 rows.
+    test('a first row of 20,000 cells over 1,000 rows of one imports through the Yjs update', async () => {
+        const one = '<w:tc><w:p/></w:tc>';
+        const docx = await buildDocxWithBody(
+            `<w:tbl><w:tblGrid><w:gridCol w:w="500"/></w:tblGrid><w:tr>${one.repeat(20_000)}</w:tr>${`<w:tr>${one}</w:tr>`.repeat(1000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 60_000);
+
+    // findWidth rescans the rows above each row after a rowspan: 49,000 rows of one cell took 27 s to open.
+    test('20,000 rows under a merge open in parts, within 2 s through the Yjs update', async () => {
+        const tc = (tcPr = '') => `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}<w:p/></w:tc>`;
+        const grid = '<w:tblGrid><w:gridCol w:w="500"/><w:gridCol w:w="500"/></w:tblGrid>';
+        const merged = `<w:tr>${tc('<w:vMerge w:val="restart"/>')}${tc()}</w:tr><w:tr>${tc('<w:vMerge/>')}${tc()}</w:tr>`;
+        const docx = await buildDocxWithBody(
+            `<w:tbl>${grid}${merged}${`<w:tr>${tc().repeat(2)}</w:tr>`.repeat(20_000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(2000);
+    }, 60_000);
+
+    // 135,001 nodes, within the budget, over 2.8 million slots.
+    test('45,000 rows of a cell over 63 columns weigh their area too, past the budget: 413', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const row = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="63"/></w:tcPr><w:p/></w:tc></w:tr>';
+        const result = measuredImport(await buildDocxWithBody(`<w:tbl>${grid}${row.repeat(45_000)}</w:tbl>`));
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+    }, 60_000);
+});
+
+describe('structure', () => {
+    // Word's column limit; a looped gridSpan of 2e9 would hold the Worker to its deadline.
+    test('a gridSpan past the grid spans the grid', async () => {
+        const json = await imported(table([2000, 2000], [[cell('Wide', '<w:gridSpan w:val="2000000000"/>')]]));
+        expect(cells(json).map((node) => node.attrs?.['colspan'])).toEqual([2]);
+    }, 5000);
+
+    test('a grid of more than 63 columns is read as 63', async () => {
+        const json = await imported(table(Array(100).fill(100), [[cell('All', '<w:gridSpan w:val="100"/>')]]));
+        const [only] = cells(json);
+        expect(only?.attrs?.['colspan']).toBe(63);
+        expect(only?.attrs?.['colwidth']).toHaveLength(63);
+    });
+
+    test('a row past 63 columns ends in a cell holding the text of the rest', async () => {
+        const words = Array.from({ length: 100 }, (_, index) => `c${index}`);
+        const json = await imported(table([2000], [words.map((word) => cell(word))]));
+        const row = cells(json);
+        expect(row).toHaveLength(63);
+        expect(texts(row.at(-1) ?? {})).toEqual(words.slice(62));
+    });
+
+    test('a table that merges is split every MAX_MERGED_ROWS rows, a merge across the split starting again', async () => {
+        const rows = (merge: boolean) =>
+            Array.from({ length: MAX_MERGED_ROWS + 2 }, (_, index) => [
+                cell(
+                    `r${index}`,
+                    !merge || index < MAX_MERGED_ROWS - 1
+                        ? ''
+                        : index === MAX_MERGED_ROWS - 1
+                          ? '<w:vMerge w:val="restart"/>'
+                          : '<w:vMerge/>',
+                ),
+                cell('b'),
+            ]);
+        const parts = (json: JSONContent) =>
+            nodesOfType(json, 'table').map((node) => cells(node).map((one) => one.attrs?.['rowspan'] ?? 1));
+        const merged = await imported(table([2000, 2000], rows(true)));
+        const spans = parts(merged);
+        expect(spans.map((part) => part.length)).toEqual([2 * MAX_MERGED_ROWS, 3]);
+        expect([spans[0]?.slice(-2), spans[1]]).toEqual([
+            [1, 1],
+            [2, 1, 1],
+        ]);
+        expect(parts(await imported(table([2000, 2000], rows(false))))).toHaveLength(1);
+    }, 30_000);
+
+    test('a merge that starts in the last row spans that row alone', async () => {
+        const json = await imported(
+            table(
+                [2000, 2000],
+                [
+                    [cell('Top', '<w:vMerge w:val="restart"/>'), cell('a')],
+                    [cell('', '<w:vMerge/>'), cell('b')],
+                    [cell('Last', '<w:vMerge w:val="restart"/>'), cell('c')],
+                ],
+            ),
+        );
+        expect(cells(json).map((node) => node.attrs?.['rowspan'])).toEqual([2, 1, 1, 1, 1]);
+    });
+
+    test('a basedOn cycle stops at the first repeat', async () => {
+        const styles = `<w:style w:type="paragraph" w:styleId="A"><w:name w:val="A"/><w:basedOn w:val="B"/><w:rPr><w:b/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="B"><w:name w:val="B"/><w:basedOn w:val="A"/></w:style>`;
+        const json = await imported(paragraph(run('Loop'), '<w:pStyle w:val="A"/>'), { styles });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Loop']);
+    });
+
+    test('a numStyleLink cycle stops at the first repeat', async () => {
+        const styles = `<w:style w:type="numbering" w:styleId="L1"><w:name w:val="L1"/><w:pPr><w:numPr><w:numId w:val="11"/></w:numPr></w:pPr></w:style>
+<w:style w:type="numbering" w:styleId="L2"><w:name w:val="L2"/><w:pPr><w:numPr><w:numId w:val="10"/></w:numPr></w:pPr></w:style>`;
+        const numbering = `<w:abstractNum w:abstractNumId="10"><w:numStyleLink w:val="L1"/></w:abstractNum>
+<w:abstractNum w:abstractNumId="11"><w:numStyleLink w:val="L2"/><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>
+<w:num w:numId="10"><w:abstractNumId w:val="10"/></w:num><w:num w:numId="11"><w:abstractNumId w:val="11"/></w:num>`;
+        const json = await imported(paragraph(run('Item'), ordered(10)), { styles, numbering });
+        expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
+    }, 5000);
+
+    test('quotes nest at most eight deep, deeper ones joining the eighth', async () => {
+        const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="12" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr>`;
+        const json = await imported(paragraph(run('Deep'), `${bar}<w:ind w:left="999999999"/>`));
+        let depth = 0;
+        for (let node = json.content?.[0]; node?.type === 'blockquote'; node = node.content?.[0]) depth++;
+        expect(depth).toBe(MAX_QUOTE_DEPTH);
+    }, 5000);
+
+    // Each list of its own definition nests under the item above by indent; 3,000 deep overflowed the Worker's stack.
+    test('lists nest at most nine deep, deeper items opening lists at the deepest level', async () => {
+        const count = 50;
+        const numbering = Array.from(
+            { length: count },
+            (_, index) =>
+                `<w:abstractNum w:abstractNumId="${100 + index}"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum><w:num w:numId="${100 + index}"><w:abstractNumId w:val="${100 + index}"/></w:num>`,
+        ).join('');
+        const body = Array.from({ length: count }, (_, index) =>
+            paragraph(run(`Item ${index}`), `${ordered(100 + index)}<w:ind w:left="${720 * (index + 1)}"/>`),
+        ).join('');
+        const json = await imported(body, { numbering });
+        const depth = (node: JSONContent): number =>
+            (node.type === 'bulletList' ? 1 : 0) + Math.max(0, ...(node.content ?? []).map(depth));
+        expect(depth(json)).toBe(LIST_LEVELS);
+        expect(nodesOfType(json, 'listItem')).toHaveLength(count);
+    });
+
+    // A number at its own text nests each item under the last; every empty paragraph after them looked through them all.
+    test('30,000 items each nesting under the last, then 80,000 empty paragraphs, import within 2 s', async () => {
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr><w:ind w:left="720" w:hanging="0"/></w:pPr></w:style>';
+        const body = `${paragraph('', '<w:pStyle w:val="L"/>').repeat(30_000)}${'<w:p/>'.repeat(80_000)}`;
+        const result = measuredImport(await buildDocxWithBody(body, { styles }), 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(2000);
+    }, 60_000);
+
+    test('40,000 paragraphs whose marks are deleted join in linear time', async () => {
+        const deleted = paragraph(run('x'), '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>');
+        const result = measuredImport(await buildDocxWithBody(`${deleted.repeat(40_000)}${paragraph(run('End'))}`));
+        expect([result.blocks, result.texts]).toEqual([1, 1]);
+        expect(result.cpuMs).toBeLessThan(2000);
+    }, 60_000);
+
+    test('tables nest at most eight deep, a deeper one reading as its cells', async () => {
+        const body = `${'<w:tbl><w:tr><w:tc>'.repeat(50)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(50)}`;
+        const json = await imported(body);
+        expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Core']);
+    });
+
+    test('a level outside 0 to 8 is read within it', async () => {
+        const json = await imported(paragraph(run('Item'), ordered(2, -3)));
+        expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
+    });
+
+    test('10,000 lists stay linear', async () => {
+        const nums = Array.from(
+            { length: 10_000 },
+            (_, index) =>
+                `<w:num w:numId="${100 + index}"><w:abstractNumId w:val="1"/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num>`,
+        ).join('');
+        const body = Array.from({ length: 10_000 }, (_, index) => paragraph(run('Item'), ordered(100 + index))).join(
+            '',
+        );
+        const started = performance.now();
+        const json = await imported(body, { numbering: nums });
+        expect(nodesOfType(json, 'orderedList')).toHaveLength(10_000);
+        expect(performance.now() - started).toBeLessThan(2000);
+    }, 10_000);
+
+    // A label grows with its lvlText and, in letters, with every item; a heading keeps it as text.
+    test('numbered heading labels are capped, so many cost no more than short ones', async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:start w:val="30000"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="${'%1'.repeat(2000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
+        const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
+        const started = performance.now();
+        const json = await imported(heading.repeat(5000), { numbering });
+        expect(performance.now() - started).toBeLessThan(2000);
+        const [first] = nodesOfType(json, 'heading');
+        expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
+    }, 20_000);
+
+    test('a 4 MB lvlText costs a heading what a short one does', async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="${'%1'.repeat(2_000_000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
+        const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
+        const started = performance.now();
+        const json = await imported(heading.repeat(200), { numbering });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'heading')).toHaveLength(200);
+    }, 30_000);
+
+    test('a footnote that references itself, or one that references it back, is read once', async () => {
+        const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(1)}${noteRef(3)}`), {
+            footnotes: [
+                footnote(1, paragraph(`${run('One')}${noteRef(2)}`)),
+                footnote(2, paragraph(`${run('Two')}${noteRef(1)}`)),
+                footnote(3, paragraph(`${run('Self')}${noteRef(3)}`)),
+            ].join(''),
+        });
+        const json = importInChild(docx, 10_000);
+        expect(notes(json)).toEqual(['One[3] ↑', 'Self[2] ↑', 'Two[1] ↑']);
+        expect(texts(json.content?.[0] ?? {})).toEqual(['Body', '[1]', '[2]']);
+    }, 15_000);
+
+    test('a long note referenced 400 times is read once', async () => {
+        const body = paragraph(noteRef(1).repeat(400));
+        const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
+        const started = performance.now();
+        const json = await imported(body, { footnotes });
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(notes(json)).toHaveLength(1);
+        expect(texts(json.content?.[0] ?? {})).toEqual(['[1]'.repeat(400)]);
+    }, 20_000);
+
+    test('a SmartArt that 1,000 graphics name is read once', async () => {
+        const points = Array.from(
+            { length: 1000 },
+            (_, index) =>
+                `<dgm:pt modelId="${index}"><dgm:t><a:p><a:r><a:t>P${index}</a:t></a:r></a:p></dgm:t></dgm:pt>`,
+        ).join('');
+        const started = performance.now();
+        const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(texts(json)).toHaveLength(1000);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
+    }, 60_000);
+
+    test('12,000 notes stay linear', async () => {
+        const count = 12_000;
+        const ids = Array.from({ length: count }, (_, index) => index + 1);
+        const body = paragraph(ids.map(noteRef).join(''));
+        const footnotes = ids.map((id) => footnote(id, paragraph(run(`N${id}`)))).join('');
+        const started = performance.now();
+        const json = await imported(body, { footnotes });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(notes(json)).toHaveLength(count);
+    }, 60_000);
+
+    test('a floating one-cell table that holds no figure is read once', async () => {
+        const item = (text: string) => paragraph(run(text), ordered(2));
+        const body = `${item('One')}${floating(`${item('Two')}${paragraph(`${run('Cell')}${noteRef(1)}`)}`)}${item('Three')}`;
+        const json = await imported(body, { footnotes: footnote(1, paragraph(run('Note'))) });
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1, 2, 3, 1]);
+        expect(notes(json)).toEqual(['Note ↑']);
+    });
+
+    test('floating tables nest at most eight deep, each read once', async () => {
+        const depth = 24;
+        const open = '<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tr><w:tc>';
+        const body = `${open.repeat(depth)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(depth)}`;
+        const started = performance.now();
+        const json = await imported(body);
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
+        expect(texts(json)).toEqual(['Core']);
+    }, 20_000);
+
+    test('a 10,000-deep basedOn chain costs each paragraph style no more than a short one', async () => {
+        const count = 10_000;
+        const styles = Array.from(
+            { length: count },
+            (_, index) =>
+                `<w:style w:type="paragraph" w:styleId="s${index}">${index > 0 ? `<w:basedOn w:val="s${index - 1}"/>` : '<w:rPr><w:b/></w:rPr>'}</w:style>`,
+        ).join('');
+        const body = Array.from({ length: 300 }, (_, index) =>
+            paragraph(run('Text'), `<w:pStyle w:val="s${count - 1 - index}"/>`),
+        ).join('');
+        const started = performance.now();
+        const json = await imported(body, { styles });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'paragraph')).toHaveLength(300);
+    }, 60_000);
+
+    test('a 5,000-link numStyleLink chain is walked once, not per item', async () => {
+        const links = 5000;
+        const chain = Array.from({ length: links }, (_, index) => 10 + index);
+        const numbering = chain
+            .map(
+                (id) =>
+                    `<w:num w:numId="${id}"><w:abstractNumId w:val="${id}"/></w:num><w:abstractNum w:abstractNumId="${id}"><w:numStyleLink w:val="S${id}"/></w:abstractNum>`,
+            )
+            .join('');
+        const styles = chain
+            .map(
+                (id) =>
+                    `<w:style w:type="numbering" w:styleId="S${id}"><w:pPr><w:numPr><w:numId w:val="${id + 1}"/></w:numPr></w:pPr></w:style>`,
+            )
+            .join('');
+        const body = paragraph(run('Item'), ordered(10)).repeat(10_000);
+        const started = performance.now();
+        await imported(body, { numbering, styles });
+        expect(performance.now() - started).toBeLessThan(2000);
+    }, 60_000);
+
+    // y-tiptap passes a paragraph's children to one call: 740,000 overflowed the stack.
+    test('a paragraph past the inline node cap is 413 through the Yjs update', async () => {
+        const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2 + 1)}</w:r>`);
+        const result = measuredImport(await buildDocxWithBody(body), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    test('a paragraph at the inline node cap imports', async () => {
+        const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2)}</w:r>`);
+        expect(nodesOfType(await imported(body), 'hardBreak')).toHaveLength(MAX_INLINE_NODES / 2);
+    });
+
+    test('fields left open cost each run what one field does', async () => {
+        const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
+        const body = paragraph(`<w:r>${open.repeat(40_000)}${'<w:t>x</w:t>'.repeat(40_000)}</w:r>`);
+        const started = performance.now();
+        const json = await imported(body);
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(texts(json).join('')).toHaveLength(40_000);
+    }, 60_000);
+});
+
+// A scan that backtracks per start position is quadratic in a run of one character: a million of them in a 1 KB file.
+describe('text the reader scans', () => {
+    const spaces = ' '.repeat(1_000_000);
+
+    test('a w:t trims a million interior spaces in linear time', async () => {
+        const json = importInChild(await buildDocxWithBody(paragraph(run(` a${spaces}b `))), 5_000);
+        expect(texts(json)).toEqual([`a${spaces}b`]);
+    }, 10_000);
+
+    test('a HYPERLINK field reads a million spaces before no quote in linear time', async () => {
+        const field = `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">HYPERLINK${spaces}https://example.com</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run('Link')}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const json = importInChild(await buildDocxWithBody(paragraph(field)), 5_000);
+        expect(marksOfType(json, 'link').map((mark) => mark.attrs['href'])).toEqual(['https://example.com']);
+    }, 10_000);
+});
+
+describe('values', () => {
+    test.each(['red', '12345', 'GGGGGG', '000000', 'auto'])('w:color %s is no color', async (value) => {
+        const json = await imported(paragraph(run('Text', `<w:color w:val="${value}"/>`)));
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+    });
+
+    test('a six-hex w:color is a color', async () => {
+        const json = await imported(paragraph(run('Text', '<w:color w:val="C0392B"/>')));
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['color'])).toEqual(['#c0392b']);
+    });
+
+    test.each(['purple', 'none', 'valueOf', 'hasOwnProperty', '__proto__'])(
+        'w:highlight %s is no highlight',
+        async (value) => {
+            const json = await imported(paragraph(run('Text', `<w:highlight w:val="${value}"/>`)));
+            expect(marksOfType(json, 'highlight')).toEqual([]);
+        },
+    );
+
+    test('a named highlight and a six-hex shading are highlights', async () => {
+        const json = await imported(
+            paragraph(
+                `${run('A', '<w:highlight w:val="green"/>')}${run('B', '<w:shd w:val="clear" w:fill="FFE4B5"/>')}`,
+            ),
+        );
+        expect(marksOfType(json, 'highlight').map((mark) => mark.attrs['color'])).toEqual(['#00ff00', '#ffe4b5']);
+    });
+
+    test('a font that is no Eigen name gives no font', async () => {
+        const json = await imported(paragraph(run('Text', '<w:rFonts w:ascii="Inter;x" w:hAnsi="Inter;x"/>')));
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+    });
+
+    test.each([
+        ['-5', 1],
+        ['1e9', 1],
+        ['32767', 32767],
+        ['0', 0],
+    ])('w:start %s starts the list at %d', async (start, expected) => {
+        const json = await imported(paragraph(run('Item'), ordered(5)), { numbering: numberedFrom(start) });
+        expect(nodesOfType(json, 'orderedList')[0]?.attrs?.['start']).toBe(expected);
+    });
+
+    test('a list that continues past 32,767 starts again at 1', async () => {
+        const body = `${paragraph(run('Last'), ordered(5))}${paragraph(run('Between'))}${paragraph(run('Next'), ordered(5))}`;
+        const json = await imported(body, { numbering: numberedFrom('32767') });
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([32767, 1]);
+    });
+
+    test('a column width stays between the narrowest column and the text column', async () => {
+        const json = await imported(table([1, 99_999_999], [[cell('Thin'), cell('Wide')]]));
+        expect(cells(json).map((node) => node.attrs?.['colwidth'])).toEqual([
+            [MIN_TABLE_COLUMN_PX],
+            [COLUMN_PX - MIN_TABLE_COLUMN_PX],
+        ]);
+    });
+
+    test('an image width stays within the text column', async () => {
+        const json = await imported(paragraph(picture('999999999999')));
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['width'])).toEqual([COLUMN_PX]);
+    });
+});
+
+describe('figures and media', () => {
+    const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+
+    test('a figure names its media and carries no src', async () => {
+        const { json, images } = await importDocxBody(paragraph(picture(381000)));
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['mediaName'], node.attrs?.['src']])).toEqual([
+            ['image-1.png', null],
+        ]);
+        expect(images.map((image) => image.name)).toEqual(['image-1.png']);
+    });
+
+    // A file may hold 200 MB of media; each image is the bytes the zip read, not a copy of them.
+    test('an image is a view of the bytes read, not a copy', async () => {
+        const media = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media })));
+        const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
+        const { images } = docxToPmJson(input);
+        expect(images[0]?.data.buffer).toBe(input.buffer);
+    });
+
+    // As a damaged optional part costs only its looks.
+    test('a damaged image entry is not stored and counts as unshown; the figure and the rest import', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)))));
+        const input = build(
+            golden.names().map((name) => {
+                const part = stored(name, golden.read(name) ?? new Uint8Array());
+                return name.startsWith('word/media/') ? { ...part, crc: part.crc ^ 1 } : part;
+            }),
+        );
+        const { json, images, warnings } = docxToPmJson(input);
+        expect(images).toEqual([]);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.png']);
+        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+    });
+
+    test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
+        const refuses = spyOn(docSchema(), 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        try {
+            const { json, images, warnings } = await importDocxBody(
+                `${paragraph(picture(381000))}${paragraph(run('After.'))}`,
+            );
+            expect(nodesOfType(json, 'figure')).toEqual([]);
+            expect(images).toEqual([]);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
+    });
+
+    test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {
+        const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
+        const { json, images } = await importDocxBody(
+            `${paragraph(GOLDEN_DOCX_IMAGE_RUN.replace('rId4', 'rId9'))}${paragraph(run('Figure 1'), '<w:pStyle w:val="Caption"/>')}`,
+            {
+                styles,
+                rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/page.png"/>`,
+                contentTypes: '<Override PartName="/word/media/page.png" ContentType="text/html"/>',
+                media: { 'word/media/page.png': new TextEncoder().encode('<script>alert(1)</script>') },
+            },
+        );
+        expect(images).toEqual([]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Figure 1']);
+    });
+
+    test('a linked picture is dropped, its alt text kept as text', async () => {
+        const linked = GOLDEN_DOCX_IMAGE_RUN.replace('r:embed="rId4"', 'r:link="rId9"');
+        const { json, images } = await importDocxBody(paragraph(linked), {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/chart.png" TargetMode="External"/>`,
+        });
+        expect(images).toEqual([]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['A pixel']);
+    });
+});
+
+describe('links', () => {
+    const linked = (target: string) =>
+        importDocxBody(paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`), {
+            rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="${target}" TargetMode="External"/>`,
+        });
+
+    test('a scheme the editor refuses links nowhere', async () => {
+        const { json } = await linked('javascript:alert(1)');
+        expect(marksOfType(json, 'link')).toEqual([]);
+    });
+
+    test.each([
+        ['https://eigen.example/doc/x?y#z', '/doc/x?y#z'],
+        ['https://eigen.example//evil.example/x', 'https://eigen.example//evil.example/x'],
+        ['https://eigen.example/\\evil.example', 'https://eigen.example/\\evil.example'],
+        ['https://elsewhere.example/doc/x', 'https://elsewhere.example/doc/x'],
+    ])('with the instance origin, %s links to %s', async (target, href) => {
+        const { json } = await importDocxBody(
+            paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`),
+            { rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="${target}" TargetMode="External"/>` },
+            { publicOrigin: 'https://eigen.example' },
+        );
+        expect(marksOfType(json, 'link').map((mark) => mark.attrs['href'])).toEqual([href]);
+    });
+});
+
+// The measure behind the budget: a tree costs 20–40× its XML. Seconds of work, so on CI and locally on request.
+const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
+
+// What a long report holds: headings, sentences in styled runs, links, lists two deep and tables, repeated up to
+// whichever budget it meets first: the output's, a node and a mark weighing one each.
+async function honestBody(): Promise<string> {
+    const sentence = 'The committee reviewed the quarterly figures and agreed on the next steps for the project. ';
+    const blocks = [
+        paragraph(run('Section heading on the review'), '<w:pStyle w:val="Heading1"/>'),
+        paragraph(
+            `${run(sentence)}${run(sentence, '<w:b/>')}${run(sentence, '<w:i/><w:color w:val="C0392B"/>')}<w:hyperlink r:id="rId3">${run('the full minutes')}</w:hyperlink>${run(sentence)}`,
+        ),
+        paragraph(run(sentence), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'),
+        paragraph(run(sentence), ordered(2)),
+        paragraph(run(sentence), ordered(2, 1)),
+        table(
+            [3000, 3000, 3000],
+            [
+                [cell(sentence), cell(sentence), cell(sentence)],
+                [cell(sentence), cell(sentence), cell(sentence)],
+            ],
+        ),
+    ].join('');
+    const tags = blocks.split('<').length - 1;
+    const weigh = (node: JSONContent): number =>
+        (node.marks?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + 1 + weigh(child), 0);
+    const weight = weigh((await importDocxBody(blocks)).json);
+    const margin = 0.98;
+    const fits = Math.min(MAX_DOCX_XML_BYTES / blocks.length, MAX_DOCX_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
+    return blocks.repeat(Math.floor(margin * fits));
+}
+
+describe.skipIf(!runSlow)('an honest document just under the budget', () => {
+    // A Worker's stack takes a spread of no more than about 500,000 arguments; one the reader overflowed would be 400.
+    test('600,000 paragraphs inside one content control are read in the Worker and weighed', async () => {
+        const body = `<w:sdt><w:sdtContent>${'<w:p/>'.repeat(600_000)}</w:sdtContent></w:sdt>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                data: await buildDocxWithBody(body),
+            },
+            { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
+        );
+        expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
+            413,
+            'Document too large',
+        ]);
+    }, 120_000);
+
+    test('imports within 1 GB of peak RSS and 10 s of CPU', async () => {
+        const result = measuredImport(await buildDocxWithBody(await honestBody()));
+        expect(result.blocks).toBeGreaterThan(10_000);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
+        expect(result.cpuMs).toBeLessThan(10_000);
+    }, 120_000);
+});
+
+describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
+    // y-tiptap passes a block's children to one call, which 700,000 paragraphs in one cell overflow: the budget comes first.
+    test('a block of too many children is 413, not a stack overflow', async () => {
+        const body = `<w:tbl><w:tr><w:tc>${'<w:p/>'.repeat(700_000)}</w:tc></w:tr></w:tbl>`;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                data: await buildDocxWithBody(body),
+            },
+            { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
+        );
+        expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
+            413,
+            'Document too large',
+        ]);
+    }, 120_000);
+});

@@ -1,0 +1,517 @@
+import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
+import { EditorState } from '@tiptap/pm/state';
+import { fixTables } from '@tiptap/pm/tables';
+import { docSchema } from '../../../lib/document/doc-schema';
+import { COLUMN_PX } from '../../../lib/import/doc/assemble';
+import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+
+// Rows and cells, merges, header rows and the writer's floating figure.
+
+const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
+const cell = (text: string, tcPr = '') => `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}${paragraph(run(text))}</w:tc>`;
+const row = (cells: string[], trPr = '') => `<w:tr>${trPr && `<w:trPr>${trPr}</w:trPr>`}${cells.join('')}</w:tr>`;
+const table = (rows: string[], tblPr = '') =>
+    `<w:tbl>${tblPr && `<w:tblPr>${tblPr}</w:tblPr>`}<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>${rows.join('')}</w:tbl>`;
+const FILL = '<w:shd w:val="clear" w:fill="1F4E79"/>';
+
+// Each row as its cells' types.
+async function rowTypes(body: string): Promise<string[][]> {
+    const { json } = await importDocxBody(body);
+    return nodesOfType(json, 'tableRow').map((tableRow: JSONContent) =>
+        (tableRow.content ?? []).map((node) => node.type ?? ''),
+    );
+}
+
+describe('header rows', () => {
+    // P12: Google Docs and many templates draw a header as a filled first row.
+    test('a first row filled in every cell over rows without a fill is a header row', async () => {
+        const body = table([
+            row([cell('Region', FILL), cell('Q1', FILL)]),
+            row([cell('North'), cell('4')]),
+            row([cell('South'), cell('5')]),
+        ]);
+        expect(await rowTypes(body)).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
+
+    test('a filled first row over a filled row is no header row', async () => {
+        const body = table([row([cell('A', FILL), cell('B', FILL)]), row([cell('C', FILL), cell('D')])]);
+        expect((await rowTypes(body))[0]).toEqual(['tableCell', 'tableCell']);
+    });
+
+    test('a first row filled in one cell only is no header row', async () => {
+        const body = table([row([cell('A', FILL), cell('B')]), row([cell('C'), cell('D')])]);
+        expect((await rowTypes(body))[0]).toEqual(['tableCell', 'tableCell']);
+    });
+
+    test('a w:tblHeader row is a header row, and w:tblHeader off is not', async () => {
+        const body = table([
+            row([cell('A'), cell('B')], '<w:tblHeader/>'),
+            row([cell('C'), cell('D')], '<w:tblHeader w:val="0"/>'),
+        ]);
+        expect(await rowTypes(body)).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
+});
+
+describe('table style first row', () => {
+    const styles =
+        '<w:style w:type="table" w:styleId="Grid"><w:name w:val="Grid"/><w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr></w:tblStylePr></w:style>';
+    const styled = (look: string) =>
+        table([row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])], `<w:tblStyle w:val="Grid"/>${look}`);
+
+    // ST_OnOff allows whitespace around the value.
+    test.each(['1', 'true', 'on', ' true '])(
+        'w:firstRow="%s" in tblLook applies the style\'s first row look',
+        async (value) => {
+            const { json } = await importDocxBody(styled(`<w:tblLook w:firstRow="${value}"/>`), { styles });
+            expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+        },
+    );
+
+    test('w:firstRow="false" in tblLook does not', async () => {
+        const { json } = await importDocxBody(styled('<w:tblLook w:firstRow="false"/>'), { styles });
+        expect(marksOfType(json, 'bold')).toEqual([]);
+    });
+
+    test("w:val's first row bit applies it without w:firstRow", async () => {
+        const { json } = await importDocxBody(styled('<w:tblLook w:val="0420"/>'), { styles });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+    });
+
+    test('w:firstRow="0" wins over the first row bit of w:val\'s mask', async () => {
+        const { json } = await importDocxBody(styled('<w:tblLook w:val="0420" w:firstRow="0"/>'), { styles });
+        expect(marksOfType(json, 'bold')).toEqual([]);
+    });
+    const filled = (fill: string) =>
+        `<w:style w:type="table" w:styleId="Filled"><w:name w:val="Filled"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr></w:tblStylePr></w:style>`;
+    const filledTable = (look: string) =>
+        table(
+            [row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])],
+            `<w:tblStyle w:val="Filled"/>${look}`,
+        );
+
+    // As a first row its cells fill is, and as Word repeats one marked w:tblHeader.
+    test("a first row the style fills is a header row, with the look on; white or the look off, it isn't", async () => {
+        const typesOf = async (fill: string, look: string) => {
+            const { json } = await importDocxBody(filledTable(look), { styles: filled(fill) });
+            return nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type));
+        };
+        expect(await typesOf('C0C0C0', '<w:tblLook w:firstRow="1"/>')).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+        expect((await typesOf('FFFFFF', '<w:tblLook w:firstRow="1"/>'))[0]).toEqual(['tableCell', 'tableCell']);
+        expect((await typesOf('C0C0C0', '<w:tblLook w:firstRow="0"/>'))[0]).toEqual(['tableCell', 'tableCell']);
+    });
+
+    // Word reads a table style's looks down its basedOn chain, as a paragraph style's.
+    test('a style based on one with a first row look and fill takes both', async () => {
+        const based = `${filled('C0C0C0').replace('<w:tcPr>', '<w:rPr><w:b/></w:rPr><w:tcPr>')}<w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Filled"/></w:style>`;
+        const body = table(
+            [row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])],
+            '<w:tblStyle w:val="Child"/><w:tblLook w:firstRow="1"/>',
+        );
+        const { json } = await importDocxBody(body, { styles: based });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type)),
+        ).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
+});
+
+describe('column widths', () => {
+    const gridded = (grid: (number | string)[], cells: string[]) =>
+        `<w:tbl><w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(cells)}</w:tbl>`;
+    const colwidths = (json: JSONContent) => nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth']);
+
+    // 200, 400 and 449 px: 1,049 px, which the editor would clip.
+    test('a grid wider than the text column scales down to it, column by column', async () => {
+        const { json } = await importDocxBody(gridded([3000, 6000, 6735], [cell('a'), cell('b'), cell('c')]));
+        const widths = colwidths(json);
+        expect(widths).toEqual([[122], [245], [275]]);
+        expect(widths.flat().reduce((sum, width) => sum + width, 0)).toBe(COLUMN_PX);
+    });
+
+    test('a grid that fits keeps its widths', async () => {
+        const { json } = await importDocxBody(gridded([3000, 4500], [cell('a'), cell('b')]));
+        expect(colwidths(json)).toEqual([[200], [300]]);
+    });
+
+    test('a grid in universal measures, as Strict OOXML writes it, is read in points', async () => {
+        const { json } = await importDocxBody(gridded(['150pt', '2in'], [cell('a'), cell('b')]));
+        expect(colwidths(json)).toEqual([[200], [192]]);
+    });
+
+    test("a nested table scales down to its cell's width", async () => {
+        const nested = gridded([4500, 4500], [cell('x'), cell('y')]);
+        const { json } = await importDocxBody(
+            gridded([3000, 3000], [`<w:tc>${nested}${paragraph('')}</w:tc>`, cell('b')]),
+        );
+        expect(colwidths(json)).toEqual([[200], [100], [100], [200]]);
+    });
+});
+
+// P3: Word draws light text on a fill the schema drops; on Eigen's paper it would vanish.
+describe('light text on a fill', () => {
+    const colored = (text: string, color: string, pPr = '', rPr = '') =>
+        paragraph(`<w:r><w:rPr><w:color w:val="${color}"/>${rPr}</w:rPr><w:t>${text}</w:t></w:r>`, pPr);
+    const colorsOf = async (body: string, styles = '') =>
+        marksOfType((await importDocxBody(body, { styles })).json, 'textStyle').map((mark) => [
+            mark.text,
+            mark.attrs['color'],
+        ]);
+    const filledCell = (inner: string, fill: string) =>
+        `<w:tc><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr>${inner}</w:tc>`;
+
+    test('white and light grey text in a teal cell lose their color; grey, dark blue and highlighted keep it', async () => {
+        const inner = [
+            colored('white', 'FFFFFF'),
+            colored('light', 'D9D9D9'),
+            colored('grey', '808080'),
+            colored('blue', '1F4E79'),
+            colored('marked', 'FFFFFF', '', '<w:highlight w:val="darkBlue"/>'),
+        ].join('');
+        expect(await colorsOf(table([row([filledCell(inner, '008080'), cell('b')])]))).toEqual([
+            ['grey', '#808080'],
+            ['blue', '#1f4e79'],
+            ['marked', '#ffffff'],
+        ]);
+    });
+
+    test("white text in a nested table's plain cell or a plain paragraph lets the teal cell around it show", async () => {
+        const nested = table([row([`<w:tc>${colored('nested', 'FFFFFF')}</w:tc>`, cell('b')])]);
+        const plain = colored('plain', 'FFFFFF', '<w:shd w:val="clear" w:fill="auto"/>');
+        expect(await colorsOf(table([row([filledCell(`${nested}${plain}`, '008080'), cell('b')])]))).toEqual([]);
+    });
+
+    test('white text on no fill keeps its color', async () => {
+        expect(await colorsOf(colored('white', 'FFFFFF'))).toEqual([['white', '#ffffff']]);
+    });
+
+    test('white text in a shaded paragraph loses its color', async () => {
+        expect(await colorsOf(colored('white', 'FFFFFF', '<w:shd w:val="clear" w:fill="1F4E79"/>'))).toEqual([]);
+    });
+
+    test("white text on a table style's first row fill loses its color, in the body rows it keeps it", async () => {
+        const styles =
+            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="4472C4"/></w:tcPr></w:tblStylePr></w:style>';
+        const body = table(
+            [
+                row([`<w:tc>${colored('head', 'FFFFFF')}</w:tc>`, cell('b')]),
+                row([`<w:tc>${colored('body', 'FFFFFF')}</w:tc>`, cell('d')]),
+            ],
+            '<w:tblStyle w:val="Dark"/><w:tblLook w:firstRow="1"/>',
+        );
+        expect(await colorsOf(body, styles)).toEqual([['body', '#ffffff']]);
+    });
+
+    test("white text in a table whose style's base fills it loses its color", async () => {
+        const styles =
+            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tcPr><w:shd w:val="clear" w:fill="000000"/></w:tcPr></w:style><w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Dark"/></w:style>';
+        const body = table(
+            [row([`<w:tc>${colored('white', 'FFFFFF')}</w:tc>`, cell('b')])],
+            '<w:tblStyle w:val="Child"/>',
+        );
+        expect(await colorsOf(body, styles)).toEqual([]);
+    });
+
+    test("a cell without a fill of its own in a table filled whole loses it; a cell's explicit none keeps it", async () => {
+        const body = table(
+            [row([`<w:tc>${colored('filled', 'FFFFFF')}</w:tc>`, filledCell(colored('clear', 'FFFFFF'), 'auto')])],
+            '<w:shd w:val="clear" w:fill="000000"/>',
+        );
+        expect(await colorsOf(body)).toEqual([['clear', '#ffffff']]);
+    });
+});
+
+describe('merges', () => {
+    test('gridSpan and vMerge are colspan and rowspan', async () => {
+        const body = table([
+            row([cell('Both', '<w:gridSpan w:val="2"/>')]),
+            row([cell('Down', '<w:vMerge w:val="restart"/>'), cell('x')]),
+            row([cell('', '<w:vMerge/>'), cell('y')]),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableCell').map((node) => [node.attrs?.['colspan'], node.attrs?.['rowspan']]),
+        ).toEqual([
+            [2, 1],
+            [1, 2],
+            [1, 1],
+            [1, 1],
+        ]);
+    });
+
+    // A row of nothing but continuations has no cell of its own to hold, so the cells above stop short of it.
+    test('a row of vMerge continuations only is dropped, and the cells above span one row less', async () => {
+        const body = table([
+            row([cell('A', '<w:vMerge w:val="restart"/>'), cell('B', '<w:vMerge w:val="restart"/>')]),
+            row([cell('', '<w:vMerge/>'), cell('', '<w:vMerge/>')]),
+            row([cell('C'), cell('D')]),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => node.attrs?.['rowspan']),
+            ),
+        ).toEqual([
+            [1, 1],
+            [1, 1],
+        ]);
+    });
+
+    // Word draws no cell there, so an empty one would draw a column Word lacks.
+    test("w:gridAfter's columns widen the row's last cell, w:gridBefore's its first", async () => {
+        const body = table([
+            row([cell('A')], '<w:gridAfter w:val="1"/>'),
+            row([cell('B')], '<w:gridBefore w:val="1"/>'),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['colwidth']]),
+            ),
+        ).toEqual([[[2, [200, 200]]], [[2, [200, 200]]]]);
+    });
+
+    // A merged cell spans its columns in every row it covers, so a row's skipped columns beside it stay a cell.
+    test('the columns a row skips beside a merged cell are an empty cell', async () => {
+        const body = table([
+            row([cell('A', '<w:vMerge w:val="restart"/>')], '<w:gridAfter w:val="1"/>'),
+            row([cell('', '<w:vMerge/>')], '<w:gridAfter w:val="1"/>'),
+            row([cell('B', '<w:vMerge w:val="restart"/>')], '<w:gridBefore w:val="1"/>'),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['rowspan'] ?? 1]),
+            ),
+        ).toEqual([
+            [
+                [1, 2],
+                [1, 1],
+            ],
+            [[1, 1]],
+            [
+                [1, 1],
+                [1, 1],
+            ],
+        ]);
+        expect(fixTables(EditorState.create({ doc: docSchema().nodeFromJSON(json) }))).toBeUndefined();
+    });
+
+    test('a cell whose paragraphs share one alignment is an aligned cell', async () => {
+        const centered = `<w:tc>${paragraph(run('a'), '<w:jc w:val="center"/>')}${paragraph(run('b'), '<w:jc w:val="center"/>')}</w:tc>`;
+        const { json } = await importDocxBody(table([row([centered, cell('c')])]));
+        expect(nodesOfType(json, 'tableCell').map((node) => node.attrs?.['align'] ?? null)).toEqual(['center', null]);
+    });
+});
+
+describe('wrappers', () => {
+    // The block walk's wrappers hold rows and cells too.
+    test('rows and cells inside wrappers are read', async () => {
+        const wrap = (local: string, inner: string) => `<w:${local}>${inner}</w:${local}>`;
+        const body = table([
+            row([cell('A'), wrap('smartTag', cell('B'))]),
+            wrap('smartTag', row([cell('C'), wrap('customXml', cell('D'))])),
+            wrap('ins', row([cell('E'), cell('F')])),
+        ]);
+        expect(await rowTypes(body)).toEqual([
+            ['tableCell', 'tableCell'],
+            ['tableCell', 'tableCell'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
+});
+
+describe("the writer's wrapped figure", () => {
+    test('a floating one-cell table holding a picture and its caption is a wrapped figure', async () => {
+        const float = `<w:tbl><w:tblPr><w:tblpPr w:tblpXSpec="right"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${paragraph(run('A caption'))}</w:tc></w:tr></w:tbl>`;
+        const { json } = await importDocxBody(`${float}${paragraph(run('Text beside it.'))}`);
+        expect(nodesOfType(json, 'table')).toEqual([]);
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['layout'], node.attrs?.['caption']])).toEqual([
+            ['wrap-right', 'A caption'],
+        ]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Text beside it.']);
+    });
+});
+
+// The reader writes each table as the editor opens it: well formed, so fixTables, which the editor runs on open, has
+// nothing to repair, and a crafted merge can't make the editor add cells past the output budget.
+describe('a table as the editor opens it', () => {
+    const tc = (text: string, tcPr = '') => cell(text, tcPr);
+    const RESTART = '<w:vMerge w:val="restart"/>';
+    const CONTINUE = '<w:vMerge/>';
+    const span = (n: number) => `<w:gridSpan w:val="${n}"/>`;
+    const gridOf = (...widths: number[]) =>
+        `<w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>`;
+    const tableOn = (grid: string, rows: string[]) => `<w:tbl>${grid}${rows.join('')}</w:tbl>`;
+    // Each row as colspan x rowspan and the cell's text.
+    const shape = (json: JSONContent) =>
+        nodesOfType(json, 'tableRow').map((tableRow) =>
+            (tableRow.content ?? []).map(
+                (node) =>
+                    `${node.attrs?.['colspan'] ?? 1}x${node.attrs?.['rowspan'] ?? 1}:${nodesOfType(node, 'text')
+                        .map((text) => text.text)
+                        .join('')}`,
+            ),
+        );
+    const repairs = (json: JSONContent) => fixTables(EditorState.create({ doc: docSchema().nodeFromJSON(json) }));
+
+    test.each([
+        ['w:gridBefore', [row([tc('A'), tc('B')]), row([tc('C')], '<w:gridBefore w:val="1"/>')]],
+        ['w:gridAfter', [row([tc('A')], '<w:gridAfter w:val="1"/>'), row([tc('B'), tc('C')])]],
+        ['a row short of the grid', [row([tc('A'), tc('B')]), row([tc('C')])]],
+        ['a row past the grid', [row([tc('A'), tc('B'), tc('C')]), row([tc('D'), tc('E')])]],
+        ['a w:gridSpan', [row([tc('A', span(2))]), row([tc('B'), tc('C')])]],
+        [
+            'a vMerge over two rows',
+            [row([tc('A', RESTART), tc('B')]), row([tc('', CONTINUE), tc('C')]), row([tc('D'), tc('E')])],
+        ],
+        [
+            'a vMerge over a span',
+            [row([tc('A', span(2) + RESTART), tc('B')]), row([tc('', span(2) + CONTINUE), tc('C')])],
+        ],
+        ['a continuation with nothing above', [row([tc('A'), tc('B')]), row([tc('C'), tc('', CONTINUE)])]],
+    ])('%s needs no repair', async (_, rows) => {
+        const { json } = await importDocxBody(table(rows));
+        expect(nodesOfType(json, 'table')).toHaveLength(1);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // A continuation under a column a cell above spans, past where it starts, is a cell of its own.
+    test('a continuation inside a merged cell above is no part of it', async () => {
+        const { json } = await importDocxBody(
+            tableOn(gridOf(500, 500, 500), [
+                row([tc('X'), tc('A', span(2) + RESTART)]),
+                row([tc('B', span(2)), tc('', CONTINUE)]),
+                row([tc('C', span(2)), tc('', CONTINUE)]),
+            ]),
+        );
+        expect(shape(json)).toEqual([['1x1:X', '2x1:A'], ['2x1:B', '1x2:'], ['2x1:C']]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // A row without the continuation, a skipped column say, ends the merge; a continuation after it starts one.
+    test('a merge a row leaves out stops above that row', async () => {
+        const { json } = await importDocxBody(
+            table([
+                row([tc('A', RESTART), tc('B')]),
+                row([tc('D')], '<w:gridBefore w:val="1"/>'),
+                row([tc('', CONTINUE), tc('E')]),
+            ]),
+        );
+        expect(shape(json)).toEqual([['1x1:A', '1x1:B'], ['2x1:D'], ['1x1:', '1x1:E']]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    test("a short row ends in one cell of its first cell's type over the columns it misses, with their widths", async () => {
+        const { json } = await importDocxBody(
+            tableOn(gridOf(3000, 1500, 1500), [row([tc('A')], '<w:tblHeader/>'), row([tc('B'), tc('C'), tc('D')])]),
+        );
+        const [first] = nodesOfType(json, 'tableRow');
+        expect(
+            (first?.content ?? []).map((node) => [node.type, node.attrs?.['colspan'], node.attrs?.['colwidth']]),
+        ).toEqual([
+            ['tableHeader', 1, [200]],
+            ['tableHeader', 2, [100, 100]],
+        ]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // Past the grid's widths a column has none, so the cell padding a row there is a second.
+    test("a row short of a row past the grid's widths ends in a cell within them and one past them", async () => {
+        const { json } = await importDocxBody(table([row([tc('A'), tc('B'), tc('C')]), row([tc('D')])]));
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['colwidth']]),
+            ),
+        ).toEqual([
+            [
+                [1, [200]],
+                [1, [200]],
+                [1, null],
+            ],
+            [
+                [1, [200]],
+                [1, [200]],
+                [1, null],
+            ],
+        ]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // A column of no width is 0 in a cell over it and others, as the editor gives it; a cell over it alone has none.
+    test('a column the grid gives no width', async () => {
+        const { json } = await importDocxBody(
+            tableOn(gridOf(3000, 0), [row([tc('A'), tc('B')]), row([tc('C', span(2))])]),
+        );
+        expect(nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[200], null, [200, 0]]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    describe("Word's 63 columns", () => {
+        const grid63 = gridOf(...Array(63).fill(100));
+        const cells = (prefix: string, count: number) =>
+            Array.from({ length: count }, (_, index) => tc(`${prefix}${index}`));
+
+        test.each([
+            ['no grid', ''],
+            ['a 63-column grid', grid63],
+        ])(
+            'a w:gridBefore of 63 over %s leaves the last column to its cells, the first spanning the row',
+            async (_, grid) => {
+                const { json } = await importDocxBody(
+                    tableOn(grid, [row([tc('A'), tc('B')], '<w:gridBefore w:val="63"/>')]),
+                );
+                expect(shape(json)).toEqual([['63x1:AB']]);
+                expect(repairs(json)).toBeUndefined();
+            },
+        );
+
+        test('a continuation into the last column reads the cells after it there, and as the last cell extends', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [
+                    row([...cells('a', 62), tc('M', RESTART)]),
+                    row([...cells('b', 62), tc('', CONTINUE), tc('LOST1'), tc('LOST2')]),
+                    row([...cells('c', 62), tc('', CONTINUE)]),
+                ]),
+            );
+            expect(shape(json).map((tableRow) => tableRow.at(-1))).toEqual(['1x1:M', '1x2:LOST1LOST2', '1x1:c61']);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('a continuation over all 63 columns reads the cells after it in its place', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [row([tc('M', span(63) + RESTART)]), row([tc('', span(63) + CONTINUE), tc('LOST3')])]),
+            );
+            expect(shape(json)).toEqual([['63x1:M'], ['63x1:LOST3']]);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('the last column holds the text of the cells past it, not their empty lines', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [
+                    row([...cells('a', 62), tc('last'), ...Array(1000).fill('<w:tc><w:p/></w:tc>'), tc('end')]),
+                ]),
+            );
+            const last = nodesOfType(json, 'tableCell').at(-1);
+            expect((last?.content ?? []).map((node) => nodesOfType(node, 'text').map((text) => text.text))).toEqual([
+                ['last'],
+                ['end'],
+            ]);
+            expect(repairs(json)).toBeUndefined();
+        });
+    });
+});

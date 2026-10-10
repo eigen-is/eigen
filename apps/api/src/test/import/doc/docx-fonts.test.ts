@@ -1,0 +1,191 @@
+import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
+import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+
+// The body font, OWNER ruling: a foreign body font of Eigen's body category (sans) is no mark; serif and mono are a
+// mark on every run; an unknown category is none. A monospace body is a font, never code.
+
+const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+const paragraph = (inner: string) => `<w:p>${inner}</w:p>`;
+const BODY = `${paragraph(`${run('First line ')}${run('of the body.')}`)}${paragraph(run('Second line.'))}`;
+const bodyFont = (fonts: string) =>
+    `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts ${fonts}/></w:rPr></w:rPrDefault></w:docDefaults>`;
+
+const fontsOf = (json: JSONContent) =>
+    nodesOfType(json, 'text').map(
+        (node) => node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? null,
+    );
+
+describe('body font', () => {
+    test('a Times New Roman body is Source Serif 4 on every run', async () => {
+        const { json } = await importDocxBody(BODY, {
+            styles: bodyFont('w:ascii="Times New Roman" w:hAnsi="Times New Roman"'),
+        });
+        expect(fontsOf(json)).toEqual(['Source Serif 4', 'Source Serif 4']);
+    });
+
+    test('a Calibri body is no mark', async () => {
+        const { json } = await importDocxBody(BODY, { styles: bodyFont('w:ascii="Calibri" w:hAnsi="Calibri"') });
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+    });
+
+    test('a Courier New body is JetBrains Mono on every run, with no code mark and no code block', async () => {
+        const { json } = await importDocxBody(BODY, {
+            styles: bodyFont('w:ascii="Courier New" w:hAnsi="Courier New"'),
+        });
+        expect(fontsOf(json)).toEqual(['JetBrains Mono', 'JetBrains Mono']);
+        expect(marksOfType(json, 'code')).toEqual([]);
+        expect(nodesOfType(json, 'codeBlock')).toEqual([]);
+    });
+
+    test('an unknown font is no mark', async () => {
+        const { json } = await importDocxBody(BODY, {
+            styles: bodyFont('w:ascii="Wingdings Pro Fancy" w:hAnsi="Wingdings Pro Fancy"'),
+        });
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+    });
+
+    test('a theme font resolves through theme1.xml', async () => {
+        const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Georgia"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
+        const { json } = await importDocxBody(BODY, {
+            styles: bodyFont('w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"'),
+            theme,
+        });
+        expect(fontsOf(json)).toEqual(['Source Serif 4', 'Source Serif 4']);
+    });
+
+    // G11: Word's complex script theme fonts, the theme's cs face, else its face for the script of the bidi language.
+    test.each([
+        ["the theme's cs face", '<a:cs typeface="Courier New"/>', '', 'JetBrains Mono'],
+        ["the face of the default bidi language's script", '<a:cs typeface=""/>', '', 'Source Serif 4'],
+        [
+            "the face of the run's own bidi language's script",
+            '<a:cs typeface=""/>',
+            '<w:lang w:bidi="he-IL"/>',
+            'JetBrains Mono',
+        ],
+        ['none for a language without one', '<a:cs typeface=""/>', '<w:lang w:bidi="th-TH"/>', null],
+    ])('majorBidi resolves to %s', async (_name, cs, lang, expected) => {
+        const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/>${cs}<a:font script="Arab" typeface="Times New Roman"/><a:font script="Hebr" typeface="Courier New"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
+        const styles =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:lang w:val="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const body = paragraph(
+            `<w:r><w:rPr><w:rFonts w:asciiTheme="majorBidi" w:hAnsiTheme="majorBidi"/>${lang}</w:rPr><w:t>Font</w:t></w:r>`,
+        );
+        expect(fontsOf((await importDocxBody(body, { styles, theme })).json)).toEqual([expected]);
+    });
+});
+
+// Word draws each character in the face of its script: ASCII, other Latin (high ANSI), East Asian or complex script.
+describe('fonts by script', () => {
+    const faces = 'w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Courier New" w:cs="Courier New"';
+    const spans = (json: JSONContent) =>
+        nodesOfType(json, 'text').map((node) => [
+            node.text,
+            node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? null,
+        ]);
+    const runOf = (text: string, rPr = '') =>
+        paragraph(`<w:r><w:rPr><w:rFonts ${faces}/>${rPr}</w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`);
+
+    test('a run splits where its script changes face', async () => {
+        const { json } = await importDocxBody(`${runOf('Data 数据')}${runOf('Hi مرحبا')}`);
+        expect(spans(json)).toEqual([
+            ['Data ', 'Source Serif 4'],
+            ['数据', 'JetBrains Mono'],
+            ['Hi ', 'Source Serif 4'],
+            ['مرحبا', 'JetBrains Mono'],
+        ]);
+    });
+
+    test('a run marked complex script or right to left draws all in its cs face', async () => {
+        const { json } = await importDocxBody(`${runOf('Latin', '<w:cs/>')}${runOf('Latin', '<w:rtl/>')}`);
+        expect(spans(json)).toEqual([
+            ['Latin', 'JetBrains Mono'],
+            ['Latin', 'JetBrains Mono'],
+        ]);
+    });
+
+    test('the eastAsia hint draws the characters Latin and East Asian faces share in the East Asian one', async () => {
+        const { json } = await importDocxBody(
+            paragraph(
+                `<w:r><w:rPr><w:rFonts ${faces} w:hint="eastAsia"/></w:rPr><w:t xml:space="preserve">“x”</w:t></w:r>`,
+            ),
+        );
+        expect(spans(json)).toEqual([
+            ['“', 'JetBrains Mono'],
+            ['x', 'Source Serif 4'],
+            ['”', 'JetBrains Mono'],
+        ]);
+    });
+
+    test("an East Asian theme font resolves to the theme's ea face", async () => {
+        const theme = `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface="Courier New"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>`;
+        const body = paragraph(
+            '<w:r><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia"/></w:rPr><w:t>Data 数据</w:t></w:r>',
+        );
+        expect(spans((await importDocxBody(body, { theme })).json)).toEqual([
+            ['Data ', null],
+            ['数据', 'JetBrains Mono'],
+        ]);
+    });
+
+    test("a style's East Asian face stays under a run that sets only its Latin one", async () => {
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:eastAsia="Courier New"/></w:rPr></w:rPrDefault></w:docDefaults>`;
+        const body = paragraph(
+            '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/></w:rPr><w:t>数据</w:t></w:r>',
+        );
+        expect(spans((await importDocxBody(body, { styles })).json)).toEqual([['数据', 'JetBrains Mono']]);
+    });
+});
+
+// G5: a name the map doesn't know draws in its fontTable.xml category: fixed pitch is monospace, roman serif and swiss
+// sans at a variable pitch; script, decorative and auto are an unknown category (P4), and so is a family at pitch
+// default, which Word writes for a font it has no metrics of.
+describe('fontTable.xml fallback', () => {
+    const font = (name: string, family: string, pitch = 'variable') =>
+        `<w:font w:name="${name}"><w:family w:val="${family}"/><w:pitch w:val="${pitch}"/></w:font>`;
+    const fontTable = [
+        font('Fixed Fancy', 'auto', 'fixed'),
+        font('Modern Fancy', 'modern'),
+        font('Roman Fancy', 'roman'),
+        font('Swiss Fancy', 'swiss'),
+        font('Script Fancy', 'script'),
+        font('Decorative Fancy', 'decorative'),
+        font('Unmeasured Fancy', 'roman', 'default'),
+        font('Georgia', 'swiss'),
+    ].join('');
+    const runIn = (name: string) =>
+        `<w:r><w:rPr><w:rFonts w:ascii="${name}" w:hAnsi="${name}"/></w:rPr><w:t>${name}</w:t></w:r>`;
+
+    test('an unknown name maps by its family and pitch; a known name by its own', async () => {
+        const names = [
+            'Fixed Fancy',
+            'Modern Fancy',
+            'Roman Fancy',
+            'Swiss Fancy',
+            'Script Fancy',
+            'Decorative Fancy',
+            'Unmeasured Fancy',
+            'Georgia',
+            'Unlisted Fancy',
+        ];
+        const { json } = await importDocxBody(names.map((name) => paragraph(runIn(name))).join(''), { fontTable });
+        expect(fontsOf(json)).toEqual([
+            'JetBrains Mono',
+            null,
+            'Source Serif 4',
+            null,
+            null,
+            null,
+            null,
+            'Source Serif 4',
+            null,
+        ]);
+    });
+
+    test('a shaded paragraph in an unknown fixed-pitch font is the code a Google Docs re-save flattens', async () => {
+        const shaded = `<w:p><w:pPr><w:shd w:val="clear" w:fill="F3F4F6"/></w:pPr>${runIn('Fixed Fancy')}</w:p>`;
+        const { json } = await importDocxBody(shaded, { fontTable });
+        expect(nodesOfType(json, 'codeBlock')).toHaveLength(1);
+    });
+});

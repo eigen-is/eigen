@@ -1,0 +1,222 @@
+import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
+import { parseOoxml, W_NS } from '../../../lib/core/ooxml';
+import { Styles } from '../../../lib/import/doc/styles';
+import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+
+// What a paragraph style means: roles come from style names along the basedOn chain, which Word keeps English.
+
+const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+const styled = (style: string, text: string) => `<w:p><w:pPr><w:pStyle w:val="${style}"/></w:pPr>${run(text)}</w:p>`;
+const style = (id: string, name: string, extra = '') =>
+    `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/>${extra}</w:style>`;
+const types = (json: JSONContent) =>
+    (json.content ?? []).map((node) => (node.type === 'heading' ? `heading${node.attrs?.['level']}` : node.type));
+
+describe('code block language', () => {
+    // The writer's carrier is the style's name; a LibreOffice re-save renames the id and keeps the name.
+    const CODE_STYLES = `${style('CodeBlock', 'Code Block', '<w:rPr><w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono"/></w:rPr>')}
+${style('CodeBlockjavascript', 'Code Block (javascript)', '<w:basedOn w:val="CodeBlock"/>')}
+${style('CodeBlock-python', 'Code Block (python)', '<w:basedOn w:val="CodeBlock"/>')}
+${style('CodeBlock-klingon', 'Code Block (klingon)', '<w:basedOn w:val="CodeBlock"/>')}`;
+
+    test('the language rides the style name, and blocks of two languages stay apart', async () => {
+        const body = [
+            styled('CodeBlockjavascript', 'const a = 1;'),
+            styled('CodeBlockjavascript', 'const b = 2;'),
+            styled('CodeBlock-python', 'print(a)'),
+            styled('CodeBlock-klingon', 'Qapla'),
+            styled('CodeBlock', 'plain'),
+        ].join('');
+        const { json } = await importDocxBody(body, { styles: CODE_STYLES });
+        expect(
+            nodesOfType(json, 'codeBlock').map((block) => [
+                block.attrs?.['language'],
+                nodesOfType(block, 'text')[0]?.text,
+            ]),
+        ).toEqual([
+            ['javascript', 'const a = 1;\nconst b = 2;'],
+            ['python', 'print(a)'],
+            [null, 'Qapla\nplain'],
+        ]);
+    });
+});
+
+describe('roles', () => {
+    test('headings by name whatever the id, Title as a heading, Subtitle as a paragraph', async () => {
+        const styles = `${style('Kop2', 'heading 2')}${style('Titel', 'Title')}${style('Ondertitel', 'Subtitle')}`;
+        const body = [styled('Kop2', 'Two'), styled('Titel', 'Title'), styled('Ondertitel', 'Sub')].join('');
+        expect(types((await importDocxBody(body, { styles })).json)).toEqual(['heading2', 'heading1', 'paragraph']);
+    });
+
+    test("a custom style's outline level is a heading; a TOC entry's is not", async () => {
+        const styles = `${style('Chapter', 'Chapter', '<w:pPr><w:outlineLvl w:val="1"/></w:pPr>')}${style('TOC1', 'toc 1', '<w:pPr><w:outlineLvl w:val="0"/></w:pPr>')}`;
+        const body = [styled('Chapter', 'Chapter'), styled('TOC1', 'Entry')].join('');
+        expect(types((await importDocxBody(body, { styles })).json)).toEqual(['heading2', 'paragraph']);
+    });
+
+    test("a heading style's bold is the heading's, no mark; a Quote's italic is the quote's", async () => {
+        const styles = `${style('Heading2', 'heading 2', '<w:rPr><w:b/></w:rPr>')}${style('Quote', 'Quote', '<w:rPr><w:i/></w:rPr>')}`;
+        const { json } = await importDocxBody(`${styled('Heading2', 'Head')}${styled('Quote', 'Said')}`, { styles });
+        expect(types(json)).toEqual(['heading2', 'blockquote']);
+        expect([...marksOfType(json, 'bold'), ...marksOfType(json, 'italic')]).toEqual([]);
+    });
+
+    // A heading draws its own size and weight; Word's italic Heading 4 and its color are looks Eigen's heading lacks.
+    test("a heading style's italic and color stay marks, as its bold and size don't", async () => {
+        const styles = style(
+            'Heading4',
+            'heading 4',
+            '<w:rPr><w:b/><w:i/><w:color w:val="2F5496"/><w:sz w:val="28"/></w:rPr>',
+        );
+        const { json } = await importDocxBody(styled('Heading4', 'Four'), { styles });
+        expect(types(json)).toEqual(['heading4']);
+        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([
+            { type: 'textStyle', attrs: { color: '#2f5496', fontFamily: null, caps: null } },
+            { type: 'italic' },
+        ]);
+    });
+
+    // A subtitle draws as a paragraph, which draws no look of its own.
+    test("a Subtitle style's bold, italic and small size stay marks", async () => {
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Subtitle', 'Subtitle', '<w:rPr><w:b/><w:i/><w:sz w:val="16"/></w:rPr>')}`;
+        const { json } = await importDocxBody(styled('Subtitle', 'Sub'), { styles });
+        expect(types(json)).toEqual(['paragraph']);
+        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([{ type: 'bold' }, { type: 'italic' }, { type: 'small' }]);
+    });
+});
+
+// G6: a heading set in body-sized text by hand reads as body text in Word; size alone demotes nothing, as Word's
+// Heading 4 to 6 are 11 pt on an 11 pt Normal.
+describe('headings in body-sized text', () => {
+    const STYLES = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Heading1', 'heading 1', '<w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>')}${style('Heading4', 'heading 4', '<w:rPr><w:b/><w:i/></w:rPr>')}${style('Heading6', 'heading 6', '<w:rPr><w:sz w:val="20"/></w:rPr>')}`;
+    const sized = (text: string, size?: number) =>
+        `<w:r>${size ? `<w:rPr><w:sz w:val="${size}"/></w:rPr>` : ''}<w:t xml:space="preserve">${text}</w:t></w:r>`;
+    const heading = (id: string, runs: string) => `<w:p><w:pPr><w:pStyle w:val="${id}"/></w:pPr>${runs}</w:p>`;
+    const read = async (body: string) => {
+        const { json } = await importDocxBody(body, { styles: STYLES });
+        return {
+            types: types(json),
+            bold: marksOfType(json, 'bold').map((mark) => mark.text),
+            italic: marksOfType(json, 'italic').map((mark) => mark.text),
+        };
+    };
+
+    test('a Heading 1 whose runs all carry a direct size of 9 pt on an 11 pt body is a bold paragraph', async () => {
+        expect(await read(heading('Heading1', `${sized('Small ', 18)}${sized('title', 18)}`))).toEqual({
+            types: ['paragraph'],
+            bold: ['Small title'],
+            italic: [],
+        });
+    });
+
+    test('a Heading 4 at the body size with no direct size stays a heading', async () => {
+        expect(await read(heading('Heading4', sized('Four')))).toEqual({
+            types: ['heading4'],
+            bold: [],
+            italic: ['Four'],
+        });
+    });
+
+    test('a Heading 4 whose runs carry the body size directly is a bold italic paragraph', async () => {
+        expect(await read(heading('Heading4', sized('Four', 20)))).toEqual({
+            types: ['paragraph'],
+            bold: ['Four'],
+            italic: ['Four'],
+        });
+    });
+
+    test.each([
+        ['Heading 1 with a direct size above the body', heading('Heading1', sized('Big', 24)), 'heading1'],
+        ['Heading 6 of 10 pt with its own size set directly', heading('Heading6', sized('Six', 20)), 'heading6'],
+        [
+            'Heading 1 with a run without a direct size',
+            heading('Heading1', `${sized('Small ', 18)}${sized('and not')}`),
+            'heading1',
+        ],
+    ])('a %s stays a heading', async (_name, body, type) => {
+        expect((await read(body)).types).toEqual([type]);
+    });
+
+    // Word draws complex script at szCs, so an Arabic heading is body-sized by it, not by sz.
+    test.each([
+        [
+            'Arabic at a direct szCs of 9 pt reads as body text',
+            'عنوان صغير',
+            '<w:sz w:val="36"/><w:szCs w:val="18"/>',
+            'paragraph',
+        ],
+        [
+            'Arabic at a direct sz of 9 pt and szCs of 18 pt stays a heading',
+            'عنوان صغير',
+            '<w:sz w:val="18"/><w:szCs w:val="36"/>',
+            'heading1',
+        ],
+        [
+            'Latin and Arabic at a direct sz of 18 pt and szCs of 9 pt stays a heading',
+            'Title عنوان',
+            '<w:sz w:val="36"/><w:szCs w:val="18"/>',
+            'heading1',
+        ],
+        [
+            'Latin and Arabic at a direct sz and szCs of 9 pt reads as body text',
+            'Title عنوان',
+            '<w:sz w:val="18"/><w:szCs w:val="18"/>',
+            'paragraph',
+        ],
+        [
+            'Latin marked rtl at a direct szCs of 9 pt reads as body text',
+            'Title',
+            '<w:rtl/><w:sz w:val="36"/><w:szCs w:val="18"/>',
+            'paragraph',
+        ],
+    ])('a Heading 1 of %s', async (_name, text, rPr, type) => {
+        const body = heading('Heading1', `<w:r><w:rPr>${rPr}</w:rPr><w:t>${text}</w:t></w:r>`);
+        expect((await read(body)).types).toEqual([type]);
+    });
+
+    // A numbered heading is outline structure; demoted, its number would read as a list.
+    test.each([
+        ['its style', 'Numbered', ''],
+        ['the paragraph', 'Heading1', '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>'],
+    ])('a Heading 1 numbered by %s, its runs at 9 pt, stays a heading with its label', async (_name, id, numPr) => {
+        const numbered = style(
+            'Numbered',
+            'Numbered Heading',
+            '<w:basedOn w:val="Heading1"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr>',
+        );
+        const numbering =
+            '<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>';
+        const body = `<w:p><w:pPr><w:pStyle w:val="${id}"/>${numPr}</w:pPr>${sized('Small ', 18)}${sized('title', 18)}</w:p>`;
+        const { json } = await importDocxBody(body, { styles: `${STYLES}${numbered}`, numbering });
+        const text = nodesOfType(json, 'text')
+            .map((node) => node.text)
+            .join('');
+        expect([types(json), text]).toEqual([['heading1'], '1. Small title']);
+    });
+
+    // In a cell the table style's size is the heading's where its own style sets none, as it is the runs'.
+    test.each([
+        ['14 pt, its runs set to the 11 pt body', 28, 22, 'paragraph'],
+        ['8 pt, its runs set to 9 pt', 16, 18, 'heading4'],
+    ])('a Heading 4 in a table whose style is %s', async (_name, tableSize, runSize, type) => {
+        const table = `<w:style w:type="table" w:styleId="Sized"><w:name w:val="Sized"/><w:rPr><w:sz w:val="${tableSize}"/></w:rPr></w:style>`;
+        const body = `<w:tbl><w:tblPr><w:tblStyle w:val="Sized"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>${heading('Heading4', sized('Four', runSize))}</w:tc></w:tr></w:tbl><w:p/>`;
+        const { json } = await importDocxBody(body, { styles: `${STYLES}${table}` });
+        expect(types(nodesOfType(json, 'tableCell')[0] ?? {})).toEqual([type]);
+    });
+});
+
+describe('a style with no id', () => {
+    const NAMELESS = `<w:styles xmlns:w="${W_NS}"><w:style w:type="character"><w:name w:val="Nameless"/><w:rPr><w:b/></w:rPr></w:style></w:styles>`;
+    const styles = () => new Styles(parseOoxml(NAMELESS) ?? undefined, { font: () => undefined });
+
+    test('is not the look of no style, whichever is resolved first', () => {
+        const noneFirst = styles();
+        expect(noneFirst.run(undefined)).toEqual({});
+        expect(noneFirst.run('')).toEqual({ bold: true });
+        const emptyFirst = styles();
+        expect(emptyFirst.run('')).toEqual({ bold: true });
+        expect(emptyFirst.run(undefined)).toEqual({});
+    });
+});

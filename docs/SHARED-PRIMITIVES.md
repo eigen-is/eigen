@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1626 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1630 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -514,7 +514,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (372)
+## Types (373)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -543,6 +543,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SpecialMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `StandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
 | `FigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -891,7 +892,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (771)
+## Utilities & constants (774)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1079,6 +1080,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_LABEL` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BROWSER_IMAGE_MIMES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `bundledFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `bundledFontOfCategory` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `CALENDAR_NAME_MAX_LENGTH` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `canonicalMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1095,6 +1098,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_CALENDAR_COLOR` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `DEFAULT_RELAY_PORT` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `defaultSenderAddress` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `DOCUMENT_FONT` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |

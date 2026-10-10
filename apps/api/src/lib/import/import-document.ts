@@ -5,11 +5,11 @@ import {
     type DrivePath,
     isCollabType,
 } from '@workspace/lib/types/drive';
+import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import { writeEigendocUpdateToYjs } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
 import {
-    type DocImportJob,
     type DocImportWorkerResult,
     type SheetsImportJob,
     type TransformMedia,
@@ -22,7 +22,6 @@ import type { Mount } from '../mount';
 import type { User } from '../user';
 
 const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
-const DOCX_TO_DOC: DocImportJob = { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc' };
 
 // Parsing, guards, recalc and serialization run in the transform Worker; the main
 // thread only commits what it returns — the snapshot for sheets, a ready Yjs update
@@ -38,7 +37,11 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<strin
 
 function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
     documentTransformRunner.assertAdmissible('foreground');
-    return runImportToDocumentUpdate(DOCX_TO_DOC, toTransferableBuffer(buffer), { signal });
+    return runImportToDocumentUpdate(
+        { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: getPublicOrigin() },
+        toTransferableBuffer(buffer),
+        { signal },
+    );
 }
 
 // The route checked write before buffering, but the job can queue and transform for
@@ -55,7 +58,7 @@ async function saveDocImages(mount: Mount, docPath: DrivePath, images: Transform
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
     for (const image of images) {
         const data = Buffer.from(image.data);
-        // Extracted names are deterministic (image-0.png, …), so a repeat import
+        // Extracted names are deterministic (image-1.png, …), so a repeat import
         // references the same names — overwrite them instead of 409ing after the
         // content already committed. Names the new import doesn't produce stay.
         const existing = await mount.getChildByName(mediaFolder.id, image.name);

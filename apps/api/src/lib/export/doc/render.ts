@@ -1,16 +1,15 @@
 import type { JSONContent } from '@tiptap/core';
+import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { common, createLowlight } from 'lowlight';
+import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
+import { lowlight } from '../../document/lowlight';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
 type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
 
-// The backend's one highlighter; the main thread imports this module lazily, so its grammars load only to highlight.
-export const lowlight = createLowlight(common);
-
-export function renderCodeBlockNode(node: {
+function renderCodeBlockNode(node: {
     attrs: { language?: string | null };
     textContent?: string;
     content?: unknown;
@@ -55,7 +54,7 @@ export function hastToHtml(tree: HastNode): string {
 }
 
 // The tiptap static renderer drops the `checked` attribute, so the checkbox is rendered here.
-export function renderTaskItemNode(
+function renderTaskItemNode(
     node: { attrs: { checked?: boolean | null } },
     children: string | string[] | undefined,
 ): string {
@@ -68,7 +67,7 @@ export function renderTaskItemNode(
 
 // `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview. Spans, which
 // a paragraph can hold, drawn by eigen-prose.css's .figure rules as the editor's node view is.
-export function renderFigureNode(
+function renderFigureNode(
     attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
     options?: { lazy?: boolean },
@@ -95,12 +94,32 @@ export function renderFigureNode(
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
 // with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
-export function withTrailingBreaks(node: JSONContent): JSONContent {
+function withTrailingBreaks(node: JSONContent): JSONContent {
     const content = node.content?.map(withTrailingBreaks);
     if (node.type !== 'paragraph' && node.type !== 'heading') return content ? { ...node, content } : node;
     const last = content?.at(-1);
     if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
+}
+
+// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds.
+export function renderDocHtml(
+    json: JSONContent,
+    resolveImgSrc: FigureImgSrcResolver,
+    options?: { lazy?: boolean },
+): string {
+    return renderToHTMLString({
+        content: inEditorMarkOrder(withTrailingBreaks(json)),
+        extensions: docExtensions(),
+        options: {
+            nodeMapping: {
+                codeBlock: ({ node }) => renderCodeBlockNode(node),
+                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
+                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
+                    renderFigureNode(node.attrs, resolveImgSrc, options),
+            },
+        },
+    });
 }
 
 // Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.

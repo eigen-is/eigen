@@ -38,8 +38,8 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 ## No Bun equivalent
 
 - `nodemailer`: Bun has no SMTP or mail API.
-- `jszip`: `Bun.Archive` handles tar, not zip.
-- `exiftool-vendored`, `iconv-lite`, `libmime`, `libqp`, `html-to-text`, `isomorphic-dompurify`, `exceljs`, `mammoth`, `ical.js`, `rrule`: domain libraries.
+- `jszip`: `Bun.Archive` handles tar, not zip. The docx import and export and the xlsx import and export use our own zip reader and writer (`apps/api/src/lib/core/zip.ts`); JSZip stays inside ExcelJS, and the API's tests read with it as a second, independent zip.
+- `exiftool-vendored`, `iconv-lite`, `libmime`, `libqp`, `html-to-text`, `isomorphic-dompurify`, `exceljs`, `ical.js`, `rrule`: domain libraries.
 - Browser-side packages (`nanoid`, `uuid`, `dayjs`, `numeral`, `es-toolkit`) cannot use Bun runtime APIs. The shared `escapeHtml` in `packages/lib/src/core/html.ts` runs on both sides, so it cannot switch to `Bun.escapeHTML`.
 
 ## Tooling
