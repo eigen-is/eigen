@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_CELLS, MAX_MERGES, MAX_RANGE_KEYS, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { MAX_CELLS, MAX_MERGES, MAX_VALIDATION_KEYS, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { build, deflated } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted xlsx meets before exceljs loads it: exceljs expands a range per cell while it loads, before
@@ -13,10 +13,16 @@ const PACKAGE_REL = 'http://schemas.openxmlformats.org/package/2006/relationship
 
 // One sheet holding A1; `after` follows the sheet data, `before` precedes it, `names` sits in the workbook.
 function xlsx(
-    sheet: { before?: string; data?: string; after?: string; names?: string },
+    sheet: { before?: string; data?: string; after?: string; names?: string; workbookPart?: string },
     extra: { name: string; xml: string }[] = [],
 ): Buffer {
-    const { before = '', data = '<row r="1"><c r="A1"><v>1</v></c></row>', after = '', names = '' } = sheet;
+    const {
+        before = '',
+        data = '<row r="1"><c r="A1"><v>1</v></c></row>',
+        after = '',
+        names = '',
+        workbookPart = 'xl/workbook.xml',
+    } = sheet;
     return build(
         [
             {
@@ -28,7 +34,7 @@ function xlsx(
                 xml: `<Relationships xmlns="${PACKAGE_REL}"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
             },
             {
-                name: 'xl/workbook.xml',
+                name: workbookPart,
                 xml: `<workbook xmlns="${SML}" xmlns:r="${REL}"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets>${names}</workbook>`,
             },
             {
@@ -48,7 +54,10 @@ const merges = (...refs: string[]) =>
     `<mergeCells count="${refs.length}">${refs.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>`;
 const validation = (sqref: string) =>
     `<dataValidations count="1"><dataValidation type="whole" operator="between" sqref="${sqref}"><formula1>1</formula1><formula2>10</formula2></dataValidation></dataValidations>`;
-const definedName = (text: string) => `<definedNames><definedName name="big">${text}</definedName></definedNames>`;
+const definedName = (text: string, name = 'big') => `<definedName name="${name}">${text}</definedName>`;
+const definedNames = (text: string) => `<definedNames>${definedName(text)}</definedNames>`;
+// exceljs walks every cell of a name's range: this one has 17 billion.
+const WHOLE_GRID = 'S!$A$1:$XFD$1048576';
 const columns = (min: number | string, max: number | string) =>
     `<cols><col min="${min}" max="${max}" width="20" customWidth="1"/></cols>`;
 // exceljs reads sheets by part name alone, so it never sees this part: the scan counts it without exceljs paying for it.
@@ -61,7 +70,13 @@ const MB = 1024 * 1024;
 
 // A process of its own with a deadline, so its peak RSS is the import's alone and a file exceljs expands can't hold
 // the suite; a refusal reports itself.
-function measuredImport(file: Buffer): { status?: number; message?: string; rssGrowth: number; cpuMs: number } {
+function measuredImport(file: Buffer): {
+    cells?: number[];
+    status?: number;
+    message?: string;
+    rssGrowth: number;
+    cpuMs: number;
+} {
     const script = `
         const { xlsxToSheets } = await import(process.env.READER);
         const data = Buffer.from(await Bun.stdin.arrayBuffer());
@@ -69,7 +84,8 @@ function measuredImport(file: Buffer): { status?: number; message?: string; rssG
         const cpu = process.cpuUsage();
         let result = {};
         try {
-            await xlsxToSheets(data);
+            const sheets = await xlsxToSheets(data);
+            result = { cells: sheets.map((sheet) => sheet.celldata.length) };
         } catch (error) {
             result = { status: error.status, message: error.message };
         }
@@ -108,7 +124,6 @@ describe('what exceljs expands per cell is refused before it loads', () => {
     test.each([
         ['a validation over the whole grid', { after: validation('A1:XFD1048576') }],
         ['a merge of 26 whole columns', { after: merges('A1:Z1048576') }],
-        ['a defined name over the whole grid', { names: definedName('S!$A$1:$XFD$1048576') }],
         ['a column range past the grid', { before: columns(1, 100_000_000) }],
         ['a column range starting past the grid', { before: columns(100_000_000, 1) }],
     ])(
@@ -160,17 +175,8 @@ describe('each cap', () => {
         );
     });
 
-    test('validated cells and named cells share one cap, every range of a sqref counted', async () => {
-        const names = MAX_RANGE_KEYS / 2;
-        const sqref = (extra: number) => `${row(names / 2)} B1:B${names / 2 + extra}`;
-        const file = (extra: number) =>
-            xlsx({}, [unread(`${validation(sqref(extra))}${definedName(`S!$A$1:$A$${names}`)}`)]);
-        expect(await outcome(file(0))).toBe('imported');
-        expect(await outcome(file(1))).toEqual(TOO_LARGE);
-    });
-
     test('validated cells alone may reach the cap', async () => {
-        const half = MAX_RANGE_KEYS / 2;
+        const half = MAX_VALIDATION_KEYS / 2;
         const file = (extra: number) => xlsx({}, [unread(validation(`${row(half)} B1:B${half + extra}`))]);
         expect(await outcome(file(0))).toBe('imported');
         expect(await outcome(file(1))).toEqual(TOO_LARGE);
@@ -204,34 +210,16 @@ describe('what the scan reads', () => {
         ['a sheet name before the range', `<mergeCell ref="S!${over}"/>`],
         ['dollar anchors', `<mergeCell ref="$A$1:$A$4000001"/>`],
         ['the ends swapped', `<mergeCell ref="A4000001:A1"/>`],
+        // exceljs's decoder takes every capital before the first digit as the column: M, Z and A make column 9,465.
+        ['an unquoted sheet name with a space', '<mergeCell ref="M Z!A1:B500"/>'],
     ])('a merge spelled with %s counts', async (_name, xml) => {
         expect(await outcome(xlsx({}, [unread(xml)]))).toEqual(TOO_LARGE);
     });
 
     // exceljs reads a part as UTF-8 and splits a sqref on any space JavaScript knows.
     test('a validation whose ranges an em space separates counts each', async () => {
-        const sqref = `A1:A2 A1:A${MAX_RANGE_KEYS + 1}`;
+        const sqref = `A1:A2 A1:A${MAX_VALIDATION_KEYS + 1}`;
         expect(await outcome(xlsx({}, [unread(validation(sqref))]))).toEqual(TOO_LARGE);
-    });
-
-    // exceljs's decoder takes the capitals before the first digit as the column, past a sheet name it couldn't strip.
-    test('a defined name counts with the column exceljs reads past an unquoted sheet name with a space', async () => {
-        const name = definedName(`M Z!$A$1:$B$${Math.ceil(MAX_RANGE_KEYS / 9000)}`);
-        expect(await outcome(xlsx({ names: name }))).toEqual(TOO_LARGE);
-    });
-
-    test.each([
-        ['a quoted sheet name holding a comma', `'XYZ,XYZ'!$A$1:$A$${MAX_RANGE_KEYS + 1}`],
-        ['entities', `&apos;P&amp;L&apos;!$A$1&#58;$A$${MAX_RANGE_KEYS + 1}`],
-        ['a second range', `S!$A$1,S!$A$1:$A$${MAX_RANGE_KEYS + 1}`],
-    ])('a defined name with %s counts', async (_name, text) => {
-        expect(await outcome(xlsx({ names: definedName(text) }))).toEqual(TOO_LARGE);
-    });
-
-    // exceljs joins text around a comment; a name whose text holds markup is not counted, so it is refused.
-    test('a defined name with markup in its text is 413', async () => {
-        const name = definedName('S!$A$1:<!-- -->$A$2');
-        expect(await outcome(xlsx({ names: name }))).toEqual(TOO_LARGE);
     });
 
     // exceljs reads only unprefixed names, and no column has such a name.
@@ -248,10 +236,7 @@ describe('what the scan reads', () => {
             xlsx({
                 before: columns(1, REFERENCE_COLUMN_COUNT),
                 after: `${merges('A1:C1', 'A2:A3')}${validation('D2:D1048576')}`,
-                names: definedName('S!$A$1:$L$1000').replace(
-                    'name="big"',
-                    'name="_xlnm._FilterDatabase" localSheetId="0" hidden="1"',
-                ),
+                names: `<definedNames>${definedName('S!$A$1:$L$1000', '_xlnm._FilterDatabase')}</definedNames>`,
             }),
         );
         expect(sheets[0].config?.merge).toEqual({
@@ -259,5 +244,59 @@ describe('what the scan reads', () => {
             '1_0': { r: 1, c: 0, rs: 2, cs: 1 },
         });
         expect(Object.keys(sheets[0].dataVerification ?? {}).length).toBeGreaterThan(0);
+    }, 30_000);
+});
+
+// Eigen drops defined names, so the import hides them from exceljs instead of counting what it would expand.
+describe('defined names never reach exceljs', () => {
+    const expand = definedName(WHOLE_GRID);
+    test.each([
+        [
+            'names over external workbooks covering 614 million cells, as a GOV.UK workbook has',
+            `<definedNames>${['Derived', 'External', 'Gross', 'Net']
+                .map(
+                    (name, i) =>
+                        `<definedName name="${name}" localSheetId="${i}">[1]${name}!$B$9:$ES$1048576</definedName>`,
+                )
+                .join('')}</definedNames>`,
+        ],
+        ['a name over the whole grid', definedNames(WHOLE_GRID)],
+        ['attributes and whitespace in both tags', `<definedNames a="1"\n>${expand}</definedNames\t>`],
+        ['a default namespace declared on it', `<definedNames xmlns="${SML}">${expand}</definedNames>`],
+        [
+            'a prefix, which exceljs reads as another element',
+            `<x:definedNames xmlns:x="${SML}">${expand}</x:definedNames>`,
+        ],
+        ['an end tag in a comment inside it', `<definedNames><!-- </definedNames> -->${expand}</definedNames>`],
+        [
+            'an end tag in CDATA inside it',
+            `<definedNames>${definedName('<![CDATA[</definedNames>]]>', 'a')}${expand}</definedNames>`,
+        ],
+        ['an empty one before another', `<definedNames/><definedNames>${expand}</definedNames>`],
+        ['one inside an element exceljs ignores', `<extLst><ext><definedNames>${expand}</definedNames></ext></extLst>`],
+        ['a nested one', `<definedNames><definedNames>${expand}</definedNames>${expand}</definedNames>`],
+    ])(
+        '%s imports at no cost',
+        (_name, names) => {
+            const result = measuredImport(xlsx({ names }));
+            expect(result.cells).toEqual([1]);
+            expect(result.rssGrowth).toBeLessThan(64 * MB);
+            expect(result.cpuMs).toBeLessThan(2_000);
+        },
+        30_000,
+    );
+
+    // exceljs reads a part named with a leading slash as the one without.
+    test('a workbook part named with a leading slash imports at no cost', () => {
+        const result = measuredImport(xlsx({ names: definedNames(WHOLE_GRID), workbookPart: '/xl/workbook.xml' }));
+        expect(result.cells).toEqual([1]);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    test('a block that never closes costs nothing', () => {
+        const result = measuredImport(xlsx({ names: `<definedNames>${expand}` }));
+        expect(result.cells).toBeUndefined();
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
 });

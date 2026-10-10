@@ -30,7 +30,6 @@ import {
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import colCache from 'exceljs/lib/utils/col-cache';
-import DefinedNameXform from 'exceljs/lib/xlsx/xform/book/defined-name-xform';
 import { ApiError } from '../../core/errors';
 import { A_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS, toTransitional } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
@@ -106,12 +105,13 @@ function repackXlsx(buffer: Buffer): Buffer {
     try {
         const zip = openZip(buffer);
         const entries: ZipWriteEntry[] = [];
-        const tally: ExpansionTally = { merges: 0, mergedCells: 0, rangeKeys: 0 };
+        const tally: ExpansionTally = { merges: 0, mergedCells: 0, validationKeys: 0 };
         for (const name of zip.names()) {
             const data = zip.read(name);
             if (!data) continue;
-            tallyExpansions(Buffer.from(data.buffer, data.byteOffset, data.byteLength), tally);
-            entries.push({ name, data, store: true });
+            const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+            tallyExpansions(bytes, tally);
+            entries.push({ name, data: withoutDefinedNames(bytes), store: true });
         }
         const packed = writeZip(entries);
         return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
@@ -123,49 +123,44 @@ function repackXlsx(buffer: Buffer): Buffer {
 }
 
 // exceljs expands these per cell while it loads, before MAX_CELLS can count anything: a merge into its cells, each
-// merge checked against every earlier one; a validation's sqref into a model key per cell; a defined name's range into
-// a matrix entry per cell; a <col> into a column object per column up to its min or max.
-type ExpansionTally = { merges: number; mergedCells: number; rangeKeys: number };
+// merge checked against every earlier one; a validation's sqref into a model key per cell; a <col> into a column object
+// per column up to its min or max.
+type ExpansionTally = { merges: number; mergedCells: number; validationKeys: number };
 
 // Merged cells count against MAX_CELLS, as cells. exceljs takes 2.4 s to check 10k merges pairwise, 27 s for 30k.
 export const MAX_MERGES = 10_000;
-// A validation key costs ~300 B and a named cell ~110 B, so 5M keys is ~1.5 GB, what 1M ordinary cells cost.
-export const MAX_RANGE_KEYS = 5_000_000;
+// A validation key costs ~300 B, so 5M keys is ~1.5 GB, what 1M ordinary cells cost; four column-wide validations fit.
+export const MAX_VALIDATION_KEYS = 5_000_000;
 
 // Every part is counted, not only those exceljs reads as sheets: a byte search, as a sheet may be the decompressed cap.
 function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
-    for (const { attributes } of startTags(bytes, 'mergeCell')) {
+    for (const attributes of startTags(bytes, 'mergeCell')) {
         tally.merges += 1;
         tally.mergedCells += rangeArea(attributes.get('ref') ?? '');
         if (tally.merges > MAX_MERGES || tally.mergedCells > MAX_CELLS) throw tooLarge();
     }
-    for (const { attributes } of startTags(bytes, 'dataValidation')) {
+    for (const attributes of startTags(bytes, 'dataValidation')) {
         // exceljs keys every piece of a sqref split on whitespace.
         for (const [ref] of (attributes.get('sqref') ?? '').matchAll(/\S+/g)) {
-            tally.rangeKeys += rangeArea(ref);
-            if (tally.rangeKeys > MAX_RANGE_KEYS) throw tooLarge();
+            tally.validationKeys += rangeArea(ref);
+            if (tally.validationKeys > MAX_VALIDATION_KEYS) throw tooLarge();
         }
     }
-    for (const { attributes } of startTags(bytes, 'col')) {
+    for (const attributes of startTags(bytes, 'col')) {
         const bounds = [attributes.get('min'), attributes.get('max')];
         if (bounds.some((bound) => Number.parseInt(bound ?? '', 10) > REFERENCE_COLUMN_COUNT)) throw tooLarge();
     }
-    for (const { text, next } of startTags(bytes, 'definedName')) {
-        if (text === undefined) continue;
-        // exceljs joins a name's text around a comment or CDATA; a name holding markup isn't counted, so it is refused.
-        if (bytes.toString('latin1', next, next + DEFINED_NAME_END.length) !== DEFINED_NAME_END) throw tooLarge();
-        const name = new DefinedNameXform();
-        name.parseOpen({ name: 'definedName', attributes: {} });
-        name.parseText(unescapeXml(text));
-        name.parseClose();
-        for (const range of name.model.ranges) {
-            tally.rangeKeys += rangeArea(range);
-            if (tally.rangeKeys > MAX_RANGE_KEYS) throw tooLarge();
-        }
-    }
 }
 
-const DEFINED_NAME_END = '</definedName';
+// Eigen drops defined names, and exceljs expands each one's range per cell, 614M cells in one GOV.UK workbook. It
+// matches the element by its exact name at any depth, so renaming every start and end tag hides it, still well-formed.
+const DEFINED_NAMES_TAG = /<(\/?)definedNames/g;
+
+function withoutDefinedNames(bytes: Buffer): Buffer {
+    if (bytes.indexOf('definedNames') < 0) return bytes;
+    // latin1 maps each byte to one character and back, so every other byte stays as it was.
+    return Buffer.from(bytes.toString('latin1').replace(DEFINED_NAMES_TAG, '<$1ignoredNames'), 'latin1');
+}
 
 function tooLarge(): ApiError {
     return new ApiError(413, 'Spreadsheet too large');
@@ -182,20 +177,16 @@ function rangeArea(ref: string): number {
 
 // Sticky, so attributes are read only in order from right after the name: a longer name like `<cols` reads none.
 const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/y;
-const TAG_END = /^\s*(\/?)>/;
+const TAG_END = /^\s*\/?>/;
 
-// Each start tag of an element by its unprefixed name, the only one exceljs matches. No attribute value holds a `<`, so
-// a tag and the text after it run to the next `<`, at `next`; `text` is undefined for an empty element.
-function* startTags(
-    bytes: Buffer,
-    name: string,
-): Generator<{ attributes: Map<string, string>; text: string | undefined; next: number }> {
+// The attributes of each start tag of an element by its unprefixed name, the only one exceljs matches. No attribute
+// value holds a `<`, so a tag runs to the next one.
+function* startTags(bytes: Buffer, name: string): Generator<Map<string, string>> {
     const open = `<${name}`;
     for (let at = bytes.indexOf(open); at >= 0; at = bytes.indexOf(open, at + open.length)) {
         const start = at + open.length;
-        const found = bytes.indexOf('<', start);
-        const next = found < 0 ? bytes.length : found;
-        const markup = bytes.toString('utf8', start, next);
+        const next = bytes.indexOf('<', start);
+        const markup = bytes.toString('utf8', start, next < 0 ? bytes.length : next);
         const attributes = new Map<string, string>();
         let end = 0;
         ATTRIBUTE.lastIndex = 0;
@@ -203,10 +194,8 @@ function* startTags(
             attributes.set(match[1], unescapeXml(match[2] ?? match[3]));
             end = ATTRIBUTE.lastIndex;
         }
-        const close = TAG_END.exec(markup.slice(end));
-        if (!close) continue;
-        const text = close[1] ? undefined : markup.slice(end + close[0].length);
-        yield { attributes, text, next };
+        // A longer name ends at no `>` after its attributes, as it reads none: it is another element.
+        if (TAG_END.test(markup.slice(end))) yield attributes;
     }
 }
 
