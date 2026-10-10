@@ -112,16 +112,41 @@ function eigenTextItemContent(item: EigenClipboardTextItem): JSONContent[] {
     }));
 }
 
-// Every eigen item in wire order at the caret, so a mixed selection keeps its paragraph/figure sequence.
-// Text lands as whole paragraphs, so beside text an image takes a paragraph of its own rather than
-// joining the last line; an image-only paste stays inline at the caret. `pastedMediaName` gives the name
-// this document stores an image item under, or null to skip it, and is awaited per item, so the loop
-// stays ordered.
-export async function insertEigenItems(
+// A docs copy's own HTML keeps the headings, lists and marks its text items flatten, so it pastes as
+// ProseMirror's would, with each figure under the name its image item is stored under. A figure with no
+// item (its file did not resolve at copy) or whose re-upload failed is dropped, so none pastes broken.
+async function pasteDocsCopy(
     editor: Editor,
+    html: Document,
     items: EigenClipboardItem[],
     pastedMediaName: (item: EigenClipboardImageItem) => Promise<string | null>,
 ): Promise<void> {
+    for (const img of html.querySelectorAll('img[data-media-name]')) {
+        const item = items.find(
+            (i): i is EigenClipboardImageItem =>
+                i.type === 'image' && i.mediaName === img.getAttribute('data-media-name'),
+        );
+        const mediaName = item ? await pastedMediaName(item) : null;
+        if (mediaName) img.setAttribute('data-media-name', mediaName);
+        else (img.closest('.figure') ?? img).remove();
+    }
+    if (!editor.isDestroyed) editor.view.pasteHTML(html.body.innerHTML);
+}
+
+// The eigen items at the caret. A docs copy, whose HTML ProseMirror marked with data-pm-slice, pastes
+// through that HTML. Any other payload is placed item by item in wire order, so a mixed selection keeps
+// its paragraph/figure sequence. Text lands as whole paragraphs, so beside text an image takes a
+// paragraph of its own rather than joining the last line; an image-only paste stays inline at the caret.
+// `pastedMediaName` gives the name this document stores an image item under, or null to skip it, and is
+// awaited per item, so the order holds.
+export async function insertEigenItems(
+    editor: Editor,
+    items: EigenClipboardItem[],
+    html: string,
+    pastedMediaName: (item: EigenClipboardImageItem) => Promise<string | null>,
+): Promise<void> {
+    const docsCopy = new DOMParser().parseFromString(html, 'text/html');
+    if (docsCopy.querySelector('[data-pm-slice]')) return pasteDocsCopy(editor, docsCopy, items, pastedMediaName);
     const withText = items.some((item) => item.type === 'text' && clipboardTextItemHasContent(item));
     for (const item of items) {
         if (editor.isDestroyed) return;
