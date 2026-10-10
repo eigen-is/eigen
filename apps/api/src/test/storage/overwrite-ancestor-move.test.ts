@@ -200,6 +200,24 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         expect(storage.order).toEqual(['write', 'rename']);
     });
 
+    test('a save queued behind its folder trash refuses and leaves the trashed bytes', async () => {
+        const { mount, storage, folderId, fileId } = await fileInFolder('save-behind-trash');
+        const base = (await mount.getPath(fileId))!.updatedAt;
+        const hold = Promise.withResolvers<void>();
+        const held = mount.withTreeShared(() => hold.promise);
+        const trashQueued = mount.armTreeWait();
+        const trash = mount.trashPath(folderId);
+        await trashQueued;
+        const saveQueued = mount.armTreeWait();
+        const save = mount.writeFile(fileId, Buffer.from('v1'), base);
+        await saveQueued;
+        hold.resolve();
+        await Promise.all([held, trash]);
+
+        await expect(save).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
+        expect(await storage.read(await mount.getStorageKey(fileId)).text()).toBe('v0');
+    });
+
     test('a file created under a folder renamed mid-write lands under the new name', async () => {
         const { mount, storage, folderId } = await fileInFolder('create-under-rename');
         const gate = storage.armWrite();

@@ -26,7 +26,7 @@ For markdown the server splits a leading `---` YAML block off the body (`extract
 
 The client sends the `updatedAt` it loaded as `expectedUpdatedAt`. When the file has changed since, the save writes nothing and answers `{ conflict: true }` with the current timestamp. `ConflictDialog` then offers Overwrite (the same save with `force`), Reload or Download your version. Before it writes, the route runs `enforceMountQuota` with the new size and the old one, so a save can also fail on quota. The route composes `prepareSaveContent` with `Drive.writeFileContent`, and access goes through `getSharedDrive`.
 
-The comparison runs inside the file's path lock, in `Mount.writeFile`, which throws a `StaleWriteError` the route turns into the conflict answer. Checked before the lock, two saves from one base would both pass and the last would silently win. `updatedAt` has second precision, so a save landing in the same second as the write the editor loaded still passes.
+The comparison runs inside the file's path lock and the tree lock, in `Mount.writeFile` and `writeFileFromTemp`, which throw a `StaleWriteError` the route turns into the conflict answer. Checked before the path lock, two saves from one base would both pass and the last would silently win. Checked before the tree lock, a save could wait behind a folder's trash and then write into the trashed file. On `s3` and `local-key` the tree lock is no lock, so the row write itself refuses a trashed file. `updatedAt` has second precision, so a save landing in the same second as the write the editor loaded still passes.
 
 ## Saving is explicit
 

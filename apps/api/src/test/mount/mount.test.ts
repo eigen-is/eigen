@@ -347,6 +347,17 @@ describe('Mount (local-key storage)', () => {
         expect(file!.size).toBe(15);
     });
 
+    test('writeFile refuses a file trashed with its folder', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedWithFolder');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        await mount.trashPath(folderId);
+        await expect(mount.writeFile(fileId, Buffer.from('new'))).rejects.toMatchObject({
+            status: 404,
+            message: 'File is in trash',
+        });
+        expect((await mount.getPath(fileId))!.size).toBe(3);
+    });
+
     test('getChildByName is case-insensitive', async () => {
         const folderId = await mount.createFolder(rootId, 'FindMe');
         const found = await mount.getChildByName(rootId, 'findme');
