@@ -163,8 +163,10 @@ export async function snapshotMountData(
                 databases++;
             } else {
                 const live = await mount.getPath(row.id);
-                const storageKey = await mount.findStorageKey(row.id);
-                if (live?.size && storageKey !== null) recordLost(live.size, storageKey);
+                if (live?.size) {
+                    const storageKey = await mount.findStorageKey(row.id);
+                    if (storageKey !== null) recordLost(live.size, storageKey);
+                }
             }
         } else {
             // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for

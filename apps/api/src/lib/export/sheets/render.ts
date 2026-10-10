@@ -30,7 +30,8 @@ import {
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
-import { exportHtmlDocument, type HtmlExportMode } from '../html-document';
+import type { HtmlExportMode } from '../../document/transform/protocol';
+import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';

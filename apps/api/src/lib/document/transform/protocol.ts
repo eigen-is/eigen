@@ -1,6 +1,5 @@
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
-import type { HtmlExportMode } from '../../export/html-document';
 
 // Closed request/response unions crossing the document-transform Worker boundary.
 // Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
@@ -17,6 +16,9 @@ export type DocumentExportFormat = 'html' | 'pdf-html';
 export type EigendocExportFormat = DocumentExportFormat | 'docx';
 // Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
 export type VectorExportFormat = 'svg' | 'pdf-html';
+
+// What an HTML export is for: the download a browser opens, or the document WeasyPrint prints.
+export type HtmlExportMode = 'screen' | 'pdf';
 
 // Out of html-document.ts, which loads jsdom, so an xlsx export never evaluates it.
 export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {

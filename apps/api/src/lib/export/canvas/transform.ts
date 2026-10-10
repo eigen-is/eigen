@@ -7,12 +7,13 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
+    type HtmlExportMode,
     htmlExportMode,
     type TransformMedia,
     type TransformWarning,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { exportHtmlDocument, type HtmlExportMode } from '../html-document';
+import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';

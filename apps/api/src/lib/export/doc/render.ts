@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { BODY, QUOTE_LOOK } from '../../document/looks';
@@ -76,24 +76,16 @@ function renderFigureNode(
     resolveImgSrc: FigureImgSrcResolver,
     options?: { lazy?: boolean },
 ): string {
-    const mediaName = attrs.mediaName ?? null;
-    const src = attrs.src ?? null;
-    const alt = escapeHtml(String(attrs.alt || ''));
-    const caption = attrs.caption;
-    const rawWidth = attrs.width;
-    const width = typeof rawWidth === 'number' && Number.isFinite(rawWidth) ? Math.round(rawWidth) : null;
-
-    const imgSrc = resolveImgSrc(mediaName, src);
-
+    const imgSrc = resolveImgSrc(attrs.mediaName ?? null, attrs.src ?? null);
+    const alt = escapeHtml(attrs.alt ?? '');
+    const width = Math.round(attrs.width ?? 0);
     const imgStyle = width ? `width: ${width}px; ` : '';
     const lazy = options?.lazy ? ' loading="lazy"' : '';
     const img = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
         : '';
-    const cap = caption ? `<span class="figcaption">${escapeHtml(caption)}</span>` : '';
-    const layout = escapeHtml(String(attrs.layout || 'block'));
-    const alignment = escapeHtml(String(attrs.alignment || 'center'));
-    return `<span class="figure" data-layout="${layout}" data-alignment="${alignment}">${img}${cap}</span>`;
+    const cap = attrs.caption ? `<span class="figcaption">${escapeHtml(attrs.caption)}</span>` : '';
+    return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${img}${cap}</span>`;
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
@@ -165,8 +157,7 @@ export function renderDocHtml(
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
-                    renderFigureNode(node.attrs, resolveImgSrc, options),
+                figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },

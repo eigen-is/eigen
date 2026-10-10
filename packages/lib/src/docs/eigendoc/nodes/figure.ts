@@ -3,7 +3,7 @@ import type { Transaction } from '@tiptap/pm/state';
 
 const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right'] as const;
 export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
-export const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
+const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
 export type FigureAlignment = (typeof FIGURE_ALIGNMENTS)[number];
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null).
