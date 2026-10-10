@@ -271,7 +271,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
             const bytes = await readBoundedBodyBytes(request, maxSize);
-            if (bytes === null) throw new ApiError(413, 'Upload too large');
             await importIntoDocument(
                 drive,
                 mount,

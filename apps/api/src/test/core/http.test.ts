@@ -5,6 +5,8 @@ import {
     matchesIfNoneMatch,
     parseByteRange,
     rangeResponse,
+    readBoundedBody,
+    readBoundedBodyBytes,
     scriptableInlineHeaders,
 } from '../../lib/core/http';
 
@@ -122,6 +124,35 @@ describe('matchesIfNoneMatch', () => {
     test('compares weakly (RFC 7232 §3.2), so a W/ validator matches', () => {
         expect(matchesIfNoneMatch(`W/${ETAG}`, ETAG)).toBe(true);
         expect(matchesIfNoneMatch(`"deadbeef", W/${ETAG}`, ETAG)).toBe(true);
+    });
+});
+
+describe('readBoundedBodyBytes', () => {
+    // A stream body carries no Content-Length, so only the loop's cap can refuse it.
+    const chunked = (...chunks: string[]) =>
+        new Request('http://x/', {
+            method: 'POST',
+            body: new ReadableStream({
+                start(controller) {
+                    for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+                    controller.close();
+                },
+            }),
+        });
+
+    test('reads a body within the cap whole', async () => {
+        expect(new TextDecoder().decode(await readBoundedBodyBytes(chunked('abc', 'de'), 5))).toBe('abcde');
+    });
+
+    test('throws 413 past the cap, whether Content-Length says so or only the chunks do', async () => {
+        const declared = new Request('http://x/', { method: 'POST', body: 'abcdef' });
+        await expect(readBoundedBodyBytes(declared, 5)).rejects.toMatchObject({ status: 413 });
+        await expect(readBoundedBodyBytes(chunked('abc', 'def'), 5)).rejects.toMatchObject({ status: 413 });
+    });
+
+    test('readBoundedBody answers null past the cap, for the DAV PUT that writes its own 413', async () => {
+        expect(await readBoundedBody(chunked('abc', 'def'), 5)).toBeNull();
+        expect(await readBoundedBody(chunked('abc'), 5)).toBe('abc');
     });
 });
 

@@ -1,6 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { type ElysiaCustomStatusResponse, status } from 'elysia';
 import { ApiError } from './errors';
+import { consumeStream } from './stream';
 
 // Default private: these bodies are per-user, and 'public' is reserved for the unauthenticated /p/ surface.
 export function setCacheHeaders(
@@ -65,31 +66,25 @@ export function matchesIfNoneMatch(header: string, etag: string | null): boolean
     return header.split(',').some((raw) => raw.trim().replace(/^W\//, '') === etag);
 }
 
-// The Content-Length pre-check only rejects an honest client early: a chunked body carries no trustworthy length, so the loop's cap is the real one.
-export async function readBoundedBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array | null> {
+// Past maxBytes a 413. The Content-Length pre-check only rejects an honest client early: a chunked body carries no trustworthy length, so the loop's cap is the real one.
+export async function readBoundedBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
     const len = request.headers.get('Content-Length');
-    if (len !== null && Number(len) > maxBytes) return null;
+    if (len !== null && Number(len) > maxBytes) throw new ApiError(413, 'Upload too large');
     if (!request.body) return new Uint8Array();
-    const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];
-    let total = 0;
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > maxBytes) {
-            await reader.cancel();
-            return null;
-        }
-        chunks.push(value);
-    }
+    await consumeStream(request.body, (chunk) => chunks.push(chunk), { maxBytes });
     return new Uint8Array(Bun.concatArrayBuffers(chunks));
 }
 
-// Lenient UTF-8 decode. An XML body stays bytes for parseXml, which reads the encoding it declares.
+// Lenient UTF-8 decode. An XML body stays bytes for parseXml, which reads the encoding it declares. Null past
+// maxBytes, as a DAV PUT answers its own 413 with the precondition in its body.
 export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
-    const bytes = await readBoundedBodyBytes(request, maxBytes);
-    return bytes === null ? null : new TextDecoder().decode(bytes);
+    try {
+        return new TextDecoder().decode(await readBoundedBodyBytes(request, maxBytes));
+    } catch (error) {
+        if (error instanceof ApiError && error.status === 413) return null;
+        throw error;
+    }
 }
 
 // RFC 7233 single byte-range: 'unsatisfiable' is the caller's 416, null its full 200 body.

@@ -18,5 +18,6 @@
     "noUnusedParameters": true,
     "noPropertyAccessFromIndexSignature": true,
     "allowSyntheticDefaultImports": true
-  }
+  },
+  "include": ["**/*", "../../assets.d.ts"]
 }
