@@ -116,8 +116,9 @@ function measuredImport(file: Buffer): {
 } {
     const script = `
         const { xlsxToSheets } = await import(process.env.READER);
+        const { peakRss } = await import(process.env.PEAK_RSS);
         const data = Buffer.from(await Bun.stdin.arrayBuffer());
-        const peak = process.resourceUsage().maxRSS * 1024;
+        const peak = peakRss();
         const cpu = process.cpuUsage();
         let result = {};
         try {
@@ -129,12 +130,16 @@ function measuredImport(file: Buffer): {
         const used = process.cpuUsage(cpu);
         console.log(JSON.stringify({
             ...result,
-            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
+            rssGrowth: peakRss() - peak,
             cpuMs: (used.user + used.system) / 1000,
         }));
     `;
     const child = Bun.spawnSync([process.execPath, '-e', script], {
-        env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/sheets/from-xlsx', import.meta.dir) },
+        env: {
+            ...process.env,
+            READER: Bun.resolveSync('../../../lib/import/sheets/from-xlsx', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../rss-test-helpers', import.meta.dir),
+        },
         stdin: new Uint8Array(file),
         timeout: 20_000,
     });

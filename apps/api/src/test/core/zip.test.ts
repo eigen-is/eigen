@@ -13,6 +13,7 @@ import {
     type ZipErrorCode,
 } from '../../lib/core';
 import { build, deflated, deflatedZeros, type RawPart, stored } from '../fixtures/raw-zip';
+import { peakRss } from '../rss-test-helpers';
 
 const GiB = 2 ** 30;
 const MiB = 2 ** 20;
@@ -430,6 +431,7 @@ describe('a bomb stays within its peak RSS', () => {
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
     const script = `
         const { openZip, ZipError } = await import(process.env.ZIP_MODULE);
+        const { peakRss } = await import(process.env.PEAK_RSS);
         const bytes = await Bun.file(process.env.ZIP_PATH).bytes();
         let outcome = 'ok';
         try {
@@ -438,7 +440,7 @@ describe('a bomb stays within its peak RSS', () => {
         } catch (error) {
             outcome = error instanceof ZipError ? error.code : String(error);
         }
-        console.log(JSON.stringify({ outcome, maxRss: process.resourceUsage().maxRSS * 1024 }));
+        console.log(JSON.stringify({ outcome, maxRss: peakRss() }));
     `;
     type Case = [name: string, make: () => Uint8Array, outcome: string, maxRss: number];
     const cases: Case[] = [
@@ -462,7 +464,12 @@ describe('a bomb stays within its peak RSS', () => {
         const path = join(dir, `${name}.zip`);
         writeFileSync(path, make());
         const run = Bun.spawnSync([process.execPath, '-e', script], {
-            env: { ...process.env, ZIP_MODULE: Bun.resolveSync('../../lib/core/zip', import.meta.dir), ZIP_PATH: path },
+            env: {
+                ...process.env,
+                ZIP_MODULE: Bun.resolveSync('../../lib/core/zip', import.meta.dir),
+                PEAK_RSS: Bun.resolveSync('../rss-test-helpers', import.meta.dir),
+                ZIP_PATH: path,
+            },
         });
         const result: { outcome: string; maxRss: number } = JSON.parse(run.stdout.toString());
         expect(result.outcome).toBe(outcome);
@@ -511,7 +518,7 @@ describe('openZip under fuzzing', () => {
             values: [0, 1, 2, 30, 46, 0x7f, 0xff, 0x7fff, 0xffff, 0x10000, 0x7fffffff, 0xffffffff, source.length],
         }));
         const outcomes = new Map<string, number>();
-        const peakBefore = process.resourceUsage().maxRSS * 1024;
+        const peakBefore = peakRss();
         for (let round = 0; round < 2000; round++) {
             const { source, headers, values } = sources[round % 2];
             const next = random(round + 1);
@@ -557,7 +564,7 @@ describe('openZip under fuzzing', () => {
         // Not vacuous: the mutations reach both reading and many refusals.
         expect(outcomes.get('ok')).toBeGreaterThan(20);
         expect(outcomes.size).toBeGreaterThanOrEqual(10);
-        expect(process.resourceUsage().maxRSS * 1024 - peakBefore).toBeLessThan(64 * MiB);
+        expect(peakRss() - peakBefore).toBeLessThan(64 * MiB);
     });
 });
 

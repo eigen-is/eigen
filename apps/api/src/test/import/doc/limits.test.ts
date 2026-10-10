@@ -95,8 +95,9 @@ function measuredImport(
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
         const { importDocxToEigendocUpdate } = await import(process.env.TRANSFORM);
+        const { peakRss } = await import(process.env.PEAK_RSS);
         const data = await Bun.stdin.arrayBuffer();
-        const peak = process.resourceUsage().maxRSS * 1024;
+        const peak = peakRss();
         const cpu = process.cpuUsage();
         const count = (node) => (node.type === 'text' ? 1 : 0) + (node.content ?? []).reduce((sum, child) => sum + count(child), 0);
         let result;
@@ -114,7 +115,7 @@ function measuredImport(
         const used = process.cpuUsage(cpu);
         console.log(JSON.stringify({
             ...result,
-            rssGrowth: process.resourceUsage().maxRSS * 1024 - peak,
+            rssGrowth: peakRss() - peak,
             cpuMs: (used.user + used.system) / 1000,
         }));
     `;
@@ -123,6 +124,7 @@ function measuredImport(
             ...process.env,
             READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir),
             TRANSFORM: Bun.resolveSync('../../../lib/import/doc/transform', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../rss-test-helpers', import.meta.dir),
             THROUGH: through,
         },
         stdin: new Uint8Array(docx),
