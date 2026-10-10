@@ -78,8 +78,8 @@ export function toLabel(row: CellCoordinate, column: CellCoordinate): string {
 }
 
 // Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
-const REFERENCE_ROW_COUNT = 1048576;
-const REFERENCE_COLUMN_COUNT = 16384;
+export const REFERENCE_ROW_COUNT = 1048576;
+export const REFERENCE_COLUMN_COUNT = 16384;
 
 // `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the grid (#REF!).
 export function offsetCoordinate(
