@@ -220,7 +220,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const halves = splitAtBreaks(pieces);
 
     // A paragraph holding nothing but a page break gives no item: the break joins the open one, and the number stays free.
-    const ilvl = Math.min(LIST_LEVELS - 1, Math.max(0, direct.ilvl ?? styled.ilvl ?? 0));
+    const styleLevel = listed && direct.numId === undefined ? reader.numbering.styleLevel(numId, styleId) : undefined;
+    const ilvl = Math.min(LIST_LEVELS - 1, Math.max(0, direct.ilvl ?? styled.ilvl ?? styleLevel ?? 0));
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list = listed && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, list?.pPr ?? {}, direct);

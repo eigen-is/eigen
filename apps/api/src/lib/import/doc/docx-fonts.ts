@@ -1,4 +1,5 @@
 import { bundledFont, DOCUMENT_FONT, EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { codePoint as dingbat } from 'dingbat-to-unicode';
 import { A_NS, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlChild, xmlElements } from '../../core/xml';
 import { descendants, is, w, wChild } from './package';
@@ -156,4 +157,10 @@ export function bundledFontOf(name: string | undefined, fontTable?: FontTable): 
 export function fontMark(name: string | undefined, fontTable?: FontTable): string | undefined {
     const font = bundledFontOf(name, fontTable);
     return font === DOCUMENT_FONT ? undefined : font;
+}
+
+// A symbol font's character as Unicode; Word's private-use spelling, U+F0xx, is the font's own xx.
+export function symbolOf(font: string, code: number): string | undefined {
+    return (dingbat(font, code) ?? (code >= 0xf000 && code <= 0xf0ff ? dingbat(font, code - 0xf000) : undefined))
+        ?.string;
 }
