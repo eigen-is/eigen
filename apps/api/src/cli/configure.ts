@@ -4,6 +4,7 @@ import type { parseArgs } from 'node:util';
 import { APP_URLS } from '@workspace/lib/constants/app-urls';
 import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { isMailEnabled } from '../lib/config/env';
 import { SERVER_DIR, SERVER_FILES } from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile, writeEnvFile } from './env-file';
@@ -321,7 +322,7 @@ export async function configure(
 
     const mail = await decide(
         flags.mail ? true : flags['no-mail'] ? false : undefined,
-        existing.get('MAIL_ENABLED') !== '0',
+        isMailEnabled(Object.fromEntries(existing)),
         (initial) =>
             ui.confirm({
                 message: 'Host email on this server?',

@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
-import { storageGone } from '../storage';
+import { storageGone } from '../core';
 import type { User } from '../user';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { DriveLike } from './get-drive';

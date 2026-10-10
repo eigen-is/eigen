@@ -4,7 +4,14 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } 
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { ApiError, type DatabaseConfig, eventLoopTurn, ManagedDatabase, type SchemaType } from '../../lib/core';
+import {
+    ApiError,
+    type DatabaseConfig,
+    eventLoopTurn,
+    ManagedDatabase,
+    type SchemaType,
+    storageGone,
+} from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import {
     CONTENT_REINDEX_CAP_SECONDS,
@@ -14,7 +21,6 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
-import { storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';

@@ -1,5 +1,5 @@
 import { type DriveImportSource, isContainerType } from '@workspace/lib/types/drive';
-import { ApiError } from '../core';
+import { ApiError, payloadTooLarge } from '../core';
 import { readStorageFile } from '../storage';
 import type { User } from '../user';
 import { getSharedDrive } from './get-drive';
@@ -18,7 +18,7 @@ export async function readImportSourceBytes(
     if (isContainerType(path.type) || !opts.accepts(path.mimeType, path.name)) {
         throw new ApiError(400, opts.rejection);
     }
-    if (path.size > opts.maxBytes) throw new ApiError(413, 'Upload too large');
+    if (path.size > opts.maxBytes) throw payloadTooLarge();
 
     const file = await drive.downloadFile(source.sourceMountId, source.sourcePathId);
     if (!file) throw new ApiError(404, 'Source file not found');

@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
+import { storageGone } from '../core';
 import { copyThumbnail } from '../shared/thumbnails';
-import { storageGone, writeTempWithHash } from '../storage';
+import { writeTempWithHash } from '../storage';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
