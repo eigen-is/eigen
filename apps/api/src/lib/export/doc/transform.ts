@@ -15,7 +15,7 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
-import { sanitizeExportHtml } from '../sanitize';
+import { EXPORT_CSP_META, sanitizeExportHtml } from '../sanitize';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -101,6 +101,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
     return `<html lang="en">
 <head>
     <meta charset="utf-8">
+    ${EXPORT_CSP_META}
     <title>${escapeHtml(title)}</title>
     <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
 </head>

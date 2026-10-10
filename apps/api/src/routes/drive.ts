@@ -21,6 +21,7 @@ import { copyPathAcross } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
+import { EXPORT_CSP } from '../lib/export/sanitize';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import {
     assertEmlPreviewable,
@@ -231,6 +232,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const result = await exportDocument(mount, path, params.format, request.signal);
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
+            set.headers['Content-Security-Policy'] = EXPORT_CSP;
             return result.data;
         },
         { auth: true },

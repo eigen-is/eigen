@@ -129,6 +129,8 @@ A browser that opens an HTML download fetches what the document names, from the 
 - The hooks are added and removed around each synchronous call, so they never leak to another DOMPurify user.
 - A media preview serves an SVG as uploaded. A docx carries it as a part of its own, and WeasyPrint and librsvg draw its every `<use>`, so the Worker takes every `image/svg+xml` media item through `sanitizeExportMedia` before any arm embeds it, and writes it as XML, without the characters XML can't hold; a file with no `<svg>` in it is dropped. The main thread hands over the inlined bytes as they are, because sanitizing a big drawing holds jsdom for seconds. Every format takes any size: the export deadline, sharp's pixel limit and the PNG fallback's timeout ([§ A docx image](#a-docx-image-is-a-png-or-jpeg-made-from-its-source)) bound the work.
 
+A browser backs the rule up: every export response carries `EXPORT_CSP` (`export/sanitize.ts`), which allows `data:` images and fonts and inline styles and nothing else, and every HTML download carries it as a `<meta>` too, so it holds once the file is saved.
+
 Previews pass the same function the exact set of their own preview URLs ([PREVIEWS.md](PREVIEWS.md)). The tests are in `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 
 ## A sheet export recalcs, and xlsx carries cells only
