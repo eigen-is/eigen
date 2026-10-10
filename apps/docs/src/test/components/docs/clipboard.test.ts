@@ -18,10 +18,12 @@ const text = (t: string, ...marks: object[]) => ({ type: 'text', text: t, ...(ma
 const figure = (mediaName: string) => ({ type: 'figure', attrs: { mediaName, width: 200 } });
 
 // A docs editor holding `content`, all of it selected, whose copy and cut write the clipboard as the editor's do.
+// Every image but a pending upload resolves.
 function source(content: object[]) {
-    const chart = drivePath({ name: 'chart.png', mimeType: 'image/png' });
     const write = (view: EditorView, event: ClipboardEvent) =>
-        writeDocsClipboard(view, event, (name) => (name === 'chart.png' ? chart : undefined));
+        writeDocsClipboard(view, event, (name) =>
+            name.startsWith('pending:') ? undefined : drivePath({ name, mimeType: 'image/png' }),
+        );
     const editor = new Editor({
         extensions: getDocExtensions(),
         content: { type: 'doc', content },
@@ -121,6 +123,22 @@ test('an image cut and pasted in its own document keeps its comment card', async
     const clipboard = copy([paragraph({ type: 'figure', attrs: { mediaName: 'chart.png', commentCardId: 'here' } })]);
     const target = await paste(clipboard, undefined, new Set(['here']));
     expect(target.state.doc.firstChild?.firstChild?.attrs.commentCardId).toBe('here');
+});
+
+test('a paste re-uploads its images at once, and an image copied twice once', async () => {
+    const clipboard = copy([paragraph(figure('chart.png'), figure('map.png'), figure('chart.png'))]);
+    const started: string[] = [];
+    const { promise: uploaded, resolve: upload } = Promise.withResolvers<void>();
+    const pasting = paste(clipboard, async (item) => {
+        started.push(item.mediaName);
+        await uploaded;
+        return `copy-${item.mediaName}`;
+    });
+    expect(started).toEqual(['chart.png', 'map.png']);
+
+    upload();
+    expect(blocks(await pasting)).toEqual([['copy-chart.png', 'copy-map.png', 'copy-chart.png']]);
+    expect(started).toEqual(['chart.png', 'map.png']);
 });
 
 // ProseMirror's own cut deletes the selection first, so the payload is written before it runs.
