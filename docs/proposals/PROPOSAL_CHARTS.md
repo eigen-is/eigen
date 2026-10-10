@@ -28,7 +28,7 @@ This proposal adds data charts to Eigen, with one chart model shared by sheets, 
 
 **xlsx import drops charts and images.** `xlsxToSheets` (`apps/api/src/lib/import/sheets/from-xlsx.ts`) loads the workbook with ExcelJS 4.4.0 and reads a few things ExcelJS misses (internal hyperlinks) straight from the zip with JSZip and regex (`readLocationHyperlinks`, `xmlAttribute`). ExcelJS has no chart support at all: `lib/xlsx/xform/drawing/` holds picture anchors only (`pic-xform.js`, `one-cell-anchor-xform.js`, `two-cell-anchor-xform.js`), and a `graphicFrame` holding a chart is skipped. The importer does not call `worksheet.getImages()` either, so floating images are dropped on import too, even though ExcelJS parses those.
 
-**xlsx export writes neither.** `to-xlsx.ts` builds an ExcelJS workbook and then post-processes the zip with JSZip (`rewriteInternalHyperlinks`), which is the pattern chart export needs. Floating images are dropped there today; that is its own ROADMAP row ("xlsx export drops floating images").
+**xlsx export writes neither.** `to-xlsx.ts` builds an ExcelJS workbook and then post-processes the zip with `openZip` and `writeZip` (`rewriteInternalHyperlinks`), which is the pattern chart export needs. Floating images are dropped there today; that is its own ROADMAP row ("xlsx export drops floating images").
 
 **Floating images are the sheets precedent.** `SheetImage` (`packages/lib/src/sheets/types.ts`) is `{ id, mediaName, x, y, width, height, angle? }` in unzoomed grid pixels from A1's top-left. `images` is a typed field on lib's `Sheet`, encoded explicitly by `snapshot-codec.ts`, materialized on every replay base by `withNormalizedSheet` (`engine/replay-ops.ts`), and drawn by the HTML/PDF export and the preview (`renderFloatingImages`, `apps/api/src/lib/export/sheets/render.ts`). In the editor, `ImgBoxs` (`packages/sheet/src/components/ImgBoxs/index.tsx`) draws each image with `ObjectTransform`, the active one at z-index 20 and the rest at 19. The editor state still routes images through a context mirror (`ctx.insertedImgs`, special-cased in `opToPatch` in `state/utils/patch.ts`), inherited from fortune-sheet.
 
@@ -218,7 +218,7 @@ Limits apply at import as everywhere (§ Limits); a chart over them imports as a
 
 ### xlsx export
 
-ExcelJS cannot write charts, so the exporter writes them in a JSZip pass after `writeBuffer`, beside `rewriteInternalHyperlinks`:
+ExcelJS cannot write charts, so the exporter writes them in a pass over `openZip` and `writeZip` after `writeBuffer`, beside `rewriteInternalHyperlinks`:
 
 - a `xl/charts/chartN.xml` per chart, from a DrawingML writer that is the importer's mapping in reverse;
 - a drawing part per sheet with one `twoCellAnchor editAs="oneCell"` per chart, the cell and EMU offset computed from the pixel box and the sheet's column widths and row heights. When floating-image export lands through ExcelJS's `addImage`, the chart anchors are added into ExcelJS's own drawing part, because a sheet has exactly one `<drawing>`;
