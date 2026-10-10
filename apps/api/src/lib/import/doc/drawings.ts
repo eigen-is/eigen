@@ -18,7 +18,7 @@ import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText }
 import { COLUMN_PX, type Item, isCaptionLike, isFigureOnly, type Para, paraOf, textOf } from './assemble';
 import { contentTypeOf, descendants, int } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
-import { linkOf, pushText, type RunContext } from './runs';
+import { pushText, type RunContext } from './runs';
 
 // The image types a part may be stored as, each under its own extension. WMF and EMF are kept though no browser or
 // sharp draws them: the figure shows its alt text in a broken image, and an export leaves it out.
@@ -124,10 +124,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 tail.map((para) => textOf(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
         } else for (const item of boxed) context.pending.push(item);
-        // A picture's own link, DrawingML's click hyperlink on its frame.
-        const click = docPr && xmlChild(docPr, A_NS, 'hlinkClick');
-        const link = click ? linkOf(reader, click, context.scope) : undefined;
-        for (const figure of figures) pushFigure(figure, link ? { ...context, link } : context);
+        for (const figure of figures) context.pieces.push({ kind: 'node', node: figure });
         for (const item of graphicText(reader, frame, context.scope)) context.pending.push(item);
     }
 }
@@ -187,15 +184,6 @@ function drawingLine(paragraph: XmlElement): JSONContent[] {
     return line;
 }
 
-// A linked image keeps its link.
-function pushFigure(figure: JSONContent, context: RunContext): void {
-    const { link } = context;
-    const node = link
-        ? { ...figure, marks: [{ type: 'link', attrs: { href: link.href, title: link.title } }] }
-        : figure;
-    context.pieces.push({ kind: 'node', node });
-}
-
 export function readVml(reader: Reader, element: XmlElement, context: RunContext): void {
     for (const shape of xmlElements(element)) {
         if (shape.ns !== V_NS) {
@@ -212,7 +200,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             if (!name) continue;
             const width = vmlWidthPx(shape.attributes['style'] ?? '');
             const alt = shape.attributes['alt'] || data.attributes['o:title'] || null;
-            pushFigure({ type: 'figure', attrs: { mediaName: name, alt, width } }, context);
+            context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
             for (const item of readBlocks(reader, xmlElements(box), onShape(context.scope))) context.pending.push(item);

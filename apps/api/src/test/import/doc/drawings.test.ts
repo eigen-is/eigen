@@ -73,17 +73,23 @@ describe('placement', () => {
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['layout'])).toEqual(['wrap-right']);
     });
 
-    test('a picture keeps its alt text, its width in pixels and its click link', async () => {
+    // The store keeps marks on text only, so a figure's link would not survive saving.
+    test('a picture keeps its alt text and its width in pixels, not its click link or the link around it', async () => {
         const linked = GOLDEN_DOCX_IMAGE_RUN.replace(
             'descr="A pixel"/>',
             'descr="A pixel"><a:hlinkClick xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:id="rId9"/></wp:docPr>',
         );
-        const { json } = await importDocxBody(paragraph(linked), {
-            rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
-        });
-        const [figure] = nodesOfType(json, 'figure');
-        expect([figure?.attrs?.['alt'], figure?.attrs?.['width']]).toEqual(['A pixel', 40]);
-        expect(figure?.marks?.map((mark) => mark.attrs?.['href'])).toEqual(['https://example.com/']);
+        const { json } = await importDocxBody(
+            `${paragraph(linked)}${paragraph(`<w:hyperlink r:id="rId9">${GOLDEN_DOCX_IMAGE_RUN}</w:hyperlink>`)}`,
+            {
+                rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+            },
+        );
+        const figures = nodesOfType(json, 'figure');
+        expect(figures.map((figure) => [figure.attrs?.['alt'], figure.attrs?.['width'], figure.marks])).toEqual([
+            ['A pixel', 40, undefined],
+            ['A pixel', 40, undefined],
+        ]);
         expect(marksOfType(json, 'link')).toEqual([]);
     });
 });

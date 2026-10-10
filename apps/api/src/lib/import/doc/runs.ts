@@ -221,7 +221,7 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
     }
 }
 
-export function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undefined {
+function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undefined {
     const id = xmlAttr(element, R_NS, 'id');
     const anchor = w(element, 'anchor');
     const rel = id ? scope.part.rels.get(id) : undefined;
