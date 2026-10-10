@@ -5,6 +5,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "css.d.ts"],
+  "include": ["src", "../../assets.d.ts"],
   "exclude": ["node_modules"]
 }
