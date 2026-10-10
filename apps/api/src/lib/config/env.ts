@@ -11,9 +11,10 @@ export function isDemo(): boolean {
 }
 
 // Hosted mailboxes come with the `mail` docker profile (postfix + dovecot). A deployment that
-// runs without it sets MAIL_ENABLED=0, and the apps then hide every Mail entry point.
-export function isMailEnabled(): boolean {
-    return process.env['MAIL_ENABLED'] !== '0';
+// runs without it sets MAIL_ENABLED=0, and the apps then hide every Mail entry point. A restore asks it of the
+// .env.production it restores with.
+export function isMailEnabled(env: Record<string, string | undefined> = process.env): boolean {
+    return env['MAIL_ENABLED'] !== '0';
 }
 
 // A demo box seeds mailboxes without an MTA: the Mail app stays while sendMail skips.
