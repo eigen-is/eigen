@@ -111,13 +111,15 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 Math.max(1, columns - column),
             );
             const colwidth = widths(columnPx, column, colspan);
-            // Word's last column holds the text of the cells a row runs on past it.
-            const past = column + colspan < MAX_COLUMNS ? [] : row.cells.slice(index + 1).flatMap(cellContent);
-            const content = build(
-                cell === onlyCell && onlyItems
-                    ? onlyItems
-                    : cellItems(cell, rowIndex, colwidth, [...cellContent(cell), ...past]),
-            );
+            const own = cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex, colwidth);
+            // Word's last column holds the text of the cells a row runs on past it, not their empty lines.
+            const past =
+                column + colspan < MAX_COLUMNS
+                    ? []
+                    : cellItems(cell, rowIndex, colwidth, row.cells.slice(index + 1).flatMap(cellContent)).filter(
+                          (item) => item.kind !== 'para' || !item.empty,
+                      );
+            const content = build([...own, ...past]);
             const fill = shadingOf(wChild(tcPr, 'shd'));
             const attrs: CellAttrs = { colspan, rowspan: 1, colwidth, ...hoistAlignment(content) };
             cells.push({

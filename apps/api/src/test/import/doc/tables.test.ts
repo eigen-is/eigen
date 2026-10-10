@@ -482,5 +482,19 @@ describe('a table as the editor opens it', () => {
             expect(shape(json)).toEqual([['63x1:M'], ['63x1:LOST3']]);
             expect(repairs(json)).toBeUndefined();
         });
+
+        test('the last column holds the text of the cells past it, not their empty lines', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [
+                    row([...cells('a', 62), tc('last'), ...Array(1000).fill('<w:tc><w:p/></w:tc>'), tc('end')]),
+                ]),
+            );
+            const last = nodesOfType(json, 'tableCell').at(-1);
+            expect((last?.content ?? []).map((node) => nodesOfType(node, 'text').map((text) => text.text))).toEqual([
+                ['last'],
+                ['end'],
+            ]);
+            expect(repairs(json)).toBeUndefined();
+        });
     });
 });
