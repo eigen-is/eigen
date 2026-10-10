@@ -106,12 +106,21 @@ function repackXlsx(buffer: Buffer): Buffer {
     try {
         const zip = openZip(buffer);
         const entries: ZipWriteEntry[] = [];
-        const tally: ExpansionTally = { cells: 0, rows: 0, merges: 0, mergedCells: 0, validationKeys: 0 };
+        const tally: ExpansionTally = {
+            sheets: 0,
+            cells: 0,
+            rows: 0,
+            elements: 0,
+            merges: 0,
+            mergedCells: 0,
+            validationKeys: 0,
+        };
         for (const name of zip.names()) {
             const data = zip.read(name);
             if (!data) continue;
             const bytes = canonicalPart(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
-            if (WORKSHEET_PART.test(name)) tallyGrid(bytes, tally);
+            if (WORKSHEET_PART.test(name)) tallySheet(bytes, tally);
+            else if (STRINGS_OR_STYLES_PART.test(name)) tallyElements(bytes, tally);
             tallyExpansions(bytes, tally);
             entries.push({ name, data: bytes, store: true });
         }
@@ -127,7 +136,15 @@ function repackXlsx(buffer: Buffer): Buffer {
 // exceljs builds these while it loads, before MAX_CELLS can count anything: a model per <c> and <row>; a merge's cells, each
 // merge checked against every earlier one; a validation's sqref as a model key per cell; a <col> as a column object
 // per column up to its min or max.
-type ExpansionTally = { cells: number; rows: number; merges: number; mergedCells: number; validationKeys: number };
+type ExpansionTally = {
+    sheets: number;
+    cells: number;
+    rows: number;
+    elements: number;
+    merges: number;
+    mergedCells: number;
+    validationKeys: number;
+};
 
 // Merged cells count against MAX_CELLS, as cells. exceljs takes 2.4 s to check 10k merges pairwise, 27 s for 30k.
 export const MAX_MERGES = 10_000;
@@ -135,6 +152,13 @@ export const MAX_MERGES = 10_000;
 export const MAX_VALIDATION_KEYS = 5_000_000;
 // An empty row costs ~600 B: two full sheets of rows is ~1.3 GB, and real workbooks hold under 1.1M row elements.
 export const MAX_ROWS = 2 * REFERENCE_ROW_COUNT;
+// A sheet holds a column object per column up to its last, ~3 MB at XFD; real workbooks hold under 50 sheets.
+export const MAX_SHEETS = 500;
+// exceljs's sheet list walks every id up to the largest (50M: 1.2 GB); real ids stay under 33,000.
+export const MAX_SHEET_ID = 1_000_000;
+// exceljs builds up to ~270 B per element, ~1 GB at the cap; real sheets, shared strings and styles hold under 70,000
+// past the cell grid.
+export const MAX_ELEMENTS = 4_000_000;
 // A cell's text, value and display, is a copy per cell for a rich string and in the snapshot for any; real workbooks
 // emit under 120M characters.
 export const MAX_TEXT = 250_000_000;
@@ -153,6 +177,9 @@ function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
             if (tally.validationKeys > MAX_VALIDATION_KEYS) throw tooLarge();
         }
     }
+    for (const attributes of startTags(bytes, 'sheet')) {
+        if (Number.parseInt(attributes.get('sheetId') ?? '', 10) > MAX_SHEET_ID) throw tooLarge();
+    }
     for (const attributes of startTags(bytes, 'col')) {
         const bounds = [attributes.get('min'), attributes.get('max')];
         if (bounds.some((bound) => Number.parseInt(bound ?? '', 10) > REFERENCE_COLUMN_COUNT)) throw tooLarge();
@@ -161,12 +188,41 @@ function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
 
 // exceljs's own test for a sheet part (lib/xlsx/xlsx.js): calcChain.xml holds a <c> per formula, which is no cell.
 const WORKSHEET_PART = /xl\/worksheets\/sheet(\d+)[.]xml/;
+const STRINGS_OR_STYLES_PART = /^\/?xl\/(?:sharedStrings|styles)\.xml$/;
 
-function tallyGrid(bytes: Buffer, tally: ExpansionTally): void {
+function tallySheet(bytes: Buffer, tally: ExpansionTally): void {
+    tally.sheets += 1;
+    if (tally.sheets > MAX_SHEETS) throw tooLarge();
     tally.cells += countTags(bytes, CELL_OPEN, MAX_CELLS - tally.cells);
     if (tally.cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
     tally.rows += countTags(bytes, ROW_OPEN, MAX_ROWS - tally.rows);
     if (tally.rows > MAX_ROWS) throw tooLarge();
+    tallyElements(bytes, tally);
+}
+
+function tallyElements(bytes: Buffer, tally: ExpansionTally): void {
+    tally.elements += countElements(bytes, MAX_ELEMENTS - tally.elements);
+    if (tally.elements > MAX_ELEMENTS) throw tooLarge();
+}
+
+// The cell grid's own names: MAX_CELLS and MAX_ROWS bound them, and repeated in one cell they cost what their bytes do.
+const GRID_NAMES = ['c', 'v', 'f', 't', 'is', 'row'].map((name) => Buffer.from(name));
+const GRID_FIRSTS = new Set(GRID_NAMES.map((name) => name[0]));
+
+// Every start tag but the grid's; an end tag, a comment, CDATA or a declaration starts `</`, `<!` or `<?`.
+function countElements(bytes: Buffer, limit: number): number {
+    let count = 0;
+    for (let at = bytes.indexOf(0x3c); at >= 0 && count <= limit; at = bytes.indexOf(0x3c, at + 1)) {
+        const first = bytes[at + 1];
+        if (first === 0x2f || first === 0x21 || first === 0x3f) continue;
+        if (GRID_FIRSTS.has(first) && GRID_NAMES.some((name) => isNameAt(bytes, at + 1, name))) continue;
+        count += 1;
+    }
+    return count;
+}
+
+function isNameAt(bytes: Buffer, at: number, name: Buffer): boolean {
+    return bytes.compare(name, 0, name.length, at, at + name.length) === 0 && NAME_ENDS.has(bytes[at + name.length]);
 }
 
 // A loop, not tagStarts: a real sheet holds millions of cells. It stops one past the limit.
@@ -187,7 +243,7 @@ function canonicalPart(bytes: Buffer): Buffer {
 }
 
 const XML_VERSION = /^(?:\xef\xbb\xbf)?<\?xml\s+version\s*=\s*(["'])(.*?)\1/;
-const SCANNED_TAGS = ['mergeCell', 'dataValidation', 'col'];
+const SCANNED_TAGS = ['mergeCell', 'dataValidation', 'col', 'sheet'];
 
 // exceljs's parser reads a raw tab, CR or LF in a value as a space, so the scanned tags carry spaces in their place.
 function withSpacedTags(bytes: Buffer): Buffer {

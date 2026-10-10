@@ -3,8 +3,11 @@ import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, toA1 } from '@workspace/sh
 import { ApiError } from '../../../lib/core/errors';
 import {
     MAX_CELLS,
+    MAX_ELEMENTS,
     MAX_MERGES,
     MAX_ROWS,
+    MAX_SHEET_ID,
+    MAX_SHEETS,
     MAX_TEXT,
     MAX_VALIDATION_KEYS,
     xlsxToSheets,
@@ -433,6 +436,10 @@ describe('defined names never reach exceljs', () => {
 // What exceljs or the conversion builds per element, per sheet or per character, past what the cell grid counts.
 describe('what else the import builds is refused before it costs', () => {
     const sst = (body: string) => ({ name: 'xl/sharedStrings.xml', xml: `<sst xmlns="${SML}">${body}</sst>` });
+    const styles = (body: string) => ({
+        name: 'xl/styles.xml',
+        xml: `<styleSheet xmlns="${SML}">${body}</styleSheet>`,
+    });
     const sharedCells = (count: number) =>
         Array.from({ length: count }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="s"><v>0</v></c></row>`).join('');
 
@@ -445,6 +452,22 @@ describe('what else the import builds is refused before it costs', () => {
         );
         expect(result).toMatchObject(TOO_LARGE);
         expect(result.rssGrowth).toBeLessThan(256 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    // exceljs's sheet list walks every id up to the largest: 50,000,000 cost 1.2 GB.
+    test('a sheet id past its cap is 413 at no cost', () => {
+        const result = measuredImport(xlsx({ sheetId: 4_294_967_294 }));
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    // A sheet holds a column object per column up to its last: 1,000 sheets reaching XFD cost 3 GB.
+    test('more sheets than the cap are 413 at no cost', () => {
+        const wide = `<cols><col min="16384" max="16384"/></cols><sheetData/>`;
+        const result = measuredImport(xlsx({ sheets: Array(MAX_SHEETS).fill(wide) }));
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
         expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
 
@@ -467,6 +490,34 @@ describe('what else the import builds is refused before it costs', () => {
         expect(result.cpuMs).toBeLessThan(5_000);
     }, 30_000);
 
+    // exceljs builds a model per element: 35M runs in 680 KB reached 9.3 GB, 30M <xf/> 6.2 GB.
+    test.each([
+        ['runs in a shared string', {}, [sst(`<si>${'<r/>'.repeat(MAX_ELEMENTS + 1)}</si>`)]],
+        ['formats in the styles', {}, [styles(`<cellXfs>${'<xf/>'.repeat(MAX_ELEMENTS + 1)}</cellXfs>`)]],
+        [
+            'rules in a sheet',
+            {
+                after: `<conditionalFormatting sqref="A1">${'<cfRule/>'.repeat(MAX_ELEMENTS + 1)}</conditionalFormatting>`,
+            },
+            [],
+        ],
+        [
+            'runs in an inline string',
+            { data: `<row r="1"><c r="A1" t="inlineStr"><is>${'<r/>'.repeat(MAX_ELEMENTS + 1)}</is></c></row>` },
+            [],
+        ],
+    ] as const)(
+        'more elements than the cap, as %s, are 413 at no cost',
+        (_name, sheet, extra) => {
+            const result = measuredImport(xlsx(sheet, [...extra]));
+            expect(result).toMatchObject(TOO_LARGE);
+            // What remains is inflating the part, up to 36 MB of markup.
+            expect(result.rssGrowth).toBeLessThan(256 * MB);
+            expect(result.cpuMs).toBeLessThan(2_000);
+        },
+        30_000,
+    );
+
     test('emitted text may reach its cap across the workbook', async () => {
         // A plain shared string reaches every cell as one string, its value and its display.
         const text = 'a'.repeat(1_000_000);
@@ -482,6 +533,17 @@ describe('what else the import builds is refused before it costs', () => {
         );
     }, 30_000);
 
+    test('a sheet id may reach its cap', async () => {
+        expect(await outcome(xlsx({ sheetId: MAX_SHEET_ID }))).toBe('imported');
+        expect(await outcome(xlsx({ sheetId: MAX_SHEET_ID + 1 }))).toEqual(TOO_LARGE);
+    }, 30_000);
+
+    test('sheets may reach their cap', async () => {
+        const sheets = (count: number) => xlsx({ sheets: Array(count - 1).fill('<sheetData/>') });
+        expect(await outcome(sheets(MAX_SHEETS))).toBe('imported');
+        expect(await outcome(sheets(MAX_SHEETS + 1))).toEqual(TOO_LARGE);
+    }, 30_000);
+
     // A row walks every column up to its last cell, styled or not; rows without a value cost exceljs no cell.
     test('the columns rows reach may add up to the cell cap', async () => {
         const styled = (row: number, column: number) =>
@@ -493,6 +555,16 @@ describe('what else the import builds is refused before it costs', () => {
         expect(1 + 249 * 16_000 + 15_999).toBe(MAX_CELLS);
         expect(await outcome(file(15_999))).toBe('imported');
         expect(await outcome(file(16_000))).toEqual(TOO_MANY_CELLS);
+    }, 30_000);
+
+    // exceljs skips what an extension holds and never reads a pivot cache; the cell grid's own names don't count.
+    test('elements may reach their cap', async () => {
+        const pivot = { name: 'xl/pivotCache/pivotCacheRecords1.xml', xml: `<r>${'<m/>'.repeat(100)}</r>` };
+        // The sheet holds worksheet, sheetData, extLst and ext besides.
+        const file = (count: number) =>
+            xlsx({ after: `<extLst><ext uri="x">${'<x/>'.repeat(count)}</ext></extLst>` }, [pivot]);
+        expect(await outcome(file(MAX_ELEMENTS - 4))).toBe('imported');
+        expect(await outcome(file(MAX_ELEMENTS - 3))).toEqual(TOO_LARGE);
     }, 30_000);
 
     test('a part named by two sheets takes the name exceljs gives it, the last', async () => {
