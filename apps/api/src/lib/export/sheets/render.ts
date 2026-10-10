@@ -31,7 +31,7 @@ import {
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { getFontCSS } from '../fonts';
-import { sanitizeExportHtml } from '../sanitize';
+import { EXPORT_CSP_META, sanitizeExportHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
@@ -727,6 +727,7 @@ function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: num
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    ${EXPORT_CSP_META}
     <title>${escapeHtml(title)}</title>
     <style>${getFontCSS()}${SHEET_CSS_BASE}${pageCSS}${SHEET_CSS_PRINT}</style>
 </head>

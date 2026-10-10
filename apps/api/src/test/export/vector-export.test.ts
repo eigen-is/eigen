@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { JSDOM } from 'jsdom';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
+import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -64,6 +65,7 @@ describe('Eigenvector export route — response contract', () => {
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toBe('image/svg+xml');
         expect(res.headers.get('content-disposition')).toBe('attachment; filename="Vector Contract.svg"');
+        expect(res.headers.get('content-security-policy')).toBe(EXPORT_CSP);
 
         const svg = await res.text();
         expect(svg.startsWith('<svg')).toBe(true);

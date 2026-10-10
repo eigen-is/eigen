@@ -13,7 +13,7 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
-import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
+import { EXPORT_CSP_META, sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
 
@@ -56,6 +56,7 @@ export function canvasHtmlDocument(opts: {
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    ${EXPORT_CSP_META}
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${escapeHtml(title)}</title>
     <style>${getFontCSS()}${SHARED_CSS}${css}${canvasTextCSSRaw}</style>
