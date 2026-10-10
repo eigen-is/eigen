@@ -201,6 +201,10 @@ describe('a block inside a list item or a quote', () => {
             'a rule after a list in a quote two deep after a task list',
             [tasks([p('One')]), quote(quote(ordered([p('Two')]), rule))],
         ],
+        [
+            'a quote in a nested item, then one in the outer item',
+            [bullets([p('One'), ordered([p('a'), quote(p('Inner'))]), quote(p('Outer'))])],
+        ],
         ['code after a nested list', [ordered([p('One'), bullets([p('a')]), code('one()')], [p('Two')])]],
         ['code after a nested task list', [ordered([p('One'), tasks([p('a')]), code('one()')], [p('Two')])]],
         ['a quote after a nested list', [bullets([p('One'), ordered([p('a')]), quote(p('Said'))], [p('Two')])]],
@@ -243,6 +247,23 @@ describe('a task list in a quote', () => {
         ['nested in a list', [quote(bullets([p('One'), tasks([p('Task')])]))]],
         ['nested in a list after a deeper quote', [quote(quote(p('Deep')), bullets([p('One'), tasks([p('Task')])]))]],
     ])('%s comes back as written', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// The writer sets a page break at the margin, so the blocks around it say where it stands.
+describe('a page break between containers', () => {
+    test.each<[string, JSONContent[]]>([
+        [
+            'after a quote in an item, before a quote',
+            [bullets([p('One'), quote(p('Said'))]), pageBreak, quote(p('After'))],
+        ],
+        [
+            'after a nested task list, before a task list',
+            [ordered([p('One'), tasks([p('a')])]), pageBreak, tasks([p('b')])],
+        ],
+    ])('%s stands between them', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });

@@ -21,8 +21,8 @@ export type Para = {
     // item.
     numberAt?: number;
     quote: number;
-    // A quote inside the list item above it: the quote depth that item sits at.
-    inItem?: number;
+    // A quote inside a list item above it: that item, whose quote depth it sits at.
+    inItem?: Para;
     // The writer's code box, whose indent counts its quotes.
     boxed?: boolean;
     // A tracked deletion of the mark: accepted, the content joins the next paragraph.
@@ -212,7 +212,7 @@ function assignQuotes(items: Item[]): void {
                 const host = itemPast(opens, at);
                 counted = item.list ? listDepth(item.list) : taskDepth(at, host);
                 if (counted !== undefined) item.quote = counted;
-                if (counted !== undefined && host && counted > host.quote) item.inItem = host.quote;
+                if (counted !== undefined && host && counted > host.quote) item.inItem = host;
             }
             opens.push(item);
         } else if (item.role.kind === 'code') closeTo(codeDepth(item, opens, previous));
@@ -222,7 +222,7 @@ function assignQuotes(items: Item[]): void {
             const depth = host && item.quote > 0 ? quotesPast(item.indLeft, host.indLeft) : undefined;
             if (host && depth) {
                 item.quote = host.quote + depth;
-                item.inItem = host.quote;
+                item.inItem = host;
             } else if (host && host.quote > 0 && depth === 0) {
                 // At a quoted item's text it goes on with the item, in its quotes.
                 item.quote = host.quote;
@@ -270,10 +270,10 @@ function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefin
     // The quotes still open where the previous paragraph sits: those in the host, or outside any item those outside the
     // item it is quoted in.
     const open = host
-        ? previous?.inItem === host.quote
+        ? previous?.inItem === host
             ? previous.quote
             : host.quote
-        : (previous?.inItem ?? previous?.quote ?? 0);
+        : (previous?.inItem?.quote ?? previous?.quote ?? 0);
     if (depth === 0 || quote <= open) block.quote = quote;
 }
 
@@ -287,7 +287,7 @@ function codeDepth(code: Para, opens: Para[], previous: Para | undefined): Para 
     if (code.boxed && depth !== undefined) {
         code.indLeft = box;
         code.quote = (item?.quote ?? 0) + depth;
-        code.inItem = item && depth > 0 ? item.quote : undefined;
+        code.inItem = item && depth > 0 ? item : undefined;
         return item;
     }
     const container = itemUnder(opens, box)?.indLeft ?? 0;
@@ -336,7 +336,8 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         if (quoted.length === 0) return;
         const content = buildLevel(quoted, depth + 1);
         const [first] = quoted;
-        const itemAt = first?.kind === 'para' && first.inItem === depth ? (first.numberAt ?? first.indLeft) : undefined;
+        const itemAt =
+            first?.kind === 'para' && first.inItem?.quote === depth ? (first.numberAt ?? first.indLeft) : undefined;
         if (content.length > 0) out.push({ kind: 'block', node: { type: 'blockquote', content }, itemAt });
         quoted = [];
     };
@@ -358,16 +359,23 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
             (after.numberAt ?? after.indLeft) - QUOTE_LOOK.indent * ((itemDepths[index + 1] ?? 0) - depth - 1);
         return Math.abs(before.indLeft - container) <= INDENT_TOLERANCE;
     };
+    // A quote in an item above starts a quote of its own, one per item, at the depth the item sits at.
+    const inItem = (entry: Item | undefined) =>
+        entry?.kind === 'para' && entry.inItem?.quote === depth ? entry.inItem : undefined;
     for (const [index, item] of items.entries()) {
         const itemDepth = itemDepths[index] ?? 0;
         if (item.kind === 'boundary' && itemDepth === depth + 1 && !betweenBoxes(index)) {
             flushQuote();
             continue;
         }
-        if (itemDepth > depth) {
-            const [first] = quoted;
-            // A quote in the item above starts a quote of its own, at the depth the item sits at.
-            const inItem = (entry: Item | undefined) => entry?.kind === 'para' && entry.inItem === depth;
+        const [first] = quoted;
+        // The writer's page break sits at the margin: between quotes of two items, or an item's and another, it stands
+        // between them.
+        const parts =
+            item.kind === 'break' &&
+            first?.kind === 'para' &&
+            inItem(first) !== inItem(items.slice(index + 1).find((next) => next.kind === 'para'));
+        if (itemDepth > depth && !parts) {
             if (item.kind === 'para' && first?.kind === 'para' && inItem(first) !== inItem(item)) flushQuote();
             quoted.push(item);
             continue;
@@ -431,7 +439,10 @@ function buildFlow(items: Item[]): JSONContent[] {
         const { list } = following;
         if (following.task || list) {
             const joins = following.task
-                ? stack.some((open) => open.kind === 'taskList')
+                ? stack.some(
+                      (open) =>
+                          open.kind === 'taskList' && Math.abs(open.indent - following.indLeft) <= INDENT_TOLERANCE,
+                  )
                 : stack.some((open) => open.key === list?.key);
             return joins || nestsUnder(following, top.indent, top.kind === 'taskList') ? top : undefined;
         }
