@@ -451,7 +451,11 @@ export class ChatRoom {
     // not append — deleted messages leave the index, edits don't duplicate; threads are short).
     private async buildRecentText(): Promise<string> {
         const rows = await this.db
-            .select({ content: schema.messages.content })
+            .select({
+                type: schema.messages.type,
+                content: schema.messages.content,
+                authorEmail: schema.messages.authorEmail,
+            })
             .from(schema.messages)
             .where(
                 and(
@@ -467,7 +471,9 @@ export class ChatRoom {
             .all();
         let text = '';
         for (const row of rows) {
-            text = text ? `${text}\n${row.content}` : row.content;
+            // Index the sentence a bystander reads, not the stored emote key.
+            const content = row.type === 'emote' ? formatEmoteForViewer(row.content, row.authorEmail) : row.content;
+            text = text ? `${text}\n${content}` : content;
             if (text.length >= RECENT_TEXT_CAP) break;
         }
         return text.slice(0, RECENT_TEXT_CAP);
