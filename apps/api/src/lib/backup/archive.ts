@@ -253,8 +253,9 @@ export async function createArchiveWriter(archivePath: string): Promise<ArchiveW
     };
 }
 
-// One member of a whole-server archive: where its bytes sit in the outer tar, and their sha256.
-export type ArchiveMember = { archivePath: string; name: string; offset: number; bytes: number; sha256: string };
+// One member of a whole-server archive: where its bytes sit in the outer tar, and their sha256 once read through.
+export type ArchiveMemberAt = { archivePath: string; name: string; offset: number; bytes: number };
+export type ArchiveMember = ArchiveMemberAt & { sha256: string };
 
 // Where an artifact's compressed bytes are read from: a file of its own, or a member of a
 // whole-server archive, read in place.
@@ -345,8 +346,8 @@ function checkedEntryPath(name: string): string {
 
 // A tar entry by entry, bodies streamed: an artifact's decompressed bytes, or a plain tar as it sits
 // on disk. A consumer that reads part of a body or none leaves the rest to the loop below, so it can
-// stop at the entry it came for.
-async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<TarEntry> {
+// stop at the entry it came for. `seek`, when given, moves `bytes` past what is left unread instead.
+async function* tarEntries(bytes: AsyncIterable<Uint8Array>, seek?: (count: number) => void): AsyncGenerator<TarEntry> {
     const source = bytes[Symbol.asyncIterator]();
     let buffered: Uint8Array = new Uint8Array(0);
     let bodyLeft = 0;
@@ -381,6 +382,11 @@ async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<Tar
     async function skip(count: number): Promise<void> {
         let left = count;
         while (left > 0) {
+            if (buffered.length === 0 && seek) {
+                seek(left);
+                position += left;
+                return;
+            }
             if (buffered.length === 0 && !(await fill())) throw new Error('backup archive: the tar ends mid-entry');
             const step = Math.min(left, buffered.length);
             buffered = buffered.subarray(step);
@@ -462,12 +468,40 @@ export async function readArchiveMembers(archivePath: string): Promise<ArchiveMe
     return members;
 }
 
+// Every file member of a whole-server archive in order, from the headers alone: a body is seeked past, not read.
+export async function listArchiveMembers(archivePath: string): Promise<ArchiveMemberAt[]> {
+    const handle = await fsp.open(archivePath, 'r');
+    try {
+        const { size } = await handle.stat();
+        let at = 0;
+        async function* blocks(): AsyncGenerator<Uint8Array> {
+            while (at < size) {
+                const { bytesRead, buffer } = await handle.read(new Uint8Array(BLOCK), 0, BLOCK, at);
+                at += bytesRead;
+                yield buffer.subarray(0, bytesRead);
+            }
+        }
+        const seek = (count: number) => {
+            if (at + count > size) throw new Error('backup archive: the tar ends mid-entry');
+            at += count;
+        };
+        const members: ArchiveMemberAt[] = [];
+        for await (const entry of tarEntries(blocks(), seek)) {
+            if (entry.typeflag === '5') continue;
+            members.push({ archivePath, name: entry.path, offset: entry.offset, bytes: entry.size });
+        }
+        return members;
+    } finally {
+        await handle.close();
+    }
+}
+
 // What readArchiveMember holds in memory at most: a manifest fits many times over, a home does not.
 const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
 
-// A member's bytes in memory, for the manifest. A member that has to land on disk goes through
+// A member's bytes in memory, for the manifest and .env.production. A member that has to land on disk goes through
 // copyArchiveMember, and a home member is unpacked in place by extractArtifact.
-export async function readArchiveMember(member: ArchiveMember): Promise<Uint8Array> {
+export async function readArchiveMember(member: ArchiveMemberAt): Promise<Uint8Array> {
     if (member.bytes > MAX_MEMBER_READ_BYTES) {
         throw new Error(`backup archive: ${member.name} is ${member.bytes} bytes, too big to read into memory`);
     }
