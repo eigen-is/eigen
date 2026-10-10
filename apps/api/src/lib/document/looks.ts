@@ -32,7 +32,7 @@ export function proseColor(selector: string, property: string): string {
     return hex;
 }
 
-export function proseFont(selector: string): string {
+function proseFont(selector: string): string {
     const name = getFontName(proseValue(selector, 'font-family'));
     if (!EIGEN_FONT_NAMES.includes(name))
         throw new Error(`eigen-prose.css font ${name} on ${selector} is no Eigen font`);
