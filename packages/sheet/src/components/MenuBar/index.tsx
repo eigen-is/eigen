@@ -1,7 +1,6 @@
 import { useMediaQuery } from '@workspace/lib/media';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
+import { ToolbarMenu } from '@workspace/ui/components/layout/toolbar';
 import { useFindBarRefocus } from '@workspace/ui/components/search/find-in-document-button';
-import { cn } from '@workspace/ui/lib/utils';
 import { type ReactNode, useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { DataMenu } from './data-menu';
@@ -15,8 +14,6 @@ type Props = {
     leftItems?: ReactNode;
     rightItems?: ReactNode;
 };
-
-const triggerClass = cn('px-3 h-8 text-sm rounded-sm', 'hover:bg-muted focus-visible:bg-muted', 'outline-hidden');
 
 // 1fr·auto·1fr grid: the equal side columns keep the center column at the bar's true
 // center, so FormatToolbar sits dead-center regardless of the menu / right-icon widths.
@@ -34,49 +31,34 @@ export function MenuBar({ leftItems, rightItems }: Props) {
         >
             <div className="flex items-center gap-1 min-w-0 overflow-x-auto">
                 {leftItems}
-                <DropdownMenu>
-                    <DropdownMenuTrigger className={triggerClass}>Edit</DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="start"
-                        className="w-56 sheet-mousedown-cancel"
-                        onCloseAutoFocus={onCloseAutoFocus}
-                    >
-                        <SheetEditMenu focusFindBarRef={focusFindBarRef} />
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <ToolbarMenu
+                    label="Edit"
+                    contentClassName="w-56 sheet-mousedown-cancel"
+                    onCloseAutoFocus={onCloseAutoFocus}
+                >
+                    <SheetEditMenu focusFindBarRef={focusFindBarRef} />
+                </ToolbarMenu>
 
                 {/* View / Insert / Format / Data are wholly mutating — hidden for viewers, like
                     FormatToolbar. Edit stays (Copy / Find gate per-item); viewers still read
                     comments via the ungated Comments panel toggle. */}
                 {context.allowEdit && (
                     <>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger className={triggerClass}>View</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 sheet-mousedown-cancel">
-                                <ViewMenu />
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <ToolbarMenu label="View" contentClassName="w-56 sheet-mousedown-cancel">
+                            <ViewMenu />
+                        </ToolbarMenu>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger className={triggerClass}>Insert</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 sheet-mousedown-cancel">
-                                <InsertMenu />
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <ToolbarMenu label="Insert" contentClassName="w-56 sheet-mousedown-cancel">
+                            <InsertMenu />
+                        </ToolbarMenu>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger className={triggerClass}>Format</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-64 sheet-mousedown-cancel">
-                                <FormatMenu />
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <ToolbarMenu label="Format" contentClassName="w-64 sheet-mousedown-cancel">
+                            <FormatMenu />
+                        </ToolbarMenu>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger className={triggerClass}>Data</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 sheet-mousedown-cancel">
-                                <DataMenu />
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <ToolbarMenu label="Data" contentClassName="w-56 sheet-mousedown-cancel">
+                            <DataMenu />
+                        </ToolbarMenu>
                     </>
                 )}
             </div>
