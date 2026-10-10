@@ -179,6 +179,8 @@ describe('a block inside a list item or a quote', () => {
         ['a heading in an item', [ordered([p('One'), heading('Part')], [p('Two')])]],
         ['a heading in an item in a quote', [quote(ordered([p('One'), heading('Part')], [p('Two')]))]],
         ['a quote two deep after a list', [bullets([p('One')]), quote(quote(p('Deep')))]],
+        ['a quote two deep holding a rule after a list', [bullets([p('One')]), quote(quote(p('Deep'), rule))]],
+        ['a quote two deep holding a table after a list', [tasks([p('One')]), quote(quote(p('Deep'), table))]],
         [
             'a quote three deep after a nested list',
             [bullets([p('One'), bullets([p('a')])]), quote(quote(quote(p('Deep'))))],

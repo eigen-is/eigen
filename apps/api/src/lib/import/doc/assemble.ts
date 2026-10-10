@@ -218,10 +218,13 @@ function assignQuotes(items: Item[]): void {
             opens.push(item);
         } else if (item.role.kind === 'code') closeTo(codeDepth(item, hostAt, previous));
         else {
-            const host = hostAt(item.indLeft);
+            // A quote in an item sits whole quotes past its text, past the quotes the item itself sits in.
+            const host =
+                item.quote > 0
+                    ? opens.findLast((open) => quotesPast(item.indLeft, open.indLeft) !== undefined)
+                    : hostAt(item.indLeft);
             const depth = host && item.quote > 0 ? quotesPast(item.indLeft, host.indLeft) : undefined;
             if (host && depth) {
-                // A quote in an item sits whole quotes past its text, past the quotes the item itself sits in.
                 item.quote = host.quote + depth;
                 item.inItem = host.quote;
             } else if (host && host.quote > 0 && depth === 0) {
