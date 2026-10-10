@@ -33,7 +33,7 @@ import type {
     RichText,
     Cell as XlsxCell,
 } from 'exceljs';
-import JSZip from 'jszip';
+import { openZip, writeZip, type ZipWriteEntry } from '../../core/zip';
 import { cssColorToHex } from '../colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
@@ -221,19 +221,18 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 // and Google author internal links location-only, with the link label in the
 // display attribute; rewrite our elements to that exact form — strip the junk
 // rel, inject display.
-async function rewriteInternalHyperlinks(
-    buffer: Buffer,
-    labelsBySheet: Map<number, Map<string, string>>,
-): Promise<Buffer> {
-    const zip = await JSZip.loadAsync(buffer);
-    let changed = false;
-    for (const path of Object.keys(zip.files)) {
+function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Map<string, string>>): Buffer {
+    // Every internal link has a label, so a workbook without one is never reopened, nor held to openZip's caps.
+    if (labelsBySheet.size === 0) return buffer;
+    const zip = openZip(buffer);
+    const text = (path: string) => new TextDecoder().decode(zip.read(path));
+    const rewritten = new Map<string, string>();
+    for (const path of zip.names()) {
         const sheetFile = path.match(/^xl\/worksheets\/sheet(\d+)\.xml$/);
         if (!sheetFile) continue;
         const labels = labelsBySheet.get(Number(sheetFile[1]));
         const ids: string[] = [];
-        const xml = await zip.files[path].async('string');
-        const stripped = xml.replace(/<hyperlink\b[^>]*>/g, (el) => {
+        const stripped = text(path).replace(/<hyperlink\b[^>]*>/g, (el) => {
             const rid = el.includes('location="') ? el.match(/ r:id="(rId\d+)"/) : null;
             if (!rid) return el;
             ids.push(rid[1]);
@@ -247,20 +246,23 @@ async function rewriteInternalHyperlinks(
             return out;
         });
         if (ids.length === 0) continue;
-        changed = true;
-        zip.file(path, stripped);
+        rewritten.set(path, stripped);
         const relsPath = `xl/worksheets/_rels/sheet${sheetFile[1]}.xml.rels`;
-        const relsFile = zip.file(relsPath);
-        if (relsFile) {
-            let rels = await relsFile.async('string');
+        if (zip.entry(relsPath)) {
+            let rels = text(relsPath);
             for (const id of ids) {
                 rels = rels.replace(new RegExp(`<Relationship [^>]*Id="${id}"[^>]*/>`), '');
             }
-            zip.file(relsPath, rels);
+            rewritten.set(relsPath, rels);
         }
     }
-    if (!changed) return buffer;
-    return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    if (rewritten.size === 0) return buffer;
+    const files: ZipWriteEntry[] = [];
+    for (const name of zip.names()) {
+        const data = rewritten.get(name) ?? zip.read(name);
+        if (data !== undefined) files.push({ name, data });
+    }
+    return Buffer.from(writeZip(files));
 }
 
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {

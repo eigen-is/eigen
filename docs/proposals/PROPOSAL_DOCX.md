@@ -21,7 +21,7 @@ This proposal replaces the docs app's docx export with a writer of our own and i
 - Font size, line spacing, indents and cell shading as schema features. Those are editor decisions. Until they exist, import keeps the text and drops the style.
 - pptx. That is its own row in [ROADMAP-POST-1.md](../ROADMAP-POST-1.md).
 
-## Current state
+## Current state (2026-10-06, before the build)
 
 **Export goes through HTML.** `renderEigendocExport` (`apps/api/src/lib/export/doc/transform.ts`) renders the doc to the export HTML, and for docx feeds it to `@turbodocx/html-to-docx` 1.22.2 with a title and the page size and margins from the page setup (§ One page setup). It runs in the transform Worker and loads lazily ([EXPORT.md](../EXPORT.md)). EXPORT.md's rule "every format but xlsx and SVG is one HTML document" holds docx inside the HTML path today.
 
@@ -41,7 +41,7 @@ The rest is main-thread data, prepared beside the media and passed to the Worker
 - **The replies** are in the container's chat. `readChatContent` (`apps/api/src/lib/document/chat.ts`) is the wrong shape: one byte-capped string, newest first, for search. A new query over `messages` beside it returns author, date and body per message, oldest first.
 - **Names and initials.** A card's `creator` and a reply's `authorEmail` are emails, so the names come from a user lookup. `creator` is optional; a card without one gets an empty author, which Word accepts.
 
-### What survives today
+### What survives today (2026-10-06, before the build)
 
 P preserved, D degraded, L lost.
 
@@ -226,7 +226,7 @@ The tests: the round trip (export, import, compare the ProseMirror JSON) for a d
 6. Export, edit in Word, import again is a supported workflow. (Owner, 2026-10-06.)
 7. The schema gains a page break; anything else waits for the corpus. (Owner, 2026-10-06.)
 8. Word's Title becomes H1, Subtitle a paragraph, Quote a blockquote. H1 exports as Heading 1. (Owner, 2026-10-06.)
-9. The writer emits the XML by hand with JSZip, through the one escape module `@workspace/lib/xml`; no `docx` package. Every XML read goes through `Bun.XML.parse` with `{ compact: false }` behind `apps/api/src/lib/core/xml.ts`, which refuses a DOCTYPE before parsing and maps parse errors to 400; the compact shape isn't used. Tests parse every generated part with it, and it is the scanner's test oracle. (Owner, 2026-10-06; reworded 2026-10-07. The writer zips with our own `writeZip` since Decision 21, and the reader in Decision 17 has no scanner.)
+9. The writer emits the XML by hand and zips it with `writeZip`, through the one escape module `@workspace/lib/xml`; no `docx` package. Every XML read goes through `Bun.XML.parse` with `{ compact: false }` behind `apps/api/src/lib/core/xml.ts`, which refuses a DOCTYPE before parsing and maps parse errors to 400; the compact shape isn't used. Tests parse every generated part with it, and it is the scanner's test oracle. (Owner, 2026-10-06; reworded 2026-10-07 and 2026-10-10. The reader in Decision 17 has no scanner.)
 10. The rewrite before mammoth is a text scanner that inserts synthesized styles; no parse and rebuild. (Owner, 2026-10-06; superseded by Decision 17.)
 11. Column widths ride a synthesized table style, list numbers a synthesized list-item paragraph style. (Owner, 2026-10-06; superseded by Decision 17.)
 12. Embed the fonts a document uses, per style used, whole: about 530 KB for a typical doc, 1.83 MB for all four families. (Owner, 2026-10-06.)
@@ -238,7 +238,7 @@ The tests: the round trip (export, import, compare the ProseMirror JSON) for a d
 18. Empty paragraphs import as blank lines, except a run of them that ends at a page break, a page-breaking paragraph or a section break that starts a page. (Owner, 2026-10-09.)
 19. A page break inside a list item stays in the item, and the list keeps counting. (Owner, 2026-10-09.)
 20. The body font: a foreign font of Eigen's body category (sans-serif, so Inter) gets no mark; a serif or monospace one gets its bundled font's mark (Source Serif 4, JetBrains Mono) on every run; a font of unknown category gets none. A foreign monospace run inside a proportional body gets the JetBrains Mono mark too, not `code`, which only a code style or the writer's code look gives. (Owner, 2026-10-09.)
-21. The zip is our own reader and writer (`apps/api/src/lib/core/zip.ts`) in the docx paths: at most 10,000 entries and 200 MB declared, 413 above. xlsx keeps JSZip until a closing study weighs replacing ExcelJS. (Owner, 2026-10-09. Built: the xlsx import reads through `openZip` too and hands ExcelJS a stored re-pack, while ExcelJS and the xlsx export still use JSZip.)
+21. The zip is our own reader and writer (`apps/api/src/lib/core/zip.ts`) in the docx paths: at most 10,000 entries and 200 MB declared, 413 above. xlsx keeps JSZip until a closing study weighs replacing ExcelJS. (Owner, 2026-10-09. Built: the xlsx import reads through `openZip` too and hands ExcelJS a stored re-pack, and the xlsx export rewrites its internal links through `openZip` and `writeZip`, so only ExcelJS uses JSZip.)
 22. At most 16 MB of parsed XML per import, counted on declared sizes before anything inflates, and at most 750,000 tags; 413 above either. The largest `document.xml` in the corpus is 12.6 MB and 611,000 tags. (Owner, 2026-10-09.)
 23. A WMF or EMF picture is kept under its real name (`image-3.wmf`): the editor shows a broken image with its alt text, which the user can delete, and the exports leave it out. Nothing on the server converts either. (Owner, 2026-10-09.)
 24. A code block's language rides a hidden paragraph style per language, id `CodeBlock-<lang>`, name `Code Block (<lang>)`, based on `CodeBlock`, `w:semiHidden` without `w:unhideWhenUsed`. Google Docs drops it. (Owner, 2026-10-09.)

@@ -1001,14 +1001,53 @@ describe('docx writer — task lists', () => {
         ]);
     });
 
-    test('a checked item strikes all its content, nested items included', async () => {
+    test('a checked item strikes its own blocks, never a nested open task', async () => {
         const paragraphs = await paragraphsOf(
             doc(tasks(task(true, p(text('done')), p(text('more')), tasks(task(false, p(text('nested'))))))),
         );
         expect(paragraphs.slice(1)).toEqual([
             `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="0"/><w:ind w:left="330"/></w:pPr>${run('more')}</w:p>`,
-            `<w:p><w:pPr><w:pStyle w:val="TaskDone"/><w:spacing w:after="220"/><w:ind w:left="660" w:hanging="330"/></w:pPr>${checkbox(false)}${run('nested')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="220"/><w:ind w:left="660" w:hanging="330"/></w:pPr>${checkbox(false)}${run('nested')}</w:p>`,
         ]);
+    });
+
+    test('an open task restores the style around the done task it sits in, its nested content too', async () => {
+        const body = await bodyOf(
+            doc(
+                quote(
+                    tasks(
+                        task(
+                            true,
+                            p(text('done')),
+                            ul(li(p(text('bullet')))),
+                            tasks(task(true, p(text('inner done')), tasks(task(false, p(text('inner open')))))),
+                            tasks(
+                                task(
+                                    false,
+                                    p(text('open')),
+                                    ul(li(p(text('open bullet')))),
+                                    tasks(task(true, p(text('deep done'))), task(false, p(text('deep open')))),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        );
+        const styles = xmlChildren(body, W, 'p').map((paragraph) => [
+            texts(paragraph).replace(/^[☐☒]/, ''),
+            w(child(child(paragraph, 'pPr'), 'pStyle'), 'val'),
+        ]);
+        expect(Object.fromEntries(styles)).toEqual({
+            done: 'TaskDone',
+            bullet: 'TaskDone',
+            'inner done': 'TaskDone',
+            'inner open': 'Quote',
+            open: 'Quote',
+            'open bullet': 'Quote',
+            'deep done': 'TaskDone',
+            'deep open': 'Quote',
+        });
     });
 
     test('the Task Done style strikes in the muted color', async () => {

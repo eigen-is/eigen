@@ -6,8 +6,8 @@ export type EigenFont = {
 };
 
 // Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
-// default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and each category
-// maps to exactly one bundled font.
+// default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and a category's
+// first font is the one a foreign font of that category maps to.
 export const EIGEN_FONTS: EigenFont[] = [
     { name: 'Inter', family: "'Inter', sans-serif", category: 'sans-serif', weights: [400, 500, 600, 700] },
     { name: 'Source Serif 4', family: "'Source Serif 4', serif", category: 'serif', weights: [400, 600, 700] },
@@ -48,7 +48,7 @@ export function getFontName(value: string): string {
 
 // Font names, trimmed and lowercase, onto the category whose bundled font stands in for them: only the
 // bundled faces are embedded in an export.
-export const FONT_CATEGORY_MAP: ReadonlyMap<string, EigenFont['category']> = new Map([
+const FONT_CATEGORY_MAP: ReadonlyMap<string, EigenFont['category']> = new Map([
     ...EIGEN_FONTS.map((font): [string, EigenFont['category']] => [font.name.toLowerCase(), font.category]),
     ['calibri', 'sans-serif'],
     ['calibri light', 'sans-serif'],
@@ -98,7 +98,11 @@ export const FONT_CATEGORY_MAP: ReadonlyMap<string, EigenFont['category']> = new
     ['comic sans ms', 'hand-drawn'],
 ]);
 
+export function bundledFontOfCategory(category: EigenFont['category']): string | undefined {
+    return EIGEN_FONTS.find((font) => font.category === category)?.name;
+}
+
 export function bundledFont(name: string): string | undefined {
     const category = FONT_CATEGORY_MAP.get(name.trim().toLowerCase());
-    return category && EIGEN_FONTS.find((font) => font.category === category)?.name;
+    return category && bundledFontOfCategory(category);
 }

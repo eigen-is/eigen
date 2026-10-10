@@ -41,6 +41,14 @@ describe('renderEigendocPreviewBody', () => {
         expect(body).not.toMatch(/<script/i);
     });
 
+    test('an ordered list keeps its start and its type, as the export draws them', () => {
+        const item = { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'c' }] }] };
+        const list = { type: 'orderedList', attrs: { start: 3, type: 'a' }, content: [item] };
+        expect(previewOf({ type: 'doc', content: [list] })).toBe(
+            '<ol start="3" style="counter-reset: list-item 2" type="a"><li><p>c</p></li></ol>',
+        );
+    });
+
     test('an empty paragraph keeps the line the editor shows', () => {
         expect(previewOf({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe('<p><br></p>');
     });

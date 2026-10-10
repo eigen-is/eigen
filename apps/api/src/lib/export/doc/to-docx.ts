@@ -194,6 +194,8 @@ type Context = {
     depth: number;
     quotes: number;
     style?: StyleId;
+    // The style TaskDone replaced, which an open task nested in a done one restores, as the editor strikes no nested task.
+    undone?: StyleId;
     after?: number;
     align?: string;
     list?: NumberingRef;
@@ -537,10 +539,11 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'taskItem',
         (node, context) => {
             const checked = node.attrs?.['checked'] === true;
-            const done: Context = checked ? { ...context, style: 'TaskDone' } : context;
+            const undone = context.style === 'TaskDone' ? context.undone : context.style;
+            const item: Context = checked ? { ...context, style: 'TaskDone', undone } : { ...context, style: undone };
             context.pkg.checkboxes = true;
             const after = proseTwips('.eigen-prose ul[data-type="taskList"] li', 'margin-bottom');
-            return itemOf(node, done, after, (first, inner) => ({
+            return itemOf(node, item, after, (first, inner) => ({
                 ...first,
                 props: { ...first.props, ind: { left: inner.indent, hanging: LIST_LEVEL } },
                 runs: checkboxXml(checked) + first.runs,
