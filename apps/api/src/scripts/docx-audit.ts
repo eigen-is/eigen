@@ -16,12 +16,15 @@ import {
     A_NS,
     C_NS,
     headingLevel,
+    isOn,
+    LINK_THEME_COLORS,
     M_NS,
     MC_NS,
     O_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PAGE_SECTION_TYPES,
     R_NS,
+    STYLE_NAMES,
     toTransitional,
     V_NS,
     W_NS,
@@ -200,7 +203,6 @@ const WRAPS = ['wrapSquare', 'wrapTight', 'wrapThrough'];
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
 // The link look's colors, apart from the reader's so the audit never grades the reader by itself.
 const LINK_STYLE_COLORS = new Set(['2563EB', '1155CC', '0563C1', '0000FF', '000080']);
-const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
 
 // Counted per word they touch, and matched as words, so a mark on the wrong words keeps nothing.
 const MARKS = new Set<Feature>([
@@ -277,7 +279,7 @@ function val(element: XmlElement | undefined): string | undefined {
 
 // An on/off property present without w:val is on.
 function on(element: XmlElement): boolean {
-    return !['0', 'false', 'off'].includes(val(element) ?? 'true');
+    return isOn(val(element)) !== false;
 }
 
 // Not into a match, nor into a text box: its content is walked by its own drawing, once.
@@ -469,7 +471,7 @@ function readStyles(root: XmlElement | undefined): Styles {
         const id = xmlAttr(style, W_NS, 'styleId');
         if (!id) continue;
         byId.set(id, style);
-        if (!['1', 'true', 'on'].includes(xmlAttr(style, W_NS, 'default') ?? '')) continue;
+        if (isOn(xmlAttr(style, W_NS, 'default')) !== true) continue;
         const type = xmlAttr(style, W_NS, 'type');
         if (type === 'paragraph') paragraph = id;
         if (type === 'character') character = id;
@@ -707,7 +709,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             heading,
             code,
             quote: !code && (names.some((name) => QUOTE_STYLES.has(name)) || (heading === undefined && only('left'))),
-            caption: names.includes('caption'),
+            caption: names.includes(STYLE_NAMES.Caption.toLowerCase()),
             jc: val(first(pPrs, 'jc')),
             pageBreakBefore: !!pageBreakBefore && on(pageBreakBefore),
             sectionBreak: !!section && PAGE_SECTION_TYPES.has(val(child(section, 'type')) ?? 'nextPage'),
@@ -837,7 +839,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         if (box && visible(scope)) {
             add(tally, 'taskItems');
             const checked = child(box, 'checked', W14_NS);
-            if (checked && ['1', 'true'].includes(xmlAttr(checked, W14_NS, 'val') ?? '')) add(tally, 'checkedTasks');
+            if (checked && isOn(xmlAttr(checked, W14_NS, 'val'))) add(tally, 'checkedTasks');
         }
         return !!box;
     };
@@ -1678,7 +1680,7 @@ function isReply(data: unknown): data is WorkerReply {
     }
 }
 
-// Another importer may answer with a Promise, as mammoth's did.
+// Another importer may answer with a Promise.
 type Importer = (
     ...args: Parameters<typeof docxToPmJson>
 ) => ReturnType<typeof docxToPmJson> | Promise<ReturnType<typeof docxToPmJson>>;
