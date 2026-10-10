@@ -1,6 +1,8 @@
 // A block figure's box is the column's width: a click in its empty space beside the image places the caret on that
-// side, and the image itself still selects the node.
+// side, and the image itself still selects the node. A selected figure still drags, and a drag that empties the
+// figure's paragraph removes it.
 import { afterEach, expect, test } from 'bun:test';
+import { NodeSelection } from '@tiptap/pm/state';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -66,4 +68,52 @@ test('a click on the image is left to ProseMirror, which selects the node', asyn
 
     expect(click(image, 300)).toBeFalsy();
     expect(editor.state.selection.toJSON()).toEqual(before);
+});
+
+test('a press on a selected figure is not prevented, so the browser can start its drag', async () => {
+    const { editor, image } = await mount();
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 300, clientY: 50 });
+    image.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(false);
+});
+
+const figure = { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200 } };
+const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+const text = (t: string) => ({ type: 'text', text: t });
+
+// ProseMirror's move of the figure at `from` to `to`: the dragged node replaced, inserted at the drop point, uiEvent drop.
+async function drop(content: object[], from: number, to: number) {
+    const editor = new Editor({
+        extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
+        content: { type: 'doc', content },
+    });
+    ({ unmount } = await renderInDocument(createElement(EditorContent, { editor })));
+    const dragged = NodeSelection.create(editor.state.doc, from);
+    await act(async () => {
+        editor.view.dispatch(editor.state.tr.setSelection(dragged));
+        const tr = editor.state.tr;
+        dragged.replace(tr);
+        const pos = tr.mapping.map(to);
+        tr.replaceRangeWith(pos, pos, dragged.node);
+        editor.view.dispatch(tr.setMeta('uiEvent', 'drop'));
+    });
+    return editor
+        .getJSON()
+        .content?.map((block) => block.content?.map((node) => ('text' in node ? node.text : node.type)) ?? []);
+}
+
+test('a figure dragged out of a paragraph of its own takes the paragraph with it', async () => {
+    // The figure at 4, the end of "b" at 8.
+    const blocks = await drop([paragraph(text('a')), paragraph(figure), paragraph(text('b'))], 4, 8);
+    expect(blocks).toEqual([['a'], ['b', 'figure']]);
+});
+
+test('a figure dragged out of a paragraph with text leaves the text', async () => {
+    // The figure at 5, the end of "b" at 9.
+    const blocks = await drop([paragraph(text('a')), paragraph(text('x'), figure), paragraph(text('b'))], 5, 9);
+    expect(blocks).toEqual([['a'], ['x'], ['b', 'figure']]);
 });
