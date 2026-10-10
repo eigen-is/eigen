@@ -1,4 +1,3 @@
-import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
@@ -7,7 +6,6 @@ import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
     DOCX_IMAGE_MAX_SIZE,
-    type DocumentExportFormat,
     type EigendocExportFormat,
     type ExportMedia,
     type TransformWarning,
@@ -40,7 +38,17 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks(media);
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
-    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title, format);
+    const dataUriMap = toDataUriMap(media);
+    const body = renderDocHtml(
+        withAbsoluteLinks(json, publicOrigin),
+        (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+        { synthesizeSmallCaps: format === 'pdf-html' },
+    );
+    const html = exportHtmlDocument({
+        title,
+        css: `${PROSE_CSS}${PRINT_EXTRAS}`,
+        body: `<div class="page"><article class="eigen-prose tiptap">${sanitizeExportHtml(body)}</article></div>`,
+    });
     return { data: toTransferableText(html), warnings: [] };
 }
 
@@ -87,22 +95,6 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
     const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
-}
-
-function renderEigendocDocument(
-    json: JSONContent,
-    dataUriMap: Map<string, string>,
-    title: string,
-    format: DocumentExportFormat,
-): string {
-    const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src), {
-        synthesizeSmallCaps: format === 'pdf-html',
-    });
-    return exportHtmlDocument({
-        title,
-        css: `${PROSE_CSS}${PRINT_EXTRAS}`,
-        body: `<div class="page"><article class="eigen-prose tiptap">${sanitizeExportHtml(bodyHtml)}</article></div>`,
-    });
 }
 
 const PRINT_EXTRAS = `

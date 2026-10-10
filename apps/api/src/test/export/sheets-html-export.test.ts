@@ -4,10 +4,9 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     getSheetContentSize,
-    renderSheetsExportDocument,
     renderSheetsHtml,
-    renderSheetsPdfDocument,
     renderSheetsPreviewHtml,
+    sheetsHtmlDocument,
 } from '../../lib/export/sheets/render';
 import { NO_MEDIA } from '../setup';
 
@@ -151,7 +150,12 @@ describe('Sheets HTML export — class-based styles', () => {
     });
 
     test('the export document embeds the class rules in a body style element', () => {
-        const doc = renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], 'T', NO_MEDIA);
+        const doc = sheetsHtmlDocument({
+            title: 'T',
+            sheets: [makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])],
+            mediaUrls: NO_MEDIA,
+            mode: 'screen',
+        });
         // The generated rules survive sanitization into the final document.
         expect(doc).toContain('border:1px solid #d4d4d4');
         expect(doc).toMatch(/<style>[^<]*td\{overflow:hidden/);
@@ -159,11 +163,12 @@ describe('Sheets HTML export — class-based styles', () => {
     });
 
     test('a hostile url() in a cell background is stripped from the document CSS', () => {
-        const doc = renderSheetsExportDocument(
-            [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'url(http://evil.test/ssrf)' } }])],
-            'T',
-            NO_MEDIA,
-        );
+        const doc = sheetsHtmlDocument({
+            title: 'T',
+            sheets: [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg: 'url(http://evil.test/ssrf)' } }])],
+            mediaUrls: NO_MEDIA,
+            mode: 'screen',
+        });
         expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
     });
 
@@ -173,7 +178,7 @@ describe('Sheets HTML export — class-based styles', () => {
         const bg = `red;mask:url(data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}#m)`;
         const sheets = [makeSheet([{ r: 0, c: 0, v: { v: 'x', bg } }])];
         const preview = sanitizeExportHtml(renderSheetsPreviewHtml(sheets, NO_MEDIA).html, { allowedRefs: new Set() });
-        for (const html of [renderSheetsExportDocument(sheets, 'T', NO_MEDIA), preview]) {
+        for (const html of [sheetsHtmlDocument({ title: 'T', sheets, mediaUrls: NO_MEDIA, mode: 'screen' }), preview]) {
             expect(html).not.toContain('mask:');
         }
     });
@@ -202,7 +207,14 @@ describe('Sheets HTML export — class-based styles', () => {
             { v: 'x', ff: BREAKOUT },
             { v: 'x', fc: BREAKOUT },
         ]) {
-            expectNoBreakout(renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: cell }])], 'T', NO_MEDIA));
+            expectNoBreakout(
+                sheetsHtmlDocument({
+                    title: 'T',
+                    sheets: [makeSheet([{ r: 0, c: 0, v: cell }])],
+                    mediaUrls: NO_MEDIA,
+                    mode: 'screen',
+                }),
+            );
         }
     });
 
@@ -212,7 +224,7 @@ describe('Sheets HTML export — class-based styles', () => {
             columnlen: { 0: BREAKOUT as unknown as number },
             rowlen: { 0: BREAKOUT as unknown as number },
         };
-        const doc = renderSheetsExportDocument([sheet], 'T', NO_MEDIA);
+        const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'screen' });
         expectNoBreakout(doc);
         // Non-numeric dimensions fall back to the defaults rather than concatenating —
         // the same coercion getSheetContentSize applies for the @page rule.
@@ -870,7 +882,7 @@ describe('Sheets export — content size (@page)', () => {
     test('the PDF page of a huge sheet is capped at the PDF page limit', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'wide' } }]);
         sheet.config = { columnlen: { 0: 1e9 }, rowlen: { 0: 1e9 } };
-        const html = renderSheetsPdfDocument([sheet], 'Huge', NO_MEDIA);
+        const html = sheetsHtmlDocument({ title: 'Huge', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'pdf' });
         expect(html).toContain('@page { size: 19200px 19200px; margin: 40px; }');
     });
 
@@ -979,11 +991,12 @@ describe('Sheets HTML export — floating images', () => {
     });
 
     test('the embedded data: URI survives the document sanitizer', () => {
-        const doc = renderSheetsExportDocument(
-            [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }])],
-            'T',
-            MEDIA,
-        );
+        const doc = sheetsHtmlDocument({
+            title: 'T',
+            sheets: [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 }])],
+            mediaUrls: MEDIA,
+            mode: 'screen',
+        });
         expect(doc).toContain(`src="${PIXEL}"`);
     });
 

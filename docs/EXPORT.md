@@ -31,7 +31,7 @@ The response is silent while the job queues and its Worker runs. Queue wait plus
 
 ## Every format but xlsx, docx and SVG is one HTML document
 
-`html` and `pdf-html` render the same document, so WeasyPrint prints what the HTML download serves. There is one document per type to get right, not one per format. The one difference is a doc's small caps, which the PDF fakes where the font has none ([DOCS.md](DOCS.md#the-pdf-fakes-small-caps-where-the-font-has-none)). A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
+`html` and `pdf-html` render the same document, so WeasyPrint prints what the HTML download serves. There is one document per type to get right, not one per format. Each type's entry (`renderEigendocExport`, `renderEigensheetsExport`, `renderEigenslidesExport`) decides once which one it renders, for what differs on paper: a sheet's page fits its widest and tallest sheet, a deck's pages leave the fit box, and a doc fakes small caps where the font has none ([DOCS.md](DOCS.md#the-pdf-fakes-small-caps-where-the-font-has-none)). A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
 
 A doc's page comes from its page setup ([DOCS.md](DOCS.md#one-page-setup-sizes-every-page-a-doc-is-drawn-on)): the HTML's screen page and the PDF's `@page` from `pageStylesheet` (in `PRINT_EXTRAS`, `export/doc/transform.ts`), and the docx's page size and margins from `pageTwips`. So all three match the editor's A4 page and its 2 cm margins.
 

@@ -5,6 +5,9 @@ import { EXPORT_CSP } from './sanitize';
 // The data-only rule as a <meta>, so it still holds once a download is saved and opened.
 const EXPORT_CSP_META = `<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`;
 
+// What an HTML export is for: the download a browser opens, or the document WeasyPrint prints.
+export type HtmlExportMode = 'screen' | 'pdf';
+
 const VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1">';
 
 // Every HTML download and every PDF's HTML: one self-contained document, the bundled fonts first in its stylesheet,

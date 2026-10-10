@@ -11,7 +11,7 @@ import {
     type TransformWarning,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { exportHtmlDocument } from '../html-document';
+import { exportHtmlDocument, type HtmlExportMode } from '../html-document';
 import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
@@ -30,7 +30,7 @@ export function canvasHtmlDocument(opts: {
     title: string;
     pages: CanvasPage[];
     scale: number;
-    mode: 'screen' | 'pdf';
+    mode: HtmlExportMode;
     resolveMedia?: MediaResolver;
 }): string {
     const { title, pages, scale, mode, resolveMedia } = opts;
