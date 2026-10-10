@@ -9,7 +9,7 @@ import {
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
-import { docSchema, docxToPmJson } from './from-docx';
+import { docSchema, readDocx } from './from-docx';
 import { DOCUMENT_TOO_LARGE } from './package';
 
 // Uploaded docx bytes → the Yjs update the main thread commits, plus the extracted
@@ -21,9 +21,9 @@ export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { json, images, warnings } = docxToPmJson(Buffer.from(data), { publicOrigin });
+    const { doc, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
 
-    const tempDoc = prosemirrorToYDoc(asOpened(docSchema.nodeFromJSON(json)), 'default');
+    const tempDoc = prosemirrorToYDoc(asOpened(doc), 'default');
     const update = Y.encodeStateAsUpdate(tempDoc);
     tempDoc.destroy();
 
@@ -42,12 +42,15 @@ export function importDocxToEigendocUpdate(
 // that many 930 MB.
 export const MAX_TABLE_REPAIRS = 10_000_000;
 
+// A collision's repair can leave another for the next pass; the reader writes tables that need none, so a table still
+// repairing after this many is refused rather than repaired to the deadline.
+export const MAX_REPAIR_PASSES = 3;
+
 // The doc as the editor leaves it on open, or the first open writes an edit nobody made, twice when two open it
-// together: prosemirror-tables pads a ragged table and then gives the new cells their column's width, and
-// TrailingNode ends the doc in a paragraph. The reader opens its tables itself, so fixTables is the safety net.
+// together: prosemirror-tables repairs a table the reader got wrong, and TrailingNode ends the doc in a paragraph.
 export function asOpened(doc: Node): Node {
     let state = EditorState.create({ doc });
-    for (;;) {
+    for (let passes = 0; ; passes++) {
         state.doc.descendants((node) => {
             if (node.type.spec['tableRole'] !== 'table') return;
             const repairs = TableMap.get(node).problems?.length ?? 0;
@@ -55,6 +58,7 @@ export function asOpened(doc: Node): Node {
         });
         const tr = fixTables(state);
         if (!tr) break;
+        if (passes === MAX_REPAIR_PASSES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         state = state.apply(tr);
     }
     const { paragraph } = docSchema.nodes;

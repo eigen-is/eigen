@@ -243,6 +243,12 @@ describe('parseXml namespaces', () => {
         expect(xmlAttr(root, 'DAV:', 'y')).toBe('2');
     });
 
+    test('a prefixed attribute is found by its whole local name', () => {
+        const root = parsed('<a xmlns:D="DAV:" D:xval="1"/>');
+        expect(xmlAttr(root, 'DAV:', 'val')).toBeUndefined();
+        expect(xmlAttr(root, 'DAV:', 'xval')).toBe('1');
+    });
+
     test('a declaration, a prefixed name and an inherited property are not attributes', () => {
         const root = parsed('<a xmlns="DAV:" xmlns:D="DAV:" D:x="1"/>');
         expect(xmlAttr(root, '', 'xmlns')).toBeUndefined();

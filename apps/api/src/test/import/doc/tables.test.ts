@@ -4,7 +4,6 @@ import { EditorState } from '@tiptap/pm/state';
 import { fixTables } from '@tiptap/pm/tables';
 import { COLUMN_PX } from '../../../lib/import/doc/assemble';
 import { docSchema } from '../../../lib/import/doc/from-docx';
-import { openTable } from '../../../lib/import/doc/tables';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
@@ -90,6 +89,44 @@ describe('table style first row', () => {
     test('w:firstRow="0" wins over the first row bit of w:val\'s mask', async () => {
         const { json } = await importDocxBody(styled('<w:tblLook w:val="0420" w:firstRow="0"/>'), { styles });
         expect(marksOfType(json, 'bold')).toEqual([]);
+    });
+    const filled = (fill: string) =>
+        `<w:style w:type="table" w:styleId="Filled"><w:name w:val="Filled"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr></w:tblStylePr></w:style>`;
+    const filledTable = (look: string) =>
+        table(
+            [row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])],
+            `<w:tblStyle w:val="Filled"/>${look}`,
+        );
+
+    // As a first row its cells fill is, and as Word repeats one marked w:tblHeader.
+    test("a first row the style fills is a header row, with the look on; white or the look off, it isn't", async () => {
+        const typesOf = async (fill: string, look: string) => {
+            const { json } = await importDocxBody(filledTable(look), { styles: filled(fill) });
+            return nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type));
+        };
+        expect(await typesOf('C0C0C0', '<w:tblLook w:firstRow="1"/>')).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+        expect((await typesOf('FFFFFF', '<w:tblLook w:firstRow="1"/>'))[0]).toEqual(['tableCell', 'tableCell']);
+        expect((await typesOf('C0C0C0', '<w:tblLook w:firstRow="0"/>'))[0]).toEqual(['tableCell', 'tableCell']);
+    });
+
+    // Word reads a table style's looks down its basedOn chain, as a paragraph style's.
+    test('a style based on one with a first row look and fill takes both', async () => {
+        const based = `${filled('C0C0C0').replace('<w:tcPr>', '<w:rPr><w:b/></w:rPr><w:tcPr>')}<w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Filled"/></w:style>`;
+        const body = table(
+            [row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])],
+            '<w:tblStyle w:val="Child"/><w:tblLook w:firstRow="1"/>',
+        );
+        const { json } = await importDocxBody(body, { styles: based });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type)),
+        ).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
     });
 });
 
@@ -177,6 +214,16 @@ describe('light text on a fill', () => {
             '<w:tblStyle w:val="Dark"/><w:tblLook w:firstRow="1"/>',
         );
         expect(await colorsOf(body, styles)).toEqual([['body', '#ffffff']]);
+    });
+
+    test("white text in a table whose style's base fills it loses its color", async () => {
+        const styles =
+            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tcPr><w:shd w:val="clear" w:fill="000000"/></w:tcPr></w:style><w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Dark"/></w:style>';
+        const body = table(
+            [row([`<w:tc>${colored('white', 'FFFFFF')}</w:tc>`, cell('b')])],
+            '<w:tblStyle w:val="Child"/>',
+        );
+        expect(await colorsOf(body, styles)).toEqual([]);
     });
 
     test("a cell without a fill of its own in a table filled whole loses it; a cell's explicit none keeps it", async () => {
@@ -282,61 +329,121 @@ describe("the writer's wrapped figure", () => {
     });
 });
 
-// The reader stores the table the editor opens, so the first open repairs nothing; fixTables, which the editor runs,
-// is the reference, pass for pass.
+// The reader writes each table as the editor opens it: well formed, so fixTables, which the editor runs on open, has
+// nothing to repair, and a crafted merge can't make the editor add cells past the output budget.
 describe('a table as the editor opens it', () => {
-    const at = (text: string, attrs: Record<string, unknown> = {}, type = 'tableCell'): JSONContent => ({
-        type,
-        attrs,
-        content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
-    });
-    const tableOf = (rows: JSONContent[][]): JSONContent => ({
-        type: 'table',
-        content: rows.map((cells) => ({ type: 'tableRow', content: cells })),
-    });
-    const fixed = (table: JSONContent) => {
-        let state = EditorState.create({ doc: docSchema.nodeFromJSON({ type: 'doc', content: [table] }) });
-        for (let tr = fixTables(state); tr; tr = fixTables(state)) state = state.apply(tr);
-        return state.doc.toJSON();
-    };
-    const opened = (table: JSONContent) => {
-        const copy = structuredClone(table);
-        openTable(copy);
-        return docSchema.nodeFromJSON({ type: 'doc', content: [copy] }).toJSON();
-    };
-    const w = (...colwidth: number[]) => ({ colwidth });
+    const tc = (text: string, tcPr = '') => cell(text, tcPr);
+    const RESTART = '<w:vMerge w:val="restart"/>';
+    const CONTINUE = '<w:vMerge/>';
+    const span = (n: number) => `<w:gridSpan w:val="${n}"/>`;
+    const gridOf = (...widths: number[]) =>
+        `<w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>`;
+    const tableOn = (grid: string, rows: string[]) => `<w:tbl>${grid}${rows.join('')}</w:tbl>`;
+    // Each row as colspan x rowspan and the cell's text.
+    const shape = (json: JSONContent) =>
+        nodesOfType(json, 'tableRow').map((tableRow) =>
+            (tableRow.content ?? []).map(
+                (node) =>
+                    `${node.attrs?.['colspan'] ?? 1}x${node.attrs?.['rowspan'] ?? 1}:${nodesOfType(node, 'text')
+                        .map((text) => text.text)
+                        .join('')}`,
+            ),
+        );
+    const repairs = (json: JSONContent) => fixTables(EditorState.create({ doc: docSchema.nodeFromJSON(json) }));
 
     test.each([
+        ['w:gridBefore', [row([tc('A'), tc('B')]), row([tc('C')], '<w:gridBefore w:val="1"/>')]],
+        ['w:gridAfter', [row([tc('A')], '<w:gridAfter w:val="1"/>'), row([tc('B'), tc('C')])]],
+        ['a row short of the grid', [row([tc('A'), tc('B')]), row([tc('C')])]],
+        ['a row past the grid', [row([tc('A'), tc('B'), tc('C')]), row([tc('D'), tc('E')])]],
+        ['a w:gridSpan', [row([tc('A', span(2))]), row([tc('B'), tc('C')])]],
         [
-            "a short row, its new cells at its end with their columns' widths",
-            [[at('A', w(90)), at('B', w(80)), at('C', w(70))], [at('D', w(90))]],
-        ],
-        ['a short first row, its new cells at its start', [[at('A')], [at('B'), at('C')], [at('D'), at('E')]]],
-        ['a short last row after a short row, its new cells at its start', [[at('A'), at('B')], [at('C')], [at('D')]]],
-        ['a short header row, filled with header cells', [[at('A', {}, 'tableHeader')], [at('B'), at('C')]]],
-        ['a column whose widths disagree', [[at('A', w(90))], [at('B', w(60))], [at('C', w(60))], [at('D')]]],
-        [
-            'a cell over a rowspan from above',
-            [[at('A'), at('B', { rowspan: 2 })], [at('C', { colspan: 2, colwidth: [50, 60] })]],
+            'a vMerge over two rows',
+            [row([tc('A', RESTART), tc('B')]), row([tc('', CONTINUE), tc('C')]), row([tc('D'), tc('E')])],
         ],
         [
-            'a spanning cell under a rowspan, two rows deep',
+            'a vMerge over a span',
+            [row([tc('A', span(2) + RESTART), tc('B')]), row([tc('', span(2) + CONTINUE), tc('C')])],
+        ],
+        ['a continuation with nothing above', [row([tc('A'), tc('B')]), row([tc('C'), tc('', CONTINUE)])]],
+    ])('%s needs no repair', async (_, rows) => {
+        const { json } = await importDocxBody(table(rows));
+        expect(nodesOfType(json, 'table')).toHaveLength(1);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // A continuation under a column a cell above spans, past where it starts, is a cell of its own.
+    test('a continuation inside a merged cell above is no part of it', async () => {
+        const { json } = await importDocxBody(
+            tableOn(gridOf(500, 500, 500), [
+                row([tc('X'), tc('A', span(2) + RESTART)]),
+                row([tc('B', span(2)), tc('', CONTINUE)]),
+                row([tc('C', span(2)), tc('', CONTINUE)]),
+            ]),
+        );
+        expect(shape(json)).toEqual([['1x1:X', '2x1:A'], ['2x1:B', '1x2:'], ['2x1:C']]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // A row without the continuation, a skipped column say, ends the merge; a continuation after it starts one.
+    test('a merge a row leaves out stops above that row', async () => {
+        const { json } = await importDocxBody(
+            table([
+                row([tc('A', RESTART), tc('B')]),
+                row([tc('D')], '<w:gridBefore w:val="1"/>'),
+                row([tc('', CONTINUE), tc('E')]),
+            ]),
+        );
+        expect(shape(json)).toEqual([
+            ['1x1:A', '1x1:B'],
+            ['1x1:', '1x1:D'],
+            ['1x1:', '1x1:E'],
+        ]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    test("a short row ends in one cell of its first cell's type over the columns it misses, with their widths", async () => {
+        const { json } = await importDocxBody(
+            tableOn(gridOf(3000, 1500, 1500), [row([tc('A')], '<w:tblHeader/>'), row([tc('B'), tc('C'), tc('D')])]),
+        );
+        const [first] = nodesOfType(json, 'tableRow');
+        expect(
+            (first?.content ?? []).map((node) => [node.type, node.attrs?.['colspan'], node.attrs?.['colwidth']]),
+        ).toEqual([
+            ['tableHeader', 1, [200]],
+            ['tableHeader', 2, [100, 100]],
+        ]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // Past the grid's widths a column has none, so the cell padding a row there is a second.
+    test("a row short of a row past the grid's widths ends in a cell within them and one past them", async () => {
+        const { json } = await importDocxBody(table([row([tc('A'), tc('B'), tc('C')]), row([tc('D')])]));
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['colwidth']]),
+            ),
+        ).toEqual([
             [
-                [at('A'), at('B', { rowspan: 2, colwidth: [60] })],
-                [at('C', { colspan: 2, rowspan: 2, colwidth: [0, 70] })],
-                [at('D')],
+                [1, [200]],
+                [1, [200]],
+                [1, null],
             ],
-        ],
-        ['a rowspan past the last row', [[at('A', { rowspan: 5 }), at('B')], [at('C')]]],
-        [
-            'a row wider than the rest, spans and all',
-            [[at('A', { colspan: 3, colwidth: [10, 20, 30] })], [at('B'), at('C', { rowspan: 2 })], [at('D')]],
-        ],
-    ])('%s', (_, rows) => {
-        const table = tableOf(rows);
-        const result = opened(table);
-        expect(result).toEqual(fixed(table));
-        const state = EditorState.create({ doc: docSchema.nodeFromJSON(result) });
-        expect(fixTables(state)).toBeUndefined();
+            [
+                [1, [200]],
+                [1, [200]],
+                [1, null],
+            ],
+        ]);
+        expect(repairs(json)).toBeUndefined();
+    });
+
+    // A column of no width is 0 in a cell over it and others, as the editor gives it; a cell over it alone has none.
+    test('a column the grid gives no width', async () => {
+        const { json } = await importDocxBody(
+            tableOn(gridOf(3000, 0), [row([tc('A'), tc('B')]), row([tc('C', span(2))])]),
+        );
+        expect(nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[200], null, [200, 0]]);
+        expect(repairs(json)).toBeUndefined();
     });
 });

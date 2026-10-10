@@ -8,7 +8,7 @@ import { openZip, ZipReader } from '../../../lib/core/zip';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { docSchema, docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
@@ -310,14 +310,26 @@ describe('XML budget', () => {
     });
 
     // As a corrupt file is, rather than as a server error.
-    test('a reader slip on a file is 400', async () => {
+    // The cause stays in the Worker, so the slip is logged there; a corrupt zip or XML is the file's fault and isn't.
+    test('a reader slip on a file is 400, and logged with its stack', async () => {
         const docx = await buildDocxWithBody(paragraph(run('Body')));
         const parses = spyOn(xml, 'parseXml').mockImplementationOnce(() => {
             throw new TypeError('slip');
         });
-        spies.push(parses);
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(parses, warns);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).toHaveBeenCalledTimes(1);
+        expect(String(warns.mock.calls[0]?.[1])).toStartWith('TypeError: slip\n');
+    });
+
+    test('a document.xml that is no XML is 400, and not logged', async () => {
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(warns);
+        const error = await rejection(async () => docxToPmJson(Buffer.from(await buildDocxWithBody('<w:p>'))));
+        expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).not.toHaveBeenCalled();
     });
 
     test('a part that inflates past its declared size is a corrupt file, 400', async () => {
@@ -326,8 +338,11 @@ describe('XML budget', () => {
             const data = golden.read(name) ?? new Uint8Array();
             return name === 'word/document.xml' ? { ...deflated(name, data), size: 10 } : stored(name, data);
         });
+        const warns = spyOn(console, 'warn').mockImplementation(() => {});
+        spies.push(warns);
         const error = await rejection(() => docxToPmJson(build(parts)));
         expect([error.status, error.message]).toEqual([400, 'Not a valid docx file']);
+        expect(warns).not.toHaveBeenCalled();
     });
 });
 
@@ -437,21 +452,11 @@ describe('output budget', () => {
         expect([result.status, result.message]).toEqual([413, 'Document too large']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
     }, 30_000);
-
-    // The editor fills a short row with a cell and its paragraph per column.
-    test('the cells a ragged table is filled with weigh', async () => {
-        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
-        const docx = await buildDocxWithBody(
-            `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1300)}</w:tbl>`,
-        );
-        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
-    }, 30_000);
 });
 
 // The reader stores a table as the editor opens it; fixTables' transaction kept a copy of the table per repair.
 describe('tables the editor would repair', () => {
-    test('a row of 63 cells over 1,000 rows of one is filled in one pass through the Yjs update', async () => {
+    test('a row of 63 cells over 1,000 rows of one imports through the Yjs update', async () => {
         const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
         const docx = await buildDocxWithBody(
             `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1000)}</w:tbl>`,
@@ -472,6 +477,27 @@ describe('tables the editor would repair', () => {
         expect(result.cpuMs).toBeLessThan(3000);
         expect(result.rssGrowth).toBeLessThan(512 * MB);
     }, 60_000);
+
+    // A continuation under a span's last column extended the cell above, which the next row's span overlapped: the
+    // editor added cells by the triangle per row, past the budget, 2.08 million from 12 KB.
+    test.each([
+        [100, 30],
+        [300, 10],
+    ])(
+        '%i rows of a span beside a continuation under the merged cell above import small',
+        async (rows, columns) => {
+            const tc = (tcPr: string) => `<w:tc><w:tcPr>${tcPr}</w:tcPr><w:p/></w:tc>`;
+            const grid = `<w:tblGrid>${'<w:gridCol w:w="500"/>'.repeat(columns + 1)}</w:tblGrid>`;
+            const first = `<w:tr>${tc('')}${tc(`<w:gridSpan w:val="${columns}"/><w:vMerge w:val="restart"/>`)}</w:tr>`;
+            const next = `<w:tr>${tc(`<w:gridSpan w:val="${columns}"/>`)}${tc('<w:vMerge/>')}</w:tr>`;
+            const docx = await buildDocxWithBody(`<w:tbl>${grid}${first}${next.repeat(rows - 1)}</w:tbl>`);
+            const result = measuredImport(docx, 'transform');
+            expect(result.status).toBeUndefined();
+            expect(result.cpuMs).toBeLessThan(2000);
+            expect(result.rssGrowth).toBeLessThan(128 * MB);
+        },
+        60_000,
+    );
 });
 
 describe('structure', () => {
@@ -798,6 +824,37 @@ describe('figures and media', () => {
         const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
         const { images } = docxToPmJson(input);
         expect(images[0]?.data.buffer).toBe(input.buffer);
+    });
+
+    // As a damaged optional part costs only its looks.
+    test('a damaged image entry is not stored and counts as unshown; the figure and the rest import', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)))));
+        const input = build(
+            golden.names().map((name) => {
+                const part = stored(name, golden.read(name) ?? new Uint8Array());
+                return name.startsWith('word/media/') ? { ...part, crc: part.crc ^ 1 } : part;
+            }),
+        );
+        const { json, images, warnings } = docxToPmJson(input);
+        expect(images).toEqual([]);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.png']);
+        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+    });
+
+    test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
+        const refuses = spyOn(docSchema, 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        try {
+            const { json, images, warnings } = await importDocxBody(
+                `${paragraph(picture(381000))}${paragraph(run('After.'))}`,
+            );
+            expect(nodesOfType(json, 'figure')).toEqual([]);
+            expect(images).toEqual([]);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
     });
 
     test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {

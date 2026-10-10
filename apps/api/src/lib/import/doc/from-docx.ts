@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { XmlError } from '../../core/xml';
@@ -9,7 +10,6 @@ import type { TransformWarning } from '../../document/transform/protocol';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
-import { missingCells, openTable } from './tables';
 
 // docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
 
@@ -29,18 +29,24 @@ export const MAX_DOCX_WEIGHT = 150_000;
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 const CHARS_PER_UNIT = 512;
 
+// The doc as JSON, for the audit and the tests; the import encodes the doc itself, with no copy between.
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
 ): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
+    const { doc, images, warnings } = readDocx(buffer, options);
+    return { json: doc.toJSON(), images, warnings };
+}
+
+export function readDocx(
+    buffer: Buffer,
+    options: { publicOrigin?: string } = {},
+): { doc: Node; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
-        const tables: JSONContent[] = [];
-        if (weightOf(content, tables) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        // Weighed, the cells the editor would fill in on open are filled in now.
-        for (const table of tables) openTable(table);
+        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema.nodeFromJSON({
@@ -48,30 +54,40 @@ export function docxToPmJson(
             content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }],
         });
         doc.check();
-        const images = reader.images.map(({ name, path, contentType }) => {
+        // Only the media a kept figure names: a flattened block's figures went with it.
+        const named = new Set<string>();
+        doc.descendants((node) => {
+            if (node.type.name === 'figure') named.add(node.attrs['mediaName']);
+        });
+        const kept = reader.images.filter((image) => named.has(image.name));
+        const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
+            const data = pkg.readMedia(path);
             // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
-            const data = pkg.zip.read(path) ?? new Uint8Array();
-            return { name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) };
+            return data
+                ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
+                : [];
         });
         const warnings: TransformWarning[] = [];
         if (refused.size > 0) warnings.push({ code: 'blocks-flattened', count: refused.size });
-        const unshown = images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
+        const damaged = kept.length - images.length;
+        const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        return { json: doc.toJSON(), images, warnings };
+        return { doc, images, warnings };
     } catch (error) {
         // The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
         if (error instanceof ZipError)
             throw new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
-        // A file the reader slips on is refused as one it can't read, not as a server error.
-        if (error instanceof XmlError || !(error instanceof ApiError))
-            throw new ApiError(400, NOT_A_DOCX, { cause: error });
-        throw error;
+        if (error instanceof XmlError) throw new ApiError(400, NOT_A_DOCX, { cause: error });
+        if (error instanceof ApiError) throw error;
+        // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
+        console.warn('[import] docx reader failed:', error instanceof Error ? (error.stack ?? error.message) : error);
+        throw new ApiError(400, NOT_A_DOCX, { cause: error });
     }
 }
 
-// Every node and mark, and the cells prosemirror-tables fills a ragged table with on open, each with its paragraph.
-function weightOf(nodes: JSONContent[], tables: JSONContent[]): number {
+// Every node and mark.
+function weightOf(nodes: JSONContent[]): number {
     let weight = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
@@ -82,10 +98,6 @@ function weightOf(nodes: JSONContent[], tables: JSONContent[]): number {
         weight += 1 + (node.marks?.length ?? 0);
         strings(node.attrs);
         for (const mark of node.marks ?? []) strings(mark.attrs);
-        if (node.type === 'table') {
-            weight += 2 * missingCells(node);
-            tables.push(node);
-        }
         for (const child of node.content ?? []) stack.push(child);
     }
     return weight;
