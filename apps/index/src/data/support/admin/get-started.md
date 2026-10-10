@@ -43,8 +43,7 @@ Click **Complete Setup**. Eigen creates the organization and the admin account, 
 
 ## What you can do after signing in
 
-Once you are signed in with your admin account, Eigen opens the admin panel at [/admin](/admin).
-The sidebar gives you access to the main areas:
+Once you are signed in with your admin account, Eigen opens the admin panel at [/admin](/admin). The sidebar gives you access to the main areas:
 
 - **Users**: view and manage all user accounts, add new users, and change roles.
 - **Teams**: create groups of members to share content with whole teams at once.
@@ -58,5 +57,4 @@ As the server owner, you also see:
 - **Guest access**: control whether guests can sign in without a prior share, and how long inactive guest accounts are kept.
 - **Waitlist**: if the waitlist is enabled, review and accept or reject applications here.
 
-See [Add and manage members](/support/admin/manage-members) to invite your first users, and
-[Server settings](/support/admin/server-settings) to adjust quotas and defaults.
+See [Add and manage members](/support/admin/manage-members) to invite your first users, and [Server settings](/support/admin/server-settings) to adjust quotas and defaults.

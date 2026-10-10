@@ -8,8 +8,7 @@ order: 50
 updated: 2026-10-10
 ---
 
-You can insert images and tables anywhere in a document. Images can come from your device or from Drive.
-Tables start as a 3×3 grid and you can grow them from there.
+You can insert images and tables anywhere in a document. Images can come from your device or from Drive. Tables start as a 3×3 grid and you can grow them from there.
 
 ## Insert an image
 

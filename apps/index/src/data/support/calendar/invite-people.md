@@ -8,20 +8,17 @@ order: 40
 updated: 2026-09-22
 ---
 
-You can invite other people to any event you create in Calendar. Guests receive the invitation immediately, and
-you can see who has accepted, declined, or not replied yet.
+You can invite other people to any event you create in Calendar. Guests receive the invitation immediately, and you can see who has accepted, declined, or not replied yet.
 
 ## Add guests when creating an event
 
 1. Open Calendar and click any day to open the **New Event** dialog.
-2. In the **Add guests** field, type a name or email address. Calendar suggests people from your contacts as you
-   type.
+2. In the **Add guests** field, type a name or email address. Calendar suggests people from your contacts as you type.
 3. Select a suggestion, or finish typing a full email address and click the **+** button.
 4. Repeat to add more guests.
 5. Fill in the rest of the event details and click **Save**.
 
-Each guest appears below the field with a **Pending** badge. Once they respond, the badge updates to
-**Accepted**, **Maybe**, or **Declined**.
+Each guest appears below the field with a **Pending** badge. Once they respond, the badge updates to **Accepted**, **Maybe**, or **Declined**.
 
 ## Add guests to an existing event
 
@@ -37,18 +34,12 @@ You cannot add yourself as a guest. If you try, Calendar will tell you. You are 
 
 ## Remove a guest
 
-In the **Edit Event** dialog, hover over the person you want to remove. An **×** button appears to the right
-of their name. Click it, then click **Save**.
+In the **Edit Event** dialog, hover over the person you want to remove. An **×** button appears to the right of their name. Click it, then click **Save**.
 
 ## See the full guest list
 
-Open the event. If the event has guests, the detail dialog shows the list with each person's current response
-status. Above three people the list starts collapsed, with a count and a summary of the replies so far, such as
-"2 accepted, 3 pending". Click the header to open it. Use the **Copy emails** button at the top of the list to
-copy all addresses to your clipboard at once.
+Open the event. If the event has guests, the detail dialog shows the list with each person's current response status. Above three people the list starts collapsed, with a count and a summary of the replies so far, such as "2 accepted, 3 pending". Click the header to open it. Use the **Copy emails** button at the top of the list to copy all addresses to your clipboard at once.
 
 ## Invite people outside Eigen
 
-You can add any email address, not only people with an Eigen account. Guests who are not on your Eigen server
-receive an invitation email they can respond to from their own calendar app. See
-[How invitations work with people outside Eigen](/support/calendar/external-invitations) for more detail.
+You can add any email address, not only people with an Eigen account. Guests who are not on your Eigen server receive an invitation email they can respond to from their own calendar app. See [How invitations work with people outside Eigen](/support/calendar/external-invitations) for more detail.

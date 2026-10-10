@@ -8,8 +8,7 @@ order: 120
 updated: 2026-10-06
 ---
 
-Chat has a set of slash commands you type directly in the message box. Start typing `/` and a suggestion list
-appears. Use the arrow keys to browse it, then press Tab or Enter to complete the command.
+Chat has a set of slash commands you type directly in the message box. Start typing `/` and a suggestion list appears. Use the arrow keys to browse it, then press Tab or Enter to complete the command.
 
 Send `/help` at any time to print the full command list in the room. The output is only visible to you.
 
@@ -21,8 +20,7 @@ Send `/help` at any time to print the full command list in the room. The output 
 | `/reply [message]` | Replies to the last whisper you received, without typing the email address again. |
 | `/invite [email]` | Invites someone to the room by email address. They gain access to the room straight away. |
 
-Whisper messages appear with a tinted background and an italic **whisper** label so you can tell them apart from
-regular messages.
+Whisper messages appear with a tinted background and an italic **whisper** label so you can tell them apart from regular messages.
 
 ## Inspect a person
 
@@ -41,9 +39,7 @@ The card shows the person's name and, if they are in your Contacts, their compan
 
 ## Built-in emotes
 
-Chat includes more than 80 named emotes. Type `/` followed by the name to use one. Many of them accept an
-optional email address as a target, which changes the message everyone sees. For example, `/wave` posts a
-wave to the room, and `/wave alice@example.com` directs it at a specific person.
+Chat includes more than 80 named emotes. Type `/` followed by the name to use one. Many of them accept an optional email address as a target, which changes the message everyone sees. For example, `/wave` posts a wave to the room, and `/wave alice@example.com` directs it at a specific person.
 
 A few emotes require a target. `/trout` is one: you must supply an email address.
 

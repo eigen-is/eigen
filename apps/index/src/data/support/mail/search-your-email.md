@@ -9,8 +9,7 @@ order: 30
 updated: 2026-09-13
 ---
 
-When you need a particular message, you don't have to scroll for it. Mail gives you two ways to search: a box at
-the top of the email list that filters the folder you're in, and a search that looks across all your mail at once.
+When you need a particular message, you don't have to scroll for it. Mail gives you two ways to search: a box at the top of the email list that filters the folder you're in, and a search that looks across all your mail at once.
 
 ## Search within a folder
 
@@ -20,17 +19,13 @@ Every folder has a search box at the top of the email list.
 2. Click the **Search emails...** box at the top of the list.
 3. Type what you're looking for. The list narrows as you type.
 
-The search looks at the **sender**, the **recipients**, the **subject**, and the text of the message. A message
-matches if your text appears in any of them, so typing a name finds mail from that person, and typing a word from
-the subject finds it by subject.
+The search looks at the **sender**, the **recipients**, the **subject**, and the text of the message. A message matches if your text appears in any of them, so typing a name finds mail from that person, and typing a word from the subject finds it by subject.
 
-Matching ignores capital letters, and the results stay sorted with the newest at the top. To clear the search and
-see the whole folder again, delete the text from the box.
+Matching ignores capital letters, and the results stay sorted with the newest at the top. To clear the search and see the whole folder again, delete the text from the box.
 
 <div class="eigen-callout">
 
-This box searches only the folder you're looking at. To search every folder at once, use the search described
-below.
+This box searches only the folder you're looking at. To search every folder at once, use the search described below.
 
 </div>
 
@@ -44,11 +39,9 @@ The search at the top of the window looks through all your mail, whichever folde
 2. Type a name, a word from the subject, or a word from the message.
 3. Matching emails appear under the **Mail** heading. Click one, or use the arrow keys and press **Enter**, to open it.
 
-This search covers the sender, the recipients, the subject, and the text of the message. It looks through
-all your folders except **Trash** and **Spam**.
+This search covers the sender, the recipients, the subject, and the text of the message. It looks through all your folders except **Trash** and **Spam**.
 
-The same box also finds files and other things in Eigen. To see only email, type `mail:` before your words, or
-press **Tab** until the **Mail** label appears above the box.
+The same box also finds files and other things in Eigen. To see only email, type `mail:` before your words, or press **Tab** until the **Mail** label appears above the box.
 
 ## Narrow by sender or recipient
 
@@ -57,13 +50,11 @@ In the search at the top of the window, you can aim your search at who sent or r
 - Type `from:` followed by a name or address to find mail from that person, for example `from:anna`.
 - Type `to:` followed by a name or address to find mail addressed to that person, for example `to:anna`.
 
-You can add ordinary words alongside these. For example, `from:anna invoice` finds messages from Anna that also
-mention `invoice`.
+You can add ordinary words alongside these. For example, `from:anna invoice` finds messages from Anna that also mention `invoice`.
 
 ## If you can't find a message
 
 A few things to check when a search comes up empty:
 
-- **It might be in the Trash or Spam folder.** The top-of-window search skips both. Open the **Trash** or **Spam**
-  folder from the sidebar and use the folder search box there instead.
+- **It might be in the Trash or Spam folder.** The top-of-window search skips both. Open the **Trash** or **Spam** folder from the sidebar and use the folder search box there instead.
 - **Drafts you haven't finished** live in the **Drafts** folder. Open it from the sidebar to find them.

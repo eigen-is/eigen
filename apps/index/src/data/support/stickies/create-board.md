@@ -8,25 +8,21 @@ order: 20
 updated: 2026-09-13
 ---
 
-A Stickies board is a kanban board made of columns. You can create as many boards as you like and shape
-each one with the columns that match your workflow.
+A Stickies board is a kanban board made of columns. You can create as many boards as you like and shape each one with the columns that match your workflow.
 
 ## Create a new board
 
 1. Open Stickies.
 2. Click **New stickies** in the sidebar. A dialog titled **New stickies** opens.
 3. Type a name for your board in the **Stickies name** field.
-4. Choose where to save it. By default the board goes into your Drive. Click **Change** under **Location**
-   to pick a different folder.
+4. Choose where to save it. By default the board goes into your Drive. Click **Change** under **Location** to pick a different folder.
 5. Click **Create**. The board opens straight away.
 
-You can also create a board from Drive: click **New** in the Drive toolbar, then choose **New stickies**
-from the menu.
+You can also create a board from Drive: click **New** in the Drive toolbar, then choose **New stickies** from the menu.
 
 ## What a new board looks like
 
-Every new board starts with three columns: **To Do**, **In Progress**, and **Done**. A welcome card sits
-in the first column. You can rename the columns, delete them, or add new ones at any time.
+Every new board starts with three columns: **To Do**, **In Progress**, and **Done**. A welcome card sits in the first column. You can rename the columns, delete them, or add new ones at any time.
 
 ## Add a column
 
@@ -54,12 +50,10 @@ Deleting a column also deletes all the cards in it. This cannot be undone.
 
 <div class="eigen-callout">
 
-Deleting a column permanently removes it and every card inside it. If you want to keep the cards, move
-them to another column first. See [Move and reorder cards](/support/stickies/move-cards).
+Deleting a column permanently removes it and every card inside it. If you want to keep the cards, move them to another column first. See [Move and reorder cards](/support/stickies/move-cards).
 
 </div>
 
 ## Undo a change
 
-Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) to undo the last change. Press **Ctrl+Y** or
-**Cmd+Shift+Z** to redo. The **Edit** menu in the toolbar also has **Undo** and **Redo**.
+Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) to undo the last change. Press **Ctrl+Y** or **Cmd+Shift+Z** to redo. The **Edit** menu in the toolbar also has **Undo** and **Redo**.

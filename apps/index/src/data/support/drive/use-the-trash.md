@@ -8,9 +8,7 @@ order: 110
 updated: 2026-09-13
 ---
 
-Deleting a file in Drive doesn't remove it straight away. It goes to the Trash, where it stays until you empty
-the Trash or it is cleaned up automatically. This means you can always recover something you've deleted by
-mistake.
+Deleting a file in Drive doesn't remove it straight away. It goes to the Trash, where it stays until you empty the Trash or it is cleaned up automatically. This means you can always recover something you've deleted by mistake.
 
 ## Move a file or folder to the Trash
 
@@ -19,8 +17,7 @@ mistake.
 
 You can also select the item in the list and press **Delete** or **Backspace**.
 
-The item disappears from your files and moves to the Trash. If you delete a folder, everything inside it moves
-to the Trash as well.
+The item disappears from your files and moves to the Trash. If you delete a folder, everything inside it moves to the Trash as well.
 
 ## Restore something from the Trash
 
@@ -28,13 +25,11 @@ to the Trash as well.
 2. Find the item you want to restore.
 3. Right-click it (or click the **⋮** button at the end of its row) and choose **Restore**.
 
-Drive puts the item back where it was. If the original folder was also deleted, the item goes back to the top
-level of your Drive instead.
+Drive puts the item back where it was. If the original folder was also deleted, the item goes back to the top level of your Drive instead.
 
 ## Delete an item permanently from the Trash
 
-If you are sure you no longer need something in the Trash, you can remove it for good before it is cleaned up
-automatically.
+If you are sure you no longer need something in the Trash, you can remove it for good before it is cleaned up automatically.
 
 1. Open **Trash** from the sidebar.
 2. Right-click the item (or click the **⋮** button at the end of its row) and choose **Delete permanently**.

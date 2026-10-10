@@ -8,9 +8,7 @@ order: 80
 updated: 2026-09-13
 ---
 
-Drive shows you your files inside folders, but sometimes you want to see all your images, or all your chats,
-without hunting through every folder. The **Filters** section in the sidebar collects every file of a given
-type across all your drives in one list.
+Drive shows you your files inside folders, but sometimes you want to see all your images, or all your chats, without hunting through every folder. The **Filters** section in the sidebar collects every file of a given type across all your drives in one list.
 
 ## Open a type filter
 
@@ -27,12 +25,9 @@ type across all your drives in one list.
 
 ## Work with files in a filtered view
 
-The file list works the same way as the regular folder view. Click a file to open the detail panel on the
-right, or double-click to open it. Right-click a file (or click its **⋮** button) for options such as
-**Download**, **Share**, **Quick preview**, and **Move to trash**.
+The file list works the same way as the regular folder view. Click a file to open the detail panel on the right, or double-click to open it. Right-click a file (or click its **⋮** button) for options such as **Download**, **Share**, **Quick preview**, and **Move to trash**.
 
-You cannot upload files or create folders from a filtered view. To add or organize files, click **Drive** at
-the top of the sidebar to go back to your folder view.
+You cannot upload files or create folders from a filtered view. To add or organize files, click **Drive** at the top of the sidebar to go back to your folder view.
 
 ## Return to your folders
 

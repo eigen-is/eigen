@@ -9,9 +9,7 @@ order: 130
 updated: 2026-09-18
 ---
 
-Mail has a set of single-key shortcuts in the style of Gmail: **j** and **k** move through the list, **e**
-archives, **c** starts a new message. They are switched off until you ask for them. This page shows where to turn
-them on and lists every key.
+Mail has a set of single-key shortcuts in the style of Gmail: **j** and **k** move through the list, **e** archives, **c** starts a new message. They are switched off until you ask for them. This page shows where to turn them on and lists every key.
 
 ## Turn the shortcuts on
 
@@ -19,22 +17,17 @@ them on and lists every key.
 2. Scroll to **Keyboard and navigation**.
 3. Turn on **Keyboard shortcuts**.
 
-Below the switch you can also set **After archiving, deleting, or reporting spam**, which decides where you land
-after acting on a message you have open.
+Below the switch you can also set **After archiving, deleting, or reporting spam**, which decides where you land after acting on a message you have open.
 
 ## Open the cheat sheet
 
-Press **?** anywhere in Mail to open the **Keyboard shortcuts** sheet with the same list you see below. This key
-only works once the shortcuts are turned on.
+Press **?** anywhere in Mail to open the **Keyboard shortcuts** sheet with the same list you see below. This key only works once the shortcuts are turned on.
 
-The sheet is also in the message list: click the **⋮** button next to the **Search emails...** box and choose
-**Keyboard shortcuts**. That way works whether the shortcuts are on or off, so you can read the list first and
-decide afterwards. When they are off, the sheet says so and links to the setting.
+The sheet is also in the message list: click the **⋮** button next to the **Search emails...** box and choose **Keyboard shortcuts**. That way works whether the shortcuts are on or off, so you can read the list first and decide afterwards. When they are off, the sheet says so and links to the setting.
 
 <div class="eigen-callout">
 
-The keys go quiet while you are writing a message and while the cheat sheet is open, so typing an **e** in a reply
-never archives anything.
+The keys go quiet while you are writing a message and while the cheat sheet is open, so typing an **e** in a reply never archives anything.
 
 </div>
 
@@ -65,8 +58,7 @@ Press **g**, then the second key.
 
 ## Select
 
-Press **\***, then the second key. Each pair replaces the current selection with the messages it
-names.
+Press **\***, then the second key. Each pair replaces the current selection with the messages it names.
 
 | Keys | What it does |
 |---|---|
@@ -91,12 +83,9 @@ names.
 | **[** | Archive & older |
 | **z** | Undo last action |
 
-Archive, delete, report spam, star, and the two mark keys act on the messages you have selected, however many that
-is, and whether or not a message is open. With nothing selected they act on the message you have open, and failing
-that on the row under the cursor.
+Archive, delete, report spam, star, and the two mark keys act on the messages you have selected, however many that is, and whether or not a message is open. With nothing selected they act on the message you have open, and failing that on the row under the cursor.
 
-The **Delete** and **Backspace** keys also send a message to the Trash, and they pick their target the same way.
-Those two are not part of the set above: they work whether or not the shortcuts are turned on.
+The **Delete** and **Backspace** keys also send a message to the Trash, and they pick their target the same way. Those two are not part of the set above: they work whether or not the shortcuts are turned on.
 
 ## Conversation
 

@@ -8,13 +8,11 @@ order: 90
 updated: 2026-09-13
 ---
 
-You can share a room with specific people, with a whole team, or with anyone on your Eigen server who has the
-link.
+You can share a room with specific people, with a whole team, or with anyone on your Eigen server who has the link.
 
 ## Open the Share dialog
 
-Open the room and click the **Share** button (the person-with-plus icon) in the toolbar at the top right.
-The **Share** dialog opens, titled with the name of the room.
+Open the room and click the **Share** button (the person-with-plus icon) in the toolbar at the top right. The **Share** dialog opens, titled with the name of the room.
 
 ## Add people
 
@@ -27,46 +25,35 @@ The **Share** dialog opens, titled with the name of the room.
 
 ## Share with a team
 
-If you belong to a team, click **Share with team** at the bottom of the dialog and pick the team from the
-list. Everyone in that team gets access to the room.
+If you belong to a team, click **Share with team** at the bottom of the dialog and pick the team from the list. Everyone in that team gets access to the room.
 
 ## Share with a link
 
 Under **General access**, a room starts as **Restricted**: only people you have added can open it.
 
-To let anyone on your Eigen server join, click the lock icon to switch it to **Unrestricted**, then choose
-**Can view** or **Can edit** from the dropdown that appears. Copy the link using the copy-link icon next to
-**People with access** and send it to whoever you like.
+To let anyone on your Eigen server join, click the lock icon to switch it to **Unrestricted**, then choose **Can view** or **Can edit** from the dropdown that appears. Copy the link using the copy-link icon next to **People with access** and send it to whoever you like.
 
 <div class="eigen-callout">
 
-An **Unrestricted** room still requires the other person to sign in to Eigen. It is not open to the public
-web.
+An **Unrestricted** room still requires the other person to sign in to Eigen. It is not open to the public web.
 
 </div>
 
 ## Let people know by email
 
-After you save, click the envelope icon in the **People with access** toolbar to open the **Email
-collaborators** dialog. Write a message, then click **Send**. A link to the room is included automatically.
+After you save, click the envelope icon in the **People with access** toolbar to open the **Email collaborators** dialog. Write a message, then click **Send**. A link to the room is included automatically.
 
 ## Control who can change sharing
 
-If you own the room, you can stop editors from adding or removing people. In the **Share** dialog, untick
-**Editors can share**. With this off, only you can change who has access. Editors can still post messages,
-but they cannot invite new people or remove anyone.
+If you own the room, you can stop editors from adding or removing people. In the **Share** dialog, untick **Editors can share**. With this off, only you can change who has access. Editors can still post messages, but they cannot invite new people or remove anyone.
 
 ## Team rooms
 
-Team rooms belong to a team, so access follows team membership rather than a per-room list. The **Share**
-button is still available for adding individual guests alongside the team, but you cannot remove or restrict
-team members through the room's share settings. To add or remove a team member, an admin needs to change
-their team membership.
+Team rooms belong to a team, so access follows team membership rather than a per-room list. The **Share** button is still available for adding individual guests alongside the team, but you cannot remove or restrict team members through the room's share settings. To add or remove a team member, an admin needs to change their team membership.
 
 ## Invite someone with a slash command
 
-You can also invite someone directly from the message input without opening the dialog. Type `/invite`
-followed by their email address and press Enter:
+You can also invite someone directly from the message input without opening the dialog. Type `/invite` followed by their email address and press Enter:
 
 ```
 /invite alice@example.com
