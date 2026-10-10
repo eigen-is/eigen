@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { type ElysiaCustomStatusResponse, status } from 'elysia';
-import { ApiError } from './errors';
+import { ApiError, payloadTooLarge } from './errors';
 import { consumeStream } from './stream';
 
 // Default private: these bodies are per-user, and 'public' is reserved for the unauthenticated /p/ surface.
@@ -69,7 +69,7 @@ export function matchesIfNoneMatch(header: string, etag: string | null): boolean
 // Past maxBytes a 413. The Content-Length pre-check only rejects an honest client early: a chunked body carries no trustworthy length, so the loop's cap is the real one.
 export async function readBoundedBodyBytes(request: Request, maxBytes: number): Promise<Uint8Array> {
     const len = request.headers.get('Content-Length');
-    if (len !== null && Number(len) > maxBytes) throw new ApiError(413, 'Upload too large');
+    if (len !== null && Number(len) > maxBytes) throw payloadTooLarge();
     if (!request.body) return new Uint8Array();
     const chunks: Uint8Array[] = [];
     await consumeStream(request.body, (chunk) => chunks.push(chunk), { maxBytes });

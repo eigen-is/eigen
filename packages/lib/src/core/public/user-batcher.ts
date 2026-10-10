@@ -15,9 +15,7 @@ async function flushBatch() {
     const ids = [...batch.keys()];
     if (ids.length === 0) return;
 
-    // Always the batch POST, even for one id: it omits an id without an account, where the
-    // single-user GET answers 404. Resolve null for a missing user so TanStack Query caches the
-    // miss instead of retrying. Chunked to the server's cap.
+    // Resolve null for a missing user so TanStack Query caches the miss instead of retrying.
     try {
         const chunks: string[][] = [];
         for (let i = 0; i < ids.length; i += MAX_PUBLIC_USERS_PER_BATCH) {

@@ -12,12 +12,6 @@ export function setStorageTimeoutMs(ms: number): void {
     storageTimeoutMs = ms;
 }
 
-// A stored object that is gone for good, after the temp and the staged copy were checked: 410, as the row
-// still resolves.
-export function storageGone(cause?: unknown): ApiError {
-    return new ApiError(410, 'Stored data not found', cause === undefined ? undefined : { cause });
-}
-
 // Node puts the errno on the Error as `code`; a thrown value that is not one has none.
 export function errnoOf(error: unknown): string | null {
     return error instanceof Error && 'code' in error ? String(error.code) : null;

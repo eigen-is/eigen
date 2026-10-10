@@ -138,11 +138,6 @@ describe('Cross-Domain Integration', () => {
             );
             expect(res.status).toBe(422); // Elysia validation error
         });
-
-        test('public user info returns 404 for unknown user', async () => {
-            const res = await ctx.app.handle(new Request(`http://localhost/p/user/unknown@test.eigen.is`));
-            expect(res.status).toBe(404);
-        });
     });
 
     describe('Home and Drive Integration', () => {

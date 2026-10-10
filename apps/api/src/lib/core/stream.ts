@@ -1,4 +1,4 @@
-import { ApiError, storageUnavailable } from './errors';
+import { ApiError, payloadTooLarge, storageUnavailable } from './errors';
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
 
@@ -52,7 +52,7 @@ export async function consumeStream(
             if (stopped) throw storageUnavailable();
             if (done) return size;
             size += value.byteLength;
-            if (size > maxBytes) throw new ApiError(413, 'Upload too large');
+            if (size > maxBytes) throw payloadTooLarge();
             onChunk(value);
             unyielded += value.byteLength;
             if (yields && unyielded >= YIELD_EVERY_BYTES) {

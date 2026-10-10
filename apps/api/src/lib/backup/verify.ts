@@ -372,8 +372,8 @@ export async function readServerArchiveMember(
     if (!member && !entry) return { bytes: null };
     if (!member) return { failure: `${name}: missing from the archive` };
     if (!entry) return { failure: `${name}: not in the manifest` };
-    const tooBig = memberMismatch(entry, member.bytes, null);
-    if (tooBig) return { failure: tooBig };
+    const sizeMismatch = memberMismatch(entry, member.bytes, null);
+    if (sizeMismatch) return { failure: sizeMismatch };
     try {
         const bytes = await readArchiveMember(member);
         const mismatch = memberMismatch(

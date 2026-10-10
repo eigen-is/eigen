@@ -7,9 +7,10 @@ import {
     ManagedDatabase,
     type SchemaType,
     type SyncCallbacks,
+    storageGone,
     storageUnavailable,
 } from '../core';
-import { errnoOf, storageGone } from '../storage';
+import { errnoOf } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';
 import type { Mount } from './mount';

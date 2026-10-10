@@ -7,7 +7,7 @@ import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
-import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
+import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo } from '../lib/space/public';
 import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
 // The /p/ prefix is eigen's PUBLIC API surface — every route here is intentionally unauthenticated
@@ -34,7 +34,6 @@ export const publicRouter = new Elysia({ name: 'public' })
         set.headers['Content-Type'] = 'image/svg+xml';
         return await generateFallbackSvg(params.emailOrId);
     })
-    .get('/p/user/:emailOrId', async ({ params }) => await getPublicInfo(params.emailOrId))
     .post('/p/users', async ({ body }): Promise<Record<string, PublicUser>> => await getBatchPublicInfo(body.ids), {
         body: t.Object({ ids: t.Array(t.String(), { maxItems: MAX_PUBLIC_USERS_PER_BATCH }) }),
     })

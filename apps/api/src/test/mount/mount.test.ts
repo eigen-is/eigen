@@ -4,7 +4,14 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } 
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { ApiError, type DatabaseConfig, eventLoopTurn, ManagedDatabase, type SchemaType } from '../../lib/core';
+import {
+    ApiError,
+    type DatabaseConfig,
+    eventLoopTurn,
+    ManagedDatabase,
+    type SchemaType,
+    storageGone,
+} from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import {
     CONTENT_REINDEX_CAP_SECONDS,
@@ -14,7 +21,6 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
-import { storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
@@ -347,6 +353,17 @@ describe('Mount (local-key storage)', () => {
         expect(file!.size).toBe(15);
     });
 
+    test('writeFile refuses a file trashed with its folder', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedWithFolder');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        await mount.trashPath(folderId);
+        await expect(mount.writeFile(fileId, Buffer.from('new'))).rejects.toMatchObject({
+            status: 404,
+            message: 'File is in trash',
+        });
+        expect((await mount.getPath(fileId))!.size).toBe(3);
+    });
+
     test('getChildByName is case-insensitive', async () => {
         const folderId = await mount.createFolder(rootId, 'FindMe');
         const found = await mount.getChildByName(rootId, 'findme');
@@ -484,6 +501,17 @@ describe('Mount (local path-based storage)', () => {
         await mount.deletePath(folderId);
         expect(await mount.getPath(subId)).toBeNull();
         expect(await mount.getPath(fileId)).toBeNull();
+    });
+
+    test('a create into a deleted folder answers 404 and leaves the root file of that name', async () => {
+        const rootFileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 9, Buffer.from('root-text'));
+        const folderId = await mount.createFolder(rootId, 'DeletedParent');
+        await mount.deletePath(folderId);
+
+        await expect(
+            mount.createFile(folderId, 'notes.txt', 'text/plain', 6, Buffer.from('orphan')),
+        ).rejects.toMatchObject({ status: 404 });
+        expect(await (await mount.readFile(rootFileId))!.text()).toBe('root-text');
     });
 
     test('duplicate name in same folder throws', async () => {
