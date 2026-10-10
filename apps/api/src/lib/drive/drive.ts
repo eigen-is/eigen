@@ -639,6 +639,7 @@ export default class Drive {
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
         user?: User,
+        expectedUpdatedAt?: Date,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
@@ -650,7 +651,7 @@ export default class Drive {
         let thumbnailCleanup: (() => Promise<void>) | undefined;
 
         if (Buffer.isBuffer(data)) {
-            await mount.writeFile(pathId, data);
+            await mount.writeFile(pathId, data, expectedUpdatedAt);
             if (data.length > 0) thumbnailSource = data;
         } else {
             // Stream / S3File: detour through a temp file so we don't hold bytes in memory.
@@ -659,7 +660,7 @@ export default class Drive {
             const tempId = randomUUID();
             try {
                 const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-                await mount.writeFileFromTemp(pathId, tempId, size, hash);
+                await mount.writeFileFromTemp(pathId, tempId, size, hash, expectedUpdatedAt);
                 if (size > 0) {
                     thumbnailSource = mount.getTempPath(tempId);
                     thumbnailCleanup = () => mount.cleanupTemp(tempId);

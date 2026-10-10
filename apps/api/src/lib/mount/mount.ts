@@ -18,14 +18,9 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { getServerSettings } from '../config/server-settings';
-import {
-    ApiError,
-    type DatabaseConfig,
-    type ManagedDatabase,
-    PATHS,
-    type SchemaType,
-    storageUnavailable,
-} from '../core';
+
+import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType, StaleWriteError } from '../core';
+
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import {
@@ -984,7 +979,11 @@ export class Mount {
         return !!row && isSearchableTextFile(row.mimeType, row.name);
     }
 
-    async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    async writeFile(
+        pathId: string,
+        data: Buffer | Uint8Array | ArrayBuffer | BunFile,
+        expectedUpdatedAt?: Date,
+    ): Promise<number> {
         let size: number;
         if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
             size = data.length;
@@ -995,26 +994,41 @@ export class Mount {
         }
         const hash = await this.computeHash(data);
 
-        return this.withPathLock(pathId, () =>
-            this.withTreeShared(async () => {
+        return this.withPathLock(pathId, async () => {
+            await this.assertUpdatedAt(pathId, expectedUpdatedAt);
+            return this.withTreeShared(async () => {
                 const storageKey = await this.getStorageKey(pathId);
                 const written = await this.storage.write(storageKey, data);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
                 return written;
-            }),
-        );
+            });
+        });
     }
 
     // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
     // Mirrors createFileFromTemp on the create side and avoids re-hashing.
-    async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
-        await this.withPathLock(pathId, () =>
-            this.withTreeShared(async () => {
+    async writeFileFromTemp(
+        pathId: string,
+        tempId: string,
+        size: number,
+        hash: string,
+        expectedUpdatedAt?: Date,
+    ): Promise<void> {
+        await this.withPathLock(pathId, async () => {
+            await this.assertUpdatedAt(pathId, expectedUpdatedAt);
+            await this.withTreeShared(async () => {
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
-            }),
-        );
+            });
+        });
+    }
+
+    // Under the path lock every overwrite takes, so of two saves from one base only the first writes.
+    private async assertUpdatedAt(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
+        if (!expectedUpdatedAt) return;
+        const { updatedAt } = await this.getActivePath(pathId);
+        if (updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new StaleWriteError(updatedAt);
     }
 
     // Runs under the path lock after the PUT landed. deletePath doesn't wait on that lock, so a
