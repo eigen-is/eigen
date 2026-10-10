@@ -69,9 +69,9 @@ type ThemePalette = string[];
 
 // Belt against a tiny file DECLARING an enormous grid (far-apart cells span the full Excel
 // bounding box): walking rowCount×columnCount to build the Sheet output would blow up, and
-// exceljs's fully-materialized in-memory model (~hundreds of bytes per cell) is itself the
-// dominant memory term. 4 M cells (e.g. 40k rows × 100 cols) exceeds any realistic import
-// while keeping that model to ~1–2 GB — survivable, unlike a 10 M-cell model (~2–4 GB).
+// exceljs's fully-materialized in-memory model (~800 bytes per cell) is itself the
+// dominant memory term. 4 M cells (e.g. 40k rows × 100 cols) exceeds any realistic import;
+// a dense, styled sheet at the cap peaks at ~5 GB to convert, ~3 GB of it exceljs's model.
 // A dense sheet at this cap decompresses to ~140 MB, well under the shared byte cap: the
 // CELL cap, not the byte cap, is the binding limit for a real spreadsheet, and neither
 // rejects a sheet the other would allow. The byte cap independently catches a LOW-cell-count
