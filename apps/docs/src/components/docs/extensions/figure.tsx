@@ -1,5 +1,6 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { Mapping } from '@tiptap/pm/transform';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
@@ -204,14 +205,12 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
                 tabIndex={selected && isEditable ? 0 : undefined}
                 aria-label={selected && isEditable ? 'Resize image' : undefined}
                 onKeyDown={selected && isEditable ? handleKeyResize : undefined}
-                // A body click must not move DOM focus out of ProseMirror onto this tabIndex
-                // wrapper (the deleted component's grips preventDefault'd for the same
-                // reason); Tab-focus for keyboard resize is unaffected. Scoped to exactly
-                // when the wrapper is focusable: the figure node is draggable, and a
-                // prevented mousedown suppresses native drag start in spec-following
-                // browsers — with no tabIndex there is no steal, so an unselected (or
-                // read-only) figure's press stays fully native for PM click-select + drag.
-                onMouseDown={selected && isEditable ? (e) => e.preventDefault() : undefined}
+                // A press focuses this wrapper, which would take the keys from ProseMirror, so focus goes
+                // back to the editor; only Tab focus stays, for keyboard resize. The press itself is left
+                // alone: a prevented mousedown starts no native drag.
+                onFocus={(e) => {
+                    if (e.target === e.currentTarget && !e.currentTarget.matches(':focus-visible')) editor.view.focus();
+                }}
             >
                 {showPlaceholder ? (
                     <div style={{ width: displayWidth ? `${displayWidth}px` : '400px', aspectRatio: '16 / 10' }}>
@@ -289,6 +288,32 @@ export const Figure = FigureNode.extend<FigureOptions>({
                         view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)));
                         return true;
                     },
+                },
+            }),
+            new Plugin({
+                key: new PluginKey('figureDragOut'),
+                // A figure dragged out of a paragraph of its own takes the paragraph with it, where the
+                // paragraph's parent can do without it. ProseMirror's drop moves the selected node.
+                appendTransaction(transactions, oldState, newState) {
+                    const dragged = oldState.selection;
+                    if (
+                        !transactions.some((tr) => tr.getMeta('uiEvent') === 'drop') ||
+                        !(dragged instanceof NodeSelection) ||
+                        dragged.node.type.name !== name ||
+                        dragged.$from.parent.childCount !== 1
+                    )
+                        return null;
+                    const mapping = new Mapping();
+                    for (const tr of transactions) mapping.appendMapping(tr.mapping);
+                    const $start = newState.doc.resolve(mapping.map(dragged.$from.before(), 1));
+                    const paragraph = $start.nodeAfter;
+                    if (
+                        !paragraph?.isTextblock ||
+                        paragraph.content.size > 0 ||
+                        !$start.parent.canReplace($start.index(), $start.index() + 1)
+                    )
+                        return null;
+                    return newState.tr.delete($start.pos, $start.pos + paragraph.nodeSize);
                 },
             }),
         ];
