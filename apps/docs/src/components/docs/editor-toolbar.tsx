@@ -549,7 +549,7 @@ export const EditorToolbar = ({
                                     />
                                     <ColorPickerButton
                                         icon={Highlighter}
-                                        tooltipText="Highlight"
+                                        tooltipText="Highlight color"
                                         active={active.highlight}
                                         value={active.highlightColor}
                                         resetLabel="None"

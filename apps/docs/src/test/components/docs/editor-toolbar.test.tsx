@@ -75,7 +75,7 @@ async function openSubmenu(label: string) {
 }
 
 const SHORT_ROW = ['Normal', 'Inter', 'Bold', 'Italic', 'Underline'];
-const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight', 'Add link', 'Insert image'];
+const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
 const FULL_ROW = [
     ...MIDDLE_ROW,
     'Align left',
