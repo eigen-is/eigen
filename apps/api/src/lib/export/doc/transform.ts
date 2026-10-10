@@ -3,6 +3,7 @@ import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace
 import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
+import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
@@ -13,7 +14,6 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { renderDocHtml, withAbsoluteLinks } from './render';

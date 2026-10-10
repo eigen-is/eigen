@@ -22,6 +22,9 @@ export type DocxImage = {
 // heaviest weighs 57,688.
 export const MAX_DOCX_WEIGHT = 150_000;
 
+// A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
+const SLOTS_PER_UNIT = 64;
+
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 const CHARS_PER_UNIT = 512;
 
@@ -82,9 +85,10 @@ export function readDocx(
     }
 }
 
-// Every node and mark.
+// Every node and mark, and every table's area.
 function weightOf(nodes: JSONContent[]): number {
     let weight = 0;
+    let slots = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
             if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
@@ -92,11 +96,12 @@ function weightOf(nodes: JSONContent[]): number {
     const stack = [...nodes];
     for (let node = stack.pop(); node; node = stack.pop()) {
         weight += 1 + (node.marks?.length ?? 0);
+        slots += (node.attrs?.['colspan'] ?? 0) * (node.attrs?.['rowspan'] ?? 1);
         strings(node.attrs);
         for (const mark of node.marks ?? []) strings(mark.attrs);
         for (const child of node.content ?? []) stack.push(child);
     }
-    return weight;
+    return weight + Math.floor(slots / SLOTS_PER_UNIT);
 }
 
 function fits(block: JSONContent): boolean {

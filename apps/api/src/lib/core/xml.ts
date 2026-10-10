@@ -31,12 +31,12 @@ const XMLNS_NAMESPACE = 'http://www.w3.org/2000/xmlns/';
 const NO_ATTRIBUTE_NS: Readonly<Record<string, string>> = Object.freeze({});
 
 // Blank input is null rather than an error: an empty PROPFIND means allprop, an empty PROPPATCH does nothing.
-export function parseXml(input: string | Uint8Array): XmlElement | null {
+export function parseXml(input: string | Uint8Array, aliases?: ReadonlyMap<string, string>): XmlElement | null {
     const prolog =
         typeof input === 'string' ? scanProlog(input, input.charCodeAt(0) === 0xfeff ? 1 : 0, true) : scanBytes(input);
     if (prolog === 'blank') return null;
     try {
-        return resolve(XML.parse(input, { compact: false }));
+        return resolve(XML.parse(input, { compact: false }), aliases);
     } catch (error) {
         if (error instanceof SyntaxError || error instanceof RangeError) {
             throw new XmlError('Malformed XML', { cause: error });
@@ -97,7 +97,7 @@ function scanBytes(bytes: Uint8Array): 'blank' | 'root' {
 }
 
 // An explicit stack, as recursion barely outlasts Bun's nesting limit; bindings are undone by setting, since a delete costs JSC's Map its size.
-function resolve(root: XML.Node): XmlElement {
+function resolve(root: XML.Node, aliases: ReadonlyMap<string, string> | undefined): XmlElement {
     const bindings = new Map<string, string | undefined>([['xml', XML_NAMESPACE]]);
     const open: { content: XML.Node['children']; next: number; element: XmlElement; shadowed: [string, string?][] }[] =
         [];
@@ -122,7 +122,7 @@ function resolve(root: XML.Node): XmlElement {
                 throw new XmlError(`Invalid namespace declaration: ${attribute}`);
             }
             shadowed.push([prefix, bindings.get(prefix)]);
-            bindings.set(prefix, uri);
+            bindings.set(prefix, aliases?.get(uri) ?? uri);
         }
         // Once the element's own declarations are bound: an attribute may use a prefix declared after it.
         let attributeNs: Record<string, string> | undefined;

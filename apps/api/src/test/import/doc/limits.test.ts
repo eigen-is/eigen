@@ -12,7 +12,7 @@ import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
-import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
+import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
     buildDocxWithBody,
     GOLDEN_DOCX_IMAGE_RUN,
@@ -501,6 +501,41 @@ describe('tables the editor would repair', () => {
     );
 });
 
+// The TableMap the editor builds for every table: a slot per column per row, and findWidth's rescans under a rowspan.
+describe("the editor's TableMap", () => {
+    // A row ran on past the grid a column per cell and padded every other row to its width: 2.3 GB at 5,000 rows.
+    test('a first row of 20,000 cells over 1,000 rows of one imports through the Yjs update', async () => {
+        const one = '<w:tc><w:p/></w:tc>';
+        const docx = await buildDocxWithBody(
+            `<w:tbl><w:tblGrid><w:gridCol w:w="500"/></w:tblGrid><w:tr>${one.repeat(20_000)}</w:tr>${`<w:tr>${one}</w:tr>`.repeat(1000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 60_000);
+
+    // findWidth rescans the rows above each row after a rowspan: 49,000 rows of one cell took 27 s to open.
+    test('20,000 rows under a merge open in parts, within 2 s through the Yjs update', async () => {
+        const tc = (tcPr = '') => `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}<w:p/></w:tc>`;
+        const grid = '<w:tblGrid><w:gridCol w:w="500"/><w:gridCol w:w="500"/></w:tblGrid>';
+        const merged = `<w:tr>${tc('<w:vMerge w:val="restart"/>')}${tc()}</w:tr><w:tr>${tc('<w:vMerge/>')}${tc()}</w:tr>`;
+        const docx = await buildDocxWithBody(
+            `<w:tbl>${grid}${merged}${`<w:tr>${tc().repeat(2)}</w:tr>`.repeat(20_000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(2000);
+    }, 60_000);
+
+    // 135,001 nodes, within the budget, over 2.8 million slots.
+    test('45,000 rows of a cell over 63 columns weigh their area too, past the budget: 413', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const row = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="63"/></w:tcPr><w:p/></w:tc></w:tr>';
+        const result = measuredImport(await buildDocxWithBody(`<w:tbl>${grid}${row.repeat(45_000)}</w:tbl>`));
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+    }, 60_000);
+});
+
 describe('structure', () => {
     // Word's column limit; a looped gridSpan of 2e9 would hold the Worker to its deadline.
     test('a gridSpan past the grid spans the grid', async () => {
@@ -514,6 +549,39 @@ describe('structure', () => {
         expect(only?.attrs?.['colspan']).toBe(63);
         expect(only?.attrs?.['colwidth']).toHaveLength(63);
     });
+
+    test('a row past 63 columns ends in a cell holding the text of the rest', async () => {
+        const words = Array.from({ length: 100 }, (_, index) => `c${index}`);
+        const json = await imported(table([2000], [words.map((word) => cell(word))]));
+        const row = cells(json);
+        expect(row).toHaveLength(63);
+        expect(texts(row.at(-1) ?? {})).toEqual(words.slice(62));
+    });
+
+    test('a table that merges is split every MAX_MERGED_ROWS rows, a merge across the split starting again', async () => {
+        const rows = (merge: boolean) =>
+            Array.from({ length: MAX_MERGED_ROWS + 2 }, (_, index) => [
+                cell(
+                    `r${index}`,
+                    !merge || index < MAX_MERGED_ROWS - 1
+                        ? ''
+                        : index === MAX_MERGED_ROWS - 1
+                          ? '<w:vMerge w:val="restart"/>'
+                          : '<w:vMerge/>',
+                ),
+                cell('b'),
+            ]);
+        const parts = (json: JSONContent) =>
+            nodesOfType(json, 'table').map((node) => cells(node).map((one) => one.attrs?.['rowspan'] ?? 1));
+        const merged = await imported(table([2000, 2000], rows(true)));
+        const spans = parts(merged);
+        expect(spans.map((part) => part.length)).toEqual([2 * MAX_MERGED_ROWS, 3]);
+        expect([spans[0]?.slice(-2), spans[1]]).toEqual([
+            [1, 1],
+            [2, 1, 1],
+        ]);
+        expect(parts(await imported(table([2000, 2000], rows(false))))).toHaveLength(1);
+    }, 30_000);
 
     test('a merge that starts in the last row spans that row alone', async () => {
         const json = await imported(

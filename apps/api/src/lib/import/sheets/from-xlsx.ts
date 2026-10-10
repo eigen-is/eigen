@@ -27,8 +27,8 @@ import {
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import { ApiError } from '../../core/errors';
-import { A_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS, toTransitional } from '../../core/ooxml';
-import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { A_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
+import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
@@ -922,9 +922,7 @@ function readPart(zip: ZipReader, path: string): XmlElement | null {
 // take from it: the location links or the theme colors, never the import. Strict reads as transitional.
 function parsePart(xml: string | Uint8Array): XmlElement | null {
     try {
-        const root = parseXml(xml);
-        if (root) toTransitional(root);
-        return root;
+        return parseOoxml(xml);
     } catch (error) {
         if (error instanceof XmlError) return null;
         throw error;

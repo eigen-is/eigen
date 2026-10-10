@@ -1,4 +1,4 @@
-import { type XmlElement, xmlElements } from './xml';
+import { parseXml, type XmlElement } from './xml';
 
 // The OOXML vocabulary the docx writer writes and the readers recognise, one source both ways: namespaces, style
 // names, list formats, units and Word's spelling of a number.
@@ -44,18 +44,9 @@ const STRICT_NAMESPACES = new Map([
     [`${STRICT}/spreadsheetml/main`, SML_NS],
 ]);
 
-// A part names its namespaces on its root, so one that declares no Strict namespace there needs no walk.
-export function toTransitional(root: XmlElement): void {
-    if (!Object.values(root.attributes).some((value) => STRICT_NAMESPACES.has(value))) return;
-    const stack = [root];
-    for (let element = stack.pop(); element; element = stack.pop()) {
-        element.ns = STRICT_NAMESPACES.get(element.ns) ?? element.ns;
-        if (Object.values(element.attributeNs).some((ns) => STRICT_NAMESPACES.has(ns)))
-            element.attributeNs = Object.fromEntries(
-                Object.entries(element.attributeNs).map(([name, ns]) => [name, STRICT_NAMESPACES.get(ns) ?? ns]),
-            );
-        for (const child of xmlElements(element)) stack.push(child);
-    }
+// A part read with Strict's namespaces as their transitional twins, wherever it declares them.
+export function parseOoxml(input: string | Uint8Array): XmlElement | null {
+    return parseXml(input, STRICT_NAMESPACES);
 }
 
 // ── Styles: Word lists a style by its name, which a re-save keeps where an id may change ────────────────────────────

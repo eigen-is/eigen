@@ -10,8 +10,11 @@ import { isFill, mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
 
-// Word's column limit: a span is walked column by column, so a gridSpan of 2e9 would hold the Worker to its deadline.
+// Word's column limit, on the grid and every row: a span is walked by column, the widest row sets every row's width.
 const MAX_COLUMNS = 63;
+
+// findWidth rescans the rows above each row after a rowspan: a table that merges splits here, at most 0.9 s a part.
+export const MAX_MERGED_ROWS = 2000;
 
 // Each table nests three nodes deep; 1,000 nested tables overflowed the Worker's stack.
 export const MAX_TABLE_DEPTH = 8;
@@ -35,7 +38,12 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
     const tableLook = tableStyle ? reader.styles.table(tableStyle.id) : undefined;
     const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableLook?.fill;
-    const cellItems = (cell: XmlElement, rowIndex: number, colwidth: number[] | null): Item[] => {
+    const cellItems = (
+        cell: XmlElement,
+        rowIndex: number,
+        colwidth: number[] | null,
+        content = cellContent(cell),
+    ): Item[] => {
         const firstRow = rowIndex === 0 && firstRowOn;
         const first = firstRow && tableLook?.firstRowRun;
         const fill =
@@ -49,7 +57,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             room: colwidth ? colwidth.reduce((sum, width) => sum + width, 0) : scope.room,
             onFill: scope.onFill || isFill(fill),
         };
-        return readBlocks(reader, cellContent(cell), cellScope);
+        return readBlocks(reader, content, cellScope);
     };
 
     // Read once: the walk counts list numbers and notes as it goes.
@@ -67,14 +75,20 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const rowNodes: { cells: JSONContent[]; end: number }[] = [];
     // The merged cells a continuation in the next row extends, by the column each starts at.
     let open = new Map<number, CellAttrs>();
+    const split =
+        rows.length > MAX_MERGED_ROWS &&
+        rows.some((row) => row.cells.some((cell) => wChild(wChild(cell, 'tcPr'), 'vMerge')));
     for (const [rowIndex, row] of rows.entries()) {
+        // A merge stops at the end of its part; a continuation past it starts a cell of its own.
+        if (split && rowNodes.length > 0 && rowNodes.length % MAX_MERGED_ROWS === 0) open = new Map();
         const header = (onOff(wChild(row.trPr, 'tblHeader')) ?? false) || (rowIndex === 0 && shadedHeader);
         const cells: JSONContent[] = [];
         const next = new Map<number, CellAttrs>();
         const extended: CellAttrs[] = [];
         let column = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0), columns);
         if (column > 0) cells.push(gridFiller(columnPx, 0, column));
-        for (const cell of row.cells) {
+        for (const [index, cell] of row.cells.entries()) {
+            if (column >= MAX_COLUMNS) break;
             const tcPr = wChild(cell, 'tcPr');
             const vMerge = wChild(tcPr, 'vMerge');
             // Only where the cell above starts, and over its columns: anywhere else the two would overlap.
@@ -91,7 +105,13 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 Math.max(1, columns - column),
             );
             const colwidth = widths(columnPx, column, colspan);
-            const content = build(cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex, colwidth));
+            // Word's last column holds the text of the cells a row runs on past it.
+            const past = column + colspan < MAX_COLUMNS ? [] : row.cells.slice(index + 1).flatMap(cellContent);
+            const content = build(
+                cell === onlyCell && onlyItems
+                    ? onlyItems
+                    : cellItems(cell, rowIndex, colwidth, [...cellContent(cell), ...past]),
+            );
             const fill = shadingOf(wChild(tcPr, 'shd'));
             const attrs: CellAttrs = { colspan, rowspan: 1, colwidth, ...hoistAlignment(content) };
             cells.push({
@@ -125,7 +145,11 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         return { type: 'tableRow', content: cells };
     });
     const indent = twipsOf(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
-    return [{ kind: 'table', node: { type: 'table', content }, indent }];
+    const part = split ? MAX_MERGED_ROWS : content.length;
+    const tables: Item[] = [];
+    for (let start = 0; start < content.length; start += part)
+        tables.push({ kind: 'table', node: { type: 'table', content: content.slice(start, start + part) }, indent });
+    return tables;
 }
 
 type CellAttrs = { colspan: number; rowspan: number; colwidth: number[] | null; align?: string };

@@ -1,6 +1,6 @@
 import { ApiError } from '../../core/errors';
-import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, toTransitional, W_NS } from '../../core/ooxml';
-import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, W_NS } from '../../core/ooxml';
+import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
 // The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
@@ -137,8 +137,7 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
         // A part refused leaves the budget to the parts after it.
         if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         budget.tags -= tags;
-        const root = parseXml(bytes) ?? undefined;
-        if (root) toTransitional(root);
+        const root = parseOoxml(bytes) ?? undefined;
         budget.parsed.set(path, root);
         return root;
     } catch (error) {

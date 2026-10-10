@@ -120,14 +120,25 @@ export function isLightNeutral(fill: string | undefined): boolean {
     return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
 }
 
-// Contrast below 1.5 against white, by WCAG's relative luminance. On a fill the schema drops, Word draws such text
-// legibly; on Eigen's paper it would vanish, so it takes the body color.
+// Contrast below 1.5 against white. On a fill the schema drops, Word draws such text legibly; on Eigen's paper it would
+// vanish, so it takes the body color.
 export function isLight(hex: string): boolean {
+    return 1.05 / (luminance(hex) + 0.05) < 1.5;
+}
+
+// White contrasts with it more than black: Word draws auto text on it white.
+export function isDark(hex: string): boolean {
+    const shade = luminance(hex) + 0.05;
+    return 1.05 / shade > shade / 0.05;
+}
+
+// WCAG's relative luminance.
+function luminance(hex: string): number {
     const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
         const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
         return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
     });
-    return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {

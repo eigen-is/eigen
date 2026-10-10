@@ -34,7 +34,7 @@ import type {
     Cell as XlsxCell,
 } from 'exceljs';
 import { openZip, writeZip, type ZipWriteEntry } from '../../core/zip';
-import { cssColorToHex } from '../colors';
+import { cssColorToHex } from '../../document/colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
 

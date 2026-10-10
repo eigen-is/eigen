@@ -12,6 +12,7 @@ import type { Reader, Scope } from './paragraphs';
 import {
     ABSORBED,
     type DocxRunProps,
+    isDark,
     isFill,
     isLight,
     isLightNeutral,
@@ -350,7 +351,7 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    // Explicit black is Word's and Google Docs' spelling of the default; as a mark it would vanish in dark mode.
+    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight is white.
     const color =
         props.color &&
         props.color !== reader.baseColor &&
@@ -358,7 +359,9 @@ function marksOf(
         linkLook === undefined &&
         !(scope.onFill && !isFill(shade) && isLight(props.color))
             ? props.color
-            : undefined;
+            : !full.color && !link && isFill(shade) && isDark(shade)
+              ? 'FFFFFF'
+              : undefined;
     // Word draws capitals over small caps.
     const caps: Caps | null = props.caps ? 'all' : props.smallCaps ? 'small' : null;
     const highlight: Marks = isFill(shade)

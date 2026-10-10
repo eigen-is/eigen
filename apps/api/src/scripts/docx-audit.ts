@@ -23,27 +23,18 @@ import {
     O_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PAGE_SECTION_TYPES,
+    parseOoxml,
     R_NS,
     STYLE_NAMES,
-    toTransitional,
     V_NS,
     W_NS,
     W10_NS,
     W14_NS,
     WP_NS,
 } from '../lib/core/ooxml';
-import {
-    parseXml,
-    XML_NAMESPACE,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../lib/core/xml';
+import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
-import { cssColorToHex } from '../lib/export/colors';
+import { cssColorToHex } from '../lib/document/colors';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
@@ -640,9 +631,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     const zip = openZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     const read = (part: string | undefined) => {
         const xml = part === undefined ? undefined : zip.read(part);
-        const root = xml && parseXml(xml);
-        if (root) toTransitional(root);
-        return root ?? undefined;
+        return (xml && parseOoxml(xml)) ?? undefined;
     };
     const relationships = (part: string) => {
         const directory = path.posix.dirname(part);

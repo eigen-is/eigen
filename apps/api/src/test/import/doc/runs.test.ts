@@ -69,6 +69,36 @@ describe('colors', () => {
             ['percent', '#ff0000'],
         ]);
     });
+
+    // Word draws auto text white on a dark shading or highlight; black on the highlight would be unreadable.
+    test('auto text on a dark shading or highlight is white; a color, a lighter shading and a link keep theirs', async () => {
+        const solid = (color: string) => `<w:shd w:val="solid" w:color="${color}" w:fill="FFFFFF"/>`;
+        const json = await imported(
+            paragraph(
+                [
+                    run('black', solid('000000')),
+                    run('navy', '<w:highlight w:val="darkBlue"/>'),
+                    run('auto', `<w:color w:val="auto"/>${solid('000000')}`),
+                    run('red', `<w:color w:val="FF0000"/>${solid('000000')}`),
+                    run('inked', `<w:color w:val="000000"/>${solid('000000')}`),
+                    run('dim', solid('404040')),
+                    run('grey', solid('808080')),
+                    run('yellow', '<w:highlight w:val="yellow"/>'),
+                    `<w:hyperlink r:id="rId9">${run('link', solid('000000'))}</w:hyperlink>`,
+                ].join(run(' ')),
+            ),
+            {
+                rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+            },
+        );
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['black', '#ffffff'],
+            ['navy', '#ffffff'],
+            ['auto', '#ffffff'],
+            ['red', '#ff0000'],
+            ['dim', '#ffffff'],
+        ]);
+    });
 });
 
 describe('fonts and code', () => {
