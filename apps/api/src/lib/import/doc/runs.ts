@@ -21,7 +21,8 @@ export type Piece =
     | { kind: 'checkbox'; checked: boolean }
     | { kind: 'hr' };
 
-export type Link = { href: string; title: string | null };
+// A link to a bookmark has no href: Eigen holds no bookmarks, and Word draws a TOC entry's link in its paragraph's look.
+export type Link = { href?: string; title: string | null };
 
 // Each open field carries what the fields around it say too, so the innermost answers alone: whether any is still in
 // its code, and the link its result shows.
@@ -226,6 +227,7 @@ function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undef
     const anchor = w(element, 'anchor');
     const rel = id ? scope.part.rels.get(id) : undefined;
     const base = rel?.external ? rel.target : '';
+    if (!base && anchor) return { title: null };
     return linkTo(reader, anchor ? `${base}#${anchor}` : base, w(element, 'tooltip'));
 }
 
@@ -258,6 +260,7 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
         else if (flag.toLowerCase() === '\\o') tooltip = value;
     }
     if (!quoted.length) target = args.trim().split(/\s+/)[0] ?? '';
+    if (!target && anchor) return { title: null };
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
 
@@ -336,7 +339,7 @@ function marksOf(
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
-    if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
+    if (link?.href) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
     const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
@@ -367,7 +370,7 @@ function marksOf(
         const code =
             bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT &&
             (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
-        if (code && !link) return { text: part, marks: [{ type: 'code' }], small: false, font };
+        if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
         const fontFamily = fontMark(font, reader.fontTable);
         const textStyle: Marks =
             color || fontFamily || caps
