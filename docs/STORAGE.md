@@ -86,7 +86,7 @@ A HEAD and a list share one deadline over all their attempts: `storageRead` runs
 
 ## A gone object answers 410, an outage 503
 
-Only the GET body tells a missing object from a sick bucket: `NoSuchKey` on S3, `ENOENT` on disk (`isMissingObjectCause`). `Mount.downloadKeyToTemp` answers that with 410 (`storageGone`), every other storage failure with 503, and a local one (the `tmp/` write or rename) with 500, so a full disk does not read as an outage. A 410 tells the client to stop retrying, a 503 or a 500 to retry ([COLLAB.md](COLLAB.md#each-close-code-tells-the-tab-what-to-do)).
+Only the GET body tells a missing object from a sick bucket: `NoSuchKey` on S3, `ENOENT` on disk (`isMissingObjectCause`). `Mount.downloadKeyToTemp` answers that with 410 (`storageGone`), every other storage failure with 503, and a local one (the `tmp/` write or rename) with 500, so a full disk does not read as an outage. A 410 tells the client to stop retrying. The collab tab retries a 503 or a 500 ([COLLAB.md](COLLAB.md#each-close-code-tells-the-tab-what-to-do)), an HTTP client only a 503.
 
 A container database's open reads the freshest copy first: the crash temp, then the staged copy of an unacknowledged upload, then the stored object ([SYNC.md](SYNC.md)). So a 410 means no copy exists anywhere, and a version restore is the way back. On a `local-key` mount the open does not GET but stats `data.db`, and answers 410 only on `ENOENT`.
 
