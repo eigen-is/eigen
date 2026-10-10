@@ -183,7 +183,7 @@ export async function uploadServerArchive(
     const stream = new Response(abortableStream(archivePath, signal));
     await untilAborted(bucket.read(name).write(stream, { partSize, queueSize: PARTS_IN_FLIGHT }), signal);
     const stored = await bucket.size(name);
-    if (stored === null) throw new Error(`The bucket did not say how many bytes of ${name} it holds`);
+    if (stored === null) throw new Error(`The bucket does not hold ${name} after its upload`);
     if (stored !== bytes) {
         // Only a size the bucket stated says the object is short; a HEAD that failed says nothing of it.
         await bucket.delete(name);

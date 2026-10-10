@@ -67,9 +67,7 @@ function createDoc(fileName: string): Promise<DrivePath> {
         ctx.alice.user.id,
         mountId,
         `folder/${rootId}/create/doc`,
-        {
-            fileName,
-        },
+        { fileName },
     );
 }
 
@@ -327,6 +325,7 @@ describe('Eigendoc docx import/convert', () => {
         expect((error as ApiError).status).toBe(403);
         expect((error as ApiError).message).toBe('No write permission');
         expect(await readDocJson(docPath.id)).toEqual(before);
+        await expect(readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).rejects.toThrow('missing from media/');
     }, 60_000);
 
     test('convert rejects a stored .docx over the upload limit with 413', async () => {

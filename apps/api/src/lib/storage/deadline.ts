@@ -89,7 +89,13 @@ export async function retryStorageRead<T>(
         } catch (error) {
             const code = causeCode(error);
             const wait = retryWaitsMs[attempt - 1];
-            if (code === null || !TRANSIENT_S3_CODES.has(code) || wait === undefined || canRetry?.() === false) {
+            if (
+                code === null ||
+                !TRANSIENT_S3_CODES.has(code) ||
+                wait === undefined ||
+                signal?.aborted ||
+                canRetry?.() === false
+            ) {
                 throw error;
             }
             console.warn(`Storage ${op} of ${key} failed with ${code} on attempt ${attempt}, retrying`);

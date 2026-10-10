@@ -125,6 +125,7 @@ export async function importIntoDocument(
     if (containerMime === DRIVE_MIME_SHEETS) {
         const snapshotJson = await importXlsxSnapshot(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
+        signal?.throwIfAborted();
         await requireWritePermission(drive, path, user);
         writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         return;
@@ -133,10 +134,10 @@ export async function importIntoDocument(
     if (containerMime === DRIVE_MIME_DOC) {
         const { update, images } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
-        // and the abort check come first, so past the save only a revocation stops the update.
-        await requireWritePermission(drive, path, user);
+        // and the abort check come before the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
+        await requireWritePermission(drive, path, user);
         await saveDocImages(mount, path, images);
         await requireWritePermission(drive, path, user);
         writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
