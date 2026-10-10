@@ -501,6 +501,28 @@ describe('tables the editor would repair', () => {
     );
 });
 
+// The editor's TableMap holds a slot per column per row, which a span or a padded row fills at no node's cost.
+describe('table area', () => {
+    // A row ran on past the grid a column per cell and padded every other row to its width: 2.3 GB at 5,000 rows.
+    test('a first row of 20,000 cells over 1,000 rows of one imports through the Yjs update', async () => {
+        const one = '<w:tc><w:p/></w:tc>';
+        const docx = await buildDocxWithBody(
+            `<w:tbl><w:tblGrid><w:gridCol w:w="500"/></w:tblGrid><w:tr>${one.repeat(20_000)}</w:tr>${`<w:tr>${one}</w:tr>`.repeat(1000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 60_000);
+
+    // 135,001 nodes, within the budget, over 2.8 million slots.
+    test('45,000 rows of a cell over 63 columns weigh their area too, past the budget: 413', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const row = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="63"/></w:tcPr><w:p/></w:tc></w:tr>';
+        const result = measuredImport(await buildDocxWithBody(`<w:tbl>${grid}${row.repeat(45_000)}</w:tbl>`));
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+    }, 60_000);
+});
+
 describe('structure', () => {
     // Word's column limit; a looped gridSpan of 2e9 would hold the Worker to its deadline.
     test('a gridSpan past the grid spans the grid', async () => {
@@ -513,6 +535,14 @@ describe('structure', () => {
         const [only] = cells(json);
         expect(only?.attrs?.['colspan']).toBe(63);
         expect(only?.attrs?.['colwidth']).toHaveLength(63);
+    });
+
+    test('a row past 63 columns ends in a cell holding the text of the rest', async () => {
+        const words = Array.from({ length: 100 }, (_, index) => `c${index}`);
+        const json = await imported(table([2000], [words.map((word) => cell(word))]));
+        const row = cells(json);
+        expect(row).toHaveLength(63);
+        expect(texts(row.at(-1) ?? {})).toEqual(words.slice(62));
     });
 
     test('a merge that starts in the last row spans that row alone', async () => {
