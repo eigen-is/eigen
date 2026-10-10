@@ -1,7 +1,10 @@
-// The decoder exceljs expands ranges with, so the xlsx import counts what it will expand.
-declare module 'exceljs/lib/utils/col-cache' {
-    const colCache: {
-        decodeEx(value: string): { top: number; left: number; bottom: number; right: number } | { top?: undefined };
-    };
-    export default colCache;
+// The range exceljs expands with, so the xlsx import counts what it will expand.
+declare module 'exceljs/lib/doc/range' {
+    export default class Range {
+        constructor(range: string);
+        readonly top: number;
+        readonly left: number;
+        readonly bottom: number;
+        readonly right: number;
+    }
 }

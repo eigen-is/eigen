@@ -29,7 +29,7 @@ import {
     update,
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
-import colCache from 'exceljs/lib/utils/col-cache';
+import Range from 'exceljs/lib/doc/range';
 import { ApiError } from '../../core/errors';
 import { A_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS, toTransitional } from '../../core/ooxml';
 import { parseXml, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
@@ -109,9 +109,9 @@ function repackXlsx(buffer: Buffer): Buffer {
         for (const name of zip.names()) {
             const data = zip.read(name);
             if (!data) continue;
-            const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+            const bytes = canonicalPart(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
             tallyExpansions(bytes, tally);
-            entries.push({ name, data: withoutDefinedNames(bytes), store: true });
+            entries.push({ name, data: bytes, store: true });
         }
         const packed = writeZip(entries);
         return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
@@ -152,6 +152,40 @@ function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
     }
 }
 
+// The bytes exceljs gets, made to read as the scan reads them.
+function canonicalPart(bytes: Buffer): Buffer {
+    // XML 1.1 reads a NEL or U+2028 in a value as a space too, and Excel writes 1.0 only.
+    const version = XML_VERSION.exec(bytes.toString('latin1', 0, 128))?.[2];
+    if (version !== undefined && version !== '1.0') throw new ApiError(400, 'Not a valid xlsx file');
+    return withoutDefinedNames(withSpacedTags(bytes));
+}
+
+const XML_VERSION = /^(?:\xef\xbb\xbf)?<\?xml\s+version\s*=\s*(["'])(.*?)\1/;
+const SCANNED_TAGS = ['mergeCell', 'dataValidation', 'col'];
+
+// exceljs's parser reads a raw tab, CR or LF in a value as a space, so the scanned tags carry spaces in their place.
+function withSpacedTags(bytes: Buffer): Buffer {
+    let spaced = bytes;
+    for (const name of SCANNED_TAGS) {
+        for (const at of tagStarts(bytes, name)) {
+            // A `>` inside a value doesn't end the tag; nothing past a `<` is in it.
+            let quote: number | undefined;
+            for (let i = at + name.length + 1; i < bytes.length && bytes[i] !== 0x3c; i++) {
+                const byte = bytes[i];
+                if (byte === 0x3e && quote === undefined) break;
+                if (byte === 0x22 || byte === 0x27) {
+                    if (quote === undefined) quote = byte;
+                    else if (quote === byte) quote = undefined;
+                }
+                if (byte !== 0x09 && byte !== 0x0a && byte !== 0x0d) continue;
+                if (spaced === bytes) spaced = Buffer.from(bytes);
+                spaced[i] = 0x20;
+            }
+        }
+    }
+    return spaced;
+}
+
 // Eigen drops defined names, and exceljs expands each one's range per cell, 614M cells in one GOV.UK workbook. It
 // matches the element by its exact name at any depth, so renaming every start and end tag hides it, still well-formed.
 const DEFINED_NAMES_TAG = /<(\/?)definedNames/g;
@@ -166,36 +200,36 @@ function tooLarge(): ApiError {
     return new ApiError(413, 'Spreadsheet too large');
 }
 
-// exceljs's own decoder, so a range counts the cells exceljs walks; it throws, as exceljs does, past column XFD.
+// exceljs's own Range, whose bounds read a missing row or column as 1, so a range counts the cells exceljs walks; it
+// throws, as exceljs does, past column XFD.
 function rangeArea(ref: string): number {
     if (!ref.includes(':')) return 1;
-    const range = colCache.decodeEx(ref);
-    if (range.top === undefined) return 1;
-    // A bound exceljs can't read is NaN, and its loops over a NaN bound never run.
-    return (range.bottom - range.top + 1) * (range.right - range.left + 1) || 0;
+    const { top, left, bottom, right } = new Range(ref);
+    return (bottom - top + 1) * (right - left + 1);
 }
 
-// Sticky, so attributes are read only in order from right after the name: a longer name like `<cols` reads none.
-const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/y;
-const TAG_END = /^\s*\/?>/;
+// Whitespace, `/` or `>` ends a name, so `<cols` is no `<col`.
+const NAME_ENDS = new Set([0x20, 0x09, 0x0a, 0x0d, 0x2f, 0x3e]);
 
-// The attributes of each start tag of an element by its unprefixed name, the only one exceljs matches. No attribute
-// value holds a `<`, so a tag runs to the next one.
-function* startTags(bytes: Buffer, name: string): Generator<Map<string, string>> {
-    const open = `<${name}`;
+// Where each start tag of an element begins, by its unprefixed name, the only one exceljs matches.
+function* tagStarts(bytes: Buffer, name: string): Generator<number> {
+    const open = Buffer.from(`<${name}`);
     for (let at = bytes.indexOf(open); at >= 0; at = bytes.indexOf(open, at + open.length)) {
-        const start = at + open.length;
-        const next = bytes.indexOf('<', start);
-        const markup = bytes.toString('utf8', start, next < 0 ? bytes.length : next);
+        if (NAME_ENDS.has(bytes[at + open.length])) yield at;
+    }
+}
+
+const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
+// The attributes of each start tag of an element. No attribute value holds a `<`, so a tag runs to the next one.
+function* startTags(bytes: Buffer, name: string): Generator<Map<string, string>> {
+    for (const at of tagStarts(bytes, name)) {
+        const next = bytes.indexOf('<', at + 1);
+        const markup = bytes.toString('utf8', at + name.length + 1, next < 0 ? bytes.length : next);
         const attributes = new Map<string, string>();
-        let end = 0;
-        ATTRIBUTE.lastIndex = 0;
-        for (let match = ATTRIBUTE.exec(markup); match; match = ATTRIBUTE.exec(markup)) {
-            attributes.set(match[1], unescapeXml(match[2] ?? match[3]));
-            end = ATTRIBUTE.lastIndex;
-        }
-        // A longer name ends at no `>` after its attributes, as it reads none: it is another element.
-        if (TAG_END.test(markup.slice(end))) yield attributes;
+        for (const [, key, double, single] of markup.matchAll(ATTRIBUTE))
+            attributes.set(key, unescapeXml(double ?? single));
+        yield attributes;
     }
 }
 

@@ -11,10 +11,13 @@ const SML = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const PACKAGE_REL = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
-// One sheet holding A1; `after` follows the sheet data, `before` precedes it, `names` sits in the workbook.
+type Part = { name: string; xml: string; version?: string };
+
+// One sheet holding A1; `after` follows the sheet data, `before` precedes it, `names` sits in the workbook, and
+// `version` is the sheet's XML version.
 function xlsx(
-    sheet: { before?: string; data?: string; after?: string; names?: string; workbookPart?: string },
-    extra: { name: string; xml: string }[] = [],
+    sheet: { before?: string; data?: string; after?: string; names?: string; workbookPart?: string; version?: string },
+    extra: Part[] = [],
 ): Buffer {
     const {
         before = '',
@@ -22,31 +25,36 @@ function xlsx(
         after = '',
         names = '',
         workbookPart = 'xl/workbook.xml',
+        version = '1.0',
     } = sheet;
+    const parts: Part[] = [
+        {
+            name: '[Content_Types].xml',
+            xml: '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+        },
+        {
+            name: '_rels/.rels',
+            xml: `<Relationships xmlns="${PACKAGE_REL}"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+        },
+        {
+            name: workbookPart,
+            xml: `<workbook xmlns="${SML}" xmlns:r="${REL}"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets>${names}</workbook>`,
+        },
+        {
+            name: 'xl/_rels/workbook.xml.rels',
+            xml: `<Relationships xmlns="${PACKAGE_REL}"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
+        },
+        {
+            name: 'xl/worksheets/sheet1.xml',
+            xml: `<worksheet xmlns="${SML}">${before}<sheetData>${data}</sheetData>${after}</worksheet>`,
+            version,
+        },
+        ...extra,
+    ];
     return build(
-        [
-            {
-                name: '[Content_Types].xml',
-                xml: '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
-            },
-            {
-                name: '_rels/.rels',
-                xml: `<Relationships xmlns="${PACKAGE_REL}"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-            },
-            {
-                name: workbookPart,
-                xml: `<workbook xmlns="${SML}" xmlns:r="${REL}"><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets>${names}</workbook>`,
-            },
-            {
-                name: 'xl/_rels/workbook.xml.rels',
-                xml: `<Relationships xmlns="${PACKAGE_REL}"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`,
-            },
-            {
-                name: 'xl/worksheets/sheet1.xml',
-                xml: `<worksheet xmlns="${SML}">${before}<sheetData>${data}</sheetData>${after}</worksheet>`,
-            },
-            ...extra,
-        ].map(({ name, xml }) => deflated(name, `<?xml version="1.0" encoding="UTF-8"?>${xml}`)),
+        parts.map(({ name, xml, version = '1.0' }) =>
+            deflated(name, `<?xml version="${version}" encoding="UTF-8"?>${xml}`),
+        ),
     );
 }
 
@@ -126,6 +134,18 @@ describe('what exceljs expands per cell is refused before it loads', () => {
         ['a merge of 26 whole columns', { after: merges('A1:Z1048576') }],
         ['a column range past the grid', { before: columns(1, 100_000_000) }],
         ['a column range starting past the grid', { before: columns(100_000_000, 1) }],
+        ['a column range past the grid behind whitespace', { before: columns(1, ' \t20000000') }],
+        // A missing row or column reads as 1: 1,000 whole-row pieces in 1.65 KB ran past 60 s.
+        [
+            'a validation of 1,000 whole rows with no column',
+            { after: validation(Array(1000).fill('1:1048576').join(' ')) },
+        ],
+        [
+            'a merge of whole rows with no column beside one of three columns',
+            { after: merges('1:1048576', 'B1:D1048576') },
+        ],
+        // A raw tab is a space to exceljs's parser, so the sheet name it seems to end hides the whole grid.
+        ['a merge whose raw tab hides the grid', { after: merges('A1\tx:XFD1048576!A1:A1') }],
     ])(
         '%s is 413 at no cost',
         (_name, sheet) => {
@@ -144,6 +164,24 @@ describe('what exceljs expands per cell is refused before it loads', () => {
         expect(result).toMatchObject(TOO_LARGE);
         expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
+
+    // XML 1.1 reads a NEL in a value as a space too, and Excel writes 1.0 only.
+    test.each([
+        [
+            'a validation whose ranges a NEL separates',
+            { version: '1.1', after: validation('B1:B1\u0085A1:XFD1048576') },
+        ],
+        ['a column range whose bound a NEL starts', { version: '1.1', before: columns(1, '\u008520000000') }],
+    ])(
+        '%s in an XML 1.1 part is 400 at no cost',
+        (_name, sheet) => {
+            const result = measuredImport(xlsx(sheet));
+            expect(result).toMatchObject({ status: 400, message: 'Not a valid xlsx file' });
+            expect(result.rssGrowth).toBeLessThan(64 * MB);
+            expect(result.cpuMs).toBeLessThan(2_000);
+        },
+        30_000,
+    );
 
     // An empty row far down passes the cell cap, and every walk to the last row took 84 s at row 1,000,000,000.
     test('a row past the grid is 413 at no cost', () => {
@@ -164,6 +202,18 @@ describe('each cap', () => {
         expect(
             await outcome(xlsx({}, [unread(merges(row(half))), unread(merges(`B1:B${half + 1}`), 'other')])),
         ).toEqual(TOO_LARGE);
+    });
+
+    test('a range missing its column counts as column A, as exceljs walks it', async () => {
+        const rest = (MAX_CELLS - REFERENCE_ROW_COUNT) / 3;
+        const file = (extra: number) => xlsx({}, [unread(merges(`1:${REFERENCE_ROW_COUNT}`, `B1:D${rest + extra}`))]);
+        expect(await outcome(file(0))).toBe('imported');
+        expect(await outcome(file(1))).toEqual(TOO_LARGE);
+    });
+
+    test('an XML 1.1 part is 400 whatever it holds', async () => {
+        expect(await outcome(xlsx({ version: '1.1' }))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
+        expect(await outcome(xlsx({ version: '1.0' }))).toBe('imported');
     });
 
     test('merges are counted across the workbook', async () => {
@@ -210,6 +260,10 @@ describe('what the scan reads', () => {
         ['a sheet name before the range', `<mergeCell ref="S!${over}"/>`],
         ['dollar anchors', `<mergeCell ref="$A$1:$A$4000001"/>`],
         ['the ends swapped', `<mergeCell ref="A4000001:A1"/>`],
+        ['a raw tab before a seeming sheet name', '<mergeCell ref="A1\tx:A4000001!A1:A1"/>'],
+        ['a raw line feed before a seeming sheet name', '<mergeCell ref="A1\nx:A4000001!A1:A1"/>'],
+        ['a raw carriage return before a seeming sheet name', '<mergeCell ref="A1\rx:A4000001!A1:A1"/>'],
+        ['a raw tab after a `>` in another value', '<mergeCell x="a>b" ref="A1\tx:A4000001!A1:A1"/>'],
         // exceljs's decoder takes every capital before the first digit as the column: M, Z and A make column 9,465.
         ['an unquoted sheet name with a space', '<mergeCell ref="M Z!A1:B500"/>'],
     ])('a merge spelled with %s counts', async (_name, xml) => {
