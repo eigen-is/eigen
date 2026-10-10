@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
-import { getSchema, type JSONContent } from '@tiptap/core';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import type { JSONContent } from '@tiptap/core';
 import JSZip from 'jszip';
-import { common, createLowlight } from 'lowlight';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
+import { docSchema } from '../../lib/document/doc-schema';
+import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
-import { proseValue, proseValueIfSet } from '../../lib/export/doc/prose-css';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
@@ -21,7 +20,7 @@ const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawi
 // U+FFFE, which XML can't hold; the formatter would unescape it into an invisible literal.
 const NONCHARACTER = String.fromCharCode(0xfffe);
 
-const schema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
+const schema = docSchema();
 
 // Every doc gets the all-features media; the writer embeds only what a figure shows.
 function docx(json: JSONContent, publicOrigin?: string, media = buildAllFeaturesDocMedia()): Promise<Uint8Array> {

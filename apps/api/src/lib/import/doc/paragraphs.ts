@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import {
     bundledFontOf,
@@ -18,24 +18,24 @@ import { Numbering } from './numbering';
 import {
     alternative,
     DOCUMENT_TOO_LARGE,
+    type DocxPackage,
     descendants,
     is,
     isAlternateContent,
-    type Package,
     type Part,
-    twips,
+    twipsOf,
     w,
     wChild,
 } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
+    type DocxRunProps,
     isFill,
     isLightNeutral,
     markColor,
     mergePara,
     mergeRun,
     type Role,
-    type RunProps,
     readParaProps,
     readRunProps,
     Styles,
@@ -48,7 +48,7 @@ import { readTable } from './tables';
 type NoteRef = { type: 'footnote' | 'endnote'; id: string; number: number };
 
 export type Reader = {
-    pkg: Package;
+    pkg: DocxPackage;
     theme: Theme;
     fontTable: FontTable;
     styles: Styles;
@@ -75,12 +75,12 @@ export type Scope = {
     part: Part;
     inNote: boolean;
     tables: number;
-    tableRun?: RunProps;
+    tableRun?: DocxRunProps;
     room?: number;
     onFill?: boolean;
 };
 
-export function createReader(pkg: Package, publicOrigin: string | undefined): Reader {
+export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
     const lang = wChild(defaults, 'lang');
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
@@ -105,9 +105,9 @@ export function createReader(pkg: Package, publicOrigin: string | undefined): Re
         bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color,
         columnTwips:
-            (twips(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
-            (twips(w(margin, 'left')) ?? 1440) -
-            (twips(w(margin, 'right')) ?? 1440),
+            (twipsOf(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
+            (twipsOf(w(margin, 'left')) ?? 1440) -
+            (twipsOf(w(margin, 'right')) ?? 1440),
         publicOrigin,
     };
 }
@@ -360,7 +360,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
 // Every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
 // text, complex script at its szCs; the style's bold and italic then stay as marks. A run's text box is not searched.
-function isBodySized(reader: Reader, p: XmlElement, heading: RunProps): boolean {
+function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): boolean {
     const headingSize = heading.size ?? 20;
     const headingSizeCs = heading.sizeCs ?? headingSize;
     const faces = descendants(p, W_NS, 'r').flatMap((run) => {

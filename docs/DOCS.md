@@ -19,11 +19,11 @@ The sections cover the schema, figures, the page and its panels, page breaks, co
 
 ## One schema serves the editor and every server renderer
 
-`getDocExtensions` (`packages/lib/src/docs/eigendoc/extensions.ts`) is the schema. The server builds it once, on first use, in `apps/api/src/lib/document/doc-schema.ts`, and the drive preview (`apps/api/src/lib/preview/eigendoc-render.ts`) and the export (`apps/api/src/lib/export/doc/transform.ts`) render through one helper over it, `renderDocHtml` (`export/doc/render.ts`). The docx import (`apps/api/src/lib/import/doc/from-docx.ts`) builds from it too. So a node the editor writes is a node the server can parse and render. A node only one side knew would vanish from every preview and export.
+`getDocExtensions` (`packages/lib/src/docs/eigendoc/extensions.ts`) is the schema. The server builds it once, on first use, in `apps/api/src/lib/document/doc-schema.ts`, and the drive preview (`apps/api/src/lib/preview/eigendoc-render.ts`) and the export (`apps/api/src/lib/export/doc/transform.ts`) render through one helper over it, `renderDocHtml` (`export/doc/render.ts`). The docx import (`apps/api/src/lib/import/doc/from-docx.ts`) checks what it reads against the same schema, `docSchema()`, as do the test fixtures. So a node the editor writes is a node the server can parse and render. A node only one side knew would vanish from every preview and export.
 
 The editor leaves out the schema's `figure` and `comment` and adds `Figure` and `CommentMark` (`apps/docs/src/components/docs/extensions/`), which extend the lib nodes with the node view and the click, menu and decoration behavior. The stored shape stays the lib's, because an extension adds behavior, not attributes.
 
-The code block exists only when the caller passes `lowlight`, the syntax highlighter. Every server schema passes the backend's one (`apps/api/src/lib/document/lowlight.ts`): the preview's and the export's, and the docx import's, which reads a code block's language back only when lowlight knows it. A test fixture that writes a stored doc's code block must build its schema with `lowlight` too.
+The code block exists only when the caller passes `lowlight`, the syntax highlighter. The server's schema passes the backend's one (`apps/api/src/lib/document/lowlight.ts`), so the docx import reads a code block's language back only when lowlight knows it, and the docx writer writes only such a language. A test fixture that writes a stored doc's code block takes `docSchema()` for the same reason.
 
 ## A tab older than the schema deletes the nodes it does not know
 

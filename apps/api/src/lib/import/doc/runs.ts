@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { LINK_LOOK } from '../../export/doc/looks';
+import { LINK_LOOK } from '../../document/looks';
 import type { Item } from './assemble';
 import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -11,13 +11,13 @@ import { alternative, descendants, isAlternateContent, onOff, w, wChild } from '
 import type { Reader, Scope } from './paragraphs';
 import {
     ABSORBED,
+    type DocxRunProps,
     isFill,
     isLight,
     isLightNeutral,
     markColor,
     mergeRun,
     type Role,
-    type RunProps,
     readRunProps,
     TOGGLES,
 } from './styles';
@@ -113,7 +113,7 @@ function mathText(element: XmlElement): string {
         .join(' ');
 }
 
-function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps, context: RunContext): void {
+function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {
     for (const child of children) {
         if (isAlternateContent(child)) {
             readRunContent(reader, alternative(child), direct, context);
@@ -269,7 +269,7 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
 
-export function pushText(reader: Reader, text: string, direct: RunProps, context: RunContext): void {
+export function pushText(reader: Reader, text: string, direct: DocxRunProps, context: RunContext): void {
     if (!text) return;
     for (const { text: part, marks, small, font } of marksOf(reader, text, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
@@ -301,7 +301,7 @@ const LINK_STYLE_COLORS = new Set([...LINK_LOOKS.keys(), '0000FF', '000080']);
 function marksOf(
     reader: Reader,
     text: string,
-    direct: RunProps,
+    direct: DocxRunProps,
     context: RunContext,
 ): { text: string; marks: Marks; small: boolean; font?: string }[] {
     const { styles } = reader;

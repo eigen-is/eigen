@@ -2,9 +2,9 @@ import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { isOn, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { HEADER_CELL_LOOK } from '../../export/doc/looks';
+import { HEADER_CELL_LOOK } from '../../document/looks';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
-import { int, is, onOff, twips, w, wChild } from './package';
+import { int, is, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
 
@@ -23,7 +23,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tblPr = wChild(table, 'tblPr');
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => is(col, W_NS, 'gridCol'))
-        .map((col) => twips(w(col, 'w')) ?? 0)
+        .map((col) => twipsOf(w(col, 'w')) ?? 0)
         .slice(0, MAX_COLUMNS);
     const columns = grid.length || MAX_COLUMNS;
     const columnPx = scaled(grid, scope.room ?? COLUMN_PX);
@@ -124,7 +124,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (gridEnd < width) cells.push(gridFiller(columnPx, gridEnd, width - gridEnd, type));
         return { type: 'tableRow', content: cells };
     });
-    const indent = twips(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
+    const indent = twipsOf(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
     return [{ kind: 'table', node: { type: 'table', content }, indent }];
 }
 
@@ -169,7 +169,7 @@ function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: 
     if (!figure || figures.length !== 1 || rest.length > 0) return undefined;
     if (image?.inlines.some((node) => node.type !== 'figure' && !isWhitespace(node))) return undefined;
     const spec = w(float, 'tblpXSpec');
-    const x = twips(w(float, 'tblpX')) ?? 0;
+    const x = twipsOf(w(float, 'tblpX')) ?? 0;
     const width = grid.reduce((sum, col) => sum + col, 0);
     const right =
         spec === 'right' || spec === 'outside' || (spec === undefined && x + width / 2 > reader.columnTwips / 2);

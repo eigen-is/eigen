@@ -432,7 +432,16 @@ type OpenList = { level: number; ordered: boolean; number: number };
 // rule: the borders of an empty paragraph that is a rule unless the next one shares them.
 type Chain = { last?: Paragraph; lists: OpenList[]; carry: Span[]; rule?: string };
 
-type Field = { result: boolean; instr: string; link: boolean };
+// A link to a bookmark alone is no link, as Eigen has no bookmarks; its text still loses the link look, as a TOC's does.
+type Link = 'out' | 'bookmark';
+
+type Field = { result: boolean; instr: string; link?: Link };
+
+function hyperlinkField(instr: string): Link | undefined {
+    const args = instr.match(/^\s*HYPERLINK\b(.*)$/is)?.[1];
+    if (args === undefined) return undefined;
+    return args.replace(/\\[lot]\s*("[^"]*"|\S+)|\\[mnh]\b|\\\*\s*\S+/gi, '').trim() ? 'out' : 'bookmark';
+}
 
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
@@ -445,7 +454,7 @@ type Inline = {
     styleRuns: XmlElement[];
     weightRuns: XmlElement[];
     marks: boolean;
-    link: boolean;
+    link?: Link;
 };
 
 // marks: all but the font, which each face of the run's text carries on its own; complexMarks: a complex script face's,
@@ -783,7 +792,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             const byParagraph = first(paragraphRuns, local);
             return (!!byCharacter && on(byCharacter)) !== (!!byParagraph && on(byParagraph));
         };
-        const linked = context.link || context.scope.fields.some((field) => field.link);
+        const links = [context.link, ...context.scope.fields.map((field) => field.link)];
+        const linked = links.some(Boolean);
         // A link style in a color of its own is a look Word draws; the link look is the link's.
         const styleColor = first(characterRuns, 'color');
         const styleHex = val(styleColor)?.toUpperCase() ?? '';
@@ -815,7 +825,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
             ['caps', toggle('caps', context.styleRuns)],
             ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
-            ['link', linked],
+            ['link', links.includes('out')],
         ];
         const set = (marks: [Feature, boolean][]) => marks.filter(([, shown]) => shown).map(([feature]) => feature);
         return {
@@ -927,7 +937,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 case 'fldChar': {
                     const type = xmlAttr(node, W_NS, 'fldCharType');
                     if (type === 'begin') {
-                        fields.push({ result: false, instr: '', link: false });
+                        fields.push({ result: false, instr: '' });
                         const box = child(child(node, 'ffData'), 'checkBox');
                         if (box && shown) {
                             add(tally, 'taskItems');
@@ -938,7 +948,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                     const field = fields.at(-1);
                     if (type === 'separate' && field) {
                         field.result = true;
-                        field.link = /^\s*HYPERLINK\b/i.test(field.instr);
+                        field.link = hyperlinkField(field.instr);
                     }
                     if (type === 'end') fields.pop();
                     break;
@@ -993,12 +1003,15 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                     runContent(node, runLook(child(node, 'rPr'), context), context);
                     break;
                 case 'hyperlink':
-                    inline(node, { ...context, link: true });
+                    inline(node, {
+                        ...context,
+                        link: xmlAttr(node, W_NS, 'anchor') && !xmlAttr(node, R_NS, 'id') ? 'bookmark' : 'out',
+                    });
                     break;
                 case 'fldSimple':
                     inline(node, {
                         ...context,
-                        link: context.link || /^\s*HYPERLINK\b/i.test(xmlAttr(node, W_NS, 'instr') ?? ''),
+                        link: hyperlinkField(xmlAttr(node, W_NS, 'instr') ?? '') ?? context.link,
                     });
                     break;
                 case 'sdt': {
@@ -1076,7 +1089,6 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
             marks: !look.code && !caption,
-            link: false,
         });
         // A deleted paragraph mark joins the paragraph to the next.
         if (look.deletedMark) {
@@ -1496,7 +1508,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
+        "Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link but drawing no link look; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most 85% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.",
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',

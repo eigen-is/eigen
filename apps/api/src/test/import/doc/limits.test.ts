@@ -5,10 +5,11 @@ import { ApiError } from '../../../lib/core/errors';
 import { LIST_LEVELS } from '../../../lib/core/ooxml';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
+import { docSchema } from '../../../lib/document/doc-schema';
+import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
-import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docSchema, docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
@@ -842,7 +843,7 @@ describe('figures and media', () => {
     });
 
     test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
-        const refuses = spyOn(docSchema, 'nodeFromJSON').mockImplementationOnce(() => {
+        const refuses = spyOn(docSchema(), 'nodeFromJSON').mockImplementationOnce(() => {
             throw new RangeError('refused');
         });
         try {

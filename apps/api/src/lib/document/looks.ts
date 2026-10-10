@@ -1,5 +1,5 @@
 import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
-import { cssColorToHex } from '../colors';
+import { cssColorToHex } from '../export/colors';
 import { proseValue } from './prose-css';
 
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a

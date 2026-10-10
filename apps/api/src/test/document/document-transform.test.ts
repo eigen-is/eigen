@@ -23,6 +23,7 @@ import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
 import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
@@ -40,7 +41,7 @@ import { exportDocument, runDocumentExport } from '../../lib/export/export-docum
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
-import { type DocxImage, docSchema, docxToPmJson } from '../../lib/import/doc/from-docx';
+import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
@@ -1119,7 +1120,7 @@ describe('document transform (docx round trip)', () => {
             attrs,
             content: [p(text(value))],
         });
-        const json = docSchema
+        const json = docSchema()
             .nodeFromJSON({
                 type: 'doc',
                 content: [

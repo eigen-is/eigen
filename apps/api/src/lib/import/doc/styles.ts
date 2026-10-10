@@ -11,10 +11,10 @@ import {
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
-import { halfPoints, int, is, onOff, twips, w, wChild } from './package';
+import { halfPointsOf, int, is, onOff, twipsOf, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
-export type RunProps = {
+export type DocxRunProps = {
     style?: string;
     bold?: boolean;
     italic?: boolean;
@@ -103,10 +103,9 @@ export function markColor(hex: string): string {
 
 export function shadingOf(shd: XmlElement | undefined): string | undefined {
     if (!shd) return undefined;
-    const fill = hexColor(w(shd, 'fill'));
-    if (fill) return fill;
-    // A solid pattern paints the pattern color.
-    return w(shd, 'val') === 'solid' ? (hexColor(w(shd, 'color')) ?? '') : '';
+    const fill = hexColor(w(shd, 'fill')) ?? '';
+    // Solid paints the pattern color; an auto one, black under auto text Word turns white, stays the fill, as Eigen can't.
+    return (w(shd, 'val') === 'solid' && hexColor(w(shd, 'color'))) || fill;
 }
 
 // White is no fill: Word and Google Docs spell an unshaded cell or paragraph that way too.
@@ -131,8 +130,8 @@ export function isLight(hex: string): boolean {
     return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
 }
 
-export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
-    const props: RunProps = {};
+export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
+    const props: DocxRunProps = {};
     for (const child of rPr ? xmlElements(rPr) : []) {
         if (child.ns !== W_NS) continue;
         switch (child.local) {
@@ -205,10 +204,10 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
                 if (child.local === 'cs' || onOff(child)) props.complex = onOff(child);
                 break;
             case 'sz':
-                props.size = halfPoints(w(child, 'val'));
+                props.size = halfPointsOf(w(child, 'val'));
                 break;
             case 'szCs':
-                props.sizeCs = halfPoints(w(child, 'val'));
+                props.sizeCs = halfPointsOf(w(child, 'val'));
                 break;
             case 'vanish':
                 props.vanish = onOff(child);
@@ -241,10 +240,10 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
             }
             case 'ind': {
                 // Each attribute inherits on its own: a w:ind of only a hanging keeps the style's left.
-                const left = twips(w(child, 'left') ?? w(child, 'start'));
+                const left = twipsOf(w(child, 'left') ?? w(child, 'start'));
                 if (left !== undefined) props.indLeft = left;
-                const hanging = twips(w(child, 'hanging'));
-                const first = hanging === undefined ? twips(w(child, 'firstLine')) : -hanging;
+                const hanging = twipsOf(w(child, 'hanging'));
+                const first = hanging === undefined ? twipsOf(w(child, 'firstLine')) : -hanging;
                 if (first !== undefined) props.indFirst = first;
                 break;
             }
@@ -269,12 +268,12 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 props.shading = shadingOf(child);
                 break;
             case 'spacing': {
-                const line = twips(w(child, 'line'));
+                const line = twipsOf(w(child, 'line'));
                 if (w(child, 'lineRule') === 'exact' && line !== undefined) props.exactLine = line;
                 break;
             }
             case 'rPr':
-                props.markSize = halfPoints(w(wChild(child, 'sz'), 'val'));
+                props.markSize = halfPointsOf(w(wChild(child, 'sz'), 'val'));
                 props.markHidden = onOff(wChild(child, 'vanish'));
                 props.markDeleted = !!(wChild(child, 'del') ?? wChild(child, 'moveFrom'));
                 break;
@@ -295,8 +294,8 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
     return props;
 }
 
-export function mergeRun(...layers: RunProps[]): RunProps {
-    const merged: RunProps = {};
+export function mergeRun(...layers: DocxRunProps[]): DocxRunProps {
+    const merged: DocxRunProps = {};
     for (const layer of layers) {
         const { fonts, ...rest } = layer;
         Object.assign(merged, rest);
@@ -338,8 +337,8 @@ type Style = {
     language?: string;
     basedOn?: string;
     pPr: ParaProps;
-    rPr: RunProps;
-    firstRowRun?: RunProps;
+    rPr: DocxRunProps;
+    firstRowRun?: DocxRunProps;
     // A table style's cell fill, whole and in its first row.
     fill?: string;
     firstRowFill?: string;
@@ -385,7 +384,7 @@ function roleOf({ name, language }: Style): Role | undefined {
 
 // What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark; a subtitle
 // draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
-export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
+export const ABSORBED: Record<Role['kind'], (keyof DocxRunProps)[] | 'all'> = {
     heading: ['bold', 'boldCs', 'size', 'sizeCs'],
     subtitle: [],
     quote: ['italic', 'italicCs', 'color'],
@@ -401,16 +400,16 @@ export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
 export const MAX_CHAIN = 32;
 
 // A table style's looks: its cells' fill, and its first row's run props and fill.
-type TableLook = { fill?: string; firstRowRun: RunProps; firstRowFill?: string };
+type TableLook = { fill?: string; firstRowRun: DocxRunProps; firstRowFill?: string };
 
 // What a style answers once its basedOn chain is merged.
-type Resolved = { run: RunProps; para: ParaProps; role: Role | undefined; code: boolean; table: TableLook };
+type Resolved = { run: DocxRunProps; para: ParaProps; role: Role | undefined; code: boolean; table: TableLook };
 
 export class Styles {
     private readonly byId = new Map<string, Style>();
     private readonly resolved = new Map<string, Resolved>();
     readonly defaultParagraph: string | undefined;
-    readonly docRun: RunProps;
+    readonly docRun: DocxRunProps;
     readonly docPara: ParaProps;
 
     constructor(root: XmlElement | undefined, theme: Theme) {
@@ -477,7 +476,7 @@ export class Styles {
         return resolved;
     }
 
-    run(id: string | undefined): RunProps {
+    run(id: string | undefined): DocxRunProps {
         return this.resolve(id).run;
     }
 

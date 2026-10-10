@@ -1,4 +1,4 @@
-import { bundledFont, DOCUMENT_FONT, EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT, type EigenFont } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
 import { A_NS, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlChild, xmlElements } from '../../core/xml';
@@ -6,7 +6,7 @@ import { descendants, is, w, wChild } from './package';
 
 // Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.
 
-export const MONOSPACE_FONT = EIGEN_FONTS.find((font) => font.category === 'monospace')?.name;
+export const MONOSPACE_FONT = bundledFontOfCategory('monospace');
 
 export type Theme = { font(themeName: string, language?: string): string | undefined };
 
@@ -143,7 +143,7 @@ export function readFontTable(root: XmlElement | undefined): FontTable {
         const family = w(wChild(font, 'family'), 'val') ?? '';
         const category =
             pitch === 'fixed' ? 'monospace' : pitch === 'variable' ? FAMILY_CATEGORIES.get(family) : undefined;
-        const bundled = category && EIGEN_FONTS.find((eigen) => eigen.category === category)?.name;
+        const bundled = category && bundledFontOfCategory(category);
         if (bundled) table.set(name.trim().toLowerCase(), bundled);
     }
     return table;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CODE_LOOK } from '../../../lib/export/doc/looks';
+import { CODE_LOOK } from '../../../lib/document/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A run's look: which marks Word's formatting becomes, and which it doesn't.
@@ -44,6 +44,29 @@ describe('colors', () => {
         );
         expect(marksOfType(json, 'highlight').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
             ['yellow', null],
+        ]);
+    });
+
+    // ST_Shd: solid paints the pattern color over the fill, clear and nil leave the fill, the percentages blend the two.
+    test('a solid shading is its pattern color, an auto one and any other pattern its fill', async () => {
+        const shaded = (text: string, val: string, color: string, fill: string) =>
+            `${run(text, `<w:shd w:val="${val}" w:color="${color}" w:fill="${fill}"/>`)}${run(' ')}`;
+        const json = await imported(
+            paragraph(
+                shaded('solid', 'solid', '800080', 'FFFFFF') +
+                    shaded('auto', 'solid', 'auto', 'FFE4B5') +
+                    shaded('clear', 'clear', '800080', '00FF00') +
+                    shaded('nil', 'nil', '800080', '0000FF') +
+                    shaded('percent', 'pct25', '000000', 'FF0000') +
+                    shaded('white', 'solid', 'FFFFFF', '000080'),
+            ),
+        );
+        expect(marksOfType(json, 'highlight').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['solid', '#800080'],
+            ['auto', '#ffe4b5'],
+            ['clear', '#00ff00'],
+            ['nil', '#0000ff'],
+            ['percent', '#ff0000'],
         ]);
     });
 });

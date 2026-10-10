@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
 import { LIST_LEVELS, LIST_TYPES } from '../../core/ooxml';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../export/doc/looks';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../document/looks';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 

@@ -34,10 +34,6 @@ import {
     WP_NS,
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
-import { lowlight } from '../../document/lowlight';
-import type { ExportMedia } from '../../document/transform/protocol';
-import { cssColorToHex, isTransparentCssColor } from '../colors';
-import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import {
     BODY,
     type Border,
@@ -55,8 +51,12 @@ import {
     SMALL_LOOK,
     TASK_DONE_LOOK,
     twips,
-} from './looks';
-import { proseValue, proseValueIfSet } from './prose-css';
+} from '../../document/looks';
+import { lowlight } from '../../document/lowlight';
+import { proseValue, proseValueIfSet } from '../../document/prose-css';
+import type { ExportMedia } from '../../document/transform/protocol';
+import { cssColorToHex, isTransparentCssColor } from '../colors';
+import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.

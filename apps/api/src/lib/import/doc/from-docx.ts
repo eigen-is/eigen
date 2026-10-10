@@ -1,11 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
-import { getSchema } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
-import { lowlight } from '../../document/lowlight';
+import { docSchema } from '../../document/doc-schema';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
@@ -18,8 +16,6 @@ export type DocxImage = {
     data: Buffer;
     contentType: string;
 };
-
-export const docSchema = getSchema(getDocExtensions({ lowlight }));
 
 // Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
 // weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
@@ -49,7 +45,7 @@ export function readDocx(
         if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
-        const doc = docSchema.nodeFromJSON({
+        const doc = docSchema().nodeFromJSON({
             type: 'doc',
             content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }],
         });
@@ -105,7 +101,7 @@ function weightOf(nodes: JSONContent[]): number {
 
 function fits(block: JSONContent): boolean {
     try {
-        docSchema.nodeFromJSON(block).check();
+        docSchema().nodeFromJSON(block).check();
         return true;
     } catch {
         return false;
