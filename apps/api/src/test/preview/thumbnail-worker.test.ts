@@ -14,9 +14,7 @@ const TMP_DIR = path.join(os.tmpdir(), `eigen-thumbnail-worker-test-${Date.now()
 const { exiftool } = await import('exiftool-vendored');
 const EXIFTOOL_BIN = await exiftool.exiftoolPath();
 
-// Every in-memory avatar conversion (contact photos, team logos) passes no tmpDir and the fixed pathId
-// 'avatar' — these are the scratch names that pair used to derive, relative to the process CWD.
-const CWD_SCRATCH = ['avatar-src.tmp', 'avatar-extract.jpg'];
+// Every in-memory avatar conversion (contact photos, team logos) passes no tmpDir and the fixed pathId 'avatar'.
 const AVATAR_OPTIONS = { maxSize: 512, quality: 80, fit: 'cover' } as const;
 
 afterAll(() => {
@@ -55,27 +53,48 @@ describe('thumbnail worker scratch files', () => {
         await expect(sharp(red).metadata()).rejects.toThrow();
         await expect(sharp(blue).metadata()).rejects.toThrow();
 
-        const privateDirsBefore = new Set(fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('eigen-thumb-')));
+        fs.writeFileSync(path.join(TMP_DIR, 'red.source'), red);
+        fs.writeFileSync(path.join(TMP_DIR, 'blue.source'), blue);
+
+        // A Worker reads TMPDIR from its process's start, and parallel test files convert in the shared one.
+        const cwd = fs.mkdtempSync(path.join(TMP_DIR, 'cwd-'));
+        const tmpdir = fs.mkdtempSync(path.join(TMP_DIR, 'tmp-'));
+        const script = `
+            const { generateImagePreview } = await import(process.env.THUMBNAILS);
+            const convert = async (source, name) => {
+                const bytes = Buffer.from(await Bun.file(source).arrayBuffer());
+                const options = JSON.parse(process.env.OPTIONS);
+                const result = await generateImagePreview(bytes, 'image/jpeg', name, '', 'avatar', options);
+                return result && result.data.toString('base64');
+            };
+            const results = await Promise.all([convert(process.env.RED, 'red.jpg'), convert(process.env.BLUE, 'blue.jpg')]);
+            console.log(JSON.stringify(results));
+        `;
+        const child = Bun.spawn([process.execPath, '-e', script], {
+            cwd,
+            env: {
+                ...process.env,
+                TMPDIR: tmpdir,
+                THUMBNAILS: Bun.resolveSync('../../lib/shared/thumbnails', import.meta.dir),
+                OPTIONS: JSON.stringify(AVATAR_OPTIONS),
+                RED: path.join(TMP_DIR, 'red.source'),
+                BLUE: path.join(TMP_DIR, 'blue.source'),
+            },
+        });
         const cwdSeen = new Set<string>();
         const poll = setInterval(() => {
-            for (const name of CWD_SCRATCH) {
-                if (fs.existsSync(path.join(process.cwd(), name))) cwdSeen.add(name);
-            }
+            for (const name of fs.readdirSync(cwd)) cwdSeen.add(name);
         }, 2);
-        const [redResult, blueResult] = await Promise.all([
-            generateImagePreview(red, 'image/jpeg', 'red.jpg', '', 'avatar', AVATAR_OPTIONS),
-            generateImagePreview(blue, 'image/jpeg', 'blue.jpg', '', 'avatar', AVATAR_OPTIONS),
-        ]);
+        const [redData, blueData]: (string | null)[] = JSON.parse(await new Response(child.stdout).text());
         clearInterval(poll);
 
         expect([...cwdSeen]).toEqual([]);
         // The dir each conversion scratches in instead is its own, and its finally removes it.
-        const privateDirs = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('eigen-thumb-'));
-        expect(privateDirs.filter((n) => !privateDirsBefore.has(n))).toEqual([]);
-        expect(redResult).not.toBeNull();
-        expect(blueResult).not.toBeNull();
-        const redPixel = await firstPixel(redResult!.data);
-        const bluePixel = await firstPixel(blueResult!.data);
+        expect(fs.readdirSync(tmpdir)).toEqual([]);
+        expect(redData).not.toBeNull();
+        expect(blueData).not.toBeNull();
+        const redPixel = await firstPixel(Buffer.from(redData!, 'base64'));
+        const bluePixel = await firstPixel(Buffer.from(blueData!, 'base64'));
         expect(redPixel.r).toBeGreaterThan(150);
         expect(redPixel.b).toBeLessThan(100);
         expect(bluePixel.b).toBeGreaterThan(150);
