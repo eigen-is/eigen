@@ -1,5 +1,5 @@
 import { type Editor, useEditorState } from '@tiptap/react';
-import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
@@ -61,13 +61,13 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
     const { layout, alignment, alt, caption, mediaName } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
-            const attrs = e.getAttributes('figure');
+            const attrs: FigureAttrs = e.getAttributes('figure');
             return {
-                layout: (attrs.layout as FigureLayout) || 'block',
-                alignment: (attrs.alignment as 'left' | 'center' | 'right') || 'center',
-                alt: (attrs.alt as string) || '',
-                caption: (attrs.caption as string) || '',
-                mediaName: attrs.mediaName as string | undefined,
+                layout: attrs.layout || 'block',
+                alignment: attrs.alignment || 'center',
+                alt: attrs.alt || '',
+                caption: attrs.caption || '',
+                mediaName: attrs.mediaName,
             };
         },
     });

@@ -809,9 +809,7 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {/* Unmounted when closed. The stable gutter is as wide as the scroll box's scrollbar and draws
-                                    none, so the panel ends left of that scrollbar, where the shift math
-                                    already puts its edge. */}
+                                {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. */}
                                 {showSidebar && (
                                     <div className="pointer-events-none absolute inset-0 overflow-hidden [scrollbar-gutter:stable]">
                                         <div className="pointer-events-auto absolute inset-y-0 right-0">

@@ -1,10 +1,10 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { NodeSelection, Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { Mapping } from '@tiptap/pm/transform';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { FigureNode } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
@@ -18,23 +18,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const FIGURE_MIN_WIDTH = 100;
 // The width a figure draws at when neither it nor its page gives one (px).
 const FIGURE_DEFAULT_WIDTH = 400;
-// A Shift+Arrow resize step (px).
-const FIGURE_KEY_STEP = 10;
-const FIGURE_RESIZE_KEYS = 'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown';
-
-declare module '@tiptap/core' {
-    interface Commands<ReturnType> {
-        figureAttributes: {
-            updateFigure: (attributes: FigureAttrs) => ReturnType;
-        };
-    }
-}
-
-// An AttrStep maps no position, so a NodeSelection on the figure survives, and with it the Image panel.
-// updateAttributes's setNodeMarkup replaces the leaf, which maps that selection to a text selection.
-function setFigureAttributes(tr: Transaction, pos: number, attributes: FigureAttrs) {
-    for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
-}
+// What Shift and each arrow key do to a selected figure's width (px).
+const FIGURE_RESIZE_STEPS = { ArrowLeft: -10, ArrowRight: 10, ArrowUp: 10, ArrowDown: -10 };
+const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
+    .map((key) => `Shift+${key}`)
+    .join(' ');
 
 // The text column, or half of it for a wrapped figure: the widest a resize makes it.
 function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
@@ -305,28 +293,9 @@ export const Figure = FigureNode.extend<FigureOptions>({
             const width = Math.min(maxWidth, (selection.node.attrs.width || drawn) + delta);
             return this.editor.commands.updateFigure({ width: Math.round(Math.max(FIGURE_MIN_WIDTH, width)) });
         };
-        return {
-            'Shift-ArrowRight': resize(FIGURE_KEY_STEP),
-            'Shift-ArrowUp': resize(FIGURE_KEY_STEP),
-            'Shift-ArrowLeft': resize(-FIGURE_KEY_STEP),
-            'Shift-ArrowDown': resize(-FIGURE_KEY_STEP),
-        };
-    },
-    addCommands() {
-        return {
-            ...this.parent?.(),
-            updateFigure:
-                (attributes) =>
-                ({ tr, dispatch }) => {
-                    const { from, to } = tr.selection;
-                    const positions: number[] = [];
-                    tr.doc.nodesBetween(from, to, (node, pos) => {
-                        if (node.type.name === this.name && pos >= from) positions.push(pos);
-                    });
-                    if (dispatch) for (const pos of positions) setFigureAttributes(tr, pos, attributes);
-                    return positions.length > 0;
-                },
-        };
+        return Object.fromEntries(
+            Object.entries(FIGURE_RESIZE_STEPS).map(([key, step]) => [`Shift-${key}`, resize(step)]),
+        );
     },
     addProseMirrorPlugins() {
         const name = this.name;
