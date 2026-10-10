@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, getSchema } from '@tiptap/core';
+import { createDocument, Editor, getSchema } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -58,5 +58,32 @@ describe('paste keeps caps', () => {
         const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600);
         const marks = createDocument(html, schema).firstChild?.firstChild?.marks ?? [];
         expect(marks.find((mark) => mark.type.name === 'textStyle')?.attrs['caps'] ?? null).toBe(caps);
+    });
+});
+
+// A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
+describe('a docs copy pastes back as it was copied', () => {
+    const figure = {
+        type: 'figure',
+        attrs: { mediaName: 'a.png', width: 200, caption: 'Sales', alignment: 'right', layout: 'wrap-left' },
+    };
+    const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+    const text = (t: string) => ({ type: 'text', text: t });
+
+    test.each([
+        [
+            'a figure in a paragraph of its own adds no empty paragraphs',
+            [paragraph(text('a')), paragraph(figure), paragraph(text('b'))],
+        ],
+        ['a figure between text keeps its paragraph whole', [paragraph(text('a'), figure, text('b'))]],
+    ])('%s', (_name, content) => {
+        const source = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
+        const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
+        const target = new Editor({
+            extensions: getDocExtensions(),
+            editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600) },
+        });
+        target.view.pasteHTML(dom.innerHTML);
+        expect(target.getJSON()).toEqual(source.getJSON());
     });
 });

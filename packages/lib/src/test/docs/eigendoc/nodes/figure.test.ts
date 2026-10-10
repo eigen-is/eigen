@@ -16,7 +16,7 @@ describe('figure HTML', () => {
     // The clipboard carries a cut image as this HTML, so a commented image keeps its card like commented text.
     test("a figure's comment card survives the HTML round-trip", () => {
         const html = generateHTML(figureDoc({ mediaName: 'a.png', commentCardId: 'card-1' }), extensions);
-        expect(html).toContain('<figure data-comment-id="card-1">');
+        expect(html).toContain('<span class="figure" data-comment-id="card-1">');
         const ids: unknown[] = [];
         createDocument(html, getSchema(extensions)).descendants((node) => {
             if (node.type.name === 'figure') ids.push(node.attrs.commentCardId);

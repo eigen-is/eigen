@@ -113,8 +113,10 @@ export const FigureNode = Node.create({
         ];
     },
 
+    // Spans, as the export writes it: a <figure> in a <p> closes it in every HTML parser, so a pasted copy
+    // would split its paragraph around the image.
     renderHTML({ HTMLAttributes }) {
-        const figureAttrs: Record<string, unknown> = {};
+        const figureAttrs: Record<string, unknown> = { class: 'figure' };
         if (HTMLAttributes['alignment'] && HTMLAttributes['alignment'] !== 'center') {
             figureAttrs['data-alignment'] = HTMLAttributes['alignment'];
         }
@@ -137,9 +139,14 @@ export const FigureNode = Node.create({
         }
 
         if (HTMLAttributes['caption']) {
-            return ['figure', figureAttrs, ['img', imgAttrs], ['figcaption', {}, HTMLAttributes['caption']]];
+            return [
+                'span',
+                figureAttrs,
+                ['img', imgAttrs],
+                ['span', { class: 'figcaption' }, HTMLAttributes['caption']],
+            ];
         }
-        return ['figure', figureAttrs, ['img', imgAttrs]];
+        return ['span', figureAttrs, ['img', imgAttrs]];
     },
 
     addCommands() {
