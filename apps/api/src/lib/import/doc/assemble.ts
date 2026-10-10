@@ -327,6 +327,17 @@ function depths(items: Item[]): number[] {
     });
 }
 
+// The next item past breaks and boundaries, looked up once rather than scanned for at every break.
+function nextPast(items: Item[]): (Item | undefined)[] {
+    const next: (Item | undefined)[] = [];
+    for (let index = items.length - 1, ahead: Item | undefined; index >= 0; index--) {
+        next[index] = ahead;
+        const item = items[index];
+        if (item && item.kind !== 'break' && item.kind !== 'boundary') ahead = item;
+    }
+    return next;
+}
+
 function buildLevel(items: Item[], depth: number): JSONContent[] {
     const out: Item[] = [];
     let quoted: Item[] = [];
@@ -340,6 +351,7 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         quoted = [];
     };
     const itemDepths = depths(items);
+    const next = nextPast(items);
     // The writer's Spacer between two boxes stands in their quote; after code, only before a box of the code's container.
     const isBox = (index: number) => {
         const near = items[index];
@@ -366,10 +378,12 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         }
         const [first] = quoted;
         // The writer's page break sits at the margin, so between quotes of two items it stands outside both.
+        const following = next[index];
         const parts =
             item.kind === 'break' &&
             first?.kind === 'para' &&
-            inItem(first) !== inItem(items.slice(index + 1).find((next) => next.kind === 'para'));
+            following?.kind === 'para' &&
+            inItem(first) !== inItem(following);
         if (itemDepth > depth && !parts) {
             if (item.kind === 'para' && first?.kind === 'para' && inItem(first) !== inItem(item)) flushQuote();
             quoted.push(item);
@@ -415,13 +429,7 @@ function buildFlow(items: Item[]): JSONContent[] {
     // The innermost open item whose text an indent is at or right of, or, for a quote, whole quotes past.
     const hostAt = (indent: number) => stack.findLast((open) => indentedUnder(indent, open.indent));
     const quoteHost = (indent: number) => stack.findLast((open) => quotesPast(indent, open.indent) !== undefined);
-    // The next item past breaks and boundaries, looked up once rather than scanned for at every break.
-    const next: (Item | undefined)[] = [];
-    for (let index = items.length - 1, ahead: Item | undefined; index >= 0; index--) {
-        next[index] = ahead;
-        const item = items[index];
-        if (item && item.kind !== 'break' && item.kind !== 'boundary') ahead = item;
-    }
+    const next = nextPast(items);
     // The item the block past a break goes on in holds the break.
     const breakHost = (index: number): Open | undefined => {
         const following = next[index];

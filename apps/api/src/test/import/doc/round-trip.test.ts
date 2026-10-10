@@ -311,6 +311,8 @@ describe('a page break in an item', () => {
         ['before a quote', [ordered([p('One'), pageBreak, quote(p('Said'))], [p('Two')])]],
         ['before a table', [ordered([p('One'), pageBreak, table], [p('Two')])]],
         ['before a heading', [ordered([p('One'), pageBreak, heading('Part')], [p('Two')])]],
+        ['in a quote, before a rule', [bullets([p('One'), quote(p('Said'), pageBreak, rule)])]],
+        ['in a quote, before a table', [bullets([p('One'), quote(p('Said'), pageBreak, table)])]],
         ['between two tasks', [tasks([p('One'), pageBreak], [p('Two')])]],
     ])('%s stays in the item', async (_name, content) => {
         const { source, json } = await roundTrip(content);
