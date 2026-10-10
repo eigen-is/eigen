@@ -301,8 +301,7 @@ export const Figure = FigureNode.extend<FigureOptions>({
                     if (
                         !transactions.some((tr) => tr.getMeta('uiEvent') === 'drop') ||
                         !(dragged instanceof NodeSelection) ||
-                        dragged.node.type.name !== name ||
-                        dragged.$from.parent.childCount !== 1
+                        dragged.node.type.name !== name
                     )
                         return null;
                     const mapping = new Mapping();
