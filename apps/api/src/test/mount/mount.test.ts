@@ -4,14 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } 
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import {
-    ApiError,
-    type DatabaseConfig,
-    eventLoopTurn,
-    ManagedDatabase,
-    type SchemaType,
-    storageGone,
-} from '../../lib/core';
+import { ApiError, type DatabaseConfig, eventLoopTurn, storageGone } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import {
     CONTENT_REINDEX_CAP_SECONDS,
@@ -25,6 +18,7 @@ import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import { createGetLocalDatabase, FaultStorage } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-${Date.now()}`);
@@ -32,18 +26,6 @@ const OWNER_ID = 'test-owner-id';
 
 function sha256(content: string): string {
     return new Bun.CryptoHasher('sha256').update(content).digest('hex');
-}
-
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        relativePath: string,
-    ): Promise<ManagedDatabase<S>> => {
-        const fullPath = join(baseDir, relativePath);
-        const db = new ManagedDatabase(config, fullPath);
-        await db.open(0);
-        return db;
-    };
 }
 
 beforeAll(() => {
@@ -382,6 +364,25 @@ describe('Mount (local-key storage)', () => {
         await expect(write).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
         expect(await (await mount.readFile(fileId))!.text()).toBe('old');
         expect(await mount.getPath(fileId)).toMatchObject({ size: 3, hash: sha256('old') });
+    });
+
+    test('an overwrite whose folder is trashed mid-upload records the new bytes, then refuses', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedMidUpload');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const fault = new FaultStorage(mount.storage);
+        fault.parkWrites = true;
+        mount.storage = fault;
+        try {
+            const write = mount.writeFile(fileId, Buffer.from('newer'));
+            await fault.waitForParked(() => true);
+            await mount.trashPath(folderId);
+            await fault.releaseOldestParked();
+            await expect(write).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
+        } finally {
+            mount.storage = fault.inner;
+        }
+        expect(await (await mount.readFile(fileId))!.text()).toBe('newer');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 5, hash: sha256('newer') });
     });
 
     test('getChildByName is case-insensitive', async () => {
