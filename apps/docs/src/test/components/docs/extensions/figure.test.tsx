@@ -118,3 +118,18 @@ test('a picture that fails to load, a WMF or EMF, widens to read its alt text', 
     });
     expect(img.className).toContain('min-w-40');
 });
+
+// A replaced image loads with no width, and the Image panel stays open only while the figure stays selected.
+test('a width written by the node view keeps the figure selected', async () => {
+    const unsized = { type: 'figure', attrs: { src: 'data:image/png;base64,' } };
+    const { editor, box } = await mount([paragraph(text('a'), unsized)]);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    await act(async () => {
+        box.querySelector('img')?.dispatchEvent(new Event('load'));
+    });
+    expect(editor.state.doc.nodeAt(2)?.attrs['width']).toBe(400);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+});

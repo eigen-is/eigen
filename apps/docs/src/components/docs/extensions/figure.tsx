@@ -1,9 +1,9 @@
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { Mapping } from '@tiptap/pm/transform';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
-import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
@@ -17,13 +17,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // The figure's resize floor (px).
 const FIGURE_MIN_WIDTH = 100;
 
+declare module '@tiptap/core' {
+    interface Commands<ReturnType> {
+        figureAttributes: {
+            updateFigure: (attributes: FigureAttrs) => ReturnType;
+        };
+    }
+}
+
+// An AttrStep maps no position, so a NodeSelection on the figure survives, and with it the Image panel.
+// updateAttributes's setNodeMarkup replaces the leaf, which maps that selection to a text selection.
+function setFigureAttributes(tr: Transaction, pos: number, attributes: FigureAttrs) {
+    for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
+}
+
 type FigureOptions = {
     // The host decides whether a menu opens, so an image with no rows keeps the browser's own.
     onContextMenu: (node: PMNode, pos: number, event: React.MouseEvent) => void;
     onOpenComment: (cardId: string) => void;
 };
 
-function FigureView({ node, updateAttributes, selected, editor, extension, getPos, decorations }: NodeViewProps) {
+function FigureView({ node, selected, editor, extension, getPos, decorations }: NodeViewProps) {
     const { onContextMenu, onOpenComment }: FigureOptions = extension.options;
     const commentCardId: string | null = node.attrs.commentCardId;
     const commentColor: string | undefined = decorations.find((d) => 'commentColor' in d.spec)?.spec.commentColor;
@@ -40,6 +54,17 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
     const gestureMaxWidth = useRef(Number.POSITIVE_INFINITY);
 
     const { resolveMediaUrl } = useMediaResolver();
+
+    const setAttributes = useCallback(
+        (attributes: FigureAttrs) =>
+            editor.commands.command(({ tr }) => {
+                const pos = getPos();
+                if (pos === undefined) return false;
+                setFigureAttributes(tr, pos, attributes);
+                return true;
+            }),
+        [editor, getPos],
+    );
 
     const width = node.attrs.width;
     const alignment = node.attrs.alignment || 'center';
@@ -105,7 +130,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
 
         if (hasIntrinsicSize) {
             if (!node.attrs.width) {
-                updateAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
+                setAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
             }
             return;
         }
@@ -113,7 +138,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
         // SVGs without explicit dimensions report 0x0 — set a width, then read
         // the rendered aspect ratio after the browser lays out using the viewBox
         if (!node.attrs.width) {
-            updateAttributes({ width: Math.round(maxWidth === Infinity ? 400 : maxWidth) });
+            setAttributes({ width: Math.round(maxWidth === Infinity ? 400 : maxWidth) });
         }
         requestAnimationFrame(() => {
             if (!imageRef.current) return;
@@ -121,7 +146,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
             const h = imageRef.current.clientHeight;
             if (w > 0 && h > 0) setAspectRatio(w / h);
         });
-    }, [getMaxWidth, node.attrs.width, updateAttributes]);
+    }, [getMaxWidth, node.attrs.width, setAttributes]);
 
     // ObjectTransform seam. The figure is a DOM box in screen space, so scene units ARE screen px:
     // the ring insets over the img (shrink-wrapped by the relative wrapper) and the pointer delta is
@@ -148,9 +173,9 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
             const w = Math.max(FIGURE_MIN_WIDTH, Math.min(gestureMaxWidth.current, next.width));
             transformStarted.current = false;
             setPreviewWidth(null);
-            updateAttributes({ width: Math.round(w) });
+            setAttributes({ width: Math.round(w) });
         },
-        [updateAttributes],
+        [setAttributes],
     );
 
     // Keyboard resize (accessibility): kept docs-side, wired to the same width write, so
@@ -169,9 +194,9 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
             e.preventDefault();
             e.stopPropagation();
             const next = Math.max(FIGURE_MIN_WIDTH, Math.min(getMaxWidth(), (width || 300) + delta));
-            updateAttributes({ width: Math.round(next) });
+            setAttributes({ width: Math.round(next) });
         },
-        [getMaxWidth, width, updateAttributes],
+        [getMaxWidth, width, setAttributes],
     );
 
     const displayWidth = previewWidth ?? width;
@@ -273,6 +298,22 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
 export const Figure = FigureNode.extend<FigureOptions>({
     addOptions() {
         return { onContextMenu: () => {}, onOpenComment: () => {} };
+    },
+    addCommands() {
+        return {
+            ...this.parent?.(),
+            updateFigure:
+                (attributes) =>
+                ({ tr, dispatch }) => {
+                    const { from, to } = tr.selection;
+                    const positions: number[] = [];
+                    tr.doc.nodesBetween(from, to, (node, pos) => {
+                        if (node.type.name === this.name && pos >= from) positions.push(pos);
+                    });
+                    if (dispatch) for (const pos of positions) setFigureAttributes(tr, pos, attributes);
+                    return positions.length > 0;
+                },
+        };
     },
     addProseMirrorPlugins() {
         const name = this.name;

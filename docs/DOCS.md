@@ -99,6 +99,8 @@ The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter:
 
 Selecting a figure or a table opens its properties panel, for a user who can write, in the slot the comments and activity panels use. An open comments or activity panel keeps the slot, and moving the caret out of the figure or table closes the properties panel. A phone shows no right-side panels: comments and activity open as a pane that hides the editor ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)), and the properties panels have no phone form.
 
+So a write from the Image panel must keep the figure selected. TipTap's `updateAttributes` writes with `setNodeMarkup`, which replaces a leaf node, and the node selection maps to a text selection, which closes the panel. The `Figure` extension's `updateFigure` command, and every write in its node view, set each attribute with `setNodeAttribute` instead, a step that moves no position. Such a write fires no `selectionUpdate` and `useEditor` re-renders on no transaction, so the panel reads the figure through `useEditorState`.
+
 ## A long selection's toolbar shows what its start holds
 
 The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 25 checks per transaction, so a select-all of 20,000 paragraphs cost 70 ms on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads the selection's first `MAX_READ_RANGE` positions instead, which costs a fixed walk. A button still acts on the whole range, so Bold, lit by a first 10,000 positions that are all bold, bolds the rest.
