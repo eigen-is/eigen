@@ -437,21 +437,11 @@ describe('output budget', () => {
         expect([result.status, result.message]).toEqual([413, 'Document too large']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
     }, 30_000);
-
-    // The editor fills a short row with a cell and its paragraph per column.
-    test('the cells a ragged table is filled with weigh', async () => {
-        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
-        const docx = await buildDocxWithBody(
-            `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1300)}</w:tbl>`,
-        );
-        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
-    }, 30_000);
 });
 
 // The reader stores a table as the editor opens it; fixTables' transaction kept a copy of the table per repair.
 describe('tables the editor would repair', () => {
-    test('a row of 63 cells over 1,000 rows of one is filled in one pass through the Yjs update', async () => {
+    test('a row of 63 cells over 1,000 rows of one imports through the Yjs update', async () => {
         const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
         const docx = await buildDocxWithBody(
             `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1000)}</w:tbl>`,
@@ -472,6 +462,27 @@ describe('tables the editor would repair', () => {
         expect(result.cpuMs).toBeLessThan(3000);
         expect(result.rssGrowth).toBeLessThan(512 * MB);
     }, 60_000);
+
+    // A continuation under a span's last column extended the cell above, which the next row's span overlapped: the
+    // editor added cells by the triangle per row, past the budget, 2.08 million from 12 KB.
+    test.each([
+        [100, 30],
+        [300, 10],
+    ])(
+        '%i rows of a span beside a continuation under the merged cell above import small',
+        async (rows, columns) => {
+            const tc = (tcPr: string) => `<w:tc><w:tcPr>${tcPr}</w:tcPr><w:p/></w:tc>`;
+            const grid = `<w:tblGrid>${'<w:gridCol w:w="500"/>'.repeat(columns + 1)}</w:tblGrid>`;
+            const first = `<w:tr>${tc('')}${tc(`<w:gridSpan w:val="${columns}"/><w:vMerge w:val="restart"/>`)}</w:tr>`;
+            const next = `<w:tr>${tc(`<w:gridSpan w:val="${columns}"/>`)}${tc('<w:vMerge/>')}</w:tr>`;
+            const docx = await buildDocxWithBody(`<w:tbl>${grid}${first}${next.repeat(rows - 1)}</w:tbl>`);
+            const result = measuredImport(docx, 'transform');
+            expect(result.status).toBeUndefined();
+            expect(result.cpuMs).toBeLessThan(2000);
+            expect(result.rssGrowth).toBeLessThan(128 * MB);
+        },
+        60_000,
+    );
 });
 
 describe('structure', () => {

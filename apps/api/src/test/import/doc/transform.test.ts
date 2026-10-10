@@ -2,12 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
+import { fixTables } from '@tiptap/pm/tables';
 import { yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
 import { lowlight } from '../../../lib/document/lowlight';
 import { docSchema } from '../../../lib/import/doc/from-docx';
-import { asOpened, importDocxToEigendocUpdate, MAX_TABLE_REPAIRS } from '../../../lib/import/doc/transform';
+import {
+    asOpened,
+    importDocxToEigendocUpdate,
+    MAX_REPAIR_PASSES,
+    MAX_TABLE_REPAIRS,
+} from '../../../lib/import/doc/transform';
 import { buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
 
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
@@ -36,13 +42,13 @@ const table = (rows: string[]) => `<w:tbl>${grid}${rows.map((cells) => `<w:tr>${
 const bullet = (text: string) => paragraph(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
 
 describe('an imported doc is stored as the editor leaves it on open', () => {
-    test('a row Word draws short of the grid is filled to it, with the widths its columns have', async () => {
+    test('a row Word draws short of the grid ends in a cell over the columns it misses, with their widths', async () => {
         const json = stored(
             await buildDocxWithBody(
                 `${table([cell('A') + cell('B') + cell('C'), cell('D')])}${paragraph(run('After.'))}`,
             ),
         );
-        expect(nodesOfType(json, 'tableRow').map((row) => row.content?.length)).toEqual([3, 3]);
+        expect(nodesOfType(json, 'tableRow').map((row) => row.content?.length)).toEqual([3, 2]);
         expect(opened(json)).toEqual(json);
     });
 
@@ -100,5 +106,43 @@ describe('the repairs on open are bounded', () => {
 
     test('a table past it is 413', () => {
         expect(() => asOpened(ragged(side + 2))).toThrow('Document too large');
+    });
+
+    // Each pass's collisions can leave new ones for the next: as many passes as these tables need, as colspan x rowspan.
+    const stacked = (rows: [number, number][]) =>
+        docSchema.nodeFromJSON({
+            type: 'doc',
+            content: [
+                {
+                    type: 'table',
+                    content: rows.map(([colspan, rowspan]) => ({
+                        type: 'tableRow',
+                        content: [{ ...cell, attrs: { colspan, rowspan } }],
+                    })),
+                },
+            ],
+        });
+
+    test(`a table repaired in ${MAX_REPAIR_PASSES} passes is repaired`, () => {
+        const doc = asOpened(
+            stacked([
+                [1, 2],
+                [2, 2],
+                [3, 1],
+            ]),
+        );
+        expect(fixTables(EditorState.create({ doc }))).toBeUndefined();
+    });
+
+    test('a table still repairing after them is 413', () => {
+        expect(() =>
+            asOpened(
+                stacked([
+                    [1, 2],
+                    [2, 2],
+                    [3, 2],
+                ]),
+            ),
+        ).toThrow('Document too large');
     });
 });
