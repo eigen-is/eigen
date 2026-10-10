@@ -390,9 +390,10 @@ const TiptapEditor = ({
                     }
 
                     if (paste.eigen) {
-                        // Images take this path for the cross-mount re-upload; text only when text/html
-                        // is marker-only (a canvas text copy), so a sheets table still parses in PM. Claimed
-                        // only with an item this editor can place, or ⌘V on a bare `elements` item is dead.
+                        // Images take this path for the cross-mount re-upload, a docs copy's through its own
+                        // HTML; text only when text/html is marker-only (a canvas text copy), so a sheets table
+                        // still parses in PM. Claimed only with an item this editor can place, or ⌘V on a bare
+                        // `elements` item is dead.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
                         const hasText = paste.eigen.items.some(
                             (i) => i.type === 'text' && clipboardTextItemHasContent(i),
@@ -400,7 +401,12 @@ const TiptapEditor = ({
                         if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
                             event.preventDefault();
                             if (editorRef.current) {
-                                insertEigenItems(editorRef.current, paste.eigen.items, pastedMediaName).catch(() => {});
+                                insertEigenItems(
+                                    editorRef.current,
+                                    paste.eigen.items,
+                                    paste.html,
+                                    pastedMediaName,
+                                ).catch(() => {});
                             }
                             return true;
                         }
