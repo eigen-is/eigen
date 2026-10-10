@@ -113,7 +113,9 @@ function ChatView() {
                 path={chat.chatPath ?? null}
             />
 
-            <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />
+            {chat.chatPath && (
+                <DriveRenameItem path={chat.chatPath} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />
+            )}
 
             <DeleteDialog
                 open={!!editing.deleteTarget}
