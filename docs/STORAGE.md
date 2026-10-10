@@ -78,6 +78,12 @@ Most reads also pass the mount's `downloads` signal. `closeAllDatabases` and `Dr
 
 A file served to a client (`/download`, `/embed`, WebDAV GET) is the exception. Its stream goes straight into the Response, so a stalled body there is bounded only by the server's 200 s `idleTimeout`. It holds no lock and no Home while it waits.
 
+## An S3 read tries three times before it answers 503
+
+Hetzner Object Storage sheds load with a 503 `SlowDown`, and the same request a second later succeeds. Bun's `S3Client` never retries a read (its `retry` covers only multipart parts), so one throttled HEAD failed a whole docx export. `retryStorageRead` (`apps/api/src/lib/storage/deadline.ts`) gives `exists`, `size`, `list` and every `streamStorageFile` GET three attempts, about 200 ms and then 800 ms apart, with jitter. It retries a throttle, a 5xx, a refused or closed connection, and Bun's `UnknownError`, which is all a HEAD reports for any status but 200 and 404, a 403 included. A missing key and a definite refusal (`NoSuchKey`, `AccessDenied` in a GET body) fail at once. Writes are not retried, because not every write path is idempotent.
+
+All attempts share one deadline. For `exists`, `size` and `list` it is the 30 s of `withStorageDeadline`, whose signal stops a wait when it fires. A GET retries only while no byte has reached the caller, since a second GET would hand it the first bytes again. A GET that stalled into its idle deadline is not retried, and the mount's `downloads` signal stops its wait. The last failure keeps its 503. `apps/api/src/test/storage/s3-read-retry.test.ts` pins this.
+
 ## A gone object answers 410, an outage 503
 
 Only the GET body tells a missing object from a sick bucket: `NoSuchKey` on S3, `ENOENT` on disk (`isMissingObjectCause`). `Mount.downloadKeyToTemp` answers that with 410 (`storageGone`) and every other failure with 503. A 410 tells the client to stop retrying, a 503 to retry ([COLLAB.md](COLLAB.md#each-close-code-tells-the-tab-what-to-do)).

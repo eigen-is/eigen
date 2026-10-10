@@ -162,6 +162,33 @@ describe('Eigendoc docx import/convert', () => {
         expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(altBytes));
     }, 120_000);
 
+    // An open tab looks each figure's media name up once, as the update reaches it: a name with no row yet spins forever.
+    test('import saves the media before the document names it', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'media-first-target' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const { mount } = await home.drive.resolveFile(mountId, docPath.id);
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        let idsAtUpdate: string[] | null = null;
+        const onUpdate = () => {
+            idsAtUpdate ??= mount.collectDescendantIds(docPath.id);
+        };
+        collab.doc.on('update', onUpdate);
+        try {
+            const res = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
+            expect((await assertJson<{ success: boolean }>(res)).success).toBe(true);
+        } finally {
+            collab.doc.off('update', onUpdate);
+        }
+        const rows = await Promise.all((idsAtUpdate ?? []).map((id) => mount.getPath(id)));
+        expect(rows.map((row) => row?.name)).toContain(GOLDEN_DOCX_IMAGE_NAME);
+    }, 120_000);
+
     // The Worker reads no config: the job carries the origin, so a link into this instance comes back root-relative.
     test('import makes a link to this instance root-relative', async () => {
         const docPath = await drivePost<DrivePath>(

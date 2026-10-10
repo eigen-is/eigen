@@ -3,7 +3,7 @@ import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError, parseXml, type XmlElement, xmlChild, xmlChildren, xmlElements, xmlText } from '../core';
-import { errnoOf, storageUnavailable, withStorageDeadline } from './deadline';
+import { errnoOf, retryStorageRead, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
 // `refusePublic` also fails a bucket that answers an unsigned GET of the probe: a backup bucket must be private.
@@ -351,7 +351,7 @@ export class S3Storage implements StorageBackend {
 
     async delete(key: string): Promise<boolean> {
         try {
-            await withStorageDeadline(this.read(key).delete());
+            await withStorageDeadline(() => this.read(key).delete());
             return true;
         } catch (error) {
             if (errnoOf(error) === 'NoSuchBucket') return true;
@@ -364,7 +364,9 @@ export class S3Storage implements StorageBackend {
         // A missing object resolves false; a throw is the provider failing. 503 is the shape the
         // create (rollback) and open (1013 close) paths speak, so the outage reads as one and not as a 500.
         try {
-            return await withStorageDeadline(this.read(key).exists());
+            return await withStorageDeadline((signal) =>
+                retryStorageRead('exists', key, () => this.read(key).exists(), { signal }),
+            );
         } catch (error) {
             console.error(`S3 exists probe failed for ${key}:`, error);
             throw storageUnavailable(error);
@@ -377,7 +379,9 @@ export class S3Storage implements StorageBackend {
         const keys: string[] = [];
         let continuationToken: string | undefined;
         do {
-            const page = await withStorageDeadline(this.client.list({ prefix: base, continuationToken }));
+            const page = await withStorageDeadline((signal) =>
+                retryStorageRead('list', base, () => this.client.list({ prefix: base, continuationToken }), { signal }),
+            );
             for (const { key } of page.contents ?? []) keys.push(key.slice(base.length));
             continuationToken = page.isTruncated ? page.nextContinuationToken : undefined;
         } while (continuationToken);
@@ -385,9 +389,13 @@ export class S3Storage implements StorageBackend {
     }
 
     async size(key: string): Promise<number | null> {
-        // stat() throws on a missing object with no distinguishable code — map any failure but the deadline to null like LocalStorage.
+        // stat() throws NoSuchKey on a missing object; any failure but the deadline maps to null, like LocalStorage.
         try {
-            return (await withStorageDeadline(this.read(key).stat())).size;
+            return (
+                await withStorageDeadline((signal) =>
+                    retryStorageRead('size', key, () => this.read(key).stat(), { signal }),
+                )
+            ).size;
         } catch (error) {
             if (error instanceof ApiError) throw error;
             return null;
