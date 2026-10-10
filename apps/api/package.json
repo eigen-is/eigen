@@ -36,7 +36,7 @@
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.30",
     "elysia-rate-limit": "^4.6.3",
-    "exceljs": "^4.4.0",
+    "exceljs": "4.4.0",
     "exiftool-vendored": "^35.21.0",
     "heic-convert": "^2.1.0",
     "html-to-text": "^9.0.5",
