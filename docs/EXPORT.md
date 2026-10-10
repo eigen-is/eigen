@@ -37,7 +37,7 @@ A doc's page comes from its page setup ([DOCS.md](DOCS.md#one-page-setup-sizes-e
 
 The document is self-contained, because WeasyPrint and a downloaded file have no app to fetch from. Fonts are WOFF2 files base64'd into `@font-face` rules (`export/fonts.ts`). A doc embeds `eigen-prose.css`, flattened once at load by `export/doc/prose-css.ts`: WeasyPrint does not read CSS nesting, so nesting is expanded, `.dark` rules are dropped and theme variables become values, so no `var()` survives. The font weights come from `font-weights.css`, rounded to the nearest multiple of 100 because WeasyPrint accepts no other weight: headings and table headers print at 500 and bold at 600.
 
-The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview. They highlight with the backend's one lowlight (`document/lowlight.ts`), which the docx writer and reader share, so the main thread imports them lazily. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. So a figure with only an external `src` exports empty, with no warning, an open [ROADMAP](ROADMAP.md) row. A task item is rendered by hand, because the static renderer drops `checked`.
+The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview: `renderDocHtml` renders a body for both, with one node mapping, so quick look draws a list's start and type as the export does. They highlight with the backend's one lowlight (`document/lowlight.ts`), which the docx writer and reader share, so the main thread imports them lazily. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. So a figure with only an external `src` exports empty, with no warning, an open [ROADMAP](ROADMAP.md) row. A task item is rendered by hand, because the static renderer drops `checked`.
 
 ## The doc renderers write the DOM the editor holds
 
@@ -45,7 +45,7 @@ A figure is an inline node, so it renders as a `span.figure` with a `span.figcap
 
 `withTrailingBreaks` (`export/doc/render.ts`) gives a paragraph, heading or code block the trailing `<br>` the editor has, in the export and the preview alike ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
-The static renderer nests a text's marks the other way round from the editor: it wraps the first mark innermost, where ProseMirror draws it outermost. So a link's own color landed outside its `<a>`, and `.eigen-prose a` drew the link color over it. `inEditorMarkOrder` (`export/doc/render.ts`) hands the renderer the doc over a schema whose marks rank in reverse, so the export and the preview nest marks as the editor does: the `<a>` outermost, its color inside it.
+The static renderer nests a text's marks the other way round from the editor: it wraps the first mark innermost, where ProseMirror draws it outermost. Rendered as is, a link's own color would sit outside its `<a>`, and `.eigen-prose a` would draw the link color over it. `inEditorMarkOrder` (`document/doc-schema.ts`) hands the renderer the doc over a schema whose marks rank in reverse, so the export and the preview nest marks as the editor does: the `<a>` outermost, its color inside it.
 
 ## An ordered list sets its first number as a counter, for WeasyPrint
 

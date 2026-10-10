@@ -1,7 +1,8 @@
-import { getSchema, type JSONContent } from '@tiptap/core';
-import { type Node, Schema } from '@tiptap/pm/model';
-import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import type { JSONContent } from '@tiptap/core';
+import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
+import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { lowlight } from '../../document/lowlight';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
@@ -117,16 +118,25 @@ export function withTrailingBreaks(node: JSONContent): JSONContent {
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
 }
 
-// The static renderer wraps a text's first mark innermost, where the editor draws it outermost, so a link's own color
-// sat outside its <a> and drew in the link color. Over marks ranked in reverse it nests them as the editor does.
-const { spec } = getSchema(getDocExtensions({ lowlight }));
-const reversedMarks = new Schema({
-    ...spec,
-    marks: Object.fromEntries(Object.entries(spec.marks.toObject()).reverse()),
-});
-
-export function inEditorMarkOrder(json: JSONContent): Node {
-    return reversedMarks.nodeFromJSON(json);
+// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds.
+export function renderDocHtml(
+    json: JSONContent,
+    resolveImgSrc: FigureImgSrcResolver,
+    options?: { lazy?: boolean },
+): string {
+    return renderToHTMLString({
+        content: inEditorMarkOrder(withTrailingBreaks(json)),
+        extensions: docExtensions(),
+        options: {
+            nodeMapping: {
+                codeBlock: ({ node }) => renderCodeBlockNode(node),
+                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
+                orderedList: ({ node, children }) => renderOrderedListNode(node, children),
+                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
+                    renderFigureNode(node.attrs, resolveImgSrc, options),
+            },
+        },
+    });
 }
 
 // Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.

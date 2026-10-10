@@ -1,16 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
-import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import {
-    DEFAULT_PAGE_SETUP,
-    type FigureAttrs,
-    getDocExtensions,
-    PAGE_BREAK_CLASS,
-    pageStylesheet,
-} from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
-import { lowlight } from '../../document/lowlight';
 import { toDataUriMap } from '../../document/media';
 import {
     DOCX_IMAGE_MAX_SIZE,
@@ -24,15 +16,7 @@ import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { PROSE_CSS } from './prose-css';
-import {
-    inEditorMarkOrder,
-    renderCodeBlockNode,
-    renderFigureNode,
-    renderOrderedListNode,
-    renderTaskItemNode,
-    withAbsoluteLinks,
-    withTrailingBreaks,
-} from './render';
+import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
@@ -108,25 +92,8 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
-const extensions = getDocExtensions({ lowlight });
-
 function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
-    const bodyHtml = renderToHTMLString({
-        content: inEditorMarkOrder(withTrailingBreaks(json)),
-        extensions,
-        options: {
-            nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node),
-                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                orderedList: ({ node, children }) => renderOrderedListNode(node, children),
-                figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
-                    renderFigureNode(node.attrs, (mediaName, src) =>
-                        mediaName ? (dataUriMap.get(mediaName) ?? null) : src,
-                    ),
-            },
-        },
-    });
-
+    const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src));
     return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
 }
 
