@@ -8,7 +8,7 @@ import { openZip, ZipReader } from '../../../lib/core/zip';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { QUOTE_LOOK } from '../../../lib/export/doc/looks';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { docSchema, docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
@@ -824,6 +824,37 @@ describe('figures and media', () => {
         const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
         const { images } = docxToPmJson(input);
         expect(images[0]?.data.buffer).toBe(input.buffer);
+    });
+
+    // As a damaged optional part costs only its looks.
+    test('a damaged image entry is not stored and counts as unshown; the figure and the rest import', async () => {
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)))));
+        const input = build(
+            golden.names().map((name) => {
+                const part = stored(name, golden.read(name) ?? new Uint8Array());
+                return name.startsWith('word/media/') ? { ...part, crc: part.crc ^ 1 } : part;
+            }),
+        );
+        const { json, images, warnings } = docxToPmJson(input);
+        expect(images).toEqual([]);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.png']);
+        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+    });
+
+    test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
+        const refuses = spyOn(docSchema, 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        try {
+            const { json, images, warnings } = await importDocxBody(
+                `${paragraph(picture(381000))}${paragraph(run('After.'))}`,
+            );
+            expect(nodesOfType(json, 'figure')).toEqual([]);
+            expect(images).toEqual([]);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
     });
 
     test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {

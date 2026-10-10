@@ -34,6 +34,8 @@ export type Package = {
     contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
     // A part a drawing names, read when met and charged as the others are; a damaged one, or one past a cap, is no part.
     readPart(path: string): XmlElement | undefined;
+    // An image's bytes; a damaged entry is none, and costs only its picture.
+    readMedia(path: string): Uint8Array | undefined;
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
     chargePiece(): void;
 };
@@ -96,6 +98,7 @@ export function readPackage(bytes: Uint8Array): Package {
         endnotes: part('endnotes'),
         contentTypes,
         readPart: (path) => optional(() => readXml(zip, path, budget), true),
+        readMedia: (path) => optional(() => zip.read(path)),
         chargePiece: () => {
             budget.pieces--;
             if (budget.pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);

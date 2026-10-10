@@ -44,14 +44,23 @@ export function docxToPmJson(
             content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }],
         });
         doc.check();
-        const images = reader.images.map(({ name, path, contentType }) => {
+        // Only the media a kept figure names: a flattened block's figures went with it.
+        const named = new Set<string>();
+        doc.descendants((node) => {
+            if (node.type.name === 'figure') named.add(node.attrs['mediaName']);
+        });
+        const kept = reader.images.filter((image) => named.has(image.name));
+        const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
+            const data = pkg.readMedia(path);
             // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
-            const data = pkg.zip.read(path) ?? new Uint8Array();
-            return { name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) };
+            return data
+                ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
+                : [];
         });
         const warnings: TransformWarning[] = [];
         if (refused.size > 0) warnings.push({ code: 'blocks-flattened', count: refused.size });
-        const unshown = images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
+        const damaged = kept.length - images.length;
+        const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         return { json: doc.toJSON(), images, warnings };
