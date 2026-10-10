@@ -97,7 +97,7 @@ Selecting a figure or a table opens its properties panel, for a user who can wri
 
 ## A long selection's toolbar shows what its start holds
 
-The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 25 checks per transaction, so a select-all of 20,000 paragraphs cost 70 ms on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads a caret at the selection's start instead, which costs nothing. A button still acts on the whole range, so Bold, lit by a bold first word, bolds the rest.
+The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 25 checks per transaction, so a select-all of 20,000 paragraphs cost 70 ms on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads the selection's first `MAX_READ_RANGE` positions instead, which costs a fixed walk. A button still acts on the whole range, so Bold, lit by a first 10,000 positions that are all bold, bolds the rest.
 
 ## A comment anchors on text as a mark and on a figure as an attribute
 
