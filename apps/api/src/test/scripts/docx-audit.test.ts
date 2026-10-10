@@ -56,6 +56,15 @@ const item = (numId: number, text: string, ilvl = 0) =>
     paragraph(text, `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`);
 
 describe('source side', () => {
+    // A trim that backtracks per start position is quadratic in a run of spaces: 100,000 of them took 7 s.
+    test("a w:t's 100,000 interior spaces trim in linear time", async () => {
+        const docx = await buildDocxWithBody(`<w:p><w:r><w:t> a${' '.repeat(100_000)}b </w:t></w:r></w:p>`);
+        const started = performance.now();
+        const tally = auditSource(docx);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(tally.words).toEqual(['a', 'b']);
+    });
+
     test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
         const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
         const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);

@@ -4,6 +4,7 @@ import {
     ApiError,
     parseXml,
     serializeXmlChildren,
+    trimXmlSpace,
     type XmlElement,
     XmlError,
     xmlAttr,
@@ -403,6 +404,15 @@ describe('children and text', () => {
         expect(xmlText(parsed('<a>&#48;612 &amp; &lt;&#x2013;</a>'))).toBe('0612 & <–');
         expect(xmlText(parsed('<a>one<b>skip</b>two</a>'))).toBe('onetwo');
         expect(xmlText(parsed('<a/>'))).toBe('');
+    });
+
+    test("trimXmlSpace trims XML's whitespace only, 100,000 interior spaces in linear time", () => {
+        expect(trimXmlSpace(' \t\r\n\u00a0a b\u00a0\n')).toBe('\u00a0a b\u00a0');
+        expect(trimXmlSpace(' \t ')).toBe('');
+        const text = `a${' '.repeat(100_000)}b`;
+        const started = performance.now();
+        expect(trimXmlSpace(` ${text} `)).toBe(text);
+        expect(performance.now() - started).toBeLessThan(100);
     });
 });
 

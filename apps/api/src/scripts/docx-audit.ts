@@ -32,7 +32,16 @@ import {
     W14_NS,
     WP_NS,
 } from '../lib/core/ooxml';
-import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
+import {
+    trimXmlSpace,
+    XML_NAMESPACE,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
@@ -293,8 +302,7 @@ function alternative(element: XmlElement): XmlElement | undefined {
 // The text Word shows for a w:t, apart from the reader's so the audit never grades the reader by itself.
 function runText(t: XmlElement): string {
     const text = xmlText(t);
-    const kept =
-        xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+    const kept = xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : trimXmlSpace(text);
     return kept.replace(/[\r\n]/g, ' ');
 }
 

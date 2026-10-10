@@ -394,6 +394,25 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
+    // A number test that backtracks is quadratic in a run of digits: 100,000 of them took 9 s.
+    test('quotes a text operand of 100,000 digits in linear time', async () => {
+        const operand = `${'1'.repeat(100_000)}x`;
+        const rule: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [0, 0], column: [0, 0] }],
+            format: { textColor: '#AA0000', cellColor: null },
+            conditionName: 'equal',
+            conditionRange: [],
+            conditionValue: [operand],
+        };
+        const started = performance.now();
+        const buffer = await sheetsToXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }]);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(await readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain(
+            `<formula>&quot;${operand}&quot;</formula>`,
+        );
+    });
+
     test('exports formula rules as expression sans leading equals', async () => {
         const rules: ConditionalFormatRule[] = [
             {

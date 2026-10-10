@@ -544,7 +544,7 @@ function toCfStyle(format: DefaultConditionalFormatRule['format']): XlsxCfWriteS
 // becomes a quoted Excel string literal with embedded quotes doubled.
 function encodeCfOperand(value: string | number): string {
     const txt = String(value);
-    return /^-?(\d+\.?\d*|\.\d+)$/.test(txt) ? txt : `"${txt.replace(/"/g, '""')}"`;
+    return /^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt) ? txt : `"${txt.replace(/"/g, '""')}"`;
 }
 
 // Engine type2 → xlsx operator; exact reverse of the importer's DV_OPERATOR.

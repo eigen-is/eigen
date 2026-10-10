@@ -308,7 +308,8 @@ function* tagStarts(bytes: Buffer, name: string): Generator<number> {
     }
 }
 
-const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+// A name after whitespace, as a lookbehind: matched from the whitespace, a long run is retried from each of its starts.
+const ATTRIBUTE = /(?<=\s)([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 // The attributes of each start tag of an element. No attribute value holds a `<`, so a tag runs to the next one.
 function* startTags(bytes: Buffer, name: string): Generator<Map<string, string>> {
@@ -724,7 +725,7 @@ function unquoteXlsxLiteral(txt: string): string | null {
 // text — coerce them to the numeric form the engine's comparisons expect.
 function parseCfLiteral(operand: string): string | null {
     const txt = operand.trim();
-    if (/^-?(\d+\.?\d*|\.\d+)$/.test(txt)) return txt;
+    if (/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt)) return txt;
     const inner = unquoteXlsxLiteral(txt);
     if (inner == null) return null;
     const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
