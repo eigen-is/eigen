@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 type ToolbarMenuProps = {
     // The menubar entry label ("Insert" | "Format" | "Filter").
     label: string;
-    // Width and pointer classes for the content; sheets pass `w-56 sheet-mousedown-cancel`.
+    // Classes for the menu content, such as its width.
     contentClassName?: string;
     // The DropdownMenuItem/Sub/Separator items, per-app.
     children: ReactNode;

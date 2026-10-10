@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, FIGURE_ALIGNMENTS, MIN_TABLE_COLUMN_PX, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import {
@@ -1010,15 +1010,13 @@ const RASTER_EXTENSIONS = new Map([
     ['image/jpeg', 'jpeg'],
 ]);
 
-const FIGURE_ALIGNMENTS = new Set(['left', 'center', 'right']);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
     const layout = attrs['layout'];
     const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
-    const alignment = attrs['alignment'];
-    const jc = !side && typeof alignment === 'string' && FIGURE_ALIGNMENTS.has(alignment) ? alignment : 'center';
+    const alignment = FIGURE_ALIGNMENTS.find((a) => a === attrs['alignment']);
+    const jc = side ? 'center' : (alignment ?? 'center');
     const caption = attrs['caption'];
     const captionRuns = typeof caption === 'string' ? textXml(caption) : '';
     if (captionRuns) useFace(context.pkg, {}, 'Caption');
