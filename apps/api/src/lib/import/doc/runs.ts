@@ -5,7 +5,7 @@ import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/oo
 import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import type { Item } from './assemble';
-import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './docx-fonts';
+import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
@@ -388,8 +388,7 @@ function marksOf(
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
         const code =
-            bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT &&
-            (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
+            isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
         if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
         const fontFamily = fontMark(font, reader.fontTable);
         const textStyle: Marks =

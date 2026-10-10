@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
@@ -135,6 +136,38 @@ describe('text boxes', () => {
         expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
             ['Red', '#c00000'],
         ]);
+    });
+
+    // The writer's convention for code and quotes: a text box's blocks sit at its anchor's text.
+    describe('anchored in a list item or a quote', () => {
+        const NUMBERING =
+            '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num><w:num w:numId="6"><w:abstractNumId w:val="5"/></w:num>';
+        const STYLES = '<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/></w:style>';
+        const item = (inner: string, numId = 5) =>
+            `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr></w:pPr>${inner}</w:p>`;
+        const text = (value: string) => `<w:r><w:t>${value}</w:t></w:r>`;
+        const outline = (node: JSONContent): string => {
+            if (node.type === 'text') return node.text ?? '';
+            const children = (node.content ?? []).map(outline);
+            return node.type === 'paragraph' ? children.join('') : `${node.type}[${children.join(' | ')}]`;
+        };
+        const read = async (body: string) =>
+            ((await importDocxBody(body, { numbering: NUMBERING, styles: STYLES })).json.content ?? []).map(outline);
+
+        test('its text stays in the item, and in the quote', async () => {
+            const quoted = `<w:p><w:pPr><w:pStyle w:val="Quote"/></w:pPr>${text('Said')}${vml(box('Inside', '000000'))}</w:p>`;
+            expect(
+                await read(`${item(`${text('One')}${shape(box('Boxed', '000000'))}`)}${item(text('Two'))}${quoted}`),
+            ).toEqual(['bulletList[listItem[One | Boxed] | listItem[Two]]', 'blockquote[Said | Inside]']);
+        });
+
+        test('a table and a list in it stay in the item', async () => {
+            const table = `<w:tbl><w:tr><w:tc><w:p>${text('Cell')}</w:p></w:tc></w:tr></w:tbl>`;
+            const inner = `<w:txbxContent>${table}${item(text('Boxed'), 6)}</w:txbxContent>`;
+            expect(await read(`${item(`${text('One')}${shape(inner)}`)}${item(text('Two'))}`)).toEqual([
+                'bulletList[listItem[One | table[tableRow[tableCell[Cell]]] | bulletList[listItem[Boxed]]] | listItem[Two]]',
+            ]);
+        });
     });
 });
 

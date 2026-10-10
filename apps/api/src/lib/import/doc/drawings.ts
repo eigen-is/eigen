@@ -17,7 +17,7 @@ import {
     WP_NS,
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { COLUMN_PX, type Item, isCaptionLike, isFigureOnly, type Para, paraOf, textOf } from './assemble';
+import { COLUMN_PX, type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
@@ -114,7 +114,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const onlyParas = paras.length > 0 && paras.length === content.length;
         if (onlyParas && figures.length === 1 && paras.every(isCaptionLike)) {
             const [figure] = figures;
-            if (figure?.attrs) figure.attrs['caption'] = paras.map((para) => textOf(para.inlines)).join('\n');
+            if (figure?.attrs) figure.attrs['caption'] = paras.map((para) => inlineText(para.inlines)).join('\n');
         } else if (
             onlyParas &&
             figures.length === 0 &&
@@ -123,7 +123,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             tail.every(isCaptionLike)
         ) {
             const caption =
-                tail.map((para) => textOf(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
+                tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
         } else for (const item of boxed) context.pending.push(item);
         for (const figure of figures) context.pieces.push({ kind: 'node', node: figure });
