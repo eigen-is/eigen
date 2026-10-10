@@ -14,6 +14,7 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { renderDocHtml, withAbsoluteLinks } from './render';
@@ -43,15 +44,11 @@ export async function renderEigendocExport(
     return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 }
 
-// The thumbnail Worker's per-image timeout (shared/thumbnails.ts), which the Worker graph cannot import. Worker.terminate()
-// does not stop libvips, so this is what frees the one transform slot from a filter librsvg grinds through for minutes.
-const SVG_FALLBACK_TIMEOUT_SECONDS = 30;
-
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
 export async function withSvgFallbacks(
     media: ExportMedia[],
-    timeoutSeconds = SVG_FALLBACK_TIMEOUT_SECONDS,
+    timeoutSeconds = THUMBNAIL_TIMEOUT_SECONDS,
 ): Promise<DocxMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
     const { default: sharp } = await import('sharp');

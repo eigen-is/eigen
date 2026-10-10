@@ -87,6 +87,8 @@ An SVG is served as its own bytes under the sandbox CSP, not rasterised. An `eig
 
 `generateImagePreview` (`apps/api/src/lib/shared/thumbnails.ts`) runs in a Worker and makes both the 512 px thumbnail and the 2560 px screen preview. It tries sharp, then `heic-convert` for HEIC, then the JPEG exiftool finds embedded in a RAW, PSD or AI file. `isExiftoolCandidate` gates it.
 
+The Worker gets 30 s per image (`THUMBNAIL_TIMEOUT_SECONDS`). `Worker.terminate()` does not stop libvips, so every sharp pipeline in the Worker carries the same value as its own `timeout`, and an SVG librsvg grinds through stops instead of holding a core after its slot is freed.
+
 An uploaded SVG's thumbnail and an SVG avatar are rasterized through sharp. Its bundled librsvg ignores external references, so an SVG can't make the server fetch a URL or read a local file.
 
 A video thumbnail is a frame ffmpeg takes at one second, retried at zero when that fails, resized like an image. ffprobe adds width, height and duration to the file's details. Without ffmpeg the upload still succeeds, just without a thumbnail.
