@@ -324,10 +324,9 @@ function marksOf(
     const asLink = !!link?.href || (!!link && !!reader.fields.at(-1)?.toc);
     // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
     // a link style in a color of its own. Its link color still covers the paragraph's, as Word draws it.
-    const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
+    const ownLook = !!charRun.color?.hex && !charRun.color.link && !LINK_STYLE_COLORS.has(charRun.color.hex);
     if (asLink && !ownLook) {
-        if (charRun.color !== undefined) charRun.color = '';
-        delete charRun.linkColor;
+        if (charRun.color) charRun.color = { hex: '', link: false };
         delete charRun.underline;
     }
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
@@ -358,20 +357,21 @@ function marksOf(
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
     if (link?.href) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
-    const linkLook = asLink ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
+    const linkLook = asLink ? props.color?.link || LINK_LOOKS.get(props.color?.hex ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
     // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight is white.
+    const hex = props.color?.hex;
     const color =
-        props.color &&
-        props.color !== reader.baseColor &&
-        props.color !== '000000' &&
+        hex &&
+        hex !== reader.baseColor &&
+        hex !== '000000' &&
         linkLook === undefined &&
-        !(scope.onFill && !isFill(shade) && isLight(props.color))
-            ? props.color
-            : !full.color && !asLink && isFill(shade) && isDark(shade)
+        !(scope.onFill && !isFill(shade) && isLight(hex))
+            ? hex
+            : !full.color?.hex && !asLink && isFill(shade) && isDark(shade)
               ? 'FFFFFF'
               : undefined;
     // Word draws capitals over small caps.
