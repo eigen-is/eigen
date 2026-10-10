@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1633 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1634 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -188,12 +188,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FrameThumbnail` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 | `FrameView` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 
-## Providers (6)
+## Providers (7)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AuthProvider` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `MediaResolverProvider` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
+| `CommandPaletteProvider` | `@workspace/ui` | packages/ui/src/components/layout/app/command-palette/command-palette-provider.tsx |
 | `PreviewProvider` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
 | `DocSearchProvider` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |

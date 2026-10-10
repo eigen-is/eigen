@@ -12,9 +12,7 @@ const { AuthProvider } = await import('@workspace/lib/auth');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
-const { CommandPaletteProvider } = await import(
-    '@workspace/ui/components/layout/app/command-palette/command-palette-provider'
-);
+const { CommandPaletteProvider } = await import('@workspace/ui');
 const { EditorToolbar } = await import('../../../components/docs/editor-toolbar');
 
 let unmount = async () => {};
