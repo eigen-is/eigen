@@ -4,10 +4,8 @@ import { Editor, type JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables } from '@tiptap/pm/tables';
 import { yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
-import { lowlight } from '../../../lib/document/lowlight';
-import { docSchema } from '../../../lib/import/doc/from-docx';
+import { docExtensions, docSchema } from '../../../lib/document/doc-schema';
 import {
     asOpened,
     importDocxToEigendocUpdate,
@@ -19,7 +17,7 @@ import { buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
 // writes Yjs updates nobody typed, and two people opening it together write them twice.
 
-const editor = new Editor({ extensions: getDocExtensions({ lowlight }), content: { type: 'doc', content: [] } });
+const editor = new Editor({ extensions: docExtensions(), content: { type: 'doc', content: [] } });
 
 function stored(data: ArrayBuffer): JSONContent {
     const ydoc = new Y.Doc();
@@ -85,7 +83,7 @@ describe('the repairs on open are bounded', () => {
     const cell = { type: 'tableCell', content: [{ type: 'paragraph' }] };
     // Every row but the first a cell short: a repair per row.
     const ragged = (rows: number) =>
-        docSchema.nodeFromJSON({
+        docSchema().nodeFromJSON({
             type: 'doc',
             content: [
                 {
@@ -110,7 +108,7 @@ describe('the repairs on open are bounded', () => {
 
     // Each pass's collisions can leave new ones for the next: as many passes as these tables need, as colspan x rowspan.
     const stacked = (rows: [number, number][]) =>
-        docSchema.nodeFromJSON({
+        docSchema().nodeFromJSON({
             type: 'doc',
             content: [
                 {

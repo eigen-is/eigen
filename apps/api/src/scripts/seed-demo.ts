@@ -238,7 +238,7 @@ async function main(): Promise<void> {
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { writeEigendocUpdateToYjs } = await import('../lib/document/doc');
-    const { docSchema } = await import('../lib/import/doc/from-docx');
+    const { docSchema } = await import('../lib/document/doc-schema');
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/core/mail-template');
@@ -458,7 +458,7 @@ async function main(): Promise<void> {
     ): Promise<DrivePath> => {
         const docPath = await drive.create(mountId, parentId, name, 'doc', author);
         const collab = await drive.getCollabDocument(mountId, docPath.id);
-        const update = prosemirrorJSONToYDoc(docSchema, json, 'default');
+        const update = prosemirrorJSONToYDoc(docSchema(), json, 'default');
         writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(update));
         update.destroy();
         return docPath;
@@ -484,7 +484,7 @@ async function main(): Promise<void> {
             teamMountId,
             folderId.get('volunteers')!,
             'crew roster',
-            htmlToDocJson(docSchema, rosterHtml),
+            htmlToDocJson(docSchema(), rosterHtml),
             author,
         );
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
@@ -503,7 +503,7 @@ async function main(): Promise<void> {
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const collab = await teamDrive.getCollabDocument(teamMountId, docPath.id);
-        const docJson = htmlToDocJson(docSchema, doc.html);
+        const docJson = htmlToDocJson(docSchema(), doc.html);
         const cards: { spec: (typeof doc.comments)[number]; card: CommentCard }[] = [];
         for (const comment of doc.comments) {
             const commentAuthor = userByKey.get(comment.author)!;
@@ -530,7 +530,7 @@ async function main(): Promise<void> {
         }
         // The doc's one write, with the anchored marks; cards land in the comments Y.Map the
         // panel renders from. Both persist through the live collab doc.
-        const marked = prosemirrorJSONToYDoc(docSchema, docJson, 'default');
+        const marked = prosemirrorJSONToYDoc(docSchema(), docJson, 'default');
         writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(marked));
         marked.destroy();
         collab.doc.transact(() => {
@@ -949,7 +949,7 @@ async function main(): Promise<void> {
 
     // --- Personal notes: a private "my notes" eigendoc in every persona's own drive (same cozy
     // content for all). The JSON is built once and written into each persona's own home drive. ---
-    const notesJson = htmlToDocJson(docSchema, NOTES.html);
+    const notesJson = htmlToDocJson(docSchema(), NOTES.html);
     for (const persona of PERSONAS) {
         const owner = userByKey.get(persona.key)!;
         const ownerHome = await getHome(owner.id);

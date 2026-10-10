@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables } from '@tiptap/pm/tables';
+import { docSchema } from '../../../lib/document/doc-schema';
 import { COLUMN_PX } from '../../../lib/import/doc/assemble';
-import { docSchema } from '../../../lib/import/doc/from-docx';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
@@ -349,7 +349,7 @@ describe('a table as the editor opens it', () => {
                         .join('')}`,
             ),
         );
-    const repairs = (json: JSONContent) => fixTables(EditorState.create({ doc: docSchema.nodeFromJSON(json) }));
+    const repairs = (json: JSONContent) => fixTables(EditorState.create({ doc: docSchema().nodeFromJSON(json) }));
 
     test.each([
         ['w:gridBefore', [row([tc('A'), tc('B')]), row([tc('C')], '<w:gridBefore w:val="1"/>')]],

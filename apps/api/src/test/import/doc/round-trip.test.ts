@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { docSchema } from '../../../lib/document/doc-schema';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
-import { type DocxImage, docSchema, docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
@@ -76,7 +77,7 @@ const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(jso
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         const docx = await eigendocToDocx(
             buildAllFeaturesDocJson(),
             buildAllFeaturesDocMedia(),
@@ -113,7 +114,7 @@ const bullets = (...items: JSONContent[][]) => ({
 
 // The source as the schema stores it, and what an import of its docx gives back.
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
-    const source = docSchema.nodeFromJSON({ type: 'doc', content }).toJSON();
+    const source = docSchema().nodeFromJSON({ type: 'doc', content }).toJSON();
     const { json } = docxToPmJson(Buffer.from(await eigendocToDocx(source, [], 'Nested', undefined)));
     return { source, json };
 }
@@ -218,7 +219,7 @@ describe("the all-features doc's Google Docs re-save", () => {
             join(import.meta.dir, '../../fixtures/docx/google-docs-all-features.docx'),
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
-        const source = docSchema.nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });
 });

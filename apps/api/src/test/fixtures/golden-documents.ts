@@ -1,7 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
-import { getSchema } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { type FigureAttrs, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -21,9 +20,9 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
-import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
 import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { DocxMedia } from '../../lib/export/doc/to-docx';
 import type { Mount } from '../../lib/mount';
@@ -46,10 +45,6 @@ export const GOLDEN_BEYOND_CAP = 'BEYOND-PREVIEW-CAP';
 const GOLDEN_DOC_XSS = '<script>alert("doc-xss")</script>';
 const GOLDEN_DECK_XSS = '<p>legit body</p><script>alert("deck-xss")</script>';
 const GOLDEN_DOC_LINK = 'https://example.com/report';
-
-// The lowlight instance the doc renderers use — the schema must match, or a
-// codeBlock node cannot be written into the Yjs document.
-const docSchema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
 
 // The node shapes both builders lay out — a plain text block, and the list/table
 // walks the renderers pay most for.
@@ -496,7 +491,7 @@ export function buildAllFeaturesDocMedia(): DocxMedia[] {
 }
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
-    const tempDoc = prosemirrorJSONToYDoc(docSchema, json, 'default');
+    const tempDoc = prosemirrorJSONToYDoc(docSchema(), json, 'default');
     writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
     tempDoc.destroy();
 }
