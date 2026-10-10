@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -44,7 +44,7 @@ A page break makes the text after it start on a new page when you print the docu
 
 In the document, the page break shows as a dashed line labeled "Page break". The line itself doesn't print. In a code block, the shortcut leaves the block instead.
 
-When you download the document as a Word file, a page break inside a list, a quote, or a table is left out. See [Export to Word, PDF, or HTML](/support/docs/export).
+A page break inside a list, a quote, or a table starts a new page in the Word file too. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Rename a document
 
