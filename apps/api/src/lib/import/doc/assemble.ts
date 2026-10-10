@@ -185,9 +185,8 @@ export function paraOf(inlines: JSONContent[]): Para {
 // The writer indents a quote or code in a list item from the item's text, so its depth counts from there and it stays
 // in the item. A quote's list items carry the list's indent too, so their depth is the numbering level's base.
 function assignQuotes(items: Item[]): void {
-    // The open list items, outermost first: a block goes in the innermost whose text it sits at, and closes those inside.
+    // The open list items, outermost first: a block goes in the innermost it sits in, and closes those inside.
     const opens: Para[] = [];
-    const hostAt = (indent: number) => opens.findLast((open) => indentedUnder(indent, open.indLeft));
     const closeTo = (host: Para | undefined) => {
         opens.length = host ? opens.indexOf(host) + 1 : 0;
     };
@@ -195,7 +194,7 @@ function assignQuotes(items: Item[]): void {
     let plain = 0;
     for (const item of items) {
         if (item.kind === 'table' || item.kind === 'hr') {
-            const host = hostAt(item.indent);
+            const host = itemPast(opens, item.indent);
             blockDepth(item, host, previous);
             closeTo(host);
             if (!item.quote) previous = undefined;
@@ -210,19 +209,16 @@ function assignQuotes(items: Item[]): void {
             if (item.quote > 0) {
                 // Whole quotes past an open item's text: a quote in that item holds it.
                 const at = item.numberAt ?? item.indLeft;
-                const host = opens.findLast((open) => quotesPast(at, open.indLeft) !== undefined);
+                const host = itemPast(opens, at);
                 counted = item.list ? listDepth(item.list) : taskDepth(at, host);
                 if (counted !== undefined) item.quote = counted;
                 if (counted !== undefined && host && counted > host.quote) item.inItem = host.quote;
             }
             opens.push(item);
-        } else if (item.role.kind === 'code') closeTo(codeDepth(item, hostAt, previous));
+        } else if (item.role.kind === 'code') closeTo(codeDepth(item, opens, previous));
         else {
             // A quote in an item sits whole quotes past its text, past the quotes the item itself sits in.
-            const host =
-                item.quote > 0
-                    ? opens.findLast((open) => quotesPast(item.indLeft, open.indLeft) !== undefined)
-                    : hostAt(item.indLeft);
+            const host = item.quote > 0 ? itemPast(opens, item.indLeft) : itemUnder(opens, item.indLeft);
             const depth = host && item.quote > 0 ? quotesPast(item.indLeft, host.indLeft) : undefined;
             if (host && depth) {
                 item.quote = host.quote + depth;
@@ -271,31 +267,45 @@ function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefin
     const depth = quotesPast(block.indent, host?.indLeft ?? 0);
     if (depth === undefined) return;
     const quote = (host?.quote ?? 0) + depth;
-    if (depth === 0 || (previous !== undefined && previous.inItem === host?.quote && previous.quote >= quote))
-        block.quote = quote;
+    // The quotes still open where the previous paragraph sits: those in the host, or outside any item those outside the
+    // item it is quoted in.
+    const open = host
+        ? previous?.inItem === host.quote
+            ? previous.quote
+            : host.quote
+        : (previous?.inItem ?? previous?.quote ?? 0);
+    if (depth === 0 || quote <= open) block.quote = quote;
 }
 
 // The writer sets a code box its own indent in from its container, and each quote around it a quote's indent in from
 // the margin or the item's text, past the item's own quotes; other editors indent code as text, so another indent nests
 // it only right after a quote, in that quote.
-function codeDepth(
-    code: Para,
-    hostAt: (indent: number) => Para | undefined,
-    previous: Para | undefined,
-): Para | undefined {
+function codeDepth(code: Para, opens: Para[], previous: Para | undefined): Para | undefined {
     const box = code.indLeft - CODE_BLOCK_LOOK.indent;
-    const item = hostAt(box);
-    const container = item?.indLeft ?? 0;
-    const depth = quotesPast(box, container);
+    const item = itemPast(opens, box);
+    const depth = quotesPast(box, item?.indLeft ?? 0);
     if (code.boxed && depth !== undefined) {
         code.indLeft = box;
         code.quote = (item?.quote ?? 0) + depth;
         code.inItem = item && depth > 0 ? item.quote : undefined;
-    } else if (box - container >= QUOTE_LOOK.indent / 2 && previous && previous.quote > 0) {
+        return item;
+    }
+    const container = itemUnder(opens, box)?.indLeft ?? 0;
+    if (box - container >= QUOTE_LOOK.indent / 2 && previous && previous.quote > 0) {
         code.quote = previous.quote;
         code.inItem = previous.inItem;
     }
-    return hostAt(code.indLeft);
+    return itemUnder(opens, code.indLeft);
+}
+
+// The innermost open item whose text an indent is at or right of.
+function itemUnder(opens: Para[], indent: number): Para | undefined {
+    return opens.findLast((open) => indentedUnder(indent, open.indLeft));
+}
+
+// The innermost open item an indent sits at or whole quotes past, as the writer sets a block in it.
+function itemPast(opens: Para[], indent: number): Para | undefined {
+    return opens.findLast((open) => quotesPast(indent, open.indLeft) !== undefined);
 }
 
 // A break or boundary sits in the shallower of the quotes around it; a table or a rule outside a quote ends it.
@@ -388,8 +398,9 @@ function buildFlow(items: Item[]): JSONContent[] {
             if (open && stack.length === 0) blocks.push(open.list);
         }
     };
-    // The innermost open item whose text an indent is at or right of.
+    // The innermost open item whose text an indent is at or right of, or, for a quote, whole quotes past.
     const hostAt = (indent: number) => stack.findLast((open) => indentedUnder(indent, open.indent));
+    const quoteHost = (indent: number) => stack.findLast((open) => quotesPast(indent, open.indent) !== undefined);
     // The next item past breaks and boundaries, looked up once rather than scanned for at every break.
     const next: (Item | undefined)[] = [];
     for (let index = items.length - 1, ahead: Item | undefined; index >= 0; index--) {
@@ -404,7 +415,7 @@ function buildFlow(items: Item[]): JSONContent[] {
         const top = stack.at(-1);
         if (!following || !top) return undefined;
         if (following.kind === 'hr' || following.kind === 'table') return hostAt(following.indent);
-        if (following.kind === 'block') return following.itemAt === undefined ? undefined : hostAt(following.itemAt);
+        if (following.kind === 'block') return following.itemAt === undefined ? undefined : quoteHost(following.itemAt);
         if (following.kind !== 'para') return undefined;
         const { list } = following;
         if (following.task || list) {
@@ -464,7 +475,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             continue;
         }
         if (item.kind === 'block') {
-            const host = item.itemAt === undefined ? undefined : hostAt(item.itemAt);
+            const host = item.itemAt === undefined ? undefined : quoteHost(item.itemAt);
             if (host) {
                 host.item.content?.push(item.node);
                 continue;
