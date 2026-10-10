@@ -10,23 +10,27 @@ import {
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
-import { readDocx } from './from-docx';
+import { importError, readDocx } from './from-docx';
 import { DOCUMENT_TOO_LARGE } from './package';
 
 // Uploaded docx bytes → the Yjs update the main thread commits, plus the extracted
 // images it writes through Mount. Runs inside the transform Worker (worker.ts owns
 // execution; the conversion logic stays here in import/, pure over the buffer), so
-// the reader and the ProseMirror-to-Yjs conversion never touch the event loop. The
-// reader refuses a file it can't read as a 400 or 413 itself.
+// the reader and the ProseMirror-to-Yjs conversion never touch the event loop. Both
+// refuse a file they can't take as a 400 or 413.
 export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
     const { doc, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
-
-    const tempDoc = prosemirrorToYDoc(asOpened(doc), 'default');
-    const update = Y.encodeStateAsUpdate(tempDoc);
-    tempDoc.destroy();
+    let update: Uint8Array;
+    try {
+        const tempDoc = prosemirrorToYDoc(asOpened(doc), 'default');
+        update = Y.encodeStateAsUpdate(tempDoc);
+        tempDoc.destroy();
+    } catch (error) {
+        throw importError(error);
+    }
 
     return {
         update: toTransferableBuffer(update),
@@ -39,30 +43,27 @@ export function importDocxToEigendocUpdate(
     };
 }
 
-// fixTables' transaction keeps a copy of the table per repair: 5,000 repairs of a 5,000-row table took 283 MB, twice
-// that many 930 MB.
+// fixTables' transaction keeps a copy of the table per repair, so a table's repairs are bounded before they run.
 export const MAX_TABLE_REPAIRS = 10_000_000;
-
-// A collision's repair can leave another for the next pass; the reader writes tables that need none, so a table still
-// repairing after this many is refused rather than repaired to the deadline.
-export const MAX_REPAIR_PASSES = 3;
 
 // The doc as the editor leaves it on open, or the first open writes an edit nobody made, twice when two open it
 // together: prosemirror-tables repairs a table the reader got wrong, and TrailingNode ends the doc in a paragraph.
 export function asOpened(doc: Node): Node {
-    let state = EditorState.create({ doc });
-    for (let passes = 0; ; passes++) {
-        state.doc.descendants((node) => {
-            if (node.type.spec['tableRole'] !== 'table') return;
-            const repairs = TableMap.get(node).problems?.length ?? 0;
-            if (repairs * node.childCount > MAX_TABLE_REPAIRS) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        });
-        const tr = fixTables(state);
-        if (!tr) break;
-        if (passes === MAX_REPAIR_PASSES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        state = state.apply(tr);
-    }
+    eachTable(doc, (table, repairs) => {
+        if (repairs * table.childCount > MAX_TABLE_REPAIRS) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+    });
+    const repaired = fixTables(EditorState.create({ doc }))?.doc ?? doc;
+    // A repair can leave another for a second pass; the reader writes tables that need none, so one that would is refused.
+    eachTable(repaired, (_table, repairs) => {
+        if (repairs > 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+    });
     const { paragraph } = docSchema().nodes;
-    if (state.doc.lastChild?.type === paragraph) return state.doc;
-    return state.doc.copy(state.doc.content.addToEnd(paragraph.create()));
+    if (repaired.lastChild?.type === paragraph) return repaired;
+    return repaired.copy(repaired.content.addToEnd(paragraph.create()));
+}
+
+function eachTable(doc: Node, visit: (table: Node, repairs: number) => void): void {
+    doc.descendants((node) => {
+        if (node.type.spec['tableRole'] === 'table') visit(node, TableMap.get(node).problems?.length ?? 0);
+    });
 }
