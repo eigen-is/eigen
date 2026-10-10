@@ -64,19 +64,15 @@ describe('page break HTML', () => {
         );
     });
 
-    test.each([
-        '<div class="page-break"></div>',
-        // The docx import's carrier.
-        '<hr class="page-break">',
-    ])('%s parses as a page break', (html) => {
-        expect(blockTypes(createDocument(`<p>Before</p>${html}<p>After</p>`, schema))).toEqual([
+    test('an empty page-break div parses as a page break', () => {
+        expect(blockTypes(createDocument('<p>Before</p><div class="page-break"></div><p>After</p>', schema))).toEqual([
             'paragraph',
             'pageBreak',
             'paragraph',
         ]);
     });
 
-    // Only an empty div or an hr is a page break: any other element carrying the class keeps its content.
+    // Only an empty div is a page break: any other element carrying the class keeps its content.
     test.each([
         ['<h2 class="page-break">Heading</h2>', ['heading']],
         ['<h2 class="page-break"></h2>', ['heading']],
@@ -90,8 +86,8 @@ describe('page break HTML', () => {
         expect(doc.textContent).toBe(html.replace(/<[^>]+>/g, ''));
     });
 
-    test('a plain hr stays a horizontal rule', () => {
-        expect(blockTypes(createDocument('<p>Before</p><hr><p>After</p>', schema))).toEqual([
+    test.each(['<hr>', '<hr class="page-break">'])('%s stays a horizontal rule', (html) => {
+        expect(blockTypes(createDocument(`<p>Before</p>${html}<p>After</p>`, schema))).toEqual([
             'paragraph',
             'horizontalRule',
             'paragraph',
