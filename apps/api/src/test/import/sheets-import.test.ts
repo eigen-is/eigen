@@ -1854,8 +1854,10 @@ describe('xlsxToSheets resource guards', () => {
             let buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
                 { ref: 'A1', location: 'T!A1' },
             ]);
+            // Past MAX_ELEMENTS a sheet's tags are refused before the load (sheets/limits.test.ts).
+            const sheetFill = fill.slice(0, 8_000_000);
             buffer = await replacePart(buffer, 'xl/worksheets/sheet1.xml', (xml) =>
-                xml.replace('</hyperlinks>', `${fill}</hyperlinks>`),
+                xml.replace('</hyperlinks>', `${sheetFill}</hyperlinks>`),
             );
             buffer = await replacePart(buffer, 'xl/workbook.xml', (xml) =>
                 xml.replace('</workbook>', `<extLst><ext uri="x">${fill}</ext></extLst></workbook>`),
