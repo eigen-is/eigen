@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import sharp, { type Sharp } from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
+import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import { extractVideoFrame } from './video-thumbnail';
 
 export type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
@@ -74,7 +75,7 @@ async function sharpResize(source: Buffer | string, options: WorkerInput['option
             default:
                 encoded = resized.webp({ quality: options.quality });
         }
-        const data = await encoded.toBuffer();
+        const data = await encoded.timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS }).toBuffer();
 
         // hasAlpha/frameCount describe the pristine source, so the avatar-staging caller can pick the embed
         // format (opaque still → JPEG, alpha → PNG, animated → GIF) from one decode.
