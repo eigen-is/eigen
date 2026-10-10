@@ -1260,6 +1260,35 @@ describe('restore --env, the first step on a fresh machine', () => {
         },
         JOB_TIMEOUT_MS,
     );
+
+    // A copy of the full archive with one byte of `member` changed, its size and the manifest as they were.
+    async function damaged(member: string): Promise<string> {
+        const { members } = await readServerManifest(fullArchive);
+        const { offset } = members.find(({ name }) => name === member)!;
+        const bytes = readFileSync(fullArchive);
+        bytes[offset] ^= 0xff;
+        const copy = join(scratch('restore-damaged-'), basename(fullArchive));
+        writeFileSync(copy, bytes);
+        return copy;
+    }
+
+    test(
+        'checks the .env.production it takes against the manifest, and leaves the other members to the stage',
+        async () => {
+            const refused = fresh();
+            const result = await restoreCli(refused, [await damaged('.env.production'), '--env']);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('.env.production: sha256 does not match the manifest');
+            expect(readdirSync(refused)).toEqual([]);
+
+            const taken = fresh();
+            const elsewhere = await restoreCli(taken, [await damaged(SERVER_ARCHIVE_SERVER_MEMBER), '--env']);
+            expect(elsewhere.stderr).toBe('');
+            expect(elsewhere.code).toBe(0);
+            expect(readFileSync(join(taken, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
+        },
+        JOB_TIMEOUT_MS,
+    );
 });
 
 describe('an interrupted swap', () => {

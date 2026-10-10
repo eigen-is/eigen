@@ -41,7 +41,7 @@ import {
     stageBytesNeeded,
     stageServerArchive,
 } from '../lib/backup/restore-server';
-import { describeFailures, readServerArchive } from '../lib/backup/verify';
+import { describeFailures, readServerArchive, readServerArchiveMember } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
@@ -661,22 +661,23 @@ async function takeEnv(archive: string | undefined): Promise<void> {
     if (existsSync(ENV_PATH)) {
         return ui.fail(`This folder has a ${ENV_PATH} already.`, `./eigen restore restores ${name} onto it.`);
     }
-    const read = await readServerArchive(archive);
-    if (!read.manifest || read.verify.status !== 'verified') {
-        return ui.fail(
-            `${name} is not a whole Eigen server archive: ${describeFailures(read.verify)}.`,
-            'Restore another archive.',
-        );
+    const read = await readServerArchiveMember(archive, SERVER_ARCHIVE_ENV_MEMBER);
+    if ('failure' in read) {
+        return ui.fail(`${name} is not a whole Eigen server archive: ${read.failure}.`, 'Restore another archive.');
     }
-    const member = read.members.find(({ name }) => name === SERVER_ARCHIVE_ENV_MEMBER);
-    if (!member) {
+    if (!read.bytes) {
         return ui.fail(
             `${name} holds no ${ENV_PATH}, so it cannot be restored on a fresh machine.`,
             'Run ./eigen setup first, then ./eigen restore.',
         );
     }
     const temporary = `${ENV_PATH}.${process.pid}.tmp`;
-    await copyArchiveMember(member, temporary);
+    try {
+        writeFileSync(temporary, read.bytes, { mode: 0o600 });
+    } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+    }
     if (!readEnvFile(temporary).has(API_IMAGE_KEY)) {
         rmSync(temporary);
         return ui.fail(
