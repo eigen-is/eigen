@@ -387,7 +387,8 @@ const TiptapEditor = ({
                 attributes: {
                     class: 'eigen-prose',
                 },
-                transformPastedHTML: (html: string) => cleanPastedHTML(html, getEditorMaxWidth()),
+                transformPastedHTML: (html: string) =>
+                    cleanPastedHTML(html, getEditorMaxWidth(), new Set(Object.keys(cardsRef.current))),
                 handleDrop: (view, event) => {
                     if (!event.dataTransfer) return false;
                     const files = Array.from(event.dataTransfer.files);
