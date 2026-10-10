@@ -133,6 +133,13 @@ function measuredImport(
     return JSON.parse(child.stdout.toString());
 }
 
+// Machine speed cancels out of CPU at n over CPU at n / 8: linear stays under 8, the quadratics below reach 14 to 39.
+async function cpuGrowth(docx: (n: number) => Promise<ArrayBuffer>, n: number, through?: 'reader' | 'transform') {
+    const small = measuredImport(await docx(n / 8), through);
+    const large = measuredImport(await docx(n), through);
+    return { large, growth: large.cpuMs / small.cpuMs };
+}
+
 async function rejection(read: () => unknown): Promise<ApiError> {
     const error = await Promise.resolve()
         .then(read)
@@ -517,16 +524,18 @@ describe("the editor's TableMap", () => {
     }, 60_000);
 
     // findWidth rescans the rows above each row after a rowspan: 49,000 rows of one cell took 27 s to open.
-    test('20,000 rows under a merge open in parts, within 2 s through the Yjs update', async () => {
+    test('20,000 rows under a merge open in parts, in linear time through the Yjs update', async () => {
         const tc = (tcPr = '') => `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}<w:p/></w:tc>`;
         const grid = '<w:tblGrid><w:gridCol w:w="500"/><w:gridCol w:w="500"/></w:tblGrid>';
         const merged = `<w:tr>${tc('<w:vMerge w:val="restart"/>')}${tc()}</w:tr><w:tr>${tc('<w:vMerge/>')}${tc()}</w:tr>`;
-        const docx = await buildDocxWithBody(
-            `<w:tbl>${grid}${merged}${`<w:tr>${tc().repeat(2)}</w:tr>`.repeat(20_000)}</w:tbl>`,
+        const { large, growth } = await cpuGrowth(
+            (rows) =>
+                buildDocxWithBody(`<w:tbl>${grid}${merged}${`<w:tr>${tc().repeat(2)}</w:tr>`.repeat(rows)}</w:tbl>`),
+            20_000,
+            'transform',
         );
-        const result = measuredImport(docx, 'transform');
-        expect(result.status).toBeUndefined();
-        expect(result.cpuMs).toBeLessThan(2000);
+        expect(large.status).toBeUndefined();
+        expect(growth).toBeLessThan(8);
     }, 60_000);
 
     // 135,001 nodes, within the budget, over 2.8 million slots.
@@ -643,20 +652,28 @@ describe('structure', () => {
     });
 
     // A number at its own text nests each item under the last; every empty paragraph after them looked through them all.
-    test('30,000 items each nesting under the last, then 80,000 empty paragraphs, import within 2 s', async () => {
+    test('30,000 items each nesting under the last, then 80,000 empty paragraphs, import in linear time', async () => {
         const styles =
             '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr><w:ind w:left="720" w:hanging="0"/></w:pPr></w:style>';
-        const body = `${paragraph('', '<w:pStyle w:val="L"/>').repeat(30_000)}${'<w:p/>'.repeat(80_000)}`;
-        const result = measuredImport(await buildDocxWithBody(body, { styles }), 'transform');
-        expect(result.status).toBeUndefined();
-        expect(result.cpuMs).toBeLessThan(2000);
+        const body = (items: number) =>
+            `${paragraph('', '<w:pStyle w:val="L"/>').repeat(items)}${'<w:p/>'.repeat((items * 8) / 3)}`;
+        const { large, growth } = await cpuGrowth(
+            (items) => buildDocxWithBody(body(items), { styles }),
+            30_000,
+            'transform',
+        );
+        expect(large.status).toBeUndefined();
+        expect(growth).toBeLessThan(8);
     }, 60_000);
 
     test('40,000 paragraphs whose marks are deleted join in linear time', async () => {
         const deleted = paragraph(run('x'), '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>');
-        const result = measuredImport(await buildDocxWithBody(`${deleted.repeat(40_000)}${paragraph(run('End'))}`));
-        expect([result.blocks, result.texts]).toEqual([1, 1]);
-        expect(result.cpuMs).toBeLessThan(2000);
+        const { large, growth } = await cpuGrowth(
+            (count) => buildDocxWithBody(`${deleted.repeat(count)}${paragraph(run('End'))}`),
+            40_000,
+        );
+        expect([large.blocks, large.texts]).toEqual([1, 1]);
+        expect(growth).toBeLessThan(8);
     }, 60_000);
 
     test('tables nest at most eight deep, a deeper one reading as its cells', async () => {

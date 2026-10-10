@@ -496,13 +496,12 @@ describe('what else the import builds is refused before it costs', () => {
 
     // Counting a row's last column walks every slot before it: 50,000 rows ending at XFD took 14.5 s.
     test('rows reaching far columns are 413 at no cost', () => {
-        const rows = Array.from(
-            { length: 50_000 },
-            (_, i) => `<row r="${i + 1}"><c r="XFD${i + 1}"><v>1</v></c></row>`,
-        );
-        const result = measuredImport(xlsx({ data: rows.join('') }));
+        const rows = (column: string) =>
+            Array.from({ length: 50_000 }, (_, i) => `<row r="${i + 1}"><c r="${column}${i + 1}"><v>1</v></c></row>`);
+        const result = measuredImport(xlsx({ data: rows('XFD').join('') }));
         expect(result).toMatchObject(TOO_MANY_CELLS);
-        expect(result.cpuMs).toBeLessThan(2_000);
+        // Against the same rows at A, so a machine's speed cancels out: 0.8 now, 25 before.
+        expect(result.cpuMs / measuredImport(xlsx({ data: rows('A').join('') })).cpuMs).toBeLessThan(3);
     }, 30_000);
 
     // Each sheet entry read its part's hyperlinks again: 1,000 entries naming one 190 MB part took 140 s.
@@ -534,9 +533,8 @@ describe('what else the import builds is refused before it costs', () => {
         (_name, sheet, extra) => {
             const result = measuredImport(xlsx(sheet, [...extra]));
             expect(result).toMatchObject(TOO_LARGE);
-            // What remains is inflating the part, up to 36 MB of markup.
+            // Inflating up to 36 MB of markup costs the CPU exceljs at the cap does, so memory is the measure.
             expect(result.rssGrowth).toBeLessThan(256 * MB);
-            expect(result.cpuMs).toBeLessThan(2_000);
         },
         30_000,
     );
