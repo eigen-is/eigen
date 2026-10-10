@@ -13,13 +13,9 @@ Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You c
 
 ## One workspace, your own data
 
-Eigen brings the tools you use every day into a single workspace: email, files, documents, a calendar, and
-more. You sign in once and move between them from the top of any page.
+Eigen brings the tools you use every day into a single workspace: email, files, documents, a calendar, and more. You sign in once and move between them from the top of any page.
 
-The name says it: *eigen* is Dutch and German for "own". Because you, or whoever runs your Eigen, host it
-yourself, your data stays with you. Eigen is open source too, so you can see exactly how it works at
-[github.com/eigen-is/eigen](https://github.com/eigen-is/eigen). It is also built on the work of many other
-open-source projects, listed on the [open-source licenses](/licenses) page.
+The name says it: *eigen* is Dutch and German for "own". Because you, or whoever runs your Eigen, host it yourself, your data stays with you. Eigen is open source too, so you can see exactly how it works at [github.com/eigen-is/eigen](https://github.com/eigen-is/eigen). It is also built on the work of many other open-source projects, listed on the [open-source licenses](/licenses) page.
 
 ## The apps
 
@@ -43,12 +39,9 @@ Not every Eigen hosts email. If yours doesn't, Mail isn't in the app switcher an
 
 ## Move between apps
 
-Open the grid icon at the top-left of any page to switch to another app. The app you're in is highlighted, so
-you always know where you are.
+Open the grid icon at the top-left of any page to switch to another app. The app you're in is highlighted, so you always know where you are.
 
-To find something fast, open the command palette with the **Search and jump anywhere** bar at the top, or press
-⌘K (Ctrl+K on Windows). It searches your mail, files, and contacts and lets you jump straight to any app. See
-[Find anything with search and the command palette](/support/getting-started/search-and-command-palette) for more.
+To find something fast, open the command palette with the **Search and jump anywhere** bar at the top, or press ⌘K (Ctrl+K on Windows). It searches your mail, files, and contacts and lets you jump straight to any app. See [Find anything with search and the command palette](/support/getting-started/search-and-command-palette) for more.
 
 ## Where to go next
 

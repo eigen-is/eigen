@@ -8,8 +8,7 @@ order: 60
 updated: 2026-09-13
 ---
 
-You can delete any card you no longer need. Deletion is permanent, but you can undo it straight away if
-you change your mind.
+You can delete any card you no longer need. Deletion is permanent, but you can undo it straight away if you change your mind.
 
 You need write access to the board to delete cards. The option does not appear if you are a viewer.
 
@@ -24,8 +23,7 @@ The card is removed from the board immediately.
 
 ## Undo a deletion
 
-Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) straight after deleting to bring the card back. **Undo** in
-the toolbar's **Edit** menu does the same thing.
+Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) straight after deleting to bring the card back. **Undo** in the toolbar's **Edit** menu does the same thing.
 
 <div class="eigen-callout">
 

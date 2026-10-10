@@ -8,8 +8,7 @@ order: 20
 updated: 2026-09-13
 ---
 
-You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the
-toolbar menus and keyboard shortcuts.
+You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
 
 ## Create a spreadsheet
 
@@ -33,25 +32,20 @@ The spreadsheet opens in Sheets straight away.
 When a spreadsheet is open, the editor has three main areas:
 
 - **Menu bar**: a row of menus (**File**, **Edit**, **View**, **Insert**, **Format**, **Data**) at the top.
-- **Formula bar**: below the menu bar. The box on the left shows the current cell address (for example, `A1`).
-  The wider area to the right shows the cell's content or formula.
-- **Sheet tabs**: a row of tabs along the bottom. Click a tab to switch between sheets. Click the **+** button
-  at the left of the tab bar to add a new sheet tab.
+- **Formula bar**: below the menu bar. The box on the left shows the current cell address (for example, `A1`). The wider area to the right shows the cell's content or formula.
+- **Sheet tabs**: a row of tabs along the bottom. Click a tab to switch between sheets. Click the **+** button at the left of the tab bar to add a new sheet tab.
 
 ## Enter and edit data
 
-Click a cell to select it. Type to enter data. Press **Enter** to confirm and move down, or **Tab** to confirm
-and move right. Press **Escape** to cancel without saving.
+Click a cell to select it. Type to enter data. Press **Enter** to confirm and move down, or **Tab** to confirm and move right. Press **Escape** to cancel without saving.
 
-To edit a cell you have already filled in, double-click it, or select it and start typing to replace its
-contents. You can also click the formula bar to edit there.
+To edit a cell you have already filled in, double-click it, or select it and start typing to replace its contents. You can also click the formula bar to edit there.
 
 To delete the contents of one or more cells, select them and press **Backspace** or **Delete**.
 
 ## Select cells
 
-Click a single cell to select it. To select a range, click and drag. To select a whole column or row, click
-its header letter or number.
+Click a single cell to select it. To select a range, click and drag. To select a whole column or row, click its header letter or number.
 
 You can select multiple separate ranges by holding **Ctrl** (Windows and Linux) or **⌘** (Mac) while clicking.
 
@@ -85,13 +79,11 @@ The **Format** menu covers all formatting options:
 - **Merge cells**: combine a selection into one cell.
 - **Clear formatting**: remove all formatting from the selected cells without deleting their values.
 
-On wider screens, quick buttons for **Text color**, **Fill color**, and horizontal alignment also appear in
-the center of the menu bar.
+On wider screens, quick buttons for **Text color**, **Fill color**, and horizontal alignment also appear in the center of the menu bar.
 
 ## Find and replace
 
-Press **Ctrl+F** (Mac: **⌘F**) to open the find panel, or **Edit → Find and replace**. A search box appears
-where you can search across all cells. Click **Show replace** to open the replace row.
+Press **Ctrl+F** (Mac: **⌘F**) to open the find panel, or **Edit → Find and replace**. A search box appears where you can search across all cells. Click **Show replace** to open the replace row.
 
 ## Sheet tabs
 
@@ -99,8 +91,7 @@ Each spreadsheet can contain multiple sheets. To manage them:
 
 - Click the **+** button at the left of the tab bar to add a sheet.
 - Double-click a tab to rename it.
-- Click the **⌄** arrow on a tab to open a menu with options to **Rename**, **Delete**, **Copy**, **Hide**,
-  **Move left**, **Move right**, and **Change color**.
+- Click the **⌄** arrow on a tab to open a menu with options to **Rename**, **Delete**, **Copy**, **Hide**, **Move left**, **Move right**, and **Change color**.
 - Drag a tab to a different position to reorder sheets.
 
 ## Save your work

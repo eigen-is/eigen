@@ -9,8 +9,7 @@ order: 40
 updated: 2026-06-08
 ---
 
-Eigen comes in a light theme and a dark theme. You can switch between them whenever you like, and your choice is
-saved to your account, so every Eigen app keeps the same look.
+Eigen comes in a light theme and a dark theme. You can switch between them whenever you like, and your choice is saved to your account, so every Eigen app keeps the same look.
 
 ## Change the theme
 
@@ -22,12 +21,10 @@ The colors change straight away.
 
 <div class="eigen-callout">
 
-**System** follows your computer's own light or dark setting and switches automatically when your computer does.
-Pick **Light** or **Dark** if you'd rather Eigen always stay one way.
+**System** follows your computer's own light or dark setting and switches automatically when your computer does. Pick **Light** or **Dark** if you'd rather Eigen always stay one way.
 
 </div>
 
 ## Where your choice applies
 
-Your choice is saved to your account, so it applies across every Eigen app and follows you when you sign in from
-a different browser or computer.
+Your choice is saved to your account, so it applies across every Eigen app and follows you when you sign in from a different browser or computer.

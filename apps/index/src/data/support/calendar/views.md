@@ -8,16 +8,13 @@ order: 20
 updated: 2026-09-13
 ---
 
-Calendar opens in month view by default. You can switch to week view for a closer look at a single week, and
-use the navigation controls in the toolbar to move between periods.
+Calendar opens in month view by default. You can switch to week view for a closer look at a single week, and use the navigation controls in the toolbar to move between periods.
 
 ## Switch between month and week view
 
-In the toolbar at the top of the page, find the dropdown on the right side. It shows the current view,
-either **Month** or **Week**. Click it and choose the other option to switch.
+In the toolbar at the top of the page, find the dropdown on the right side. It shows the current view, either **Month** or **Week**. Click it and choose the other option to switch.
 
-The view changes immediately, staying on the same point in time. If you are looking at June in month view,
-switching to week view shows the week that contains your current date in June.
+The view changes immediately, staying on the same point in time. If you are looking at June in month view, switching to week view shows the week that contains your current date in June.
 
 ## Move to the next or previous period
 
@@ -26,23 +23,18 @@ Use the arrow buttons in the toolbar to step through time:
 - The **left arrow** moves back one month (in month view) or one week (in week view).
 - The **right arrow** moves forward by the same amount.
 
-The title next to the arrows updates to show where you are. In month view it reads something like
-**June 2026**. In week view it shows the date range, for example **2 – 8 Jun 2026**.
+The title next to the arrows updates to show where you are. In month view it reads something like **June 2026**. In week view it shows the date range, for example **2 – 8 Jun 2026**.
 
 ## Jump to today
 
-Click **Today** in the toolbar to return to the current period. In month view this brings you back to the
-current month. In week view it brings you back to the current week.
+Click **Today** in the toolbar to return to the current period. In month view this brings you back to the current month. In week view it brings you back to the current week.
 
 Today's date is always highlighted with a filled circle in both views, so you can spot it at a glance.
 
-The sidebar has **View Month** and **View Week** as well. Both switch to that view and jump to the current
-month or week, wherever in time you were looking.
+The sidebar has **View Month** and **View Week** as well. Both switch to that view and jump to the current month or week, wherever in time you were looking.
 
-On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the
-toolbar.
+On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the toolbar.
 
 ## Create an event by clicking a day
 
-In both views, you can click any day cell to open the event creation dialog with that date pre-filled. See
-[Create and edit an event](/support/calendar/create-event) for the full steps.
+In both views, you can click any day cell to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.

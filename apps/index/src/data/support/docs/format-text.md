@@ -9,8 +9,7 @@ order: 30
 updated: 2026-10-10
 ---
 
-Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or
-italic, pick a color, align paragraphs, and build lists, all without leaving the page.
+Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
 
 The toolbar is visible whenever you have write access to the document. If you can only view, the toolbar is hidden.
 
@@ -25,20 +24,17 @@ Click the font name in the toolbar, or open **Format**, then **Font**. A dropdow
 - **JetBrains Mono** (monospaced, suited to code or technical content)
 - **Excalifont** (a hand-drawn style)
 
-Click the name you want. The change applies to the selected text. If nothing is selected, it applies to new text
-you type from that point.
+Click the name you want. The change applies to the selected text. If nothing is selected, it applies to new text you type from that point.
 
 ## Apply a heading style
 
-The heading selector sits next to the font picker. It shows the current style of the cursor position, such as
-**Normal** or **Heading 2**.
+The heading selector sits next to the font picker. It shows the current style of the cursor position, such as **Normal** or **Heading 2**.
 
 1. Click inside the paragraph you want to change, or select several lines.
 2. Click the heading selector to open the dropdown, or open **Format**, then **Heading**.
 3. Choose one of **Heading 1**, **Heading 2**, **Heading 3**, **Heading 4**, or **Normal text**.
 
-Headings are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text**
-removes any heading and returns the paragraph to the default style.
+Headings are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes any heading and returns the paragraph to the default style.
 
 To set paragraphs off as a quote, open **Format**, then **Heading**, and choose **Quote**. Choose it again to turn the quote back into normal paragraphs.
 
@@ -50,8 +46,7 @@ Select the text you want to change, then click the button in the toolbar:
 - **Italic** (or Cmd+I / Ctrl+I)
 - **Underline** (or Cmd+U / Ctrl+U)
 
-Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside
-styled text, the button appears highlighted, so you can see what is active.
+Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside styled text, the button appears highlighted, so you can see what is active.
 
 For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline** it has **Strikethrough**, **Inline code**, **Superscript**, **Subscript**, and **Small** (renders the text at a smaller size inline). Choose a style again on the same selection to remove it.
 
@@ -71,8 +66,7 @@ To go back to the default color, click **Default** at the top of the grid.
 
 ## Highlight text
 
-The **Highlight** button (the highlighter pen icon) works the same way as text color, but paints the background
-behind the selected text.
+The **Highlight** button (the highlighter pen icon) works the same way as text color, but paints the background behind the selected text.
 
 1. Select the text.
 2. Click the **Highlight** button, or open **Format**, then **Text**, then **Highlight color**.
@@ -88,8 +82,7 @@ Alignment applies to the whole paragraph the cursor is in, or to all paragraphs 
 - **Align center**
 - **Align right**
 
-Click the relevant button in the toolbar. The alignment buttons are the three icons showing horizontal lines
-in different positions. You can also open **Format**, then **Align**, and choose **Left**, **Center**, or **Right**.
+Click the relevant button in the toolbar. The alignment buttons are the three icons showing horizontal lines in different positions. You can also open **Format**, then **Align**, and choose **Left**, **Center**, or **Right**.
 
 ## Add a list
 
@@ -101,8 +94,7 @@ Place your cursor on the line where you want the list to start, then click one o
 
 The same lists are in **Format**, then **Lists**: **Bulleted**, **Numbered**, and **Checklist**.
 
-Press Enter to add the next item, and press Enter on an empty item to end the list. You can also click the same
-button again on a selected list to turn it back into regular paragraphs.
+Press Enter to add the next item, and press Enter on an empty item to end the list. You can also click the same button again on a selected list to turn it back into regular paragraphs.
 
 ## Remove all formatting
 

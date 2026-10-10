@@ -8,8 +8,7 @@ order: 130
 updated: 2026-06-08
 ---
 
-Docs keeps a version history for every document you own or can edit. You can save a snapshot at any point, then
-browse the list and roll back to an earlier state whenever you need to.
+Docs keeps a version history for every document you own or can edit. You can save a snapshot at any point, then browse the list and roll back to an earlier state whenever you need to.
 
 ## Save a version
 
@@ -17,8 +16,7 @@ browse the list and roll back to an earlier state whenever you need to.
 2. Click **File** in the toolbar.
 3. Click **Save version now**.
 
-A toast confirms "Version saved". The version is added to the list and labeled with the date and time it was
-saved.
+A toast confirms "Version saved". The version is added to the list and labeled with the date and time it was saved.
 
 ## View and restore a version
 
@@ -28,18 +26,14 @@ saved.
 4. Click the version you want to go back to. A confirmation dialog opens.
 5. Click **Restore** to confirm.
 
-Docs saves the current state as a new version before it overwrites anything, so you can come back to where you
-were by restoring that entry.
+Docs saves the current state as a new version before it overwrites anything, so you can come back to where you were by restoring that entry.
 
 <div class="eigen-callout">
 
-Comments and attachments are not rolled back when you restore a version. Only the document text and formatting
-return to the earlier state.
+Comments and attachments are not rolled back when you restore a version. Only the document text and formatting return to the earlier state.
 
 </div>
 
 ## Who can use version history
 
-Version history is available to anyone with edit access to the document. If you can only view the document, the
-**File** menu does not show these options. See [Share a document and set access](/support/docs/share-a-document)
-to change who can edit.
+Version history is available to anyone with edit access to the document. If you can only view the document, the **File** menu does not show these options. See [Share a document and set access](/support/docs/share-a-document) to change who can edit.

@@ -8,17 +8,13 @@ order: 80
 updated: 2026-09-22
 ---
 
-A recurring event is one that repeats on a schedule. You set it up once and Calendar generates all the
-occurrences automatically. You can later edit or delete a single occurrence, all future ones from a
-given date, or the whole series.
+A recurring event is one that repeats on a schedule. You set it up once and Calendar generates all the occurrences automatically. You can later edit or delete a single occurrence, all future ones from a given date, or the whole series.
 
 ## Set a recurrence when creating an event
 
-1. Open the **New Event** form by clicking **Create event** in the sidebar, or by clicking any day in
-   the calendar view.
+1. Open the **New Event** form by clicking **Create event** in the sidebar, or by clicking any day in the calendar view.
 2. Fill in the title, date, and time as normal.
-3. In the row below the time pickers, open the recurrence dropdown. It shows **Does not repeat** by
-   default.
+3. In the row below the time pickers, open the recurrence dropdown. It shows **Does not repeat** by default.
 4. Choose how often you want the event to repeat:
 
    - **Daily**: every day from the start date.
@@ -27,8 +23,7 @@ given date, or the whole series.
    - **Annually on [day] [month]**: the same date each year, for example "Annually on 8 June".
    - **Every weekday (Monday to Friday)**: each working day.
 
-   The day and month labels in the options come from the start date you set. If you change the start
-   date, open the dropdown again to see the updated options.
+   The day and month labels in the options come from the start date you set. If you change the start date, open the dropdown again to see the updated options.
 
 5. Click **Save**.
 
@@ -48,8 +43,7 @@ given date, or the whole series.
 ## Edit one occurrence without changing the others
 
 1. Click the specific occurrence you want to change.
-2. Click the pencil icon and make your changes (you can adjust the time, title, location, or any other
-   field).
+2. Click the pencil icon and make your changes (you can adjust the time, title, location, or any other field).
 3. Click **Save**, then choose **This event** when Calendar asks which occurrences to update.
 4. Click **OK**.
 

@@ -8,8 +8,7 @@ order: 50
 updated: 2026-06-08
 ---
 
-Labels let you group contacts however you like. You might use them for work, personal, or project-based
-groupings. Once a contact has a label you can click that label in the sidebar to see only those contacts.
+Labels let you group contacts however you like. You might use them for work, personal, or project-based groupings. Once a contact has a label you can click that label in the sidebar to see only those contacts.
 
 ## Create a label
 

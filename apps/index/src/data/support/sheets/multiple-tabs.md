@@ -8,8 +8,7 @@ order: 100
 updated: 2026-06-08
 ---
 
-A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor.
-You can add, rename, reorder, and color-code them to keep your data organized.
+A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor. You can add, rename, reorder, and color-code them to keep your data organized.
 
 ## Add a sheet
 
@@ -21,11 +20,9 @@ You can also go to **Insert → Sheet** in the menu bar.
 
 Click any tab to switch to that sheet.
 
-If you have many sheets and the tabs overflow the bar, scroll left or right using the arrow buttons that appear at
-the right of the tab bar.
+If you have many sheets and the tabs overflow the bar, scroll left or right using the arrow buttons that appear at the right of the tab bar.
 
-To see all sheets at once, click the grid icon (next to the **+** button) to open the sheet list, then
-click the sheet you want.
+To see all sheets at once, click the grid icon (next to the **+** button) to open the sheet list, then click the sheet you want.
 
 ## Rename a sheet
 
@@ -37,8 +34,7 @@ You can also click the **⌄** arrow on the tab and choose **Rename** from the m
 
 Drag a tab left or right and drop it in the new position.
 
-You can also click the **⌄** arrow on a tab and choose **Move left** or **Move right** to shift it one place at
-a time.
+You can also click the **⌄** arrow on a tab and choose **Move left** or **Move right** to shift it one place at a time.
 
 ## Copy a sheet
 
@@ -46,18 +42,15 @@ Click the **⌄** arrow on a tab and choose **Copy**. A duplicate of the sheet a
 
 ## Add a color to a tab
 
-Click the **⌄** arrow on a tab and choose **Change color**. Pick a color from the palette. A thin stripe of
-that color appears along the bottom of the tab.
+Click the **⌄** arrow on a tab and choose **Change color**. Pick a color from the palette. A thin stripe of that color appears along the bottom of the tab.
 
 To clear the color, open the same menu, choose **Change color** again, and click **Reset color**.
 
 ## Hide and show a sheet
 
-To hide a sheet, click the **⌄** arrow on its tab and choose **Hide**. The tab disappears from the bar. You
-cannot hide the last visible sheet.
+To hide a sheet, click the **⌄** arrow on its tab and choose **Hide**. The tab disappears from the bar. You cannot hide the last visible sheet.
 
-To show a hidden sheet again, open the **View** menu in the menu bar. If any sheets are hidden, a **Hidden
-sheets** submenu appears. Click the sheet name to make it visible again.
+To show a hidden sheet again, open the **View** menu in the menu bar. If any sheets are hidden, a **Hidden sheets** submenu appears. Click the sheet name to make it visible again.
 
 ## Delete a sheet
 

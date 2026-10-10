@@ -10,9 +10,7 @@ order: 10
 updated: 2026-09-13
 ---
 
-Drive is where your files live in Eigen. You can upload files from your computer, create documents and
-spreadsheets without leaving the browser, organize everything into folders, and share any of it with other
-people. This page is a quick tour of what you can do.
+Drive is where your files live in Eigen. You can upload files from your computer, create documents and spreadsheets without leaving the browser, organize everything into folders, and share any of it with other people. This page is a quick tour of what you can do.
 
 ## Add your files
 
@@ -26,11 +24,9 @@ You can also drag files from your desktop and drop them into Drive.
 
 ## Open and edit files
 
-Click a file to open it. Documents, spreadsheets, and presentations open in their own editor. Other files, like
-images and PDFs, open in a preview.
+Click a file to open it. Documents, spreadsheets, and presentations open in their own editor. Other files, like images and PDFs, open in a preview.
 
-To look at a file without leaving the list, open its menu (right-click, or the **⋮** button) and choose
-**Quick preview**. The same menu has **Open in new tab**, **Rename**, and **Download**.
+To look at a file without leaving the list, open its menu (right-click, or the **⋮** button) and choose **Quick preview**. The same menu has **Open in new tab**, **Rename**, and **Download**.
 
 ## Keep things organized
 
@@ -41,16 +37,12 @@ To look at a file without leaving the list, open its menu (right-click, or the *
 
 ## Share your files
 
-Anything in Drive is private to you until you share it. Open a file's menu and choose **Share** to give other
-people access, decide whether they can view or edit, and send them a link. See
-[Share a file or folder](/support/drive/share-a-file) for the details.
+Anything in Drive is private to you until you share it. Open a file's menu and choose **Share** to give other people access, decide whether they can view or edit, and send them a link. See [Share a file or folder](/support/drive/share-a-file) for the details.
 
 ## Recover something you deleted
 
-Deleted files aren't gone right away. They go to the **Trash**, where you can restore a file you still need or
-empty it to remove everything for good. Open the Trash from the sidebar.
+Deleted files aren't gone right away. They go to the **Trash**, where you can restore a file you still need or empty it to remove everything for good. Open the Trash from the sidebar.
 
 ## Use Drive from your computer
 
-If you'd rather work with your files in Finder or File Explorer, you can connect Drive as a network drive over
-WebDAV. See [Mount Drive on your computer](/support/connect/mount-drive-on-your-computer).
+If you'd rather work with your files in Finder or File Explorer, you can connect Drive as a network drive over WebDAV. See [Mount Drive on your computer](/support/connect/mount-drive-on-your-computer).
