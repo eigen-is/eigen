@@ -36,6 +36,9 @@ export function installHappyDom(): Window {
     // The page-break test presses keys with a KeyboardEvent of this window.
     borrow('KeyboardEvent', window.KeyboardEvent);
     borrow('IS_REACT_ACT_ENVIRONMENT', true);
+    // A query the hook fires fails here instead of reaching whatever listens on the origin, such as a
+    // dev server answering with its SPA page. A test may stub fetch over this; afterAll restores it.
+    borrow('fetch', () => Promise.reject(new TypeError('A hook test has no network')));
 
     afterAll(async () => {
         // react-dom reads `window.event` for any update still queued; let it run while the DOM is still there.

@@ -450,7 +450,7 @@ export const EditorToolbar = ({
                 center={
                     canWrite &&
                     showsRow && (
-                        <div className="flex">
+                        <div className="flex" role="toolbar" aria-label="Formatting">
                             <ToolbarSeparator />
 
                             {/* Heading / paragraph selector */}
@@ -549,7 +549,7 @@ export const EditorToolbar = ({
                                     />
                                     <ColorPickerButton
                                         icon={Highlighter}
-                                        tooltipText="Highlight"
+                                        tooltipText="Highlight color"
                                         active={active.highlight}
                                         value={active.highlightColor}
                                         resetLabel="None"

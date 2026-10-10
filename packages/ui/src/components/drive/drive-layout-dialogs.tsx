@@ -253,7 +253,7 @@ export function DriveLayoutDialogs({ actions }: DriveLayoutDialogsProps) {
                 />
             )}
 
-            {capabilities.canRename && (
+            {capabilities.canRename && dialogs.rename.item && (
                 <DriveRenameItem
                     path={dialogs.rename.item}
                     open={dialogs.rename.open}

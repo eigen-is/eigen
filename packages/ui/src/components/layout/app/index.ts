@@ -4,6 +4,7 @@ export { AppShell } from './app-shell';
 export { CollabDocumentGate } from './collab-document-gate';
 export type { ColumnProps } from './column-layout';
 export { Column, ColumnLayout } from './column-layout';
+export { CommandPaletteProvider } from './command-palette/command-palette-provider';
 export { EigenApp } from './eigen-app';
 export { EigenDocEditorRoute } from './eigen-doc-editor-route';
 export { EigenDocRouteStatus } from './eigen-doc-route-status';

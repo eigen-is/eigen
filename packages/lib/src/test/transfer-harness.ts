@@ -23,7 +23,6 @@ export const served: { importResponse: unknown } = { importResponse: null };
 // Captured once, before any file has mocked anything, so a later file restores the real modules.
 const realAuthContextModule = await import('../core/auth/auth-context');
 const realSonnerModule = await import('sonner');
-const realFetch = g.fetch;
 
 export function installTransferHarness(): void {
     // react-dom needs a DOM to render the hooks into.
@@ -48,7 +47,6 @@ export function installTransferHarness(): void {
     };
 
     afterAll(() => {
-        g.fetch = realFetch;
         mock.module('../core/auth/auth-context', () => realAuthContextModule);
         mock.module('sonner', () => realSonnerModule);
     });

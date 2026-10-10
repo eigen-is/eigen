@@ -30,7 +30,7 @@ export function DriveCreateItemDialog({
     confirmLabel,
 }: DriveCreateItemDialogProps) {
     const [itemName, setItemName] = useState(defaultValue);
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
 
     // Reset input value when dialog opens/closes or defaultValue changes
     useEffect(() => {
