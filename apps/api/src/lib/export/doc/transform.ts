@@ -4,6 +4,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { toDataUriMap } from '../../document/media';
+import { PROSE_CSS } from '../../document/prose-css';
 import {
     DOCX_IMAGE_MAX_SIZE,
     type EigendocExportFormat,
@@ -15,7 +16,6 @@ import {
 import { FONT_STACK_MONO } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
-import { PROSE_CSS } from './prose-css';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 

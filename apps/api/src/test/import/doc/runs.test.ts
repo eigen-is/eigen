@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CODE_LOOK } from '../../../lib/export/doc/looks';
+import { CODE_LOOK } from '../../../lib/document/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A run's look: which marks Word's formatting becomes, and which it doesn't.

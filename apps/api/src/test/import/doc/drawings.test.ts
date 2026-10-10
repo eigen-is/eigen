@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CAPTION_LOOK } from '../../../lib/export/doc/looks';
+import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Pictures: one media file per image part, named from its content type, placed as Word places it.

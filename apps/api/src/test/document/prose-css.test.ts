@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PROSE_CSS, proseValue } from '../../lib/export/doc/prose-css';
+import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
 
 describe('prose css — the lookup', () => {
     test('a rule answers with its value', () => {

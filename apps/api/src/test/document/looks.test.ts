@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
-import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../../lib/core/ooxml';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
-import { openZip } from '../../../lib/core/zip';
+import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../lib/core/ooxml';
+import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
+import { openZip } from '../../lib/core/zip';
 import {
     BODY,
     CAPTION_LOOK,
@@ -13,9 +13,9 @@ import {
     LINK_LOOK,
     QUOTE_LOOK,
     TASK_DONE_LOOK,
-} from '../../../lib/export/doc/looks';
-import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
+} from '../../lib/document/looks';
+import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const zip = openZip(
     await eigendocToDocx(buildAllFeaturesDocJson(), buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined),

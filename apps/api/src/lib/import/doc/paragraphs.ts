@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../export/doc/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import {
     bundledFontOf,

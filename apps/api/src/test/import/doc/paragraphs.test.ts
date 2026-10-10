@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/export/doc/looks';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.

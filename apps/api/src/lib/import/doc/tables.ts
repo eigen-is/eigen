@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { isOn, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { HEADER_CELL_LOOK } from '../../export/doc/looks';
+import { HEADER_CELL_LOOK } from '../../document/looks';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
 import { int, is, onOff, twips, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';

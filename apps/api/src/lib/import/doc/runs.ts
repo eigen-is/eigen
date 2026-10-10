@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { LINK_LOOK } from '../../export/doc/looks';
+import { LINK_LOOK } from '../../document/looks';
 import type { Item } from './assemble';
 import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
