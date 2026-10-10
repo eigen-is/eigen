@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, getSchema } from '@tiptap/core';
+import { createDocument, Editor, getSchema } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -12,7 +12,7 @@ const schema = getSchema(getDocExtensions());
 
 // The name the textStyle mark's parseHTML reads from the pasted stack.
 function pastedFont(fontFamily: string): string {
-    const html = cleanPastedHTML(`<p><span style="font-family: ${fontFamily}">x</span></p>`, 600);
+    const html = cleanPastedHTML(`<p><span style="font-family: ${fontFamily}">x</span></p>`, 600, new Set());
     const span = new DOMParser().parseFromString(html, 'text/html').querySelector('span');
     if (!span) throw new Error('span gone');
     return getFontName(span.style.fontFamily);
@@ -55,8 +55,55 @@ describe('paste keeps caps', () => {
         ['font-family:Calibri;font-variant:small-caps', 'small'],
         ['font-variant:normal;text-transform:none', null],
     ])('%s pastes as caps %s', (style, caps) => {
-        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600);
+        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600, new Set());
         const marks = createDocument(html, schema).firstChild?.firstChild?.marks ?? [];
         expect(marks.find((mark) => mark.type.name === 'textStyle')?.attrs['caps'] ?? null).toBe(caps);
     });
+});
+
+// A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
+describe('a docs copy pastes back as it was copied', () => {
+    const figure = {
+        type: 'figure',
+        attrs: { mediaName: 'a.png', width: 200, caption: 'Sales', alignment: 'right', layout: 'wrap-left' },
+    };
+    const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+    const text = (t: string) => ({ type: 'text', text: t });
+
+    test.each([
+        [
+            'a figure in a paragraph of its own adds no empty paragraphs',
+            [paragraph(text('a')), paragraph(figure), paragraph(text('b'))],
+        ],
+        ['a figure between text keeps its paragraph whole', [paragraph(text('a'), figure, text('b'))]],
+    ])('%s', (_name, content) => {
+        const source = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
+        const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
+        const target = new Editor({
+            extensions: getDocExtensions(),
+            editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, new Set()) },
+        });
+        target.view.pasteHTML(dom.innerHTML);
+        expect(target.getJSON()).toEqual(source.getJSON());
+    });
+});
+
+// A cut keeps its comment because the card stays in the document's map; another document's card is not there.
+test('paste keeps the comment anchors this document has cards for and strips the rest', () => {
+    const html =
+        '<p><span data-comment-id="here">a</span><span data-comment-id="elsewhere">b</span></p>' +
+        '<p><span class="figure" data-comment-id="here"><img data-media-name="a.png"></span>' +
+        '<span class="figure" data-comment-id="elsewhere"><img data-media-name="b.png"></span></p>';
+    const anchors: unknown[][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set(['here'])), schema).descendants((node) => {
+        const mark = node.marks.find((m) => m.type.name === 'comment');
+        if (node.isLeaf)
+            anchors.push([node.text ?? node.attrs.mediaName, node.attrs.commentCardId, mark?.attrs.cardId]);
+    });
+    expect(anchors).toEqual([
+        ['a', undefined, 'here'],
+        ['b', undefined, undefined],
+        ['a.png', 'here', undefined],
+        ['b.png', null, undefined],
+    ]);
 });

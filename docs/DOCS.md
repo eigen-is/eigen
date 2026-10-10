@@ -107,11 +107,13 @@ The toolbar lights a button when the whole selection carries the mark or sits in
 
 A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
 
-## A docs copy writes image items, and a paste places them one by one
+## A docs copy with an image writes its items in order, and a paste places them one by one
 
-A copy whose selection holds a figure writes the eigen clipboard payload: one image item per figure whose file resolves, beside ProseMirror's own HTML and the plain text. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
+A copy whose selection holds a figure writes the eigen clipboard payload, beside ProseMirror's own HTML and the plain text (`copiedClipboardItems`, `apps/docs/src/components/docs/clipboard.ts`). In document order it holds an image item per figure whose file resolves, and the text between them as a text item, a line per paragraph. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
 
-On paste, a payload with an image item is placed item by item: a figure from another document's `media/` is re-uploaded into this one first and is skipped if that fails. A docs copy of text plus an image therefore pastes the image alone ([ROADMAP](ROADMAP.md)).
+ProseMirror's own HTML writes a figure as spans, `span.figure` with a `span.figcaption`, the form the export writes. A `<figure>` inside a `<p>` closes the paragraph in every HTML parser, so a pasted copy would split its paragraph around the image.
+
+On paste, a payload with an image item is placed item by item (`insertEigenItems`): a figure from another document's `media/` is re-uploaded into this one first and is skipped if that fails. A text item lands as a paragraph per line, and beside text an image takes a paragraph of its own. A text item is plain, so a docs copy of text and an image pastes its words and paragraphs but not its headings, lists or marks.
 
 ## Pasted content is fitted to the page
 

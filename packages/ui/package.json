@@ -108,6 +108,7 @@
     "./components/user": "./src/components/user/index.ts",
     "./components/vector": "./src/components/vector/index.ts",
     "./hooks/*": "./src/hooks/*.ts",
+    "./test/drive-path": "./src/test/drive-path.ts",
     "./test/happy-dom": "./src/test/happy-dom.ts",
     "./test/render-in-document": "./src/test/render-in-document.ts"
   }
