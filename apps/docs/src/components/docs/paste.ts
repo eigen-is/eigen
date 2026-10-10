@@ -4,24 +4,20 @@ import { bundledFont, DOCUMENT_FONT, getFontFamily } from '@workspace/lib/consta
 export function cleanPastedHTML(html: string, maxWidth: number): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    doc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
+    for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
         const font = bundledFont(el.style.fontFamily.replace(/['"]/g, ''));
         // The document font needs no mark.
         el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
-    });
+    }
 
-    doc.querySelectorAll<HTMLElement>('img, table').forEach((el) => {
-        const attrWidth = el.getAttribute('width');
-        const styleWidth = el.style.width;
-        let w = 0;
-        if (attrWidth) w = parseInt(attrWidth, 10) || 0;
-        if (!w && styleWidth?.endsWith('px')) w = parseInt(styleWidth, 10) || 0;
-
-        if (w > maxWidth) {
+    for (const el of doc.querySelectorAll<HTMLElement>('img, table')) {
+        const styleWidth = el.style.width.endsWith('px') ? Number.parseInt(el.style.width, 10) || 0 : 0;
+        const width = Number.parseInt(el.getAttribute('width') ?? '', 10) || styleWidth;
+        if (width > maxWidth) {
             el.setAttribute('width', String(Math.round(maxWidth)));
             el.style.width = `${Math.round(maxWidth)}px`;
         }
-    });
+    }
 
     return doc.body.innerHTML;
 }
