@@ -16,6 +16,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 // The figure's resize floor (px).
 const FIGURE_MIN_WIDTH = 100;
+// A Shift+Arrow resize step (px).
+const FIGURE_KEY_STEP = 10;
+const FIGURE_RESIZE_KEYS = 'Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -29,6 +32,15 @@ declare module '@tiptap/core' {
 // updateAttributes's setNodeMarkup replaces the leaf, which maps that selection to a text selection.
 function setFigureAttributes(tr: Transaction, pos: number, attributes: FigureAttrs) {
     for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
+}
+
+// The text column, or half of it for a wrapped figure: the widest a resize makes it.
+function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
+    const container = figure instanceof Element ? figure.closest('[data-document]') : null;
+    if (!container) return Infinity;
+    const style = getComputedStyle(container);
+    const fullWidth = container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
 }
 
 type FigureOptions = {
@@ -75,7 +87,6 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
     const alt = node.attrs.alt || '';
     const isEditable = editor.isEditable;
     const layout = (node.attrs.layout || 'block') as FigureLayout;
-    const isWrapping = layout === 'wrap-left' || layout === 'wrap-right';
 
     // Re-arm the one-shot loader when the source changes so the author's width reset recomputes the ratio.
     useEffect(() => {
@@ -103,13 +114,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         };
     }, [selected, isEditable]);
 
-    const getMaxWidth = useCallback(() => {
-        const container = containerRef.current?.closest('[data-document]');
-        if (!container) return Infinity;
-        const style = getComputedStyle(container);
-        const fullWidth = container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-        return isWrapping ? fullWidth * 0.5 : fullWidth;
-    }, [isWrapping]);
+    const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout), [layout]);
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
@@ -178,27 +183,6 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         [setAttributes],
     );
 
-    // Keyboard resize (accessibility): kept docs-side, wired to the same width write, so
-    // ObjectTransform's chrome stays pixel-identical to slides/vector. Tab to the wrapper, arrow to
-    // resize; Shift = fine step. Floor/ceiling mirror the pointer path.
-    const handleKeyResize = useCallback(
-        (e: React.KeyboardEvent) => {
-            const step = e.shiftKey ? 1 : 10;
-            const delta =
-                e.key === 'ArrowRight' || e.key === 'ArrowUp'
-                    ? step
-                    : e.key === 'ArrowLeft' || e.key === 'ArrowDown'
-                      ? -step
-                      : 0;
-            if (delta === 0) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const next = Math.max(FIGURE_MIN_WIDTH, Math.min(getMaxWidth(), (width || 300) + delta));
-            setAttributes({ width: Math.round(next) });
-        },
-        [getMaxWidth, width, setAttributes],
-    );
-
     const displayWidth = previewWidth ?? width;
     // Mount the shared transform chrome only once we have a resolvable px box (loaded, sized,
     // editable, not a pending placeholder). Otherwise a selected figure shows the plain ring.
@@ -225,18 +209,13 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         >
             {/* Relative wrapper shrink-wraps the img so the inset-0 ObjectTransform ring
                 lands exactly on the image box. When no transform mounts (placeholder,
-                read-only, pre-load), the same ring shows via the class. */}
+                read-only, pre-load), the same ring shows via the class. It takes no focus: the
+                editor's keymap resizes the selected figure, and a press stays free to start a drag. */}
             <div
                 className={cn('relative', selected && !box && 'eigen-selection-ring')}
-                tabIndex={selected && isEditable ? 0 : undefined}
+                role={selected && isEditable ? 'group' : undefined}
                 aria-label={selected && isEditable ? 'Resize image' : undefined}
-                onKeyDown={selected && isEditable ? handleKeyResize : undefined}
-                // A press focuses this wrapper, which would take the keys from ProseMirror, so focus goes
-                // back to the editor; only Tab focus stays, for keyboard resize. The press itself is left
-                // alone: a prevented mousedown starts no native drag.
-                onFocus={(e) => {
-                    if (e.target === e.currentTarget && !e.currentTarget.matches(':focus-visible')) editor.view.focus();
-                }}
+                aria-keyshortcuts={selected && isEditable ? FIGURE_RESIZE_KEYS : undefined}
             >
                 {showPlaceholder ? (
                     <div style={{ width: displayWidth ? `${displayWidth}px` : '400px', aspectRatio: '16 / 10' }}>
@@ -269,7 +248,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
                         // Default minSize (1): in aspect mode the component floors BOTH dims,
                         // which would inflate wide images (a 100 floor on a 4:1 banner's height
                         // forces width 400). The width-only [100, maxWidth] floor is the host
-                        // clamp in handleTransform/handleCommit/handleKeyResize.
+                        // clamp in handleTransform/handleCommit and the Shift+Arrow keymap.
                         onTransform={handleTransform}
                         onCommit={handleCommit}
                     />
@@ -298,6 +277,27 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
 export const Figure = FigureNode.extend<FigureOptions>({
     addOptions() {
         return { onContextMenu: () => {}, onOpenComment: () => {} };
+    },
+    addKeyboardShortcuts() {
+        // Shift+Arrow would extend the selection from the figure; on a selected figure it resizes instead.
+        const resize = (delta: number) => () => {
+            const { selection } = this.editor.state;
+            if (
+                !(selection instanceof NodeSelection) ||
+                selection.node.type.name !== this.name ||
+                !this.editor.isEditable
+            )
+                return false;
+            const maxWidth = figureMaxWidth(this.editor.view.nodeDOM(selection.from), selection.node.attrs.layout);
+            const width = Math.min(maxWidth, (selection.node.attrs.width || 300) + delta);
+            return this.editor.commands.updateFigure({ width: Math.round(Math.max(FIGURE_MIN_WIDTH, width)) });
+        };
+        return {
+            'Shift-ArrowRight': resize(FIGURE_KEY_STEP),
+            'Shift-ArrowUp': resize(FIGURE_KEY_STEP),
+            'Shift-ArrowLeft': resize(-FIGURE_KEY_STEP),
+            'Shift-ArrowDown': resize(-FIGURE_KEY_STEP),
+        };
     },
     addCommands() {
         return {

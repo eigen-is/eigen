@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-08
+updated: 2026-10-10
 ---
 
 You can insert images and tables anywhere in a document. Images can come from your device or from Drive.
@@ -37,7 +37,7 @@ If you have an image on the clipboard (copied from another app or from elsewhere
 
 ## Resize and position an image
 
-Click an image to select it. Resize handles appear at the edges. Drag a handle to change the width. The height adjusts to keep the proportions. To place the cursor before or after an image that sits on its own line, click in the empty space to its left or right.
+Click an image to select it. Resize handles appear at the edges. Drag a handle to change the width. The height adjusts to keep the proportions. To resize with the keyboard, select the image and hold Shift while you press an arrow key: Right or Up makes it wider, Left or Down makes it narrower. To place the cursor before or after an image that sits on its own line, click in the empty space to its left or right.
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
