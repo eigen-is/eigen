@@ -18,11 +18,11 @@ export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
-export type Relationship = { type: string; target: string; external: boolean };
+export type DocxRelationship = { type: string; target: string; external: boolean };
 
-export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
+export type Part = { path: string; root: XmlElement; rels: Map<string, DocxRelationship> };
 
-export type Package = {
+export type DocxPackage = {
     zip: ZipReader;
     document: Part;
     styles?: XmlElement;
@@ -45,7 +45,7 @@ const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const ENCRYPTED_PACKAGE = Buffer.from('EncryptedPackage', 'utf16le');
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
-export function readPackage(bytes: Uint8Array): Package {
+export function readPackage(bytes: Uint8Array): DocxPackage {
     // Any other OLE file, a .doc say, is no zip, which openZip refuses.
     if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte) && Buffer.from(bytes).includes(ENCRYPTED_PACKAGE))
         throw new ApiError(400, PASSWORD_PROTECTED);
@@ -149,7 +149,7 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
 
 const LESS_THAN = 0x3c;
 
-function readContentTypes(root: XmlElement | undefined): Package['contentTypes'] {
+function readContentTypes(root: XmlElement | undefined): DocxPackage['contentTypes'] {
     const defaults = new Map<string, string>();
     const overrides = new Map<string, string>();
     for (const entry of root ? xmlElements(root) : []) {
@@ -162,7 +162,7 @@ function readContentTypes(root: XmlElement | undefined): Package['contentTypes']
     return { defaults, overrides };
 }
 
-export function contentTypeOf(pkg: Package, path: string): string | undefined {
+export function contentTypeOf(pkg: DocxPackage, path: string): string | undefined {
     const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
     return pkg.contentTypes.overrides.get(path) ?? pkg.contentTypes.defaults.get(extension);
 }
@@ -172,9 +172,9 @@ function relsPathOf(partPath: string): string {
     return `${partPath.slice(0, slash + 1)}_rels/${partPath.slice(slash + 1)}.rels`;
 }
 
-function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, Relationship> {
+function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, DocxRelationship> {
     const root = readXml(zip, relsPathOf(partPath), budget);
-    const rels = new Map<string, Relationship>();
+    const rels = new Map<string, DocxRelationship>();
     for (const rel of root ? xmlElements(root) : []) {
         const id = rel.attributes['Id'];
         if (!is(rel, PACKAGE_RELATIONSHIPS_NS, 'Relationship') || !id) continue;
@@ -189,7 +189,7 @@ function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string,
     return rels;
 }
 
-function relOfType(rels: Map<string, Relationship>, type: string): string | undefined {
+function relOfType(rels: Map<string, DocxRelationship>, type: string): string | undefined {
     for (const rel of rels.values()) if (rel.type.endsWith(`/${type}`) && !rel.external) return rel.target;
     return undefined;
 }
@@ -284,11 +284,11 @@ function measure(value: string | undefined, perPoint: number): number | undefine
     return points === undefined ? int(value) : Math.round(Number(number) * points * perPoint);
 }
 
-export function twips(value: string | undefined): number | undefined {
+export function twipsOf(value: string | undefined): number | undefined {
     return measure(value, 20);
 }
 
-export function halfPoints(value: string | undefined): number | undefined {
+export function halfPointsOf(value: string | undefined): number | undefined {
     return measure(value, 2);
 }
 
