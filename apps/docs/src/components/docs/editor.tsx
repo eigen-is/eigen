@@ -13,7 +13,6 @@ import {
     materializeClipboardSvg,
     needsReUpload,
     reUploadImage,
-    writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
@@ -61,7 +60,7 @@ import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
-import { copiedClipboardItems, insertEigenItems } from './clipboard';
+import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
@@ -264,6 +263,8 @@ const TiptapEditor = ({
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
+    const resolveMediaPathRef = useRef(resolveMediaPath);
+    resolveMediaPathRef.current = resolveMediaPath;
 
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
@@ -353,6 +354,10 @@ const TiptapEditor = ({
             editorProps: {
                 attributes: {
                     class: 'eigen-prose',
+                },
+                handleDOMEvents: {
+                    copy: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
+                    cut: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
                 },
                 transformPastedHTML: (html: string) =>
                     cleanPastedHTML(html, getEditorMaxWidth(), new Set(Object.keys(cardsRef.current))),
@@ -496,32 +501,6 @@ const TiptapEditor = ({
         );
         return result?.mediaName ?? null;
     };
-
-    useEffect(() => {
-        if (!editor) return;
-        const handleCopyOrCut = (e: ClipboardEvent) => {
-            if (!editor.isFocused) return;
-            const { from, to } = editor.state.selection;
-            if (from === to) return;
-
-            const items = copiedClipboardItems(editor, from, to, resolveMediaPath);
-
-            if (items.length > 0) {
-                const text = editor.state.doc.textBetween(from, to, '\n').trim();
-                // PM's own serialization keeps figures and typography as rich HTML for every other host;
-                // the helper puts the eigen marker before it.
-                const { dom } = editor.view.serializeForClipboard(editor.state.selection.content());
-                e.preventDefault();
-                writeEigenClipboard(e, { version: 1, items }, text || undefined, dom.innerHTML);
-            }
-        };
-        document.addEventListener('copy', handleCopyOrCut);
-        document.addEventListener('cut', handleCopyOrCut);
-        return () => {
-            document.removeEventListener('copy', handleCopyOrCut);
-            document.removeEventListener('cut', handleCopyOrCut);
-        };
-    }, [editor, resolveMediaPath]);
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;

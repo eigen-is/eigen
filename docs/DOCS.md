@@ -113,7 +113,7 @@ A comment's card id rides the `comment` mark on text and the `commentCardId` att
 
 ## A docs copy with an image writes its items in order, and a docs paste reads its HTML
 
-A copy whose selection holds a figure writes the eigen clipboard payload, beside ProseMirror's own HTML and the plain text (`copiedClipboardItems`, `apps/docs/src/components/docs/clipboard.ts`). In document order it holds an image item per figure whose file resolves, and the text between them as a text item, a line per paragraph. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
+A copy or cut whose selection holds a figure writes the eigen clipboard payload, beside ProseMirror's own HTML and the plain text (`writeDocsClipboard`, `apps/docs/src/components/docs/clipboard.ts`). It runs in the editor's `handleDOMEvents`, before ProseMirror's own handler, because that handler deletes a cut's selection before any later listener could read it. So it makes the cut's delete itself. In document order it holds an image item per figure whose file resolves, and the text between them as a text item, a line per paragraph. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
 
 ProseMirror's own HTML writes a figure as spans, `span.figure` with a `span.figcaption`, the form the export writes. A `<figure>` inside a `<p>` closes the paragraph in every HTML parser, so a pasted copy would split its paragraph around the image.
 
