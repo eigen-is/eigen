@@ -217,11 +217,12 @@ function assignQuotes(items: Item[]): void {
         } else if (item.role.kind === 'code') closeTo(codeDepth(item, hostAt, previous));
         else {
             const host = hostAt(item.indLeft);
-            if (host && item.quote > 0 && item.indLeft > host.indLeft + INDENT_TOLERANCE) {
-                // Past the quotes the item itself sits in.
-                item.quote = host.quote + Math.max(1, Math.round((item.indLeft - host.indLeft) / QUOTE_LOOK.indent));
+            const depth = host && item.quote > 0 ? quotesPast(item.indLeft, host.indLeft) : undefined;
+            if (host && depth) {
+                // A quote in an item sits whole quotes past its text, past the quotes the item itself sits in.
+                item.quote = host.quote + depth;
                 item.inItem = host.quote;
-            } else if (host && host.quote > 0 && item.quote > 0) {
+            } else if (host && host.quote > 0 && depth === 0) {
                 // At a quoted item's text it goes on with the item, in its quotes.
                 item.quote = host.quote;
                 item.inItem = host.inItem;
@@ -240,27 +241,30 @@ function assignQuotes(items: Item[]): void {
 // The writer numbers a level from a base, the quotes' indent around the list, its hanging indent per level past it
 // (to-docx.ts numberingXml); a base off a quote's text is another editor's.
 function listDepth(list: NonNullable<Para['list']>): number | undefined {
-    const base = (list.pPr.indLeft ?? 0) + (list.pPr.indFirst ?? 0) * (list.ilvl + 1);
-    const depth = Math.round(base / QUOTE_LOOK.indent);
-    return depth > 0 && Math.abs(base - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE ? depth : undefined;
+    const depth = quotesPast((list.pPr.indLeft ?? 0) + (list.pPr.indFirst ?? 0) * (list.ilvl + 1), 0);
+    return depth || undefined;
+}
+
+// The quotes an indent sits past a container's text, a quote's indent each as the writer sets them; none off a whole one.
+function quotesPast(indent: number, container: number): number | undefined {
+    const depth = Math.round((indent - container) / QUOTE_LOOK.indent);
+    return depth >= 0 && Math.abs(indent - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE
+        ? depth
+        : undefined;
 }
 
 // The writer sets a checkbox at its container's text, a quote's indent per quote past the item it sits in.
 function taskDepth(task: Para, open: Para | undefined): number | undefined {
-    const offset = (task.numberAt ?? task.indLeft) - (open?.indLeft ?? 0);
-    const depth = Math.round(offset / QUOTE_LOOK.indent);
-    const quote = (open?.quote ?? 0) + depth;
-    return depth >= 0 && quote > 0 && Math.abs(offset - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE
-        ? quote
-        : undefined;
+    const depth = quotesPast(task.numberAt ?? task.indLeft, open?.indLeft ?? 0);
+    if (depth === undefined) return undefined;
+    return (open?.quote ?? 0) + depth || undefined;
 }
 
 // The writer indents a table or a rule to its container's text, a quote's indent per quote past the item it sits in.
 // Nothing else marks it, so it joins a deeper quote only after a paragraph in it.
 function blockDepth(block: Item & { kind: 'hr' | 'table' }, host: Para | undefined, previous: Para | undefined): void {
-    const container = host?.indLeft ?? 0;
-    const depth = Math.round((block.indent - container) / QUOTE_LOOK.indent);
-    if (depth < 0 || Math.abs(block.indent - container - depth * QUOTE_LOOK.indent) > INDENT_TOLERANCE) return;
+    const depth = quotesPast(block.indent, host?.indLeft ?? 0);
+    if (depth === undefined) return;
     const quote = (host?.quote ?? 0) + depth;
     if (depth === 0 || (previous !== undefined && previous.inItem === host?.quote && previous.quote >= quote))
         block.quote = quote;
@@ -277,12 +281,12 @@ function codeDepth(
     const box = code.indLeft - CODE_BLOCK_LOOK.indent;
     const item = hostAt(box);
     const container = item?.indLeft ?? 0;
-    const depth = Math.round((box - container) / QUOTE_LOOK.indent);
-    if (code.boxed && depth >= 0 && Math.abs(box - container - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE) {
+    const depth = quotesPast(box, container);
+    if (code.boxed && depth !== undefined) {
         code.indLeft = box;
         code.quote = (item?.quote ?? 0) + depth;
         code.inItem = item && depth > 0 ? item.quote : undefined;
-    } else if (depth > 0 && previous && previous.quote > 0) {
+    } else if (box - container >= QUOTE_LOOK.indent / 2 && previous && previous.quote > 0) {
         code.quote = previous.quote;
         code.inItem = previous.inItem;
     }
