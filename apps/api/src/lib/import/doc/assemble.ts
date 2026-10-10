@@ -205,13 +205,15 @@ function assignQuotes(items: Item[]): void {
         // A quoted item's depth by where the writer sets its number or checkbox.
         let counted: number | undefined;
         if (item.list || item.task) {
-            let open = opens.at(-1);
-            for (; open && !nestsUnder(item, open.indLeft, !!open.task); open = opens.at(-1)) opens.pop();
-            if (item.quote > 0) counted = item.list ? listDepth(item.list) : taskDepth(item, open);
-            if (counted !== undefined) {
-                item.quote = counted;
-                // A quote in the open item holds it.
-                if (open && counted > open.quote) item.inItem = open.quote;
+            for (let open = opens.at(-1); open && !nestsUnder(item, open.indLeft, !!open.task); open = opens.at(-1))
+                opens.pop();
+            if (item.quote > 0) {
+                // Whole quotes past an open item's text: a quote in that item holds it.
+                const at = item.numberAt ?? item.indLeft;
+                const host = opens.findLast((open) => quotesPast(at, open.indLeft) !== undefined);
+                counted = item.list ? listDepth(item.list) : taskDepth(at, host);
+                if (counted !== undefined) item.quote = counted;
+                if (counted !== undefined && host && counted > host.quote) item.inItem = host.quote;
             }
             opens.push(item);
         } else if (item.role.kind === 'code') closeTo(codeDepth(item, hostAt, previous));
@@ -254,8 +256,8 @@ function quotesPast(indent: number, container: number): number | undefined {
 }
 
 // The writer sets a checkbox at its container's text, a quote's indent per quote past the item it sits in.
-function taskDepth(task: Para, open: Para | undefined): number | undefined {
-    const depth = quotesPast(task.numberAt ?? task.indLeft, open?.indLeft ?? 0);
+function taskDepth(checkbox: number, open: Para | undefined): number | undefined {
+    const depth = quotesPast(checkbox, open?.indLeft ?? 0);
     if (depth === undefined) return undefined;
     return (open?.quote ?? 0) + depth || undefined;
 }
