@@ -286,19 +286,60 @@ describe('doc export — whitespace', () => {
 });
 
 describe('doc export — caps', () => {
-    test.each(['html', 'pdf-html'] as const)('%s draws caps in CSS over the letters as typed', async (format) => {
-        const caps = (text: string, value: string) => ({
-            type: 'text',
-            text,
-            marks: [{ type: 'textStyle', attrs: { caps: value } }],
-        });
-        const doc = seededDoc({
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [caps('Title', 'all'), caps(' Name', 'small')] }],
-        });
-        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
-        expect(new TextDecoder().decode(data)).toContain(
-            '<p><span style="text-transform: uppercase">Title</span><span style="font-variant-caps: small-caps"> Name</span></p>',
+    const caps = (text: string, value: string, fontFamily: string | null = null, italic = false): JSONContent => ({
+        type: 'text',
+        text,
+        marks: [{ type: 'textStyle', attrs: { caps: value, fontFamily } }, ...(italic ? [{ type: 'italic' }] : [])],
+    });
+
+    async function exportBody(format: 'html' | 'pdf-html', content: JSONContent[]): Promise<string> {
+        const { data } = await renderEigendocExport(
+            seededDoc({ type: 'doc', content }),
+            format,
+            'Report.eigendoc',
+            [],
+            undefined,
+        );
+        return new TextDecoder().decode(data);
+    }
+
+    test.each(['html', 'pdf-html'] as const)('%s draws all caps in CSS over the letters as typed', async (format) => {
+        expect(await exportBody(format, [{ type: 'paragraph', content: [caps('Title', 'all')] }])).toContain(
+            '<p><span style="text-transform: uppercase">Title</span></p>',
+        );
+    });
+
+    test('html draws small caps in CSS over the letters as typed', async () => {
+        expect(await exportBody('html', [{ type: 'paragraph', content: [caps(' Name', 'small')] }])).toContain(
+            '<p><span style="font-variant-caps: small-caps"> Name</span></p>',
+        );
+    });
+
+    // WeasyPrint draws small caps only from a font's smcp glyphs, which only upright Source Serif 4 has.
+    test('the pdf draws small caps in a font without them as smaller capitals', async () => {
+        const small = (text: string) => `<span style="font-size: 0.7em">${text}</span>`;
+        const html = await exportBody('pdf-html', [
+            { type: 'paragraph', content: [caps('Mac Straße é 1 👍🏽x', 'small')] },
+            { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4', true)] },
+            {
+                type: 'blockquote',
+                content: [{ type: 'paragraph', content: [caps('Quote', 'small', 'Source Serif 4')] }],
+            },
+        ]);
+
+        expect(html).toContain(
+            `<p><span style="font-variant-caps: small-caps">M${small('AC')} S${small('TRASSE')} ${small('É')} 1 👍🏽${small('X')}</span></p>`,
+        );
+        expect(html).toContain(`S${small('ERIF')}`);
+        expect(html).toContain(`Q${small('UOTE')}`);
+    });
+
+    test('the pdf keeps upright Source Serif 4 small caps as typed', async () => {
+        const html = await exportBody('pdf-html', [
+            { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },
+        ]);
+        expect(html).toContain(
+            `<p><span style="font-family: 'Source Serif 4', serif; font-variant-caps: small-caps">Serif</span></p>`,
         );
     });
 });

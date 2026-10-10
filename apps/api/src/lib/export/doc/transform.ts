@@ -8,6 +8,7 @@ import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
     DOCX_IMAGE_MAX_SIZE,
+    type DocumentExportFormat,
     type EigendocExportFormat,
     type ExportMedia,
     type TransformWarning,
@@ -24,9 +25,9 @@ import type { DocxMedia } from './to-docx';
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
-// HTML and PDF render the same document by design: WeasyPrint consumes exactly what the
-// HTML download serves. The docx is written from the JSON by to-docx.ts, which loads
-// lazily so an HTML export never evaluates it, its styles or its fonts.
+// HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
+// serves, but for the small caps the PDF fakes (render.ts). The docx is written from the JSON by
+// to-docx.ts, which loads lazily so an HTML export never evaluates it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -40,7 +41,7 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks(media);
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
-    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title);
+    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title, format);
     return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
 }
 
@@ -89,8 +90,15 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
-function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
-    const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src));
+function renderEigendocDocument(
+    json: JSONContent,
+    dataUriMap: Map<string, string>,
+    title: string,
+    format: DocumentExportFormat,
+): string {
+    const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src), {
+        synthesizeSmallCaps: format === 'pdf-html',
+    });
     return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
 }
 

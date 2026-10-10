@@ -390,9 +390,10 @@ const TiptapEditor = ({
                     }
 
                     if (paste.eigen) {
-                        // Images take this path for the cross-mount re-upload; text only when text/html
-                        // is marker-only (a canvas text copy), so a sheets table still parses in PM. Claimed
-                        // only with an item this editor can place, or ⌘V on a bare `elements` item is dead.
+                        // Images take this path for the cross-mount re-upload, a docs copy's through its own
+                        // HTML; text only when text/html is marker-only (a canvas text copy), so a sheets table
+                        // still parses in PM. Claimed only with an item this editor can place, or ⌘V on a bare
+                        // `elements` item is dead.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
                         const hasText = paste.eigen.items.some(
                             (i) => i.type === 'text' && clipboardTextItemHasContent(i),
@@ -400,7 +401,12 @@ const TiptapEditor = ({
                         if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
                             event.preventDefault();
                             if (editorRef.current) {
-                                insertEigenItems(editorRef.current, paste.eigen.items, pastedMediaName).catch(() => {});
+                                insertEigenItems(
+                                    editorRef.current,
+                                    paste.eigen.items,
+                                    paste.html,
+                                    pastedMediaName,
+                                ).catch(() => {});
                             }
                             return true;
                         }
@@ -448,7 +454,7 @@ const TiptapEditor = ({
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
         const { pendingName, promise } = startUpload(file);
         // Reset width so the new image's aspect ratio is recomputed on load
-        editorRef.current.chain().focus().updateAttributes('figure', { mediaName: pendingName, width: null }).run();
+        editorRef.current.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
         const result = await promise;
         if (!editorRef.current) return;
         swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
@@ -471,11 +477,7 @@ const TiptapEditor = ({
             .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
             .catch(() => null);
         if (result?.[0]) {
-            editorRef.current
-                .chain()
-                .focus()
-                .updateAttributes('figure', { mediaName: result[0].name, width: null })
-                .run();
+            editorRef.current.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
         }
     };
 
@@ -826,8 +828,7 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {/* Unmounted when closed: the properties panels key-remount per caret move.
-                                    The stable gutter is as wide as the scroll box's scrollbar and draws
+                                {/* Unmounted when closed. The stable gutter is as wide as the scroll box's scrollbar and draws
                                     none, so the panel ends left of that scrollbar, where the shift math
                                     already puts its edge. */}
                                 {showSidebar && (
@@ -837,7 +838,6 @@ const TiptapEditor = ({
                                                 <PanelColumn activePanel={panel} {...panelProps} />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
-                                                    key={editor.state.selection.from}
                                                     editor={editor}
                                                     onReplaceImage={handleReplaceImage}
                                                     onReplaceImageFromDrive={handleReplaceImageFromDrive}

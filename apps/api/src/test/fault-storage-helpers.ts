@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { BunFile } from 'bun';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import { type DatabaseConfig, ManagedDatabase, type SchemaType, storageUnavailable } from '../lib/core';
 import type Drive from '../lib/drive/drive';
 import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
@@ -39,8 +39,9 @@ export class FaultStorage implements StorageBackend {
     // request body) and reaches the inner store only when the test lands it — so completions can
     // be reordered exactly like orphaned requests landing late server-side.
     parkWrites = false;
-    // Objects whose GET fails: read() throws for these keys. Targets ONE object (e.g. a container's
-    // comments.db) where a fail-next counter would hit whichever request happens to come first.
+    // Objects whose GET fails: read() throws for these keys the 503 a real failed GET reaches its caller as.
+    // Targets ONE object (e.g. a container's comments.db) where a fail-next counter would hit whichever
+    // request happens to come first.
     readonly failReadKeys = new Set<string>();
     readonly parked: ParkedWrite[] = [];
     private hungResolvers: Array<() => void> = [];
@@ -92,7 +93,7 @@ export class FaultStorage implements StorageBackend {
     }
 
     read(key: string): StorageFile {
-        if (this.failReadKeys.has(key)) throw new Error(`injected read failure (503) for ${key}`);
+        if (this.failReadKeys.has(key)) throw storageUnavailable(new Error(`injected read failure for ${key}`));
         return this.inner.read(key);
     }
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {

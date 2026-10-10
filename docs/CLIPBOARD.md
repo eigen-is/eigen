@@ -50,7 +50,7 @@ The download runs as the pasting user, with credentials. A user who cannot read 
 
 | App | Ladder |
 |---|---|
-| Docs (`apps/docs/src/components/docs/editor.tsx`) | SVG as a figure, then image items and marker-only text, then an image file, then ProseMirror's own paste |
+| Docs (`apps/docs/src/components/docs/editor.tsx`) | SVG as a figure, then image items (a docs copy through its own HTML) and marker-only text, then an image file, then ProseMirror's own paste |
 | Sheets (`packages/sheet/src/components/Workbook/index.tsx`) | SVG as a floating image, then image items as images and text items into cells, then the HTML table |
 | Canvas (`packages/ui/src/components/vector/hooks/use-canvas-clipboard.ts`) | Native elements, then the SVG, then OS files, then plain text as a text box |
 

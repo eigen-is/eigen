@@ -246,12 +246,13 @@ export const collabRouter = new Elysia({
                 );
             } catch (err) {
                 console.error('Error opening collab session:', err);
-                // A 503 retries, a home a restore is replacing too: the stale epoch the reconnect names
-                // after a finished restore reloads the tab, and a failed restore leaves the epoch, so the
-                // tab syncs the edits it holds.
-                if (err instanceof ApiError && err.status === 503) {
+                // Any failure HTTP would answer 5xx retries, a local one or a home a restore is replacing
+                // too: the stale epoch the reconnect names after a finished restore reloads the tab, and a
+                // failed restore leaves the epoch, so the tab syncs the edits it holds.
+                const status = err instanceof ApiError ? err.status : 500;
+                if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
-                } else if (err instanceof ApiError && err.status === 410) {
+                } else if (status === 410) {
                     // Terminal: the stored object is gone, so the client stops retrying.
                     ws.close(COLLAB_STORAGE_GONE_CLOSE, COLLAB_STORAGE_GONE_REASON);
                 } else {

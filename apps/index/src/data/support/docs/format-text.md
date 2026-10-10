@@ -57,8 +57,6 @@ styled text, the button appears highlighted, so you can see what is active.
 
 Select the text, then click **All caps** (or Cmd+Shift+A / Ctrl+Shift+A) or **Small caps** in the toolbar. All caps shows every letter as a capital. Small caps shows lowercase letters as smaller capitals. The letters you typed stay as they are, so clicking the button again brings them back. If the toolbar doesn't show these buttons, open **Format**, then **Text**, and choose **All caps** or **Small caps**.
 
-In a PDF, small caps show only in upright **Source Serif 4** text. In the other fonts, and in Source Serif 4 italic, the text prints as you typed it.
-
 ## Set a text color
 
 The text color button shows a letter A with a colored underline reflecting the current color.

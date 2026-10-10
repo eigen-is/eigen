@@ -1,5 +1,6 @@
 import { BUILT_IN_EMOTES } from '@workspace/lib/chat/built-in-emotes';
 import { resolveEmoteKey } from '@workspace/lib/chat/emotes';
+import type { ChatMessage } from '@workspace/lib/types/chat';
 import { validateCommand } from '@workspace/lib/validation';
 
 export type ParsedCommand =
@@ -79,4 +80,10 @@ export function formatEmoteForViewer(content: string, authorEmail: string, viewe
     }
 
     return `${authorEmail} ${content}`;
+}
+
+// What every search indexes for a stored message: the text a bystander reads, so a built-in emote is its
+// third-person sentence, not its key. Whispers never get here (SEARCHABLE_MESSAGES).
+export function searchableMessageText(message: Pick<ChatMessage, 'type' | 'content' | 'authorEmail'>): string {
+    return message.type === 'emote' ? formatEmoteForViewer(message.content, message.authorEmail) : message.content;
 }

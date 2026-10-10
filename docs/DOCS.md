@@ -37,9 +37,11 @@ The schema turns TipTap's own undo off (`undoRedo: false`), and y-prosemirror's 
 
 A figure is an inline, atomic node (`packages/lib/src/docs/eigendoc/nodes/figure.ts`): it sits in a paragraph, its contents are not editable, and it can be dragged. Its durable reference is `mediaName`. `src` is only for an external image, and the export strips that ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)). The other attributes are `alt`, `caption`, `alignment`, `layout` (block, or wrapped left or right), `commentCardId` and `width`.
 
-The browser starts a drag only from a press nobody prevented, selected figure included. A selected figure's image wrapper takes Tab focus for keyboard resize, so a press would move focus there and away from ProseMirror's keys; the wrapper hands a focus that isn't `:focus-visible` back to the editor instead of preventing the press. A drop that leaves the figure's own paragraph empty removes it (`figureDragOut` in the `Figure` extension).
+The browser starts a drag only from a press nobody prevented, selected figure included, so nothing in the node view prevents a press or takes focus from the editor. A drop that leaves the figure's own paragraph empty removes it (`figureDragOut` in the `Figure` extension). A cut keeps that empty paragraph, as Word and Google Docs do.
 
 A figure stores its width and never its height, so the height always follows the image's own ratio. The width is in the page's layout pixels, measured with `clientWidth` on the page element, which a CSS `scale()` does not change. So a doc edited on a narrow, scaled-down page stores the same width as on a wide one. The node view (`apps/docs/src/components/docs/extensions/figure.tsx`) sets the width on the image's first load, capped at the text column (half of it for a wrapped image), and resizing clamps between 100 px and that cap.
+
+Shift and an arrow key resize a selected figure by 10 px, Right and Up wider, Left and Down narrower, with the same clamp. It is a keymap on the figure's node selection (`addKeyboardShortcuts` in the `Figure` extension), so the keys never leave the editor. Shift and an arrow would otherwise extend the selection, and on a text selection of the figure, the one Shift+ArrowRight from beside it makes, they still do.
 
 ## The node view and the export draw one figure box
 
@@ -99,6 +101,8 @@ The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter:
 
 Selecting a figure or a table opens its properties panel, for a user who can write, in the slot the comments and activity panels use. An open comments or activity panel keeps the slot, and moving the caret out of the figure or table closes the properties panel. A phone shows no right-side panels: comments and activity open as a pane that hides the editor ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)), and the properties panels have no phone form.
 
+So a write from the Image panel must keep the figure selected. TipTap's `updateAttributes` writes with `setNodeMarkup`, which replaces a leaf node, and the node selection maps to a text selection, which closes the panel. The `Figure` extension's `updateFigure` command, and every write in its node view, set each attribute with `setNodeAttribute` instead, a step that moves no position. Such a write fires no `selectionUpdate` and `useEditor` re-renders on no transaction, so the panel reads the figure through `useEditorState`.
+
 ## A long selection's toolbar shows what its start holds
 
 The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 25 checks per transaction, so a select-all of 20,000 paragraphs cost 70 ms on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads the selection's first `MAX_READ_RANGE` positions instead, which costs a fixed walk. A button still acts on the whole range, so Bold, lit by a first 10,000 positions that are all bold, bolds the rest.
@@ -107,13 +111,13 @@ The toolbar lights a button when the whole selection carries the mark or sits in
 
 A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
 
-## A docs copy with an image writes its items in order, and a paste places them one by one
+## A docs copy with an image writes its items in order, and a docs paste reads its HTML
 
 A copy whose selection holds a figure writes the eigen clipboard payload, beside ProseMirror's own HTML and the plain text (`copiedClipboardItems`, `apps/docs/src/components/docs/clipboard.ts`). In document order it holds an image item per figure whose file resolves, and the text between them as a text item, a line per paragraph. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
 
 ProseMirror's own HTML writes a figure as spans, `span.figure` with a `span.figcaption`, the form the export writes. A `<figure>` inside a `<p>` closes the paragraph in every HTML parser, so a pasted copy would split its paragraph around the image.
 
-On paste, a payload with an image item is placed item by item (`insertEigenItems`): a figure from another document's `media/` is re-uploaded into this one first and is skipped if that fails. A text item lands as a paragraph per line, and beside text an image takes a paragraph of its own. A text item is plain, so a docs copy of text and an image pastes its words and paragraphs but not its headings, lists or marks.
+On paste, a payload with an image item goes through `insertEigenItems`. A docs copy, whose HTML ProseMirror marked with `data-pm-slice`, pastes through that HTML, because a text item is plain and would drop the headings, lists and marks. First each figure takes the name its image item gives: a figure from another document's `media/` is re-uploaded into this one, and a figure with no item or a failed re-upload is removed, so none pastes broken. The paste lands once every re-upload has settled. Any other payload, from slides or sheets, is placed item by item: a text item lands as a paragraph per line, and beside text an image takes a paragraph of its own.
 
 ## Pasted content is fitted to the page
 
@@ -129,9 +133,9 @@ All caps and small caps are the `caps` attribute of the `textStyle` mark (`packa
 
 Mod-Shift-A toggles all caps, as in Word. Small caps get no key: Word's Mod-Shift-K reaches the command palette, whose listener takes Mod+K with or without Shift (`use-palette-shortcuts.ts`).
 
-## Small caps print only in Source Serif 4
+## The PDF fakes small caps where the font has none
 
-A browser fakes small caps in a font that has none, so the editor, quick look and the HTML download show them in every font. WeasyPrint fakes nothing, and of the bundled fonts only Source Serif 4's upright face has small-caps glyphs (the OpenType `smcp` feature). So the PDF prints small caps in Inter, JetBrains Mono, Excalifont or Source Serif 4's italic as the letters were typed ([ROADMAP](ROADMAP.md)). All caps print in every font. Word fakes small caps itself, so the docx shows them everywhere.
+A browser fakes small caps in a font that has none, so the editor, quick look and the HTML download show them in every font. WeasyPrint fakes nothing: it draws `font-variant-caps` only from a font's own small-caps glyphs (the OpenType `smcp` feature), which of the bundled fonts only Source Serif 4's upright face has. So the PDF's HTML fakes them itself: in Inter, JetBrains Mono, Excalifont and italic Source Serif 4, a small-caps run's lowercase letters are written as capitals in a span at 0.7em, the size Chromium and WebKit fake them at. Its capitals and everything else stay as typed. Upright Source Serif 4 keeps its real small caps. A run counts as italic under the italic mark or in a blockquote, which eigen-prose.css sets in italic. `renderDocHtml` does this behind its `synthesizeSmallCaps` option, which only the `pdf-html` format sets, so the HTML download keeps the letters as typed. Word fakes small caps itself, so the docx shows them everywhere.
 
 ## See also
 

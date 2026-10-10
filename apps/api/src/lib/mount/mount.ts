@@ -18,14 +18,9 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { getServerSettings } from '../config/server-settings';
-import {
-    ApiError,
-    type DatabaseConfig,
-    type ManagedDatabase,
-    PATHS,
-    type SchemaType,
-    storageUnavailable,
-} from '../core';
+
+import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType, StaleWriteError } from '../core';
+
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import {
@@ -62,11 +57,26 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     relativePath: string,
 ) => Promise<ManagedDatabase<S>>;
 
+type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
+
+// By mount folder, not Mount object: a backup's own Mount of a disabled mount and the Mount an enable or a
+// storage re-point builds lock with the drive's. One small entry per folder, kept for the process.
+const folderLocks = new Map<string, FolderLocks>();
+
+function locksFor(folder: string): FolderLocks {
+    let locks = folderLocks.get(folder);
+    if (!locks) {
+        locks = { paths: new Map(), tree: new RWLock() };
+        folderLocks.set(folder, locks);
+    }
+    return locks;
+}
+
 export class Mount {
     readonly id: string;
     readonly config: MountConfig;
 
-    private baseDir: string;
+    private readonly baseDir: string;
     storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
     // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + drive/history.ts
     // (the last one constructor-injected)
@@ -77,8 +87,8 @@ export class Mount {
     documentDbs: Map<string, DocumentDbSlot> = new Map();
     // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
     closing = false; // internal — used by mount/*.ts
-    private pathLocks: Map<string, Promise<void>> = new Map();
-    private treeLock = new RWLock();
+    private readonly pathLocks: Map<string, Promise<void>>;
+    private readonly treeLock: RWLock;
 
     // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
@@ -116,6 +126,7 @@ export class Mount {
         this.id = config.id;
         this.config = config;
         this.baseDir = path.join(baseDir, PATHS.DRIVE.ROOT, config.id);
+        ({ paths: this.pathLocks, tree: this.treeLock } = locksFor(this.baseDir));
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
 
@@ -968,7 +979,11 @@ export class Mount {
         return !!row && isSearchableTextFile(row.mimeType, row.name);
     }
 
-    async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    async writeFile(
+        pathId: string,
+        data: Buffer | Uint8Array | ArrayBuffer | BunFile,
+        expectedUpdatedAt?: Date,
+    ): Promise<number> {
         let size: number;
         if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
             size = data.length;
@@ -979,26 +994,41 @@ export class Mount {
         }
         const hash = await this.computeHash(data);
 
-        return this.withPathLock(pathId, () =>
-            this.withTreeShared(async () => {
+        return this.withPathLock(pathId, async () => {
+            await this.assertUpdatedAt(pathId, expectedUpdatedAt);
+            return this.withTreeShared(async () => {
                 const storageKey = await this.getStorageKey(pathId);
                 const written = await this.storage.write(storageKey, data);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
                 return written;
-            }),
-        );
+            });
+        });
     }
 
     // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
     // Mirrors createFileFromTemp on the create side and avoids re-hashing.
-    async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
-        await this.withPathLock(pathId, () =>
-            this.withTreeShared(async () => {
+    async writeFileFromTemp(
+        pathId: string,
+        tempId: string,
+        size: number,
+        hash: string,
+        expectedUpdatedAt?: Date,
+    ): Promise<void> {
+        await this.withPathLock(pathId, async () => {
+            await this.assertUpdatedAt(pathId, expectedUpdatedAt);
+            await this.withTreeShared(async () => {
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
-            }),
-        );
+            });
+        });
+    }
+
+    // Under the path lock every overwrite takes, so of two saves from one base only the first writes.
+    private async assertUpdatedAt(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
+        if (!expectedUpdatedAt) return;
+        const { updatedAt } = await this.getActivePath(pathId);
+        if (updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new StaleWriteError(updatedAt);
     }
 
     // Runs under the path lock after the PUT landed. deletePath doesn't wait on that lock, so a
@@ -1049,7 +1079,7 @@ export class Mount {
                     // A staged copy the queue's ack unlinked mid-read now sits in the bucket: fall through.
                     if (!isMissingObjectCause(err)) {
                         console.error(`[Mount] download of staged ${storageKey} failed:`, err);
-                        throw err instanceof ApiError ? err : storageUnavailable();
+                        throw err;
                     }
                 }
             }
@@ -1071,9 +1101,9 @@ export class Mount {
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
             // Only the GET body tells a gone object (410) from an outage (503). The read's own failures
-            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT is not a gone object.
+            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), so a 500, and its ENOENT is not a gone object.
             if (isMissingObjectCause(err)) throw storageGone(err.cause);
-            throw err instanceof ApiError ? err : storageUnavailable();
+            throw err;
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -1088,11 +1118,11 @@ export class Mount {
         let size: number;
         try {
             ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
+            fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         } catch (err) {
             await this.cleanupTemp(sideId);
             throw err;
         }
-        fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         return size;
     }
 
