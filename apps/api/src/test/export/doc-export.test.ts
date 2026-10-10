@@ -323,7 +323,11 @@ describe('doc export — caps', () => {
             { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4', true)] },
             {
                 type: 'blockquote',
-                content: [{ type: 'paragraph', content: [caps('Quote', 'small', 'Source Serif 4')] }],
+                content: [
+                    { type: 'paragraph', content: [caps('Quote', 'small', 'Source Serif 4')] },
+                    { type: 'paragraph', content: [caps('Mono', 'small', 'JetBrains Mono')] },
+                    { type: 'paragraph', content: [caps('Body', 'small')] },
+                ],
             },
         ]);
 
@@ -332,6 +336,8 @@ describe('doc export — caps', () => {
         );
         expect(html).toContain(`S${small('ERIF')}`);
         expect(html).toContain(`Q${small('UOTE')}`);
+        expect(html).toContain(`M${small('ONO')}`);
+        expect(html).toContain(`B${small('ODY')}`);
     });
 
     test('the pdf keeps upright Source Serif 4 small caps as typed', async () => {
