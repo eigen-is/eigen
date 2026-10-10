@@ -6,7 +6,7 @@ import { descendants, is, w, wChild } from './package';
 
 // Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.
 
-export const MONOSPACE_FONT = bundledFontOfCategory('monospace');
+const MONOSPACE_FONT = bundledFontOfCategory('monospace');
 
 export type Theme = { font(themeName: string, language?: string): string | undefined };
 
@@ -149,8 +149,12 @@ export function readFontTable(root: XmlElement | undefined): FontTable {
     return table;
 }
 
-export function bundledFontOf(name: string | undefined, fontTable?: FontTable): string | undefined {
+function bundledFontOf(name: string | undefined, fontTable?: FontTable): string | undefined {
     return name ? (bundledFont(name) ?? fontTable?.get(name.trim().toLowerCase())) : undefined;
+}
+
+export function isMonospaceFont(name: string | undefined, fontTable: FontTable): boolean {
+    return bundledFontOf(name, fontTable) === MONOSPACE_FONT;
 }
 
 // The document font draws without a mark, so a foreign sans body is no mark and a serif or mono one is one per run.

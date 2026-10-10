@@ -4,15 +4,7 @@ import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxm
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import {
-    bundledFontOf,
-    byFace,
-    type FontTable,
-    MONOSPACE_FONT,
-    readFontTable,
-    readTheme,
-    type Theme,
-} from './docx-fonts';
+import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import {
@@ -194,12 +186,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const outline = styles.para(styleId).outlineLvl;
     if (role.kind === 'paragraph' && outline !== undefined && outline < 6 && !style?.name.startsWith('toc'))
         role = { kind: 'heading', level: outline + 1 };
-    const headingRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
+    const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
-    if (role.kind === 'heading' && !listed && isBodySized(reader, p, headingRun)) role = { kind: 'paragraph' };
-    if (role.kind === 'code' && !isMonospace(reader, p, scope, styleId)) role = { kind: 'paragraph' };
+    if (role.kind === 'heading' && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
+    if (role.kind === 'code' && !isMonospace(reader, p, paraRun)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
@@ -230,8 +222,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
     // grey of any shade, as other editors shade code.
     const texts = pieces.filter((piece) => piece.kind === 'node' && piece.node.type === 'text');
-    const mono = (piece: Piece) =>
-        piece.kind === 'node' && bundledFontOf(piece.font, reader.fontTable) === MONOSPACE_FONT;
+    const mono = (piece: Piece) => piece.kind === 'node' && isMonospaceFont(piece.font, reader.fontTable);
     const allMono =
         texts.some(mono) && texts.every((piece) => mono(piece) || (piece.kind === 'node' && isWhitespace(piece.node)));
     if (
@@ -364,23 +355,29 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     return items;
 }
 
+// Each run's text in the faces Word draws it in, beside the run's own properties. A run's text box is not searched.
+function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
+    return descendants(p, W_NS, 'r').flatMap((run) => {
+        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
+        const props = mergeRun(paraRun, reader.styles.run(direct.style), direct);
+        return xmlElements(run)
+            .filter((child) => is(child, W_NS, 't'))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, reader.pkg.chargePiece))
+            .filter((face) => face.text.trim())
+            .map((face) => ({ ...face, direct }));
+    });
+}
+
 // Every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
-// text, complex script at its szCs; the style's bold and italic then stay as marks. A run's text box is not searched.
+// text, complex script at its szCs; the style's bold and italic then stay as marks.
 function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): boolean {
     const headingSize = heading.size ?? 20;
     const headingSizeCs = heading.sizeCs ?? headingSize;
-    const faces = descendants(p, W_NS, 'r').flatMap((run) => {
-        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
-        return xmlElements(run)
-            .filter((child) => is(child, W_NS, 't'))
-            .flatMap((t) => byFace(xmlText(t), undefined, direct, true, reader.pkg.chargePiece))
-            .filter((face) => face.text.trim())
-            .map(({ complex }) =>
-                complex
-                    ? { size: direct.sizeCs, heading: headingSizeCs, body: reader.bodySizeCs }
-                    : { size: direct.size, heading: headingSize, body: reader.bodySize },
-            );
-    });
+    const faces = textFaces(reader, p, heading).map(({ complex, direct }) =>
+        complex
+            ? { size: direct.sizeCs, heading: headingSizeCs, body: reader.bodySizeCs }
+            : { size: direct.size, heading: headingSize, body: reader.bodySize },
+    );
     return (
         faces.length > 0 &&
         faces.every(({ size, heading, body }) => size !== undefined && size < heading && size <= body)
@@ -389,21 +386,11 @@ function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): bool
 
 // A code style draws code only where every run holding text is monospace, an empty line where its mark is;
 // HTML Preformatted in Times is prose.
-function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: string | undefined): boolean {
-    const { styles } = reader;
-    const paraRun = mergeRun(styles.docRun, scope.tableRun ?? {}, styles.run(styleId));
-    const mono = (font: string | undefined) => bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT;
-    const faces = descendants(p, W_NS, 'r').flatMap((run) => {
-        const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
-        const props = mergeRun(paraRun, styles.run(direct.style), direct);
-        return xmlElements(run)
-            .filter((child) => is(child, W_NS, 't'))
-            .flatMap((t) => byFace(xmlText(t), props.fonts, props, false, reader.pkg.chargePiece))
-            .filter((face) => face.text.trim());
-    });
-    if (faces.length > 0) return faces.every((face) => mono(face.font));
+function isMonospace(reader: Reader, p: XmlElement, paraRun: DocxRunProps): boolean {
+    const faces = textFaces(reader, p, paraRun);
+    if (faces.length > 0) return faces.every((face) => isMonospaceFont(face.font, reader.fontTable));
     const mark = mergeRun(paraRun, readRunProps(wChild(wChild(p, 'pPr'), 'rPr'), reader.theme));
-    return mono(byFace(' ', mark.fonts, mark, false)[0]?.font);
+    return isMonospaceFont(byFace(' ', mark.fonts, mark, false)[0]?.font, reader.fontTable);
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

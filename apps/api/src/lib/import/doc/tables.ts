@@ -3,7 +3,7 @@ import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { isOn, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
-import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
+import { build, COLUMN_PX, type Item, inlineText, isWhitespace, type Para } from './assemble';
 import { int, is, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
@@ -210,7 +210,7 @@ function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: 
         attrs: {
             ...figure.attrs,
             layout: right ? 'wrap-right' : 'wrap-left',
-            caption: caption ? textOf(caption.inlines) || null : null,
+            caption: caption ? inlineText(caption.inlines) || null : null,
         },
     };
 }

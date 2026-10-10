@@ -71,7 +71,7 @@ export function build(raw: Item[]): JSONContent[] {
     return buildLevel(items, 0);
 }
 
-export function textOf(nodes: JSONContent[]): string {
+export function inlineText(nodes: JSONContent[]): string {
     return nodes.map((node) => (node.type === 'hardBreak' ? '\n' : (node.text ?? ''))).join('');
 }
 
@@ -141,7 +141,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                     ? !!item.frame && item.frame === previous.frame && isCaptionLike(item)
                     : !item.empty && !item.list && !item.task && (item.role.kind === 'caption' || !!item.captionLook);
                 if (caption && last?.attrs && figures.length === 1 && !last.attrs['caption']) {
-                    last.attrs['caption'] = textOf(item.inlines);
+                    last.attrs['caption'] = inlineText(item.inlines);
                     continue;
                 }
             }
@@ -240,8 +240,8 @@ function assignQuotes(items: Item[]): void {
     }
 }
 
-// The writer numbers a level from a base, the quotes' indent around the list, its hanging indent per level past it
-// (to-docx.ts numberingXml); a base off a quote's text is another editor's.
+// The writer numbers a level from a base, the quotes' indent around the list, its hanging indent per level past it; a
+// base off a quote's text is another editor's.
 function listDepth(list: NonNullable<Para['list']>): number | undefined {
     const depth = quotesPast((list.pPr.indLeft ?? 0) + (list.pPr.indFirst ?? 0) * (list.ilvl + 1), 0);
     return depth || undefined;
@@ -434,7 +434,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             if (code && (code.language !== item.role.language || code.host !== host)) flushCode();
             closeLists(host ? stack.indexOf(host) + 1 : 0);
             code ??= { language: item.role.language, lines: [], host };
-            code.lines.push(textOf(item.inlines.filter((node) => node.type !== 'figure')));
+            code.lines.push(inlineText(item.inlines.filter((node) => node.type !== 'figure')));
             continue;
         }
         flushCode();
@@ -473,7 +473,7 @@ function buildFlow(items: Item[]): JSONContent[] {
         if (item.kind === 'float') continue;
         const node = textblockOf(item);
         if (item.list || item.task) {
-            placeItem(item, node, stack, blocks);
+            placeItem(item, node, stack, closeLists);
             continue;
         }
         // The writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
@@ -540,7 +540,7 @@ function textblockOf(para: Para): JSONContent {
 
 // Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's
 // text, and tasks by indent. A number that doesn't follow starts a new list.
-function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JSONContent[]): void {
+function placeItem(para: Para, textblock: JSONContent, stack: Open[], closeLists: (to: number) => void): void {
     // An item opens on a paragraph: a checkbox in a heading makes a task of the heading's text.
     const paragraph: JSONContent =
         textblock.type === 'paragraph'
@@ -554,21 +554,17 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
     const item: JSONContent = para.task
         ? { type: 'taskItem', attrs: { checked: para.task.checked }, content: [paragraph] }
         : { type: 'listItem', content: [paragraph] };
-    const pop = () => {
-        const popped = stack.pop();
-        if (popped && stack.length === 0) blocks.push(popped.list);
-    };
     while (stack.length > 0) {
         const top = stack.at(-1);
         if (!top) break;
         const sameList = top.key === key && top.kind === kind && !para.task;
         if (sameList && top.ilvl > ilvl) {
-            pop();
+            closeLists(stack.length - 1);
             continue;
         }
         if (sameList && top.ilvl === ilvl) {
             if (kind === 'orderedList' && number !== top.number + 1) {
-                pop();
+                closeLists(stack.length - 1);
                 break;
             }
             top.list.content?.push(item);
@@ -584,7 +580,7 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], blocks: JS
         const deeper = sameList ? top.ilvl < ilvl : nestsUnder(para, top.indent, top.kind === 'taskList');
         // No deeper than Word's levels: lists of other definitions nest by indent, which a hostile file can deepen.
         if (deeper && stack.length < LIST_LEVELS) break;
-        pop();
+        closeLists(stack.length - 1);
         if (deeper) break;
     }
     const attrs =
