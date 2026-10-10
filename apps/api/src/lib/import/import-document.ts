@@ -104,9 +104,9 @@ export async function convertToDocument(
     const { update, images } = await importDocxUpdate(buffer);
     const name = sourcePath.name.replace(/\.docx$/i, '');
     const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
-    await saveDocImages(mount, newPath, images);
     const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
     writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+    await saveDocImages(mount, newPath, images);
     return newPath;
 }
 
@@ -132,10 +132,12 @@ export async function importIntoDocument(
 
     if (containerMime === DRIVE_MIME_DOC) {
         const { update, images } = await importDocxUpdate(buffer, signal);
-        // Media before the update that names it: an open tab looks each name up once, as the update arrives.
+        // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
+        // and the abort check come first, so past the save only a revocation stops the update.
         await requireWritePermission(drive, path, user);
-        await saveDocImages(mount, path, images);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
+        signal?.throwIfAborted();
+        await saveDocImages(mount, path, images);
         await requireWritePermission(drive, path, user);
         writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         return;

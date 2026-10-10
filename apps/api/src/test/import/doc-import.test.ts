@@ -61,6 +61,18 @@ async function upload(bytes: ArrayBuffer | string, fileName: string, type = DOCX
     );
 }
 
+function createDoc(fileName: string): Promise<DrivePath> {
+    return drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${rootId}/create/doc`,
+        {
+            fileName,
+        },
+    );
+}
+
 function convertRequest(pathId: string, targetType = 'eigendoc'): Promise<Response> {
     return authedRequest(
         ctx.alice.user.sessionToken,
@@ -118,13 +130,7 @@ describe('Eigendoc docx import/convert', () => {
     }, 120_000);
 
     test('import .docx replaces the existing eigendoc content instead of appending', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'import-target' },
-        );
+        const docPath = await createDoc('import-target');
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
         seedEigendoc(collab.doc, {
@@ -142,13 +148,7 @@ describe('Eigendoc docx import/convert', () => {
     }, 120_000);
 
     test('a repeat .docx import overwrites the previous import media', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'repeat-import-target' },
-        );
+        const docPath = await createDoc('repeat-import-target');
         const first = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
         expect((await assertJson<{ success: boolean }>(first)).success).toBe(true);
 
@@ -164,13 +164,7 @@ describe('Eigendoc docx import/convert', () => {
 
     // An open tab looks each figure's media name up once, as the update reaches it: a name with no row yet spins forever.
     test('import saves the media before the document names it', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'media-first-target' },
-        );
+        const docPath = await createDoc('media-first-target');
         const home = await getHome(ctx.alice.user.id);
         const { mount } = await home.drive.resolveFile(mountId, docPath.id);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
@@ -191,13 +185,7 @@ describe('Eigendoc docx import/convert', () => {
 
     // The Worker reads no config: the job carries the origin, so a link into this instance comes back root-relative.
     test('import makes a link to this instance root-relative', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'origin-import-target' },
-        );
+        const docPath = await createDoc('origin-import-target');
         const docx = await buildDocxWithBody(
             '<w:p><w:hyperlink r:id="rId9"><w:r><w:t>Home</w:t></w:r></w:hyperlink></w:p>',
             {
@@ -223,26 +211,14 @@ describe('Eigendoc docx import/convert', () => {
     }, 60_000);
 
     test('import with a non-docx body returns 400, not 500', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'garbage-import-target' },
-        );
+        const docPath = await createDoc('garbage-import-target');
         const res = await importRequest(docPath.id, toTransferableBuffer(Buffer.from('not a valid docx file')));
         expect(res.status).toBe(400);
         expect(await res.text()).toBe('Not a valid docx file');
     }, 60_000);
 
     test('import route surfaces the decompression-bomb guard as 413 Document too large', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'bomb-import-target' },
-        );
+        const docPath = await createDoc('bomb-import-target');
         const bomb = buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
         const res = await importRequest(docPath.id, toTransferableBuffer(bomb));
         expect(res.status).toBe(413);
@@ -254,13 +230,7 @@ describe('Eigendoc docx import/convert', () => {
         // for up to minutes. Calling the commit seam directly with a writer whose
         // permission was revoked in that window is exactly the race: read still
         // resolves the collab document, only the write recheck stands in the way.
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'acl-race-target' },
-        );
+        const docPath = await createDoc('acl-race-target');
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
         seedEigendoc(collab.doc, {
@@ -293,16 +263,34 @@ describe('Eigendoc docx import/convert', () => {
         expect(await readDocJson(docPath.id)).toEqual(before);
     }, 60_000);
 
+    test('an import aborted after the transform writes neither media nor update', async () => {
+        const docPath = await createDoc('abort-import-target');
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile(mountId, docPath.id);
+        const before = await readDocJson(docPath.id);
+        const controller = new AbortController();
+        const realGet = home.drive.getCollabDocument.bind(home.drive);
+        const getSpy = spyOn(home.drive, 'getCollabDocument').mockImplementation((id, pathId) => {
+            controller.abort();
+            return realGet(id, pathId);
+        });
+        const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
+        try {
+            await expect(
+                importIntoDocument(home.drive, mount, path, buffer, home.user, controller.signal),
+            ).rejects.toMatchObject({ name: 'AbortError' });
+        } finally {
+            getSpy.mockRestore();
+        }
+        const mediaFolder = await mount.getChildByName(docPath.id, 'media');
+        expect(mediaFolder && (await mount.getChildByName(mediaFolder.id, GOLDEN_DOCX_IMAGE_NAME))).toBeNull();
+        expect(await readDocJson(docPath.id)).toEqual(before);
+    }, 60_000);
+
     test('write revoked during the collab-document lookup blocks the commit', async () => {
         // The recheck only closes the race if it is the LAST await before the write:
         // resolving the collab document is itself an await, read-checked only.
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'acl-race-lookup-target' },
-        );
+        const docPath = await createDoc('acl-race-lookup-target');
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
         seedEigendoc(collab.doc, {
@@ -398,13 +386,7 @@ describe('docx import errors', () => {
     }
 
     test('a password-protected file says so, through the import route', async () => {
-        const docPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'locked-import-target' },
-        );
+        const docPath = await createDoc('locked-import-target');
         const res = await importRequest(docPath.id, ole('EncryptedPackage'));
         expect(res.status).toBe(400);
         expect(await res.text()).toBe(
