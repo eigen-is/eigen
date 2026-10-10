@@ -291,6 +291,14 @@ type ReadServerArchive = {
     manifest: ServerArchiveManifest | null;
 };
 
+// How a member differs from its manifest entry, or null. A null sha256 checks the size alone, for a reader that has
+// not read the bytes yet.
+function memberMismatch(entry: ServerArchiveManifest['entries'][number], bytes: number, sha256: string | null) {
+    if (bytes !== entry.bytes) return `${entry.path}: ${bytes} bytes, the manifest says ${entry.bytes}`;
+    if (sha256 !== null && sha256 !== entry.sha256) return `${entry.path}: sha256 does not match the manifest`;
+    return null;
+}
+
 // The transport check of a whole-server archive: its last member is the manifest, and every other
 // member is there with the bytes and sha256 the manifest names. No member is unpacked; each one
 // verifies on its own when it is extracted.
@@ -333,10 +341,9 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
         present.delete(entry.path);
         if (!member) {
             failures.push(`${entry.path}: missing from the archive`);
-        } else if (member.bytes !== entry.bytes) {
-            failures.push(`${entry.path}: ${member.bytes} bytes, the manifest says ${entry.bytes}`);
-        } else if (member.sha256 !== entry.sha256) {
-            failures.push(`${entry.path}: sha256 does not match the manifest`);
+        } else {
+            const mismatch = memberMismatch(entry, member.bytes, member.sha256);
+            if (mismatch) failures.push(mismatch);
         }
     }
     for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
@@ -365,12 +372,17 @@ export async function readServerArchiveMember(
     if (!member && !entry) return { bytes: null };
     if (!member) return { failure: `${name}: missing from the archive` };
     if (!entry) return { failure: `${name}: not in the manifest` };
-    if (member.bytes !== entry.bytes) {
-        return { failure: `${name}: ${member.bytes} bytes, the manifest says ${entry.bytes}` };
+    const tooBig = memberMismatch(entry, member.bytes, null);
+    if (tooBig) return { failure: tooBig };
+    try {
+        const bytes = await readArchiveMember(member);
+        const mismatch = memberMismatch(
+            entry,
+            bytes.length,
+            new Bun.CryptoHasher('sha256').update(bytes).digest('hex'),
+        );
+        return mismatch ? { failure: mismatch } : { bytes };
+    } catch (error) {
+        return { failure: describeError(error) };
     }
-    const bytes = await readArchiveMember(member);
-    if (new Bun.CryptoHasher('sha256').update(bytes).digest('hex') !== entry.sha256) {
-        return { failure: `${name}: sha256 does not match the manifest` };
-    }
-    return { bytes };
 }

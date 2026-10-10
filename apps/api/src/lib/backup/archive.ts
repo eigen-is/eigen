@@ -477,6 +477,7 @@ export async function listArchiveMembers(archivePath: string): Promise<ArchiveMe
         async function* blocks(): AsyncGenerator<Uint8Array> {
             while (at < size) {
                 const { bytesRead, buffer } = await handle.read(new Uint8Array(BLOCK), 0, BLOCK, at);
+                if (bytesRead === 0) return;
                 at += bytesRead;
                 yield buffer.subarray(0, bytesRead);
             }

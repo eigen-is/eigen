@@ -672,7 +672,12 @@ async function takeEnv(archive: string | undefined): Promise<void> {
         );
     }
     const temporary = `${ENV_PATH}.${process.pid}.tmp`;
-    writeFileSync(temporary, read.bytes, { mode: 0o600 });
+    try {
+        writeFileSync(temporary, read.bytes, { mode: 0o600 });
+    } catch (error) {
+        rmSync(temporary, { force: true });
+        throw error;
+    }
     if (!readEnvFile(temporary).has(API_IMAGE_KEY)) {
         rmSync(temporary);
         return ui.fail(
