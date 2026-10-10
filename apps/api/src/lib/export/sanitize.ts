@@ -161,9 +161,8 @@ function restrictStyleTextToDataRefs(node: { textContent: string | null }, allow
 }
 
 // Backs the data-only rule up in the browser: the export route sends it as a header, and every HTML
-// download carries it as a <meta>, so it still holds once the file is saved and opened.
+// download carries it as a <meta> (html-document.ts).
 export const EXPORT_CSP = "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'";
-export const EXPORT_CSP_META = `<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`;
 
 // Shared sanitizer for assembled export and preview bodies (slides/sheets/docs/vector), used for HTML,
 // PDF and live-DOM output. Adds the URL restriction on top of DOMPurify. The hooks are scoped to this

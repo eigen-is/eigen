@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import ExcelJS from 'exceljs';
-import { EXPORT_CSP, EXPORT_CSP_META } from '../../lib/export/sanitize';
+import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -48,7 +48,7 @@ describe('Sheets export route — response contract', () => {
 
         const html = await res.text();
         expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
-        expect(html).toContain(EXPORT_CSP_META);
+        expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`);
         expect(html).toContain('<title>Export Contract</title>');
         // Full workbook, not the budgeted preview: every sheet renders, computed
         // formulas included, and hostile fixture content stays sanitized.

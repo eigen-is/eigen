@@ -1,4 +1,3 @@
-import { escapeHtml } from '@workspace/lib/html';
 import { FRAME_WIDTH, type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
@@ -12,8 +11,8 @@ import {
     type TransformWarning,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { getFontCSS } from '../fonts';
-import { EXPORT_CSP_META, sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
+import { exportHtmlDocument, type HtmlExportMode } from '../html-document';
+import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
 
@@ -31,7 +30,7 @@ export function canvasHtmlDocument(opts: {
     title: string;
     pages: CanvasPage[];
     scale: number;
-    mode: 'screen' | 'pdf';
+    mode: HtmlExportMode;
     resolveMedia?: MediaResolver;
 }): string {
     const { title, pages, scale, mode, resolveMedia } = opts;
@@ -47,24 +46,16 @@ export function canvasHtmlDocument(opts: {
     // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
-    // A collaborator can put arbitrary strings in a schemaless scene, so the assembled body runs
-    // through the shared sanitizer (the documented data-only rule); a rich-text box's raw HTML was
-    // filtered at the scene. No ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
-    const body = sanitizeExportHtml(rendered.join(''));
+    // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
+    // compositor emits ordinary HTML, never a foreignObject.
+    const body = rendered.join('');
     const css = mode === 'pdf' ? pdfCss(width, height) : screenCss(width);
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    ${EXPORT_CSP_META}
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${SHARED_CSS}${css}${canvasTextCSSRaw}</style>
-</head>
-<body>
-    ${mode === 'pdf' ? body : `<div class="deck">${body}</div>`}
-</body>
-</html>`;
+    return exportHtmlDocument({
+        title,
+        css: `${SHARED_CSS}${css}${canvasTextCSSRaw}`,
+        body: mode === 'pdf' ? body : `<div class="deck">${body}</div>`,
+        viewport: true,
+    });
 }
 
 // Materialized doc + prepared media → export bytes for a deck: one page per frame.

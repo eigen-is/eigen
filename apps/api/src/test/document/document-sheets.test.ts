@@ -5,7 +5,7 @@ import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine'
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import { readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
-import { renderSheetsExportDocument } from '../../lib/export/sheets/render';
+import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import type { Mount } from '../../lib/mount';
@@ -324,7 +324,9 @@ describe('document/sheets — patch op replay', () => {
         const { sheets: result } = await readSheets(mount, path);
 
         expect(result[0].data![0][1]).toEqual({ v: 2, f: '=1+1', m: '2' });
-        expect(renderSheetsExportDocument(result, 'first-formula', NO_MEDIA)).toContain('>2<');
+        expect(
+            sheetsHtmlDocument({ title: 'first-formula', sheets: result, mediaUrls: NO_MEDIA, mode: 'screen' }),
+        ).toContain('>2<');
     });
 
     test('reads doc with snapshot + multiple op batches → applies in order', async () => {

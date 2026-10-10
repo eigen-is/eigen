@@ -5,7 +5,9 @@ import { getFontName } from '@workspace/lib/constants/fonts';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
+import { BODY, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
+import { hasSmallCaps } from '../fonts';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
@@ -109,9 +111,8 @@ const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';
 
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
-// WeasyPrint draws small caps only from a font's smcp glyphs and fakes none, and of the bundled faces only upright
-// Source Serif 4 has them. Elsewhere the PDF writes a small-caps text's lowercase as smaller capitals. eigen-prose.css
-// sets a blockquote in italic.
+// WeasyPrint draws small caps only from a font's own smcp glyphs and fakes none, so where the face has none
+// (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals.
 function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
     const quoted = new Set<Node>();
     doc.descendants((node) => {
@@ -126,8 +127,10 @@ function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) 
         const style = node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs;
         if (style?.['caps'] !== 'small') return escapeHtml(text);
         const font = style['fontFamily'];
-        const italic = quoted.has(node) || node.marks.some((mark) => mark.type.name === 'italic');
-        if (!italic && typeof font === 'string' && getFontName(font) === 'Source Serif 4') return escapeHtml(text);
+        const family = typeof font === 'string' ? getFontName(font) : BODY.font;
+        const italic =
+            (QUOTE_LOOK.italic && quoted.has(node)) || node.marks.some((mark) => mark.type.name === 'italic');
+        if (hasSmallCaps(family, italic ? 'italic' : 'normal')) return escapeHtml(text);
         let html = '';
         let capitals = '';
         for (const { segment } of GRAPHEMES.segment(text)) {
@@ -143,8 +146,9 @@ function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) 
     };
 }
 
-const smaller = (capitals: string): string =>
-    capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
+function smaller(capitals: string): string {
+    return capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
+}
 
 // The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
 // small caps.

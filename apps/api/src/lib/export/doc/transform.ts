@@ -1,6 +1,4 @@
-import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace/lib/docs/eigendoc';
-import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
@@ -8,7 +6,6 @@ import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
     DOCX_IMAGE_MAX_SIZE,
-    type DocumentExportFormat,
     type EigendocExportFormat,
     type ExportMedia,
     type TransformWarning,
@@ -16,8 +13,7 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
-import { getFontCSS } from '../fonts';
-import { EXPORT_CSP_META, sanitizeExportHtml } from '../sanitize';
+import { exportHtmlDocument } from '../html-document';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -41,16 +37,23 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks(media);
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
-    const html = renderEigendocDocument(withAbsoluteLinks(json, publicOrigin), toDataUriMap(media), title, format);
-    return { data: toTransferableText(`<!DOCTYPE html>\n${html}`), warnings: [] };
+    const dataUriMap = toDataUriMap(media);
+    const body = renderDocHtml(
+        withAbsoluteLinks(json, publicOrigin),
+        (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+        { synthesizeSmallCaps: format === 'pdf-html' },
+    );
+    const html = exportHtmlDocument({
+        title,
+        css: `${PROSE_CSS}${PRINT_EXTRAS}`,
+        body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
+    });
+    return { data: toTransferableText(html), warnings: [] };
 }
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
-export async function withSvgFallbacks(
-    media: ExportMedia[],
-    timeoutSeconds = THUMBNAIL_TIMEOUT_SECONDS,
-): Promise<DocxMedia[]> {
+async function withSvgFallbacks(media: ExportMedia[]): Promise<DocxMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
     const { default: sharp } = await import('sharp');
     const prepared: DocxMedia[] = [];
@@ -66,7 +69,7 @@ export async function withSvgFallbacks(
             const png = await image
                 .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
-                .timeout({ seconds: timeoutSeconds })
+                .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
                 .toBuffer();
             prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
         } catch {
@@ -88,32 +91,6 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
     const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
-}
-
-function renderEigendocDocument(
-    json: JSONContent,
-    dataUriMap: Map<string, string>,
-    title: string,
-    format: DocumentExportFormat,
-): string {
-    const bodyHtml = renderDocHtml(json, (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src), {
-        synthesizeSmallCaps: format === 'pdf-html',
-    });
-    return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
-}
-
-function wrapInDocument(title: string, bodyHtml: string): string {
-    return `<html lang="en">
-<head>
-    <meta charset="utf-8">
-    ${EXPORT_CSP_META}
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${PROSE_CSS}${PRINT_EXTRAS}</style>
-</head>
-<body>
-    <div class="page"><article class="eigen-prose tiptap">${bodyHtml}</article></div>
-</body>
-</html>`;
 }
 
 const PRINT_EXTRAS = `
