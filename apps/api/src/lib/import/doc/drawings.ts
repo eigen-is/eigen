@@ -102,7 +102,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
-            readBlocks(reader, xmlElements(box), context.scope),
+            readBlocks(reader, xmlElements(box), onShape(context.scope)),
         );
         const content = boxed.filter((item) => item.kind !== 'para' || !item.empty);
         const paras = content.filter((item): item is Para => item.kind === 'para');
@@ -215,8 +215,13 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             pushFigure({ type: 'figure', attrs: { mediaName: name, alt, width } }, context);
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
-            for (const item of readBlocks(reader, xmlElements(box), context.scope)) context.pending.push(item);
+            for (const item of readBlocks(reader, xmlElements(box), onShape(context.scope))) context.pending.push(item);
     }
+}
+
+// A shape's text sits on its fill, which the schema drops.
+function onShape(scope: Scope): Scope {
+    return { ...scope, onFill: true };
 }
 
 // Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.

@@ -88,6 +88,26 @@ describe('placement', () => {
     });
 });
 
+// P3: a shape's text sits on its fill, which the schema drops, so light text there takes the body color.
+describe('text boxes', () => {
+    const box = (text: string, color: string) =>
+        `<w:txbxContent><w:p><w:r><w:rPr><w:color w:val="${color}"/></w:rPr><w:t>${text}</w:t></w:r></w:p></w:txbxContent>`;
+    const shape = (inner: string) =>
+        `<w:r><w:drawing><wp:anchor><wp:extent cx="1905000" cy="571500"/><wp:docPr id="2" name="Shape 2"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx>${inner}</wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+    const vml = (inner: string) =>
+        `<w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>${inner}</v:textbox></v:shape></w:pict></w:r>`;
+
+    test('white text in a DrawingML or a VML shape has no color, a dark one keeps its', async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${shape(`${box('Drawn', 'FFFFFF')}${box('Red', 'C00000')}`)}${vml(box('Legacy', 'FFFFFF'))}`),
+        );
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Drawn', 'Red', 'Legacy']);
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Red', '#c00000'],
+        ]);
+    });
+});
+
 // G9: a figure keeps its place; a block figure takes the next line as its caption only in the Caption style or the
 // writer's caption look, a wrapped one only what its own drawing holds.
 describe('captions', () => {
