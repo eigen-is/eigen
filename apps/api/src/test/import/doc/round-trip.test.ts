@@ -259,6 +259,18 @@ describe('boxes side by side in a quote', () => {
         ['a quote, then a quote opening with code', [quote(p('Said')), quote(code('one()'))]],
         ['a quote ending in code, then a quote', [quote(code('one()')), quote(p('Said'))]],
         ['two code blocks at the margin', [code('one()'), code('two()')]],
+        ['two tables', [quote(p('Said'), table, table)]],
+        ['a table in an item and one after the list', [quote(bullets([p('One'), table]), table)]],
+        ['a quote ending in a list, and code', [quote(quote(bullets([p('One'), p('More')])), code('one()'))]],
+        ['code and a quote opening with a list', [quote(code('one()'), quote(bullets([p('One')])))]],
+        [
+            'a quote ending in code in an item, then a quote opening with code',
+            [quote(bullets([p('One'), code('one()')])), quote(code('two()'))],
+        ],
+        [
+            'a quote ending in code in an item, then a quote opening with a quote',
+            [quote(bullets([p('One'), code('one()')])), quote(quote(p('Deep')))],
+        ],
     ])('%s come back as written', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));

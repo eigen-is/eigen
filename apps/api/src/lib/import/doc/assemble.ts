@@ -341,15 +341,26 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         quoted = [];
     };
     const itemDepths = depths(items);
-    // Code or a deeper quote: the writer's Spacer between two of them stands in the quote around them.
+    // Code, a table or a deeper quote: the writer's Spacer between two of them stands in the quote around them, as one
+    // between two quotes always has a quote's text on one side. After code it parts boxes of one container: the code's
+    // box is its text, a deeper quote's first line a quote's indent per quote in from it.
     const isBox = (index: number) => {
         const near = items[index];
         const nearDepth = itemDepths[index] ?? 0;
-        return nearDepth > depth + 1 || (near?.kind === 'para' && near.role.kind === 'code');
+        return nearDepth > depth + 1 || near?.kind === 'table' || (near?.kind === 'para' && near.role.kind === 'code');
+    };
+    const betweenBoxes = (index: number) => {
+        const before = items[index - 1];
+        const after = items[index + 1];
+        if (!isBox(index - 1) || !isBox(index + 1)) return false;
+        if (before?.kind !== 'para' || (itemDepths[index - 1] ?? 0) > depth + 1 || after?.kind !== 'para') return true;
+        const container =
+            (after.numberAt ?? after.indLeft) - QUOTE_LOOK.indent * ((itemDepths[index + 1] ?? 0) - depth - 1);
+        return Math.abs(before.indLeft - container) <= INDENT_TOLERANCE;
     };
     for (const [index, item] of items.entries()) {
         const itemDepth = itemDepths[index] ?? 0;
-        if (item.kind === 'boundary' && itemDepth === depth + 1 && !(isBox(index - 1) && isBox(index + 1))) {
+        if (item.kind === 'boundary' && itemDepth === depth + 1 && !betweenBoxes(index)) {
             flushQuote();
             continue;
         }
