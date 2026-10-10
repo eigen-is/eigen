@@ -379,6 +379,24 @@ describe('what the scan reads', () => {
     }, 30_000);
 });
 
+// A scan that backtracks per start position is quadratic in a run of one character: a million of them in a 1 KB file.
+describe('text the import scans', () => {
+    test('a merge reads a million spaces before its end in linear time', () => {
+        const merge = `<mergeCells count="1"><mergeCell ref="A1:B1"${' '.repeat(1_000_000)}/></mergeCells>`;
+        const result = measuredImport(xlsx({ after: merge }));
+        // The merge's second cell is one too.
+        expect(result).toMatchObject({ cells: [2] });
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    test('a conditional format reads a million digits before no number in linear time', () => {
+        const rule = `<conditionalFormatting sqref="A1"><cfRule type="cellIs" priority="1" operator="equal"><formula>${'1'.repeat(1_000_000)}x</formula></cfRule></conditionalFormatting>`;
+        const result = measuredImport(xlsx({ after: rule }));
+        expect(result).toMatchObject({ cells: [1] });
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+});
+
 // Eigen drops defined names, so the import hides them from exceljs instead of counting what it would expand.
 describe('defined names never reach exceljs', () => {
     const expand = definedName(WHOLE_GRID);

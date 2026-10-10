@@ -812,6 +812,22 @@ describe('structure', () => {
     }, 60_000);
 });
 
+// A scan that backtracks per start position is quadratic in a run of one character: a million of them in a 1 KB file.
+describe('text the reader scans', () => {
+    const spaces = ' '.repeat(1_000_000);
+
+    test('a w:t trims a million interior spaces in linear time', async () => {
+        const json = importInChild(await buildDocxWithBody(paragraph(run(` a${spaces}b `))), 5_000);
+        expect(texts(json)).toEqual([`a${spaces}b`]);
+    }, 10_000);
+
+    test('a HYPERLINK field reads a million spaces before no quote in linear time', async () => {
+        const field = `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">HYPERLINK${spaces}https://example.com</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run('Link')}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const json = importInChild(await buildDocxWithBody(paragraph(field)), 5_000);
+        expect(marksOfType(json, 'link').map((mark) => mark.attrs['href'])).toEqual(['https://example.com']);
+    }, 10_000);
+});
+
 describe('values', () => {
     test.each(['red', '12345', 'GGGGGG', '000000', 'auto'])('w:color %s is no color', async (value) => {
         const json = await imported(paragraph(run('Text', `<w:color w:val="${value}"/>`)));

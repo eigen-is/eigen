@@ -271,7 +271,8 @@ describe('merges', () => {
         ]);
     });
 
-    test('w:gridAfter fills the columns a row leaves empty at its end, as w:gridBefore does at its start', async () => {
+    // Word draws no cell there, so an empty one would draw a column Word lacks.
+    test("w:gridAfter's columns widen the row's last cell, w:gridBefore's its first", async () => {
         const body = table([
             row([cell('A')], '<w:gridAfter w:val="1"/>'),
             row([cell('B')], '<w:gridBefore w:val="1"/>'),
@@ -281,16 +282,33 @@ describe('merges', () => {
             nodesOfType(json, 'tableRow').map((tableRow) =>
                 (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['colwidth']]),
             ),
+        ).toEqual([[[2, [200, 200]]], [[2, [200, 200]]]]);
+    });
+
+    // A merged cell spans its columns in every row it covers, so a row's skipped columns beside it stay a cell.
+    test('the columns a row skips beside a merged cell are an empty cell', async () => {
+        const body = table([
+            row([cell('A', '<w:vMerge w:val="restart"/>')], '<w:gridAfter w:val="1"/>'),
+            row([cell('', '<w:vMerge/>')], '<w:gridAfter w:val="1"/>'),
+            row([cell('B', '<w:vMerge w:val="restart"/>')], '<w:gridBefore w:val="1"/>'),
+        ]);
+        const { json } = await importDocxBody(body);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) =>
+                (tableRow.content ?? []).map((node) => [node.attrs?.['colspan'], node.attrs?.['rowspan'] ?? 1]),
+            ),
         ).toEqual([
             [
-                [1, [200]],
-                [1, [200]],
+                [1, 2],
+                [1, 1],
             ],
+            [[1, 1]],
             [
-                [1, [200]],
-                [1, [200]],
+                [1, 1],
+                [1, 1],
             ],
         ]);
+        expect(fixTables(EditorState.create({ doc: docSchema().nodeFromJSON(json) }))).toBeUndefined();
     });
 
     test('a cell whose paragraphs share one alignment is an aligned cell', async () => {
@@ -394,11 +412,7 @@ describe('a table as the editor opens it', () => {
                 row([tc('', CONTINUE), tc('E')]),
             ]),
         );
-        expect(shape(json)).toEqual([
-            ['1x1:A', '1x1:B'],
-            ['1x1:', '1x1:D'],
-            ['1x1:', '1x1:E'],
-        ]);
+        expect(shape(json)).toEqual([['1x1:A', '1x1:B'], ['2x1:D'], ['1x1:', '1x1:E']]);
         expect(repairs(json)).toBeUndefined();
     });
 
@@ -455,13 +469,16 @@ describe('a table as the editor opens it', () => {
         test.each([
             ['no grid', ''],
             ['a 63-column grid', grid63],
-        ])('a w:gridBefore of 63 over %s leaves the last column to its cells', async (_, grid) => {
-            const { json } = await importDocxBody(
-                tableOn(grid, [row([tc('A'), tc('B')], '<w:gridBefore w:val="63"/>')]),
-            );
-            expect(shape(json)).toEqual([['62x1:', '1x1:AB']]);
-            expect(repairs(json)).toBeUndefined();
-        });
+        ])(
+            'a w:gridBefore of 63 over %s leaves the last column to its cells, the first spanning the row',
+            async (_, grid) => {
+                const { json } = await importDocxBody(
+                    tableOn(grid, [row([tc('A'), tc('B')], '<w:gridBefore w:val="63"/>')]),
+                );
+                expect(shape(json)).toEqual([['63x1:AB']]);
+                expect(repairs(json)).toBeUndefined();
+            },
+        );
 
         test('a continuation into the last column reads the cells after it there, and as the last cell extends', async () => {
             const { json } = await importDocxBody(

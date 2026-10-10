@@ -7,6 +7,7 @@ import {
     DSP_NS,
     EMU_PER_PX,
     EMU_PER_TWIP,
+    FLOATING_WRAPS,
     O_NS,
     PIC_NS,
     R_NS,
@@ -191,7 +192,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             if (shape.ns !== W_NS || shape.local !== 'control') readVml(reader, shape, context);
             continue;
         }
-        if (shape.attributes['o:hr'] === 't' || xmlAttr(shape, O_NS, 'hr') === 't') {
+        if (xmlAttr(shape, O_NS, 'hr') === 't') {
             context.pieces.push({ kind: 'hr' });
             continue;
         }
@@ -200,7 +201,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             const name = path && mediaName(reader, path);
             if (!name) continue;
             const width = vmlWidthPx(shape.attributes['style'] ?? '');
-            const alt = shape.attributes['alt'] || data.attributes['o:title'] || null;
+            const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
@@ -215,9 +216,7 @@ function onShape(scope: Scope): Scope {
 
 // Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
 function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, string> {
-    const wrapped = xmlElements(anchor).some(
-        (child) => child.ns === WP_NS && ['wrapSquare', 'wrapTight', 'wrapThrough'].includes(child.local),
-    );
+    const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');

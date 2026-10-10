@@ -6,9 +6,8 @@ import { openZip, ZipError, type ZipReader } from '../../core/zip';
 // The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
-// A tree costs per element too: 16 MB of empty paragraphs is 2.8 million of them and would take 3.5 GB. The corpus's
-// most is 611,000 (a 178-page report); at this cap 740,000 empty paragraphs peak at 1.25 GB before the output budget
-// refuses them. Counted as '<' in the bytes.
+// A tree costs per element too, so the parts' elements have a cap of their own, past a long report's. Counted as '<' in
+// the bytes.
 export const MAX_DOCX_XML_TAGS = 750_000;
 
 // A piece past a run's first is a node no tag counts, held before the output is weighed; the corpus's most is 1,055.
@@ -18,7 +17,7 @@ export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
-export type DocxRelationship = { type: string; target: string; external: boolean };
+type DocxRelationship = { type: string; target: string; external: boolean };
 
 export type Part = { path: string; root: XmlElement; rels: Map<string, DocxRelationship> };
 
@@ -278,7 +277,7 @@ export const POINTS_PER_UNIT = new Map([
 
 // A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
 function measure(value: string | undefined, perPoint: number): number | undefined {
-    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)(pt|pc|pi|in|cm|mm)$/) ?? [];
+    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]+)$/) ?? [];
     const points = POINTS_PER_UNIT.get(unit);
     return points === undefined ? int(value) : Math.round(Number(number) * points * perPoint);
 }

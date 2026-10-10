@@ -56,6 +56,15 @@ const item = (numId: number, text: string, ilvl = 0) =>
     paragraph(text, `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr>`);
 
 describe('source side', () => {
+    // A trim that backtracks per start position is quadratic in a run of spaces: 100,000 of them took 7 s.
+    test("a w:t's 100,000 interior spaces trim in linear time", async () => {
+        const docx = await buildDocxWithBody(`<w:p><w:r><w:t> a${' '.repeat(100_000)}b </w:t></w:r></w:p>`);
+        const started = performance.now();
+        const tally = auditSource(docx);
+        expect(performance.now() - started).toBeLessThan(1_000);
+        expect(tally.words).toEqual(['a', 'b']);
+    });
+
     test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
         const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
         const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);
@@ -99,18 +108,26 @@ describe('source side', () => {
         expect(tally.words).toEqual(['Kept', 'added', 'moved', 'Page', '7', 'one']);
     });
 
-    test('a link to a bookmark alone is no link, one out of the document is, and neither draws the link look', async () => {
+    test('a link to a bookmark alone is no link drawing its style but in a TOC, one out of the document a link drawing none', async () => {
         const linkRun = (text: string) => run(text, '<w:rStyle w:val="Hyperlink"/>');
-        const field = (instruction: string, text: string) =>
-            `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${instruction}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${linkRun(text)}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const begin = (instruction: string) =>
+            `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${instruction}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`;
+        const end = '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+        const field = (instruction: string, text: string) => `${begin(instruction)}${linkRun(text)}${end}`;
         const tally = await source(
-            `<w:p><w:hyperlink w:anchor="_Toc1">${linkRun('toc')}</w:hyperlink>${run(' ')}<w:hyperlink r:id="rId3" w:anchor="part">${linkRun('out')}</w:hyperlink></w:p>
+            `<w:p><w:hyperlink w:anchor="_Toc1">${linkRun('anchor')}</w:hyperlink>${run(' ')}<w:hyperlink r:id="rId3" w:anchor="part">${linkRun('out')}</w:hyperlink></w:p>
 <w:p>${field(' HYPERLINK \\l "_Toc2" ', 'field')}${run(' ')}${field(' HYPERLINK "https://example.com" \\l "x" ', 'web')}</w:p>
-<w:p><w:fldSimple w:instr=' HYPERLINK \\l "_Toc3" \\h '>${linkRun('simple')}</w:fldSimple>${run(' ')}<w:fldSimple w:instr=" HYPERLINK https://example.org ">${linkRun('bare')}</w:fldSimple></w:p>`,
+<w:p><w:fldSimple w:instr=' HYPERLINK \\l "_Toc3" \\h '>${linkRun('simple')}</w:fldSimple>${run(' ')}<w:fldSimple w:instr=" HYPERLINK https://example.org ">${linkRun('bare')}</w:fldSimple></w:p>
+<w:p>${begin(' TOC \\o "1-3" \\h ')}<w:hyperlink w:anchor="_Toc4">${linkRun('entry')}</w:hyperlink></w:p>
+<w:p>${field(' HYPERLINK \\l "_Toc5" ', 'nested')}${end}</w:p>`,
             '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>',
         );
         const words = (feature: Feature) => tally.marks.get(feature) ?? [];
-        expect([words('link'), words('underline'), words('color')]).toEqual([['out', 'web', 'bare'], [], []]);
+        expect([words('link'), words('underline'), words('color')]).toEqual([
+            ['out', 'web', 'bare'],
+            ['anchor', 'field', 'simple'],
+            ['anchor', 'field', 'simple'],
+        ]);
     });
 
     test('a merged cell counts once', async () => {

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { parseOoxml, W_NS } from '../../../lib/core/ooxml';
+import { Styles } from '../../../lib/import/doc/styles';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // What a paragraph style means: roles come from style names along the basedOn chain, which Word keeps English.
@@ -202,5 +204,19 @@ describe('headings in body-sized text', () => {
         const body = `<w:tbl><w:tblPr><w:tblStyle w:val="Sized"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>${heading('Heading4', sized('Four', runSize))}</w:tc></w:tr></w:tbl><w:p/>`;
         const { json } = await importDocxBody(body, { styles: `${STYLES}${table}` });
         expect(types(nodesOfType(json, 'tableCell')[0] ?? {})).toEqual([type]);
+    });
+});
+
+describe('a style with no id', () => {
+    const NAMELESS = `<w:styles xmlns:w="${W_NS}"><w:style w:type="character"><w:name w:val="Nameless"/><w:rPr><w:b/></w:rPr></w:style></w:styles>`;
+    const styles = () => new Styles(parseOoxml(NAMELESS) ?? undefined, { font: () => undefined });
+
+    test('is not the look of no style, whichever is resolved first', () => {
+        const noneFirst = styles();
+        expect(noneFirst.run(undefined)).toEqual({});
+        expect(noneFirst.run('')).toEqual({ bold: true });
+        const emptyFirst = styles();
+        expect(emptyFirst.run('')).toEqual({ bold: true });
+        expect(emptyFirst.run(undefined)).toEqual({});
     });
 });

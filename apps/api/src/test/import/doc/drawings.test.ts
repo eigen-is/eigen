@@ -94,6 +94,30 @@ describe('placement', () => {
     });
 });
 
+// VML's office attributes are read by their namespace, whatever prefix binds it.
+describe('VML', () => {
+    const OFFICE = 'urn:schemas-microsoft-com:office:office';
+    const vml = (attributes: string, inner = '') =>
+        `<w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" ${attributes}>${inner}</v:shape></w:pict></w:r>`;
+
+    test("a rule is the office namespace's hr, not a prefix's", async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(vml(`xmlns:office="${OFFICE}" office:hr="t"`))}${paragraph(vml('xmlns:o="urn:other" o:hr="t"'))}`,
+        );
+        expect(nodesOfType(json, 'horizontalRule')).toHaveLength(1);
+    });
+
+    test("a picture's alt text is the office namespace's title, not a prefix's", async () => {
+        const image = (title: string) => `<v:imagedata r:id="rId4" ${title}/>`;
+        const { json } = await importDocxBody(
+            paragraph(
+                `${vml('', image(`xmlns:office="${OFFICE}" office:title="Office"`))}${vml('', image('xmlns:o="urn:other" o:title="Other"'))}`,
+            ),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['alt'])).toEqual(['Office', null]);
+    });
+});
+
 // A shape's text sits on its fill, which the schema drops, so light text there takes the body color.
 describe('text boxes', () => {
     const box = (text: string, color: string) =>

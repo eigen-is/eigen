@@ -1,3 +1,4 @@
+import type { EigenFont } from '@workspace/lib/constants/fonts';
 import { parseXml, type XmlElement } from './xml';
 
 // The OOXML vocabulary the docx writer writes and the readers recognise, one source both ways: namespaces, style
@@ -186,6 +187,17 @@ export const EMU_PER_TWIP = 635;
 
 // A paragraph's border sides, as pBdr orders them.
 export const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
+
+// A font's category as fontTable.xml's w:family names it.
+export const FONT_FAMILY: Record<EigenFont['category'], string> = {
+    'sans-serif': 'swiss',
+    serif: 'roman',
+    monospace: 'modern',
+    'hand-drawn': 'script',
+};
+
+// The wraps that float a drawing beside the text.
+export const FLOATING_WRAPS = new Set(['wrapSquare', 'wrapTight', 'wrapThrough']);
 
 // The theme colors Word's link look names.
 export const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);

@@ -33,7 +33,7 @@ import type {
     RichText,
     Cell as XlsxCell,
 } from 'exceljs';
-import { openZip, writeZip, type ZipWriteEntry } from '../../core/zip';
+import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 import { resolveFontFamily } from './fonts';
@@ -224,7 +224,14 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Map<string, string>>): Buffer {
     // Every internal link has a label, so a workbook without one is never reopened, nor held to openZip's caps.
     if (labelsBySheet.size === 0) return buffer;
-    const zip = openZip(buffer);
+    let zip: ZipReader;
+    try {
+        zip = openZip(buffer);
+    } catch (error) {
+        // One past the upload caps is exported as exceljs writes it, its internal links with their redundant rels.
+        if (error instanceof ZipError) return buffer;
+        throw error;
+    }
     const text = (path: string) => new TextDecoder().decode(zip.read(path));
     const rewritten = new Map<string, string>();
     for (const path of zip.names()) {
@@ -258,10 +265,7 @@ function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Ma
     }
     if (rewritten.size === 0) return buffer;
     const files: ZipWriteEntry[] = [];
-    for (const name of zip.names()) {
-        const data = rewritten.get(name) ?? zip.read(name);
-        if (data !== undefined) files.push({ name, data });
-    }
+    for (const [name, data] of zip.files()) files.push({ name, data: rewritten.get(name) ?? data });
     return Buffer.from(writeZip(files));
 }
 
@@ -544,7 +548,7 @@ function toCfStyle(format: DefaultConditionalFormatRule['format']): XlsxCfWriteS
 // becomes a quoted Excel string literal with embedded quotes doubled.
 function encodeCfOperand(value: string | number): string {
     const txt = String(value);
-    return /^-?(\d+\.?\d*|\.\d+)$/.test(txt) ? txt : `"${txt.replace(/"/g, '""')}"`;
+    return /^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt) ? txt : `"${txt.replace(/"/g, '""')}"`;
 }
 
 // Engine type2 → xlsx operator; exact reverse of the importer's DV_OPERATOR.

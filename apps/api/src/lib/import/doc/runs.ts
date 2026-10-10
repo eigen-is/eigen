@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
-import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import type { Item } from './assemble';
 import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './docx-fonts';
@@ -31,12 +31,12 @@ export type Piece =
     | { kind: 'checkbox'; checked: boolean }
     | { kind: 'hr' };
 
-// A link to a bookmark has no href: Eigen holds no bookmarks, and Word draws a TOC entry's link in its paragraph's look.
-export type Link = { href?: string; title: string | null };
+// A link to a bookmark has no href, as Eigen holds no bookmarks.
+type Link = { href?: string; title: string | null };
 
 // Each open field carries what the fields around it say too, so the innermost answers alone: whether any is still in
-// its code, and the link its result shows.
-export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean };
+// its code, the link its result shows, and whether it is a table of contents.
+export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean; toc?: boolean };
 
 export type RunContext = {
     scope: Scope;
@@ -202,8 +202,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
 // Word drops a w:t's leading and trailing whitespace unless xml:space preserves it, and draws a line feed as a space.
 function runText(t: XmlElement): string {
     const text = xmlText(t);
-    const kept =
-        xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+    const kept = xmlAttr(t, XML_NAMESPACE, 'space') === 'preserve' ? text : trimXmlSpace(text);
     return kept.replace(/[\r\n]/g, ' ');
 }
 
@@ -220,6 +219,7 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
         if (field) {
             field.inCode = outer?.inCode ?? false;
             field.link = hyperlinkField(reader, field.code) ?? outer?.link;
+            field.toc = outer?.toc || /^TOC\b/i.test(field.code.trim());
         }
     } else if (type === 'end') {
         const field = reader.fields.pop();
@@ -251,21 +251,30 @@ function rootRelativeHref(href: string, publicOrigin: string | undefined): strin
     return /^\/(?![/\\])/.test(path) ? path : href;
 }
 
-// HYPERLINK "target" [\l "anchor"] [\o "tooltip"]
+// HYPERLINK "target" [\l "anchor"] [\o "tooltip"], read quote by quote: a regex retries each start of a long run.
 function hyperlinkField(reader: Reader, code: string): Link | undefined {
-    const match = code.trim().match(/^HYPERLINK\b(.*)$/i);
-    if (!match) return undefined;
-    const args = match[1] ?? '';
-    const quoted = [...args.matchAll(/(\\[a-z])?\s*"([^"]*)"/gi)];
+    const trimmed = code.trim();
+    if (!/^HYPERLINK\b/i.test(trimmed)) return undefined;
+    const args = trimmed.slice('HYPERLINK'.length);
     let target = '';
     let anchor = '';
     let tooltip: string | undefined;
-    for (const [, flag, value = ''] of quoted) {
-        if (!flag) target = value;
-        else if (flag.toLowerCase() === '\\l') anchor = value;
-        else if (flag.toLowerCase() === '\\o') tooltip = value;
+    let quoted = false;
+    for (let at = 0, open = args.indexOf('"'); open >= 0; open = args.indexOf('"', at)) {
+        const close = args.indexOf('"', open + 1);
+        if (close < 0) break;
+        // The switch a value follows, whitespace between.
+        let start = open;
+        while (start > at && /\s/.test(args[start - 1])) start--;
+        const flag = args.slice(Math.max(at, start - 2), start).toLowerCase();
+        const value = args.slice(open + 1, close);
+        if (flag === '\\l') anchor = value;
+        else if (flag === '\\o') tooltip = value;
+        else if (!/^\\[a-z]$/.test(flag)) target = value;
+        quoted = true;
+        at = close + 1;
     }
-    if (!quoted.length) target = args.trim().split(/\s+/)[0] ?? '';
+    if (!quoted) target = args.trim().split(/\s+/)[0] ?? '';
     if (!target && anchor) return { title: null };
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
@@ -310,10 +319,13 @@ function marksOf(
     const absorbed = ABSORBED[role.kind];
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
+    // A link to a bookmark is no link, its look the run's, but in a table of contents: Word draws its link look there
+    // in the paragraph's.
+    const asLink = !!link?.href || (!!link && !!reader.fields.at(-1)?.toc);
     // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
     // a link style in a color of its own. Its link color still covers the paragraph's, as Word draws it.
     const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
-    if (link && !ownLook) {
+    if (asLink && !ownLook) {
         if (charRun.color !== undefined) charRun.color = '';
         delete charRun.linkColor;
         delete charRun.underline;
@@ -346,7 +358,7 @@ function marksOf(
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
     if (link?.href) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
-    const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
+    const linkLook = asLink ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
@@ -359,7 +371,7 @@ function marksOf(
         linkLook === undefined &&
         !(scope.onFill && !isFill(shade) && isLight(props.color))
             ? props.color
-            : !full.color && !link && isFill(shade) && isDark(shade)
+            : !full.color && !asLink && isFill(shade) && isDark(shade)
               ? 'FFFFFF'
               : undefined;
     // Word draws capitals over small caps.

@@ -418,7 +418,8 @@ type Resolved = { run: DocxRunProps; para: ParaProps; role: Role | undefined; co
 
 export class Styles {
     private readonly byId = new Map<string, Style>();
-    private readonly resolved = new Map<string, Resolved>();
+    // By id as given: a style with no w:styleId is '', no style undefined.
+    private readonly resolved = new Map<string | undefined, Resolved>();
     readonly defaultParagraph: string | undefined;
     readonly docRun: DocxRunProps;
     readonly docPara: ParaProps;
@@ -461,7 +462,7 @@ export class Styles {
 
     // Its chain, nearest first, ends at MAX_CHAIN or at the first repeat of a cycle.
     private resolve(id: string | undefined): Resolved {
-        let resolved = this.resolved.get(id ?? '');
+        let resolved = this.resolved.get(id);
         if (resolved) return resolved;
         const chain: Style[] = [];
         for (
@@ -483,7 +484,7 @@ export class Styles {
                 firstRowFill: chain.find((style) => style.firstRowFill !== undefined)?.firstRowFill,
             },
         };
-        this.resolved.set(id ?? '', resolved);
+        this.resolved.set(id, resolved);
         return resolved;
     }
 

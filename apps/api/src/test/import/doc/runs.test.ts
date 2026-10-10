@@ -299,20 +299,40 @@ describe('links', () => {
         expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Pink']);
     });
 
-    // Eigen holds no bookmarks, and Word draws a TOC entry's link in its paragraph's look; the writer's in-document
-    // link rides on a relationship, which keeps it.
-    test("a link to a bookmark is its text in its own marks, no link and no link look; a relationship's #anchor links", async () => {
+    // Eigen holds no bookmarks, so a link to one is its text in the run's look; Word draws a TOC entry's link style in
+    // its paragraph's look. The writer's in-document link rides on a relationship, which keeps it.
+    test("a link to a bookmark is no link: its text keeps its own look, its link style's outside a TOC", async () => {
         const styles =
             '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1" w:themeColor="hyperlink"/><w:u w:val="single"/></w:rPr></w:style>';
         const linked = (text: string) => run(text, '<w:rStyle w:val="Hyperlink"/><w:b/>');
+        const begin = (code: string) =>
+            `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${code} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>`;
+        const end = '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
         const json = await imported(
-            `${paragraph(`<w:hyperlink w:anchor="_Toc1" w:history="1">${linked('Element')}</w:hyperlink>`)}${paragraph(`<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK \\l "_Toc2" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${linked('Field')}<w:r><w:fldChar w:fldCharType="end"/></w:r>`)}${paragraph(`<w:hyperlink r:id="rId9">${linked('Writer')}</w:hyperlink>`)}`,
+            [
+                // A table of contents is a field around its entries' paragraphs.
+                paragraph(
+                    `${begin('TOC \\o "1-3" \\h')}<w:hyperlink w:anchor="_Toc1">${linked('Entry')}</w:hyperlink>`,
+                ),
+                paragraph(`${begin('HYPERLINK \\l "_Toc2"')}${linked('Field')}${end}${end}`),
+                paragraph(`<w:hyperlink w:anchor="ref1">${linked('Reference')}</w:hyperlink>`),
+                paragraph(
+                    `<w:hyperlink w:anchor="ref2">${run('Direct', '<w:color w:val="1155cc"/><w:u w:val="single"/>')}</w:hyperlink>`,
+                ),
+                paragraph(`<w:hyperlink r:id="rId9">${linked('Writer')}</w:hyperlink>`),
+            ].join(''),
             { styles, rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="#part" TargetMode="External"/>` },
         );
         expect(nodesOfType(json, 'text').map((node) => [node.text, node.marks?.map((mark) => mark.type)])).toEqual([
-            ['Element', ['bold']],
+            ['Entry', ['bold']],
             ['Field', ['bold']],
+            ['Reference', ['textStyle', 'bold', 'underline']],
+            ['Direct', ['textStyle', 'underline']],
             ['Writer', ['link', 'bold']],
+        ]);
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Reference', '#0563c1'],
+            ['Direct', '#1155cc'],
         ]);
         expect(marksOfType(json, 'link').map((mark) => mark.attrs['href'])).toEqual(['#part']);
     });

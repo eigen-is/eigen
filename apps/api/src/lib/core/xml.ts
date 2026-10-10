@@ -214,6 +214,15 @@ export function xmlText(element: XmlElement): string {
     return element.children.filter((child) => typeof child === 'string').join('');
 }
 
+// XML's whitespace off both ends, by index: a regex anchored at the end retries every start of a long run.
+export function trimXmlSpace(text: string): string {
+    let start = 0;
+    let end = text.length;
+    while (start < end && ' \t\r\n'.includes(text[start])) start++;
+    while (end > start && ' \t\r\n'.includes(text[end - 1])) end--;
+    return text.slice(start, end);
+}
+
 // '' for an absent element. For what a client may indent: hrefs, tokens, names.
 export function xmlTrimmedText(element: XmlElement | undefined): string {
     return element ? xmlText(element).trim() : '';

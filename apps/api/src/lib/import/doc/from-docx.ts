@@ -74,15 +74,21 @@ export function readDocx(
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         return { doc, images, warnings };
     } catch (error) {
-        // The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
-        if (error instanceof ZipError)
-            throw new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
-        if (error instanceof XmlError) throw new ApiError(400, NOT_A_DOCX, { cause: error });
-        if (error instanceof ApiError) throw error;
-        // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
-        console.warn('[import] docx reader failed:', error instanceof Error ? (error.stack ?? error.message) : error);
-        throw new ApiError(400, NOT_A_DOCX, { cause: error });
+        throw importError(error);
     }
+}
+
+// The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
+export function importError(error: unknown): ApiError {
+    if (error instanceof ZipError)
+        return new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
+    if (error instanceof XmlError) return new ApiError(400, NOT_A_DOCX, { cause: error });
+    if (error instanceof ApiError) return error;
+    // A stack or an allocation the document outgrew.
+    if (error instanceof RangeError) return new ApiError(413, DOCUMENT_TOO_LARGE, { cause: error });
+    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
+    console.warn('[import] docx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
+    return new ApiError(400, NOT_A_DOCX, { cause: error });
 }
 
 // Every node and mark, and every table's area.

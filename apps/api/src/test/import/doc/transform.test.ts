@@ -1,17 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
-import { fixTables } from '@tiptap/pm/tables';
+import { fixTables, TableMap } from '@tiptap/pm/tables';
 import { yXmlFragmentToProseMirrorRootNode } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
+import { ApiError } from '../../../lib/core/errors';
 import { docExtensions, docSchema } from '../../../lib/document/doc-schema';
-import {
-    asOpened,
-    importDocxToEigendocUpdate,
-    MAX_REPAIR_PASSES,
-    MAX_TABLE_REPAIRS,
-} from '../../../lib/import/doc/transform';
+import { asOpened, importDocxToEigendocUpdate, MAX_TABLE_REPAIRS } from '../../../lib/import/doc/transform';
 import { buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
 
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
@@ -106,7 +102,6 @@ describe('the repairs on open are bounded', () => {
         expect(() => asOpened(ragged(side + 2))).toThrow('Document too large');
     });
 
-    // Each pass's collisions can leave new ones for the next: as many passes as these tables need, as colspan x rowspan.
     const stacked = (rows: [number, number][]) =>
         docSchema().nodeFromJSON({
             type: 'doc',
@@ -121,26 +116,50 @@ describe('the repairs on open are bounded', () => {
             ],
         });
 
-    test(`a table repaired in ${MAX_REPAIR_PASSES} passes is repaired`, () => {
+    test('a table one pass repairs is repaired', () => {
         const doc = asOpened(
             stacked([
                 [1, 2],
                 [2, 2],
-                [3, 1],
             ]),
         );
         expect(fixTables(EditorState.create({ doc }))).toBeUndefined();
     });
 
-    test('a table still repairing after them is 413', () => {
+    // A pass's collisions can leave new ones, as colspan x rowspan: this one repairs in two.
+    test('a table a second pass would repair is 413', () => {
         expect(() =>
             asOpened(
                 stacked([
                     [1, 2],
-                    [2, 2],
-                    [3, 2],
+                    [1, 2],
+                    [2, 1],
                 ]),
             ),
         ).toThrow('Document too large');
+    });
+});
+
+// What converting the doc throws is mapped as the reader's throws are.
+describe('a slip converting the doc is refused as the reader refuses one', () => {
+    test.each([
+        ['a TypeError', new TypeError('slip'), 400, 'Not a valid docx file'],
+        ['a RangeError', new RangeError('Maximum call stack size exceeded'), 413, 'Document too large'],
+    ])('%s is a %d', async (_name, thrown, status, message) => {
+        const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
+        const slip = spyOn(TableMap, 'get').mockImplementationOnce(() => {
+            throw thrown;
+        });
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const error = await Promise.resolve()
+                .then(() => importDocxToEigendocUpdate(docx, undefined))
+                .catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(ApiError);
+            expect(error).toMatchObject({ status, message });
+        } finally {
+            slip.mockRestore();
+            warn.mockRestore();
+        }
     });
 });

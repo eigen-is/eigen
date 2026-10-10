@@ -1,6 +1,3 @@
-/// <reference path="../modules.d.ts" />
-/// <reference path="../exceljs-internals.d.ts" />
-
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { formatInputDate } from '@workspace/lib/date';
 import type {
@@ -66,15 +63,9 @@ const BORDER_STYLE_MAP: Record<string, number> = Object.fromEntries(
 
 type ThemePalette = string[];
 
-// Belt against a tiny file DECLARING an enormous grid (far-apart cells span the full Excel
-// bounding box): walking rowCount×columnCount to build the Sheet output would blow up, and
-// exceljs's fully-materialized in-memory model (~800 bytes per cell) is itself the
-// dominant memory term. 4 M cells (e.g. 40k rows × 100 cols) exceeds any realistic import;
-// a dense, styled sheet at the cap peaks at ~5 GB to convert, ~3 GB of it exceljs's model.
-// The byte cap holds ~7.5M valued cells, so the cells a part holds count against this cap
-// before exceljs loads (tallyExpansions), and the grid they span after. The byte cap
-// independently catches a LOW-cell-count bomb (repeated bytes in one entry, or a forged
-// xl/media/* blob) the cell cap can't see.
+// exceljs's model per cell dominates memory, and a tiny file can declare far-apart cells whose grid the conversion walks:
+// the cells the parts hold count before exceljs loads (tallySheet), the grid they span after. The byte cap catches a bomb
+// of few cells.
 export const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
@@ -115,9 +106,7 @@ function repackXlsx(buffer: Buffer): Buffer {
             mergedCells: 0,
             validationKeys: 0,
         };
-        for (const name of zip.names()) {
-            const data = zip.read(name);
-            if (!data) continue;
+        for (const [name, data] of zip.files()) {
             const bytes = canonicalPart(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
             if (WORKSHEET_PART.test(name)) tallySheet(bytes, tally);
             else if (STRINGS_OR_STYLES_PART.test(name)) tallyElements(bytes, tally);
@@ -133,9 +122,8 @@ function repackXlsx(buffer: Buffer): Buffer {
     }
 }
 
-// exceljs builds these while it loads, before MAX_CELLS can count anything: a model per <c> and <row>; a merge's cells, each
-// merge checked against every earlier one; a validation's sqref as a model key per cell; a <col> as a column object
-// per column up to its min or max.
+// What exceljs builds while it loads, before MAX_CELLS can count anything: a model per sheet, <c>, <row> and element; a
+// merge's cells, each merge checked against every earlier one; a validation's sqref as a model key per cell.
 type ExpansionTally = {
     sheets: number;
     cells: number;
@@ -146,7 +134,7 @@ type ExpansionTally = {
     validationKeys: number;
 };
 
-// Merged cells count against MAX_CELLS, as cells. exceljs takes 2.4 s to check 10k merges pairwise, 27 s for 30k.
+// Merged cells count against MAX_CELLS, as cells; exceljs checks each merge against every earlier one.
 export const MAX_MERGES = 10_000;
 // A validation key costs ~300 B, so 5M keys is ~1.5 GB, what 1M ordinary cells cost; four column-wide validations fit.
 export const MAX_VALIDATION_KEYS = 5_000_000;
@@ -154,7 +142,7 @@ export const MAX_VALIDATION_KEYS = 5_000_000;
 export const MAX_ROWS = 2 * REFERENCE_ROW_COUNT;
 // A sheet holds a column object per column up to its last, ~3 MB at XFD; real workbooks hold under 50 sheets.
 export const MAX_SHEETS = 500;
-// exceljs's sheet list walks every id up to the largest (50M: 1.2 GB); real ids stay under 33,000.
+// exceljs's sheet list walks every id up to the largest; real ids stay far below.
 export const MAX_SHEET_ID = 1_000_000;
 // exceljs builds up to ~270 B per element, ~1 GB at the cap; real sheets, shared strings and styles hold under 70,000
 // past the cell grid.
@@ -194,7 +182,7 @@ function tallySheet(bytes: Buffer, tally: ExpansionTally): void {
     tally.sheets += 1;
     if (tally.sheets > MAX_SHEETS) throw tooLarge();
     tally.cells += countTags(bytes, CELL_OPEN, MAX_CELLS - tally.cells);
-    if (tally.cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+    if (tally.cells > MAX_CELLS) throw tooManyCells();
     tally.rows += countTags(bytes, ROW_OPEN, MAX_ROWS - tally.rows);
     if (tally.rows > MAX_ROWS) throw tooLarge();
     tallyElements(bytes, tally);
@@ -268,8 +256,8 @@ function withSpacedTags(bytes: Buffer): Buffer {
     return spaced;
 }
 
-// Eigen drops defined names, and exceljs expands each one's range per cell, 614M cells in one GOV.UK workbook. It
-// matches the element by its exact name at any depth, so renaming every start and end tag hides it, still well-formed.
+// Eigen drops defined names, and exceljs expands each one's range per cell. It matches the element by its exact name at
+// any depth, so renaming every start and end tag hides it, still well-formed.
 const DEFINED_NAMES_TAG = /<(\/?)definedNames/g;
 
 function withoutDefinedNames(bytes: Buffer): Buffer {
@@ -284,6 +272,10 @@ function textLength(value: unknown): number {
 
 function tooLarge(): ApiError {
     return new ApiError(413, 'Spreadsheet too large');
+}
+
+function tooManyCells(): ApiError {
+    return new ApiError(413, 'Spreadsheet has too many cells');
 }
 
 // exceljs's own Range, whose bounds read a missing row or column as 1, so a range counts the cells exceljs walks; it
@@ -308,7 +300,8 @@ function* tagStarts(bytes: Buffer, name: string): Generator<number> {
     }
 }
 
-const ATTRIBUTE = /\s+([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+// A name after whitespace, as a lookbehind: matched from the whitespace, a long run is retried from each of its starts.
+const ATTRIBUTE = /(?<=\s)([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 // The attributes of each start tag of an element. No attribute value holds a `<`, so a tag runs to the next one.
 function* startTags(bytes: Buffer, name: string): Generator<Map<string, string>> {
@@ -339,12 +332,12 @@ function assertCellCountWithinBounds(workbook: Workbook): void {
     let cells = 0;
     for (const worksheet of workbook.worksheets) {
         // A row past the grid needs no cell, and every walk to the last row visits each row number before it.
-        if (worksheet.rowCount > REFERENCE_ROW_COUNT) throw new ApiError(413, 'Spreadsheet has too many cells');
+        if (worksheet.rowCount > REFERENCE_ROW_COUNT) throw tooManyCells();
         // Each row walks every column up to its last cell, in columnCount and in the conversion, so those come first.
         for (let n = 1; n <= worksheet.rowCount; n++) slots += worksheet.findRow(n)?.cellCount ?? 0;
-        if (slots > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+        if (slots > MAX_CELLS) throw tooManyCells();
         cells += worksheet.rowCount * worksheet.columnCount;
-        if (cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
+        if (cells > MAX_CELLS) throw tooManyCells();
     }
 }
 
@@ -487,7 +480,7 @@ type XlsxCfColor = { argb?: string; theme?: number; tint?: number };
 // list four), `duplicateValues`/`uniqueValues`/`beginsWith`/… pass through as raw type
 // strings, formulae entries are raw formula text, and dataBar `color` is a single object
 // while colorScale's is an array.
-type XlsxCfRule = {
+export type XlsxCfRule = {
     type: string;
     priority: number;
     operator?: string;
@@ -724,7 +717,7 @@ function unquoteXlsxLiteral(txt: string): string | null {
 // text — coerce them to the numeric form the engine's comparisons expect.
 function parseCfLiteral(operand: string): string | null {
     const txt = operand.trim();
-    if (/^-?(\d+\.?\d*|\.\d+)$/.test(txt)) return txt;
+    if (/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt)) return txt;
     const inner = unquoteXlsxLiteral(txt);
     if (inner == null) return null;
     const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
@@ -764,7 +757,7 @@ function autoFilterToFilterRange(autoFilter: AutoFilter | undefined): SingleRang
 // pre-coerces formulae on read: whole/textLength → parseInt, decimal → parseFloat,
 // date → JS Date, list/custom → raw formula string; `operator` defaults to 'between'
 // for the operand-carrying types.
-type XlsxDataValidation = {
+export type XlsxDataValidation = {
     type: string;
     operator?: string;
     formulae?: unknown[];
@@ -773,14 +766,6 @@ type XlsxDataValidation = {
     prompt?: string;
     errorStyle?: string;
 };
-
-// Real Worksheet properties (lib/doc/worksheet.js) that exceljs's typings omit.
-declare module 'exceljs' {
-    interface Worksheet {
-        conditionalFormattings?: { ref: string; rules: XlsxCfRule[] }[];
-        dataValidations?: { model?: Record<string, XlsxDataValidation> };
-    }
-}
 
 const DV_TYPE: Record<string, string> = {
     list: 'dropdown',
