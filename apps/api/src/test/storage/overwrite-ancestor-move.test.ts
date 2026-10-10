@@ -126,6 +126,10 @@ class ProbeMount extends Mount {
 
 const createdMounts: Mount[] = [];
 
+function sha256(content: string): string {
+    return new Bun.CryptoHasher('sha256').update(content).digest('hex');
+}
+
 async function fileInFolder(id: string) {
     const mount = new ProbeMount(
         OWNER_ID,
@@ -198,11 +202,15 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         expect(await storage.exists(oldKey)).toBe(false);
         expect(existsSync(storage.getPath('before'))).toBe(false);
         expect(storage.order).toEqual(['write', 'rename']);
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 2, hash: sha256('v1') });
     });
 
-    test('a save queued behind its folder trash refuses and leaves the trashed bytes', async () => {
-        const { mount, storage, folderId, fileId } = await fileInFolder('save-behind-trash');
-        const base = (await mount.getPath(fileId))!.updatedAt;
+    test.each([
+        ['a save', true],
+        ['a plain overwrite', false],
+    ])('%s queued behind its folder trash refuses and leaves the trashed bytes', async (_, guarded) => {
+        const { mount, storage, folderId, fileId } = await fileInFolder(`behind-trash-${guarded}`);
+        const base = guarded ? (await mount.getPath(fileId))!.updatedAt : undefined;
         const hold = Promise.withResolvers<void>();
         const held = mount.withTreeShared(() => hold.promise);
         const trashQueued = mount.armTreeWait();
@@ -216,6 +224,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
 
         await expect(save).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
         expect(await storage.read(await mount.getStorageKey(fileId)).text()).toBe('v0');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 2, hash: sha256('v0') });
     });
 
     test('a file created under a folder renamed mid-write lands under the new name', async () => {

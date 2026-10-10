@@ -1002,7 +1002,7 @@ export class Mount {
 
         return this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertUpdatedAt(pathId, expectedUpdatedAt);
+                await this.assertOverwritable(pathId, expectedUpdatedAt);
                 const storageKey = await this.getStorageKey(pathId);
                 const written = await this.storage.write(storageKey, data);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
@@ -1022,7 +1022,7 @@ export class Mount {
     ): Promise<void> {
         await this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
-                await this.assertUpdatedAt(pathId, expectedUpdatedAt);
+                await this.assertOverwritable(pathId, expectedUpdatedAt);
                 const storageKey = await this.getStorageKey(pathId);
                 await this.uploadFromTemp(storageKey, tempId);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
@@ -1030,27 +1030,29 @@ export class Mount {
         );
     }
 
-    // Under the path lock every overwrite takes, so of two saves from one base only the first writes, and
-    // under the tree lock, so an ancestor's trash on `local` can't land between the check and the write.
-    private async assertUpdatedAt(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
-        if (!expectedUpdatedAt) return;
+    // Before any byte lands, so a trashed file keeps the bytes it was trashed with. Under the path lock
+    // every overwrite takes, so of two saves from one base only the first writes, and under the tree
+    // lock, so an ancestor's trash on `local` can't land between the check and the write.
+    private async assertOverwritable(pathId: string, expectedUpdatedAt: Date | undefined): Promise<void> {
         const { updatedAt } = await this.getActivePath(pathId);
-        if (updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new StaleWriteError(updatedAt);
+        if (expectedUpdatedAt && updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+            throw new StaleWriteError(updatedAt);
+        }
     }
 
     // Runs under the path lock after the PUT landed. deletePath doesn't wait on that lock, so a
     // delete that ran during the PUT left the bytes behind. Off `local` an ancestor's trash takes no
-    // lock the overwrite holds either, so the row write refuses a trashed row, which keeps its object.
+    // lock the overwrite holds either: the row still records the bytes its object now holds, then refuses.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<void> {
         const searchable = await this.isSearchableRow(pathId);
         if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         const committed = await this.db
             .update(paths)
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
-            .where(and(eq(paths.id, pathId), isNull(paths.trashedAt)))
-            .returning({ id: paths.id });
-        if (committed.length === 0) {
-            if (await this.getPath(pathId)) throw new ApiError(404, 'File is in trash');
+            .where(eq(paths.id, pathId))
+            .returning({ trashedAt: paths.trashedAt })
+            .get();
+        if (!committed) {
             if (!(await this.storage.delete(storageKey))) {
                 console.warn(`[Mount] overwrite of deleted ${pathId} left its object ${storageKey} behind`);
             }
@@ -1058,6 +1060,7 @@ export class Mount {
         }
         await this.invalidateAncestorsOf(pathId);
         if (searchable) this.reindexQueue?.kick();
+        if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
     }
 
     getTempPath(pathId: string): string {
