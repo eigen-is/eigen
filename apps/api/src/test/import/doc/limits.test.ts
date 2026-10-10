@@ -640,6 +640,23 @@ describe('structure', () => {
         expect(nodesOfType(json, 'listItem')).toHaveLength(count);
     });
 
+    // A number at its own text nests each item under the last; every empty paragraph after them looked through them all.
+    test('30,000 items each nesting under the last, then 80,000 empty paragraphs, import within 2 s', async () => {
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr><w:ind w:left="720" w:hanging="0"/></w:pPr></w:style>';
+        const body = `${paragraph('', '<w:pStyle w:val="L"/>').repeat(30_000)}${'<w:p/>'.repeat(80_000)}`;
+        const result = measuredImport(await buildDocxWithBody(body, { styles }), 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(2000);
+    }, 60_000);
+
+    test('40,000 paragraphs whose marks are deleted join in linear time', async () => {
+        const deleted = paragraph(run('x'), '<w:rPr><w:del w:id="1" w:author="A"/></w:rPr>');
+        const result = measuredImport(await buildDocxWithBody(`${deleted.repeat(40_000)}${paragraph(run('End'))}`));
+        expect([result.blocks, result.texts]).toEqual([1, 1]);
+        expect(result.cpuMs).toBeLessThan(2000);
+    }, 60_000);
+
     test('tables nest at most eight deep, a deeper one reading as its cells', async () => {
         const body = `${'<w:tbl><w:tr><w:tc>'.repeat(50)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(50)}`;
         const json = await imported(body);

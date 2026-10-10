@@ -318,9 +318,16 @@ describe('openZip refuses', () => {
 describe('openZip reads', () => {
     test('every entry with its bytes, in the order of the directory', () => {
         const zip = openZip(build([TYPES, REAL]));
-        expect([...zip.files()].map(([name, data]) => [name, utf8.decode(data)])).toEqual(
+        expect([...zip.files()].map(([name, read]) => [name, utf8.decode(read())])).toEqual(
             zip.names().map((name) => [name, utf8.decode(zip.read(name))]),
         );
+    });
+
+    test('an entry walked past unread is never inflated', () => {
+        const zip = openZip(build([{ ...REAL, crc: 0xdeadbeef }, TYPES]));
+        expect([...zip.files()].flatMap(([name, read]) => (name === TYPES.name ? [utf8.decode(read())] : []))).toEqual([
+            '<Types/>',
+        ]);
     });
 
     test('stored and deflated entries, with their sizes', () => {

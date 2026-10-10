@@ -95,6 +95,10 @@ The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter:
 
 Selecting a figure or a table opens its properties panel, for a user who can write, in the slot the comments and activity panels use. An open comments or activity panel keeps the slot, and moving the caret out of the figure or table closes the properties panel. A phone shows no right-side panels: comments and activity open as a pane that hides the editor ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)), and the properties panels have no phone form.
 
+## A long selection's toolbar shows what its start holds
+
+The toolbar lights a button when the whole selection carries the mark or sits in the block, and it reads that again on every transaction, a collaborator's keystroke or caret included. Each check walks every node the range spans, some 25 checks per transaction, so a select-all of 20,000 paragraphs cost 70 ms on every remote keystroke. Past `MAX_READ_RANGE` positions (`use-toolbar-state.ts`) the toolbar reads a caret at the selection's start instead, which costs nothing. A button still acts on the whole range, so Bold, lit by a bold first word, bolds the rest.
+
 ## A comment anchors on text as a mark and on a figure as an attribute
 
 A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).

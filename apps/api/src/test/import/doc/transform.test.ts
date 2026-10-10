@@ -143,9 +143,11 @@ describe('the repairs on open are bounded', () => {
 // What converting the doc throws is mapped as the reader's throws are.
 describe('a slip converting the doc is refused as the reader refuses one', () => {
     test.each([
-        ['a TypeError', new TypeError('slip'), 400, 'Not a valid docx file'],
-        ['a RangeError', new RangeError('Maximum call stack size exceeded'), 413, 'Document too large'],
-    ])('%s is a %d', async (_name, thrown, status, message) => {
+        ['a TypeError', new TypeError('slip'), 400, 'Not a valid docx file', 1],
+        ['a stack overflow', new RangeError('Maximum call stack size exceeded.'), 413, 'Document too large', 0],
+        ['an allocation past memory', new RangeError('Out of memory'), 413, 'Document too large', 0],
+        ['a schema RangeError', new RangeError('Invalid content for node table'), 400, 'Not a valid docx file', 1],
+    ])('%s is a %d', async (_name, thrown, status, message, logged) => {
         const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
         const slip = spyOn(TableMap, 'get').mockImplementationOnce(() => {
             throw thrown;
@@ -157,6 +159,7 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
                 .catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(ApiError);
             expect(error).toMatchObject({ status, message });
+            expect(warn).toHaveBeenCalledTimes(logged);
         } finally {
             slip.mockRestore();
             warn.mockRestore();

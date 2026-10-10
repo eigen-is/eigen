@@ -1,3 +1,5 @@
+import { getAttributes, isActive } from '@tiptap/core';
+import { EditorState, Selection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 
@@ -29,37 +31,50 @@ type ToolbarState = {
     selectionEmpty: boolean;
 };
 
+// Each check walks every node a range spans, some 25 per transaction, and a collaborator's edit or caret is one too.
+const MAX_READ_RANGE = 10_000;
+
 // useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it.
 export function useToolbarState(editor: Editor): ToolbarState {
     return useEditorState({
         editor,
-        selector: ({ editor: e }) => ({
-            headingLevel: [1, 2, 3, 4].find((level) => e.isActive('heading', { level })),
-            // getFontName also collapses the full stack a not-yet-normalized doc still carries.
-            fontName: getFontName(e.getAttributes('textStyle').fontFamily || '') || DOCUMENT_FONT,
-            color: e.getAttributes('textStyle').color || '',
-            highlightColor: e.isActive('highlight') ? e.getAttributes('highlight').color || '' : '',
-            bold: e.isActive('bold'),
-            italic: e.isActive('italic'),
-            underline: e.isActive('underline'),
-            strike: e.isActive('strike'),
-            code: e.isActive('code'),
-            superscript: e.isActive('superscript'),
-            subscript: e.isActive('subscript'),
-            small: e.isActive('small'),
-            allCaps: e.isActive('textStyle', { caps: 'all' }),
-            smallCaps: e.isActive('textStyle', { caps: 'small' }),
-            highlight: e.isActive('highlight'),
-            alignLeft: e.isActive({ textAlign: 'left' }),
-            alignCenter: e.isActive({ textAlign: 'center' }),
-            alignRight: e.isActive({ textAlign: 'right' }),
-            bulletList: e.isActive('bulletList'),
-            orderedList: e.isActive('orderedList'),
-            taskList: e.isActive('taskList'),
-            blockquote: e.isActive('blockquote'),
-            codeBlock: e.isActive('codeBlock'),
-            link: e.isActive('link'),
-            selectionEmpty: e.state.selection.empty,
-        }),
+        selector: ({ editor: e }) => {
+            const { doc, selection } = e.state;
+            // A longer range reads as a caret at its start; a state without the editor's plugins costs nothing to make.
+            const state =
+                selection.to - selection.from > MAX_READ_RANGE
+                    ? EditorState.create({ doc, selection: Selection.near(selection.$from) })
+                    : e.state;
+            const active = (name: string | null, attributes?: Record<string, unknown>) =>
+                isActive(state, name, attributes);
+            return {
+                headingLevel: [1, 2, 3, 4].find((level) => active('heading', { level })),
+                // getFontName also collapses the full stack a not-yet-normalized doc still carries.
+                fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
+                color: getAttributes(state, 'textStyle')['color'] || '',
+                highlightColor: active('highlight') ? getAttributes(state, 'highlight')['color'] || '' : '',
+                bold: active('bold'),
+                italic: active('italic'),
+                underline: active('underline'),
+                strike: active('strike'),
+                code: active('code'),
+                superscript: active('superscript'),
+                subscript: active('subscript'),
+                small: active('small'),
+                allCaps: active('textStyle', { caps: 'all' }),
+                smallCaps: active('textStyle', { caps: 'small' }),
+                highlight: active('highlight'),
+                alignLeft: active(null, { textAlign: 'left' }),
+                alignCenter: active(null, { textAlign: 'center' }),
+                alignRight: active(null, { textAlign: 'right' }),
+                bulletList: active('bulletList'),
+                orderedList: active('orderedList'),
+                taskList: active('taskList'),
+                blockquote: active('blockquote'),
+                codeBlock: active('codeBlock'),
+                link: active('link'),
+                selectionEmpty: selection.empty,
+            };
+        },
     });
 }

@@ -457,8 +457,10 @@ function randomDocument(seed: number): JSONContent[] {
 // What the writer writes the same as another document, left out, and one reader limit.
 function writable(content: JSONContent[], container = 'doc'): boolean {
     const box = (node: JSONContent | undefined) => node?.type === 'codeBlock' || node?.type === 'blockquote';
-    const end = (node: JSONContent | undefined): JSONContent | undefined =>
-        LISTS.has(node?.type ?? '') ? end(node?.content?.at(-1)?.content?.at(-1)) : node;
+    const end = (node: JSONContent | undefined, quotes = false): JSONContent | undefined => {
+        if (LISTS.has(node?.type ?? '')) return end(node?.content?.at(-1)?.content?.at(-1), quotes);
+        return quotes && node?.type === 'blockquote' ? end(node.content?.at(-1), quotes) : node;
+    };
     // Nothing marks a rule or a table as in the quote it opens, and a page break sits at the margin.
     if (container === 'blockquote' && ['horizontalRule', 'table', 'pageBreak'].includes(content[0]?.type ?? ''))
         return false;
@@ -470,8 +472,8 @@ function writable(content: JSONContent[], container = 'doc'): boolean {
         if (node.type === 'taskList' && previous?.type === 'taskList') return false;
         if (node.type !== 'blockquote' || previous?.type !== 'blockquote') continue;
         const last = previous.content?.at(-1);
-        // A page break between two quotes is one in a quote, and nothing parts a quote ending in a table from the next.
-        if (content.indexOf(node) > content.indexOf(previous) + 1 || end(last)?.type === 'table') return false;
+        // A break between quotes is one in a quote; nothing parts a quote that ends deep in a table from the next.
+        if (content.indexOf(node) > content.indexOf(previous) + 1 || end(last, true)?.type === 'table') return false;
         // Boxes meeting are one quote holding both; a quote ending a list's last item doesn't say where it sits.
         if (box(node.content?.[0]) && (box(last) || end(last)?.type === 'blockquote')) return false;
     }
