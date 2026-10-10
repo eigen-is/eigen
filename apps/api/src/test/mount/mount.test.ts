@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import {
     CONTENT_REINDEX_CAP_SECONDS,
@@ -14,7 +14,7 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
-import { storageGone } from '../../lib/storage';
+import { eventLoopTurn, storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
@@ -133,6 +133,22 @@ describe('downloadToTemp', () => {
         await mount.createDatabase(guardConfig, dataDbId);
         await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('live working copy');
         await mount.closeDatabase(dataDbId);
+    });
+
+    // handleApiError answers a raw error 500; a 503 would read as a storage outage.
+    test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
+        const data = Buffer.from('snapshot-bytes-local-failure');
+        const fileId = await mount.createFile(rootId, 'snap3.db', 'application/octet-stream', data.length, data);
+        const tempId = randomUUID();
+        // A non-empty directory at the temp path: the rename of the downloaded side file onto it fails.
+        mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
+        const before = readdirSync(mount.tmpDir);
+
+        const error = await mount.downloadToTemp(fileId, tempId).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(ApiError);
+        expect(readdirSync(mount.tmpDir)).toEqual(before);
+        rmSync(mount.getTempPath(tempId), { recursive: true });
     });
 });
 
@@ -367,6 +383,39 @@ describe('Mount (local path-based storage)', () => {
         const root = await mount.getRootFolder();
         expect(root).not.toBeNull();
         rootId = root!.id;
+    });
+
+    // A backup's own Mount of a disabled mount and the drive's Mount after an enable are two objects over one folder.
+    test("a second Mount over the same folder waits on the first one's path and tree locks", async () => {
+        const twin = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createTestMountConfig('test-local', 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        const order: string[] = [];
+        const release = Promise.withResolvers<void>();
+        const held = mount.withPathLock(rootId, () =>
+            mount.withTreeShared(async () => {
+                order.push('first');
+                await release.promise;
+                order.push('first done');
+            }),
+        );
+        const tried = await twin.tryWithPathLock(rootId, async () => 'ran');
+        const path = twin.withPathLock(rootId, async () => order.push('path'));
+        const tree = twin.withTreeExclusive(async () => order.push('tree'));
+        // A failed expect must still release: the locks are the folder's, shared with the rest of the file.
+        try {
+            await eventLoopTurn();
+            expect(tried).toBeNull();
+            expect(order).toEqual(['first']);
+        } finally {
+            release.resolve();
+        }
+        await Promise.all([held, path, tree]);
+        expect(order.slice(0, 2)).toEqual(['first', 'first done']);
+        expect(order.slice(2).sort()).toEqual(['path', 'tree']);
     });
 
     test('create folder creates physical directory', async () => {

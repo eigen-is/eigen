@@ -55,7 +55,7 @@ An id key never moves, so on `local-key` and `s3` a rename, a move or a trash ch
 
 ## Writes to one row serialize on its path lock
 
-A write to an existing row runs under `Mount.withPathLock(pathId)`: an overwrite, a rename or move, a trash or restore, a version snapshot on the container, the chat restore. A backup holds a file's path lock while it copies the file, because `LocalStorage.write` rewrites a local file in place, so a read beside an overwrite would end short ([BACKUP.md](BACKUP.md#a-home-archive-holds-every-database-file-and-auth-row)). A create takes no lock. The partial unique index on `(parentId, LOWER(name))` over untrashed rows closes the race between two creates of one name, and the loser gets a 409. On `local` both creates write the same name path before either row lands, so the surviving row can hold the loser's bytes ([ROADMAP.md](ROADMAP.md)).
+A write to an existing row runs under `Mount.withPathLock(pathId)`: an overwrite, a rename or move, a trash or restore, a version snapshot on the container, the chat restore. The path locks and the tree lock below belong to the mount's folder, not to a `Mount` object, so a backup's own `Mount` of a disabled mount and the one an enable or a storage re-point builds wait for each other. A backup holds a file's path lock while it copies the file, because `LocalStorage.write` rewrites a local file in place, so a read beside an overwrite would end short ([BACKUP.md](BACKUP.md#a-home-archive-holds-every-database-file-and-auth-row)). A create takes no lock. The partial unique index on `(parentId, LOWER(name))` over untrashed rows closes the race between two creates of one name, and the loser gets a 409. On `local` both creates write the same name path before either row lands, so the surviving row can hold the loser's bytes ([ROADMAP.md](ROADMAP.md)).
 
 ## On `local` a key is a name path, so renames lock the whole tree
 
@@ -86,7 +86,7 @@ A HEAD and a list share one deadline over all their attempts: `storageRead` runs
 
 ## A gone object answers 410, an outage 503
 
-Only the GET body tells a missing object from a sick bucket: `NoSuchKey` on S3, `ENOENT` on disk (`isMissingObjectCause`). `Mount.downloadKeyToTemp` answers that with 410 (`storageGone`) and every other failure with 503. A 410 tells the client to stop retrying, a 503 to retry ([COLLAB.md](COLLAB.md#each-close-code-tells-the-tab-what-to-do)).
+Only the GET body tells a missing object from a sick bucket: `NoSuchKey` on S3, `ENOENT` on disk (`isMissingObjectCause`). `Mount.downloadKeyToTemp` answers that with 410 (`storageGone`), every other storage failure with 503, and a local one (the `tmp/` write or rename) with 500, so a full disk does not read as an outage. A 410 tells the client to stop retrying, a 503 or a 500 to retry ([COLLAB.md](COLLAB.md#each-close-code-tells-the-tab-what-to-do)).
 
 A container database's open reads the freshest copy first: the crash temp, then the staged copy of an unacknowledged upload, then the stored object ([SYNC.md](SYNC.md)). So a 410 means no copy exists anywhere, and a version restore is the way back. On a `local-key` mount the open does not GET but stats `data.db`, and answers 410 only on `ENOENT`.
 

@@ -52,7 +52,7 @@ An unauthenticated upgrade never reaches `open`. The `auth` macro answers the HT
 
 A caller without read access gets nothing but the constant empty awareness heartbeat ([The route speaks first during a cold load](#the-route-speaks-first-during-a-cold-load)), then close 1008. That is why the heartbeat may start before the access check: it carries no document data.
 
-Three failed opens close with their own codes, so the tab knows what to do ([Each close code tells the tab what to do](#each-close-code-tells-the-tab-what-to-do)): home-replaced after a restore, storage-unavailable, and storage-gone (4410: the stored object is gone, so the client stops retrying). Every other failed open is 1008.
+Three failed opens close with their own codes, so the tab knows what to do ([Each close code tells the tab what to do](#each-close-code-tells-the-tab-what-to-do)): home-replaced after a restore, storage-unavailable for any server-side (5xx) failure, an outage or a local one such as a full disk, and storage-gone (4410: the stored object is gone, so the client stops retrying). Every other failed open, such as a missing path, is 1008.
 
 Binary frames arrive as Bun `Buffer`s. A string frame is `ping` or `pong`, or it is ignored.
 
@@ -102,7 +102,7 @@ The codes live in `packages/lib/src/constants/collab.ts`.
 
 | Close | The tab |
 |---|---|
-| 1013 `storage-unavailable` | Shows "retrying" and reconnects itself after 5 s. y-websocket would retry every 2.5 s and re-pay the failing load each time. |
+| 1013 `storage-unavailable` | Any server-side (5xx) failed open, not only an outage. Shows "retrying" and reconnects itself after 5 s. y-websocket would retry every 2.5 s and re-pay the failing load each time. |
 | 4410 `storage-gone` | Stops for good. The loading screen shows an error and offers the version list to a writer. An open editor stays mounted and reads as offline. |
 | 1012 `home-replaced` | Reloads through `reloadReplacedHome`, the reload the event stream uses too, one render after clearing the unsynced flag, so the leave prompt doesn't block the reload. |
 

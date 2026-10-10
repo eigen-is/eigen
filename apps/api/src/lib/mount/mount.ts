@@ -62,11 +62,26 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     relativePath: string,
 ) => Promise<ManagedDatabase<S>>;
 
+type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
+
+// By mount folder, not Mount object: a backup's own Mount of a disabled mount and the Mount an enable or a
+// storage re-point builds lock with the drive's. One small entry per folder, kept for the process.
+const folderLocks = new Map<string, FolderLocks>();
+
+function locksFor(folder: string): FolderLocks {
+    let locks = folderLocks.get(folder);
+    if (!locks) {
+        locks = { paths: new Map(), tree: new RWLock() };
+        folderLocks.set(folder, locks);
+    }
+    return locks;
+}
+
 export class Mount {
     readonly id: string;
     readonly config: MountConfig;
 
-    private baseDir: string;
+    private readonly baseDir: string;
     storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
     // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + drive/history.ts
     // (the last one constructor-injected)
@@ -77,8 +92,8 @@ export class Mount {
     documentDbs: Map<string, DocumentDbSlot> = new Map();
     // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
     closing = false; // internal — used by mount/*.ts
-    private pathLocks: Map<string, Promise<void>> = new Map();
-    private treeLock = new RWLock();
+    private readonly pathLocks: Map<string, Promise<void>>;
+    private readonly treeLock: RWLock;
 
     // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
@@ -116,6 +131,7 @@ export class Mount {
         this.id = config.id;
         this.config = config;
         this.baseDir = path.join(baseDir, PATHS.DRIVE.ROOT, config.id);
+        ({ paths: this.pathLocks, tree: this.treeLock } = locksFor(this.baseDir));
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
 
@@ -1049,7 +1065,7 @@ export class Mount {
                     // A staged copy the queue's ack unlinked mid-read now sits in the bucket: fall through.
                     if (!isMissingObjectCause(err)) {
                         console.error(`[Mount] download of staged ${storageKey} failed:`, err);
-                        throw err instanceof ApiError ? err : storageUnavailable();
+                        throw err;
                     }
                 }
             }
@@ -1071,9 +1087,9 @@ export class Mount {
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
             // Only the GET body tells a gone object (410) from an outage (503). The read's own failures
-            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT is not a gone object.
+            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), so a 500, and its ENOENT is not a gone object.
             if (isMissingObjectCause(err)) throw storageGone(err.cause);
-            throw err instanceof ApiError ? err : storageUnavailable();
+            throw err;
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -1088,11 +1104,11 @@ export class Mount {
         let size: number;
         try {
             ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
+            fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         } catch (err) {
             await this.cleanupTemp(sideId);
             throw err;
         }
-        fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         return size;
     }
 
