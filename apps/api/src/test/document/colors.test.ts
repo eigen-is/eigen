@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cssColorToHex, isTransparentCssColor } from '../../lib/export/colors';
+import { cssColorToHex, isTransparentCssColor } from '../../lib/document/colors';
 
 describe('cssColorToHex', () => {
     test.each([

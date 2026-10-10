@@ -34,6 +34,7 @@ import {
     WP_NS,
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
+import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import {
     BODY,
     type Border,
@@ -55,7 +56,6 @@ import {
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
 import type { ExportMedia } from '../../document/transform/protocol';
-import { cssColorToHex, isTransparentCssColor } from '../colors';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 

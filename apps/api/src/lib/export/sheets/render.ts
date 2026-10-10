@@ -28,8 +28,8 @@ import {
     FormulaEngine,
     withCfRanges,
 } from '@workspace/sheet/engine';
-import { cssColorToHex, isTransparentCssColor } from '../colors';
-import { FONT_STACK_SANS } from '../font-stacks';
+import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
+import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';

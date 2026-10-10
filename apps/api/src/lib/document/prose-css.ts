@@ -1,6 +1,6 @@
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
-import { FONT_STACK_MONO, FONT_STACK_SANS } from '../export/font-stacks';
+import { FONT_STACK_MONO, FONT_STACK_SANS } from './font-stacks';
 
 // eigen-prose.css, flattened once: the HTML and PDF exports embed it, and the docx writer reads
 // its sizes, spacing and colors through proseValue, so the editor's look lives in one file.

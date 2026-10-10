@@ -4,6 +4,7 @@ import { FRAME_WIDTH, type MediaResolver, readVectorFromDoc, round } from '@work
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
+import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
@@ -11,7 +12,6 @@ import {
     type TransformWarning,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml, sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';

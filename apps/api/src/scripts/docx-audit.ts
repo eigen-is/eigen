@@ -43,7 +43,7 @@ import {
     xmlText,
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
-import { cssColorToHex } from '../lib/export/colors';
+import { cssColorToHex } from '../lib/document/colors';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { SMALL_PRINT } from '../lib/import/doc/runs';
