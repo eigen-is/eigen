@@ -89,6 +89,11 @@ function hexColor(value: string | undefined): string | undefined {
     return /^#?[0-9a-f]{6}$/i.test(value) ? value.slice(-6).toUpperCase() : '';
 }
 
+// A color as a mark holds it, from Word's hex.
+export function markColor(hex: string): string {
+    return `#${hex.toLowerCase()}`;
+}
+
 export function shadingOf(shd: XmlElement | undefined): string | undefined {
     if (!shd) return undefined;
     const fill = hexColor(w(shd, 'fill'));
@@ -107,6 +112,16 @@ export function isLightNeutral(fill: string | undefined): boolean {
     if (!fill || !isFill(fill)) return false;
     const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));
     return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
+}
+
+// Contrast below 1.5 against white, by WCAG's relative luminance. On a fill the schema drops, Word draws such text
+// legibly; on Eigen's paper it would vanish, so it takes the body color.
+export function isLight(hex: string): boolean {
+    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
+        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
 }
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {

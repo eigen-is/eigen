@@ -31,6 +31,7 @@ import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
     isFill,
     isLightNeutral,
+    markColor,
     mergePara,
     mergeRun,
     type Role,
@@ -243,7 +244,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         role = { kind: 'code', language: null };
 
     const borders = props.borders ?? {};
-    // G7: a bar alone is a quote only at the writer's width, which a heading in a quote carries too, in any color; the
+    // A bar alone is a quote only at the writer's width, which a heading in a quote carries too, in any color; the
     // Quote style always is, and its bar counts its depth.
     const writersBar = borders.bar === QUOTE_LOOK.border.sz;
     const leftBar =
@@ -271,7 +272,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
     if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
-    const done = `#${TASK_DONE_LOOK.color.toLowerCase()}`;
+    const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>
         piece.kind === 'node' && piece.node.text?.trim() ? [piece.node.marks ?? []] : [],
     );
@@ -292,7 +293,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             node: { type: 'text', text: list?.suffix === 'nothing' ? label : `${label} ` },
         });
 
-    const captionColor = `#${CAPTION_LOOK.color.toLowerCase()}`;
+    const captionColor = markColor(CAPTION_LOOK.color);
     const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
@@ -313,7 +314,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
         const para: Para = {
             kind: 'para',
-            // P2: an empty heading is the blank line Word shows, not a heading's height.
+            // An empty heading is the blank line Word shows, not a heading's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
@@ -357,7 +358,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     return items;
 }
 
-// G6: every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
+// Every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
 // text, complex script at its szCs; the style's bold and italic then stay as marks. A run's text box is not searched.
 function isBodySized(reader: Reader, p: XmlElement, heading: RunProps): boolean {
     const headingSize = heading.size ?? 20;
@@ -380,7 +381,7 @@ function isBodySized(reader: Reader, p: XmlElement, heading: RunProps): boolean 
     );
 }
 
-// G8: a code style draws code only where every run holding text is monospace, an empty line where its mark is;
+// A code style draws code only where every run holding text is monospace, an empty line where its mark is;
 // HTML Preformatted in Times is prose.
 function isMonospace(reader: Reader, p: XmlElement, scope: Scope, styleId: string | undefined): boolean {
     const { styles } = reader;
@@ -441,7 +442,7 @@ function trimStart(inlines: JSONContent[]): void {
 }
 
 function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {
-    const hex = `#${color.toLowerCase()}`;
+    const hex = markColor(color);
     for (const piece of pieces) {
         if (piece.kind !== 'node' || !piece.node.marks) continue;
         piece.node.marks = piece.node.marks.flatMap((mark) => {

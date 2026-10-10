@@ -9,8 +9,18 @@ import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './doc
 import { readDrawing, readVml } from './drawings';
 import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
-import { ABSORBED, isFill, isLightNeutral, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
-import { isLight } from './tables';
+import {
+    ABSORBED,
+    isFill,
+    isLight,
+    isLightNeutral,
+    markColor,
+    mergeRun,
+    type Role,
+    type RunProps,
+    readRunProps,
+    TOGGLES,
+} from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 export type Piece =
@@ -94,7 +104,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
     }
 }
 
-// G14: math as text until the schema holds math; each object and run of an equation is a word of its own.
+// Math as text until the schema holds math; each object and run of an equation is a word of its own.
 function mathText(element: XmlElement): string {
     const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
     return equations
@@ -269,7 +279,7 @@ export function pushText(reader: Reader, text: string, direct: RunProps, context
 
 type Marks = NonNullable<JSONContent['marks']>;
 
-// P8: small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
+// Small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
 // smaller is still body text.
 export const SMALL_PRINT = 0.85;
 
@@ -352,7 +362,7 @@ function marksOf(
     // Word draws capitals over small caps.
     const caps: Caps | null = props.caps ? 'all' : props.smallCaps ? 'small' : null;
     const highlight: Marks = isFill(shade)
-        ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` } }]
+        ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : markColor(shade) } }]
         : [];
     return faces.map(({ text: part, font, complex }) => {
         const small = isSmall(complex);
@@ -373,7 +383,7 @@ function marksOf(
                       {
                           type: 'textStyle',
                           attrs: {
-                              color: color ? `#${color.toLowerCase()}` : null,
+                              color: color ? markColor(color) : null,
                               fontFamily: fontFamily ?? null,
                               caps,
                           },

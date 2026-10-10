@@ -129,7 +129,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
                 item.empty = false;
                 floats = [];
             }
-            // G9: a block figure takes the next line in the Caption style or its look; a wrapped one only a caption in
+            // A block figure takes the next line in the Caption style or its look; a wrapped one only a caption in
             // its own frame.
             const previous = items.at(-1);
             if (previous?.kind === 'para' && isFigureOnly(previous)) {
@@ -435,7 +435,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             placeItem(item, node, stack, blocks);
             continue;
         }
-        // G10: the writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
+        // The writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
         if (isBreakOnly(item) && continues(index) && holdsWrapped(stack.at(-1)?.item)) continue;
         if (stack.length > 0 && item.role.kind !== 'heading') {
             // A blank line between two items of one list stays in the item above, so the list stays one.

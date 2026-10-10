@@ -128,7 +128,7 @@ function scriptOf(language: string | undefined): string | undefined {
 export type FontTable = Map<string, string>;
 
 // Word writes roman with pitch default for a font it has no metrics of (ArialMT, MinionPro-Regular), and modern for
-// some variable sans, so a family counts only beside a known variable pitch. P4: script, decorative and auto are unknown.
+// some variable sans, so a family counts only beside a known variable pitch. Script, decorative and auto are unknown.
 const FAMILY_CATEGORIES = new Map<string, EigenFont['category']>([
     ['roman', 'serif'],
     ['swiss', 'sans-serif'],

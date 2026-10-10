@@ -94,7 +94,7 @@ describe('placement', () => {
     });
 });
 
-// P3: a shape's text sits on its fill, which the schema drops, so light text there takes the body color.
+// A shape's text sits on its fill, which the schema drops, so light text there takes the body color.
 describe('text boxes', () => {
     const box = (text: string, color: string) =>
         `<w:txbxContent><w:p><w:r><w:rPr><w:color w:val="${color}"/></w:rPr><w:t>${text}</w:t></w:r></w:p></w:txbxContent>`;
