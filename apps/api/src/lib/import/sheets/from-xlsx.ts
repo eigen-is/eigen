@@ -71,10 +71,10 @@ type ThemePalette = string[];
 // exceljs's fully-materialized in-memory model (~800 bytes per cell) is itself the
 // dominant memory term. 4 M cells (e.g. 40k rows × 100 cols) exceeds any realistic import;
 // a dense, styled sheet at the cap peaks at ~5 GB to convert, ~3 GB of it exceljs's model.
-// A dense sheet at this cap decompresses to ~140 MB, well under the shared byte cap: the
-// CELL cap, not the byte cap, is the binding limit for a real spreadsheet, and neither
-// rejects a sheet the other would allow. The byte cap independently catches a LOW-cell-count
-// bomb (repeated bytes in one entry, or a forged xl/media/* blob) the cell cap can't see.
+// The byte cap holds ~7.5M valued cells, so the cells a part holds count against this cap
+// before exceljs loads (tallyExpansions), and the grid they span after. The byte cap
+// independently catches a LOW-cell-count bomb (repeated bytes in one entry, or a forged
+// xl/media/* blob) the cell cap can't see.
 export const MAX_CELLS = 4_000_000;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
@@ -105,11 +105,12 @@ function repackXlsx(buffer: Buffer): Buffer {
     try {
         const zip = openZip(buffer);
         const entries: ZipWriteEntry[] = [];
-        const tally: ExpansionTally = { merges: 0, mergedCells: 0, validationKeys: 0 };
+        const tally: ExpansionTally = { cells: 0, merges: 0, mergedCells: 0, validationKeys: 0 };
         for (const name of zip.names()) {
             const data = zip.read(name);
             if (!data) continue;
             const bytes = canonicalPart(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
+            if (WORKSHEET_PART.test(name)) tallyCells(bytes, tally);
             tallyExpansions(bytes, tally);
             entries.push({ name, data: bytes, store: true });
         }
@@ -122,10 +123,10 @@ function repackXlsx(buffer: Buffer): Buffer {
     }
 }
 
-// exceljs expands these per cell while it loads, before MAX_CELLS can count anything: a merge into its cells, each
-// merge checked against every earlier one; a validation's sqref into a model key per cell; a <col> into a column object
+// exceljs builds these while it loads, before MAX_CELLS can count anything: a model per <c>; a merge's cells, each
+// merge checked against every earlier one; a validation's sqref as a model key per cell; a <col> as a column object
 // per column up to its min or max.
-type ExpansionTally = { merges: number; mergedCells: number; validationKeys: number };
+type ExpansionTally = { cells: number; merges: number; mergedCells: number; validationKeys: number };
 
 // Merged cells count against MAX_CELLS, as cells. exceljs takes 2.4 s to check 10k merges pairwise, 27 s for 30k.
 export const MAX_MERGES = 10_000;
@@ -149,6 +150,18 @@ function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
     for (const attributes of startTags(bytes, 'col')) {
         const bounds = [attributes.get('min'), attributes.get('max')];
         if (bounds.some((bound) => Number.parseInt(bound ?? '', 10) > REFERENCE_COLUMN_COUNT)) throw tooLarge();
+    }
+}
+
+// exceljs's own test for a sheet part (lib/xlsx/xlsx.js): calcChain.xml holds a <c> per formula, which is no cell.
+const WORKSHEET_PART = /xl\/worksheets\/sheet(\d+)[.]xml/;
+
+// A loop, not tagStarts: a real sheet holds millions of cells.
+function tallyCells(bytes: Buffer, tally: ExpansionTally): void {
+    for (let at = bytes.indexOf(CELL_OPEN); at >= 0; at = bytes.indexOf(CELL_OPEN, at + CELL_OPEN.length)) {
+        if (!NAME_ENDS.has(bytes[at + CELL_OPEN.length])) continue;
+        tally.cells += 1;
+        if (tally.cells > MAX_CELLS) throw new ApiError(413, 'Spreadsheet has too many cells');
     }
 }
 
@@ -208,6 +221,8 @@ function rangeArea(ref: string): number {
     return (bottom - top + 1) * (right - left + 1);
 }
 
+// A Buffer, as a string needle costs an allocation per search.
+const CELL_OPEN = Buffer.from('<c');
 // Whitespace, `/` or `>` ends a name, so `<cols` is no `<col`.
 const NAME_ENDS = new Set([0x20, 0x09, 0x0a, 0x0d, 0x2f, 0x3e]);
 

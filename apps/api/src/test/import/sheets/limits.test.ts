@@ -183,6 +183,14 @@ describe('what exceljs expands per cell is refused before it loads', () => {
         30_000,
     );
 
+    // exceljs builds a model per cell before the grid they span is counted: 12M empty cells imported at 3.7 GB.
+    test('more cells than the cap are 413 at no cost', () => {
+        const result = measuredImport(xlsx({ data: `<row r="1">${'<c/>'.repeat(MAX_CELLS + 1)}</row>` }));
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        expect(result.rssGrowth).toBeLessThan(64 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
     // An empty row far down passes the cell cap, and every walk to the last row took 84 s at row 1,000,000,000.
     test('a row past the grid is 413 at no cost', () => {
         const result = measuredImport(xlsx({ data: '<row r="1000000000" hidden="1"/>' }));
@@ -203,6 +211,25 @@ describe('each cap', () => {
             await outcome(xlsx({}, [unread(merges(row(half))), unread(merges(`B1:B${half + 1}`), 'other')])),
         ).toEqual(TOO_LARGE);
     });
+
+    // exceljs skips what an extension holds, so these cells cost it nothing; a calculation chain's entries are no cells.
+    test('cells in the sheets are counted against the cell cap before the load', async () => {
+        const chain = {
+            name: 'xl/calcChain.xml',
+            xml: `<calcChain xmlns="${SML}">${'<c r="A1" i="1"/>'.repeat(10)}</calcChain>`,
+        };
+        const file = (count: number) =>
+            xlsx(
+                {
+                    before: '<cols><col min="1" max="1"/></cols>',
+                    after: `<conditionalFormatting sqref="A1"><cfRule type="expression" priority="1"><formula>A1</formula></cfRule></conditionalFormatting><extLst><ext uri="x">${'<c/>'.repeat(count)}</ext></extLst>`,
+                },
+                [chain],
+            );
+        // The sheet holds A1 too.
+        expect(await outcome(file(MAX_CELLS - 1))).toBe('imported');
+        expect(await outcome(file(MAX_CELLS))).toEqual(TOO_MANY_CELLS);
+    }, 30_000);
 
     test('a range missing its column counts as column A, as exceljs walks it', async () => {
         const rest = (MAX_CELLS - REFERENCE_ROW_COUNT) / 3;
