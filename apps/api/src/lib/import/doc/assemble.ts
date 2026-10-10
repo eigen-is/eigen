@@ -17,7 +17,8 @@ export type Para = {
     // A half after a page break, which continues its item rather than numbering again.
     continued: boolean;
     indLeft: number;
-    // Where an item's number starts, which says whether a list of another definition nests under the open item.
+    // Where an item's number or checkbox starts, which says whether a list of another definition nests under the open
+    // item.
     numberAt?: number;
     quote: number;
     // A quote inside the list item above it: the quote depth that item sits at.
@@ -201,14 +202,16 @@ function assignQuotes(items: Item[]): void {
             continue;
         }
         if (item.kind !== 'para') continue;
-        const listed = item.list && item.quote > 0 ? listDepth(item.list) : undefined;
+        // A quoted item's depth by where the writer sets its number or checkbox.
+        let counted: number | undefined;
         if (item.list || item.task) {
             let open = opens.at(-1);
             for (; open && !nestsUnder(item, open.indLeft, !!open.task); open = opens.at(-1)) opens.pop();
-            if (listed !== undefined) {
-                item.quote = listed;
+            if (item.quote > 0) counted = item.list ? listDepth(item.list) : taskDepth(item, open);
+            if (counted !== undefined) {
+                item.quote = counted;
                 // A quote in the open item holds it.
-                if (open && listed > open.quote) item.inItem = open.quote;
+                if (open && counted > open.quote) item.inItem = open.quote;
             }
             opens.push(item);
         } else if (item.role.kind === 'code') closeTo(codeDepth(item, hostAt, previous));
@@ -226,7 +229,7 @@ function assignQuotes(items: Item[]): void {
             if (!item.continued && !item.empty) closeTo(host);
         }
         item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
-        if (item.quote > 0 && listed === undefined) {
+        if (item.quote > 0 && counted === undefined) {
             if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));
             else if (item.inItem === undefined) plain = item.quote;
         }
@@ -240,6 +243,16 @@ function listDepth(list: NonNullable<Para['list']>): number | undefined {
     const base = (list.pPr.indLeft ?? 0) + (list.pPr.indFirst ?? 0) * (list.ilvl + 1);
     const depth = Math.round(base / QUOTE_LOOK.indent);
     return depth > 0 && Math.abs(base - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE ? depth : undefined;
+}
+
+// The writer sets a checkbox at its container's text, a quote's indent per quote past the item it sits in.
+function taskDepth(task: Para, open: Para | undefined): number | undefined {
+    const offset = (task.numberAt ?? task.indLeft) - (open?.indLeft ?? 0);
+    const depth = Math.round(offset / QUOTE_LOOK.indent);
+    const quote = (open?.quote ?? 0) + depth;
+    return depth >= 0 && quote > 0 && Math.abs(offset - depth * QUOTE_LOOK.indent) <= INDENT_TOLERANCE
+        ? quote
+        : undefined;
 }
 
 // The writer indents a table or a rule to its container's text, a quote's indent per quote past the item it sits in.

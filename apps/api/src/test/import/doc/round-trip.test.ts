@@ -206,6 +206,22 @@ describe('lists side by side', () => {
     });
 });
 
+// The writer sets a task's checkbox at its container's text, so its quotes count from there.
+describe('a task list in a quote', () => {
+    test.each<[string, JSONContent[]]>([
+        ['after a quote in the quote', [quote(p('Said'), quote(p('Deep')), tasks([p('Task')]))]],
+        ['two deep', [quote(quote(tasks([p('Task')]))), p('Done')]],
+        ['in an item', [bullets([p('One'), quote(tasks([p('Task')]))], [p('Two')])]],
+        ['after a paragraph in an item', [bullets([p('One'), quote(p('Said'), tasks([p('Task')]))])]],
+        ['in a task', [tasks([p('One'), quote(tasks([p('Task')]))])]],
+        ['nested in a list', [quote(bullets([p('One'), tasks([p('Task')])]))]],
+        ['nested in a list after a deeper quote', [quote(quote(p('Deep')), bullets([p('One'), tasks([p('Task')])]))]],
+    ])('%s comes back as written', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
 // The writer sets a Spacer between two boxes, code or a quote, which stands in the quote around them.
 describe('boxes side by side in a quote', () => {
     test.each<[string, JSONContent[]]>([

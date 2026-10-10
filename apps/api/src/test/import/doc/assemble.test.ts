@@ -169,6 +169,11 @@ describe('quotes', () => {
             assembled([quoted('One', QUOTE_LOOK.indent), { kind: 'break' }, quoted('Two', QUOTE_LOOK.indent)]),
         ).toEqual(['blockquote[One | pageBreak | Two]']);
     });
+
+    test("a quoted task whose checkbox sits at the margin is another editor's, and stays in its quote", () => {
+        const task = para('Task', { indLeft: ITEM_INDENT, numberAt: 0, quote: 1, task: { checked: false } });
+        expect(assembled([task])).toEqual(['blockquote[taskList[taskItem[Task]]]']);
+    });
 });
 
 describe('blank lines before a page', () => {
