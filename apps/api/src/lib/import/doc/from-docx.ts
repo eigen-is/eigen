@@ -20,6 +20,14 @@ export type DocxImage = {
 
 export const docSchema = getSchema(getDocExtensions({ lowlight }));
 
+// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
+// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
+// heaviest weighs 57,688.
+export const MAX_DOCX_WEIGHT = 150_000;
+
+// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
+const CHARS_PER_UNIT = 512;
+
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
@@ -28,6 +36,7 @@ export function docxToPmJson(
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
+        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema.nodeFromJSON({
@@ -55,6 +64,48 @@ export function docxToPmJson(
             throw new ApiError(400, NOT_A_DOCX, { cause: error });
         throw error;
     }
+}
+
+// Every node and mark, and the cells prosemirror-tables fills a ragged table with on open, each with its paragraph.
+function weightOf(nodes: JSONContent[]): number {
+    let weight = 0;
+    const strings = (attrs: Record<string, unknown> | undefined) => {
+        for (const value of Object.values(attrs ?? {}))
+            if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+    };
+    const stack = [...nodes];
+    for (let node = stack.pop(); node; node = stack.pop()) {
+        weight += 1 + (node.marks?.length ?? 0);
+        strings(node.attrs);
+        for (const mark of node.marks ?? []) strings(mark.attrs);
+        if (node.type === 'table') weight += 2 * missingCells(node);
+        for (const child of node.content ?? []) stack.push(child);
+    }
+    return weight;
+}
+
+// The table's width as prosemirror-tables reads it, a row's cells and the rowspans reaching into it, by its rows,
+// less the slots its cells fill.
+function missingCells(table: JSONContent): number {
+    const rows = table.content ?? [];
+    const reaching = new Array<number>(rows.length + 1).fill(0);
+    let width = 0;
+    let filled = 0;
+    let carried = 0;
+    for (const [index, row] of rows.entries()) {
+        carried += reaching[index] ?? 0;
+        let own = 0;
+        for (const cell of row.content ?? []) {
+            const colspan = Number(cell.attrs?.['colspan'] ?? 1);
+            const rowspan = Math.min(Number(cell.attrs?.['rowspan'] ?? 1), rows.length - index);
+            own += colspan;
+            filled += colspan * rowspan;
+            reaching[index + 1] = (reaching[index + 1] ?? 0) + colspan;
+            reaching[index + rowspan] = (reaching[index + rowspan] ?? 0) - colspan;
+        }
+        width = Math.max(width, own + carried);
+    }
+    return width * rows.length - filled;
 }
 
 function fits(block: JSONContent): boolean {
