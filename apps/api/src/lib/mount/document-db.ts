@@ -187,8 +187,8 @@ async function buildDocumentDb<S extends SchemaType>(
                           // the resolve and the write, would rebuild the old tree and orphan the sync.
                           // A vanished row means the doc was deleted — skip, so a stale sync can't
                           // resurrect a dead key. (s3/local-key keys are id-stable and take no lock.)
-                          if (!(await mount.getPath(pathId))) return;
-                          const currentKey = await mount.getStorageKey(pathId);
+                          const currentKey = await mount.findStorageKey(pathId);
+                          if (currentKey === null) return;
                           if (mount.uploadQueue) {
                               const stagingPath = mount.uploadQueue.newStagingPath();
                               managed.stageCopy(stagingPath);

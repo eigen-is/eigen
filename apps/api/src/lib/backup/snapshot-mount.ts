@@ -150,7 +150,8 @@ export async function snapshotMountData(
                 )
                 .catch(async (error: unknown) => {
                     // Empty trash takes no path lock, so a row can still go between the check and the read.
-                    if (!(await isGone())) rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error);
+                    const storageKey = await mount.findStorageKey(row.id);
+                    if (storageKey !== null) rethrowStorageFailure(mount.id, storageKey, error);
                     fs.rmSync(destPath, { force: true });
                     return null;
                 });
@@ -162,7 +163,8 @@ export async function snapshotMountData(
                 databases++;
             } else {
                 const live = await mount.getPath(row.id);
-                if (live?.size) recordLost(live.size, await mount.getStorageKey(row.id));
+                const storageKey = await mount.findStorageKey(row.id);
+                if (live?.size && storageKey !== null) recordLost(live.size, storageKey);
             }
         } else {
             // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
@@ -172,8 +174,8 @@ export async function snapshotMountData(
             const entry = await mount.withPathLock(row.id, async () => {
                 const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
-                    if (!live) return null;
-                    const storageKey = await mount.getStorageKey(row.id);
+                    const storageKey = await mount.findStorageKey(row.id);
+                    if (!live || storageKey === null) return null;
                     const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
                     // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on
                     // record mirrors that absence. readKey asks pendingStagedCopy before its first await, so both

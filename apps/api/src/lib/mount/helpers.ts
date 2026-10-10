@@ -25,7 +25,7 @@ export const docContainerDescendantIds = sql`
 `;
 
 // Subquery: each of `pathIds` plus every ancestor up to the mount root. Embedded as `id IN (…)` so one
-// query fetches whole chains (resolveStoragePath walks one down, getBreadcrumbs walks each up).
+// query fetches whole chains (findStorageKey walks one down, getBreadcrumbs walks each up).
 export function ancestorIds(...pathIds: string[]): SQL {
     return sql`
         WITH RECURSIVE ancestors AS (

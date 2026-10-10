@@ -742,13 +742,14 @@ export class Mount {
                     wroteUnderLock = true;
                     await this.withPathLock(pathId, () =>
                         this.withTreeExclusive(async () => {
-                            const oldPath = await this.resolveStoragePath(pathId);
+                            const oldPath = await this.getStorageKey(pathId);
+                            // Only the root's key is '': a rename or move of the mount itself writes nothing.
                             if (!oldPath) return;
                             if (updates.name !== undefined) {
                                 values.file = targetName;
                             }
                             await writeRow();
-                            const newPath = await this.resolveStoragePath(pathId);
+                            const newPath = await this.getStorageKey(pathId);
                             if (oldPath !== newPath) {
                                 await renameFn.call(this.storage, oldPath, newPath);
                             }
@@ -766,18 +767,23 @@ export class Mount {
         return updated;
     }
 
+    // For a missing row an id key is still the id, so a read of a deleted file finds no object. A name path is a
+    // 404, never the root's '': a create into a deleted folder would write at the mount root.
     // internal — used by mount/*.ts + versioning/snapshot.ts
     async getStorageKey(pathId: string): Promise<string> {
-        if (!this.isPathBased) {
-            const row = await this.db.select({ file: paths.file }).from(paths).where(eq(paths.id, pathId)).get();
-            return row?.file || pathId;
-        }
-        return this.resolveStoragePath(pathId);
+        const storageKey = await this.findStorageKey(pathId);
+        if (storageKey !== null) return storageKey;
+        if (!this.isPathBased) return pathId;
+        throw new ApiError(404, 'Path not found');
     }
 
-    // A missing row is a 404, never the root's '': a create into a deleted folder would write at the mount root.
-    // internal — used by mount/*.ts
-    async resolveStoragePath(pathId: string): Promise<string> {
+    // Null once the row is gone, for a caller racing a permanent delete, which takes no path lock.
+    // internal — used by mount/*.ts + lib/backup
+    async findStorageKey(pathId: string): Promise<string | null> {
+        if (!this.isPathBased) {
+            const row = await this.db.select({ file: paths.file }).from(paths).where(eq(paths.id, pathId)).get();
+            return row ? row.file || pathId : null;
+        }
         const rows = await this.db
             .select({
                 id: paths.id,
@@ -788,7 +794,7 @@ export class Mount {
             .where(sql`${paths.id} IN (${ancestorIds(pathId)})`)
             .all();
 
-        if (rows.length === 0) throw new ApiError(404, 'Path not found');
+        if (rows.length === 0) return null;
 
         const byId = new Map(rows.map((r) => [r.id, r]));
         const segments: string[] = [];
@@ -803,7 +809,7 @@ export class Mount {
     }
 
     private async resolveStoragePathForNew(parentId: string, fileValue: string): Promise<string> {
-        const parentPath = await this.resolveStoragePath(parentId);
+        const parentPath = await this.getStorageKey(parentId);
         return parentPath ? `${parentPath}/${fileValue}` : fileValue;
     }
 
@@ -819,15 +825,22 @@ export class Mount {
 
         // DB delete before storage cleanup (crash safety: orphaned file > orphaned row)
         const deleteDir = this.storage.deleteDir;
+        // A null key or no row deleted: a concurrent delete of the same row got there first.
         if (pathEntry.type === 'file') {
             await this.withTreeShared(async () => {
-                const storageKey = await this.getStorageKey(pathId);
-                await this.db.delete(paths).where(eq(paths.id, pathId));
-                await this.removeObject(pathId, storageKey);
+                const storageKey = await this.findStorageKey(pathId);
+                if (storageKey === null) return;
+                const deleted = await this.db
+                    .delete(paths)
+                    .where(eq(paths.id, pathId))
+                    .returning({ id: paths.id })
+                    .get();
+                if (deleted) await this.removeObject(pathId, storageKey);
             });
         } else if (this.isPathBased && deleteDir) {
             await this.withTreeExclusive(async () => {
-                const storageKey = await this.getStorageKey(pathId);
+                const storageKey = await this.findStorageKey(pathId);
+                if (storageKey === null) return;
                 const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
                 for (const { id } of files) {
                     await deleteThumbnail(this.thumbsDir, id);

@@ -317,8 +317,8 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
     });
 });
 
-// A restore's and a move's pre-lock checks go stale while they queue; each re-answers under the lock.
-describe('a restore or move whose pre-lock check goes stale', () => {
+// A restore's, a move's and a delete's pre-lock checks go stale while they queue; each re-answers under the lock.
+describe('a restore, move or delete whose pre-lock check goes stale', () => {
     test('a restore racing a same-name create answers 409 and clobbers nothing', async () => {
         const { mount, storage, folderId, fileId } = await fileInFolder('restore-vs-create');
         await mount.trashPath(fileId);
@@ -349,9 +349,31 @@ describe('a restore or move whose pre-lock check goes stale', () => {
         const rejected = outcomes.filter((o) => o.status === 'rejected');
         expect(rejected).toHaveLength(1);
         expect(rejected[0]).toMatchObject({ reason: { status: 400 } });
-        const [keyA, keyB] = [await mount.resolveStoragePath(a), await mount.resolveStoragePath(b)];
+        const [keyA, keyB] = [await mount.getStorageKey(a), await mount.getStorageKey(b)];
         expect(keyA.startsWith(`${keyB}/`) || keyB.startsWith(`${keyA}/`)).toBe(true);
         expect(await settlesWithin([mount.invalidateSizesFrom(a)], 5000)).toBe(true);
         await expect(mount.updatePath(a, { parentId: a })).rejects.toMatchObject({ status: 400 });
+    });
+
+    // The second delete passes its row check, then queues behind the first and an exclusive holder,
+    // so it reaches the lock only once the row is gone.
+    test.each(['file', 'folder'] as const)('two deletes of one %s both resolve', async (type) => {
+        const { mount, storage, folderId, fileId } = await fileInFolder(`delete-twice-${type}`);
+        const pathId = type === 'file' ? fileId : folderId;
+        const key = await mount.getStorageKey(pathId);
+        const hold = Promise.withResolvers<void>();
+        const held = mount.withTreeExclusive(() => hold.promise);
+        const firstQueued = mount.armTreeWait();
+        const first = mount.deletePath(pathId);
+        await firstQueued;
+        const between = mount.withTreeExclusive(async () => {});
+        const secondQueued = mount.armTreeWait();
+        const second = mount.deletePath(pathId);
+        await secondQueued;
+        hold.resolve();
+        await Promise.all([held, first, between, second]);
+
+        expect(await mount.getPath(pathId)).toBeNull();
+        expect(existsSync(storage.getPath(key))).toBe(false);
     });
 });
