@@ -9,6 +9,7 @@ import type { TransformWarning } from '../../document/transform/protocol';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
+import { missingCells, openTable } from './tables';
 
 // docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
 
@@ -36,7 +37,10 @@ export function docxToPmJson(
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
-        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        const tables: JSONContent[] = [];
+        if (weightOf(content, tables) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        // Weighed, the cells the editor would fill in on open are filled in now.
+        for (const table of tables) openTable(table);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema.nodeFromJSON({
@@ -67,7 +71,7 @@ export function docxToPmJson(
 }
 
 // Every node and mark, and the cells prosemirror-tables fills a ragged table with on open, each with its paragraph.
-function weightOf(nodes: JSONContent[]): number {
+function weightOf(nodes: JSONContent[], tables: JSONContent[]): number {
     let weight = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
@@ -78,34 +82,13 @@ function weightOf(nodes: JSONContent[]): number {
         weight += 1 + (node.marks?.length ?? 0);
         strings(node.attrs);
         for (const mark of node.marks ?? []) strings(mark.attrs);
-        if (node.type === 'table') weight += 2 * missingCells(node);
+        if (node.type === 'table') {
+            weight += 2 * missingCells(node);
+            tables.push(node);
+        }
         for (const child of node.content ?? []) stack.push(child);
     }
     return weight;
-}
-
-// The table's width as prosemirror-tables reads it, a row's cells and the rowspans reaching into it, by its rows,
-// less the slots its cells fill.
-function missingCells(table: JSONContent): number {
-    const rows = table.content ?? [];
-    const reaching = new Array<number>(rows.length + 1).fill(0);
-    let width = 0;
-    let filled = 0;
-    let carried = 0;
-    for (const [index, row] of rows.entries()) {
-        carried += reaching[index] ?? 0;
-        let own = 0;
-        for (const cell of row.content ?? []) {
-            const colspan = Number(cell.attrs?.['colspan'] ?? 1);
-            const rowspan = Math.min(Number(cell.attrs?.['rowspan'] ?? 1), rows.length - index);
-            own += colspan;
-            filled += colspan * rowspan;
-            reaching[index + 1] = (reaching[index + 1] ?? 0) + colspan;
-            reaching[index + rowspan] = (reaching[index + rowspan] ?? 0) - colspan;
-        }
-        width = Math.max(width, own + carried);
-    }
-    return width * rows.length - filled;
 }
 
 function fits(block: JSONContent): boolean {

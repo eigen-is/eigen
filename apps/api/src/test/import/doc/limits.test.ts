@@ -449,6 +449,31 @@ describe('output budget', () => {
     }, 30_000);
 });
 
+// The reader stores a table as the editor opens it; fixTables' transaction kept a copy of the table per repair.
+describe('tables the editor would repair', () => {
+    test('a row of 63 cells over 1,000 rows of one is filled in one pass through the Yjs update', async () => {
+        const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
+        const docx = await buildDocxWithBody(
+            `<w:tbl>${grid}<w:tr>${'<w:tc/>'.repeat(63)}</w:tr>${'<w:tr><w:tc/></w:tr>'.repeat(1000)}</w:tbl>`,
+        );
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(3000);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+    }, 60_000);
+
+    // A cell spanning a column of no width has none, where the column's other cells have one.
+    test('20,000 rows whose widths disagree with their column import through the Yjs update', async () => {
+        const grid = '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="0"/></w:tblGrid>';
+        const wide = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr></w:tc></w:tr>';
+        const docx = await buildDocxWithBody(`<w:tbl>${grid}<w:tr><w:tc/><w:tc/></w:tr>${wide.repeat(20_000)}</w:tbl>`);
+        const result = measuredImport(docx, 'transform');
+        expect(result.status).toBeUndefined();
+        expect(result.cpuMs).toBeLessThan(3000);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+    }, 60_000);
+});
+
 describe('structure', () => {
     // Word's column limit; a looped gridSpan of 2e9 would hold the Worker to its deadline.
     test('a gridSpan past the grid spans the grid', async () => {

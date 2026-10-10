@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { EditorState } from '@tiptap/pm/state';
+import { fixTables } from '@tiptap/pm/tables';
 import { COLUMN_PX } from '../../../lib/import/doc/assemble';
+import { docSchema } from '../../../lib/import/doc/from-docx';
+import { openTable } from '../../../lib/import/doc/tables';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
@@ -275,5 +279,64 @@ describe("the writer's wrapped figure", () => {
             ['wrap-right', 'A caption'],
         ]);
         expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Text beside it.']);
+    });
+});
+
+// The reader stores the table the editor opens, so the first open repairs nothing; fixTables, which the editor runs,
+// is the reference, pass for pass.
+describe('a table as the editor opens it', () => {
+    const at = (text: string, attrs: Record<string, unknown> = {}, type = 'tableCell'): JSONContent => ({
+        type,
+        attrs,
+        content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    });
+    const tableOf = (rows: JSONContent[][]): JSONContent => ({
+        type: 'table',
+        content: rows.map((cells) => ({ type: 'tableRow', content: cells })),
+    });
+    const fixed = (table: JSONContent) => {
+        let state = EditorState.create({ doc: docSchema.nodeFromJSON({ type: 'doc', content: [table] }) });
+        for (let tr = fixTables(state); tr; tr = fixTables(state)) state = state.apply(tr);
+        return state.doc.toJSON();
+    };
+    const opened = (table: JSONContent) => {
+        const copy = structuredClone(table);
+        openTable(copy);
+        return docSchema.nodeFromJSON({ type: 'doc', content: [copy] }).toJSON();
+    };
+    const w = (...colwidth: number[]) => ({ colwidth });
+
+    test.each([
+        [
+            "a short row, its new cells at its end with their columns' widths",
+            [[at('A', w(90)), at('B', w(80)), at('C', w(70))], [at('D', w(90))]],
+        ],
+        ['a short first row, its new cells at its start', [[at('A')], [at('B'), at('C')], [at('D'), at('E')]]],
+        ['a short last row after a short row, its new cells at its start', [[at('A'), at('B')], [at('C')], [at('D')]]],
+        ['a short header row, filled with header cells', [[at('A', {}, 'tableHeader')], [at('B'), at('C')]]],
+        ['a column whose widths disagree', [[at('A', w(90))], [at('B', w(60))], [at('C', w(60))], [at('D')]]],
+        [
+            'a cell over a rowspan from above',
+            [[at('A'), at('B', { rowspan: 2 })], [at('C', { colspan: 2, colwidth: [50, 60] })]],
+        ],
+        [
+            'a spanning cell under a rowspan, two rows deep',
+            [
+                [at('A'), at('B', { rowspan: 2, colwidth: [60] })],
+                [at('C', { colspan: 2, rowspan: 2, colwidth: [0, 70] })],
+                [at('D')],
+            ],
+        ],
+        ['a rowspan past the last row', [[at('A', { rowspan: 5 }), at('B')], [at('C')]]],
+        [
+            'a row wider than the rest, spans and all',
+            [[at('A', { colspan: 3, colwidth: [10, 20, 30] })], [at('B'), at('C', { rowspan: 2 })], [at('D')]],
+        ],
+    ])('%s', (_, rows) => {
+        const table = tableOf(rows);
+        const result = opened(table);
+        expect(result).toEqual(fixed(table));
+        const state = EditorState.create({ doc: docSchema.nodeFromJSON(result) });
+        expect(fixTables(state)).toBeUndefined();
     });
 });
