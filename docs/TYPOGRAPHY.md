@@ -42,7 +42,15 @@ The name expands to CSS only where it renders. A sheet cell is looser: it stores
 
 ## Foreign fonts map onto the bundled ones
 
-Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. One map sends a foreign font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category: `FONT_CATEGORY_MAP` and `bundledFont` in `packages/lib/src/constants/fonts.ts`. xlsx import sets that font as a cell's `ff`, and leaves `ff` unset for a font the map doesn't know. Pasted HTML in docs reads the same map (`cleanPastedHTML` in `apps/docs/src/components/docs/paste.ts`), and drops a font that maps to Inter, the document font.
+Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. One map sends a foreign font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category: `FONT_CATEGORY_MAP` and `bundledFont` in `packages/lib/src/constants/fonts.ts`. Three readers share it: the xlsx import, which sets the font as a cell's `ff` and leaves `ff` unset for a font the map doesn't know; a paste in docs (`cleanPastedHTML` in `apps/docs/src/components/docs/paste.ts`); and the docx reader (`apps/api/src/lib/import/doc/docx-fonts.ts`).
+
+A doc's text draws in the document font, `DOCUMENT_FONT` (Inter), without a mark. So a paste or a docx import gives a font that maps to Inter no mark, and every other bundled font its `textStyle` mark: a Word file set in Calibri imports with no font marks, one set in Times New Roman with Source Serif 4 on every run. A run in a foreign monospace font, Courier New in a sentence, gets the JetBrains Mono mark and stays prose. Only a code style or the editor's code look on a light grey makes a run inline code, because a grey chip on every Courier run would invent code the author never marked.
+
+## The docx reader picks a font per script and falls back on the font table
+
+Word gives a run four faces and draws each character in the one for its script: `w:ascii` for ASCII, `w:hAnsi` for the rest of Latin, Greek and Cyrillic, `w:eastAsia` for East Asian text, and `w:cs` for complex script (Arabic, Hebrew, the Indic scripts, Thai and the like), which has its own bold, italic and size. The reader does the same, so an Arabic word in a Latin sentence gets its own face and look (`byFace` in `docx-fonts.ts`). A theme font resolves through the file's theme, and its complex-script and East Asian faces through the script of the run's language.
+
+A name the map doesn't know falls back on its entry in the file's `fontTable.xml`: a fixed pitch is monospace, and a variable pitch is serif for the family `roman` and sans-serif for `swiss`. Anything else maps to nothing, and the text keeps the document font. The family counts only beside a variable pitch, because Word writes `roman` with the default pitch for a font it has no metrics for. The corpus audit (`apps/api/src/scripts/docx-audit.ts`) imports this rule to count the words Word draws in a bundled font.
 
 ## One picker serves every app
 

@@ -23,7 +23,7 @@ The sections cover the schema, figures, the page and its panels, page breaks, co
 
 The editor leaves out the schema's `figure` and `comment` and adds `Figure` and `CommentMark` (`apps/docs/src/components/docs/extensions/`), which extend the lib nodes with the node view and the click, menu and decoration behavior. The stored shape stays the lib's, because an extension adds behavior, not attributes.
 
-The code block exists only when the caller passes `lowlight`, the syntax highlighter. The preview and the export pass one. The docx importer passes none, so its schema has no code block, and a test fixture that writes a stored doc's code block must build its schema with `lowlight` too.
+The code block exists only when the caller passes `lowlight`, the syntax highlighter. Every server schema passes the backend's one (`apps/api/src/lib/document/lowlight.ts`): the preview, the export and the docx import, which reads a code block's language back only when lowlight knows it. A test fixture that writes a stored doc's code block must build its schema with `lowlight` too.
 
 ## A tab older than the schema deletes the nodes it does not know
 
@@ -61,7 +61,7 @@ File → **Page setup…** shows the page in a dialog whose controls are all dis
 
 ## A page break is a dashed rule on screen and a new page on paper
 
-The `pageBreak` node (`packages/lib/src/docs/eigendoc/nodes/page-break.ts`) is an atomic block with no content. It renders as `<div class="page-break">` and parses a `div` or `hr` with that class and no text, so the div the export writes and the `hr` the docx import writes come back through one rule, and a heading, table or `div` with text that carries the class keeps its content. `PAGE_BREAK_CLASS` holds the class for the node and the importer, and `eigen-prose.css` draws and pages at the same class.
+The `pageBreak` node (`packages/lib/src/docs/eigendoc/nodes/page-break.ts`) is an atomic block with no content. It renders as `<div class="page-break">` and parses that div back when it holds no text, so a heading, table or `div` with text that carries the class keeps its content. `PAGE_BREAK_CLASS` holds the class, and `eigen-prose.css` draws and pages at the same class.
 
 The toolbar button, the **Insert** menu of the narrow toolbar and Mod-Enter insert it the way the horizontal rule is inserted: the caret lands after it, on a new paragraph when the break ends the doc. Mid-paragraph the break splits it, and the caret waits at the start of the second half. Before a table or a rule the caret waits in a gap cursor instead, so the first Backspace selects the break and the second removes it, and the table stays. A gap cursor needs a closed block on both sides, so before a list or a quote, which open on a paragraph, the caret goes into its first paragraph. A selected image is an inline node with no room for a block beside it, so the break splits its paragraph after the image.
 
@@ -71,13 +71,13 @@ Every screen surface draws it from `eigen-prose.css` as a dashed rule labeled "P
 
 ## A Word page break splits its paragraph on import
 
-In Word a page break is a run inside a paragraph, and in a doc it is a block. So a `transformDocument` pass in `from-docx.ts` splits each paragraph at its breaks and sets each break bare between the halves, outside any paragraph. The halves keep the paragraph's style and numbering, so the break stands between two headings or two lists instead of inside one. An empty half vanishes with mammoth's other empty paragraphs. mammoth's style map writes the bare break as `hr.page-break:fresh`, which the node's parse rule reads ahead of the horizontal rule's own `hr` rule. `:fresh` keeps two breaks in a row two `hr`s, where mammoth would otherwise merge them into one.
+In Word a page break is a run inside a paragraph (`w:br w:type="page"`), and in a doc it is a block. So the docx reader (`apps/api/src/lib/import/doc/`) splits a paragraph at each break and sets the break between the halves. The halves keep the paragraph's style, so the break stands between two headings instead of inside one. A half that shows nothing (empty, spaces, a bookmark) gives no block, but one holding a non-breaking space stays, as Word draws it. Two breaks in a row stay two.
 
-A half that holds only a bookmark or a checkbox survives mammoth, but the schema keeps neither, so it would parse as an empty block. The importer removes one such paragraph or heading on each side of the `hr`. A block holding only spaces, tabs or newlines counts as empty too, but a spacer paragraph holding a non-breaking space stays.
+Inside a list item or a quote the break stays inside. It becomes a block of the item, the rest of a split item continues that item unnumbered, and the list keeps counting; a paragraph holding nothing but a break joins the item above and takes no number. Word counts on across a page, and a break pulled out of the list would cut it in two and restart the second half at 1. A break in a table cell is a page break inside the cell.
 
-A numbered list that a break splits comes back as two lists, and the second starts at 1 again: the import does not read Word's list numbers, which is phase 3 of [PROPOSAL_DOCX.md](proposals/PROPOSAL_DOCX.md).
+Word starts a page in two more ways, and both give a break. A paragraph with `w:pageBreakBefore`, its own or its style's, gets one before it. A section break that starts a page gets one after its paragraph: `nextPage`, `oddPage`, `evenPage`, or no type, which means `nextPage` (`PAGE_SECTION_TYPES`, `apps/api/src/lib/core/ooxml.ts`). A `continuous` or `nextColumn` section break gives none, and neither does the body's last section, which ends the document. A footnote or endnote isn't paged, so every break in a note is dropped.
 
-Three breaks are dropped instead of split. A break in a nested list item would stand outside the list and tear it apart, so the item keeps its text whole. A break that trails a list item's text, right before its nested items, would cut the item off from them, so it goes too, while what follows it without being text, a footnote reference, a line break or spaces, stays on the item; a break earlier in that item still splits it. A footnote or endnote isn't paged. mammoth reads a note's body through `notes.resolve`, out of the split's reach, so `transformDocument` hands it a `resolve` that strips the breaks. Comments need nothing: the import doesn't convert them. A break in a table cell imports as a page break inside the cell. The cases are pinned in `apps/api/src/test/import/doc-import.test.ts`.
+Empty paragraphs import as blank lines, except a run of them that ends at a break, which is dropped (`isBlank` in `assemble.ts`). Eigen draws an empty line taller than Word, so the blank lines that fill out Word's page would push the break onto a blank page of its own. A blank list item, task item or rule stays. The cases are pinned in `apps/api/src/test/import/doc-import.test.ts`, `apps/api/src/test/import/doc/paragraphs.test.ts` and `apps/api/src/test/import/doc/assemble.test.ts`.
 
 ## The page keeps its width and slides, then scales, clear of a panel
 
@@ -107,7 +107,7 @@ On paste, a payload with an image item is placed item by item: a figure from ano
 
 ## Pasted content is fitted to the page
 
-Content wider than the text column would overflow the page and the export. So `transformPastedHTML` caps every pasted image and table at the text column's width, and maps common desktop fonts onto the bundled families ([TYPOGRAPHY.md](TYPOGRAPHY.md#foreign-fonts-map-onto-the-bundled-ones)). A table resized or pasted past the column is scaled back after every change by `TableWidthClamp` (`apps/docs/src/components/docs/extensions/table-width-clamp.ts`), which shrinks every column by the same factor with a 25 px floor.
+Content wider than the text column would overflow the page and the export. So the editor's `transformPastedHTML` (`cleanPastedHTML`, `apps/docs/src/components/docs/paste.ts`) caps every pasted image and table at the text column's width, and maps common desktop fonts onto the bundled families ([TYPOGRAPHY.md](TYPOGRAPHY.md#foreign-fonts-map-onto-the-bundled-ones)). A table resized or pasted past the column is scaled back after every change by `TableWidthClamp` (`apps/docs/src/components/docs/extensions/table-width-clamp.ts`), which shrinks every column by the same factor with a 25 px floor.
 
 ## A font is stored as its name
 
