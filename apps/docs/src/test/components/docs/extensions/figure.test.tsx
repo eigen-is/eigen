@@ -1,6 +1,6 @@
 // A block figure's box is the column's width: a click in its empty space beside the image places the caret on that
 // side, and the image itself still selects the node. A selected figure still drags, and a drag that empties the
-// figure's paragraph removes it.
+// figure's paragraph removes it. Shift and the arrow keys resize a selected figure within the text column.
 import { afterEach, expect, test } from 'bun:test';
 import { NodeSelection } from '@tiptap/pm/state';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -20,13 +20,18 @@ const figure = { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 
 const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
 const text = (t: string) => ({ type: 'text', text: t });
 
-// By default "a" at 1, the figure at 2, "b" at 3: the image box spans x 200 to 400 in the 600 px wide figure box.
+// By default "a" at 1, the figure at 2, "b" at 3: the image box spans x 200 to 400 in the 600 px wide figure box,
+// on a page whose text column is 600 px.
 async function mount(content: object[] = [paragraph(text('a'), figure, text('b'))]) {
     const editor = new Editor({
         extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
         content: { type: 'doc', content },
     });
-    const rendered = await renderInDocument(createElement(EditorContent, { editor }));
+    const rendered = await renderInDocument(
+        createElement('div', { 'data-document': '', style: { padding: 0 } }, createElement(EditorContent, { editor })),
+    );
+    const page = document.querySelector('[data-document]');
+    if (page) Object.defineProperty(page, 'clientWidth', { value: 600 });
     unmount = async () => {
         await rendered.unmount();
         editor.destroy();
@@ -117,4 +122,67 @@ test('a picture that fails to load, a WMF or EMF, widens to read its alt text', 
         img.dispatchEvent(new Event('error'));
     });
     expect(img.className).toContain('min-w-40');
+});
+
+// A replaced image loads with no width, and the Image panel stays open only while the figure stays selected.
+test('a width written by the node view keeps the figure selected', async () => {
+    const unsized = { type: 'figure', attrs: { src: 'data:image/png;base64,' } };
+    const { editor, box } = await mount([paragraph(text('a'), unsized)]);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    await act(async () => {
+        box.querySelector('img')?.dispatchEvent(new Event('load'));
+    });
+    expect(editor.state.doc.nodeAt(2)?.attrs['width']).toBe(600);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+});
+
+const press = (editor: InstanceType<typeof Editor>, key: string) =>
+    act(async () => {
+        editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey: true, bubbles: true }));
+    });
+const widthAt2 = (editor: InstanceType<typeof Editor>) => editor.state.doc.nodeAt(2)?.attrs['width'];
+
+test('Shift and an arrow key resize a selected figure in steps, and it stays selected', async () => {
+    const { editor } = await mount();
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    await press(editor, 'ArrowRight');
+    expect(widthAt2(editor)).toBe(210);
+    await press(editor, 'ArrowUp');
+    expect(widthAt2(editor)).toBe(220);
+    await press(editor, 'ArrowLeft');
+    await press(editor, 'ArrowDown');
+    expect(widthAt2(editor)).toBe(200);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+});
+
+test.each([
+    ['block', 595, 'ArrowRight', 600],
+    ['wrap-left', 295, 'ArrowRight', 300],
+    ['block', 105, 'ArrowLeft', 100],
+])('a %s figure of %d px, Shift-%s twice, stops at %d px', async (layout, width, key, limit) => {
+    const { editor } = await mount([paragraph(text('a'), { ...figure, attrs: { ...figure.attrs, layout, width } })]);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    await press(editor, key);
+    await press(editor, key);
+    expect(widthAt2(editor)).toBe(limit);
+});
+
+// Shift+ArrowRight from before a figure selects it as text, and the next press extends that selection.
+test('Shift and an arrow key leave a text selection of a figure to the browser', async () => {
+    const { editor } = await mount();
+    await act(async () => {
+        editor.commands.setTextSelection({ from: 2, to: 3 });
+    });
+
+    await press(editor, 'ArrowRight');
+    expect(widthAt2(editor)).toBe(200);
 });

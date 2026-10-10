@@ -37,9 +37,11 @@ The schema turns TipTap's own undo off (`undoRedo: false`), and y-prosemirror's 
 
 A figure is an inline, atomic node (`packages/lib/src/docs/eigendoc/nodes/figure.ts`): it sits in a paragraph, its contents are not editable, and it can be dragged. Its durable reference is `mediaName`. `src` is only for an external image, and the export strips that ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches)). The other attributes are `alt`, `caption`, `alignment`, `layout` (block, or wrapped left or right), `commentCardId` and `width`.
 
-The browser starts a drag only from a press nobody prevented, selected figure included. A selected figure's image wrapper takes Tab focus for keyboard resize, so a press would move focus there and away from ProseMirror's keys; the wrapper hands a focus that isn't `:focus-visible` back to the editor instead of preventing the press. A drop that leaves the figure's own paragraph empty removes it (`figureDragOut` in the `Figure` extension).
+The browser starts a drag only from a press nobody prevented, selected figure included, so nothing in the node view prevents a press or takes focus from the editor. A drop that leaves the figure's own paragraph empty removes it (`figureDragOut` in the `Figure` extension). A cut keeps that empty paragraph, as Word and Google Docs do.
 
 A figure stores its width and never its height, so the height always follows the image's own ratio. The width is in the page's layout pixels, measured with `clientWidth` on the page element, which a CSS `scale()` does not change. So a doc edited on a narrow, scaled-down page stores the same width as on a wide one. The node view (`apps/docs/src/components/docs/extensions/figure.tsx`) sets the width on the image's first load, capped at the text column (half of it for a wrapped image), and resizing clamps between 100 px and that cap.
+
+Shift and an arrow key resize a selected figure by 10 px, Right and Up wider, Left and Down narrower, with the same clamp. It is a keymap on the figure's node selection (`addKeyboardShortcuts` in the `Figure` extension), so the keys never leave the editor. Shift and an arrow would otherwise extend the selection, and on a text selection of the figure, the one Shift+ArrowRight from beside it makes, they still do.
 
 ## The node view and the export draw one figure box
 
@@ -98,6 +100,8 @@ The overlay sits in a wrapper with a stable scrollbar gutter (`scrollbar-gutter:
 ## The properties panels follow the selection, on desktop only
 
 Selecting a figure or a table opens its properties panel, for a user who can write, in the slot the comments and activity panels use. An open comments or activity panel keeps the slot, and moving the caret out of the figure or table closes the properties panel. A phone shows no right-side panels: comments and activity open as a pane that hides the editor ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)), and the properties panels have no phone form.
+
+So a write from the Image panel must keep the figure selected. TipTap's `updateAttributes` writes with `setNodeMarkup`, which replaces a leaf node, and the node selection maps to a text selection, which closes the panel. The `Figure` extension's `updateFigure` command, and every write in its node view, set each attribute with `setNodeAttribute` instead, a step that moves no position. Such a write fires no `selectionUpdate` and `useEditor` re-renders on no transaction, so the panel reads the figure through `useEditorState`.
 
 ## A long selection's toolbar shows what its start holds
 

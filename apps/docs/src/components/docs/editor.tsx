@@ -454,7 +454,7 @@ const TiptapEditor = ({
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
         const { pendingName, promise } = startUpload(file);
         // Reset width so the new image's aspect ratio is recomputed on load
-        editorRef.current.chain().focus().updateAttributes('figure', { mediaName: pendingName, width: null }).run();
+        editorRef.current.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
         const result = await promise;
         if (!editorRef.current) return;
         swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
@@ -477,11 +477,7 @@ const TiptapEditor = ({
             .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
             .catch(() => null);
         if (result?.[0]) {
-            editorRef.current
-                .chain()
-                .focus()
-                .updateAttributes('figure', { mediaName: result[0].name, width: null })
-                .run();
+            editorRef.current.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
         }
     };
 
@@ -832,8 +828,7 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {/* Unmounted when closed: the properties panels key-remount per caret move.
-                                    The stable gutter is as wide as the scroll box's scrollbar and draws
+                                {/* Unmounted when closed. The stable gutter is as wide as the scroll box's scrollbar and draws
                                     none, so the panel ends left of that scrollbar, where the shift math
                                     already puts its edge. */}
                                 {showSidebar && (
@@ -843,7 +838,6 @@ const TiptapEditor = ({
                                                 <PanelColumn activePanel={panel} {...panelProps} />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
-                                                    key={editor.state.selection.from}
                                                     editor={editor}
                                                     onReplaceImage={handleReplaceImage}
                                                     onReplaceImageFromDrive={handleReplaceImageFromDrive}
