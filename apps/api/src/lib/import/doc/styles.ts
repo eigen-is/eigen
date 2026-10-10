@@ -398,10 +398,10 @@ function roleOf({ name, language }: Style): Role | undefined {
 export const ABSORBED: Record<Role['kind'], (keyof DocxRunProps)[] | 'all'> = {
     heading: ['bold', 'boldCs', 'size', 'sizeCs'],
     subtitle: [],
-    quote: ['italic', 'italicCs', 'color'],
+    quote: ['italic', 'italicCs', 'color', 'linkColor'],
     code: 'all',
     caption: [],
-    taskDone: ['strike', 'color'],
+    taskDone: ['strike', 'color', 'linkColor'],
     hr: 'all',
     structural: 'all',
     paragraph: [],
