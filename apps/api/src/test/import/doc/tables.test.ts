@@ -446,4 +446,55 @@ describe('a table as the editor opens it', () => {
         expect(nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[200], null, [200, 0]]);
         expect(repairs(json)).toBeUndefined();
     });
+
+    describe("Word's 63 columns", () => {
+        const grid63 = gridOf(...Array(63).fill(100));
+        const cells = (prefix: string, count: number) =>
+            Array.from({ length: count }, (_, index) => tc(`${prefix}${index}`));
+
+        test.each([
+            ['no grid', ''],
+            ['a 63-column grid', grid63],
+        ])('a w:gridBefore of 63 over %s leaves the last column to its cells', async (_, grid) => {
+            const { json } = await importDocxBody(
+                tableOn(grid, [row([tc('A'), tc('B')], '<w:gridBefore w:val="63"/>')]),
+            );
+            expect(shape(json)).toEqual([['62x1:', '1x1:AB']]);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('a continuation into the last column reads the cells after it there, and as the last cell extends', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [
+                    row([...cells('a', 62), tc('M', RESTART)]),
+                    row([...cells('b', 62), tc('', CONTINUE), tc('LOST1'), tc('LOST2')]),
+                    row([...cells('c', 62), tc('', CONTINUE)]),
+                ]),
+            );
+            expect(shape(json).map((tableRow) => tableRow.at(-1))).toEqual(['1x1:M', '1x2:LOST1LOST2', '1x1:c61']);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('a continuation over all 63 columns reads the cells after it in its place', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [row([tc('M', span(63) + RESTART)]), row([tc('', span(63) + CONTINUE), tc('LOST3')])]),
+            );
+            expect(shape(json)).toEqual([['63x1:M'], ['63x1:LOST3']]);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('the last column holds the text of the cells past it, not their empty lines', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [
+                    row([...cells('a', 62), tc('last'), ...Array(1000).fill('<w:tc><w:p/></w:tc>'), tc('end')]),
+                ]),
+            );
+            const last = nodesOfType(json, 'tableCell').at(-1);
+            expect((last?.content ?? []).map((node) => nodesOfType(node, 'text').map((text) => text.text))).toEqual([
+                ['last'],
+                ['end'],
+            ]);
+            expect(repairs(json)).toBeUndefined();
+        });
+    });
 });

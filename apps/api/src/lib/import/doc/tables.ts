@@ -85,7 +85,12 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         const cells: JSONContent[] = [];
         const next = new Map<number, CellAttrs>();
         const extended: CellAttrs[] = [];
-        let column = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0), columns);
+        // Short of Word's last column, which holds the row's cells.
+        let column = Math.min(
+            Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0),
+            columns,
+            MAX_COLUMNS - 1,
+        );
         if (column > 0) cells.push(gridFiller(columnPx, 0, column));
         for (const [index, cell] of row.cells.entries()) {
             if (column >= MAX_COLUMNS) break;
@@ -93,7 +98,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             const vMerge = wChild(tcPr, 'vMerge');
             // Only where the cell above starts, and over its columns: anywhere else the two would overlap.
             const above = vMerge && w(vMerge, 'val') !== 'restart' ? open.get(column) : undefined;
-            if (above) {
+            // Into the last column with cells after it, a cell of its own: it holds their text.
+            if (above && (column + above.colspan < MAX_COLUMNS || index === row.cells.length - 1)) {
                 extended.push(above);
                 next.set(column, above);
                 column += above.colspan;
@@ -105,13 +111,15 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 Math.max(1, columns - column),
             );
             const colwidth = widths(columnPx, column, colspan);
-            // Word's last column holds the text of the cells a row runs on past it.
-            const past = column + colspan < MAX_COLUMNS ? [] : row.cells.slice(index + 1).flatMap(cellContent);
-            const content = build(
-                cell === onlyCell && onlyItems
-                    ? onlyItems
-                    : cellItems(cell, rowIndex, colwidth, [...cellContent(cell), ...past]),
-            );
+            const own = cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex, colwidth);
+            // Word's last column holds the text of the cells a row runs on past it, not their empty lines.
+            const past =
+                column + colspan < MAX_COLUMNS
+                    ? []
+                    : cellItems(cell, rowIndex, colwidth, row.cells.slice(index + 1).flatMap(cellContent)).filter(
+                          (item) => item.kind !== 'para' || !item.empty,
+                      );
+            const content = build([...own, ...past]);
             const fill = shadingOf(wChild(tcPr, 'shd'));
             const attrs: CellAttrs = { colspan, rowspan: 1, colwidth, ...hoistAlignment(content) };
             cells.push({
