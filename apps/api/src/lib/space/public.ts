@@ -4,7 +4,6 @@ import type { PublicUser } from '@workspace/lib/types/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { BunFile } from 'bun';
 import { getAvatarsDir } from '../config/paths';
-import { ApiError } from '../core';
 import { getTeam, getTeamExists } from '../team';
 import type { User } from '../user';
 import { getUserByEmail, getUserById } from '../user/';
@@ -13,7 +12,7 @@ export async function getUserByEmailOrId(emailOrId: string): Promise<User | null
     return validateEmailAddress(emailOrId) ? getUserByEmail(emailOrId) : getUserById(emailOrId);
 }
 
-export async function getPublicInfo(emailOrId: string): Promise<PublicUser> {
+export async function getPublicInfo(emailOrId: string): Promise<PublicUser | null> {
     const parsed = parseOwnerId(emailOrId);
     if (parsed.type === 'team') {
         const team = await getTeam(parsed.id);
@@ -32,18 +31,16 @@ export async function getPublicInfo(emailOrId: string): Promise<PublicUser> {
                 avatar: `p/avatar/${user.id}`,
             };
     }
-    throw new ApiError(404, 'User not found');
+    return null;
 }
 
+// An id that resolves to no user or team is left out.
 export async function getBatchPublicInfo(ids: string[]): Promise<Record<string, PublicUser>> {
     const result: Record<string, PublicUser> = {};
     await Promise.all(
         ids.map(async (id) => {
-            try {
-                result[id] = await getPublicInfo(id);
-            } catch {
-                // Skip users that can't be resolved
-            }
+            const info = await getPublicInfo(id);
+            if (info) result[id] = info;
         }),
     );
     return result;

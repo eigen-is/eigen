@@ -1,8 +1,10 @@
 import { type CommandProps, Node } from '@tiptap/core';
 import type { Transaction } from '@tiptap/pm/state';
 
-export type FigureLayout = 'block' | 'wrap-left' | 'wrap-right';
-export type FigureAlignment = 'left' | 'center' | 'right';
+const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right'] as const;
+export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
+export const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
+export type FigureAlignment = (typeof FIGURE_ALIGNMENTS)[number];
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null).
 export type FigureAttrs = {
@@ -23,6 +25,25 @@ declare module '@tiptap/core' {
             updateFigure: (attributes: FigureAttrs) => ReturnType;
         };
     }
+}
+
+// A figure's attributes off untyped ones (TipTap's getAttributes): a value of the wrong type reads as unset.
+export function readFigureAttrs(attrs: Record<string, unknown>): FigureAttrs {
+    const text = (key: keyof FigureAttrs) => {
+        const value = attrs[key];
+        return typeof value === 'string' ? value : null;
+    };
+    const width = attrs['width'];
+    return {
+        mediaName: text('mediaName'),
+        src: text('src'),
+        alt: text('alt'),
+        caption: text('caption'),
+        width: typeof width === 'number' ? width : null,
+        alignment: FIGURE_ALIGNMENTS.find((a) => a === attrs['alignment']) ?? null,
+        layout: FIGURE_LAYOUTS.find((l) => l === attrs['layout']) ?? null,
+        commentCardId: text('commentCardId'),
+    };
 }
 
 // An AttrStep maps no position, so a node selection on the figure survives, and with it the editor's Image panel.

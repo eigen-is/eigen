@@ -7,6 +7,7 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
+    htmlExportMode,
     type TransformMedia,
     type TransformWarning,
     toTransferableText,
@@ -76,7 +77,7 @@ export function renderEigenslidesExport(
         title,
         pages,
         scale: DECK_SCALE,
-        mode: format === 'pdf-html' ? 'pdf' : 'screen',
+        mode: htmlExportMode(format),
         resolveMedia,
     });
     return { data: toTransferableText(html), warnings: [] };

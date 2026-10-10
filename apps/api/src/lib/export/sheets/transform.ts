@@ -2,6 +2,7 @@ import type * as Y from 'yjs';
 import { toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
 import {
+    htmlExportMode,
     type SheetExportFormat,
     type TransformMedia,
     type TransformWarning,
@@ -33,7 +34,7 @@ export async function renderEigensheetsExport(
                 title,
                 sheets,
                 mediaUrls: toDataUriMap(media),
-                mode: format === 'pdf-html' ? 'pdf' : 'screen',
+                mode: htmlExportMode(format),
             });
             return { data: toTransferableText(html), warnings };
         }

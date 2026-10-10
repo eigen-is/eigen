@@ -30,6 +30,10 @@ import { createTestMountConfig } from '../mount-test-helpers';
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
 
+function sha256(content: string): string {
+    return new Bun.CryptoHasher('sha256').update(content).digest('hex');
+}
+
 function createGetLocalDatabase(baseDir: string) {
     return async <S extends SchemaType>(
         config: DatabaseConfig<S>,
@@ -353,7 +357,7 @@ describe('Mount (local-key storage)', () => {
         expect(file!.size).toBe(15);
     });
 
-    test('writeFile refuses a file trashed with its folder', async () => {
+    test('writeFile refuses a file trashed with its folder and keeps its bytes', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedWithFolder');
         const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
         await mount.trashPath(folderId);
@@ -361,7 +365,23 @@ describe('Mount (local-key storage)', () => {
             status: 404,
             message: 'File is in trash',
         });
-        expect((await mount.getPath(fileId))!.size).toBe(3);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('old');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 3, hash: sha256('old') });
+    });
+
+    test('a plain overwrite queued while its folder is trashed writes nothing', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashedWhileQueued');
+        const fileId = await mount.createFile(folderId, 'inside.txt', 'text/plain', 3, Buffer.from('old'));
+        const hold = Promise.withResolvers<void>();
+        const held = mount.withPathLock(fileId, () => hold.promise);
+        const write = mount.writeFile(fileId, Buffer.from('new'));
+        await mount.trashPath(folderId);
+        hold.resolve();
+        await held;
+
+        await expect(write).rejects.toMatchObject({ status: 404, message: 'File is in trash' });
+        expect(await (await mount.readFile(fileId))!.text()).toBe('old');
+        expect(await mount.getPath(fileId)).toMatchObject({ size: 3, hash: sha256('old') });
     });
 
     test('getChildByName is case-insensitive', async () => {

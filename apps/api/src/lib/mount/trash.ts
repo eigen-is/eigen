@@ -29,7 +29,7 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
         mount.withTreeExclusive(async () => {
             let trashKey: string | undefined;
             if (mount.isPathBased && mount.storage.rename) {
-                const oldKey = await mount.resolveStoragePath(pathId);
+                const oldKey = await mount.getStorageKey(pathId);
                 trashKey = trashStorageKey(pathId, item.name);
                 await mount.storage.rename(oldKey, trashKey);
             }
@@ -113,8 +113,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             // A create raced past the pre-lock check may own this key on `local`, and a storage rename replaces.
             await mount.assertUniqueName(targetParentId, restoreName);
             if (mount.isPathBased && mount.storage.rename) {
-                const currentKey = await mount.resolveStoragePath(pathId);
-                const parentPath = await mount.resolveStoragePath(targetParentId);
+                const currentKey = await mount.getStorageKey(pathId);
+                const parentPath = await mount.getStorageKey(targetParentId);
                 const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
                 await mount.storage.rename(currentKey, targetKey);
             }

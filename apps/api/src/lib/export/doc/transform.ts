@@ -8,6 +8,7 @@ import {
     DOCX_IMAGE_MAX_SIZE,
     type EigendocExportFormat,
     type ExportMedia,
+    htmlExportMode,
     type TransformWarning,
     toTransferableBuffer,
     toTransferableText,
@@ -41,7 +42,7 @@ export async function renderEigendocExport(
     const body = renderDocHtml(
         withAbsoluteLinks(json, publicOrigin),
         (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-        { synthesizeSmallCaps: format === 'pdf-html' },
+        { synthesizeSmallCaps: htmlExportMode(format) === 'pdf' },
     );
     const html = exportHtmlDocument({
         title,
