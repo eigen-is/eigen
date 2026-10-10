@@ -1,13 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { renderEigendocExport, withSvgFallbacks } from '../../lib/export/doc/transform';
+import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
@@ -479,17 +480,32 @@ describe('doc export — docx SVG fallback timeout', () => {
     const slow = `<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="2560"><filter id="f" x="0" y="0" width="1" height="1"><feTurbulence baseFrequency="0.9" numOctaves="10"/></filter><rect width="2560" height="2560" filter="url(#f)"/></svg>`;
     const fast = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>';
 
+    const figure = (mediaName: string): JSONContent => ({
+        type: 'paragraph',
+        content: [{ type: 'figure', attrs: { mediaName } }],
+    });
+
     // Untimed, the slow one renders in seconds and gets a PNG, so its absence proves the timeout fired; a wall-clock
     // bound fails on a loaded CI runner, where the uninterruptible librsvg pass alone outlasts it.
-    test('an SVG that outlasts the timeout gets no PNG fallback, and the next one still does', async () => {
-        const media = await withSvgFallbacks(
-            [
+    test('an SVG that outlasts the timeout leaves the docx, and the next one is still drawn', async () => {
+        const original = { ...thumbnailTimeout };
+        mock.module('../../lib/shared/thumbnail-timeout', () => ({ THUMBNAIL_TIMEOUT_SECONDS: 1 }));
+        try {
+            const media = [
                 { name: 'slow.svg', contentType: 'image/svg+xml', data: toTransferableText(slow) },
                 { name: 'fast.svg', contentType: 'image/svg+xml', data: toTransferableText(fast) },
-            ],
-            1,
-        );
-        expect(media.map(({ name, png }) => [name, png !== undefined])).toEqual([['fast.svg', true]]);
+            ];
+            const doc = seededDoc({ type: 'doc', content: [figure('slow.svg'), figure('fast.svg')] });
+            const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
+            const zip = openZip(new Uint8Array(data));
+            expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([
+                'word/media/image1.png',
+                'word/media/image1.svg',
+            ]);
+            expect(new TextDecoder().decode(zip.read('word/media/image1.svg'))).toContain('width="10"');
+        } finally {
+            mock.module('../../lib/shared/thumbnail-timeout', () => original);
+        }
     }, 30_000);
 });
 

@@ -53,10 +53,7 @@ export async function renderEigendocExport(
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
 // time, for one decode's memory; sharp loads only for an SVG.
-export async function withSvgFallbacks(
-    media: ExportMedia[],
-    timeoutSeconds = THUMBNAIL_TIMEOUT_SECONDS,
-): Promise<DocxMedia[]> {
+async function withSvgFallbacks(media: ExportMedia[]): Promise<DocxMedia[]> {
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
     const { default: sharp } = await import('sharp');
     const prepared: DocxMedia[] = [];
@@ -72,7 +69,7 @@ export async function withSvgFallbacks(
             const png = await image
                 .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
-                .timeout({ seconds: timeoutSeconds })
+                .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
                 .toBuffer();
             prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
         } catch {
