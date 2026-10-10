@@ -1,4 +1,5 @@
 import { bundledFont, DOCUMENT_FONT, EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { codePoint as dingbat } from 'dingbat-to-unicode';
 import { A_NS, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlChild, xmlElements } from '../../core/xml';
 import { descendants, is, w, wChild } from './package';
@@ -14,7 +15,7 @@ export type Languages = { bidi?: string; eastAsia?: string };
 
 // *Bidi names the complex script face: the theme's a:cs, else its a:font for the script of the run's bidi language,
 // which the document's default language answers when the run names none; *EastAsia the a:ea face the same way.
-export function readTheme(root: XmlElement | undefined, defaults: Languages = {}): Theme {
+export function readTheme(root: XmlElement | undefined, defaults: Languages): Theme {
     const [scheme] = root ? descendants(root, A_NS, 'fontScheme') : [];
     const typeface = (font: XmlElement | undefined) => font?.attributes['typeface'] || undefined;
     const faces = (local: string) => {
@@ -127,7 +128,7 @@ function scriptOf(language: string | undefined): string | undefined {
 export type FontTable = Map<string, string>;
 
 // Word writes roman with pitch default for a font it has no metrics of (ArialMT, MinionPro-Regular), and modern for
-// some variable sans, so a family counts only beside a known variable pitch. P4: script, decorative and auto are unknown.
+// some variable sans, so a family counts only beside a known variable pitch. Script, decorative and auto are unknown.
 const FAMILY_CATEGORIES = new Map<string, EigenFont['category']>([
     ['roman', 'serif'],
     ['swiss', 'sans-serif'],
@@ -156,4 +157,10 @@ export function bundledFontOf(name: string | undefined, fontTable?: FontTable): 
 export function fontMark(name: string | undefined, fontTable?: FontTable): string | undefined {
     const font = bundledFontOf(name, fontTable);
     return font === DOCUMENT_FONT ? undefined : font;
+}
+
+// A symbol font's character as Unicode; Word's private-use spelling, U+F0xx, is the font's own xx.
+export function symbolOf(font: string, code: number): string | undefined {
+    return (dingbat(font, code) ?? (code >= 0xf000 && code <= 0xf0ff ? dingbat(font, code - 0xf000) : undefined))
+        ?.string;
 }

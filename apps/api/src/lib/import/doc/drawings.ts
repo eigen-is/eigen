@@ -10,15 +10,16 @@ import {
     O_NS,
     PIC_NS,
     R_NS,
+    TWIPS_PER_PX,
     V_NS,
     W_NS,
     WP_NS,
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { COLUMN_PX, type Item, isCaptionLike, isFigureOnly, type Para, paraOf, textOf } from './assemble';
-import { contentTypeOf, descendants, int } from './package';
+import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
-import { linkOf, pushText, type RunContext } from './runs';
+import { pushText, type RunContext } from './runs';
 
 // The image types a part may be stored as, each under its own extension. WMF and EMF are kept though no browser or
 // sharp draws them: the figure shows its alt text in a broken image, and an export leaves it out.
@@ -102,7 +103,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
-            readBlocks(reader, xmlElements(box), context.scope),
+            readBlocks(reader, xmlElements(box), onShape(context.scope)),
         );
         const content = boxed.filter((item) => item.kind !== 'para' || !item.empty);
         const paras = content.filter((item): item is Para => item.kind === 'para');
@@ -124,10 +125,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 tail.map((para) => textOf(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
         } else for (const item of boxed) context.pending.push(item);
-        // A picture's own link, DrawingML's click hyperlink on its frame.
-        const click = docPr && xmlChild(docPr, A_NS, 'hlinkClick');
-        const link = click ? linkOf(reader, click, context.scope) : undefined;
-        for (const figure of figures) pushFigure(figure, link ? { ...context, link } : context);
+        for (const figure of figures) context.pieces.push({ kind: 'node', node: figure });
         for (const item of graphicText(reader, frame, context.scope)) context.pending.push(item);
     }
 }
@@ -187,15 +185,6 @@ function drawingLine(paragraph: XmlElement): JSONContent[] {
     return line;
 }
 
-// A linked image keeps its link.
-function pushFigure(figure: JSONContent, context: RunContext): void {
-    const { link } = context;
-    const node = link
-        ? { ...figure, marks: [{ type: 'link', attrs: { href: link.href, title: link.title } }] }
-        : figure;
-    context.pieces.push({ kind: 'node', node });
-}
-
 export function readVml(reader: Reader, element: XmlElement, context: RunContext): void {
     for (const shape of xmlElements(element)) {
         if (shape.ns !== V_NS) {
@@ -212,11 +201,16 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             if (!name) continue;
             const width = vmlWidthPx(shape.attributes['style'] ?? '');
             const alt = shape.attributes['alt'] || data.attributes['o:title'] || null;
-            pushFigure({ type: 'figure', attrs: { mediaName: name, alt, width } }, context);
+            context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
-            for (const item of readBlocks(reader, xmlElements(box), context.scope)) context.pending.push(item);
+            for (const item of readBlocks(reader, xmlElements(box), onShape(context.scope))) context.pending.push(item);
     }
+}
+
+// A shape's text sits on its fill, which the schema drops.
+function onShape(scope: Scope): Scope {
+    return { ...scope, onFill: true };
 }
 
 // Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
@@ -237,16 +231,16 @@ function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, str
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 
+// A point is 20 twips.
 const PX_PER_UNIT = new Map([
     ['px', 1],
-    ['pt', 4 / 3],
-    ['in', 96],
-    ['cm', 96 / 2.54],
-    ['mm', 96 / 25.4],
+    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, (points * 20) / TWIPS_PER_PX]),
 ]);
 
+const VML_WIDTH = new RegExp(`(?:^|;)\\s*width\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
+
 function vmlWidthPx(style: string): number | null {
-    const match = style.match(/(?:^|;)\s*width\s*:\s*([\d.]+)(pt|px|in|cm|mm)?/i);
+    const match = style.match(VML_WIDTH);
     if (!match) return null;
     const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
     return Number.isFinite(px) && px > 0 ? widthPx(px) : null;

@@ -73,18 +73,44 @@ describe('placement', () => {
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['layout'])).toEqual(['wrap-right']);
     });
 
-    test('a picture keeps its alt text, its width in pixels and its click link', async () => {
+    // The store keeps marks on text only, so a figure's link would not survive saving.
+    test('a picture keeps its alt text and its width in pixels, not its click link or the link around it', async () => {
         const linked = GOLDEN_DOCX_IMAGE_RUN.replace(
             'descr="A pixel"/>',
             'descr="A pixel"><a:hlinkClick xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:id="rId9"/></wp:docPr>',
         );
-        const { json } = await importDocxBody(paragraph(linked), {
-            rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
-        });
-        const [figure] = nodesOfType(json, 'figure');
-        expect([figure?.attrs?.['alt'], figure?.attrs?.['width']]).toEqual(['A pixel', 40]);
-        expect(figure?.marks?.map((mark) => mark.attrs?.['href'])).toEqual(['https://example.com/']);
+        const { json } = await importDocxBody(
+            `${paragraph(linked)}${paragraph(`<w:hyperlink r:id="rId9">${GOLDEN_DOCX_IMAGE_RUN}</w:hyperlink>`)}`,
+            {
+                rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+            },
+        );
+        const figures = nodesOfType(json, 'figure');
+        expect(figures.map((figure) => [figure.attrs?.['alt'], figure.attrs?.['width'], figure.marks])).toEqual([
+            ['A pixel', 40, undefined],
+            ['A pixel', 40, undefined],
+        ]);
         expect(marksOfType(json, 'link')).toEqual([]);
+    });
+});
+
+// A shape's text sits on its fill, which the schema drops, so light text there takes the body color.
+describe('text boxes', () => {
+    const box = (text: string, color: string) =>
+        `<w:txbxContent><w:p><w:r><w:rPr><w:color w:val="${color}"/></w:rPr><w:t>${text}</w:t></w:r></w:p></w:txbxContent>`;
+    const shape = (inner: string) =>
+        `<w:r><w:drawing><wp:anchor><wp:extent cx="1905000" cy="571500"/><wp:docPr id="2" name="Shape 2"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx>${inner}</wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+    const vml = (inner: string) =>
+        `<w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox>${inner}</v:textbox></v:shape></w:pict></w:r>`;
+
+    test('white text in a DrawingML or a VML shape has no color, a dark one keeps its', async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${shape(`${box('Drawn', 'FFFFFF')}${box('Red', 'C00000')}`)}${vml(box('Legacy', 'FFFFFF'))}`),
+        );
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Drawn', 'Red', 'Legacy']);
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Red', '#c00000'],
+        ]);
     });
 });
 

@@ -190,3 +190,19 @@ export const TWIPS_PER_PX = 15;
 export const EMU_PER_PX = 9525;
 
 export const EMU_PER_TWIP = 635;
+
+// ── Vocabulary the readers share ────────────────────────────────────────────────────────────────────────────────
+
+// A paragraph's border sides, as pBdr orders them.
+export const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
+
+// The theme colors Word's link look names.
+export const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
+
+// ST_OnOff attribute value: 1, true, on / 0, false, off, whitespace around it allowed; anything else is no answer.
+export function isOn(value: string | undefined): boolean | undefined {
+    const trimmed = value?.trim();
+    if (trimmed === undefined) return undefined;
+    if (['1', 'true', 'on'].includes(trimmed)) return true;
+    return ['0', 'false', 'off'].includes(trimmed) ? false : undefined;
+}

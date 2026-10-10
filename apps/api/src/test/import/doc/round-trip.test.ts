@@ -97,6 +97,10 @@ const code = (text: string) => ({
     content: [{ type: 'text', text }],
 });
 const rule = { type: 'horizontalRule' };
+const table = {
+    type: 'table',
+    content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [p('Cell')] }] }],
+};
 const ordered = (...items: JSONContent[][]) => ({
     type: 'orderedList',
     attrs: { start: 1, type: null },
@@ -146,6 +150,15 @@ describe('a block inside a list item or a quote', () => {
         ],
         ['a rule in a quote', [quote(p('Said'), rule, p('Done'))]],
         ['a rule in a quote two deep', [quote(p('Said'), quote(p('Deep'), rule, p('Deeper')), p('Done'))]],
+        ['a table in a quote', [quote(p('Said'), table, p('Done'))]],
+        ['a table in a quote two deep', [quote(quote(p('Deep'), table))]],
+        ['a page break after a table in a quote', [quote(p('Said'), table, { type: 'pageBreak' }, p('Done'))]],
+        ['a table in an item in a quote', [quote(ordered([p('One'), table]))]],
+        ['a rule and a paragraph in an item in a quote', [quote(bullets([p('One'), rule, p('More')]))]],
+        ['a table and a rule in a quote in an item', [bullets([p('One'), quote(p('Said'), table, rule)])]],
+        ['a list opening a quote in a quote', [quote(p('Said'), quote(bullets([p('One')])))]],
+        ['a list in a quote two deep, then a paragraph', [quote(quote(ordered([p('One')])), p('Done'))]],
+        ['a quote opening with a list in an item', [bullets([p('One'), quote(ordered([p('Two')]))])]],
     ])('%s', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));

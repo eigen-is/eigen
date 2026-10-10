@@ -1,17 +1,26 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
-import { hex as dingbat } from 'dingbat-to-unicode';
-import { DEFAULT_HIGHLIGHT, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
+import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../export/doc/looks';
 import type { Item } from './assemble';
-import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT } from './docx-fonts';
+import { bundledFontOf, byFace, fontMark, MONOSPACE_FONT, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
-import { alternative, descendants, isAlternateContent, isOn, onOff, w, wChild } from './package';
+import { alternative, descendants, isAlternateContent, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
-import { ABSORBED, isFill, isLightNeutral, mergeRun, type Role, type RunProps, readRunProps, TOGGLES } from './styles';
-import { isLight } from './tables';
+import {
+    ABSORBED,
+    isFill,
+    isLight,
+    isLightNeutral,
+    markColor,
+    mergeRun,
+    type Role,
+    type RunProps,
+    readRunProps,
+    TOGGLES,
+} from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 export type Piece =
@@ -21,7 +30,8 @@ export type Piece =
     | { kind: 'checkbox'; checked: boolean }
     | { kind: 'hr' };
 
-export type Link = { href: string; title: string | null };
+// A link to a bookmark has no href: Eigen holds no bookmarks, and Word draws a TOC entry's link in its paragraph's look.
+export type Link = { href?: string; title: string | null };
 
 // Each open field carries what the fields around it say too, so the innermost answers alone: whether any is still in
 // its code, and the link its result shows.
@@ -94,7 +104,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
     }
 }
 
-// G14: math as text until the schema holds math; each object and run of an equation is a word of its own.
+// Math as text until the schema holds math; each object and run of an equation is a word of its own.
 function mathText(element: XmlElement): string {
     const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
     return equations
@@ -139,12 +149,8 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: RunProps
                 pushText(reader, '­', direct, linked);
                 break;
             case 'sym': {
-                const font = w(child, 'font') ?? '';
-                const code = w(child, 'char') ?? '';
-                // Word's private-use spelling, F0xx, is the font's own xx.
-                const unicode =
-                    dingbat(font, code) ?? (/^F0..$/i.test(code) ? dingbat(font, code.slice(2)) : undefined);
-                if (unicode) pushText(reader, unicode.string, direct, linked);
+                const unicode = symbolOf(w(child, 'font') ?? '', Number.parseInt(w(child, 'char') ?? '', 16));
+                if (unicode) pushText(reader, unicode, direct, linked);
                 break;
             }
             case 'br':
@@ -221,11 +227,12 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
     }
 }
 
-export function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undefined {
+function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undefined {
     const id = xmlAttr(element, R_NS, 'id');
     const anchor = w(element, 'anchor');
     const rel = id ? scope.part.rels.get(id) : undefined;
     const base = rel?.external ? rel.target : '';
+    if (!base && anchor) return { title: null };
     return linkTo(reader, anchor ? `${base}#${anchor}` : base, w(element, 'tooltip'));
 }
 
@@ -258,6 +265,7 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
         else if (flag.toLowerCase() === '\\o') tooltip = value;
     }
     if (!quoted.length) target = args.trim().split(/\s+/)[0] ?? '';
+    if (!target && anchor) return { title: null };
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
 
@@ -271,7 +279,7 @@ export function pushText(reader: Reader, text: string, direct: RunProps, context
 
 type Marks = NonNullable<JSONContent['marks']>;
 
-// P8: small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
+// Small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
 // smaller is still body text.
 export const SMALL_PRINT = 0.85;
 
@@ -302,10 +310,10 @@ function marksOf(
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
     // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
-    // a link style in a color of its own.
+    // a link style in a color of its own. Its link color still covers the paragraph's, as Word draws it.
     const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
     if (link && !ownLook) {
-        delete charRun.color;
+        if (charRun.color !== undefined) charRun.color = '';
         delete charRun.linkColor;
         delete charRun.underline;
     }
@@ -336,7 +344,7 @@ function marksOf(
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
-    if (link) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
+    if (link?.href) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
     const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
@@ -354,7 +362,7 @@ function marksOf(
     // Word draws capitals over small caps.
     const caps: Caps | null = props.caps ? 'all' : props.smallCaps ? 'small' : null;
     const highlight: Marks = isFill(shade)
-        ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : `#${shade.toLowerCase()}` } }]
+        ? [{ type: 'highlight', attrs: { color: shade === DEFAULT_HIGHLIGHT ? null : markColor(shade) } }]
         : [];
     return faces.map(({ text: part, font, complex }) => {
         const small = isSmall(complex);
@@ -367,7 +375,7 @@ function marksOf(
         const code =
             bundledFontOf(font, reader.fontTable) === MONOSPACE_FONT &&
             (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
-        if (code && !link) return { text: part, marks: [{ type: 'code' }], small: false, font };
+        if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
         const fontFamily = fontMark(font, reader.fontTable);
         const textStyle: Marks =
             color || fontFamily || caps
@@ -375,7 +383,7 @@ function marksOf(
                       {
                           type: 'textStyle',
                           attrs: {
-                              color: color ? `#${color.toLowerCase()}` : null,
+                              color: color ? markColor(color) : null,
                               fontFamily: fontFamily ?? null,
                               caps,
                           },

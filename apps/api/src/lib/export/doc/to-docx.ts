@@ -9,6 +9,7 @@ import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import {
     A_NS,
     ASVG_NS,
+    BORDER_SIDES,
     CHECKBOX_GLYPHS,
     CONTENT_TYPES_NS,
     CORE_PROPERTIES_NS,
@@ -335,8 +336,6 @@ function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFac
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
-
-const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
 
 type NumberingRef = { numId: number; ilvl: number };
 

@@ -1,12 +1,23 @@
 import { LIST_LEVELS, spellNumber, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { int, is, w, wChild } from './package';
+import { symbolOf } from './docx-fonts';
+import { int, is, onOff, w, wChild } from './package';
 import { MAX_CHAIN, type ParaProps, readParaProps, type Styles } from './styles';
 
 // Word's counters, emulated in document order: lists sharing a definition continue, a start override restarts once.
 
-// pPr: the level's paragraph properties, its indent, which sit between the paragraph style's and the paragraph's own.
-type Level = { start: number; format: string; text: string; pPr: ParaProps; restart?: number; suffix: string };
+// pPr: the level's paragraph properties, its indent, which sit between the paragraph style's and the paragraph's own;
+// style: the paragraph style the level numbers; legal: its label shows every number in arabic.
+type Level = {
+    start: number;
+    format: string;
+    text: string;
+    pPr: ParaProps;
+    restart?: number;
+    suffix: string;
+    style?: string;
+    legal: boolean;
+};
 
 export type ListRef = {
     key: string;
@@ -80,6 +91,12 @@ export class Numbering {
         }
     }
 
+    // ECMA-376 §17.9.23: a paragraph style's numbering without a level takes the level whose pStyle names the style.
+    styleLevel(numId: string, styleId: string | undefined): number | undefined {
+        for (const [ilvl, level] of this.abstractOf(numId)?.levels ?? []) if (level.style === styleId) return ilvl;
+        return undefined;
+    }
+
     next(numId: string, ilvl: number): ListRef | undefined {
         const num = this.nums.get(numId);
         const abstract = this.abstractOf(numId);
@@ -113,7 +130,7 @@ export class Numbering {
                 let label = '';
                 for (const [index, piece] of level.text.split(/%([1-9])/).entries()) {
                     const counter = Number(piece) - 1;
-                    const format = (abstract.levels.get(counter) ?? level).format;
+                    const format = level.legal ? 'decimal' : (abstract.levels.get(counter) ?? level).format;
                     label +=
                         index % 2 === 0
                             ? piece
@@ -135,14 +152,21 @@ function startOf(element: XmlElement | undefined): number | undefined {
     return start >= 0 && start <= MAX_START ? start : 1;
 }
 
+// Word spells a Symbol or Wingdings bullet in the private use area, which only that font draws.
+const PRIVATE_USE = /[\uf000-\uf0ff]/g;
+
 function readLevel(lvl: XmlElement): Level {
+    // Cut once, so a long lvlText costs each label what a short one does.
+    const text = (w(wChild(lvl, 'lvlText'), 'val') ?? '').slice(0, MAX_LABEL_CHARS);
+    const font = w(wChild(wChild(lvl, 'rPr'), 'rFonts'), 'ascii');
     return {
         start: startOf(wChild(lvl, 'start')) ?? 1,
         format: w(wChild(lvl, 'numFmt'), 'val') ?? 'decimal',
-        // Cut once, so a long lvlText costs each label what a short one does.
-        text: (w(wChild(lvl, 'lvlText'), 'val') ?? '').slice(0, MAX_LABEL_CHARS),
+        text: font ? text.replace(PRIVATE_USE, (char) => symbolOf(font, char.charCodeAt(0)) ?? char) : text,
         pPr: readParaProps(wChild(lvl, 'pPr')),
         restart: int(w(wChild(lvl, 'lvlRestart'), 'val')),
         suffix: w(wChild(lvl, 'suff'), 'val') ?? 'tab',
+        style: w(wChild(lvl, 'pStyle'), 'val'),
+        legal: onOff(wChild(lvl, 'isLgl')) ?? false,
     };
 }

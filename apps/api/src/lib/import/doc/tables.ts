@@ -1,10 +1,10 @@
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
-import { TWIPS_PER_PX, W_NS } from '../../core/ooxml';
+import { isOn, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../export/doc/looks';
 import { build, COLUMN_PX, type Item, isWhitespace, type Para, textOf } from './assemble';
-import { int, is, isOn, onOff, twips, w, wChild } from './package';
+import { int, is, onOff, twips, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
 
@@ -157,16 +157,6 @@ function isShadedHeader(rows: Row[]): boolean {
         first.cells.every(cellFill) &&
         rest.every((row) => !row.cells.some(cellFill))
     );
-}
-
-// P3: contrast below 1.5 against white, by WCAG's relative luminance. On a fill the schema drops, Word draws such text
-// legibly; on Eigen's paper it would vanish, so it takes the body color.
-export function isLight(hex: string): boolean {
-    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
-        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
-        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-    });
-    return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
 }
 
 // The writer's wrapped figure: a floating one-cell table holding the image and its caption.

@@ -87,4 +87,42 @@ describe('counters', () => {
             '2. Method',
         ]);
     });
+
+    const headings = async (body: string, numbering: string, styles = '') =>
+        nodesOfType((await importDocxBody(body, { numbering, styles })).json, 'heading').map(
+            (node) => nodesOfType(node, 'text')[0]?.text,
+        );
+    const heading = (style: string, text: string, pPr = '') =>
+        `<w:p><w:pPr><w:pStyle w:val="${style}"/>${pPr}</w:pPr>${run(text)}</w:p>`;
+
+    // ECMA-376 §17.9.23: a style's numbering without a level takes the level whose pStyle names the style.
+    test("a heading style's numbering without a level takes the level that names the style", async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'decimal', '%1.', '<w:pStyle w:val="Heading2"/>')}${level(1, 'decimal', '%1.%2', '<w:pStyle w:val="Heading3"/>')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        const style = (id: string, name: string) =>
+            `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>`;
+        const body = [
+            heading('Heading2', 'Intro'),
+            heading('Heading3', 'Scope'),
+            heading('Heading3', 'Method'),
+            heading('Heading2', 'Results'),
+        ].join('');
+        expect(
+            await headings(body, numbering, `${style('Heading2', 'heading 2')}${style('Heading3', 'heading 3')}`),
+        ).toEqual(['1. Intro', '1.1 Scope', '1.2 Method', '2. Results']);
+    });
+
+    test('a legal level shows every number in its label in arabic', async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'upperRoman', '%1.')}${level(1, 'lowerLetter', '%1.%2', '<w:isLgl/>')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        const body = [
+            numbered(1, 'Intro', 0, '<w:pStyle w:val="Heading1"/>'),
+            numbered(1, 'Scope', 1, '<w:pStyle w:val="Heading1"/>'),
+        ].join('');
+        expect(await headings(body, numbering)).toEqual(['I. Intro', '1.1 Scope']);
+    });
+
+    // Word spells a Symbol bullet in the private use area, which no font of Eigen's draws.
+    test("a heading's Symbol bullet is the character the font draws", async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'bullet', '\uf0b7', '<w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr>')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        expect(await headings(numbered(1, 'Intro', 0, '<w:pStyle w:val="Heading1"/>'), numbering)).toEqual(['• Intro']);
+    });
 });

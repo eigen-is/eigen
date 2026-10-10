@@ -1,8 +1,17 @@
-import { codeBlockLanguage, headingLevel, PAGE_SECTION_TYPES, STYLE_NAMES, W_NS } from '../../core/ooxml';
+import {
+    BORDER_SIDES,
+    codeBlockLanguage,
+    headingLevel,
+    isOn,
+    LINK_THEME_COLORS,
+    PAGE_SECTION_TYPES,
+    STYLE_NAMES,
+    W_NS,
+} from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
-import { halfPoints, int, is, isOn, onOff, twips, w, wChild } from './package';
+import { halfPoints, int, is, onOff, twips, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type RunProps = {
@@ -81,12 +90,15 @@ const HIGHLIGHT_COLORS = new Map([
     ['white', 'FFFFFF'],
 ]);
 
-const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
-
-// Six hex digits or nothing: `auto`, a theme name or a typo is an explicit none.
+// Six hex digits, after a '#' some converters write, or nothing: `auto`, a theme name or a typo is an explicit none.
 function hexColor(value: string | undefined): string | undefined {
     if (value === undefined) return undefined;
-    return /^[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : '';
+    return /^#?[0-9a-f]{6}$/i.test(value) ? value.slice(-6).toUpperCase() : '';
+}
+
+// A color as a mark holds it, from Word's hex.
+export function markColor(hex: string): string {
+    return `#${hex.toLowerCase()}`;
 }
 
 export function shadingOf(shd: XmlElement | undefined): string | undefined {
@@ -107,6 +119,16 @@ export function isLightNeutral(fill: string | undefined): boolean {
     if (!fill || !isFill(fill)) return false;
     const channels = [0, 2, 4].map((at) => Number.parseInt(fill.slice(at, at + 2), 16));
     return Math.min(...channels) >= 0xd0 && Math.max(...channels) - Math.min(...channels) <= 0x18;
+}
+
+// Contrast below 1.5 against white, by WCAG's relative luminance. On a fill the schema drops, Word draws such text
+// legibly; on Eigen's paper it would vanish, so it takes the body color.
+export function isLight(hex: string): boolean {
+    const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((at) => {
+        const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 1.05 / (0.2126 * red + 0.7152 * green + 0.0722 * blue + 0.05) < 1.5;
 }
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProps {
@@ -195,8 +217,6 @@ export function readRunProps(rPr: XmlElement | undefined, theme: Theme): RunProp
     }
     return props;
 }
-
-const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;
 
 export function readParaProps(pPr: XmlElement | undefined): ParaProps {
     const props: ParaProps = {};
