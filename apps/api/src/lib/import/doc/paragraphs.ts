@@ -353,7 +353,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         numbered = true;
         items.push(para);
     }
-    for (const item of context.pending) items.push(item);
+    // A text box's blocks follow the paragraph that anchors it, at its text and in its quotes, so they stay in its item.
+    for (const item of context.pending) {
+        if (item.kind === 'para') {
+            item.indLeft += indLeft;
+            if (item.numberAt !== undefined) item.numberAt += indLeft;
+            item.quote ||= quote;
+        } else if (item.kind === 'table') item.indent += indLeft;
+        items.push(item);
+    }
     if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
     return items;
 }
