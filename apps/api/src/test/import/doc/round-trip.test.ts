@@ -175,6 +175,18 @@ describe('a block inside a list item or a quote', () => {
             'a quote holding an item of two paragraphs in an item',
             [bullets([p('One'), quote(bullets([p('a'), p('More')]))], [p('Two')])],
         ],
+        ['code after a nested list', [ordered([p('One'), bullets([p('a')]), code('one()')], [p('Two')])]],
+        ['code after a nested task list', [ordered([p('One'), tasks([p('a')]), code('one()')], [p('Two')])]],
+        ['a quote after a nested list', [bullets([p('One'), ordered([p('a')]), quote(p('Said'))], [p('Two')])]],
+        [
+            'a quote opening with a list after a nested list',
+            [bullets([p('One'), ordered([p('a')]), quote(bullets([p('Said')]))], [p('Two')])],
+        ],
+        ['a paragraph after a nested list in a quote', [quote(ordered([p('One'), bullets([p('a')]), p('More')]))]],
+        ['a rule after a nested list in a quote', [quote(ordered([p('One'), bullets([p('a')]), rule]))]],
+        ['a table after a nested list in a quote', [quote(ordered([p('One'), bullets([p('a')]), table]))]],
+        ['code after a nested list in a quote', [quote(ordered([p('One'), bullets([p('a')]), code('one()')]))]],
+        ['a quote after a nested list in a quote', [quote(ordered([p('One'), bullets([p('a')]), quote(p('Said'))]))]],
     ])('%s', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
