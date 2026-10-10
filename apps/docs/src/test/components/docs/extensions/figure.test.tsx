@@ -16,25 +16,21 @@ const { Figure } = await import('../../../../components/docs/extensions/figure')
 let unmount = async () => {};
 afterEach(() => unmount());
 
-// "a" at 1, the figure at 2, "b" at 3: the image box spans x 200 to 400 in the 600 px wide figure box.
-async function mount() {
+const figure = { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200 } };
+const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+const text = (t: string) => ({ type: 'text', text: t });
+
+// By default "a" at 1, the figure at 2, "b" at 3: the image box spans x 200 to 400 in the 600 px wide figure box.
+async function mount(content: object[] = [paragraph(text('a'), figure, text('b'))]) {
     const editor = new Editor({
         extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
-        content: {
-            type: 'doc',
-            content: [
-                {
-                    type: 'paragraph',
-                    content: [
-                        { type: 'text', text: 'a' },
-                        { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200 } },
-                        { type: 'text', text: 'b' },
-                    ],
-                },
-            ],
-        },
+        content: { type: 'doc', content },
     });
-    ({ unmount } = await renderInDocument(createElement(EditorContent, { editor })));
+    const rendered = await renderInDocument(createElement(EditorContent, { editor }));
+    unmount = async () => {
+        await rendered.unmount();
+        editor.destroy();
+    };
     await act(async () => {});
     const box = editor.view.dom.querySelector<HTMLElement>('.figure');
     const image = box?.firstElementChild;
@@ -81,17 +77,9 @@ test('a press on a selected figure is not prevented, so the browser can start it
     expect(press.defaultPrevented).toBe(false);
 });
 
-const figure = { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 200 } };
-const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
-const text = (t: string) => ({ type: 'text', text: t });
-
 // ProseMirror's move of the figure at `from` to `to`: the dragged node replaced, inserted at the drop point, uiEvent drop.
 async function drop(content: object[], from: number, to: number) {
-    const editor = new Editor({
-        extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
-        content: { type: 'doc', content },
-    });
-    ({ unmount } = await renderInDocument(createElement(EditorContent, { editor })));
+    const { editor } = await mount(content);
     const dragged = NodeSelection.create(editor.state.doc, from);
     await act(async () => {
         editor.view.dispatch(editor.state.tr.setSelection(dragged));

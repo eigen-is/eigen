@@ -247,11 +247,13 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
                     />
                 )}
                 {/* After the transform, so its NE grip never covers the mark. A button, so
-                    ProseMirror leaves its press alone (no node select, no drag). */}
+                    ProseMirror leaves its press alone (no node select); a prevented press keeps
+                    focus in the editor and starts no drag of the figure. */}
                 {commentCardId && (
                     <button
                         type="button"
                         className="absolute top-0 right-0"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => onOpenComment(commentCardId)}
                         aria-label="Open comment"
                         title="Open comment"
