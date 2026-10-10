@@ -98,7 +98,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             const vMerge = wChild(tcPr, 'vMerge');
             // Only where the cell above starts, and over its columns: anywhere else the two would overlap.
             const above = vMerge && w(vMerge, 'val') !== 'restart' ? open.get(column) : undefined;
-            if (above) {
+            // Into the last column with cells after it, a cell of its own: it holds their text.
+            if (above && (column + above.colspan < MAX_COLUMNS || index === row.cells.length - 1)) {
                 extended.push(above);
                 next.set(column, above);
                 column += above.colspan;

@@ -449,6 +449,8 @@ describe('a table as the editor opens it', () => {
 
     describe("Word's 63 columns", () => {
         const grid63 = gridOf(...Array(63).fill(100));
+        const cells = (prefix: string, count: number) =>
+            Array.from({ length: count }, (_, index) => tc(`${prefix}${index}`));
 
         test.each([
             ['no grid', ''],
@@ -458,6 +460,26 @@ describe('a table as the editor opens it', () => {
                 tableOn(grid, [row([tc('A'), tc('B')], '<w:gridBefore w:val="63"/>')]),
             );
             expect(shape(json)).toEqual([['62x1:', '1x1:AB']]);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('a continuation into the last column reads the cells after it there, and as the last cell extends', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [
+                    row([...cells('a', 62), tc('M', RESTART)]),
+                    row([...cells('b', 62), tc('', CONTINUE), tc('LOST1'), tc('LOST2')]),
+                    row([...cells('c', 62), tc('', CONTINUE)]),
+                ]),
+            );
+            expect(shape(json).map((tableRow) => tableRow.at(-1))).toEqual(['1x1:M', '1x2:LOST1LOST2', '1x1:c61']);
+            expect(repairs(json)).toBeUndefined();
+        });
+
+        test('a continuation over all 63 columns reads the cells after it in its place', async () => {
+            const { json } = await importDocxBody(
+                tableOn(grid63, [row([tc('M', span(63) + RESTART)]), row([tc('', span(63) + CONTINUE), tc('LOST3')])]),
+            );
+            expect(shape(json)).toEqual([['63x1:M'], ['63x1:LOST3']]);
             expect(repairs(json)).toBeUndefined();
         });
     });
