@@ -305,10 +305,10 @@ function marksOf(
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
     // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
-    // a link style in a color of its own.
+    // a link style in a color of its own. Its link color still covers the paragraph's, as Word draws it.
     const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
     if (link && !ownLook) {
-        delete charRun.color;
+        if (charRun.color !== undefined) charRun.color = '';
         delete charRun.linkColor;
         delete charRun.underline;
     }

@@ -195,24 +195,29 @@ describe('links', () => {
         expect(marksOfType(json, 'underline')).toEqual([]);
     });
 
-    test("the Hyperlink style's theme color leaves the paragraph's color on a link", async () => {
+    // Word draws the character style's color over the paragraph style's, so a link in a colored heading is the link look.
+    test("the Hyperlink style's theme color covers the heading's color on a link; a plain run keeps the heading's", async () => {
         const styles =
-            '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1" w:themeColor="hyperlink"/><w:u w:val="single"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Red"><w:name w:val="Red"/><w:rPr><w:color w:val="FF0000"/></w:rPr></w:style>';
+            '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1" w:themeColor="hyperlink"/><w:u w:val="single"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:color w:val="2F5496"/></w:rPr></w:style>';
         const json = await imported(
             paragraph(
-                `<w:hyperlink r:id="rId9">${run('Red', '<w:rStyle w:val="Hyperlink"/>')}</w:hyperlink>`,
-                '<w:pStyle w:val="Red"/>',
+                `${run('Read ')}<w:hyperlink r:id="rId9">${run('Linked', '<w:rStyle w:val="Hyperlink"/>')}${run(' bare')}</w:hyperlink>`,
+                '<w:pStyle w:val="Heading1"/>',
             ),
             {
                 styles,
                 rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
             },
         );
-        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs['color'])).toEqual(['#ff0000']);
+        expect(marksOfType(json, 'link').map((mark) => mark.text)).toEqual(['Linked', ' bare']);
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['Read ', '#2f5496'],
+            [' bare', '#2f5496'],
+        ]);
     });
 
     // Word draws a custom Hyperlink style's color and underline; only a known link look is the editor's to draw.
-    test("a Hyperlink style in a color of its own keeps its color and underline; Word's link look leaves the paragraph's", async () => {
+    test("a Hyperlink style in a color of its own keeps its color and underline; Word's link look covers the paragraph's", async () => {
         const hyperlink = (id: string, color: string) =>
             `<w:style w:type="character" w:styleId="${id}"><w:name w:val="${id}"/><w:rPr><w:color ${color}/><w:u w:val="single"/></w:rPr></w:style>`;
         const linked = (text: string, style: string) =>
@@ -229,7 +234,6 @@ describe('links', () => {
         );
         expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
             ['Pink', '#e91d63'],
-            ['WordOldNavyTheme', '#ff0000'],
         ]);
         expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Pink']);
     });
