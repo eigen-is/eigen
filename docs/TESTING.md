@@ -61,6 +61,10 @@ A plain local run stays sequential in one process. The per-file server boot (abo
 
 That one process also shares one data root, so a file that passes alone can fail a later one locally while CI stays green. Leave behind nothing a later file reads: server settings, archives in the backups folder, a socket file at a fixed path, a home no backup can verify (a corrupted document, a control character in a path) or a stray home with an s3 mount. A server backup test verifies every home in the data root and lists every archive, so it is the usual victim.
 
+## Resource bounds measure the child, and scale rather than time
+
+A test that bounds memory runs the work in a child process and reads the child's peak with `peakRss()` (`apps/api/src/test/rss-test-helpers.ts`): on Linux a child's `maxRSS` starts at the high-water mark of the process that spawned it, so CI's worker would read its own 1 GB, and `VmHWM` in `/proc/self/status` is the child's alone. A test that guards against a quadratic compares CPU at n with CPU at a fraction of n instead of holding an absolute bound, because a CI runner spends two to four times this Mac's CPU and the old quadratic was only a few times slower at test sizes. A Bun Worker sees `TMPDIR` as it was when its process started, so a test that needs a private temp dir runs the work in a child process with its own `TMPDIR` and working directory.
+
 ## Slow end-to-end suites run on CI only
 
 A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with.
