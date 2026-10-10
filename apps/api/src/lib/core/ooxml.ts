@@ -44,7 +44,9 @@ const STRICT_NAMESPACES = new Map([
     [`${STRICT}/spreadsheetml/main`, SML_NS],
 ]);
 
+// A part names its namespaces on its root, so one that declares no Strict namespace there needs no walk.
 export function toTransitional(root: XmlElement): void {
+    if (!Object.values(root.attributes).some((value) => STRICT_NAMESPACES.has(value))) return;
     const stack = [root];
     for (let element = stack.pop(); element; element = stack.pop()) {
         element.ns = STRICT_NAMESPACES.get(element.ns) ?? element.ns;

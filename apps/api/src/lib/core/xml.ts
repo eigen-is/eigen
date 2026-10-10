@@ -102,10 +102,16 @@ function resolve(root: XML.Node): XmlElement {
     const open: { content: XML.Node['children']; next: number; element: XmlElement; shadowed: [string, string?][] }[] =
         [];
     const enter = (node: XML.Node): XmlElement => {
+        const { name, attributes } = node;
         const shadowed: [string, string?][] = [];
-        for (const [attribute, uri] of Object.entries(node.attributes)) {
+        let prefixed = false;
+        for (const attribute in attributes) {
             const prefix = declaredPrefix(attribute);
-            if (prefix === undefined) continue;
+            if (prefix === undefined) {
+                prefixed ||= attribute.includes(':');
+                continue;
+            }
+            const uri = attributes[attribute];
             // Namespaces in XML § 3: `xmlns` is never declared, `xml` only to its own namespace, neither to another prefix.
             if (
                 (attribute !== 'xmlns' && (prefix === '' || prefix.includes(':') || uri === '')) ||
@@ -118,24 +124,29 @@ function resolve(root: XML.Node): XmlElement {
             shadowed.push([prefix, bindings.get(prefix)]);
             bindings.set(prefix, uri);
         }
+        // Once the element's own declarations are bound: an attribute may use a prefix declared after it.
         let attributeNs: Record<string, string> | undefined;
         let expanded: Set<string> | undefined;
-        for (const attribute of Object.keys(node.attributes)) {
-            if (declaredPrefix(attribute) !== undefined || !attribute.includes(':')) continue;
-            const { ns, local } = qualify(attribute, bindings, false);
-            // A local name holds no space, so the key is unambiguous (§ 6.3: no two attributes share an expanded name).
-            const key = `${local} ${ns}`;
-            if (expanded?.has(key)) throw new XmlError(`Duplicate attribute: ${attribute}`);
-            (expanded ??= new Set()).add(key);
-            (attributeNs ??= {})[attribute] = ns;
-        }
+        if (prefixed)
+            for (const attribute in attributes) {
+                if (declaredPrefix(attribute) !== undefined || !attribute.includes(':')) continue;
+                const colon = attribute.indexOf(':');
+                const ns = namespaceOf(attribute, colon, bindings, false);
+                // A local name holds no space, so the key is unambiguous (§ 6.3: no two attributes share an expanded name).
+                const key = `${attribute.slice(colon + 1)} ${ns}`;
+                if (expanded?.has(key)) throw new XmlError(`Duplicate attribute: ${attribute}`);
+                (expanded ??= new Set()).add(key);
+                (attributeNs ??= {})[attribute] = ns;
+            }
         const content = node.children;
+        const colon = name.indexOf(':');
         // Sized up front: a pushed array keeps its growth slack.
         const children = new Array<XmlContent>(content.length);
         const element: XmlElement = {
-            name: node.name,
-            ...qualify(node.name, bindings, true),
-            attributes: node.attributes,
+            name,
+            ns: namespaceOf(name, colon, bindings, true),
+            local: colon < 0 ? name : name.slice(colon + 1),
+            attributes,
             attributeNs: attributeNs ?? NO_ATTRIBUTE_NS,
             children,
         };
@@ -163,20 +174,21 @@ function declaredPrefix(attribute: string): string | undefined {
     return attribute.startsWith('xmlns:') ? attribute.slice('xmlns:'.length) : undefined;
 }
 
-// The default namespace applies to elements only (Namespaces in XML § 6.2).
-function qualify(
+// The namespace of a name whose prefix ends at `colon`; the default namespace applies to elements only (Namespaces in
+// XML § 6.2).
+function namespaceOf(
     name: string,
+    colon: number,
     scope: ReadonlyMap<string, string | undefined>,
     isElement: boolean,
-): { ns: string; local: string } {
-    const colon = name.indexOf(':');
-    if (colon < 0) return { ns: isElement ? (scope.get('') ?? '') : '', local: name };
+): string {
+    if (colon < 0) return isElement ? (scope.get('') ?? '') : '';
     const prefix = name.slice(0, colon);
-    const local = name.slice(colon + 1);
-    if (prefix === '' || local === '' || local.includes(':')) throw new XmlError(`Invalid name: ${name}`);
+    if (prefix === '' || colon === name.length - 1 || name.includes(':', colon + 1))
+        throw new XmlError(`Invalid name: ${name}`);
     const ns = scope.get(prefix);
     if (ns === undefined) throw new XmlError(`Unbound namespace prefix: ${prefix}`);
-    return { ns, local };
+    return ns;
 }
 
 const isXmlElement = (content: XmlContent): content is XmlElement => typeof content === 'object' && 'name' in content;
@@ -212,8 +224,9 @@ export function xmlAttr(element: XmlElement, ns: string, local: string): string 
     if (ns === '') {
         return local === 'xmlns' || !Object.hasOwn(element.attributes, local) ? undefined : element.attributes[local];
     }
-    for (const [name, attributeNs] of Object.entries(element.attributeNs)) {
-        if (attributeNs === ns && name.endsWith(`:${local}`)) return element.attributes[name];
+    const suffix = `:${local}`;
+    for (const name in element.attributeNs) {
+        if (element.attributeNs[name] === ns && name.endsWith(suffix)) return element.attributes[name];
     }
     return undefined;
 }

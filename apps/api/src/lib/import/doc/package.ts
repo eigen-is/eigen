@@ -133,7 +133,7 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
         const bytes = zip.read(path);
         if (!bytes) return undefined;
         let tags = 0;
-        for (const byte of bytes) if (byte === LESS_THAN) tags++;
+        for (let at = bytes.indexOf(LESS_THAN); at >= 0; at = bytes.indexOf(LESS_THAN, at + 1)) tags++;
         // A part refused leaves the budget to the parts after it.
         if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         budget.tags -= tags;
