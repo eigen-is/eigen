@@ -191,7 +191,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             if (shape.ns !== W_NS || shape.local !== 'control') readVml(reader, shape, context);
             continue;
         }
-        if (shape.attributes['o:hr'] === 't' || xmlAttr(shape, O_NS, 'hr') === 't') {
+        if (xmlAttr(shape, O_NS, 'hr') === 't') {
             context.pieces.push({ kind: 'hr' });
             continue;
         }
@@ -200,7 +200,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             const name = path && mediaName(reader, path);
             if (!name) continue;
             const width = vmlWidthPx(shape.attributes['style'] ?? '');
-            const alt = shape.attributes['alt'] || data.attributes['o:title'] || null;
+            const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
         }
         for (const box of descendants(shape, W_NS, 'txbxContent'))
