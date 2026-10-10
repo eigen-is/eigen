@@ -83,10 +83,10 @@ const HIGHLIGHT_COLORS = new Map([
 
 const LINK_THEME_COLORS = new Set(['hyperlink', 'followedHyperlink']);
 
-// Six hex digits or nothing: `auto`, a theme name or a typo is an explicit none.
+// Six hex digits, after a '#' some converters write, or nothing: `auto`, a theme name or a typo is an explicit none.
 function hexColor(value: string | undefined): string | undefined {
     if (value === undefined) return undefined;
-    return /^[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : '';
+    return /^#?[0-9a-f]{6}$/i.test(value) ? value.slice(-6).toUpperCase() : '';
 }
 
 export function shadingOf(shd: XmlElement | undefined): string | undefined {

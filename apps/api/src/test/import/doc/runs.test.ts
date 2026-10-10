@@ -28,6 +28,14 @@ describe('colors', () => {
         ]);
     });
 
+    // ST_HexColor has no '#', but a converter writes one; Word reads the color.
+    test("a color written with a leading '#' is that color", async () => {
+        const json = await imported(paragraph(run('blue', '<w:color w:val="#1f497d"/>')));
+        expect(marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['color']])).toEqual([
+            ['blue', '#1f497d'],
+        ]);
+    });
+
     test('yellow is the highlight without a color, white no highlight', async () => {
         const json = await imported(
             paragraph(
