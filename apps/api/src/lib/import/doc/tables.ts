@@ -91,7 +91,11 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             columns,
             MAX_COLUMNS - 1,
         );
-        if (column > 0) cells.push(gridFiller(columnPx, 0, column));
+        // Word draws no cell over the columns a row skips: the cell beside them spans them, unless it merges down.
+        const unmerged = (cell: XmlElement | undefined) => !!cell && !wChild(wChild(cell, 'tcPr'), 'vMerge');
+        const lead = unmerged(row.cells[0]) ? column : 0;
+        if (column > lead) cells.push(gridFiller(columnPx, 0, column));
+        let last: { attrs: CellAttrs; start: number } | undefined;
         for (const [index, cell] of row.cells.entries()) {
             if (column >= MAX_COLUMNS) break;
             const tcPr = wChild(cell, 'tcPr');
@@ -103,6 +107,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 extended.push(above);
                 next.set(column, above);
                 column += above.colspan;
+                last = undefined;
                 continue;
             }
             // Within the grid's columns left, or Word's limit where the grid names none.
@@ -110,7 +115,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                 Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1),
                 Math.max(1, columns - column),
             );
-            const colwidth = widths(columnPx, column, colspan);
+            const start = index === 0 ? column - lead : column;
+            const colwidth = widths(columnPx, start, column + colspan - start);
             const own = cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex, colwidth);
             // Word's last column holds the text of the cells a row runs on past it, not their empty lines.
             const past =
@@ -121,18 +127,27 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                       );
             const content = build([...own, ...past]);
             const fill = shadingOf(wChild(tcPr, 'shd'));
-            const attrs: CellAttrs = { colspan, rowspan: 1, colwidth, ...hoistAlignment(content) };
+            const attrs: CellAttrs = {
+                colspan: column + colspan - start,
+                rowspan: 1,
+                colwidth,
+                ...hoistAlignment(content),
+            };
             cells.push({
                 type: header || fill === HEADER_CELL_LOOK.fill ? 'tableHeader' : 'tableCell',
                 attrs,
                 content: content.length > 0 ? content : [{ type: 'paragraph' }],
             });
             if (vMerge) next.set(column, attrs);
+            last = unmerged(cell) ? { attrs, start } : undefined;
             column += colspan;
         }
         const after = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridAfter'), 'val')) ?? 0), columns - column);
         if (after > 0) {
-            cells.push(gridFiller(columnPx, column, after));
+            if (last) {
+                last.attrs.colspan += after;
+                last.attrs.colwidth = widths(columnPx, last.start, last.attrs.colspan);
+            } else cells.push(gridFiller(columnPx, column, after));
             column += after;
         }
         // A row of continuations only has no cell to hold: dropped, the cells above don't reach into it.
