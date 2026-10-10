@@ -105,3 +105,16 @@ test('a figure dragged out of a paragraph with text leaves the text', async () =
     const blocks = await drop([paragraph(text('a')), paragraph(text('x'), figure), paragraph(text('b'))], 5, 9);
     expect(blocks).toEqual([['a'], ['x'], ['b', 'figure']]);
 });
+
+test('a picture that fails to load, a WMF or EMF, widens to read its alt text', async () => {
+    const small = { type: 'figure', attrs: { src: 'data:image/x-wmf;base64,', alt: 'Organisation chart', width: 40 } };
+    const { box } = await mount([paragraph(small)]);
+    const img = box.querySelector('img');
+    if (!img) throw new Error('no img');
+    expect(img.className).not.toContain('min-w-');
+
+    await act(async () => {
+        img.dispatchEvent(new Event('error'));
+    });
+    expect(img.className).toContain('min-w-40');
+});

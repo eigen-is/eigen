@@ -30,6 +30,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
     const imageRef = useRef<HTMLImageElement>(null);
     const containerRef = useRef<HTMLSpanElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+    const [failedSrc, setFailedSrc] = useState<string | null>(null);
     const imageProcessed = useRef(false);
     // Live preview width during an ObjectTransform drag — never a node write until onCommit.
     const [previewWidth, setPreviewWidth] = useState<number | null>(null);
@@ -221,12 +222,14 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
                         ref={imageRef}
                         src={src}
                         alt={alt}
-                        className="max-w-full block"
+                        // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes.
+                        className={cn('max-w-full block', failedSrc === src && 'min-w-40')}
                         style={{
                             width: displayWidth ? `${displayWidth}px` : undefined,
                             aspectRatio: aspectRatio ?? undefined,
                         }}
                         onLoad={handleImageLoad}
+                        onError={() => setFailedSrc(src)}
                         draggable={false}
                         decoding="async"
                     />
