@@ -39,8 +39,8 @@ const editor = new Editor({
 });
 
 let seen: ReturnType<typeof useToolbarState>[] = [];
-function Probe() {
-    seen.push(useToolbarState(editor));
+function Probe({ of = editor }: { of?: typeof editor }) {
+    seen.push(useToolbarState(of));
     return null;
 }
 
@@ -64,4 +64,34 @@ test('a caret move that changes nothing drawn renders nothing', async () => {
     seen = [];
     await act(async () => editor.commands.setTextSelection(4));
     expect(seen).toEqual([]);
+});
+
+// What a caret at the start draws, as a check over the whole range would cost every transaction a walk of it.
+test('a long selection draws what its start does, a short one what all of it is', async () => {
+    const words = 'plain words that run on '.repeat(4);
+    const long = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: Array.from({ length: 20_000 }, (_, index) => ({
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: `Item ${index} `, marks: [{ type: 'bold' }] },
+                    { type: 'text', text: words },
+                ],
+            })),
+        },
+    });
+    long.commands.setTextSelection({ from: 1, to: 9000 });
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: long })));
+    expect(seen.at(-1)).toMatchObject({ bold: false, selectionEmpty: false });
+
+    await act(async () => long.commands.selectAll());
+    expect(seen.at(-1)).toMatchObject({ bold: true, selectionEmpty: false });
+
+    const started = performance.now();
+    for (let index = 0; index < 20; index++)
+        await act(async () => long.view.dispatch(long.state.tr.setMeta('remote', index)));
+    expect((performance.now() - started) / 20).toBeLessThan(10);
+    long.destroy();
 });
