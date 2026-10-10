@@ -58,3 +58,22 @@ test('a Style toggle keeps the figure selected and lights the new layout', async
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
     expect(styleToggles().map((t) => t.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false']);
 });
+
+test.each([
+    ['Alt text', 'alt', 'A chart'],
+    ['Caption', 'caption', 'Figure 1'],
+])('Enter in the %s field writes it and keeps the figure selected', async (placeholder, attribute, value) => {
+    const editor = await mount();
+    const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
+    if (!input) throw new Error(`no ${placeholder} field`);
+
+    await act(async () => {
+        input.focus();
+        input.value = value;
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(editor.state.doc.nodeAt(2)?.attrs[attribute]).toBe(value);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+    expect(document.activeElement).toBe(input);
+});

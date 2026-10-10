@@ -41,6 +41,10 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
         },
     });
     const previewUrl = mediaName ? resolveMediaUrl(mediaName) : null;
+    // Enter commits and leaves the caret in the field, so the blur after it finds nothing new to write.
+    const commitAlt = (value: string) => value !== alt && editor.commands.updateFigure({ alt: value });
+    const commitCaption = (value: string) =>
+        value !== caption && editor.commands.updateFigure({ caption: value || null });
 
     return (
         <PropertiesPanel title="Image">
@@ -92,7 +96,10 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
                         className="h-7 text-xs"
                         defaultValue={alt}
                         placeholder="Alt text"
-                        onBlur={(e) => editor.commands.updateFigure({ alt: e.target.value })}
+                        onBlur={(e) => commitAlt(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitAlt(e.currentTarget.value);
+                        }}
                     />
                 </PropertyRow>
                 <PropertyRow label="Cap">
@@ -101,7 +108,10 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
                         className="h-7 text-xs"
                         defaultValue={caption}
                         placeholder="Caption"
-                        onBlur={(e) => editor.commands.updateFigure({ caption: e.target.value || null })}
+                        onBlur={(e) => commitCaption(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitCaption(e.currentTarget.value);
+                        }}
                     />
                 </PropertyRow>
                 <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setReplacePickerOpen(true)}>
