@@ -460,9 +460,8 @@ describe('Backup of a disabled mount enabled while it is captured', () => {
     const MOUNT_ID = 'modes-enabled-mid-capture';
 
     // The capture reads a disabled mount through a Mount of its own. Enabling the mount gives writers the drive's new
-    // Mount, whose path locks are another object's, so an overwrite and the capture's copy must still take turns.
-    // Fails until the ROADMAP row "A mount replaced during a backup is outside the capture's path lock" is done.
-    test.failing('an overwrite through the enabled mount waits for the copy of its file', async () => {
+    // Mount, another object over the same folder, so an overwrite and the capture's copy must still take turns.
+    test('an overwrite through the enabled mount waits for the copy of its file', async () => {
         await getTestContext();
         const owner = await createTestUser('backup-modes-enabled@test.eigen.is', 'testpassword123', 'Modes Enabled');
         const ownerHome = await getHome(owner.id);

@@ -14,7 +14,7 @@ import {
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
-import { storageGone } from '../../lib/storage';
+import { eventLoopTurn, storageGone } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
@@ -383,6 +383,35 @@ describe('Mount (local path-based storage)', () => {
         const root = await mount.getRootFolder();
         expect(root).not.toBeNull();
         rootId = root!.id;
+    });
+
+    // A backup's own Mount of a disabled mount and the drive's Mount after an enable are two objects over one folder.
+    test("a second Mount over the same folder waits on the first one's path and tree locks", async () => {
+        const twin = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createTestMountConfig('test-local', 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        const order: string[] = [];
+        const release = Promise.withResolvers<void>();
+        const held = mount.withPathLock(rootId, () =>
+            mount.withTreeShared(async () => {
+                order.push('first');
+                await release.promise;
+                order.push('first done');
+            }),
+        );
+        const tried = await twin.tryWithPathLock(rootId, async () => 'ran');
+        const path = twin.withPathLock(rootId, async () => order.push('path'));
+        const tree = twin.withTreeExclusive(async () => order.push('tree'));
+        await eventLoopTurn();
+        expect(tried).toBeNull();
+        expect(order).toEqual(['first']);
+        release.resolve();
+        await Promise.all([held, path, tree]);
+        expect(order.slice(0, 2)).toEqual(['first', 'first done']);
+        expect(order.slice(2).sort()).toEqual(['path', 'tree']);
     });
 
     test('create folder creates physical directory', async () => {
