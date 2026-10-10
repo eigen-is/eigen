@@ -136,6 +136,53 @@ describe('a checkbox glyph opening a paragraph', () => {
     });
 });
 
+// The task item's checkbox stands where Word's box and the space after it stood.
+describe('a checkbox opening a task', () => {
+    const W14 = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+    const control = `<w:sdt><w:sdtPr><w14:checkbox ${W14}><w14:checked ${W14} w14:val="1"/></w14:checkbox></w:sdtPr><w:sdtContent>${run('☒')}</w:sdtContent></w:sdt>`;
+    const formField = `<w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:checkBox><w:default w:val="0"/></w:checkBox></w:ffData></w:fldChar></w:r><w:r><w:instrText xml:space="preserve"> FORMCHECKBOX </w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+
+    test('drops the spaces and tabs after a content control, a form field or a glyph, across runs', async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(`${run(' ')}${control}${run('  &lt;3 months ago')}`)}${paragraph(`${formField}<w:r><w:tab/></w:r>${run('  No diploma')}`)}${paragraph(`${run('☐ ')}${run('   Milk')}`)}`,
+        );
+        expect(
+            nodesOfType(json, 'taskItem').map((item) => [
+                item.attrs?.['checked'],
+                nodesOfType(item, 'text')
+                    .map((node) => node.text)
+                    .join(''),
+            ]),
+        ).toEqual([
+            [true, '<3 months ago'],
+            [false, 'No diploma'],
+            [false, 'Milk'],
+        ]);
+    });
+});
+
+// Word sets a note's text off its number with a space or a tab; Eigen's list numbers the note.
+describe('notes', () => {
+    test("a note's text starts at its first character", async () => {
+        const note = (id: number, inner: string) =>
+            `<w:footnote w:id="${id}">${paragraph(`<w:r><w:footnoteRef/></w:r>${inner}`)}</w:footnote>`;
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r><w:r><w:footnoteReference w:id="2"/></w:r>`,
+            ),
+            { footnotes: `${note(1, run(' Note text'))}${note(2, `<w:r><w:tab/></w:r>${run(' Other')}`)}` },
+        );
+        const notes = json.content?.at(-1);
+        expect(
+            (notes?.content ?? []).map((item) =>
+                nodesOfType(item, 'text')
+                    .map((node) => node.text)
+                    .join(''),
+            ),
+        ).toEqual(['Note text ↑', 'Other ↑']);
+    });
+});
+
 describe('tracked changes and hidden text', () => {
     test('an insertion counts, a deletion and hidden text do not', async () => {
         const body = paragraph(

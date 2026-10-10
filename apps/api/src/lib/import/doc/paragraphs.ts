@@ -144,6 +144,7 @@ function readNotes(reader: Reader): JSONContent[] {
         if (!part || !note) continue;
         reader.fields.length = 0;
         const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true, tables: 0 }));
+        if (blocks[0]?.type === 'paragraph') trimStart(blocks[0].content ?? []);
         const back: JSONContent[] = [
             { type: 'text', text: ' ' },
             { type: 'text', text: '↑', marks: [{ type: 'link', attrs: { href: `#${ref.type}-ref-${ref.id}` } }] },
@@ -301,6 +302,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     for (const [index, half] of halves.entries()) {
         if (index > 0) items.push({ kind: 'break' });
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
+        if (!numbered && task) trimStart(content);
         if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const visible = isShown(half);
         const isRule = half.some((piece) => piece.kind === 'hr');
@@ -415,28 +417,25 @@ function taskOf(pieces: Piece[]): { checked: boolean } | undefined {
     const opener = pieces[first];
     if (opener?.kind === 'checkbox') {
         pieces.splice(first, 1);
-        dropLeadingTab(pieces, first);
         return { checked: opener.checked };
     }
     if (opener?.kind !== 'node' || opener.node.type !== 'text') return undefined;
     const text = opener.node.text ?? '';
     const checked = CHECKBOXES.get(text.charAt(0));
     if (checked === undefined || (text.length > 1 && !/^[\t ]/.test(text.slice(1)))) return undefined;
-    const rest = text.slice(1).replace(/^(?:\t| {1,2})/, '');
-    if (rest) opener.node.text = rest;
-    else {
-        pieces.splice(first, 1);
-        dropLeadingTab(pieces, first);
-    }
+    opener.node.text = text.slice(1);
     return { checked };
 }
 
-function dropLeadingTab(pieces: Piece[], from: number): void {
-    const next = pieces[from];
-    if (next?.kind === 'node' && next.node.type === 'text' && next.node.text?.startsWith('\t')) {
-        const rest = next.node.text.slice(1);
-        if (rest) next.node.text = rest;
-        else pieces.splice(from, 1);
+// Word sets a task's text off its checkbox, and a note's off its number, with spaces or a tab; Eigen draws its own.
+function trimStart(inlines: JSONContent[]): void {
+    for (let first = inlines[0]; first?.type === 'text'; first = inlines[0]) {
+        const rest = (first.text ?? '').replace(/^[\t ]+/, '');
+        if (rest) {
+            first.text = rest;
+            return;
+        }
+        inlines.shift();
     }
 }
 
