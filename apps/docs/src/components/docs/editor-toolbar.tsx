@@ -450,7 +450,7 @@ export const EditorToolbar = ({
                 center={
                     canWrite &&
                     showsRow && (
-                        <div className="flex">
+                        <div className="flex" role="toolbar" aria-label="Formatting">
                             <ToolbarSeparator />
 
                             {/* Heading / paragraph selector */}

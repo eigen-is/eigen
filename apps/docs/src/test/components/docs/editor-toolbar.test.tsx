@@ -47,10 +47,10 @@ async function render(width: number, canWrite: boolean) {
 
 const menus = () => [...document.querySelectorAll('button[aria-haspopup="menu"]')].map((button) => button.textContent);
 
-// The center slot's controls by name, the shortcut hint dropped.
+// The icon row's controls by name, the shortcut hint dropped.
 const iconRow = () =>
-    [...(document.querySelector('[style*="1fr auto 1fr"]')?.children[1]?.querySelectorAll('button') ?? [])].map(
-        (button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').replace(/ \(.*\)$/, ''),
+    [...document.querySelectorAll('[role="toolbar"][aria-label="Formatting"] button')].map((button) =>
+        (button.getAttribute('aria-label') ?? button.textContent ?? '').replace(/ \(.*\)$/, ''),
     );
 
 const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
