@@ -98,15 +98,25 @@ function isBlank(item: Item | undefined): boolean {
     );
 }
 
-// The joined paragraph is the next one, with its own properties: its mark is the one that stays.
+// The joined paragraph is the next one, with its own properties: its mark is the one that stays; a run joins at once.
 function joinDeletedMarks(raw: Item[]): Item[] {
+    let joined: Para[] = [];
     return raw.filter((item, index) => {
-        const next = raw[index + 1];
-        if (item.kind !== 'para' || !item.joinsNext || next?.kind !== 'para') return true;
-        const at = next.labelled ? 1 : 0;
-        next.inlines = [...next.inlines.slice(0, at), ...item.inlines, ...next.inlines.slice(at)];
-        next.empty &&= item.empty;
-        return false;
+        if (item.kind !== 'para') return true;
+        if (item.joinsNext && raw[index + 1]?.kind === 'para') {
+            joined.push(item);
+            return false;
+        }
+        if (joined.length === 0) return true;
+        const at = item.labelled ? 1 : 0;
+        item.inlines = [
+            ...item.inlines.slice(0, at),
+            ...joined.flatMap((para) => para.inlines),
+            ...item.inlines.slice(at),
+        ];
+        item.empty &&= joined.every((para) => para.empty);
+        joined = [];
+        return true;
     });
 }
 
@@ -213,6 +223,8 @@ function assignQuotes(items: Item[]): void {
                 if (counted !== undefined) item.quote = counted;
                 if (counted !== undefined && host && counted > host.quote) item.inItem = host;
             }
+            // As placeItem nests no deeper than Word's levels: a hostile indent nests each item under the last.
+            if (opens.length === LIST_LEVELS) opens.pop();
             opens.push(item);
         } else if (item.role.kind === 'code') closeTo(codeDepth(item, opens, previous));
         else {
