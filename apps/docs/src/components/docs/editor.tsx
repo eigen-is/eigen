@@ -478,10 +478,12 @@ const TiptapEditor = ({
 
     const handleReplaceImageFromDrive = async (paths: DrivePath[]) => {
         if (!mediaFolderIdRef.current || !editorRef.current || paths.length === 0) return;
+        const replaced = editorRef.current.getAttributes('figure').mediaName;
         const result = await copyToMediaFolder
             .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
             .catch(() => null);
-        if (result?.[0]) {
+        // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
+        if (result?.[0] && editorRef.current?.isActive('figure', { mediaName: replaced })) {
             editorRef.current.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
         }
     };
