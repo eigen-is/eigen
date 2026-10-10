@@ -1,5 +1,5 @@
 import { getAttributes, isActive } from '@tiptap/core';
-import { EditorState, Selection } from '@tiptap/pm/state';
+import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 
@@ -40,10 +40,16 @@ export function useToolbarState(editor: Editor): ToolbarState {
         editor,
         selector: ({ editor: e }) => {
             const { doc, selection } = e.state;
-            // A longer range reads as a caret at its start; a state without the editor's plugins costs nothing to make.
+            // A longer range reads its first MAX_READ_RANGE positions, as a caret would take the marks before it; a state without the editor's plugins costs nothing to make.
             const state =
                 selection.to - selection.from > MAX_READ_RANGE
-                    ? EditorState.create({ doc, selection: Selection.near(selection.$from) })
+                    ? EditorState.create({
+                          doc,
+                          selection: TextSelection.between(
+                              selection.$from,
+                              doc.resolve(selection.from + MAX_READ_RANGE),
+                          ),
+                      })
                     : e.state;
             const active = (name: string | null, attributes?: Record<string, unknown>) =>
                 isActive(state, name, attributes);

@@ -66,8 +66,8 @@ test('a caret move that changes nothing drawn renders nothing', async () => {
     expect(seen).toEqual([]);
 });
 
-// What a caret at the start draws, as a check over the whole range would cost every transaction a walk of it.
-test('a long selection draws what its start does, a short one what all of it is', async () => {
+// The first 10,000 positions are read as a range, as a check over the whole selection would cost every transaction a walk of it.
+test('a long selection draws what its first 10,000 positions are, a short one what all of it is', async () => {
     const words = 'plain words that run on '.repeat(4);
     const long = new Editor({
         extensions: getDocExtensions(),
@@ -87,11 +87,39 @@ test('a long selection draws what its start does, a short one what all of it is'
     expect(seen.at(-1)).toMatchObject({ bold: false, selectionEmpty: false });
 
     await act(async () => long.commands.selectAll());
-    expect(seen.at(-1)).toMatchObject({ bold: true, selectionEmpty: false });
+    expect(seen.at(-1)).toMatchObject({ bold: false, selectionEmpty: false });
 
     const started = performance.now();
     for (let index = 0; index < 20; index++)
         await act(async () => long.view.dispatch(long.state.tr.setMeta('remote', index)));
     expect((performance.now() - started) / 20).toBeLessThan(10);
+    long.destroy();
+});
+
+// A caret takes the marks and the block before it, so a long selection starting after them must not.
+test('a long selection starting after a bold word or a heading reads none of them', async () => {
+    const plain = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+    const long = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'bold', marks: [{ type: 'bold' }] }] },
+                ...Array.from({ length: 3000 }, () => plain('plain words that run on')),
+                { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Title' }] },
+                ...Array.from({ length: 3000 }, () => plain('plain words that run on')),
+            ],
+        },
+    });
+    long.commands.setTextSelection({ from: 5, to: long.state.doc.content.size - 1 });
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: long })));
+    expect(seen.at(-1)).toMatchObject({ bold: false, headingLevel: undefined });
+
+    let headingEnd = 0;
+    long.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'heading') headingEnd = pos + node.nodeSize - 1;
+    });
+    await act(async () => long.commands.setTextSelection({ from: headingEnd, to: long.state.doc.content.size - 1 }));
+    expect(seen.at(-1)).toMatchObject({ bold: false, headingLevel: undefined });
     long.destroy();
 });
