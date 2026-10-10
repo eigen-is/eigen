@@ -90,6 +90,44 @@ describe('table style first row', () => {
         const { json } = await importDocxBody(styled('<w:tblLook w:val="0420" w:firstRow="0"/>'), { styles });
         expect(marksOfType(json, 'bold')).toEqual([]);
     });
+    const filled = (fill: string) =>
+        `<w:style w:type="table" w:styleId="Filled"><w:name w:val="Filled"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr></w:tblStylePr></w:style>`;
+    const filledTable = (look: string) =>
+        table(
+            [row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])],
+            `<w:tblStyle w:val="Filled"/>${look}`,
+        );
+
+    // As a first row its cells fill is, and as Word repeats one marked w:tblHeader.
+    test("a first row the style fills is a header row, with the look on; white or the look off, it isn't", async () => {
+        const typesOf = async (fill: string, look: string) => {
+            const { json } = await importDocxBody(filledTable(look), { styles: filled(fill) });
+            return nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type));
+        };
+        expect(await typesOf('C0C0C0', '<w:tblLook w:firstRow="1"/>')).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+        expect((await typesOf('FFFFFF', '<w:tblLook w:firstRow="1"/>'))[0]).toEqual(['tableCell', 'tableCell']);
+        expect((await typesOf('C0C0C0', '<w:tblLook w:firstRow="0"/>'))[0]).toEqual(['tableCell', 'tableCell']);
+    });
+
+    // Word reads a table style's looks down its basedOn chain, as a paragraph style's.
+    test('a style based on one with a first row look and fill takes both', async () => {
+        const based = `${filled('C0C0C0').replace('<w:tcPr>', '<w:rPr><w:b/></w:rPr><w:tcPr>')}<w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Filled"/></w:style>`;
+        const body = table(
+            [row([cell('Head'), cell('H2')]), row([cell('Body'), cell('B2')])],
+            '<w:tblStyle w:val="Child"/><w:tblLook w:firstRow="1"/>',
+        );
+        const { json } = await importDocxBody(body, { styles: based });
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(['Head', 'H2']);
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type)),
+        ).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
 });
 
 describe('column widths', () => {
@@ -176,6 +214,16 @@ describe('light text on a fill', () => {
             '<w:tblStyle w:val="Dark"/><w:tblLook w:firstRow="1"/>',
         );
         expect(await colorsOf(body, styles)).toEqual([['body', '#ffffff']]);
+    });
+
+    test("white text in a table whose style's base fills it loses its color", async () => {
+        const styles =
+            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tcPr><w:shd w:val="clear" w:fill="000000"/></w:tcPr></w:style><w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Dark"/></w:style>';
+        const body = table(
+            [row([`<w:tc>${colored('white', 'FFFFFF')}</w:tc>`, cell('b')])],
+            '<w:tblStyle w:val="Child"/>',
+        );
+        expect(await colorsOf(body, styles)).toEqual([]);
     });
 
     test("a cell without a fill of its own in a table filled whole loses it; a cell's explicit none keeps it", async () => {

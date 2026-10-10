@@ -33,13 +33,14 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         ? (isOn(w(look, 'firstRow')) ?? (Number.parseInt(w(look, 'val') ?? '0', 16) & 0x20) !== 0)
         : false;
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
-    const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableStyle?.fill;
+    const tableLook = tableStyle ? reader.styles.table(tableStyle.id) : undefined;
+    const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableLook?.fill;
     const cellItems = (cell: XmlElement, rowIndex: number, colwidth: number[] | null): Item[] => {
         const firstRow = rowIndex === 0 && firstRowOn;
-        const first = firstRow && tableStyle?.firstRowRun;
+        const first = firstRow && tableLook?.firstRowRun;
         const fill =
             shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')) ??
-            (firstRow ? tableStyle?.firstRowFill : undefined) ??
+            (firstRow ? tableLook?.firstRowFill : undefined) ??
             tableFill;
         const cellScope: Scope = {
             ...scope,
@@ -61,7 +62,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (figure) return [{ kind: 'float', figure }];
     }
 
-    const shadedHeader = isShadedHeader(rows);
+    // A first row the table style fills is a header row, as one the cells fill is.
+    const shadedHeader = isShadedHeader(rows) || (firstRowOn && isFill(tableLook?.firstRowFill));
     const rowNodes: { cells: JSONContent[]; end: number }[] = [];
     // The merged cells a continuation in the next row extends, by the column each starts at.
     let open = new Map<number, CellAttrs>();

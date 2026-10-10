@@ -380,8 +380,11 @@ export const ABSORBED: Record<Role['kind'], (keyof RunProps)[] | 'all'> = {
 // How far a basedOn or numStyleLink chain is followed: deeper than any a person builds, and each walk stays short.
 export const MAX_CHAIN = 32;
 
+// A table style's looks: its cells' fill, and its first row's run props and fill.
+type TableLook = { fill?: string; firstRowRun: RunProps; firstRowFill?: string };
+
 // What a style answers once its basedOn chain is merged.
-type Resolved = { run: RunProps; para: ParaProps; role: Role | undefined; code: boolean };
+type Resolved = { run: RunProps; para: ParaProps; role: Role | undefined; code: boolean; table: TableLook };
 
 export class Styles {
     private readonly byId = new Map<string, Style>();
@@ -444,6 +447,11 @@ export class Styles {
             // The nearest style in the chain that names a role.
             role: chain.map(roleOf).find((role) => role !== undefined),
             code: chain.some((style) => CODE_CHARACTER_NAMES.has(style.name)),
+            table: {
+                fill: chain.find((style) => style.fill !== undefined)?.fill,
+                firstRowRun: mergeRun(...rootFirst.flatMap((style) => style.firstRowRun ?? [])),
+                firstRowFill: chain.find((style) => style.firstRowFill !== undefined)?.firstRowFill,
+            },
         };
         this.resolved.set(id ?? '', resolved);
         return resolved;
@@ -463,5 +471,9 @@ export class Styles {
 
     isCodeCharacter(id: string | undefined): boolean {
         return this.resolve(id).code;
+    }
+
+    table(id: string | undefined): TableLook {
+        return this.resolve(id).table;
     }
 }
