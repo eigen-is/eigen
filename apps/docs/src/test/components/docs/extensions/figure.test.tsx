@@ -111,17 +111,19 @@ test('a figure dragged out of a paragraph with text leaves the text', async () =
     expect(blocks).toEqual([['a'], ['x'], ['b', 'figure']]);
 });
 
-test('a picture that fails to load, a WMF or EMF, widens to read its alt text', async () => {
+// The box takes 10rem or all its container gives, so a narrow table cell keeps its width; one with no alt text shows.
+test('a picture that fails to load, a WMF or EMF, widens to read its alt text and stands a line tall', async () => {
     const small = { type: 'figure', attrs: { src: 'data:image/x-wmf;base64,', alt: 'Organisation chart', width: 40 } };
-    const { box } = await mount([paragraph(small)]);
+    const { box, image } = await mount([paragraph(small)]);
     const img = box.querySelector('img');
     if (!img) throw new Error('no img');
-    expect(img.className).not.toContain('min-w-');
+    const classes = () => [box, image, img].map((el) => el.className.split(' ').filter((c) => c.startsWith('min-')));
+    expect(classes()).toEqual([[], [], []]);
 
     await act(async () => {
         img.dispatchEvent(new Event('error'));
     });
-    expect(img.className).toContain('min-w-40');
+    expect(classes()).toEqual([['min-w-[min(10rem,100%)]'], ['min-w-[min(10rem,100%)]'], ['min-w-full', 'min-h-10']]);
 });
 
 // A replaced image loads with no width, and the Image panel stays open only while the figure stays selected.
@@ -174,6 +176,19 @@ test.each([
     await press(editor, key);
     await press(editor, key);
     expect(widthAt2(editor)).toBe(limit);
+});
+
+// A figure with no width draws at its image's own width, capped at the column.
+test('Shift and an arrow key resize a figure with no width from the width it is drawn at', async () => {
+    const unsized = { type: 'figure', attrs: { src: 'data:image/png;base64,' } };
+    const { editor, box } = await mount([paragraph(text('a'), unsized)]);
+    Object.defineProperty(box.querySelector('img'), 'clientWidth', { value: 250 });
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+
+    await press(editor, 'ArrowRight');
+    expect(widthAt2(editor)).toBe(260);
 });
 
 // Shift+ArrowRight from before a figure selects it as text, and the next press extends that selection.
