@@ -47,9 +47,9 @@ A figure is an inline node, so it renders as a `span.figure` with a `span.figcap
 
 The static renderer nests a text's marks the other way round from the editor: it wraps the first mark innermost, where ProseMirror draws it outermost. Rendered as is, a link's own color would sit outside its `<a>`, and `.eigen-prose a` would draw the link color over it. `inEditorMarkOrder` (`document/doc-schema.ts`) hands the renderer the doc over a schema whose marks rank in reverse, so the export and the preview nest marks as the editor does: the `<a>` outermost, its color inside it.
 
-## An ordered list sets its first number as a counter, for WeasyPrint
+## An ordered list draws its first number and its marker inline
 
-WeasyPrint reads `<ol start>` only as a presentational hint, and the PDF render takes no hints, so every list would print from 1. So `renderOrderedListNode` (`export/doc/render.ts`) writes `counter-reset: list-item <start − 1>` beside `start` on a list that starts elsewhere, and browsers draw the same number from it. Letters and Roman numerals come from `ol[type]` rules in `eigen-prose.css`, with the `s` flag: HTML matches `type` case-blind, so `[type="a"]` would match an `A` list too and the later upper-alpha rule would win.
+WeasyPrint reads `<ol start>` and `<ol type>` only as presentational hints, and the PDF render takes no hints, so every list would print from 1 in decimals. A stylesheet can't stand in for `type`: HTML matches the attribute case-blind, so `[type="a"]` matches an `A` list too, and Chrome reads no `s` flag to tell them apart. So the schema's ordered list (`EigenOrderedList`, `packages/lib/src/docs/eigendoc/nodes/ordered-list.ts`) writes both into its own `style`: `counter-reset: list-item <start − 1>` on a list that starts elsewhere, and `list-style-type` for a lettered or Roman one. The editor, quick look, the HTML and the PDF all render it, and it keeps `start` and `type`, which a paste reads back.
 
 ## A doc's docx is written from its JSON, with the editor's CSS values
 

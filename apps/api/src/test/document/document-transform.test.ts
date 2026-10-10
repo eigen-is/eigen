@@ -777,9 +777,10 @@ describe('document transform (xlsx import)', () => {
 // inset inside its paragraph's spacing: the golden figure paragraph's spacing, and nothing else.
 // The HTML hashes moved when the print CSS named .figure and let a table or quote holding a page break split.
 // And again when a done task's strike moved from its content div to the blocks in it but a nested task list: that rule.
+// And again when an ordered list took its marker style inline and eigen-prose.css lost its four ol[type] rules: those.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'b634f5d8612d4e9990db49582ce1e1df1a4978cf4a21f9e4c5429700f3eea68b';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'b634f5d8612d4e9990db49582ce1e1df1a4978cf4a21f9e4c5429700f3eea68b';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '871ca431ef2853502e223a6f2bdcffae3d284130cb5e68152c646d0330302332';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '871ca431ef2853502e223a6f2bdcffae3d284130cb5e68152c646d0330302332';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '206ea61b5647d3f54cdc7c8bf6e95f528b11219e7819eb62c372133356346f20';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'c10d3b5e6acc6ab964702f8fefac3fb7c172527f4f15494c6a949b8a7c1ff3b4';

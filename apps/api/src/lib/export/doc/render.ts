@@ -65,22 +65,6 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
-// WeasyPrint draws `<ol start>` only as a presentational hint, which the PDF render leaves off, so a list that doesn't
-// start at 1 also carries the counter-reset that sets its first number; browsers draw the same one.
-export function renderOrderedListNode(
-    node: { attrs: { start?: number | null; type?: string | null } },
-    children: string | string[] | undefined,
-): string {
-    const { start, type } = node.attrs;
-    const content = Array.isArray(children) ? children.join('') : (children ?? '');
-    const startAttrs =
-        typeof start === 'number' && Number.isInteger(start) && start !== 1
-            ? ` start="${start}" style="counter-reset: list-item ${start - 1}"`
-            : '';
-    const typeAttr = type && type !== '1' ? ` type="${escapeHtml(type)}"` : '';
-    return `<ol${startAttrs}${typeAttr}>${content}</ol>`;
-}
-
 // `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview. Spans, which
 // a paragraph can hold, drawn by eigen-prose.css's .figure rules as the editor's node view is.
 export function renderFigureNode(
@@ -131,7 +115,6 @@ export function renderDocHtml(
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
-                orderedList: ({ node, children }) => renderOrderedListNode(node, children),
                 figure: ({ node }: { node: { attrs: FigureAttrs } }) =>
                     renderFigureNode(node.attrs, resolveImgSrc, options),
             },

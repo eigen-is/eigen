@@ -45,7 +45,7 @@ describe('renderEigendocPreviewBody', () => {
         const item = { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'c' }] }] };
         const list = { type: 'orderedList', attrs: { start: 3, type: 'a' }, content: [item] };
         expect(previewOf({ type: 'doc', content: [list] })).toBe(
-            '<ol start="3" style="counter-reset: list-item 2" type="a"><li><p>c</p></li></ol>',
+            '<ol start="3" type="a" style="counter-reset: list-item 2; list-style-type: lower-alpha"><li><p>c</p></li></ol>',
         );
     });
 
