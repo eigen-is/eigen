@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, fonts, headings, lists, color, alignment, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or
@@ -53,12 +53,9 @@ styled text, the button appears highlighted, so you can see what is active.
 
 ## Set text in capitals
 
-Select the text, then click **All caps** (or Cmd+Shift+A / Ctrl+Shift+A) or **Small caps** in the toolbar. All caps
-shows every letter as a capital. Small caps shows lowercase letters as smaller capitals. The letters you typed stay as
-they are, so clicking the button again brings them back. On a narrow screen, open **Format**, then **Text**, and
-choose **All caps** or **Small caps**.
+Select the text, then click **All caps** (or Cmd+Shift+A / Ctrl+Shift+A) or **Small caps** in the toolbar. All caps shows every letter as a capital. Small caps shows lowercase letters as smaller capitals. The letters you typed stay as they are, so clicking the button again brings them back. On a narrow screen, open **Format**, then **Text**, and choose **All caps** or **Small caps**.
 
-In a PDF, small caps show only in the **Source Serif 4** font. In the other fonts the text prints as you typed it.
+In a PDF, small caps show only in upright **Source Serif 4** text. In the other fonts, and in Source Serif 4 italic, the text prints as you typed it.
 
 ## Set a text color
 

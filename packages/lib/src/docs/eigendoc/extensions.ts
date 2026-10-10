@@ -12,6 +12,7 @@ import { TextCaps } from './nodes/caps';
 import { CommentMarkSchema } from './nodes/comment-mark';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
+import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { SmallMark } from './nodes/small-mark';
 
@@ -21,6 +22,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         StarterKit.configure({
             undoRedo: false,
             codeBlock: false,
+            orderedList: false,
             link: {
                 HTMLAttributes: {
                     target: '_blank',
@@ -28,6 +30,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
                 },
             },
         }),
+        EigenOrderedList,
         Subscript,
         Superscript,
         SmallMark,

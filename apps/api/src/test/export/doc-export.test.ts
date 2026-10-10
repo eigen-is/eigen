@@ -472,8 +472,20 @@ describe('doc export — ordered lists', () => {
         ['A', 'upper-alpha'],
         ['i', 'lower-roman'],
         ['I', 'upper-roman'],
-    ])('an ol of type %s draws %s', (type, style) => {
-        expect(proseValue(`.eigen-prose ol[type="${type}" s]`, 'list-style-type')).toBe(style);
+    ])('an ol of type %s draws %s on itself', async (type, style) => {
+        const html = await pdfHtml(orderedList({ start: 2, type }, listItem('b')));
+        expect(html).toContain(
+            `<ol start="2" type="${type}" style="counter-reset: list-item 1; list-style-type: ${style}">`,
+        );
+    });
+
+    test('a decimal ol draws no marker style of its own', async () => {
+        const html = await pdfHtml(
+            orderedList({ type: '1' }, listItem('a')),
+            orderedList({ type: 'x' }, listItem('b')),
+        );
+        expect(html).toContain('<ol type="x">');
+        expect(html).not.toMatch(/<ol [^>]*style=/);
     });
 });
 
