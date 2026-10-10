@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bundledFont, EIGEN_FONT_NAMES, FONT_CATEGORY_MAP } from '../../constants/fonts';
+import { bundledFont, bundledFontOfCategory, EIGEN_FONT_NAMES } from '../../constants/fonts';
 
 describe('bundledFont', () => {
     test('a bundled font is its own', () => {
@@ -44,7 +44,18 @@ describe('bundledFont', () => {
         expect(bundledFont(name)).toBe(bundled);
     });
 
-    test('the table is keyed by trimmed lowercase names', () => {
-        for (const name of FONT_CATEGORY_MAP.keys()) expect(name).toBe(name.trim().toLowerCase());
+    test('a bundled font maps to itself in any case and padding', () => {
+        for (const name of EIGEN_FONT_NAMES) expect(bundledFont(` ${name.toUpperCase()} `)).toBe(name);
+    });
+});
+
+describe('bundledFontOfCategory', () => {
+    test.each([
+        ['sans-serif', 'Inter'],
+        ['serif', 'Source Serif 4'],
+        ['monospace', 'JetBrains Mono'],
+        ['hand-drawn', 'Excalifont'],
+    ] as const)('%s is drawn in %s', (category, name) => {
+        expect(bundledFontOfCategory(category)).toBe(name);
     });
 });
