@@ -23,16 +23,16 @@ Clearing formatting removes two kinds of style at once:
 Links are also removed as part of the inline marks. If you want to keep a link, remove it separately
 first using the **Remove link** button.
 
-## Clear formatting on the desktop toolbar
+## Clear formatting with the toolbar button
 
 1. Select the text you want to clean up. You can select across multiple paragraphs.
 2. Click the **Clear formatting** button at the right end of the formatting toolbar.
 
 The selection becomes plain text in the default font and size, with no heading style.
 
-## Clear formatting on a narrow screen
+## Clear formatting from the Format menu
 
-On a narrow screen, the formatting controls collapse into dropdown menus.
+The **Format** menu works on any screen, also when the toolbar doesn't show the formatting buttons.
 
 1. Select the text you want to clean up.
 2. Click the **Format** menu in the toolbar.

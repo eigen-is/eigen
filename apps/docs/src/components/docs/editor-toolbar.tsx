@@ -124,9 +124,9 @@ export const EditorToolbar = ({
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const active = useToolbarState(editor);
     const { exportPath, isExporting } = useDocumentExport();
-    // Docs' inline toolbar is the widest in the suite (~30 controls), so it folds earlier than the
-    // shared 1200px default.
-    const isCompact = useIsCompactToolbar(1400);
+    // The icon row (~30 controls, 1200px at its widest: a link in a JetBrains Mono "Heading 4") sits
+    // centered beside File, Edit, Format and Insert only from 1771px; below that the bar keeps the menus.
+    const isCompact = useIsCompactToolbar(1780);
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -198,7 +198,7 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                         />
 
-                        {isCompact && canWrite && (
+                        {canWrite && (
                             <>
                                 <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuSub>

@@ -14,6 +14,8 @@ italic, pick a color, align paragraphs, and build lists, all without leaving the
 
 The toolbar is visible whenever you have write access to the document. If you can only view, the toolbar is hidden.
 
+The formatting buttons show only on a wide screen. On a smaller one, the **Format** menu in the toolbar has the font, text style, heading, alignment, and list options. Text color and highlight need the wide toolbar.
+
 ## Choose a font
 
 Click the font name on the left of the toolbar. A dropdown shows the four available fonts:
@@ -53,7 +55,7 @@ styled text, the button appears highlighted, so you can see what is active.
 
 ## Set text in capitals
 
-Select the text, then click **All caps** (or Cmd+Shift+A / Ctrl+Shift+A) or **Small caps** in the toolbar. All caps shows every letter as a capital. Small caps shows lowercase letters as smaller capitals. The letters you typed stay as they are, so clicking the button again brings them back. On a narrow screen, open **Format**, then **Text**, and choose **All caps** or **Small caps**.
+Select the text, then click **All caps** (or Cmd+Shift+A / Ctrl+Shift+A) or **Small caps** in the toolbar. All caps shows every letter as a capital. Small caps shows lowercase letters as smaller capitals. The letters you typed stay as they are, so clicking the button again brings them back. If the toolbar doesn't show these buttons, open **Format**, then **Text**, and choose **All caps** or **Small caps**.
 
 In a PDF, small caps show only in upright **Source Serif 4** text. In the other fonts, and in Source Serif 4 italic, the text prints as you typed it.
 
