@@ -309,9 +309,15 @@ function buildLevel(items: Item[], depth: number): JSONContent[] {
         quoted = [];
     };
     const itemDepths = depths(items);
+    // Code or a deeper quote: the writer's Spacer between two of them stands in the quote around them.
+    const isBox = (index: number) => {
+        const near = items[index];
+        const nearDepth = itemDepths[index] ?? 0;
+        return nearDepth > depth + 1 || (near?.kind === 'para' && near.role.kind === 'code');
+    };
     for (const [index, item] of items.entries()) {
         const itemDepth = itemDepths[index] ?? 0;
-        if (item.kind === 'boundary' && itemDepth === depth + 1) {
+        if (item.kind === 'boundary' && itemDepth === depth + 1 && !(isBox(index - 1) && isBox(index + 1))) {
             flushQuote();
             continue;
         }

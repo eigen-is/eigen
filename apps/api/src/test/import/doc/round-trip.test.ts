@@ -206,6 +206,23 @@ describe('lists side by side', () => {
     });
 });
 
+// The writer sets a Spacer between two boxes, code or a quote, which stands in the quote around them.
+describe('boxes side by side in a quote', () => {
+    test.each<[string, JSONContent[]]>([
+        ['two code blocks', [quote(p('Said'), code('one()'), code('two()'), p('Done'))]],
+        ['a quote and code', [quote(quote(p('Deep')), code('one()'))]],
+        ['code and a quote', [quote(code('one()'), quote(p('Deep')))]],
+        ['two code blocks two deep', [quote(quote(code('one()'), code('two()')))]],
+        ['two code blocks in a quote in an item', [bullets([p('One'), quote(code('one()'), code('two()'))])]],
+        ['a quote, then a quote opening with code', [quote(p('Said')), quote(code('one()'))]],
+        ['a quote ending in code, then a quote', [quote(code('one()')), quote(p('Said'))]],
+        ['two code blocks at the margin', [code('one()'), code('two()')]],
+    ])('%s come back as written', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
 // The writer sets a page break at the margin, so the block after it says which item holds it.
 describe('a page break in an item', () => {
     test.each<[string, JSONContent[]]>([
