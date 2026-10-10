@@ -40,11 +40,11 @@ Both sides validate with the same `validateCommand` (`packages/lib/src/validatio
 
 ## Emotes are stored as keys and phrased per viewer
 
-A built-in emote is stored in its wire form, `$dance` or `$dance:marloes@example.com`, not as a sentence. The sentence depends on who reads it: the author sees "You dance with …", the target sees "… dances with you", everyone else the third person. `getMessagesForUser` renders it per viewer with `formatEmoteForViewer`, using the phrases in `BUILT_IN_EMOTES` (`packages/lib/src/core/chat/built-in-emotes.ts`). Notification bodies keep the wire form and render it at display time ([ACTIVITY-ROWS.md](ACTIVITY-ROWS.md#chat-derived-bodies-are-stored-raw-and-rendered-at-display-time)).
+A built-in emote is stored in its wire form, `$dance` or `$dance:marloes@example.com`, not as a sentence. The sentence depends on who reads it: the author sees "You dance with …", the target sees "… dances with you", everyone else the third person. `getMessagesForUser` renders it per viewer with `formatEmoteForViewer`, using the phrases in `BUILT_IN_EMOTES` (`packages/lib/src/core/chat/built-in-emotes.ts`). Notification bodies keep the wire form and render it at display time ([ACTIVITY-ROWS.md](ACTIVITY-ROWS.md#chat-derived-bodies-are-stored-raw-and-rendered-at-display-time)). Every search indexes the third-person sentence instead, through `searchableMessageText`, so Drive's content index and the comment index find an emote by its words and never by its key.
 
 ## The server redacts whispers
 
-A whisper's target must be a registered user, or the post answers 404. On read, the server rewrites every whisper for the viewer: author and recipient see the text, anyone else gets `[a few hushed words]` with the target kept and the attachments stripped. The browser of a non-participant never holds the text. A whisper also stays out of the comment index and the file history, and notifies only its recipient.
+A whisper's target must be a registered user, or the post answers 404. On read, the server rewrites every whisper for the viewer: author and recipient see the text, anyone else gets `[a few hushed words]` with the target kept and the attachments stripped. The browser of a non-participant never holds the text. A whisper also stays out of Drive's content index and the comment index (`SEARCHABLE_MESSAGES`, `chat/schema.ts`) and out of the file history, and notifies only its recipient.
 
 ## A message notifies mentions, participants and watchers once each
 

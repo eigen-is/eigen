@@ -1,5 +1,5 @@
 import type { ChatAttachment, ChatMessageType } from '@workspace/lib/types/chat';
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const messages = sqliteTable('messages', {
@@ -18,6 +18,9 @@ export const messages = sqliteTable('messages', {
 // The keyset every page of messages walks. createdAt is whole seconds: rowid breaks the tie, so a page edge
 // inside a second skips nothing.
 export const NEWEST_FIRST = [desc(messages.createdAt), desc(sql`rowid`)];
+
+// The messages a search indexes: live ones, never a whisper, whose text only its two participants may read.
+export const SEARCHABLE_MESSAGES = and(isNull(messages.deletedAt), ne(messages.type, 'whisper'));
 
 export function olderThan(cursor: { createdAt: Date; rowid: number }) {
     return or(

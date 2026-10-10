@@ -183,6 +183,26 @@ describe('Drive content-index', () => {
         expect((await searchFile('flibberchat')).file.some((h) => h.id === chat.id)).toBe(true);
     });
 
+    test('a CHAT emote is searchable by the sentence a bystander reads, not its stored key, and a whisper not at all', async () => {
+        const chat = await drivePost(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/chat`,
+            { fileName: 'emote-chat' },
+        );
+        const post = (content: string) =>
+            chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, { content });
+        await post(`/mindblown ${ctx.bob.user.email}`);
+        await post(`/whisper ${ctx.bob.user.email} hushedquokka`);
+        await home.drive.flushContainerDb(mountId, chat.id);
+        await home.drive.flushContentReindex();
+
+        expect((await searchFile('temples')).file.some((h) => h.id === chat.id)).toBe(true);
+        expect((await searchFile('mindblown')).file.some((h) => h.id === chat.id)).toBe(false);
+        expect((await searchFile('hushedquokka')).file.some((h) => h.id === chat.id)).toBe(false);
+    });
+
     // Plaintext files get contentDirty = 1 at upload time (write-path mark), so no
     // flushContainerDb is needed — flushContentReindex() alone drains the dirty bit.
     test('PLAINTEXT file body is searchable (no flush — write-path mark)', async () => {
