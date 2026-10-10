@@ -13,6 +13,9 @@ type Row = { trPr?: XmlElement; cells: XmlElement[] };
 // Word's column limit, on the grid and every row: a span is walked by column, the widest row sets every row's width.
 const MAX_COLUMNS = 63;
 
+// findWidth rescans the rows above each row after a rowspan: a table that merges splits here, at most 0.9 s a part.
+export const MAX_MERGED_ROWS = 2000;
+
 // Each table nests three nodes deep; 1,000 nested tables overflowed the Worker's stack.
 export const MAX_TABLE_DEPTH = 8;
 
@@ -72,7 +75,12 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const rowNodes: { cells: JSONContent[]; end: number }[] = [];
     // The merged cells a continuation in the next row extends, by the column each starts at.
     let open = new Map<number, CellAttrs>();
+    const split =
+        rows.length > MAX_MERGED_ROWS &&
+        rows.some((row) => row.cells.some((cell) => wChild(wChild(cell, 'tcPr'), 'vMerge')));
     for (const [rowIndex, row] of rows.entries()) {
+        // A merge stops at the end of its part; a continuation past it starts a cell of its own.
+        if (split && rowNodes.length > 0 && rowNodes.length % MAX_MERGED_ROWS === 0) open = new Map();
         const header = (onOff(wChild(row.trPr, 'tblHeader')) ?? false) || (rowIndex === 0 && shadedHeader);
         const cells: JSONContent[] = [];
         const next = new Map<number, CellAttrs>();
@@ -137,7 +145,11 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         return { type: 'tableRow', content: cells };
     });
     const indent = twipsOf(w(wChild(tblPr, 'tblInd'), 'w')) ?? 0;
-    return [{ kind: 'table', node: { type: 'table', content }, indent }];
+    const part = split ? MAX_MERGED_ROWS : content.length;
+    const tables: Item[] = [];
+    for (let start = 0; start < content.length; start += part)
+        tables.push({ kind: 'table', node: { type: 'table', content: content.slice(start, start + part) }, indent });
+    return tables;
 }
 
 type CellAttrs = { colspan: number; rowspan: number; colwidth: number[] | null; align?: string };
