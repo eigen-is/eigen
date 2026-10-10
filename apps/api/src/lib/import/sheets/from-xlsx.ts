@@ -106,7 +106,8 @@ function repackXlsx(buffer: Buffer): Buffer {
             mergedCells: 0,
             validationKeys: 0,
         };
-        for (const [name, data] of zip.files()) {
+        for (const [name, read] of zip.files()) {
+            const data = read();
             const bytes = canonicalPart(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
             if (WORKSHEET_PART.test(name)) tallySheet(bytes, tally);
             else if (STRINGS_OR_STYLES_PART.test(name)) tallyElements(bytes, tally);

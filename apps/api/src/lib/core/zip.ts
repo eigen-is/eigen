@@ -88,9 +88,9 @@ export class ZipReader {
         return located && this.#inflate(located);
     }
 
-    // Every entry with its bytes, in the directory's order.
-    *files(): Generator<[name: string, data: Uint8Array]> {
-        for (const [name, located] of this.#entries) yield [name, this.#inflate(located)];
+    // Every entry in the directory's order, inflated only when read: a rewrite replaces some unread.
+    *files(): Generator<[name: string, read: () => Uint8Array]> {
+        for (const [name, located] of this.#entries) yield [name, () => this.#inflate(located)];
     }
 
     #inflate({ entry, dataStart }: Located): Uint8Array {

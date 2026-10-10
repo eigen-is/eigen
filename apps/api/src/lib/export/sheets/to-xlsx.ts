@@ -265,7 +265,7 @@ function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Ma
     }
     if (rewritten.size === 0) return buffer;
     const files: ZipWriteEntry[] = [];
-    for (const [name, data] of zip.files()) files.push({ name, data: rewritten.get(name) ?? data });
+    for (const [name, read] of zip.files()) files.push({ name, data: rewritten.get(name) ?? read() });
     return Buffer.from(writeZip(files));
 }
 
