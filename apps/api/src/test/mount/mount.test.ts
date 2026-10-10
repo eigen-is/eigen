@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import {
     CONTENT_REINDEX_CAP_SECONDS,
@@ -133,6 +133,22 @@ describe('downloadToTemp', () => {
         await mount.createDatabase(guardConfig, dataDbId);
         await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('live working copy');
         await mount.closeDatabase(dataDbId);
+    });
+
+    // handleApiError answers a raw error 500; a 503 would read as a storage outage.
+    test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
+        const data = Buffer.from('snapshot-bytes-local-failure');
+        const fileId = await mount.createFile(rootId, 'snap3.db', 'application/octet-stream', data.length, data);
+        const tempId = randomUUID();
+        // A non-empty directory at the temp path: the rename of the downloaded side file onto it fails.
+        mkdirSync(join(mount.getTempPath(tempId), 'blocker'), { recursive: true });
+        const before = readdirSync(mount.tmpDir);
+
+        const error = await mount.downloadToTemp(fileId, tempId).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(ApiError);
+        expect(readdirSync(mount.tmpDir)).toEqual(before);
+        rmSync(mount.getTempPath(tempId), { recursive: true });
     });
 });
 

@@ -27,7 +27,6 @@ import {
     type StorageBackend,
     type StorageFile,
     storageGone,
-    storageUnavailable,
     writeTempWithHash,
 } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
@@ -1043,7 +1042,7 @@ export class Mount {
                     // A staged copy the queue's ack unlinked mid-read now sits in the bucket: fall through.
                     if (!isMissingObjectCause(err)) {
                         console.error(`[Mount] download of staged ${storageKey} failed:`, err);
-                        throw err instanceof ApiError ? err : storageUnavailable();
+                        throw err;
                     }
                 }
             }
@@ -1065,9 +1064,9 @@ export class Mount {
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
             // Only the GET body tells a gone object (410) from an outage (503). The read's own failures
-            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT is not a gone object.
+            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), so a 500, and its ENOENT is not a gone object.
             if (isMissingObjectCause(err)) throw storageGone(err.cause);
-            throw err instanceof ApiError ? err : storageUnavailable();
+            throw err;
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -1082,11 +1081,11 @@ export class Mount {
         let size: number;
         try {
             ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
+            fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         } catch (err) {
             await this.cleanupTemp(sideId);
             throw err;
         }
-        fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
         return size;
     }
 

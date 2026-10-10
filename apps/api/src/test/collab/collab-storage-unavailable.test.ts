@@ -132,15 +132,13 @@ describe('Collab WS open under unreachable storage', () => {
         });
     });
 
-    test('a failed local temp write on an intact object closes storage-unavailable, not storage-gone', async () => {
+    // A local failure is a 500, not an outage: the open fails as any other, and never as storage-gone.
+    test('a failed local temp write on an intact object closes as a failed open, not storage-gone', async () => {
         const { docId } = await createDoc('TmpGone');
         const parked = `${mount.tmpDir}.parked`;
         renameSync(mount.tmpDir, parked);
         try {
-            expect(await openCollabClient(docId).closed).toEqual({
-                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
-                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
-            });
+            expect(await openCollabClient(docId).closed).toEqual({ code: 1008, reason: 'Failed to open document' });
         } finally {
             rmSync(mount.tmpDir, { recursive: true, force: true });
             renameSync(parked, mount.tmpDir);
