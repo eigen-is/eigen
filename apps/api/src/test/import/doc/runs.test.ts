@@ -299,6 +299,23 @@ describe('links', () => {
         expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Pink']);
     });
 
+    // A quote or a done task draws its own color, so its style's hyperlink theme is no link look.
+    test("a quote's or done task's hyperlink-theme color leaves a link's own underline a mark", async () => {
+        const style = (id: string, name: string) =>
+            `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:rPr><w:color w:val="0563C1" w:themeColor="hyperlink"/></w:rPr></w:style>`;
+        const linked = (text: string, pStyle: string) =>
+            paragraph(
+                `<w:hyperlink r:id="rId9">${run(text, '<w:u w:val="single"/>')}</w:hyperlink>`,
+                `<w:pStyle w:val="${pStyle}"/>`,
+            );
+        const json = await imported(`${linked('Quoted', 'Quote')}${linked('Done', 'TaskDone')}`, {
+            styles: `${style('Quote', 'Quote')}${style('TaskDone', 'Task Done')}`,
+            rels: `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com/" TargetMode="External"/>`,
+        });
+        expect(marksOfType(json, 'link').map((mark) => mark.text)).toEqual(['Quoted', 'Done']);
+        expect(marksOfType(json, 'underline').map((mark) => mark.text)).toEqual(['Quoted', 'Done']);
+    });
+
     // Eigen holds no bookmarks, so a link to one is its text in the run's look; Word draws a TOC entry's link style in
     // its paragraph's look. The writer's in-document link rides on a relationship, which keeps it.
     test("a link to a bookmark is no link: its text keeps its own look, its link style's outside a TOC", async () => {
