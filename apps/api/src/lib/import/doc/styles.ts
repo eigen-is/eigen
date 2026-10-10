@@ -103,10 +103,9 @@ export function markColor(hex: string): string {
 
 export function shadingOf(shd: XmlElement | undefined): string | undefined {
     if (!shd) return undefined;
-    const fill = hexColor(w(shd, 'fill'));
-    if (fill) return fill;
-    // A solid pattern paints the pattern color.
-    return w(shd, 'val') === 'solid' ? (hexColor(w(shd, 'color')) ?? '') : '';
+    const fill = hexColor(w(shd, 'fill')) ?? '';
+    // Solid paints the pattern color; an auto one, black under auto text Word turns white, stays the fill, as Eigen can't.
+    return (w(shd, 'val') === 'solid' && hexColor(w(shd, 'color'))) || fill;
 }
 
 // White is no fill: Word and Google Docs spell an unshaded cell or paragraph that way too.
