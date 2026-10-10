@@ -63,6 +63,9 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
     borrow('navigator', window.navigator);
     borrow('getComputedStyle', window.getComputedStyle.bind(window));
     borrow('IS_REACT_ACT_ENVIRONMENT', true);
+    // A query the component fires fails here instead of reaching whatever listens on the origin, such
+    // as a dev server answering with its SPA page. A test may stub fetch over this; afterAll restores it.
+    borrow('fetch', () => Promise.reject(new TypeError('A component test has no network')));
 
     const { onResizeObserver } = options;
     class FakeResizeObserver {
