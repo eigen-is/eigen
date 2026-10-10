@@ -31,12 +31,12 @@ export type Piece =
     | { kind: 'checkbox'; checked: boolean }
     | { kind: 'hr' };
 
-// A link to a bookmark has no href: Eigen holds no bookmarks, and Word draws a TOC entry's link in its paragraph's look.
-export type Link = { href?: string; title: string | null };
+// A link to a bookmark has no href, as Eigen holds no bookmarks.
+type Link = { href?: string; title: string | null };
 
 // Each open field carries what the fields around it say too, so the innermost answers alone: whether any is still in
-// its code, and the link its result shows.
-export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean };
+// its code, the link its result shows, and whether it is a table of contents.
+export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boolean; toc?: boolean };
 
 export type RunContext = {
     scope: Scope;
@@ -219,6 +219,7 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
         if (field) {
             field.inCode = outer?.inCode ?? false;
             field.link = hyperlinkField(reader, field.code) ?? outer?.link;
+            field.toc = outer?.toc || /^TOC\b/i.test(field.code.trim());
         }
     } else if (type === 'end') {
         const field = reader.fields.pop();
@@ -318,10 +319,13 @@ function marksOf(
     const absorbed = ABSORBED[role.kind];
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
+    // A link to a bookmark is no link, its look the run's, but in a table of contents: Word draws its link look there
+    // in the paragraph's.
+    const asLink = !!link?.href || (!!link && !!reader.fields.at(-1)?.toc);
     // A link draws its own color and underline; the Hyperlink style on text that links nowhere is just a look, and so is
     // a link style in a color of its own. Its link color still covers the paragraph's, as Word draws it.
     const ownLook = !!charRun.color && !charRun.linkColor && !LINK_STYLE_COLORS.has(charRun.color);
-    if (link && !ownLook) {
+    if (asLink && !ownLook) {
         if (charRun.color !== undefined) charRun.color = '';
         delete charRun.linkColor;
         delete charRun.underline;
@@ -354,7 +358,7 @@ function marksOf(
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
     if (link?.href) marks.push({ type: 'link', attrs: { href: link.href, title: link.title } });
-    const linkLook = link ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
+    const linkLook = asLink ? props.linkColor || LINK_LOOKS.get(props.color ?? '') : undefined;
     if (props.underline && !linkLook) marks.push({ type: 'underline' });
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
@@ -367,7 +371,7 @@ function marksOf(
         linkLook === undefined &&
         !(scope.onFill && !isFill(shade) && isLight(props.color))
             ? props.color
-            : !full.color && !link && isFill(shade) && isDark(shade)
+            : !full.color && !asLink && isFill(shade) && isDark(shade)
               ? 'FFFFFF'
               : undefined;
     // Word draws capitals over small caps.
