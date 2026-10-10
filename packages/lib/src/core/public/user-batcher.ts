@@ -15,21 +15,9 @@ async function flushBatch() {
     const ids = [...batch.keys()];
     if (ids.length === 0) return;
 
-    // Single ID — use the existing GET endpoint (avoids POST for common case)
-    if (ids.length === 1) {
-        const id = ids[0];
-        const resolve = batch.get(id)!;
-        try {
-            const res = await publicApi.user({ emailOrId: id }).get();
-            resolve(res.data ?? null);
-        } catch {
-            resolve(null);
-        }
-        return;
-    }
-
-    // Multiple IDs — batch POST, chunked to the server's cap. Resolve null for
-    // not-found users so TanStack Query caches the miss instead of retrying.
+    // Always the batch POST, even for one id: it omits an id without an account, where the
+    // single-user GET answers 404. Resolve null for a missing user so TanStack Query caches the
+    // miss instead of retrying. Chunked to the server's cap.
     try {
         const chunks: string[][] = [];
         for (let i = 0; i < ids.length; i += MAX_PUBLIC_USERS_PER_BATCH) {
