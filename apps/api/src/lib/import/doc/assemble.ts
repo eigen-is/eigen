@@ -206,6 +206,7 @@ function assignQuotes(items: Item[]): void {
             // Its number at or right of the open item's text: a quote in that item holds it.
             if (open && listed > open.quote && (item.numberAt ?? 0) >= open.indLeft - INDENT_TOLERANCE)
                 item.inItem = open.quote;
+            else if (open && listed === open.quote) item.inItem = open.inItem;
             open = item;
         } else if (item.list || item.task) open = item;
         else if (item.role.kind === 'code') {
@@ -215,8 +216,11 @@ function assignQuotes(items: Item[]): void {
             // Past the quotes the item itself sits in.
             item.quote = open.quote + Math.max(1, Math.round((item.indLeft - open.indLeft) / QUOTE_LOOK.indent));
             item.inItem = open.quote;
-        } else if (goesOn) item.quote = goesOn.quote;
-        else if (!item.continued && !item.empty) open = undefined;
+        } else if (goesOn) {
+            item.quote = goesOn.quote;
+            item.inItem = goesOn.inItem;
+        } else if (!item.continued && !item.empty && !(open && indentedUnder(item.indLeft, open.indLeft)))
+            open = undefined;
         item.quote = Math.min(item.quote, MAX_QUOTE_DEPTH);
         if (item.quote > 0 && listed === undefined) {
             if (item.list || item.task || item.continued) item.quote = Math.min(item.quote, Math.max(1, plain));

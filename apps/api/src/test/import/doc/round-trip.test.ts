@@ -160,6 +160,16 @@ describe('a block inside a list item or a quote', () => {
         ['a list opening a quote in a quote', [quote(p('Said'), quote(bullets([p('One')])))]],
         ['a list in a quote two deep, then a paragraph', [quote(quote(ordered([p('One')])), p('Done'))]],
         ['a quote opening with a list in an item', [bullets([p('One'), quote(ordered([p('Two')]))])]],
+        ["a quote after an item's second paragraph", [bullets([p('One'), p('More'), quote(p('Said'))], [p('Two')])]],
+        ['a quote holding a list of two in an item', [bullets([p('One'), quote(bullets([p('a')], [p('b')]))])]],
+        [
+            'a quote holding a paragraph and a list of two in an item',
+            [bullets([p('One'), quote(p('Said'), bullets([p('a')], [p('b')]))])],
+        ],
+        [
+            'a quote holding an item of two paragraphs in an item',
+            [bullets([p('One'), quote(bullets([p('a'), p('More')]))], [p('Two')])],
+        ],
     ])('%s', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
