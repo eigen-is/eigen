@@ -446,4 +446,19 @@ describe('a table as the editor opens it', () => {
         expect(nodesOfType(json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([[200], null, [200, 0]]);
         expect(repairs(json)).toBeUndefined();
     });
+
+    describe("Word's 63 columns", () => {
+        const grid63 = gridOf(...Array(63).fill(100));
+
+        test.each([
+            ['no grid', ''],
+            ['a 63-column grid', grid63],
+        ])('a w:gridBefore of 63 over %s leaves the last column to its cells', async (_, grid) => {
+            const { json } = await importDocxBody(
+                tableOn(grid, [row([tc('A'), tc('B')], '<w:gridBefore w:val="63"/>')]),
+            );
+            expect(shape(json)).toEqual([['62x1:', '1x1:AB']]);
+            expect(repairs(json)).toBeUndefined();
+        });
+    });
 });

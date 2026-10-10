@@ -85,7 +85,12 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         const cells: JSONContent[] = [];
         const next = new Map<number, CellAttrs>();
         const extended: CellAttrs[] = [];
-        let column = Math.min(Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0), columns);
+        // Short of Word's last column, which holds the row's cells.
+        let column = Math.min(
+            Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0),
+            columns,
+            MAX_COLUMNS - 1,
+        );
         if (column > 0) cells.push(gridFiller(columnPx, 0, column));
         for (const [index, cell] of row.cells.entries()) {
             if (column >= MAX_COLUMNS) break;
