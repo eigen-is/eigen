@@ -393,8 +393,8 @@ function roleOf({ name, language }: Style): Role | undefined {
     return ROLE_BY_NAME.get(name);
 }
 
-// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark; a subtitle
-// draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
+// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark unless it is
+// Heading 5 or 6's own, which paragraphs.ts strips; a subtitle draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
 export const ABSORBED: Record<Role['kind'], (keyof DocxRunProps)[] | 'all'> = {
     heading: ['bold', 'boldCs', 'size', 'sizeCs'],
     subtitle: [],

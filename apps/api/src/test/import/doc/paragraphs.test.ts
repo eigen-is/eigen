@@ -567,4 +567,20 @@ describe("a node's look", () => {
             { color: null, fontFamily: null, caps: 'all' },
         ]);
     });
+
+    // Google Docs' Heading 6 is grey and italic, in its style and on its runs; the editor draws that look itself.
+    test("Heading 6's grey and italic go, another color stays", async () => {
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Fine', '<w:i/><w:color w:val="666666"/>')}${run(' print', '<w:color w:val="C00000"/>')}`,
+                '<w:pStyle w:val="Heading6"/>',
+            ),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr><w:i/><w:color w:val="666666"/></w:rPr></w:style>',
+            },
+        );
+        expect(nodesOfType(json, 'heading').map((node) => node.attrs?.['level'])).toEqual([6]);
+        expect(marksOfType(json, 'italic')).toEqual([]);
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs?.['color'])).toEqual(['#c00000']);
+    });
 });

@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, HEADING_LOOKS, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -260,8 +260,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
+    // The quote's, a heading's and the done task's look, which Google Docs writes as direct formatting, is the node's.
     if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+    const headingLook = role.kind === 'heading' ? HEADING_LOOKS[role.level - 1] : undefined;
+    if (headingLook && (headingLook.color || headingLook.italic))
+        stripLook(pieces, headingLook.italic ? 'italic' : undefined, headingLook.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
     const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>
@@ -434,13 +437,13 @@ function trimStart(inlines: JSONContent[]): void {
     }
 }
 
-function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {
-    const hex = markColor(color);
+function stripLook(pieces: Piece[], toggle: string | undefined, color: string | undefined): void {
+    const hex = color === undefined ? undefined : markColor(color);
     for (const piece of pieces) {
         if (piece.kind !== 'node' || !piece.node.marks) continue;
         piece.node.marks = piece.node.marks.flatMap((mark) => {
             if (mark.type === toggle) return [];
-            if (mark.type !== 'textStyle' || mark.attrs?.['color'] !== hex) return [mark];
+            if (mark.type !== 'textStyle' || hex === undefined || mark.attrs?.['color'] !== hex) return [mark];
             const attrs = { ...mark.attrs, color: null };
             return Object.values(attrs).some((value) => value !== null) ? [{ ...mark, attrs }] : [];
         });

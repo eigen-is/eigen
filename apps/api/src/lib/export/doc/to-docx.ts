@@ -45,10 +45,12 @@ import {
     CODE_LOOK,
     cssPt,
     HEADER_CELL_LOOK,
+    HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
     proseBorder,
     proseColor,
+    proseTextLook,
     QUOTE_LOOK,
     SMALL_LOOK,
     TASK_DONE_LOOK,
@@ -1154,19 +1156,12 @@ function codeLines(tree: HastNode, pkg: Package): string[] {
             return;
         }
         const token = { ...props };
-        for (const name of node.properties?.className ?? []) Object.assign(token, tokenLook(name));
+        for (const name of node.properties?.className ?? [])
+            Object.assign(token, proseTextLook(`.eigen-prose pre .${name}`));
         for (const child of node.children ?? []) walk(child, token);
     };
     walk(tree, {});
     return lines;
-}
-
-function tokenLook(className: string): RunProps {
-    const selector = `.eigen-prose pre .${className}`;
-    const look: RunProps = {};
-    if (proseValueIfSet(selector, 'color') !== undefined) look.color = proseColor(selector, 'color');
-    if (proseValueIfSet(selector, 'font-style') === 'italic') look.italic = true;
-    return look;
 }
 
 const JUSTIFICATION = new Map([
@@ -1458,7 +1453,7 @@ function styleDefinitions(): StyleDef[] {
                 spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
                 outlineLvl: level - 1,
             },
-            rPr: { spacing: tracking, size: halfPoints(sizePt) },
+            rPr: { spacing: tracking, size: halfPoints(sizePt), ...HEADING_LOOKS[level - 1] },
         };
     });
     return [

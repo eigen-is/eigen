@@ -48,10 +48,23 @@
         line-height: 1.4;
     }
 
+    /* Google Docs' Heading 5 and 6: the body's size, which they inherit, at its weight, in Google's grey, which no theme token matches. */
+    h5,
+    h6 {
+        font-weight: var(--font-weight-normal);
+        color: #666666;
+    }
+
+    h6 {
+        font-style: italic;
+    }
+
     h1:first-child,
     h2:first-child,
     h3:first-child,
-    h4:first-child {
+    h4:first-child,
+    h5:first-child,
+    h6:first-child {
         margin-top: 0;
     }
 
@@ -533,6 +546,11 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     blockquote {
         color: #a1a1aa;
         border-color: #3f3f46;
+    }
+
+    h5,
+    h6 {
+        color: #a1a1aa;
     }
 
     hr {
