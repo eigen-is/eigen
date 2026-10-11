@@ -1,4 +1,5 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
+// Tools reaches everyone, viewers included.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -6,6 +7,7 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 const window = installHappyDom();
 
 const { act, createElement } = await import('react');
+const { formatForDisplay } = await import('@tanstack/react-hotkeys');
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
@@ -95,10 +97,13 @@ const SHORT_ROW = ['Normal text', 'Inter', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
-test.each([1920, 1300, 1000, 390])('a writer gets the Format and Insert menus at %ipx', async (width) => {
-    await render(width, true);
-    expect(menus()).toEqual(expect.arrayContaining(['File', 'Edit', 'Format', 'Insert']));
-});
+test.each([1920, 1300, 1000, 390])(
+    'a writer gets the File, Edit, Format, Insert and Tools menus at %ipx',
+    async (width) => {
+        await render(width, true);
+        expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Format', 'Insert', 'Tools']);
+    },
+);
 
 test.each([
     [1920, FULL_ROW],
@@ -384,9 +389,81 @@ test.each([
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
-test('a viewer gets neither the Format and Insert menus nor the icon row', async () => {
+test('a viewer gets File, Edit and Tools, but neither the Format and Insert menus nor the icon row', async () => {
     await render(1920, false);
+    expect(menus().slice(0, 3)).toEqual(['File', 'Edit', 'Tools']);
     expect(menus()).not.toContain('Format');
     expect(menus()).not.toContain('Insert');
     expect(iconRow()).toEqual([]);
+});
+
+// Each row of the word count dialog as its label and its count.
+const wordCountRows = () =>
+    [...document.querySelectorAll('[role="dialog"] dl > div')].map((row) => [
+        row.querySelector('dt')?.textContent,
+        row.querySelector('dd')?.textContent,
+    ]);
+
+async function openWordCount() {
+    await openMenu('Tools');
+    expect(openMenuEntries()).toEqual([`Word count${formatForDisplay('Mod+Shift+C')}`]);
+    const item = document.querySelector<HTMLElement>('[role="menuitem"]');
+    await act(async () => item?.click());
+}
+
+const FOUR_WORDS = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello brave new world' }] }],
+};
+
+test.each([true, false])('Tools › Word count counts the whole doc for a caret (writer %p)', async (canWrite) => {
+    editor.commands.setContent(FOUR_WORDS);
+    editor.commands.setTextSelection(1);
+    await render(1920, canWrite);
+    await openWordCount();
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Word count');
+    expect(wordCountRows()).toEqual([
+        ['Words', '4'],
+        ['Characters', '21'],
+        ['Characters excluding spaces', '18'],
+    ]);
+
+    const ok = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
+        (button) => button.textContent === 'OK',
+    );
+    await act(async () => ok?.click());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test('Tools › Word count counts a selection out of the whole doc, as Google does', async () => {
+    editor.commands.setContent(FOUR_WORDS);
+    // "brave new"
+    editor.commands.setTextSelection({ from: 7, to: 16 });
+    await render(1920, true);
+    await openWordCount();
+    expect(wordCountRows()).toEqual([
+        ['Words', '2 of 4'],
+        ['Characters', '9 of 21'],
+        ['Characters excluding spaces', '8 of 18'],
+    ]);
+});
+
+test('Mod+Shift+C opens the word count, for a viewer too', async () => {
+    editor.commands.setContent(FOUR_WORDS);
+    await render(1920, false);
+    const isMac = /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
+    await act(async () => {
+        document.body.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                bubbles: true,
+                key: 'C',
+                code: 'KeyC',
+                shiftKey: true,
+                metaKey: isMac,
+                ctrlKey: !isMac,
+            }),
+        );
+    });
+    expect(wordCountRows()[0]).toEqual(['Words', '4']);
 });

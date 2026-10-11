@@ -1,0 +1,38 @@
+import type { Node } from '@tiptap/pm/model';
+import type { EditorState } from '@tiptap/pm/state';
+import { readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+
+export type TextCounts = { words: number; characters: number; charactersExcludingSpaces: number };
+
+const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+// A leaf ends the word before it; a figure adds its caption, never its alt text or media name.
+const leafText = (node: Node) =>
+    `\n${node.type.name === 'figure' ? (readFigureAttrs(node.attrs).caption ?? '') : ''}\n`;
+
+function countGraphemes(text: string): number {
+    let count = 0;
+    for (const _ of graphemes.segment(text)) count++;
+    return count;
+}
+
+// Words split on whitespace, as Google Docs splits them, and a token without a letter or digit (a dash) is none. A
+// character is a grapheme, what a reader sees as one, spaces included and line breaks not.
+function countText(text: string): TextCounts {
+    return {
+        words: text.split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length,
+        characters: countGraphemes(text.replaceAll('\n', '')),
+        charactersExcludingSpaces: countGraphemes(text.replace(/\s/g, '')),
+    };
+}
+
+// The whole doc, and the selection when it holds any range (a table's cells are several).
+export function countWords({ doc, selection }: EditorState): { document: TextCounts; selection: TextCounts | null } {
+    const textOf = (from: number, to: number) => doc.textBetween(from, to, '\n', leafText);
+    return {
+        document: countText(textOf(0, doc.content.size)),
+        selection: selection.empty
+            ? null
+            : countText(selection.ranges.map(({ $from, $to }) => textOf($from.pos, $to.pos)).join('\n')),
+    };
+}

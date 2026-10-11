@@ -137,6 +137,12 @@ Mod-Shift-A toggles all caps, as in Word. Small caps get no key: Word's Mod-Shif
 
 A browser fakes small caps in a font that has none, so the editor, quick look and the HTML download show them in every font. WeasyPrint fakes nothing: it draws `font-variant-caps` only from a font's own small-caps glyphs (the OpenType `smcp` feature), which of the bundled fonts only Source Serif 4's upright face has, marked `smallCaps` in the fonts table (`FONT_FILES`, `apps/api/src/lib/export/fonts.ts`). So the PDF's HTML fakes them itself: in Inter, JetBrains Mono, Excalifont and italic Source Serif 4, a small-caps run's lowercase letters are written as capitals in a span at 0.7em, the size Chromium and WebKit fake them at. Its capitals and everything else stay as typed. Upright Source Serif 4 keeps its real small caps. A run counts as italic under the italic mark, or in a blockquote while eigen-prose.css sets a quote in italic (`QUOTE_LOOK`, `apps/api/src/lib/document/looks.ts`). `renderDocHtml` does this behind its `synthesizeSmallCaps` option, which `renderEigendocExport` sets for the `pdf-html` format only, so the HTML download keeps the letters as typed. Word fakes small caps itself, so the docx shows them everywhere.
 
+## Word count reads the editor's text, and its key belongs to the page
+
+Tools › Word count counts the doc, and the selection out of it when there is one, as Google Docs does: words, characters, and characters excluding spaces (`countWords`, `apps/docs/src/components/docs/word-count.ts`). It reads ProseMirror's own text, so table cells, list items and figure captions count, and alt text, comment threads and media names don't. A word is a whitespace-separated token holding a letter or a digit. A character is a grapheme, and a line break is none. The dialog counts once as it opens, so a collaborator's typing never recounts the doc behind it. It shows no page count, because the editor draws one long page and the browser has no page to count ([ROADMAP.md](ROADMAP.md)).
+
+A viewer counts too, so Mod-Shift-C is a document-level hotkey (`useHotkey` in the toolbar), not an editor keymap: ProseMirror runs no keydown handler while the editor is not editable.
+
 ## See also
 
 - [COLLAB.md](COLLAB.md): the collab document, the socket and the `loaded` gate the editor waits on
