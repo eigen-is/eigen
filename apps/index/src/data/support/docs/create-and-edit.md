@@ -67,6 +67,12 @@ Open the **Edit** menu in the toolbar and choose **Undo** or **Redo**, or use th
 - **Undo**: Cmd+Z (Mac) or Ctrl+Z (Windows)
 - **Redo**: Cmd+Y (Mac) or Ctrl+Y (Windows)
 
+## Cut, copy, and select
+
+The **Edit** menu also has **Cut**, **Copy**, **Select all**, and **Delete**. Select some text first for **Cut**, **Copy**, and **Delete**. To paste, press Cmd+V (Mac) or Ctrl+V (Windows).
+
+If you can only view the document, you can still use **Copy** and **Select all**.
+
 ## Next steps
 
 - [Format text](/support/docs/format-text): apply headings, bold, lists, colors, and more.
