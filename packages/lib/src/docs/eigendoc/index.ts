@@ -1,4 +1,5 @@
 export { getDocExtensions } from './extensions';
+export { ITALIC_HEADING_LEVELS } from './heading';
 export type { Caps } from './nodes/caps';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export type { FigureAlignment, FigureAttrs, FigureLayout } from './nodes/figure';

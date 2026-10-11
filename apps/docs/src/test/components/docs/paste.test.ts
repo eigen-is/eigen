@@ -61,6 +61,26 @@ describe('paste keeps caps', () => {
     });
 });
 
+// Google Docs spells its italic Heading 6 on every run, and a run in it set upright as font-style normal. Heading 6
+// draws an italic mark upright, so the upright run is the mark and the italic one plain.
+test('an upright run in a pasted Google Docs Heading 6 is italic, its italic runs are not', () => {
+    const span = (text: string, fontStyle: string) =>
+        `<span style="font-size:11pt;font-family:Arial,sans-serif;color:#666666;font-weight:400;font-style:${fontStyle};">${text}</span>`;
+    const html =
+        `<b style="font-weight:normal;" id="docs-internal-guid-1"><h6 dir="ltr">${span('Fine ', 'italic')}${span('print', 'normal')}</h6>` +
+        `<p dir="ltr">${span('Said ', 'italic')}${span('plainly', 'normal')}</p></b>`;
+    const runs: [string, string[]][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.isText) runs.push([node.text ?? '', node.marks.map((mark) => mark.type.name)]);
+    });
+    expect(runs.map(([text, marks]) => [text, marks.includes('italic')])).toEqual([
+        ['Fine ', false],
+        ['print', true],
+        ['Said ', true],
+        ['plainly', false],
+    ]);
+});
+
 // A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
 describe('a docs copy pastes back as it was copied', () => {
     const figure = {

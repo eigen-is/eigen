@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import { ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
@@ -9,6 +10,7 @@ import {
     CODE_BLOCK_LOOK,
     CODE_LOOK,
     HEADER_CELL_LOOK,
+    HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
     QUOTE_LOOK,
@@ -116,4 +118,10 @@ describe('the writer draws its body in the document font', () => {
     test('the prose body is the font a doc draws without a mark', () => {
         expect(BODY.font).toBe(DOCUMENT_FONT);
     });
+});
+
+// The docs app reads which headings draw italic from lib, as a paste and a copy turn an italic mark upright in them.
+test("lib's italic heading levels are those eigen-prose.css sets in italic", () => {
+    const italic = HEADING_LOOKS.flatMap((look, index) => (look.italic ? [index + 1] : []));
+    expect(new Set(italic)).toEqual(new Set(ITALIC_HEADING_LEVELS));
 });
