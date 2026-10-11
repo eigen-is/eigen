@@ -57,7 +57,6 @@ export const TableWidthClamp = Extension.create({
 
         return [
             new Plugin({
-                // A column dragged past the text column ends here too: the drag writes its width, and this scales it.
                 appendTransaction(transactions, _oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;
 
