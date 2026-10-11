@@ -684,6 +684,19 @@ describe('docx writer — marks', () => {
         ).toEqual([['b'], ['bCs'], ['i'], ['iCs'], ['color', '2563EB'], ['vertAlign', 'superscript']]);
     });
 
+    // Heading 6 is italic, so its italic mark is upright, as the editor draws it.
+    test('an italic mark in Heading 6 is w:i off, in Heading 5 w:i', async () => {
+        const italic = async (level: number) => {
+            const body = await bodyOf(
+                doc({ type: 'heading', attrs: { level }, content: [text('x', { type: 'italic' })] }),
+            );
+            const rPr = child(only(descendants(body, W, 'r')), 'rPr');
+            return ['i', 'iCs'].map((name) => w(child(rPr, name), 'val') ?? (child(rPr, name) ? 'on' : undefined));
+        };
+        expect(await italic(6)).toEqual(['0', '0']);
+        expect(await italic(5)).toEqual(['on', 'on']);
+    });
+
     test('inline code in a heading is 0.9 of the heading size', async () => {
         const body = await bodyOf(
             doc({ type: 'heading', attrs: { level: 1 }, content: [text('code', { type: 'code' })] }),

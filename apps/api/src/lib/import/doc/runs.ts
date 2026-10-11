@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { LINK_LOOK } from '../../document/looks';
+import { HEADING_LOOKS, LINK_LOOK } from '../../document/looks';
 import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -317,6 +317,8 @@ function marksOf(
     const { styles } = reader;
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
+    // A heading that draws italic draws an italic mark upright, so there the mark is a run set upright.
+    const upright = role.kind === 'heading' && !!HEADING_LOOKS[role.level - 1]?.italic;
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
     // A link to a bookmark is no link, its look the run's, but in a table of contents: Word draws its link look there
@@ -383,7 +385,8 @@ function marksOf(
         const small = isSmall(complex);
         const shape: Marks = [];
         if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
-        if (complex ? props.italicCs : props.italic) shape.push({ type: 'italic' });
+        const italic = complex ? props.italicCs : props.italic;
+        if (upright ? italic === false : italic) shape.push({ type: 'italic' });
         if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.

@@ -159,7 +159,8 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
 export function readDominantTextAlign(html: string): TextAlign | null {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     for (const el of Array.from(doc.body.children)) {
-        const raw = ((el as HTMLElement).style.textAlign || el.getAttribute('align') || '').trim().toLowerCase();
+        if (!(el instanceof HTMLElement)) continue;
+        const raw = (el.style.textAlign || el.getAttribute('align') || '').trim().toLowerCase();
         const match = TEXT_ALIGNS.find((a) => a === raw);
         if (match) return match;
     }

@@ -26,7 +26,7 @@ export const ROUNDNESS = ['sharp', 'round'] as const;
 // rich text; lines and arrows keep `roundness` (sharp vs curved polyline), which is a different question.
 export const CORNERS = ['straight', 'curved', 'round'] as const;
 export const OBJECT_FITS = ['fill', 'contain', 'cover'] as const;
-// Docs' TextAlign values too, in the order its toolbar lists them; html-dom reads a pasted block's against it.
+// Docs' TextAlign values too, in the order its toolbar lists them.
 export const TEXT_ALIGNS = ['left', 'center', 'right', 'justify'] as const;
 export const VERTICAL_ALIGNS = ['top', 'center', 'bottom'] as const;
 export const FONT_WEIGHTS = ['normal', 'bold'] as const;
