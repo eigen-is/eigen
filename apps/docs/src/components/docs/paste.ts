@@ -13,15 +13,24 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
         if (!cardIds.has(el.getAttribute('data-comment-id') ?? '')) el.removeAttribute('data-comment-id');
     }
 
-    for (const heading of doc.querySelectorAll<HTMLElement>(ITALIC_HEADINGS)) {
-        for (const el of [heading, ...heading.querySelectorAll<HTMLElement>('[style]')]) {
-            const upright = el.style.fontStyle === 'normal';
-            el.style.fontStyle = '';
-            if (upright) {
-                const em = doc.createElement('em');
-                em.append(...el.childNodes);
-                el.append(em);
-            }
+    // A text's look is its nearest font-style; document order visits a parent before its children.
+    for (const heading of ITALIC_HEADINGS ? doc.querySelectorAll<HTMLElement>(ITALIC_HEADINGS) : []) {
+        const upright = new Map<Node | null, boolean>();
+        const runs: Text[] = [];
+        const walker = doc.createTreeWalker(heading, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+        for (let node: Node | null = heading; node; node = walker.nextNode()) {
+            const inherited = upright.get(node.parentNode) ?? false;
+            if (node instanceof Text) {
+                if (inherited) runs.push(node);
+            } else if (node instanceof HTMLElement && node.style.fontStyle) {
+                upright.set(node, node.style.fontStyle === 'normal');
+                node.style.fontStyle = '';
+            } else upright.set(node, inherited);
+        }
+        for (const text of runs) {
+            const em = doc.createElement('em');
+            text.replaceWith(em);
+            em.append(text);
         }
     }
 

@@ -81,6 +81,22 @@ test('an upright run in a pasted Google Docs Heading 6 is italic, its italic run
     ]);
 });
 
+// A run's look is its nearest font-style, so an italic run inside an upright one stays plain.
+test.each([
+    ['an upright heading', '<h6 style="font-style:normal">a<span style="font-style:italic">b</span>c</h6>'],
+    ['an upright run', '<h6><span style="font-style:normal">a<span style="font-style:italic">b</span>c</span></h6>'],
+])('an italic run inside %s of a pasted Heading 6 stays plain', (_name, html) => {
+    const runs: [string, boolean][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.isText) runs.push([node.text ?? '', node.marks.some((mark) => mark.type.name === 'italic')]);
+    });
+    expect(runs).toEqual([
+        ['a', true],
+        ['b', false],
+        ['c', true],
+    ]);
+});
+
 // A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
 describe('a docs copy pastes back as it was copied', () => {
     const figure = {

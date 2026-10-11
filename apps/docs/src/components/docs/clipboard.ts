@@ -104,9 +104,11 @@ export function writeDocsClipboard(
     if (selection.empty || !event.clipboardData || (cut && !view.editable)) return false;
     const items = copiedClipboardItems(view, selection.from, selection.to, resolveMediaPath);
     const { dom, text } = view.serializeForClipboard(selection.content());
-    const upright = [...dom.querySelectorAll(ITALIC_HEADINGS)].flatMap((heading) => [
-        ...heading.querySelectorAll<HTMLElement>('em'),
-    ]);
+    const upright = ITALIC_HEADINGS
+        ? [...dom.querySelectorAll(ITALIC_HEADINGS)].flatMap((heading) => [
+              ...heading.querySelectorAll<HTMLElement>('em'),
+          ])
+        : [];
     if (items.length === 0 && upright.length === 0) return false;
     for (const em of upright) em.style.fontStyle = 'normal';
     event.preventDefault();
