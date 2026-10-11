@@ -2,12 +2,14 @@ import type { Editor } from '@tiptap/react';
 import { Button } from '@workspace/ui/components/button';
 import { PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
 import { Columns2, GripHorizontal, GripVertical, Merge, RowsIcon, Split, ToggleLeft, Trash2 } from 'lucide-react';
+import { useToolbarState } from './hooks/use-toolbar-state';
 
 type TablePropertiesPanelProps = {
     editor: Editor;
 };
 
 export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
+    const { canMergeCells, canSplitCell } = useToolbarState(editor);
     return (
         <PropertiesPanel title="Table">
             <PropertySection title="Columns">
@@ -74,6 +76,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         variant="outline"
                         size="sm"
                         className="text-xs"
+                        disabled={!canMergeCells}
                         onClick={() => editor.chain().focus().mergeCells().run()}
                     >
                         <Merge className="h-3.5 w-3.5 mr-1" /> Merge
@@ -82,9 +85,10 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         variant="outline"
                         size="sm"
                         className="text-xs"
+                        disabled={!canSplitCell}
                         onClick={() => editor.chain().focus().splitCell().run()}
                     >
-                        <Split className="h-3.5 w-3.5 mr-1" /> Split
+                        <Split className="h-3.5 w-3.5 mr-1" /> Unmerge
                     </Button>
                 </div>
                 <Button

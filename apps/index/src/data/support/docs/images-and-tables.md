@@ -76,9 +76,9 @@ Under **Columns**, click **Before** or **After** to add a column on either side 
 
 Under **Rows**, click **Before** or **After** to add a row above or below the current one. Click **Delete row** to remove the current row.
 
-**Merge and split cells**
+**Merge and unmerge cells**
 
-Select two or more cells, then click **Merge** under **Cells** to join them into one. Click **Split** to divide a merged cell back into its original cells.
+Select two or more cells, then click **Merge** under **Cells** to join them into one. Click **Unmerge** to divide a merged cell back into its original cells.
 
 **Toggle the header row**
 
