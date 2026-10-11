@@ -46,6 +46,7 @@ import {
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
+import { HEADING_LOOKS } from '../lib/document/looks';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
@@ -437,12 +438,15 @@ type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; field
 
 // styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
 // capitals. weightRuns: what bold and size read, as a heading draws its own and leaves its style's other formatting.
+// drawn: the color and italic the paragraph's node draws, a heading level's, which are no mark and from which a run set
+// apart is one: an upright run in a heading that draws italic is the italic mark it came from.
 type Inline = {
     scope: Scope;
     paragraph: Paragraph;
     runs: XmlElement[];
     styleRuns: XmlElement[];
     weightRuns: XmlElement[];
+    drawn: { color?: string; italic?: true };
     marks: boolean;
     link?: Link;
 };
@@ -802,7 +806,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const sizeCs = val(first(sized, 'szCs'));
         const shape = (bold: string, italic: string, small: boolean): [Feature, boolean][] => [
             ['bold', toggle(bold, context.weightRuns)],
-            ['italic', toggle(italic)],
+            ['italic', toggle(italic) !== !!context.drawn.italic],
             ['small', small],
         ];
         const common: [Feature, boolean][] = [
@@ -810,7 +814,10 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             ['strike', toggle('strike') || toggle('dstrike')],
             ['subscript', vertAlign === 'subscript'],
             ['superscript', vertAlign === 'superscript'],
-            ['color', own.some((source) => child(source, 'color')) && colorOf(own) !== base.color],
+            [
+                'color',
+                own.some((source) => child(source, 'color')) && colorOf(own) !== (context.drawn.color ?? base.color),
+            ],
             ['highlight', (!!highlight && highlight !== 'none') || (!!fill && fill !== 'AUTO' && fill !== 'FFFFFF')],
             ['caps', toggle('caps', context.styleRuns)],
             ['smallCaps', toggle('smallCaps', context.styleRuns) && !toggle('caps', context.styleRuns)],
@@ -1078,6 +1085,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
+            // Word's Heading 7 to 9 are an Eigen Heading 6.
+            drawn: look.heading ? HEADING_LOOKS[Math.min(look.heading, HEADING_LOOKS.length) - 1] : {},
             marks: !look.code && !caption,
         });
         // A deleted paragraph mark joins the paragraph to the next.
