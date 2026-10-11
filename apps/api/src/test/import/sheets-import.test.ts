@@ -1844,8 +1844,11 @@ describe('Sheets xlsx conversion fidelity', () => {
 });
 
 describe('xlsxToSheets resource guards', () => {
+    // The delta holds uncollected garbage: no tree measures up to ~140 MB under CI load, a dropped tree ~450 MB.
+    const treeless = 256 * 1024 * 1024;
+
     // Bun's tree costs ~120x the markup it holds: 8 MB of `<a/>` builds a ~1 GB tree, two at once ~2 GB.
-    test('workbook, rels, theme and hyperlinks block of 8 or 16 MB of tags cost no tree', async () => {
+    test('workbook, rels and theme of 8 or 16 MB of tags cost no tree', async () => {
         for (const bytes of [8 * 1024 * 1024 - 4096, 8_000_000, 16_000_000]) {
             const fill = '<a/>'.repeat(bytes / 4);
             const workbook = new ExcelJS.Workbook();
@@ -1854,11 +1857,6 @@ describe('xlsxToSheets resource guards', () => {
             let buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
                 { ref: 'A1', location: 'T!A1' },
             ]);
-            // Past MAX_ELEMENTS a sheet's tags are refused before the load (sheets/limits.test.ts).
-            const sheetFill = fill.slice(0, 8_000_000);
-            buffer = await replacePart(buffer, 'xl/worksheets/sheet1.xml', (xml) =>
-                xml.replace('</hyperlinks>', `${sheetFill}</hyperlinks>`),
-            );
             buffer = await replacePart(buffer, 'xl/workbook.xml', (xml) =>
                 xml.replace('</workbook>', `<extLst><ext uri="x">${fill}</ext></extLst></workbook>`),
             );
@@ -1872,7 +1870,7 @@ describe('xlsxToSheets resource guards', () => {
             const grown = process.memoryUsage().heapUsed - before;
 
             expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
-            expect(grown).toBeLessThan(128 * 1024 * 1024);
+            expect(grown).toBeLessThan(treeless);
 
             // exceljs refuses a rels part holding anything but relationships, so this one is read on its own.
             const zip = await JSZip.loadAsync(buffer);
@@ -1881,8 +1879,34 @@ describe('xlsxToSheets resource guards', () => {
             Bun.gc(true);
             const relsBefore = process.memoryUsage().heapUsed;
             expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
-            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(128 * 1024 * 1024);
+            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(treeless);
         }
+    });
+
+    test('a hyperlinks block of 15 MB of tags costs no tree and loses only its own links', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('S').getCell('A1').value = 'link';
+        workbook.addWorksheet('T').getCell('A1').value = 'back';
+        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
+            { ref: 'A1', location: 'T!A1' },
+        ]);
+        // Just under MAX_ELEMENTS: past it a sheet's tags are refused before the load (sheets/limits.test.ts).
+        const filled = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+            xml.replace('</hyperlinks>', `${'<a/>'.repeat(3_900_000)}</hyperlinks>`),
+        );
+        const buffer = await replacePart(filled, 'xl/worksheets/sheet2.xml', (xml) =>
+            xml.replace('<pageMargins', '<hyperlinks><hyperlink ref="A1" location="S!A1"/></hyperlinks><pageMargins'),
+        );
+
+        Bun.gc(true);
+        const before = process.memoryUsage().heapUsed;
+        const sheets = await xlsxToSheets(Buffer.from(buffer));
+        const grown = process.memoryUsage().heapUsed - before;
+
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
+        expect(sheets[0].hyperlink).toBeUndefined();
+        expect(sheets[1].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'S!A1' } });
+        expect(grown).toBeLessThan(treeless);
     });
 
     // Past the length cap a part isn't parsed: a tree would cost 1x to 4x its text. Without the cap the link and the
