@@ -358,6 +358,7 @@ type Style = {
 // What a paragraph style means in eigendoc. Its look is the node's, so the props it absorbs are no marks.
 export type Role =
     | { kind: 'heading'; level: number }
+    | { kind: 'title' }
     | { kind: 'subtitle' }
     | { kind: 'quote' }
     | { kind: 'code'; language: string | null }
@@ -371,9 +372,9 @@ const lowercase = (names: string[]) => names.map((name) => name.toLowerCase());
 
 const ROLE_BY_NAME = new Map<string, Role>([
     // LibreOffice's parent of its numbered headings.
-    ['title', { kind: 'heading', level: 1 }],
     ['heading', { kind: 'heading', level: 1 }],
-    ['subtitle', { kind: 'subtitle' }],
+    [STYLE_NAMES.Title.toLowerCase(), { kind: 'title' }],
+    [STYLE_NAMES.Subtitle.toLowerCase(), { kind: 'subtitle' }],
     [STYLE_NAMES.Quote.toLowerCase(), { kind: 'quote' }],
     ['intense quote', { kind: 'quote' }],
     ...lowercase(CODE_PARAGRAPH_STYLES).map((name): [string, Role] => [name, { kind: 'code', language: null }]),
@@ -394,11 +395,13 @@ function roleOf({ name, language }: Style): Role | undefined {
 }
 
 // What the node draws itself: a heading its size and weight, so a style's color stays a mark unless it is Heading 5 or
-// 6's own, which paragraphs.ts strips, and its italic unless the heading draws italic, which runs.ts inverts; a
-// subtitle draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
+// 6's own, which paragraphs.ts strips, and its italic unless the heading draws italic, which runs.ts inverts; a title
+// and a subtitle their size, at the body's weight, so a bold Title stays bold and only the subtitle's own grey goes; a
+// caption draws as a paragraph, whose marks a figure drops as plain text and a paragraph keeps.
 export const ABSORBED: Record<Role['kind'], (keyof DocxRunProps)[] | 'all'> = {
     heading: ['bold', 'boldCs', 'size', 'sizeCs'],
-    subtitle: [],
+    title: ['size', 'sizeCs'],
+    subtitle: ['size', 'sizeCs'],
     quote: ['italic', 'italicCs', 'color'],
     code: 'all',
     caption: [],

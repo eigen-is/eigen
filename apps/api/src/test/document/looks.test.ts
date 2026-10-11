@@ -15,6 +15,7 @@ import {
     LINK_LOOK,
     QUOTE_LOOK,
     TASK_DONE_LOOK,
+    TITLE_LOOKS,
 } from '../../lib/document/looks';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
@@ -78,6 +79,12 @@ describe('the writer draws the editor look from the vocabulary', () => {
         expect(w(prop('Quote', 'pPr', 'ind'), 'left')).toBe(String(QUOTE_LOOK.indent));
         expect(prop('Quote', 'rPr', 'i') !== undefined).toBe(QUOTE_LOOK.italic);
         expect(w(prop('Quote', 'rPr', 'color'), 'val')).toBe(QUOTE_LOOK.color);
+    });
+
+    test('a title and a subtitle: no color of their own on the title, the subtitle grey', () => {
+        expect(TITLE_LOOKS).toEqual({ title: {}, subtitle: { color: '666666' } });
+        expect(prop('Title', 'rPr', 'color')).toBeUndefined();
+        expect(w(prop('Subtitle', 'rPr', 'color'), 'val')).toBe(TITLE_LOOKS.subtitle.color);
     });
 
     test('a done task: its strike and color', () => {

@@ -192,7 +192,7 @@ describe('caps', () => {
         ]);
     });
 
-    // A Title in caps is a heading whose runs carry the style's caps: no node draws capitals.
+    // A Title in caps is a title whose runs carry the style's caps: no node draws capitals.
     test("a style's caps are its runs' through basedOn, toggled by a character style, and the run's own setting wins", async () => {
         const styles = `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:rPr><w:caps/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="Names"><w:name w:val="Names"/><w:rPr><w:smallCaps/></w:rPr></w:style>
@@ -202,7 +202,7 @@ describe('caps', () => {
             `${paragraph(`${run('Title')}${run(' plain', '<w:caps w:val="0"/>')}`, '<w:pStyle w:val="Title"/>')}${paragraph(run('Ada'), '<w:pStyle w:val="MoreNames"/>')}${paragraph(`${run('both', '<w:rStyle w:val="Shout"/>')}${run('direct', '<w:rStyle w:val="Shout"/><w:caps/>')}`, '<w:pStyle w:val="Title"/>')}`,
             { styles },
         );
-        expect(nodesOfType(json, 'heading')).toHaveLength(2);
+        expect(nodesOfType(json, 'title')).toHaveLength(2);
         expect(capsOf(json)).toEqual([
             ['Title', 'all', null],
             ['Ada', 'small', null],

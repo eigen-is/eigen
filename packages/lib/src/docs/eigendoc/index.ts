@@ -1,4 +1,4 @@
-export { getDocExtensions } from './extensions';
+export { getDocExtensions, PROSE_TEXTBLOCKS } from './extensions';
 export { ITALIC_HEADING_LEVELS } from './heading';
 export type { Caps } from './nodes/caps';
 export { CommentMarkSchema } from './nodes/comment-mark';

@@ -2,7 +2,7 @@
 
 > **TLDR:** Docs is Eigen's word processor: rich text on an A4 page that several people edit at once. A doc is a `.eigendoc` collab document whose truth is ProseMirror content held in a Yjs fragment, and one schema defines that content for the editor and for every server renderer. The schema is `packages/lib/src/docs/eigendoc/`, and the editor is `apps/docs/src/components/docs/`.
 
-The editor is TipTap, a React wrapper around ProseMirror, the editing toolkit that models a document as a tree of nodes (paragraphs, headings, lists, tables, task lists, code blocks, images, page breaks) carrying marks (bold, color, font, comment). An image is a `figure` node. The app around it is a Drive-style file list plus one editor route, `/doc/$ownerId/$mountId/$pathId`.
+The editor is TipTap, a React wrapper around ProseMirror, the editing toolkit that models a document as a tree of nodes (paragraphs, a title and subtitle, headings, lists, tables, task lists, code blocks, images, page breaks) carrying marks (bold, color, font, comment). An image is a `figure` node. The app around it is a Drive-style file list plus one editor route, `/doc/$ownerId/$mountId/$pathId`.
 
 On disk a doc is a container, a Drive folder named like a file (`Notes.eigendoc`), like every collab document ([COLLAB.md](COLLAB.md)). Its `data.db` holds the Yjs state, and the truth inside it is the `XmlFragment` named `default`, which y-prosemirror (the Yjs binding for ProseMirror) keeps in step with the editor. The same container holds the doc's images in `media/`, its comment threads in `chat/` and `comments.db` ([COMMENTS.md](COMMENTS.md)), and its version history.
 
@@ -32,6 +32,12 @@ The Yjs binding (`createNodeFromYElement` in `@tiptap/y-tiptap`) deletes any fra
 ## Undo is the Yjs binding's and reverts only this tab's edits
 
 The schema turns TipTap's own undo off (`undoRedo: false`), and y-prosemirror's undo plugin takes its place. It tracks only the changes this tab made, so ⌘Z never takes back a collaborator's typing. The toolbar reads its undo and redo state from that plugin (`yUndoPluginKey`).
+
+## A title and a subtitle are paragraphs marked by their type
+
+Google Docs' and Word's Title and Subtitle are paragraph styles, so the schema's `title` and `subtitle` nodes (`packages/lib/src/docs/eigendoc/nodes/title.ts`) hold what a paragraph holds and render as `<p data-type="title">` and `<p data-type="subtitle">`. A `<p>` is how both write them in HTML, so the export, the search text and a paste into another app treat them as text. The `data-type` marks them rather than a class, because a web page's `p.title` would otherwise paste as a Title. A paste reads one only from the editor's own HTML, and from any other app it lands as the paragraph it was written as. Enter at the end of either starts Normal text, as at the end of a heading, because the schema's default block is the paragraph.
+
+Their look is Google's: 26 pt for the title, 15 pt in the Heading 5 and 6 grey for the subtitle, both at the body's weight, set once in `eigen-prose.css`. The docx writer reads it from there into Word's built-in Title and Subtitle styles ([EXPORT.md](EXPORT.md#a-docs-docx-is-written-from-its-json-with-the-editors-css-values)). `PROSE_TEXTBLOCKS` (`@workspace/lib/docs/eigendoc`) names the textblocks that hold prose, which alignment applies to and which the server treats alike: the paragraph, the title, the subtitle and the heading. Format › Paragraph styles and the style picker list the styles from one table, `PARAGRAPH_STYLES` (`apps/docs/src/components/docs/paragraph-styles.ts`), in Google's order.
 
 ## A figure stores a media name and a width in page pixels
 

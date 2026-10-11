@@ -783,10 +783,11 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved when Heading 5 and 6 took Google Docs' look: eigen-prose.css's h5 and h6 rules and their first-child margin, and nothing else. The docx hash moved with them: Heading5's and Heading6's grey and Heading6's italic in styles.xml, and nothing else.
 // Both doc HTML hashes moved again when an italic mark in Heading 6 drew upright: the h6 em rule, and a blank line where the second dark rule is dropped, and nothing else.
 // Both doc HTML hashes moved again when a numbered list right after another ran on at the items' step: the two ol + ol rules, and nothing else.
+// Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '465a5479bf0cd13bf08fe63fc7824c704aedfa5e345ea1968424177ee34cd939';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '465a5479bf0cd13bf08fe63fc7824c704aedfa5e345ea1968424177ee34cd939';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '159a9d631299c4d8ca2510c0c4a973f80d3f40f6d037afbb8ee372b70a67ec47';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'cbfaf4ed9435389b2266e1864e90834d0fc2084289652afc0548314f6ea827c8';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'cbfaf4ed9435389b2266e1864e90834d0fc2084289652afc0548314f6ea827c8';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '8e95237c637e358447508983b2fb27d3d7a20dd81a6622c976d188e57f7c61e4';

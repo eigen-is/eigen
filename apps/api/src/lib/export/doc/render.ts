@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { type FigureAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { BODY, HEADING_LOOKS, QUOTE_LOOK } from '../../document/looks';
@@ -92,7 +92,7 @@ function renderFigureNode(
 // with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
 function withTrailingBreaks(node: JSONContent): JSONContent {
     const content = node.content?.map(withTrailingBreaks);
-    if (node.type !== 'paragraph' && node.type !== 'heading') return content ? { ...node, content } : node;
+    if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) return content ? { ...node, content } : node;
     const last = content?.at(-1);
     if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };

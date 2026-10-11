@@ -46,7 +46,7 @@ import {
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
-import { HEADING_LOOKS } from '../lib/document/looks';
+import { HEADING_LOOKS, TITLE_LOOKS } from '../lib/document/looks';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
@@ -56,6 +56,8 @@ import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/
 const FEATURES = [
     ['text', 'Visible text (words)'],
     ['paragraphs', 'Paragraphs'],
+    ['title', 'Title'],
+    ['subtitle', 'Subtitle'],
     ['heading1', 'Heading 1'],
     ['heading2', 'Heading 2'],
     ['heading3', 'Heading 3'],
@@ -398,6 +400,7 @@ type Styles = {
 
 type ParagraphLook = {
     heading?: number;
+    title?: 'title' | 'subtitle';
     quote: boolean;
     code: boolean;
     caption: boolean;
@@ -438,8 +441,8 @@ type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; field
 
 // styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
 // capitals. weightRuns: what bold and size read, as a heading draws its own and leaves its style's other formatting.
-// drawn: the color and italic the paragraph's node draws, a heading level's, which are no mark and from which a run set
-// apart is one: an upright run in a heading that draws italic is the italic mark it came from.
+// drawn: the color and italic the paragraph's node draws, a heading level's or a title's, which are no mark and from
+// which a run set apart is one: an upright run in a heading that draws italic is the italic mark it came from.
 type Inline = {
     scope: Scope;
     paragraph: Paragraph;
@@ -680,11 +683,17 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const chain = named.length > 0 ? named : styles.chain(styles.paragraph);
         const names = chain.map(styleName);
         const pPrs = [pPr, ...chain.map((style) => child(style, 'pPr')), styles.pPr].flatMap((p) => p ?? []);
-        // Word's Title is H1 in Eigen. The nearest style that names a level decides,
+        // The nearest style that names a level, or is the Title or the Subtitle, decides,
         // and outline level 9 is body text, as a TOC Heading based on Heading 1 sets it.
         let heading: number | undefined;
+        let title: ParagraphLook['title'];
         for (const [index, style] of chain.entries()) {
-            const named = headingLevel(names[index]) ?? (names[index] === 'title' ? 1 : 0);
+            const name = names[index];
+            if (name === 'title' || name === 'subtitle') {
+                title = name;
+                break;
+            }
+            const named = headingLevel(name) ?? 0;
             const outline = val(child(child(style, 'pPr'), 'outlineLvl'));
             if (!named && outline === undefined) continue;
             heading = named || (Number(outline) < 9 ? Number(outline) + 1 : undefined);
@@ -708,6 +717,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             .find((value) => value !== undefined);
         return {
             heading,
+            title,
             code,
             quote: !code && (names.some((name) => QUOTE_STYLES.has(name)) || (heading === undefined && only('left'))),
             caption: names.includes(STYLE_NAMES.Caption.toLowerCase()),
@@ -1086,7 +1096,11 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
             // Word's Heading 7 to 9 are an Eigen Heading 6.
-            drawn: look.heading ? HEADING_LOOKS[Math.min(look.heading, HEADING_LOOKS.length) - 1] : {},
+            drawn: look.heading
+                ? HEADING_LOOKS[Math.min(look.heading, HEADING_LOOKS.length) - 1]
+                : look.title
+                  ? TITLE_LOOKS[look.title]
+                  : {},
             marks: !look.code && !caption,
         });
         // A deleted paragraph mark joins the paragraph to the next.
@@ -1106,6 +1120,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         chain.last = current;
         if (!scope.float && !caption && (hasText || current.image)) {
             add(tally, 'paragraphs');
+            if (look.title && hasText) add(tally, look.title);
             if (look.heading && hasText) {
                 add(tally, HEADINGS[Math.min(look.heading, 7) - 1]);
                 if (label) add(tally, 'numberedHeadings');
@@ -1313,6 +1328,7 @@ export function auditImported(json: JSONContent): Tally {
         if (!hasText && !figure) return;
         add(tally, 'paragraphs');
         if (!hasText) return;
+        if (node.type === 'title' || node.type === 'subtitle') add(tally, node.type);
         const level = node.attrs?.['level'];
         if (node.type === 'heading' && typeof level === 'number') {
             add(tally, HEADINGS[Math.min(Math.max(level, 1), 7) - 1]);
@@ -1328,6 +1344,8 @@ export function auditImported(json: JSONContent): Tally {
         const children = node.content ?? [];
         switch (node.type) {
             case 'paragraph':
+            case 'title':
+            case 'subtitle':
             case 'heading':
                 textblock(node, place.align);
                 return;

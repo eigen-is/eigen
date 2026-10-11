@@ -70,11 +70,14 @@ describe('docx fixtures', () => {
         expect(texts((await imported('mammoth-text-box.docx')).json)).toEqual(['Datum plane']);
     });
 
-    test('GOV.UK form: its title heading and its required-documents list', async () => {
+    // Its Title is bold and purple, which Eigen's title draws neither of.
+    test('GOV.UK form: its title, bold and purple, and its required-documents list', async () => {
         const { json } = await imported('govuk-Application_for_Approval_as_a_Community_Sponsor.docx');
-        expect(nodesOfType(json, 'heading')[0]?.content?.[0]?.text).toBe(
+        const [title] = nodesOfType(json, 'title');
+        expect([title?.content?.[0]?.text, title?.content?.[0]?.marks?.map((mark) => mark.type)]).toEqual([
             'Application for Approval as a Community Sponsor',
-        );
+            ['textStyle', 'bold'],
+        ]);
         expect(nodesOfType(json, 'bulletList')[0]?.content).toHaveLength(9);
     });
 

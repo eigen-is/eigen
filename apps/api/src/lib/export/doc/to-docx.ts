@@ -54,6 +54,8 @@ import {
     QUOTE_LOOK,
     SMALL_LOOK,
     TASK_DONE_LOOK,
+    TITLE_LOOKS,
+    TITLE_SELECTORS,
     twips,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
@@ -458,6 +460,12 @@ function paragraphXml({ props, runs }: Paragraph): string {
 
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// Word's built-in Title and Subtitle, in its gallery's order.
+const TITLE_STYLES = [
+    { type: 'title', id: 'Title', uiPriority: 10 },
+    { type: 'subtitle', id: 'Subtitle', uiPriority: 11 },
+] as const;
+
 const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>([
     [
         'paragraph',
@@ -467,7 +475,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'heading',
         (node, context) => {
             const level = clampInt(node.attrs?.['level'], 1, 6, 1);
-            const { sizePt } = headingMetrics(level);
+            const { sizePt } = textMetrics(`.eigen-prose h${level}`);
             const firstMargin = context.first
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
                 : undefined;
@@ -483,6 +491,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt, upright }, true);
         },
     ],
+    ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
     [
         'horizontalRule',
@@ -551,6 +560,14 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         },
     ],
 ]);
+
+function titleOf(type: keyof typeof TITLE_SELECTORS, style: StyleId) {
+    return (node: JSONContent, context: Context): Block[] => {
+        const props = textProps({ style, jc: justification(node) }, context);
+        const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
+        return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
+    };
+}
 
 // Never fails on structure: inline content where a block belongs is wrapped in a paragraph, a nested block hoisted out.
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
@@ -1351,9 +1368,8 @@ function proseTwips(selector: string, property: string): number {
     return twips(cssPt(proseValue(selector, property), BODY.sizePt));
 }
 
-// A heading without its own size or line height inherits the prose root's, as h5 and h6 do.
-function headingMetrics(level: number) {
-    const selector = `.eigen-prose h${level}`;
+// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do.
+function textMetrics(selector: string) {
     const sizePt = cssPt(
         proseValueIfSet(selector, 'font-size') ?? proseValue('.eigen-prose', 'font-size'),
         BODY.sizePt,
@@ -1447,9 +1463,27 @@ function styleDefinitions(): StyleDef[] {
     const codeMargin = proseValue('.eigen-prose pre', 'margin');
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
+    const titles = TITLE_STYLES.map(({ type, id, uiPriority }): StyleDef => {
+        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type]);
+        return {
+            type: 'paragraph',
+            id,
+            name: STYLE_NAMES[id],
+            basedOn: 'Normal',
+            next: 'Normal',
+            uiPriority,
+            qFormat: true,
+            pPr: {
+                keepNext: true,
+                keepLines: true,
+                spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
+            },
+            rPr: { spacing: tracking, size: halfPoints(sizePt), ...TITLE_LOOKS[type] },
+        };
+    });
     const headings = HEADING_LOOKS.map((look, index): StyleDef => {
         const level = index + 1;
-        const { sizePt, before, after, line, tracking } = headingMetrics(level);
+        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`);
         return {
             type: 'paragraph',
             id: `Heading${level}`,
@@ -1509,6 +1543,7 @@ function styleDefinitions(): StyleDef[] {
             semiHidden: true,
             unhideWhenUsed: true,
         },
+        ...titles,
         ...headings,
         {
             type: 'paragraph',

@@ -550,6 +550,40 @@ describe('docx writer — paragraphs and headings', () => {
         }
     });
 
+    test("a title and a subtitle take Word's Title and Subtitle and keep their alignment", async () => {
+        const body = await bodyOf(
+            doc(
+                { type: 'title', content: [text('Plan')] },
+                { type: 'subtitle', attrs: { textAlign: 'center' }, content: [text('For 2027')] },
+            ),
+        );
+        const [title, subtitle] = xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')));
+        expect([title, subtitle]).toEqual([
+            '<w:pPr><w:pStyle w:val="Title"/></w:pPr>',
+            '<w:pPr><w:pStyle w:val="Subtitle"/><w:jc w:val="center"/></w:pPr>',
+        ]);
+    });
+
+    // Word's own built-in styles, so Word, LibreOffice and Google Docs list them as their Title and Subtitle.
+    test("the Title and Subtitle styles are Word's, kept with the next paragraph and at no outline level", async () => {
+        const all = await styles();
+        for (const id of ['Title', 'Subtitle']) {
+            const title = style(all, id);
+            expect([
+                w(child(title, 'name'), 'val'),
+                w(child(title, 'basedOn'), 'val'),
+                w(child(title, 'next'), 'val'),
+                !!child(title, 'qFormat'),
+            ]).toEqual([id, 'Normal', 'Normal', true]);
+            const pPr = child(title, 'pPr');
+            expect([!!child(pPr, 'keepNext'), !!child(pPr, 'keepLines'), child(pPr, 'outlineLvl')]).toEqual([
+                true,
+                true,
+                undefined,
+            ]);
+        }
+    });
+
     test('a heading that opens the document drops its margin above, as h1:first-child to h6:first-child do', async () => {
         const heading = (level: number) => ({ type: 'heading', attrs: { level }, content: [text('x')] });
         const body = await bodyOf(doc(heading(1), heading(1)));
@@ -2258,6 +2292,21 @@ describe('docx writer — styles from the CSS', () => {
         expect(look('Heading5')).toEqual(['666666', false, false, '22']);
         expect(look('Heading6')).toEqual(['666666', true, false, '22']);
         expect(look('Heading4')).toEqual([undefined, false, false, expect.any(String)]);
+    });
+
+    // Google Docs' Title is 26 pt and its Subtitle 15 pt in grey, neither bold, with no margin above.
+    test("the title and subtitle take Google Docs' look from the CSS", async () => {
+        const all = await styles();
+        const look = (id: string) => {
+            const title = style(all, id);
+            const rPr = child(title, 'rPr');
+            return [...sizeOf(title), ...spacingOf(title), w(child(rPr, 'color'), 'val'), !!child(rPr, 'b')];
+        };
+        expect(look('Title')).toEqual(['52', '52', '0', '60', '238', 'auto', undefined, false]);
+        expect(look('Subtitle')).toEqual(['30', '30', '0', '320', '258', 'auto', '666666', false]);
+        // Inline code is 0.9em of the title's 26 pt.
+        const body = await bodyOf(doc({ type: 'title', content: [text('x', { type: 'code' })] }));
+        expect(w(only(descendants(body, W, 'sz')), 'val')).toBe('47');
     });
 
     test('every heading style is derived from the CSS values', async () => {

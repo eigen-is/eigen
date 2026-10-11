@@ -42,6 +42,17 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
+    test('eigendoc: a title and a subtitle index as text', async () => {
+        const doc = new Y.Doc();
+        const block = (type: string, text: string) => ({ type, content: [{ type: 'text', text }] });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [block('title', 'Roadmap'), block('subtitle', 'For 2027'), block('paragraph', 'Body')],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Roadmap For 2027 Body');
+        doc.destroy();
+    });
+
     // Caps draw capitals over the letters; search finds what was typed.
     test('eigendoc: text in caps indexes as typed', async () => {
         const doc = new Y.Doc();

@@ -2,7 +2,14 @@ import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, HEADING_LOOKS, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import {
+    CAPTION_LOOK,
+    CODE_BLOCK_LOOK,
+    HEADING_LOOKS,
+    QUOTE_LOOK,
+    TASK_DONE_LOOK,
+    TITLE_LOOKS,
+} from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -260,12 +267,17 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // The quote's, a heading's and the done task's look, which Google Docs writes as direct formatting, is the node's;
-    // in a heading that draws italic, an italic mark is a run set upright (runs.ts), which a quote around it keeps.
-    const headingLook = role.kind === 'heading' ? HEADING_LOOKS[role.level - 1] : undefined;
-    if (quote > 0)
-        stripLook(pieces, QUOTE_LOOK.italic && !headingLook?.italic ? 'italic' : undefined, QUOTE_LOOK.color);
-    if (headingLook) stripLook(pieces, undefined, headingLook.color);
+    // The quote's, a heading's, a title's and the done task's look, which Google Docs writes as direct formatting, is
+    // the node's; in a heading that draws italic, an italic mark is a run set upright (runs.ts), which a quote around it
+    // keeps.
+    const nodeLook =
+        role.kind === 'heading'
+            ? HEADING_LOOKS[role.level - 1]
+            : role.kind === 'title' || role.kind === 'subtitle'
+              ? TITLE_LOOKS[role.kind]
+              : undefined;
+    if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic && !nodeLook?.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+    if (nodeLook) stripLook(pieces, undefined, nodeLook.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
     const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>

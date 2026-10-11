@@ -80,6 +80,16 @@ describe('doc export — the stylesheet', () => {
         expect(css.match(/font-size: 11pt/g)).toHaveLength(1);
     });
 
+    // Google Docs' Title and Subtitle, which the docx writer reads too.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws the title and subtitle at their size, the subtitle grey',
+        async (format) => {
+            const css = await exportStyle(format);
+            expect(css).toMatch(/\.eigen-prose p\[data-type="title"\] \{[^}]*font-size: 26pt;[^}]*line-height: 1\.2;/);
+            expect(css).toMatch(/\.eigen-prose p\[data-type="subtitle"\] \{ font-size: 15pt;[^}]*color: #666666;/);
+        },
+    );
+
     test('the body text font and color are set once, by eigen-prose', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/(^|\n)\s*body \{/);
@@ -201,6 +211,16 @@ describe('doc export — trailing breaks', () => {
     test('an empty paragraph or heading keeps its line', async () => {
         expect(await bodyOf({ type: 'paragraph' }, { type: 'heading', attrs: { level: 2 } })).toContain(
             '<p><br></p><h2><br></h2>',
+        );
+    });
+
+    test('a title and a subtitle render as the p the editor holds, an empty one keeping its line', async () => {
+        const body = await bodyOf(
+            { type: 'title', content: [{ type: 'text', text: 'Plan' }] },
+            { type: 'subtitle', attrs: { textAlign: 'center' } },
+        );
+        expect(body).toContain(
+            '<p data-type="title">Plan</p><p data-type="subtitle" style="text-align: center"><br></p>',
         );
     });
 

@@ -73,6 +73,22 @@
         margin-top: 0;
     }
 
+    /* Google Docs' Title and Subtitle, at its sizes and spacing, the subtitle in the Heading 5 and 6 grey. */
+    p[data-type="title"] {
+        font-size: 26pt;
+        line-height: 1.2;
+        margin-top: 0;
+        margin-bottom: 3pt;
+    }
+
+    p[data-type="subtitle"] {
+        font-size: 15pt;
+        line-height: 1.3;
+        margin-top: 0;
+        margin-bottom: 16pt;
+        color: #666666;
+    }
+
     /* Inline text */
 
     strong {
@@ -161,6 +177,8 @@
     h4,
     h5,
     h6,
+    p[data-type="title"],
+    p[data-type="subtitle"],
     hr,
     .page-break,
     blockquote,
@@ -586,7 +604,8 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 .dark .tiptap:not(.eigen-paper *) {
     blockquote,
     h5,
-    h6 {
+    h6,
+    p[data-type="subtitle"] {
         color: #a1a1aa;
     }
 }

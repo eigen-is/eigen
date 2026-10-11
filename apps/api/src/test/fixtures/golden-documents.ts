@@ -240,6 +240,12 @@ export function buildAllFeaturesDocJson(): JSONContent {
     return {
         type: 'doc',
         content: [
+            { type: 'title', content: [{ type: 'text', text: 'All features' }] },
+            {
+                type: 'subtitle',
+                attrs: { textAlign: 'center' },
+                content: [{ type: 'text', text: 'Every node and mark' }, marked(' in bold', { type: 'bold' })],
+            },
             ...headings,
             ...aligned,
             {

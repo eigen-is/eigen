@@ -4,9 +4,11 @@ import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { orderedListDepth } from '../list-numbering';
+import { paragraphStyleOf } from '../paragraph-styles';
 
 type ToolbarState = {
-    headingLevel: number | undefined;
+    // The paragraph style's name, none for Normal text.
+    paragraphStyle: string | undefined;
     mixedStyles: boolean;
     fontName: string;
     color: string;
@@ -65,20 +67,20 @@ export function useToolbarState(editor: Editor): ToolbarState {
             // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centred items, and
             // getAttributes reads the last heading. A cell selection has a range per cell, as setTextAlign aligns it.
             const alignments = new Set<TextAlign>();
-            const headingLevels = new Set<number | undefined>();
+            const styles = new Set<string | undefined>();
             for (const { $from, $to } of state.selection.ranges) {
                 state.doc.nodesBetween($from.pos, $to.pos, (node) => {
                     if (!node.isTextblock) return;
                     alignments.add(oneOf(node.attrs['textAlign'], TEXT_ALIGNS, 'left'));
-                    headingLevels.add(node.type.name === 'heading' ? node.attrs['level'] : undefined);
+                    styles.add(paragraphStyleOf(node)?.name);
                 });
             }
             const table = active('table');
             const listDepth = orderedListDepth(selection.$from);
             return {
-                // A range of mixed levels, or of headings and other blocks, reads as none.
-                headingLevel: headingLevels.size === 1 ? [...headingLevels][0] : undefined,
-                mixedStyles: headingLevels.size > 1,
+                // A range of mixed styles, or of styled and Normal text, reads as none.
+                paragraphStyle: styles.size === 1 ? [...styles][0] : undefined,
+                mixedStyles: styles.size > 1,
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
                 color: getAttributes(state, 'textStyle')['color'] || '',

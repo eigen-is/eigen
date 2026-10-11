@@ -57,6 +57,8 @@ export const STYLE_NAMES = {
     DefaultParagraphFont: 'Default Paragraph Font',
     TableNormal: 'Normal Table',
     NoList: 'No List',
+    Title: 'Title',
+    Subtitle: 'Subtitle',
     Quote: 'Quote',
     CodeBlock: 'Code Block',
     Caption: 'caption',
