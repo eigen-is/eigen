@@ -550,15 +550,15 @@ describe('docx writer — paragraphs and headings', () => {
         }
     });
 
-    test('a heading that opens the document drops its margin above, as h1:first-child to h4:first-child do', async () => {
+    test('a heading that opens the document drops its margin above, as h1:first-child to h6:first-child do', async () => {
         const heading = (level: number) => ({ type: 'heading', attrs: { level }, content: [text('x')] });
         const body = await bodyOf(doc(heading(1), heading(1)));
         const [first, second] = xmlChildren(body, W, 'p');
         expect(shape(child(first, 'pPr') ?? body)).toEqual(['pStyle', 'spacing']);
         expect(w(child(child(first, 'pPr'), 'spacing'), 'before')).toBe('0');
         expect(shape(child(second, 'pPr') ?? body)).toEqual(['pStyle']);
-        const fifth = only(xmlChildren(await bodyOf(doc(heading(5))), W, 'p'));
-        expect(shape(child(fifth, 'pPr') ?? fifth)).toEqual(['pStyle']);
+        const sixth = only(xmlChildren(await bodyOf(doc(heading(6))), W, 'p'));
+        expect(w(child(child(sixth, 'pPr'), 'spacing'), 'before')).toBe('0');
     });
 
     test('an empty paragraph keeps its properties, and only a bare one is <w:p/>', async () => {
@@ -682,6 +682,19 @@ describe('docx writer — marks', () => {
                 { type: 'superscript' },
             ),
         ).toEqual([['b'], ['bCs'], ['i'], ['iCs'], ['color', '2563EB'], ['vertAlign', 'superscript']]);
+    });
+
+    // Heading 6 is italic, so its italic mark is upright, as the editor draws it.
+    test('an italic mark in Heading 6 is w:i off, in Heading 5 w:i', async () => {
+        const italic = async (level: number) => {
+            const body = await bodyOf(
+                doc({ type: 'heading', attrs: { level }, content: [text('x', { type: 'italic' })] }),
+            );
+            const rPr = child(only(descendants(body, W, 'r')), 'rPr');
+            return ['i', 'iCs'].map((name) => w(child(rPr, name), 'val') ?? (child(rPr, name) ? 'on' : undefined));
+        };
+        expect(await italic(6)).toEqual(['0', '0']);
+        expect(await italic(5)).toEqual(['on', 'on']);
     });
 
     test('inline code in a heading is 0.9 of the heading size', async () => {
@@ -2234,6 +2247,17 @@ describe('docx writer — styles from the CSS', () => {
         const spacer = style(all, 'Spacer');
         expect(spacingOf(spacer)).toEqual(['0', '0', '20', 'exact']);
         expect(sizeOf(spacer)).toEqual(['2', '2']);
+    });
+
+    test("Heading 5 and 6 take Google Docs' look: the body's size, grey and not bold, and 6 italic", async () => {
+        const all = await styles();
+        const look = (id: string) => {
+            const rPr = child(style(all, id), 'rPr');
+            return [w(child(rPr, 'color'), 'val'), !!child(rPr, 'i'), !!child(rPr, 'b'), w(child(rPr, 'sz'), 'val')];
+        };
+        expect(look('Heading5')).toEqual(['666666', false, false, '22']);
+        expect(look('Heading6')).toEqual(['666666', true, false, '22']);
+        expect(look('Heading4')).toEqual([undefined, false, false, expect.any(String)]);
     });
 
     test('every heading style is derived from the CSS values', async () => {

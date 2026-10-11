@@ -16,10 +16,8 @@ import type {
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
-
-// Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
-const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
+import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
+import { ITALIC_HEADINGS } from './paste';
 
 // The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
 // the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
@@ -93,7 +91,9 @@ function copiedClipboardItems(
 
 // A copy or cut with eigen items writes them beside ProseMirror's own HTML and text, and a cut deletes the
 // selection as ProseMirror's handler would. Bound in handleDOMEvents, so it runs before that handler, whose
-// cut deletes the selection before any later listener reads it. No items → false, and the event is ProseMirror's.
+// cut deletes the selection before any later listener reads it. An italic mark in a heading that draws italic is
+// written upright, as it draws, since Google Docs reads a run by its look. Neither → false, and the event is
+// ProseMirror's.
 export function writeDocsClipboard(
     view: EditorView,
     event: ClipboardEvent,
@@ -103,10 +103,21 @@ export function writeDocsClipboard(
     const cut = event.type === 'cut';
     if (selection.empty || !event.clipboardData || (cut && !view.editable)) return false;
     const items = copiedClipboardItems(view, selection.from, selection.to, resolveMediaPath);
-    if (items.length === 0) return false;
     const { dom, text } = view.serializeForClipboard(selection.content());
+    const upright = ITALIC_HEADINGS
+        ? [...dom.querySelectorAll(ITALIC_HEADINGS)].flatMap((heading) => [
+              ...heading.querySelectorAll<HTMLElement>('em'),
+          ])
+        : [];
+    if (items.length === 0 && upright.length === 0) return false;
+    for (const em of upright) em.style.fontStyle = 'normal';
     event.preventDefault();
-    writeEigenClipboard(event, { version: 1, items }, text || undefined, dom.innerHTML);
+    if (items.length > 0) writeEigenClipboard(event, { version: 1, items }, text || undefined, dom.innerHTML);
+    else {
+        event.clipboardData.clearData();
+        event.clipboardData.setData('text/html', dom.innerHTML);
+        event.clipboardData.setData('text/plain', text);
+    }
     if (cut) view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut'));
     return true;
 }
@@ -126,9 +137,11 @@ function eigenTextItemContent(item: EigenClipboardTextItem): JSONContent[] {
     if (typo?.fontStyle === 'italic') marks.push({ type: 'italic' });
     if (typo?.textDecoration === 'underline') marks.push({ type: 'underline' });
     if (typo?.textDecoration === 'line-through') marks.push({ type: 'strike' });
+    // An unrecognized wire alignment reads as left, the alignment an unaligned paragraph has, rather than storing garbage.
+    const textAlign = oneOf(typo?.textAlign, TEXT_ALIGNS, 'left');
     return text.split('\n').map((line) => ({
         type: 'paragraph',
-        ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
+        ...(textAlign !== 'left' ? { attrs: { textAlign } } : {}),
         // A text node may not be empty, so an empty line is a paragraph with no content.
         ...(line ? { content: [{ type: 'text', text: line, ...(marks.length > 0 ? { marks } : {}) }] } : {}),
     }));

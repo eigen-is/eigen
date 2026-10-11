@@ -16,16 +16,24 @@ type EditMenuProps = {
     onRedo: () => void;
     // Host-app edit entries (vector's tool-lock toggle), rendered after Undo/Redo when canEdit.
     children?: ReactNode;
+    // An editor that takes focus back on Undo or Redo passes its keep-focus handler; a Find pick still focuses the bar.
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 // The 'Edit' menubar entry next to FileMenu, shared by all eigendoc toolbars. Undo machinery is
 // per-app (Yjs UndoManager, TipTap history), so handlers come in as props; the find entries come
 // from the DocSearchProvider the toolbar is mounted under (null-safe: absent provider → no items).
-export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo, children }: EditMenuProps) {
-    const { docSearchBar, focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
+export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo, children, onCloseAutoFocus }: EditMenuProps) {
+    const { docSearchBar, focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
 
     return (
-        <ToolbarMenu label="Edit" onCloseAutoFocus={onCloseAutoFocus}>
+        <ToolbarMenu
+            label="Edit"
+            onCloseAutoFocus={(event) => {
+                refocusFindBar(event);
+                if (!event.defaultPrevented) onCloseAutoFocus?.(event);
+            }}
+        >
             {canEdit && (
                 <>
                     <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>

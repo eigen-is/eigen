@@ -1,5 +1,5 @@
 // The toolbar draws the marks and the block at the caret, and a caret move is a transaction that changes no content.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -119,4 +119,100 @@ test('a long selection starting after a bold word or a heading reads none of the
     await act(async () => long.commands.setTextSelection({ from: headingEnd, to: long.state.doc.content.size - 1 }));
     expect(seen.at(-1)).toMatchObject({ bold: false, headingLevel: undefined });
     long.destroy();
+});
+
+// Tiptap's isActive sums the ranges of the nodes an attribute matches, and a list's own range counts against them,
+// so a centred paragraph and a centred list item would read left.
+test('a range reads the alignment all its blocks share, and none when they differ', async () => {
+    const paragraph = (text: string, textAlign: string) => ({
+        type: 'paragraph',
+        attrs: { textAlign },
+        content: [{ type: 'text', text }],
+    });
+    // "centred" at 1-8, the list item's "item" at 12-16, "right" at 20-25.
+    const aligned = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                paragraph('centred', 'center'),
+                { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph('item', 'center')] }] },
+                paragraph('right', 'right'),
+            ],
+        },
+    });
+    aligned.commands.setTextSelection({ from: 2, to: 14 });
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: aligned })));
+    expect(seen.at(-1)?.alignment).toBe('center');
+
+    await act(async () => aligned.commands.setTextSelection({ from: 2, to: 22 }));
+    expect(seen.at(-1)?.alignment).toBeUndefined();
+
+    await act(async () => aligned.commands.setTextSelection(22));
+    expect(seen.at(-1)?.alignment).toBe('right');
+    aligned.destroy();
+});
+
+// setTextAlign aligns every cell of a cell selection, which ProseMirror's from and to span only one of.
+test('a cell selection reads the alignment all its cells share, and none when they differ', async () => {
+    const cell = (text: string, textAlign: string | null) => ({
+        type: 'tableCell',
+        content: [{ type: 'paragraph', attrs: { textAlign }, content: [{ type: 'text', text }] }],
+    });
+    const row = (left: string, leftAlign: string | null) => ({
+        type: 'tableRow',
+        content: [cell(left, leftAlign), cell(`${left}2`, 'center')],
+    });
+    // Column A left, then right in the last row; column B centred.
+    const table = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [{ type: 'table', content: [row('a', null), row('b', null), row('c', 'right')] }],
+        },
+    });
+    const cells: number[] = [];
+    table.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'tableCell') cells.push(pos);
+    });
+    const select = (anchorCell = 0, headCell = 0) => table.commands.setCellSelection({ anchorCell, headCell });
+    select(cells[0], cells[2]);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: table })));
+    expect(seen.at(-1)?.alignment).toBe('left');
+
+    await act(async () => select(cells[1], cells[5]));
+    expect(seen.at(-1)?.alignment).toBe('center');
+
+    await act(async () => select(cells[0], cells[4]));
+    expect(seen.at(-1)?.alignment).toBeUndefined();
+    table.destroy();
+});
+
+test('a range over two heading levels reads no level', async () => {
+    const heading = (level: number, text: string) => ({
+        type: 'heading',
+        attrs: { level },
+        content: [{ type: 'text', text }],
+    });
+    // "Two" at 1-4, "Three" at 6-11.
+    const headings = new Editor({
+        extensions: getDocExtensions(),
+        content: { type: 'doc', content: [heading(2, 'Two'), heading(3, 'Three')] },
+    });
+    headings.commands.setTextSelection({ from: 2, to: 3 });
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: headings })));
+    expect(seen.at(-1)).toMatchObject({ headingLevel: 2, mixedStyles: false });
+
+    await act(async () => headings.commands.setTextSelection({ from: 2, to: 8 }));
+    expect(seen.at(-1)).toMatchObject({ headingLevel: undefined, mixedStyles: true });
+    headings.destroy();
+});
+
+test('outside a table no transaction tries the cell commands', async () => {
+    editor.commands.setTextSelection(2);
+    const can = spyOn(editor, 'can');
+    ({ unmount } = await renderInDocument(createElement(Probe)));
+    await act(async () => editor.commands.setTextSelection(4));
+    expect(can).not.toHaveBeenCalled();
+    can.mockRestore();
 });

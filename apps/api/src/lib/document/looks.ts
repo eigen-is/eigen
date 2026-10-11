@@ -1,6 +1,6 @@
 import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
 import { cssColorToHex } from './colors';
-import { proseValue } from './prose-css';
+import { proseValue, proseValueIfSet } from './prose-css';
 
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
 // re-save drops the writer's styles and keeps it as direct formatting.
@@ -125,6 +125,17 @@ export const CAPTION_LOOK = {
     sizePt: cssPt(proseValue('.eigen-prose figcaption', 'font-size'), BODY.sizePt),
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
+
+// The color and italic eigen-prose.css gives an element's text, where it gives any: a highlighted code token's, a heading's.
+export function proseTextLook(selector: string): { color?: string; italic?: true } {
+    return {
+        ...(proseValueIfSet(selector, 'color') !== undefined && { color: proseColor(selector, 'color') }),
+        ...(proseValueIfSet(selector, 'font-style') === 'italic' && { italic: true }),
+    };
+}
+
+// Each heading level's own look, by level - 1: Heading 5 and 6 draw Google Docs' grey, and 6 italic.
+export const HEADING_LOOKS = [1, 2, 3, 4, 5, 6].map((level) => proseTextLook(`.eigen-prose h${level}`));
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 

@@ -7,9 +7,11 @@ type FontPickerProps = {
     value: string;
     onChange: (fontName: string) => void;
     className?: string;
+    // An editor that takes focus back on a pick passes its keep-focus handler, so Radix doesn't refocus the trigger.
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
-export function FontPicker({ value, onChange, className }: FontPickerProps) {
+export function FontPicker({ value, onChange, className, onCloseAutoFocus }: FontPickerProps) {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -23,7 +25,11 @@ export function FontPicker({ value, onChange, className }: FontPickerProps) {
                     <ChevronDown className="h-3 w-3" />
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="max-h-[75vh] overflow-auto">
+            <DropdownMenuContent
+                align="start"
+                className="max-h-[75vh] overflow-auto"
+                onCloseAutoFocus={onCloseAutoFocus}
+            >
                 {EIGEN_FONTS.map((font) => (
                     <DropdownMenuItem key={font.name} onClick={() => onChange(font.name)}>
                         <span style={{ fontFamily: getFontFamily(font.name) }}>{font.name}</span>

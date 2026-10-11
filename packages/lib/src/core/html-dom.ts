@@ -1,6 +1,7 @@
 // Browser-only HTML helpers — these depend on the DOM (`document`), so backend-shared
 // code (anything importable by apps/api) must never import this module. The BE-safe HTML
 // helpers (escapeHtml, stripTagsServer) live in ./html.
+import { TEXT_ALIGNS, type TextAlign } from '../vector/types';
 import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_HREF, type LIGHT_EDITOR_MARK_TAGS } from './html';
 
 export function htmlToPlainText(html: string): string {
@@ -155,12 +156,12 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
 // LightEditor sanitizer strips along with every other attribute — so read it here, off the RAW html,
 // before sanitizing. Returns the first top-level block's alignment when it's one of the four canonical
 // values, else null (a default-left paragraph carries no style, so callers keep their own default).
-const TEXT_ALIGN_VALUES = ['left', 'center', 'right', 'justify'] as const;
-export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[number] | null {
+export function readDominantTextAlign(html: string): TextAlign | null {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     for (const el of Array.from(doc.body.children)) {
-        const raw = ((el as HTMLElement).style.textAlign || el.getAttribute('align') || '').trim().toLowerCase();
-        const match = TEXT_ALIGN_VALUES.find((a) => a === raw);
+        if (!(el instanceof HTMLElement)) continue;
+        const raw = (el.style.textAlign || el.getAttribute('align') || '').trim().toLowerCase();
+        const match = TEXT_ALIGNS.find((a) => a === raw);
         if (match) return match;
     }
     return null;

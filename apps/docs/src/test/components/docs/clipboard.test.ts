@@ -160,3 +160,24 @@ test('a payload beside no docs HTML pastes its items in order', async () => {
         ['One'],
     ]);
 });
+
+// Heading 6 draws an italic mark upright, as Google Docs does, which reads the run by its look.
+test('a copy writes an italic mark in Heading 6 upright and pastes it back as the mark', async () => {
+    const heading = (level: number) => ({
+        type: 'heading',
+        attrs: { level },
+        content: [text('Fine '), text('print', { type: 'italic' })],
+    });
+    // A closing paragraph, as a paste into an empty editor keeps its empty paragraph after closed blocks.
+    const content = [heading(6), heading(5), paragraph(text('Body'))];
+    const clipboard = copy(content);
+    const html = new DOMParser().parseFromString(clipboard.html, 'text/html');
+    expect([...html.querySelectorAll('em')].map((em) => [em.closest('h5, h6')?.tagName, em.style.fontStyle])).toEqual([
+        ['H6', 'normal'],
+        ['H5', ''],
+    ]);
+
+    const target = await paste(clipboard);
+    const expected = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
+    expect(target.getJSON()).toEqual(expected.getJSON());
+});

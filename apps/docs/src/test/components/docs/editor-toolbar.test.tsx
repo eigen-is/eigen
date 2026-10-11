@@ -1,5 +1,5 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -18,7 +18,11 @@ const { EditorToolbar } = await import('../../../components/docs/editor-toolbar'
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const editor = new Editor({ extensions: getDocExtensions() });
+// Mounted in the document, so a test can read whether it holds focus.
+const editor = new Editor({
+    element: document.body.appendChild(document.createElement('div')),
+    extensions: getDocExtensions(),
+});
 
 const onReplaceImage = mock(() => {});
 
@@ -61,13 +65,17 @@ const openMenuEntries = () =>
     [
         ...([...document.querySelectorAll('[role="menu"]')]
             .at(-1)
-            ?.querySelectorAll('[role="menuitem"], [role="separator"]') ?? []),
+            ?.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="separator"]') ?? []),
     ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim()));
 
-async function openMenu(label: string) {
-    const trigger = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
-        (button) => button.textContent === label,
+// A menu trigger by its text, or by its name when it is an icon.
+const menuTrigger = (label: string) =>
+    [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
+        (button) => button.textContent === label || button.getAttribute('aria-label') === label,
     );
+
+async function openMenu(label: string) {
+    const trigger = menuTrigger(label);
     await act(async () => {
         trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     });
@@ -85,16 +93,7 @@ async function openSubmenu(label: string) {
 
 const SHORT_ROW = ['Normal text', 'Inter', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
-const FULL_ROW = [
-    ...MIDDLE_ROW,
-    'Align left',
-    'Align center',
-    'Align right',
-    'Bulleted list',
-    'Numbered list',
-    'Checklist',
-    'Clear formatting',
-];
+const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
 test.each([1920, 1300, 1000, 390])('a writer gets the Format and Insert menus at %ipx', async (width) => {
     await render(width, true);
@@ -165,6 +164,99 @@ test('Format › Text puts the Eigen-only marks after the scripts and capitalisa
         'Text color',
         'Highlight color',
     ]);
+});
+
+test('Format › Paragraph styles lists Normal text, Heading 1 to 6 and then Quote', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Paragraph styles');
+    expect(openMenuEntries()).toEqual([
+        'Normal text',
+        'Heading 1',
+        'Heading 2',
+        'Heading 3',
+        'Heading 4',
+        'Heading 5',
+        'Heading 6',
+        '—',
+        'Quote',
+    ]);
+});
+
+test('the style picker offers Heading 1 to 6 and reads Heading 5 in a Heading 5', async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'heading', attrs: { level: 5 }, content: [{ type: 'text', text: 'Fine print' }] }],
+    });
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    expect(iconRow()[0]).toBe('Heading 5');
+
+    await openMenu('Heading 5');
+    expect(menuItems()).toEqual([
+        'Normal text',
+        'Heading 1',
+        'Heading 2',
+        'Heading 3',
+        'Heading 4',
+        'Heading 5',
+        'Heading 6',
+    ]);
+});
+
+test('Format › Align and indent lists Left, Center, Right and Justified, as Google does', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    expect(openMenuEntries()).toEqual(['Left', 'Center', 'Right', 'Justified']);
+});
+
+// The trigger draws the paragraph's alignment, as Google's does, so its first icon names it.
+const alignIcon = () => menuTrigger('Align')?.querySelector('svg')?.getAttribute('class');
+
+test("the row's one Align dropdown marks the paragraph's alignment and Justified justifies it", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a' }] }],
+    });
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    expect(alignIcon()).toMatch(/text-align-start/);
+
+    await openMenu('Align');
+    expect(openMenuEntries()).toEqual(['Left', 'Center', 'Right', 'Justified']);
+    const checked = () =>
+        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
+            item.textContent?.trim(),
+        );
+    expect(checked()).toEqual(['Left']);
+
+    const justified = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'Justified',
+    );
+    await act(async () => justified?.click());
+    expect(editor.state.doc.firstChild?.attrs['textAlign']).toBe('justify');
+    expect(alignIcon()).toMatch(/text-align-justify/);
+
+    await openMenu('Align');
+    expect(checked()).toEqual(['Justified']);
+});
+
+test('a range of mixed alignments checks no Align item and draws Left', async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: ['center', 'right'].map((textAlign) => ({
+            type: 'paragraph',
+            attrs: { textAlign },
+            content: [{ type: 'text', text: 'a' }],
+        })),
+    });
+    editor.commands.setTextSelection({ from: 1, to: 5 });
+    await render(1920, true);
+    expect(alignIcon()).toMatch(/text-align-start/);
+
+    await openMenu('Align');
+    expect(document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')).toHaveLength(0);
 });
 
 test('Format › Bullets and numbering lists numbered before bulleted, as Google does', async () => {
@@ -260,6 +352,36 @@ test('Format › Image › Replace image opens the picker the image panel opens'
 
     await clickItem('Replace image');
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
+});
+
+// Tiptap refocuses the editor a frame after a pick. A browser runs that frame once the menu has closed and before its
+// exit animation unmounts it, and the unmounting menu then hands focus back to its trigger unless told not to; happy-dom
+// runs it before the menu closes, under its focus trap, so a pick here defers it to a timer, as a frame would.
+async function pickInBrowserFrames(pick: () => Promise<void>) {
+    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        setTimeout(() => callback(performance.now()));
+        return 0;
+    });
+    try {
+        await pick();
+        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    } finally {
+        frame.mockRestore();
+    }
+}
+
+const ONE_PARAGRAPH = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] };
+
+test.each([
+    ['the style picker', 'Normal text', 'Heading 2'],
+    ['the font picker', 'Inter', 'Source Serif 4'],
+])('a choice in %s gives focus back to the editor', async (_, trigger, choice) => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu(trigger);
+    await pickInBrowserFrames(() => clickItem(choice));
+    expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
 test('a viewer gets neither the Format and Insert menus nor the icon row', async () => {

@@ -5,6 +5,7 @@ import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
+import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import {
     CenteredToolbar,
     DocumentShareCluster,
@@ -23,6 +24,8 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
@@ -35,17 +38,15 @@ import { Label } from '@workspace/ui/components/label';
 import { ColorPickerButton, ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Separator } from '@workspace/ui/components/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
     ALargeSmall,
     AlignCenter,
+    AlignJustify,
     AlignLeft,
     AlignRight,
     Baseline,
-    BetweenHorizontalEnd,
-    BetweenHorizontalStart,
-    BetweenVerticalEnd,
-    BetweenVerticalStart,
     Bold,
     CaseSensitive,
     CaseUpper,
@@ -54,12 +55,12 @@ import {
     Code,
     CodeXml,
     FileSliders,
-    GripHorizontal,
-    GripVertical,
     Heading1,
     Heading2,
     Heading3,
     Heading4,
+    Heading5,
+    Heading6,
     Highlighter,
     ImageIcon,
     ImagePlus,
@@ -68,6 +69,7 @@ import {
     Link2Off,
     List,
     ListOrdered,
+    type LucideIcon,
     MessageSquarePlus,
     Minus,
     Pilcrow,
@@ -79,10 +81,6 @@ import {
     Subscript,
     Superscript,
     Table,
-    TableCellsMerge,
-    TableCellsSplit,
-    ToggleLeft,
-    Trash2,
     Type,
     TypeOutline,
     Underline,
@@ -90,6 +88,26 @@ import {
 import { useState } from 'react';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { PageSetupDialog } from './page-setup-dialog';
+import { TABLE_ACTION_ICONS } from './table-action-icons';
+
+// Format › Paragraph styles and the style picker list these; the picker previews each as the editor draws it, its
+// sizes stepping down and Heading 5 and 6 at the body's weight in grey, Heading 6 in italic.
+const HEADINGS = [
+    { level: 1, icon: Heading1, preview: 'text-xl font-medium' },
+    { level: 2, icon: Heading2, preview: 'text-lg font-medium' },
+    { level: 3, icon: Heading3, preview: 'text-base font-medium' },
+    { level: 4, icon: Heading4, preview: 'text-sm font-medium' },
+    { level: 5, icon: Heading5, preview: 'text-sm text-muted-foreground' },
+    { level: 6, icon: Heading6, preview: 'text-sm text-muted-foreground italic' },
+] as const;
+
+// Format › Align and indent and the icon row's Align dropdown name each alignment alike.
+const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
+    left: { label: 'Left', icon: AlignLeft },
+    center: { label: 'Center', icon: AlignCenter },
+    right: { label: 'Right', icon: AlignRight },
+    justify: { label: 'Justified', icon: AlignJustify },
+};
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -137,10 +155,12 @@ export const EditorToolbar = ({
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const active = useToolbarState(editor);
+    // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
+    const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
     // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sit centered beside the menus from 870, 1052 and 1311px.
+    // sit centered beside the menus from 870, 1052 and 1267px.
     const showsRow = useMediaQuery('(min-width: 900px)');
     const showsMiddle = useMediaQuery('(min-width: 1100px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
@@ -229,6 +249,7 @@ export const EditorToolbar = ({
                             canRedo={canRedo}
                             onUndo={() => editor.chain().focus().undo().run()}
                             onRedo={() => editor.chain().focus().redo().run()}
+                            onCloseAutoFocus={keepEditorFocus}
                         />
 
                         {canWrite && (
@@ -335,26 +356,16 @@ export const EditorToolbar = ({
                                             >
                                                 <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                            >
-                                                <Heading1 className="mr-2 h-4 w-4" /> Heading 1
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                            >
-                                                <Heading2 className="mr-2 h-4 w-4" /> Heading 2
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                                            >
-                                                <Heading3 className="mr-2 h-4 w-4" /> Heading 3
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-                                            >
-                                                <Heading4 className="mr-2 h-4 w-4" /> Heading 4
-                                            </DropdownMenuItem>
+                                            {HEADINGS.map(({ level, icon: Icon }) => (
+                                                <DropdownMenuItem
+                                                    key={level}
+                                                    onClick={() =>
+                                                        editor.chain().focus().toggleHeading({ level }).run()
+                                                    }
+                                                >
+                                                    <Icon className="mr-2 h-4 w-4" /> Heading {level}
+                                                </DropdownMenuItem>
+                                            ))}
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
@@ -368,21 +379,19 @@ export const EditorToolbar = ({
                                             <AlignLeft className="h-4 w-4 mr-2" /> Align and indent
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                            >
-                                                <AlignLeft className="h-4 w-4 mr-2" /> Left
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                            >
-                                                <AlignCenter className="h-4 w-4 mr-2" /> Center
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                            >
-                                                <AlignRight className="h-4 w-4 mr-2" /> Right
-                                            </DropdownMenuItem>
+                                            {TEXT_ALIGNS.map((alignment) => {
+                                                const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
+                                                return (
+                                                    <DropdownMenuItem
+                                                        key={alignment}
+                                                        onClick={() =>
+                                                            editor.chain().focus().setTextAlign(alignment).run()
+                                                        }
+                                                    >
+                                                        <Icon className="h-4 w-4 mr-2" /> {label}
+                                                    </DropdownMenuItem>
+                                                );
+                                            })}
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
                                     <DropdownMenuSub>
@@ -416,55 +425,61 @@ export const EditorToolbar = ({
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().addRowBefore().run()}
                                             >
-                                                <BetweenHorizontalStart className="h-4 w-4 mr-2" /> Insert row above
+                                                <TABLE_ACTION_ICONS.addRowBefore className="h-4 w-4 mr-2" /> Insert row
+                                                above
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().addRowAfter().run()}
                                             >
-                                                <BetweenHorizontalEnd className="h-4 w-4 mr-2" /> Insert row below
+                                                <TABLE_ACTION_ICONS.addRowAfter className="h-4 w-4 mr-2" /> Insert row
+                                                below
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().addColumnBefore().run()}
                                             >
-                                                <BetweenVerticalStart className="h-4 w-4 mr-2" /> Insert column left
+                                                <TABLE_ACTION_ICONS.addColumnBefore className="h-4 w-4 mr-2" /> Insert
+                                                column left
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().addColumnAfter().run()}
                                             >
-                                                <BetweenVerticalEnd className="h-4 w-4 mr-2" /> Insert column right
+                                                <TABLE_ACTION_ICONS.addColumnAfter className="h-4 w-4 mr-2" /> Insert
+                                                column right
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
-                                                <GripHorizontal className="h-4 w-4 mr-2" /> Delete row
+                                                <TABLE_ACTION_ICONS.deleteRow className="h-4 w-4 mr-2" /> Delete row
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().deleteColumn().run()}
                                             >
-                                                <GripVertical className="h-4 w-4 mr-2" /> Delete column
+                                                <TABLE_ACTION_ICONS.deleteColumn className="h-4 w-4 mr-2" /> Delete
+                                                column
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().deleteTable().run()}
                                             >
-                                                <Trash2 className="h-4 w-4 mr-2" /> Delete table
+                                                <TABLE_ACTION_ICONS.deleteTable className="h-4 w-4 mr-2" /> Delete table
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 disabled={!active.canMergeCells}
                                                 onClick={() => editor.chain().focus().mergeCells().run()}
                                             >
-                                                <TableCellsMerge className="h-4 w-4 mr-2" /> Merge cells
+                                                <TABLE_ACTION_ICONS.mergeCells className="h-4 w-4 mr-2" /> Merge cells
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 disabled={!active.canSplitCell}
                                                 onClick={() => editor.chain().focus().splitCell().run()}
                                             >
-                                                <TableCellsSplit className="h-4 w-4 mr-2" /> Unmerge cells
+                                                <TABLE_ACTION_ICONS.splitCell className="h-4 w-4 mr-2" /> Unmerge cells
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleHeaderRow().run()}
                                             >
-                                                <ToggleLeft className="h-4 w-4 mr-2" /> Toggle header row
+                                                <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4 mr-2" /> Toggle
+                                                header row
                                             </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
@@ -547,40 +562,29 @@ export const EditorToolbar = ({
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
                                         <span className="text-xs whitespace-nowrap">
-                                            {active.headingLevel ? `Heading ${active.headingLevel}` : 'Normal text'}
+                                            {active.mixedStyles
+                                                ? ''
+                                                : active.headingLevel
+                                                  ? `Heading ${active.headingLevel}`
+                                                  : 'Normal text'}
                                         </span>
                                         <ChevronDown className="h-3 w-3" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent>
+                                <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
                                         <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                     </DropdownMenuItem>
                                     <Separator className="my-1" />
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                    >
-                                        <Heading1 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-xl font-medium">Heading 1</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                    >
-                                        <Heading2 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-lg font-medium">Heading 2</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                                    >
-                                        <Heading3 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-base font-medium">Heading 3</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-                                    >
-                                        <Heading4 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-sm font-medium">Heading 4</span>
-                                    </DropdownMenuItem>
+                                    {HEADINGS.map(({ level, icon: Icon, preview }) => (
+                                        <DropdownMenuItem
+                                            key={level}
+                                            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+                                        >
+                                            <Icon className="mr-2 h-4 w-4" />{' '}
+                                            <span className={preview}>Heading {level}</span>
+                                        </DropdownMenuItem>
+                                    ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
 
@@ -590,6 +594,7 @@ export const EditorToolbar = ({
                             <FontPicker
                                 value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
+                                onCloseAutoFocus={keepEditorFocus}
                             />
 
                             <ToolbarSeparator />
@@ -674,30 +679,44 @@ export const EditorToolbar = ({
                                 <>
                                     <ToolbarSeparator />
 
-                                    {/* Alignment toggle group */}
-                                    <div className="flex items-center gap-0.5">
-                                        <TooltipButton
-                                            icon={AlignLeft}
-                                            tooltipText="Align left"
-                                            active={active.alignLeft}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                        />
-                                        <TooltipButton
-                                            icon={AlignCenter}
-                                            tooltipText="Align center"
-                                            active={active.alignCenter}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                        />
-                                        <TooltipButton
-                                            icon={AlignRight}
-                                            tooltipText="Align right"
-                                            active={active.alignRight}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                        />
-                                    </div>
+                                    {/* Alignment, one dropdown as Google's */}
+                                    <DropdownMenu>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 px-2 gap-1"
+                                                        aria-label="Align"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                    >
+                                                        <AlignmentIcon className="h-4 w-4" />
+                                                        <ChevronDown className="h-3 w-3" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Align</TooltipContent>
+                                        </Tooltip>
+                                        <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
+                                            <DropdownMenuRadioGroup value={active.alignment}>
+                                                {TEXT_ALIGNS.map((alignment) => {
+                                                    const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
+                                                    return (
+                                                        <DropdownMenuRadioItem
+                                                            key={alignment}
+                                                            value={alignment}
+                                                            onSelect={() =>
+                                                                editor.chain().focus().setTextAlign(alignment).run()
+                                                            }
+                                                        >
+                                                            <Icon className="h-4 w-4" /> {label}
+                                                        </DropdownMenuRadioItem>
+                                                    );
+                                                })}
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
 
                                     <ToolbarSeparator />
 

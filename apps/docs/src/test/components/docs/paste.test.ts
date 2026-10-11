@@ -61,6 +61,42 @@ describe('paste keeps caps', () => {
     });
 });
 
+// Google Docs spells its italic Heading 6 on every run, and a run in it set upright as font-style normal. Heading 6
+// draws an italic mark upright, so the upright run is the mark and the italic one plain.
+test('an upright run in a pasted Google Docs Heading 6 is italic, its italic runs are not', () => {
+    const span = (text: string, fontStyle: string) =>
+        `<span style="font-size:11pt;font-family:Arial,sans-serif;color:#666666;font-weight:400;font-style:${fontStyle};">${text}</span>`;
+    const html =
+        `<b style="font-weight:normal;" id="docs-internal-guid-1"><h6 dir="ltr">${span('Fine ', 'italic')}${span('print', 'normal')}</h6>` +
+        `<p dir="ltr">${span('Said ', 'italic')}${span('plainly', 'normal')}</p></b>`;
+    const runs: [string, string[]][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.isText) runs.push([node.text ?? '', node.marks.map((mark) => mark.type.name)]);
+    });
+    expect(runs.map(([text, marks]) => [text, marks.includes('italic')])).toEqual([
+        ['Fine ', false],
+        ['print', true],
+        ['Said ', true],
+        ['plainly', false],
+    ]);
+});
+
+// A run's look is its nearest font-style, so an italic run inside an upright one stays plain.
+test.each([
+    ['an upright heading', '<h6 style="font-style:normal">a<span style="font-style:italic">b</span>c</h6>'],
+    ['an upright run', '<h6><span style="font-style:normal">a<span style="font-style:italic">b</span>c</span></h6>'],
+])('an italic run inside %s of a pasted Heading 6 stays plain', (_name, html) => {
+    const runs: [string, boolean][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.isText) runs.push([node.text ?? '', node.marks.some((mark) => mark.type.name === 'italic')]);
+    });
+    expect(runs).toEqual([
+        ['a', true],
+        ['b', false],
+        ['c', true],
+    ]);
+});
+
 // A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
 describe('a docs copy pastes back as it was copied', () => {
     const figure = {

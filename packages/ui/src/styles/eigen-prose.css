@@ -48,10 +48,28 @@
         line-height: 1.4;
     }
 
+    /* Google Docs' Heading 5 and 6: the body's size, which they inherit, at its weight, in Google's grey, which no theme token matches. */
+    h5,
+    h6 {
+        font-weight: var(--font-weight-normal);
+        color: #666666;
+    }
+
+    h6 {
+        font-style: italic;
+    }
+
+    /* An italic mark in the italic Heading 6 draws upright, as in Google Docs and Word. */
+    h6 em {
+        font-style: normal;
+    }
+
     h1:first-child,
     h2:first-child,
     h3:first-child,
-    h4:first-child {
+    h4:first-child,
+    h5:first-child,
+    h6:first-child {
         margin-top: 0;
     }
 
@@ -531,7 +549,6 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     color: #e4e4e7;
 
     blockquote {
-        color: #a1a1aa;
         border-color: #3f3f46;
     }
 
@@ -551,6 +568,16 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 
     th {
         background-color: #27272a;
+    }
+}
+
+/* The greys the shared block sets, which a bare editor (Drive's Markdown editor) draws too. */
+.dark .eigen-prose:not(.eigen-paper *),
+.dark .tiptap:not(.eigen-paper *) {
+    blockquote,
+    h5,
+    h6 {
+        color: #a1a1aa;
     }
 }
 

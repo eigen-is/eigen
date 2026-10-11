@@ -45,10 +45,12 @@ import {
     CODE_LOOK,
     cssPt,
     HEADER_CELL_LOOK,
+    HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
     proseBorder,
     proseColor,
+    proseTextLook,
     QUOTE_LOOK,
     SMALL_LOOK,
     TASK_DONE_LOOK,
@@ -202,6 +204,8 @@ type Context = {
     align?: string;
     list?: NumberingRef;
     headingPt?: number;
+    // In a heading that draws italic, which draws an italic mark upright.
+    upright?: boolean;
 };
 
 const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
@@ -354,7 +358,8 @@ type RunProps = {
     style?: StyleId;
     font?: string;
     bold?: true;
-    italic?: true;
+    // false undoes a style's italic.
+    italic?: boolean;
     caps?: true;
     smallCaps?: true;
     // false undoes a style's strike.
@@ -427,7 +432,8 @@ function rPrXml(props: RunProps): string {
         style && `<w:rStyle w:val="${style}"/>`,
         font && `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>`,
         bold && '<w:b/><w:bCs/>',
-        italic && '<w:i/><w:iCs/>',
+        italic === true && '<w:i/><w:iCs/>',
+        italic === false && '<w:i w:val="0"/><w:iCs w:val="0"/>',
         caps && '<w:caps/>',
         smallCaps && '<w:smallCaps/>',
         strike === true && '<w:strike/>',
@@ -473,7 +479,8 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 },
                 context,
             );
-            return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
+            const upright = !!HEADING_LOOKS[level - 1]?.italic;
+            return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt, upright }, true);
         },
     ],
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
@@ -580,7 +587,12 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
-        const written = write(node, { ...context, first: !textblock && index === 0, headingPt: undefined });
+        const written = write(node, {
+            ...context,
+            first: !textblock && index === 0,
+            headingPt: undefined,
+            upright: undefined,
+        });
         if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? '')) keepApart(blocks, written);
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
@@ -1154,19 +1166,12 @@ function codeLines(tree: HastNode, pkg: Package): string[] {
             return;
         }
         const token = { ...props };
-        for (const name of node.properties?.className ?? []) Object.assign(token, tokenLook(name));
+        for (const name of node.properties?.className ?? [])
+            Object.assign(token, proseTextLook(`.eigen-prose pre .${name}`));
         for (const child of node.children ?? []) walk(child, token);
     };
     walk(tree, {});
     return lines;
-}
-
-function tokenLook(className: string): RunProps {
-    const selector = `.eigen-prose pre .${className}`;
-    const look: RunProps = {};
-    if (proseValueIfSet(selector, 'color') !== undefined) look.color = proseColor(selector, 'color');
-    if (proseValueIfSet(selector, 'font-style') === 'italic') look.italic = true;
-    return look;
 }
 
 const JUSTIFICATION = new Map([
@@ -1250,7 +1255,7 @@ function textXml(text: string): string {
 
 const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context) => RunProps>([
     ['bold', () => ({ bold: true })],
-    ['italic', () => ({ italic: true })],
+    ['italic', (_attrs, { upright }) => ({ italic: !upright })],
     ['underline', () => ({ underline: true })],
     ['strike', () => ({ strike: true })],
     ['subscript', () => ({ vertAlign: 'subscript' })],
@@ -1442,7 +1447,8 @@ function styleDefinitions(): StyleDef[] {
     const codeMargin = proseValue('.eigen-prose pre', 'margin');
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
-    const headings = [1, 2, 3, 4, 5, 6].map((level): StyleDef => {
+    const headings = HEADING_LOOKS.map((look, index): StyleDef => {
+        const level = index + 1;
         const { sizePt, before, after, line, tracking } = headingMetrics(level);
         return {
             type: 'paragraph',
@@ -1458,7 +1464,7 @@ function styleDefinitions(): StyleDef[] {
                 spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
                 outlineLvl: level - 1,
             },
-            rPr: { spacing: tracking, size: halfPoints(sizePt) },
+            rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },
         };
     });
     return [
