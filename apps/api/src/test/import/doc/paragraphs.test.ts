@@ -583,4 +583,23 @@ describe("a node's look", () => {
         expect(marksOfType(json, 'italic')).toEqual([]);
         expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs?.['color'])).toEqual(['#c00000']);
     });
+
+    // Heading 6 is italic, so the editor draws an italic mark in it upright, as Google Docs and Word do.
+    test('a run set upright in Heading 6 is italic, one italic through the style or its own w:i is not', async () => {
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Fine', '<w:i/>')}${run(' print')}${run(' upright', '<w:i w:val="0"/><w:iCs w:val="0"/>')}`,
+                '<w:pStyle w:val="Heading6"/>',
+            ),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr><w:i/><w:iCs/></w:rPr></w:style>',
+            },
+        );
+        expect(
+            nodesOfType(json, 'text').map((node) => [node.text, (node.marks ?? []).map((mark) => mark.type)]),
+        ).toEqual([
+            ['Fine print', []],
+            [' upright', ['italic']],
+        ]);
+    });
 });

@@ -59,6 +59,11 @@
         font-style: italic;
     }
 
+    /* An italic mark in the italic Heading 6 draws upright, as in Google Docs and Word. */
+    h6 em {
+        font-style: normal;
+    }
+
     h1:first-child,
     h2:first-child,
     h3:first-child,
@@ -544,13 +549,7 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     color: #e4e4e7;
 
     blockquote {
-        color: #a1a1aa;
         border-color: #3f3f46;
-    }
-
-    h5,
-    h6 {
-        color: #a1a1aa;
     }
 
     hr {
@@ -569,6 +568,16 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 
     th {
         background-color: #27272a;
+    }
+}
+
+/* The greys the shared block sets, which a bare editor (Drive's Markdown editor) draws too. */
+.dark .eigen-prose:not(.eigen-paper *),
+.dark .tiptap:not(.eigen-paper *) {
+    blockquote,
+    h5,
+    h6 {
+        color: #a1a1aa;
     }
 }
 

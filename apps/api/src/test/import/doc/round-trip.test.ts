@@ -334,6 +334,26 @@ describe("a link's own look", () => {
     });
 });
 
+// Heading 6's style is italic, so an italic mark in it is written upright and read back as one.
+describe("a heading's italic", () => {
+    const fine = (level: number) => ({
+        type: 'heading',
+        attrs: { level },
+        content: [
+            { type: 'text', text: 'Fine ' },
+            { type: 'text', text: 'print', marks: [{ type: 'italic' }] },
+        ],
+    });
+    test.each<[string, JSONContent[]]>([
+        ['in Heading 5', [fine(5)]],
+        ['in Heading 6', [fine(6)]],
+        ['in Heading 6 in a quote', [quote(fine(6))]],
+    ])('%s comes back', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
 // Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
 // It keeps one placeholder for the export's media, so names don't say which image is which. The recording predates
 // caps.

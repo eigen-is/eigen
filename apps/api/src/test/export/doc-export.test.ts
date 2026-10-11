@@ -341,6 +341,19 @@ describe('doc export — caps', () => {
         expect(html).toContain(`B${small('ODY')}`);
     });
 
+    // Heading 6 draws italic, and an italic mark in it upright.
+    test("the pdf reads Heading 6's italic, an italic mark in it upright", async () => {
+        const html = await exportBody('pdf-html', [
+            {
+                type: 'heading',
+                attrs: { level: 6 },
+                content: [caps('Plain', 'small', 'Source Serif 4'), caps(' Marked', 'small', 'Source Serif 4', true)],
+            },
+        ]);
+        expect(html).toContain('P<span style="font-size: 0.7em">LAIN</span>');
+        expect(html).toContain('<em> Marked</em>');
+    });
+
     test('the pdf keeps upright Source Serif 4 small caps as typed', async () => {
         const html = await exportBody('pdf-html', [
             { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },

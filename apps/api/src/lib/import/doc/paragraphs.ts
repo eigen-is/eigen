@@ -260,11 +260,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // The quote's, a heading's and the done task's look, which Google Docs writes as direct formatting, is the node's.
-    if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+    // The quote's, a heading's and the done task's look, which Google Docs writes as direct formatting, is the node's;
+    // in a heading that draws italic, an italic mark is a run set upright (runs.ts), which a quote around it keeps.
     const headingLook = role.kind === 'heading' ? HEADING_LOOKS[role.level - 1] : undefined;
-    if (headingLook && (headingLook.color || headingLook.italic))
-        stripLook(pieces, headingLook.italic ? 'italic' : undefined, headingLook.color);
+    if (quote > 0)
+        stripLook(pieces, QUOTE_LOOK.italic && !headingLook?.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+    if (headingLook) stripLook(pieces, undefined, headingLook.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
     const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>
