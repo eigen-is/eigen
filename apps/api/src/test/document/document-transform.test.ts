@@ -782,9 +782,10 @@ describe('document transform (xlsx import)', () => {
 // The sheets pdf-html and both doc hashes moved when one builder sanitized every export body keeping link targets: a target="_blank" on each link, and nothing else (the old hashes come back with it stripped; WeasyPrint prints the same PDF bytes).
 // Both doc HTML hashes moved when Heading 5 and 6 took Google Docs' look: eigen-prose.css's h5 and h6 rules and their first-child margin, and nothing else. The docx hash moved with them: Heading5's and Heading6's grey and Heading6's italic in styles.xml, and nothing else.
 // Both doc HTML hashes moved again when an italic mark in Heading 6 drew upright: the h6 em rule, and a blank line where the second dark rule is dropped, and nothing else.
+// Both doc HTML hashes moved again when a numbered list right after another ran on at the items' step: the two ol + ol rules, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '25c82f5b3639cc05175c59016b6e9e6e9002c9aa5e1006101940e8fc91b1c5f8';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '25c82f5b3639cc05175c59016b6e9e6e9002c9aa5e1006101940e8fc91b1c5f8';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '465a5479bf0cd13bf08fe63fc7824c704aedfa5e345ea1968424177ee34cd939';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '465a5479bf0cd13bf08fe63fc7824c704aedfa5e345ea1968424177ee34cd939';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '159a9d631299c4d8ca2510c0c4a973f80d3f40f6d037afbb8ee372b70a67ec47';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';

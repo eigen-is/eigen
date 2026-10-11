@@ -237,6 +237,26 @@ describe('lists side by side', () => {
     });
 });
 
+// Format › Bullets and numbering's five styles, and the lists Restart numbering splits one into.
+describe("a numbered list's style and start", () => {
+    const numbered = (start: number, type: string | null, ...texts: string[]) => ({
+        ...ordered(...texts.map((text) => [p(text)])),
+        attrs: { start, type },
+    });
+    test.each<[string, JSONContent[]]>([
+        ['decimal from 4', [numbered(4, null, 'One', 'Two')]],
+        ['small letters', [numbered(1, 'a', 'One', 'Two')]],
+        ['capital letters from 3', [numbered(3, 'A', 'One')]],
+        ['small roman numerals from 2', [numbered(2, 'i', 'One')]],
+        ['capital roman numerals', [numbered(1, 'I', 'One', 'Two')]],
+        ['a list restarted at its second item', [numbered(1, 'a', 'One'), numbered(1, 'a', 'Two', 'Three')]],
+        ['a list split where its numbers run on', [numbered(1, 'i', 'One'), numbered(2, 'i', 'Two')]],
+    ])('%s comes back as written', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
 // The writer sets a task's checkbox at its container's text, so its quotes count from there.
 describe('a task list in a quote', () => {
     test.each<[string, JSONContent[]]>([

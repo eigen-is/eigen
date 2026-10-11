@@ -69,6 +69,7 @@ import {
     Link2Off,
     List,
     ListOrdered,
+    ListRestart,
     type LucideIcon,
     MessageSquarePlus,
     Minus,
@@ -77,6 +78,7 @@ import {
     Quote,
     RemoveFormatting,
     SeparatorHorizontal,
+    Settings2,
     Strikethrough,
     Subscript,
     Superscript,
@@ -88,7 +90,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useToolbarState } from './hooks/use-toolbar-state';
+import { setNumberedListType } from './list-numbering';
 import { PageSetupDialog } from './page-setup-dialog';
+import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
 import { WordCountDialog } from './word-count-dialog';
 
@@ -110,6 +114,15 @@ const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
     right: { label: 'Right', icon: AlignRight },
     justify: { label: 'Justified', icon: AlignJustify },
 };
+
+// Format › Bullets and numbering › Numbered list: Google's single-level styles, by the type a list stores.
+const NUMBERED_LIST_STYLES = [
+    { type: '1', preview: '1. 2. 3.' },
+    { type: 'a', preview: 'a. b. c.' },
+    { type: 'A', preview: 'A. B. C.' },
+    { type: 'i', preview: 'i. ii. iii.' },
+    { type: 'I', preview: 'I. II. III.' },
+] as const;
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -157,6 +170,7 @@ export const EditorToolbar = ({
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const [wordCountOpen, setWordCountOpen] = useState(false);
+    const [restartNumberingOpen, setRestartNumberingOpen] = useState(false);
     const active = useToolbarState(editor);
     // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
     const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
@@ -417,11 +431,35 @@ export const EditorToolbar = ({
                                             <List className="h-4 w-4 mr-2" /> Bullets and numbering
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                                            >
-                                                <ListOrdered className="h-4 w-4 mr-2" /> Numbered list
-                                            </DropdownMenuItem>
+                                            <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger disabled={!active.orderedListType}>
+                                                    <Settings2 className="h-4 w-4 mr-2" /> List options
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent>
+                                                    <DropdownMenuItem onClick={() => setRestartNumberingOpen(true)}>
+                                                        <ListRestart className="h-4 w-4 mr-2" /> Restart numbering
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger>
+                                                    <ListOrdered className="h-4 w-4 mr-2" /> Numbered list
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent>
+                                                    <DropdownMenuRadioGroup value={active.orderedListType}>
+                                                        {NUMBERED_LIST_STYLES.map(({ type, preview }) => (
+                                                            <DropdownMenuRadioItem
+                                                                key={type}
+                                                                value={type}
+                                                                onSelect={() => setNumberedListType(editor, type)}
+                                                            >
+                                                                {preview}
+                                                            </DropdownMenuRadioItem>
+                                                        ))}
+                                                    </DropdownMenuRadioGroup>
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleBulletList().run()}
                                             >
@@ -846,6 +884,12 @@ export const EditorToolbar = ({
             <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} />
 
             <WordCountDialog editor={editor} open={wordCountOpen} onOpenChange={setWordCountOpen} />
+
+            <RestartNumberingDialog
+                editor={editor}
+                open={restartNumberingOpen}
+                onOpenChange={setRestartNumberingOpen}
+            />
 
             <ExportProgressDialog open={isExporting} />
 

@@ -272,7 +272,7 @@ test('Format › Bullets and numbering lists numbered before bulleted, as Google
     await render(1920, true);
     await openMenu('Format');
     await openSubmenu('Bullets and numbering');
-    expect(openMenuEntries()).toEqual(['Numbered list', 'Bulleted list', 'Checklist']);
+    expect(openMenuEntries()).toEqual(['List options', '—', 'Numbered list', 'Bulleted list', 'Checklist']);
 });
 
 // "a" at 1, a figure at 2, then a 2×2 table whose first cell's text sits at 7.
@@ -391,6 +391,140 @@ test.each([
     await openMenu(trigger);
     await pickInBrowserFrames(() => clickItem(choice));
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
+
+const listItem = (text: string) => ({
+    type: 'listItem',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+});
+
+const listOf = (attrs: Record<string, unknown>, ...texts: string[]) => ({
+    type: 'orderedList',
+    attrs,
+    content: texts.map(listItem),
+});
+
+// "a" at 3, "b" at 8, "c" at 13.
+const orderedList = (attrs: Record<string, unknown>) => ({ type: 'doc', content: [listOf(attrs, 'a', 'b', 'c')] });
+
+// The doc's numbered lists, and blocks as the schema stores them: the paragraph the editor keeps after a list is no list.
+const lists = () => editor.getJSON().content?.filter((block) => block.type === 'orderedList');
+const stored = (...content: ReturnType<typeof listOf>[]) =>
+    editor.schema.nodeFromJSON({ type: 'doc', content }).toJSON().content;
+
+const BULLETS = { type: 'doc', content: [{ type: 'bulletList', content: [listItem('a')] }] };
+
+async function openNumberedList() {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Bullets and numbering');
+    await openSubmenu('Numbered list');
+}
+
+const checkedPresets = () =>
+    [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
+        item.textContent?.trim(),
+    );
+
+async function pickPreset(label: string) {
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (entry) => entry.textContent?.trim() === label,
+    );
+    await act(async () => item?.click());
+}
+
+test("Format › Bullets and numbering › Numbered list offers Google's five numbering styles", async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await openNumberedList();
+    expect(openMenuEntries()).toEqual(NUMBERED_PRESETS);
+    expect(checkedPresets()).toEqual([]);
+});
+
+test.each([
+    ['1. 2. 3.', null],
+    ['a. b. c.', 'a'],
+    ['I. II. III.', 'I'],
+])('Numbered list › marks %s in a list of type %p', async (preset, type) => {
+    editor.commands.setContent(orderedList({ start: 1, type }));
+    editor.commands.setTextSelection(8);
+    await openNumberedList();
+    expect(checkedPresets()).toEqual([preset]);
+});
+
+test('Numbered list › i. ii. iii. makes a paragraph a list numbered in small roman numerals', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await openNumberedList();
+    await pickPreset('i. ii. iii.');
+    expect(editor.getJSON().content?.[0]).toMatchObject({ type: 'orderedList', attrs: { start: 1, type: 'i' } });
+});
+
+test.each([
+    ['A. B. C.', 'A'],
+    ['1. 2. 3.', null],
+])("Numbered list › %s sets a list's style and keeps its items and start", async (preset, type) => {
+    editor.commands.setContent(orderedList({ start: 4, type: 'a' }));
+    editor.commands.setTextSelection(8);
+    await openNumberedList();
+    await pickPreset(preset);
+    expect(lists()).toEqual(stored(listOf({ start: 4, type }, 'a', 'b', 'c')));
+});
+
+test.each([
+    ['in a paragraph', ONE_PARAGRAPH, true],
+    ['in a bulleted list', BULLETS, true],
+    ['in a numbered list', orderedList({ start: 1, type: null }), false],
+])('%s, Bullets and numbering › List options is disabled %p', async (_, content, disabled) => {
+    editor.commands.setContent(content);
+    editor.commands.setTextSelection(3);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Bullets and numbering');
+    expect(submenuDisabled('List options')).toBe(disabled);
+});
+
+// Opens Restart numbering at the caret, types the number and confirms.
+async function restartAtCaret(startAt: string) {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Bullets and numbering');
+    await openSubmenu('List options');
+    expect(openMenuEntries()).toEqual(['Restart numbering']);
+    await clickItem('Restart numbering');
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Restart numbering');
+
+    const input = document.querySelector<HTMLInputElement>('[role="dialog"] input');
+    expect(input?.value).toBe('1');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, startAt);
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const ok = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
+        (button) => button.textContent === 'OK',
+    );
+    await act(async () => ok?.click());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+}
+
+test('List options › Restart numbering at the first item sets where the list starts', async () => {
+    editor.commands.setContent(orderedList({ start: 1, type: 'a' }));
+    editor.commands.setTextSelection(3);
+    await restartAtCaret('5');
+    expect(lists()).toEqual(stored(listOf({ start: 5, type: 'a' }, 'a', 'b', 'c')));
+});
+
+test('List options › Restart numbering in the middle splits the list there, as Google does', async () => {
+    editor.commands.setContent(orderedList({ start: 3, type: 'a' }));
+    editor.commands.setTextSelection(9);
+    await restartAtCaret('1');
+    expect(lists()).toEqual(stored(listOf({ start: 3, type: 'a' }, 'a'), listOf({ start: 1, type: 'a' }, 'b', 'c')));
+    // The caret stays after the b.
+    const { $from } = editor.state.selection;
+    expect([$from.parent.textContent, $from.parentOffset]).toEqual(['b', 1]);
 });
 
 test('a viewer gets File, Edit and Tools, but neither the Format and Insert menus nor the icon row', async () => {

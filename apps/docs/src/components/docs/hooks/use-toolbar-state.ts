@@ -3,6 +3,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
+import { orderedListDepth } from '../list-numbering';
 
 type ToolbarState = {
     headingLevel: number | undefined;
@@ -17,6 +18,8 @@ type ToolbarState = {
     alignment: TextAlign | undefined;
     bulletList: boolean;
     orderedList: boolean;
+    // The type of the numbered list the caret is in, decimal as '1'.
+    orderedListType: string | undefined;
     taskList: boolean;
     link: boolean;
     selectionEmpty: boolean;
@@ -71,6 +74,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 });
             }
             const table = active('table');
+            const listDepth = orderedListDepth(selection.$from);
             return {
                 // A range of mixed levels, or of headings and other blocks, reads as none.
                 headingLevel: headingLevels.size === 1 ? [...headingLevels][0] : undefined,
@@ -87,6 +91,8 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 alignment: alignments.size === 1 ? [...alignments][0] : undefined,
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
+                orderedListType:
+                    listDepth === undefined ? undefined : (selection.$from.node(listDepth).attrs['type'] ?? '1'),
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
