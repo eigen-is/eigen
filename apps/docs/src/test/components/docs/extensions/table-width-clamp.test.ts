@@ -1,5 +1,4 @@
-// A change that takes a table past the text column ends with the table at the column's width. Distribute columns gives
-// every column one width, the table's own or, with a column of no width, the text column's.
+// A change that takes a table past the text column ends with the table at the column's width.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -16,7 +15,7 @@ afterEach(() => unmount());
 
 const COLUMN_PX = 600;
 
-type CellAttrs = { colspan?: number; colwidth: number[] | null };
+type CellAttrs = { colwidth: number[] | null };
 const cell = (attrs: CellAttrs, text = 'x') => ({
     type: 'tableCell',
     attrs,
@@ -59,27 +58,4 @@ test('a change that takes the table past the text column scales every column bac
     const { state, view } = editor;
     view.dispatch(state.tr.setNodeMarkup(first, null, { ...state.doc.nodeAt(first)?.attrs, colwidth: [400] }));
     expect(widths(editor)).toEqual([[300], [150], [150]]);
-});
-
-test('Distribute columns splits the width of a table whose columns all have one', async () => {
-    const editor = await mount([
-        row(cell({ colwidth: [100] }), cell({ colwidth: [200] }), cell({ colwidth: [60] })),
-        row(cell({ colspan: 2, colwidth: [100, 200] }), cell({ colwidth: [60] })),
-    ]);
-    editor.commands.setTextSelection(first + 2);
-    expect(editor.commands.distributeColumns()).toBe(true);
-    expect(widths(editor)).toEqual([[120], [120], [120], [120, 120], [120]]);
-});
-
-test('Distribute columns fills the text column when a column has no width', async () => {
-    const editor = await mount([row(cell({ colwidth: [100] }), cell({ colwidth: null }), cell({ colwidth: [0] }))]);
-    editor.commands.setTextSelection(first + 2);
-    expect(editor.commands.distributeColumns()).toBe(true);
-    expect(widths(editor)).toEqual([[200], [200], [200]]);
-});
-
-test('Distribute columns does nothing outside a table', async () => {
-    const editor = await mount([row(cell({ colwidth: [100] }))]);
-    editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph' }] });
-    expect(editor.commands.distributeColumns()).toBe(false);
 });

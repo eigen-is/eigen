@@ -75,7 +75,7 @@ Under **Columns**, click **Before** or **After** to add a column on either side 
 
 **Resize columns**
 
-Point at the border between two columns until the cursor changes, then drag it left or right. One column gets wider and the one beside it narrower, so the table keeps its width. To make the whole table wider or narrower, drag its right edge; it stops at the edge of the page's text. Dragging needs a mouse or trackpad; on a touchscreen the columns keep their widths.
+Point at the border between two columns until the cursor changes, then drag it left or right. One column gets wider and the one beside it narrower, so the table keeps its width. To make the whole table wider or narrower, drag its right edge; it stops at the edge of the page's text, or of the list item or table cell it sits in. Dragging needs a mouse or trackpad; on a touchscreen the columns keep their widths.
 
 Click **Distribute columns** under **Columns** to give every column the same width.
 

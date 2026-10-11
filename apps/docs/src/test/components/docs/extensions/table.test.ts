@@ -1,6 +1,8 @@
 // Google Docs' column drag: the border between two columns moves width from one to the other and the table keeps its
-// width, each column stopping at the floor; the table's right edge sets the table's width, up to the text column. The
-// first drag on a table stores every column's drawn width, and undoing it draws the columns as before.
+// width, each column stopping at the floor; the table's right edge sets the table's width, up to the block it sits in.
+// The first drag on a table stores every column's drawn width, and undoing it draws the columns as before; a click
+// writes nothing. Distribute columns gives every column one width, the table's own or, with a column of no width, the
+// text column's.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -9,7 +11,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
-const { history, undo } = await import('@tiptap/pm/history');
+const { history, undo, undoDepth } = await import('@tiptap/pm/history');
 const { columnResizingPluginKey } = await import('@tiptap/pm/tables');
 const { getDocExtensions, MIN_TABLE_COLUMN_PX } = await import('@workspace/lib/docs/eigendoc');
 const { EditorTable } = await import('../../../../components/docs/extensions/table');
@@ -31,10 +33,10 @@ const widthRow = (...widths: (number | null)[]) =>
     row(...widths.map((width) => cell({ colwidth: width === null ? null : [width] })));
 
 // Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it.
-async function mount(rows: object[]) {
+async function mountDoc(content: object[]) {
     const editor = new Editor({
         extensions: [...getDocExtensions({ exclude: ['table'] }), EditorTable, TableWidthClamp],
-        content: { type: 'doc', content: [{ type: 'table', content: rows }] },
+        content: { type: 'doc', content },
     });
     editor.registerPlugin(history());
     const rendered = await renderInDocument(
@@ -50,6 +52,8 @@ async function mount(rows: object[]) {
     return editor;
 }
 
+const mount = (rows: object[]) => mountDoc([{ type: 'table', content: rows }]);
+
 const widths = (editor: InstanceType<typeof Editor>) => {
     const found: (number[] | null)[] = [];
     editor.state.doc.descendants((node) => {
@@ -61,14 +65,27 @@ const widths = (editor: InstanceType<typeof Editor>) => {
 const colStyles = (editor: InstanceType<typeof Editor>) =>
     [...editor.view.dom.querySelectorAll<HTMLTableColElement>('col')].map((col) => col.style.width);
 
-// A drag of the right border of the cell at `cellPos` by `dx`: the handle columnResizing sets on hover, mousedown on
-// the editor, a move and the mouseup on the window.
-function drag(editor: InstanceType<typeof Editor>, cellPos: number, dx: number) {
+// Every cell draws `px` wide, as a laid-out page would draw it.
+const drawCells = (editor: InstanceType<typeof Editor>, px: number) => {
+    for (const td of editor.view.dom.querySelectorAll('td')) Object.defineProperty(td, 'offsetWidth', { value: px });
+};
+
+// A press on the right border of the cell at `cellPos`: the handle columnResizing sets on hover, then mousedown on the
+// editor at x 300. The moves and the mouseup go to the window.
+function press(editor: InstanceType<typeof Editor>, cellPos: number, button = 0) {
     const { view } = editor;
     view.dispatch(view.state.tr.setMeta(columnResizingPluginKey, { setHandle: cellPos }));
-    view.dom.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, bubbles: true, cancelable: true }));
-    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 300 + dx, buttons: 1 }));
-    window.dispatchEvent(new MouseEvent('mouseup', { clientX: 300 + dx }));
+    view.dom.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, button, bubbles: true, cancelable: true }));
+}
+const move = (dx: number, buttons = 1) =>
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 300 + dx, buttons }));
+const release = (dx: number, button = 0) =>
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: 300 + dx, button }));
+
+function drag(editor: InstanceType<typeof Editor>, cellPos: number, dx: number) {
+    press(editor, cellPos);
+    move(dx);
+    release(dx);
 }
 
 // Cell positions: table at 0, row at 1, its cells at 2, 7 and 12 ("x" in a paragraph is 5 long).
@@ -115,9 +132,7 @@ test('a cell spanning both columns keeps its width and splits it anew', async ()
 
 test("the first drag stores every column's drawn width, and undo draws the columns as before", async () => {
     const editor = await mount([widthRow(null, null, null)]);
-    for (const td of editor.view.dom.querySelectorAll('td')) {
-        Object.defineProperty(td, 'offsetWidth', { value: 200 });
-    }
+    drawCells(editor, 200);
     expect(colStyles(editor)).toEqual(['', '', '']);
     drag(editor, first, 50);
     expect(widths(editor)).toEqual([[250], [150], [200]]);
@@ -130,11 +145,159 @@ test("the first drag stores every column's drawn width, and undo draws the colum
 
 test('a move draws the columns the drop writes', async () => {
     const editor = await mount([widthRow(100, 100, 100)]);
-    const { view } = editor;
-    view.dispatch(view.state.tr.setMeta(columnResizingPluginKey, { setHandle: first }));
-    view.dom.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, bubbles: true, cancelable: true }));
-    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 330, buttons: 1 }));
+    press(editor, first);
+    move(30);
     expect(colStyles(editor)).toEqual(['130px', '70px', '100px']);
-    window.dispatchEvent(new MouseEvent('mouseup', { clientX: 330 }));
+    release(30);
     expect(widths(editor)).toEqual([[130], [70], [100]]);
+});
+
+test('a click or a right-click on a border writes nothing and draws the columns as before', async () => {
+    const editor = await mount([widthRow(null, null, null)]);
+    drawCells(editor, 200);
+    press(editor, first, 2);
+    move(40, 2);
+    release(40, 2);
+    expect(widths(editor)).toEqual([null, null, null]);
+    press(editor, first);
+    move(0);
+    release(0);
+    expect(widths(editor)).toEqual([null, null, null]);
+    expect(colStyles(editor)).toEqual(['', '', '']);
+});
+
+test('a drag back to where it started writes nothing and draws the columns as before', async () => {
+    const editor = await mount([widthRow(null, null, null), widthRow(null, null, null)]);
+    drawCells(editor, 200);
+    press(editor, first);
+    move(40);
+    expect(colStyles(editor)).not.toEqual(['', '', '']);
+    // A collaborator deletes the row the handle is on, so columnResizing drops its handle.
+    editor
+        .chain()
+        .setTextSelection(first + 2)
+        .deleteRow()
+        .run();
+    move(0);
+    release(0);
+    expect(widths(editor)).toEqual([null, null, null]);
+    expect(colStyles(editor)).toEqual(['', '', '']);
+});
+
+test('the drop reads the table again: a column deleted meanwhile keeps its widths, a row added takes them', async () => {
+    const deleted = await mount([widthRow(100, 100, 100)]);
+    press(deleted, first);
+    move(30);
+    deleted
+        .chain()
+        .setTextSelection(third + 2)
+        .deleteColumn()
+        .run();
+    move(40);
+    release(40);
+    expect(widths(deleted)).toEqual([[100], [100]]);
+    expect(colStyles(deleted)).toEqual(['100px', '100px']);
+    await unmount();
+
+    const added = await mount([widthRow(100, 100, 100)]);
+    press(added, first);
+    move(30);
+    added
+        .chain()
+        .setTextSelection(first + 2)
+        .addRowAfter()
+        .run();
+    release(30);
+    expect(widths(added)).toEqual([[130], [70], [100], [130], [70], [100]]);
+});
+
+test("columnResizing's hover leaves the handle where the drag started", async () => {
+    const editor = await mount([widthRow(100, 100, 100)]);
+    const { view } = editor;
+    press(editor, first);
+    view.dom
+        .querySelectorAll('td')[1]
+        ?.dispatchEvent(new MouseEvent('mousemove', { clientX: 330, buttons: 1, bubbles: true }));
+    view.dom.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(columnResizingPluginKey.getState(view.state)?.activeHandle).toBe(first);
+    release(30);
+    expect(widths(editor)).toEqual([[130], [70], [100]]);
+});
+
+test('a move with no button down ends the drag where it is', async () => {
+    const editor = await mount([widthRow(100, 100, 100)]);
+    press(editor, first);
+    move(30);
+    move(40, 0);
+    release(80);
+    expect(widths(editor)).toEqual([[140], [60], [100]]);
+});
+
+test('a viewer drags nothing', async () => {
+    const editor = await mount([widthRow(100, 100, 100)]);
+    editor.setEditable(false);
+    drag(editor, first, 50);
+    expect(widths(editor)).toEqual([[100], [100], [100]]);
+});
+
+test("on a page drawn at half size a drag moves the border twice as far in the page's pixels", async () => {
+    const editor = await mount([widthRow(100, 100, 100)]);
+    const table = editor.view.dom.querySelector('table');
+    if (!table) throw new Error('no table');
+    Object.defineProperty(table, 'offsetWidth', { value: 300 });
+    Object.defineProperty(table, 'getBoundingClientRect', { value: () => new DOMRect(0, 0, 150, 20) });
+    drag(editor, third, 100);
+    expect(widths(editor)).toEqual([[100], [100], [300]]);
+});
+
+test("a table in a list item grows up to the list item's width", async () => {
+    // The list at 0, its item at 1, an empty paragraph at 2, the table at 4, its row at 5, its cells at 6, 11 and 16.
+    const editor = await mountDoc([
+        {
+            type: 'bulletList',
+            content: [
+                {
+                    type: 'listItem',
+                    content: [{ type: 'paragraph' }, { type: 'table', content: [widthRow(100, 100, 100)] }],
+                },
+            ],
+        },
+    ]);
+    const item = editor.view.dom.querySelector('li');
+    if (!item) throw new Error('no list item');
+    Object.defineProperty(item, 'clientWidth', { value: 400 });
+    drag(editor, 16, 1000);
+    expect(widths(editor)).toEqual([[100], [100], [200]]);
+});
+
+test('Distribute columns splits the width of a table whose columns all have one', async () => {
+    const editor = await mount([
+        row(cell({ colwidth: [100] }), cell({ colwidth: [200] }), cell({ colwidth: [60] })),
+        row(cell({ colspan: 2, colwidth: [100, 200] }), cell({ colwidth: [60] })),
+    ]);
+    editor.commands.setTextSelection(first + 2);
+    expect(editor.commands.distributeColumns()).toBe(true);
+    expect(widths(editor)).toEqual([[120], [120], [120], [120, 120], [120]]);
+});
+
+test('Distribute columns fills the text column when a column has no width', async () => {
+    const editor = await mount([row(cell({ colwidth: [100] }), cell({ colwidth: null }), cell({ colwidth: [0] }))]);
+    editor.commands.setTextSelection(first + 2);
+    expect(editor.commands.distributeColumns()).toBe(true);
+    expect(widths(editor)).toEqual([[200], [200], [200]]);
+});
+
+test('Distribute columns leaves a table whose columns are already one width as it is', async () => {
+    const editor = await mount([widthRow(100, 100, 100)]);
+    editor.commands.setTextSelection(first + 2);
+    const [before, depth] = [editor.state.doc, undoDepth(editor.state)];
+    expect(editor.commands.distributeColumns()).toBe(true);
+    expect(editor.state.doc).toBe(before);
+    expect(undoDepth(editor.state)).toBe(depth);
+});
+
+test('Distribute columns does nothing outside a table', async () => {
+    const editor = await mount([widthRow(100)]);
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph' }] });
+    expect(editor.commands.distributeColumns()).toBe(false);
 });

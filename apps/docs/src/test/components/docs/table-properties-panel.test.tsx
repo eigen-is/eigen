@@ -10,7 +10,7 @@ const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { TablePropertiesPanel } = await import('../../../components/docs/table-properties-panel');
-const { TableWidthClamp } = await import('../../../components/docs/extensions/table-width-clamp');
+const { EditorTable } = await import('../../../components/docs/extensions/table');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -23,7 +23,7 @@ const cell = (text: string, colwidth: number[] | null = null) => ({
 
 async function mount(cells = [cell('a'), cell('b')]) {
     const editor = new Editor({
-        extensions: [...getDocExtensions(), TableWidthClamp],
+        extensions: [...getDocExtensions({ exclude: ['table'] }), EditorTable],
         content: { type: 'doc', content: [{ type: 'table', content: [{ type: 'tableRow', content: cells }] }] },
     });
     editor.commands.setTextSelection(3);
