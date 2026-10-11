@@ -25,12 +25,17 @@ const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .join(' ');
 
 // The text column, or half of it for a wrapped figure: the widest a resize makes it.
-function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
+export function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
     const container = figure instanceof Element ? figure.closest('[data-document]') : null;
     if (!container) return Infinity;
     const style = getComputedStyle(container);
     const fullWidth = container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
+}
+
+// The width a grip, Shift and an arrow, or the Image panel's Width field writes.
+export function clampFigureWidth(width: number, maxWidth: number) {
+    return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
 }
 
 type FigureOptions = {
@@ -154,21 +159,19 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
             if (!transformStarted.current) {
                 transformStarted.current = true;
                 // Measured once per gesture (see latch note); a hidden surface reports <=0, which the
-                // FIGURE_MIN_WIDTH floor below wins over.
+                // clampFigureWidth floor wins over.
                 gestureMaxWidth.current = getMaxWidth();
             }
-            const w = Math.max(FIGURE_MIN_WIDTH, Math.min(gestureMaxWidth.current, next.width));
-            setPreviewWidth(Math.round(w));
+            setPreviewWidth(clampFigureWidth(next.width, gestureMaxWidth.current));
         },
         [getMaxWidth],
     );
 
     const handleCommit = useCallback(
         (next: Box) => {
-            const w = Math.max(FIGURE_MIN_WIDTH, Math.min(gestureMaxWidth.current, next.width));
             transformStarted.current = false;
             setPreviewWidth(null);
-            setAttributes({ width: Math.round(w) });
+            setAttributes({ width: clampFigureWidth(next.width, gestureMaxWidth.current) });
         },
         [setAttributes],
     );
@@ -244,8 +247,8 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
                         resizeMode="aspect"
                         // Default minSize (1): in aspect mode the component floors BOTH dims,
                         // which would inflate wide images (a 100 floor on a 4:1 banner's height
-                        // forces width 400). The width-only [100, maxWidth] floor is the host
-                        // clamp in handleTransform/handleCommit and the Shift+Arrow keymap.
+                        // forces width 400). The width-only [100, maxWidth] clamp is the host's,
+                        // clampFigureWidth.
                         onTransform={handleTransform}
                         onCommit={handleCommit}
                     />
@@ -290,8 +293,9 @@ export const Figure = FigureNode.extend<FigureOptions>({
             // With no width stored, the image draws at its own width, and a placeholder at the default.
             const drawn =
                 (figure instanceof Element && figure.querySelector('img')?.clientWidth) || FIGURE_DEFAULT_WIDTH;
-            const width = Math.min(maxWidth, (selection.node.attrs.width || drawn) + delta);
-            return this.editor.commands.updateFigure({ width: Math.round(Math.max(FIGURE_MIN_WIDTH, width)) });
+            return this.editor.commands.updateFigure({
+                width: clampFigureWidth((selection.node.attrs.width || drawn) + delta, maxWidth),
+            });
         };
         return Object.fromEntries(
             Object.entries(FIGURE_RESIZE_STEPS).map(([key, step]) => [`Shift-${key}`, resize(step)]),
