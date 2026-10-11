@@ -1846,6 +1846,8 @@ describe('Sheets xlsx conversion fidelity', () => {
 describe('xlsxToSheets resource guards', () => {
     // Bun's tree costs ~120x the markup it holds: 8 MB of `<a/>` builds a ~1 GB tree, two at once ~2 GB.
     test('workbook, rels, theme and hyperlinks block of 8 or 16 MB of tags cost no tree', async () => {
+        // The delta holds uncollected garbage: no tree measures up to ~140 MB under CI load, a dropped tree ~450 MB.
+        const treeless = 256 * 1024 * 1024;
         for (const bytes of [8 * 1024 * 1024 - 4096, 8_000_000, 16_000_000]) {
             const fill = '<a/>'.repeat(bytes / 4);
             const workbook = new ExcelJS.Workbook();
@@ -1872,7 +1874,7 @@ describe('xlsxToSheets resource guards', () => {
             const grown = process.memoryUsage().heapUsed - before;
 
             expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
-            expect(grown).toBeLessThan(128 * 1024 * 1024);
+            expect(grown).toBeLessThan(treeless);
 
             // exceljs refuses a rels part holding anything but relationships, so this one is read on its own.
             const zip = await JSZip.loadAsync(buffer);
@@ -1881,7 +1883,7 @@ describe('xlsxToSheets resource guards', () => {
             Bun.gc(true);
             const relsBefore = process.memoryUsage().heapUsed;
             expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
-            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(128 * 1024 * 1024);
+            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(treeless);
         }
     });
 
