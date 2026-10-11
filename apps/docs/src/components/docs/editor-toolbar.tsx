@@ -1,8 +1,8 @@
-import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
@@ -84,11 +84,13 @@ import {
     Type,
     TypeOutline,
     Underline,
+    WholeWord,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { PageSetupDialog } from './page-setup-dialog';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
+import { WordCountDialog } from './word-count-dialog';
 
 // Format › Paragraph styles and the style picker list these; the picker previews each as the editor draws it, its
 // sizes stepping down and Heading 5 and 6 at the body's weight in grey, Heading 6 in italic.
@@ -154,6 +156,7 @@ export const EditorToolbar = ({
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
+    const [wordCountOpen, setWordCountOpen] = useState(false);
     const active = useToolbarState(editor);
     // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
     const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
@@ -164,6 +167,21 @@ export const EditorToolbar = ({
     const showsRow = useMediaQuery('(min-width: 900px)');
     const showsMiddle = useMediaQuery('(min-width: 1100px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
+    // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
+    const isMobile = useIsMobile();
+
+    // Document-level: a viewer's editor is not editable, so an editor keymap would never see the key.
+    useHotkey('Mod+Shift+C', (e) => {
+        e.preventDefault();
+        setWordCountOpen(true);
+    });
+
+    const wordCountItem = (
+        <DropdownMenuItem onClick={() => setWordCountOpen(true)}>
+            <WholeWord className="h-4 w-4 mr-2" /> Word count
+            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+C')}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+    );
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -544,6 +562,12 @@ export const EditorToolbar = ({
                                 </ToolbarMenu>
                             </>
                         )}
+
+                        {!isMobile && (
+                            <ToolbarMenu label="Tools" onCloseAutoFocus={keepEditorFocus}>
+                                {wordCountItem}
+                            </ToolbarMenu>
+                        )}
                     </div>
                 }
                 center={
@@ -769,6 +793,7 @@ export const EditorToolbar = ({
                         activityPanelOpen={activityPanelOpen}
                         assignedCommentCount={assignedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                        mobileMenuItems={wordCountItem}
                     />
                 }
             />
@@ -819,6 +844,8 @@ export const EditorToolbar = ({
             </Dialog>
 
             <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} />
+
+            <WordCountDialog editor={editor} open={wordCountOpen} onOpenChange={setWordCountOpen} />
 
             <ExportProgressDialog open={isExporting} />
 

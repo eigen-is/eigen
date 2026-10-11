@@ -28,7 +28,7 @@ The toolbar has three areas:
 - **Formatting controls**, in the center. Change the heading level (Normal text, Heading 1 through Heading 6) and the font, make text **Bold**, **Italic**, or **Underline**, set text color and highlight color, insert a link or an image, and set alignment and list style (bulleted, numbered, or checklist).
 - **Share** and **Comments** buttons, on the right.
 
-The **Format** and **Insert** menus sit next to **File** and **Edit** on every screen. They hold every formatting option, including strikethrough, capitals, and quotes, and everything you can insert, such as a horizontal rule, a page break, or a table. On a narrower window the center shows fewer controls, dropping them from the right, and on a small screen none. Use the menus for the rest.
+The **Format** and **Insert** menus sit next to **File** and **Edit** on every screen. They hold every formatting option, including strikethrough, capitals, and quotes, and everything you can insert, such as a horizontal rule, a page break, or a table. On a narrower window the center shows fewer controls, dropping them from the right, and on a small screen none. Use the menus for the rest. The **Tools** menu comes after **Insert** and holds **Word count**, which viewers can use too. On a phone, **Word count** sits in the **⋮** menu instead.
 
 ## Your changes save automatically
 
