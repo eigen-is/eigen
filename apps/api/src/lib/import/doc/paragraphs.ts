@@ -2,7 +2,14 @@ import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, HEADING_LOOKS, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import {
+    CAPTION_LOOK,
+    CODE_BLOCK_LOOK,
+    HEADING_LOOKS,
+    QUOTE_LOOK,
+    TASK_DONE_LOOK,
+    TITLE_LOOKS,
+} from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -169,6 +176,9 @@ export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope)
     });
 }
 
+// The roles whose node draws its own size: set at the body's, it reads as body text, and no list holds it.
+const SIZED = new Set<Role['kind']>(['heading', 'title', 'subtitle']);
+
 const CHECKBOXES = new Map([
     [CHECKBOX_GLYPHS.unchecked, false],
     ['☑', true],
@@ -190,7 +200,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
-    if (role.kind === 'heading' && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
+    if (SIZED.has(role.kind) && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, paraRun)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
@@ -260,12 +270,17 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // The quote's, a heading's and the done task's look, which Google Docs writes as direct formatting, is the node's;
-    // in a heading that draws italic, an italic mark is a run set upright (runs.ts), which a quote around it keeps.
-    const headingLook = role.kind === 'heading' ? HEADING_LOOKS[role.level - 1] : undefined;
-    if (quote > 0)
-        stripLook(pieces, QUOTE_LOOK.italic && !headingLook?.italic ? 'italic' : undefined, QUOTE_LOOK.color);
-    if (headingLook) stripLook(pieces, undefined, headingLook.color);
+    // The quote's, a heading's, a title's and the done task's look, which Google Docs writes as direct formatting, is
+    // the node's; in a heading that draws italic, an italic mark is a run set upright (runs.ts), which a quote around it
+    // keeps.
+    const nodeLook =
+        role.kind === 'heading'
+            ? HEADING_LOOKS[role.level - 1]
+            : role.kind === 'title' || role.kind === 'subtitle'
+              ? TITLE_LOOKS[role.kind]
+              : undefined;
+    if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic && !nodeLook?.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+    if (nodeLook) stripLook(pieces, undefined, nodeLook.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
     const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>
@@ -280,8 +295,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
     if (task?.checked || (task && looksDone)) stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
 
-    // A numbered heading keeps its number as text: the schema holds no numbered heading.
-    const label = list && role.kind === 'heading' ? list.label() : '';
+    // A numbered heading or title keeps its number as text: the schema holds no numbered heading.
+    const label = list && SIZED.has(role.kind) ? list.label() : '';
     if (label)
         halves[0]?.unshift({
             kind: 'node',
@@ -309,7 +324,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
         const para: Para = {
             kind: 'para',
-            // An empty heading is the blank line Word shows, not a heading's height.
+            // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
+            // draws it at the title's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
@@ -330,7 +346,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
         };
-        if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
+        if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
         if (para.list || para.task) para.numberAt = indLeft + Math.min(0, props.indFirst ?? 0);
         if (boxed) para.boxed = true;

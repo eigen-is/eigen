@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, and images.
@@ -38,7 +38,7 @@ Eigen creates a new document in the same folder, with the same name as the Word 
 
 Your text keeps its bold, italic, underline, strikethrough, color, highlight, all caps, small caps, and alignment. Fonts become Eigen's own: a sans-serif font such as Calibri or Arial shows in Inter, Eigen's default font, a serif font such as Times New Roman in Source Serif 4, and a monospace font such as Courier New in JetBrains Mono.
 
-- Headings stay headings, and Word's Title style becomes a Heading 1.
+- Headings stay headings, and Word's Title and Subtitle styles become a Title and a Subtitle.
 - Numbered lists keep their numbers, the number they start at, and their style (1, a, A, i, or I). A list keeps counting across a page break, and a page break inside a list item stays in that item.
 - Checkboxes become a checklist, ticked or not.
 - Tables keep their merged cells and column widths. A table wider than the page shrinks to fit.

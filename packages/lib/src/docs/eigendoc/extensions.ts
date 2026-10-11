@@ -15,6 +15,10 @@ import { EigenFontFamily } from './nodes/font-family';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { SmallMark } from './nodes/small-mark';
+import { SubtitleNode, TitleNode } from './nodes/title';
+
+// The textblocks that hold prose, which an alignment applies to; a code block holds code.
+export const PROSE_TEXTBLOCKS = ['paragraph', 'title', 'subtitle', 'heading'];
 
 export function getDocExtensions(options?: { lowlight?: unknown; exclude?: string[] }) {
     const exclude = options?.exclude;
@@ -41,7 +45,9 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextCaps,
         TaskList,
         TaskItem.configure({ nested: true }),
-        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        TitleNode,
+        SubtitleNode,
+        TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
         FigureNode,
         PageBreakNode,
         Highlight.configure({ multicolor: true }),

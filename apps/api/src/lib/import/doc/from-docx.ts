@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
+import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
@@ -125,7 +126,7 @@ function asParagraphs(block: JSONContent): JSONContent[] {
     const lines: JSONContent[] = [];
     const walk = (node: JSONContent, line: JSONContent[]) => {
         if (node.type === 'text' && node.text) line.push({ type: 'text', text: node.text });
-        else if (node.type === 'paragraph' || node.type === 'heading' || node.type === 'codeBlock') {
+        else if (PROSE_TEXTBLOCKS.includes(node.type ?? '') || node.type === 'codeBlock') {
             const own: JSONContent[] = [];
             for (const child of node.content ?? []) walk(child, own);
             lines.push({ type: 'paragraph', content: own });

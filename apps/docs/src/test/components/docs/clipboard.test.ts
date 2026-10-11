@@ -8,7 +8,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 installHappyDom();
 
 const { classifyPaste } = await import('@workspace/lib/clipboard');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { getDocExtensions, TITLE_LOOK_CSS } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { insertEigenItems, writeDocsClipboard } = await import('../../../components/docs/clipboard');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
@@ -175,6 +175,29 @@ test('a copy writes an italic mark in Heading 6 upright and pastes it back as th
     expect([...html.querySelectorAll('em')].map((em) => [em.closest('h5, h6')?.tagName, em.style.fontStyle])).toEqual([
         ['H6', 'normal'],
         ['H5', ''],
+    ]);
+
+    const target = await paste(clipboard);
+    const expected = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
+    expect(target.getJSON()).toEqual(expected.getJSON());
+});
+
+// A title's look is its node's, which Google Docs and Word don't read: the copy writes it on the p, and a paste here
+// reads the node from its data-type.
+test('a copy writes the title and subtitle look inline and pastes them back as the nodes', async () => {
+    const content = [
+        { type: 'title', content: [text('Report')] },
+        { type: 'subtitle', content: [text('Third quarter')] },
+        paragraph(text('Body')),
+    ];
+    const clipboard = copy(content);
+    const html = new DOMParser().parseFromString(clipboard.html, 'text/html');
+    expect(
+        [...html.querySelectorAll<HTMLElement>('p')].map((p) => [p.dataset['type'], p.style.fontSize, p.style.color]),
+    ).toEqual([
+        ['title', TITLE_LOOK_CSS.title.fontSize, ''],
+        ['subtitle', TITLE_LOOK_CSS.subtitle.fontSize, TITLE_LOOK_CSS.subtitle.color],
+        [undefined, '', ''],
     ]);
 
     const target = await paste(clipboard);

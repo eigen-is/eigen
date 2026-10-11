@@ -44,7 +44,7 @@ function Probe({ of = editor }: { of?: typeof editor }) {
 test('a caret move alone updates what the toolbar draws', async () => {
     editor.commands.setTextSelection(3);
     ({ unmount } = await renderInDocument(createElement(Probe)));
-    expect(seen.at(-1)).toMatchObject({ bold: false, fontName: 'Inter', headingLevel: undefined });
+    expect(seen.at(-1)).toMatchObject({ bold: false, fontName: 'Inter', paragraphStyle: undefined });
 
     const before = editor.state.doc;
     await act(async () => editor.commands.setTextSelection(9));
@@ -52,7 +52,7 @@ test('a caret move alone updates what the toolbar draws', async () => {
     expect(seen.at(-1)).toMatchObject({ bold: true, fontName: 'Source Serif 4' });
 
     await act(async () => editor.commands.setTextSelection(14));
-    expect(seen.at(-1)).toMatchObject({ bold: false, fontName: 'Inter', headingLevel: 2 });
+    expect(seen.at(-1)).toMatchObject({ bold: false, fontName: 'Inter', paragraphStyle: 'Heading 2' });
 });
 
 test('a caret move that changes nothing drawn renders nothing', async () => {
@@ -110,14 +110,14 @@ test('a long selection starting after a bold word or a heading reads none of the
     });
     long.commands.setTextSelection({ from: 5, to: long.state.doc.content.size - 1 });
     ({ unmount } = await renderInDocument(createElement(Probe, { of: long })));
-    expect(seen.at(-1)).toMatchObject({ bold: false, headingLevel: undefined });
+    expect(seen.at(-1)).toMatchObject({ bold: false, paragraphStyle: undefined });
 
     let headingEnd = 0;
     long.state.doc.descendants((node, pos) => {
         if (node.type.name === 'heading') headingEnd = pos + node.nodeSize - 1;
     });
     await act(async () => long.commands.setTextSelection({ from: headingEnd, to: long.state.doc.content.size - 1 }));
-    expect(seen.at(-1)).toMatchObject({ bold: false, headingLevel: undefined });
+    expect(seen.at(-1)).toMatchObject({ bold: false, paragraphStyle: undefined });
     long.destroy();
 });
 
@@ -201,10 +201,10 @@ test('a range over two heading levels reads no level', async () => {
     });
     headings.commands.setTextSelection({ from: 2, to: 3 });
     ({ unmount } = await renderInDocument(createElement(Probe, { of: headings })));
-    expect(seen.at(-1)).toMatchObject({ headingLevel: 2, mixedStyles: false });
+    expect(seen.at(-1)).toMatchObject({ paragraphStyle: 'Heading 2', mixedStyles: false });
 
     await act(async () => headings.commands.setTextSelection({ from: 2, to: 8 }));
-    expect(seen.at(-1)).toMatchObject({ headingLevel: undefined, mixedStyles: true });
+    expect(seen.at(-1)).toMatchObject({ paragraphStyle: undefined, mixedStyles: true });
     headings.destroy();
 });
 

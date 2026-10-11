@@ -12,6 +12,8 @@ const style = (id: string, name: string, extra = '') =>
     `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/>${extra}</w:style>`;
 const types = (json: JSONContent) =>
     (json.content ?? []).map((node) => (node.type === 'heading' ? `heading${node.attrs?.['level']}` : node.type));
+const colored = (color: string, text: string) =>
+    `<w:r><w:rPr><w:color w:val="${color}"/></w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`;
 
 describe('code block language', () => {
     // The writer's carrier is the style's name; a LibreOffice re-save renames the id and keeps the name.
@@ -43,10 +45,10 @@ ${style('CodeBlock-klingon', 'Code Block (klingon)', '<w:basedOn w:val="CodeBloc
 });
 
 describe('roles', () => {
-    test('headings by name whatever the id, Title as a heading, Subtitle as a paragraph', async () => {
+    test('headings, the Title and the Subtitle by name whatever the id', async () => {
         const styles = `${style('Kop2', 'heading 2')}${style('Titel', 'Title')}${style('Ondertitel', 'Subtitle')}`;
         const body = [styled('Kop2', 'Two'), styled('Titel', 'Title'), styled('Ondertitel', 'Sub')].join('');
-        expect(types((await importDocxBody(body, { styles })).json)).toEqual(['heading2', 'heading1', 'paragraph']);
+        expect(types((await importDocxBody(body, { styles })).json)).toEqual(['heading2', 'title', 'subtitle']);
     });
 
     test("a custom style's outline level is a heading; a TOC entry's is not", async () => {
@@ -77,12 +79,28 @@ describe('roles', () => {
         ]);
     });
 
-    // A subtitle draws as a paragraph, which draws no look of its own.
-    test("a Subtitle style's bold, italic and small size stay marks", async () => {
-        const styles = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style('Subtitle', 'Subtitle', '<w:rPr><w:b/><w:i/><w:sz w:val="16"/></w:rPr>')}`;
-        const { json } = await importDocxBody(styled('Subtitle', 'Sub'), { styles });
-        expect(types(json)).toEqual(['paragraph']);
-        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([{ type: 'bold' }, { type: 'italic' }, { type: 'small' }]);
+    // A title and a subtitle draw their size at the body's weight, upright: a style's bold and italic stay marks.
+    test.each([
+        ['Title', 'title'],
+        ['Subtitle', 'subtitle'],
+    ])("a %s style's bold and italic stay marks, its size is the node's", async (name, type) => {
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>${style(name, name, '<w:rPr><w:b/><w:i/><w:sz w:val="16"/></w:rPr>')}`;
+        const { json } = await importDocxBody(styled(name, 'Big'), { styles });
+        expect(types(json)).toEqual([type]);
+        expect(nodesOfType(json, 'text')[0]?.marks).toEqual([{ type: 'bold' }, { type: 'italic' }]);
+    });
+
+    // The subtitle draws Google Docs' grey, which a Google Docs re-save writes on each run: there it is no mark. Another
+    // grey on a subtitle, and that grey on a title, stay.
+    test("the subtitle's own grey is no mark, any other color is", async () => {
+        const styles = `${style('Title', 'Title')}${style('Subtitle', 'Subtitle')}`;
+        const body = `<w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr>${colored('666666', 'Sub ')}${colored('5A5A5A', 'dark')}</w:p><w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>${colored('666666', 'Grey')}</w:p>`;
+        const { json } = await importDocxBody(body, { styles });
+        expect(nodesOfType(json, 'text').map((node) => [node.text, node.marks?.[0]?.attrs?.['color']])).toEqual([
+            ['Sub ', undefined],
+            ['dark', '#5a5a5a'],
+            ['Grey', '#666666'],
+        ]);
     });
 });
 
@@ -124,6 +142,16 @@ describe('headings in body-sized text', () => {
             bold: ['Four'],
             italic: ['Four'],
         });
+    });
+
+    test.each([
+        ['Title', 'Title'],
+        ['Subtitle', 'Subtitle'],
+    ])('a 28 pt %s whose runs carry the 11 pt body size directly is a paragraph', async (_name, name) => {
+        const { json } = await importDocxBody(heading(name, sized('Plain', 22)), {
+            styles: `${STYLES}${style(name, name, '<w:rPr><w:sz w:val="56"/></w:rPr>')}`,
+        });
+        expect(types(json)).toEqual(['paragraph']);
     });
 
     test.each([

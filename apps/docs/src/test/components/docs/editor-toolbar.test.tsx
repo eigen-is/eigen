@@ -175,12 +175,14 @@ test('Format › Text puts the Eigen-only marks after the scripts and capitalisa
     ]);
 });
 
-test('Format › Paragraph styles lists Normal text, Heading 1 to 6 and then Quote', async () => {
+test('Format › Paragraph styles lists Normal text, Title, Subtitle, Heading 1 to 6 and then Quote, as Google does', async () => {
     await render(1920, true);
     await openMenu('Format');
     await openSubmenu('Paragraph styles');
     expect(openMenuEntries()).toEqual([
         'Normal text',
+        'Title',
+        'Subtitle',
         'Heading 1',
         'Heading 2',
         'Heading 3',
@@ -192,7 +194,7 @@ test('Format › Paragraph styles lists Normal text, Heading 1 to 6 and then Quo
     ]);
 });
 
-test('the style picker offers Heading 1 to 6 and reads Heading 5 in a Heading 5', async () => {
+test('the style picker offers Title, Subtitle and Heading 1 to 6 and reads Heading 5 in a Heading 5', async () => {
     editor.commands.setContent({
         type: 'doc',
         content: [{ type: 'heading', attrs: { level: 5 }, content: [{ type: 'text', text: 'Fine print' }] }],
@@ -204,6 +206,8 @@ test('the style picker offers Heading 1 to 6 and reads Heading 5 in a Heading 5'
     await openMenu('Heading 5');
     expect(menuItems()).toEqual([
         'Normal text',
+        'Title',
+        'Subtitle',
         'Heading 1',
         'Heading 2',
         'Heading 3',
@@ -211,6 +215,22 @@ test('the style picker offers Heading 1 to 6 and reads Heading 5 in a Heading 5'
         'Heading 5',
         'Heading 6',
     ]);
+});
+
+test.each([
+    ['Title', 'title'],
+    ['Subtitle', 'subtitle'],
+])('the style picker makes a paragraph a %s, reads it there, and Normal text undoes it', async (name, type) => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu('Normal text');
+    await clickItem(name);
+    expect([editor.state.doc.firstChild?.type.name, iconRow()[0]]).toEqual([type, name]);
+
+    await openMenu(name);
+    await clickItem('Normal text');
+    expect([editor.state.doc.firstChild?.type.name, iconRow()[0]]).toEqual(['paragraph', 'Normal text']);
 });
 
 test('Format › Align and indent lists Left, Center, Right and Justified, as Google does', async () => {

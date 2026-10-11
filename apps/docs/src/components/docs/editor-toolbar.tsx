@@ -56,12 +56,7 @@ import {
     CodeXml,
     Copy,
     FileSliders,
-    Heading1,
     Heading2,
-    Heading3,
-    Heading4,
-    Heading5,
-    Heading6,
     Highlighter,
     ImageIcon,
     ImagePlus,
@@ -96,20 +91,10 @@ import { useState } from 'react';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
 import { PageSetupDialog } from './page-setup-dialog';
+import { PARAGRAPH_STYLES } from './paragraph-styles';
 import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
 import { WordCountDialog } from './word-count-dialog';
-
-// Format › Paragraph styles and the style picker list these; the picker previews each as the editor draws it, its
-// sizes stepping down and Heading 5 and 6 at the body's weight in grey, Heading 6 in italic.
-const HEADINGS = [
-    { level: 1, icon: Heading1, preview: 'text-xl font-medium' },
-    { level: 2, icon: Heading2, preview: 'text-lg font-medium' },
-    { level: 3, icon: Heading3, preview: 'text-base font-medium' },
-    { level: 4, icon: Heading4, preview: 'text-sm font-medium' },
-    { level: 5, icon: Heading5, preview: 'text-sm text-muted-foreground' },
-    { level: 6, icon: Heading6, preview: 'text-sm text-muted-foreground italic' },
-] as const;
 
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
 const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
@@ -428,14 +413,18 @@ export const EditorToolbar = ({
                                             >
                                                 <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                             </DropdownMenuItem>
-                                            {HEADINGS.map(({ level, icon: Icon }) => (
+                                            {PARAGRAPH_STYLES.map(({ name, type, attrs, icon: Icon }) => (
                                                 <DropdownMenuItem
-                                                    key={level}
+                                                    key={name}
                                                     onClick={() =>
-                                                        editor.chain().focus().toggleHeading({ level }).run()
+                                                        editor
+                                                            .chain()
+                                                            .focus()
+                                                            .toggleNode(type, 'paragraph', attrs)
+                                                            .run()
                                                     }
                                                 >
-                                                    <Icon className="mr-2 h-4 w-4" /> Heading {level}
+                                                    <Icon className="mr-2 h-4 w-4" /> {name}
                                                 </DropdownMenuItem>
                                             ))}
                                             <DropdownMenuSeparator />
@@ -671,11 +660,7 @@ export const EditorToolbar = ({
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
                                         <span className="text-xs whitespace-nowrap">
-                                            {active.mixedStyles
-                                                ? ''
-                                                : active.headingLevel
-                                                  ? `Heading ${active.headingLevel}`
-                                                  : 'Normal text'}
+                                            {active.mixedStyles ? '' : (active.paragraphStyle ?? 'Normal text')}
                                         </span>
                                         <ChevronDown className="h-3 w-3" />
                                     </Button>
@@ -685,13 +670,14 @@ export const EditorToolbar = ({
                                         <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                     </DropdownMenuItem>
                                     <Separator className="my-1" />
-                                    {HEADINGS.map(({ level, icon: Icon, preview }) => (
+                                    {PARAGRAPH_STYLES.map(({ name, type, attrs, icon: Icon, preview }) => (
                                         <DropdownMenuItem
-                                            key={level}
-                                            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+                                            key={name}
+                                            onClick={() =>
+                                                editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()
+                                            }
                                         >
-                                            <Icon className="mr-2 h-4 w-4" />{' '}
-                                            <span className={preview}>Heading {level}</span>
+                                            <Icon className="mr-2 h-4 w-4" /> <span className={preview}>{name}</span>
                                         </DropdownMenuItem>
                                     ))}
                                 </DropdownMenuContent>

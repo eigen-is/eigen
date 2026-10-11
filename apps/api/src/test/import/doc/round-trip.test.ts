@@ -411,6 +411,10 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        // The recording predates the title and subtitle, so it holds neither.
+        source.content = source.content.filter(
+            (block: JSONContent) => block.type !== 'title' && block.type !== 'subtitle',
+        );
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });
 });

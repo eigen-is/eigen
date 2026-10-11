@@ -137,6 +137,17 @@ export function proseTextLook(selector: string): { color?: string; italic?: true
 // Each heading level's own look, by level - 1: Heading 5 and 6 draw Google Docs' grey, and 6 italic.
 export const HEADING_LOOKS = [1, 2, 3, 4, 5, 6].map((level) => proseTextLook(`.eigen-prose h${level}`));
 
+export const TITLE_SELECTORS = {
+    title: '.eigen-prose p[data-type="title"]',
+    subtitle: '.eigen-prose p[data-type="subtitle"]',
+};
+
+// The title's and subtitle's own look, by node: the subtitle draws Google Docs' grey.
+export const TITLE_LOOKS = {
+    title: proseTextLook(TITLE_SELECTORS.title),
+    subtitle: proseTextLook(TITLE_SELECTORS.subtitle),
+};
+
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };

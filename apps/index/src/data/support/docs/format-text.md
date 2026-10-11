@@ -26,15 +26,15 @@ Click the font name in the toolbar, or open **Format**, then **Font**. A dropdow
 
 Click the name you want. The change applies to the selected text. If nothing is selected, it applies to new text you type from that point.
 
-## Apply a heading style
+## Apply a paragraph style
 
-The heading selector sits next to the font picker. It shows the current style of the cursor position, such as **Normal text** or **Heading 2**.
+The style selector sits next to the font picker. It shows the current style of the cursor position, such as **Normal text** or **Heading 2**.
 
 1. Click inside the paragraph you want to change, or select several lines.
-2. Click the heading selector to open the dropdown, or open **Format**, then **Paragraph styles**.
-3. Choose **Normal text** or one of **Heading 1** through **Heading 6**.
+2. Click the style selector to open the dropdown, or open **Format**, then **Paragraph styles**.
+3. Choose **Normal text**, **Title**, **Subtitle**, or one of **Heading 1** through **Heading 6**.
 
-Headings are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes any heading and returns the paragraph to the default style.
+These are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes the style and returns the paragraph to the default style.
 
 To set paragraphs off as a quote, open **Format**, then **Paragraph styles**, and choose **Quote**. Choose it again to turn the quote back into normal paragraphs.
 
