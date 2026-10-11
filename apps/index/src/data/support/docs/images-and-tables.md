@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 You can insert images and tables anywhere in a document. Images can come from your device or from Drive. Tables start as a 3×3 grid and you can grow them from there.
@@ -48,6 +48,8 @@ On a wide screen, selecting an image also opens the **Image** panel on the right
 - **Cap**: add a caption that appears beneath the image.
 - **Replace image**: swap the image for a different file from your device or Drive, keeping the same position in the document.
 
+**Replace image** is also under **Format → Image**, which works on any screen, a phone included. The **Image** item is greyed out until you select an image.
+
 ## Download an image
 
 Right-click an image and choose **Download original image**. You get the image file at its full size and in its own format. This works with view access too.
@@ -63,6 +65,8 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 ## Edit a table
 
 Click inside the table. The **Table** panel opens on the right side of the editor (on a wide screen).
+
+The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Merge cells**, **Unmerge cells**, and **Toggle header row**. The **Table** item is greyed out until your cursor is in a table.
 
 **Add or remove columns**
 

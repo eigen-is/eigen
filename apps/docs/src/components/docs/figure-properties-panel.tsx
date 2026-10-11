@@ -1,10 +1,7 @@
 import { type Editor, useEditorState } from '@tiptap/react';
 import { readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import { isImageMime } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { Input } from '@workspace/ui/components/input';
 import {
     AlignmentPicker,
@@ -50,13 +47,11 @@ function FigureTextField({
 
 type FigurePropertiesPanelProps = {
     editor: Editor;
-    onReplaceImage: (file: File) => void;
-    onReplaceImageFromDrive?: (paths: DrivePath[]) => void;
+    onReplaceImage: () => void;
 };
 
-export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFromDrive }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
-    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
     const { layout, alignment, alt, caption, mediaName } = useEditorState({
         editor,
@@ -131,19 +126,10 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
                         onCommit={(value) => editor.commands.updateFigure({ caption: value || null })}
                     />
                 </PropertyRow>
-                <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setReplacePickerOpen(true)}>
+                <Button variant="outline" size="sm" className="w-full mt-1" onClick={onReplaceImage}>
                     <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                     Replace image
                 </Button>
-                <DrivePickerWithUpload
-                    open={replacePickerOpen}
-                    onOpenChange={setReplacePickerOpen}
-                    title="Replace image"
-                    canPick={(item) => isImageMime(item.mimeType)}
-                    onPickFromDrive={(paths) => onReplaceImageFromDrive?.(paths)}
-                    onPickFromDevice={(files) => files[0] && onReplaceImage(files[0])}
-                    accept="image/*"
-                />
             </PropertySection>
         </PropertiesPanel>
     );

@@ -42,6 +42,10 @@ import {
     AlignLeft,
     AlignRight,
     Baseline,
+    BetweenHorizontalEnd,
+    BetweenHorizontalStart,
+    BetweenVerticalEnd,
+    BetweenVerticalStart,
     Bold,
     CaseSensitive,
     CaseUpper,
@@ -50,11 +54,14 @@ import {
     Code,
     CodeXml,
     FileSliders,
+    GripHorizontal,
+    GripVertical,
     Heading1,
     Heading2,
     Heading3,
     Heading4,
     Highlighter,
+    ImageIcon,
     ImagePlus,
     Italic,
     Link,
@@ -72,6 +79,10 @@ import {
     Subscript,
     Superscript,
     Table,
+    TableCellsMerge,
+    TableCellsSplit,
+    ToggleLeft,
+    Trash2,
     Type,
     TypeOutline,
     Underline,
@@ -96,6 +107,7 @@ type EditorToolbarProps = {
     assignedCommentCount?: number;
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
+    onReplaceImage: () => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
 };
@@ -116,6 +128,7 @@ export const EditorToolbar = ({
     assignedCommentCount,
     onImageUpload,
     onImagePickFromDrive,
+    onReplaceImage,
     onAddComment,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
@@ -391,6 +404,77 @@ export const EditorToolbar = ({
                                                 onClick={() => editor.chain().focus().toggleTaskList().run()}
                                             >
                                                 <CheckSquare className="h-4 w-4 mr-2" /> Checklist
+                                            </DropdownMenuItem>
+                                        </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger disabled={!active.table}>
+                                            <Table className="h-4 w-4 mr-2" /> Table
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().addRowBefore().run()}
+                                            >
+                                                <BetweenHorizontalStart className="h-4 w-4 mr-2" /> Insert row above
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().addRowAfter().run()}
+                                            >
+                                                <BetweenHorizontalEnd className="h-4 w-4 mr-2" /> Insert row below
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().addColumnBefore().run()}
+                                            >
+                                                <BetweenVerticalStart className="h-4 w-4 mr-2" /> Insert column left
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().addColumnAfter().run()}
+                                            >
+                                                <BetweenVerticalEnd className="h-4 w-4 mr-2" /> Insert column right
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
+                                                <GripHorizontal className="h-4 w-4 mr-2" /> Delete row
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().deleteColumn().run()}
+                                            >
+                                                <GripVertical className="h-4 w-4 mr-2" /> Delete column
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().deleteTable().run()}
+                                            >
+                                                <Trash2 className="h-4 w-4 mr-2" /> Delete table
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                disabled={!active.canMergeCells}
+                                                onClick={() => editor.chain().focus().mergeCells().run()}
+                                            >
+                                                <TableCellsMerge className="h-4 w-4 mr-2" /> Merge cells
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                disabled={!active.canSplitCell}
+                                                onClick={() => editor.chain().focus().splitCell().run()}
+                                            >
+                                                <TableCellsSplit className="h-4 w-4 mr-2" /> Unmerge cells
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+                                            >
+                                                <ToggleLeft className="h-4 w-4 mr-2" /> Toggle header row
+                                            </DropdownMenuItem>
+                                        </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+                                    <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger disabled={!active.figure}>
+                                            <ImageIcon className="h-4 w-4 mr-2" /> Image
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent>
+                                            <DropdownMenuItem onClick={onReplaceImage}>
+                                                <ImagePlus className="h-4 w-4 mr-2" /> Replace image
                                             </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
