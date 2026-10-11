@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, fonts, headings, lists, color, alignment, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.

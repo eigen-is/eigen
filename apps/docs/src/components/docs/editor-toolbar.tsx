@@ -73,6 +73,7 @@ import {
     Superscript,
     Table,
     Type,
+    TypeOutline,
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -293,7 +294,7 @@ export const EditorToolbar = ({
                                     </DropdownMenuSub>
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger>
-                                            <Type className="h-4 w-4 mr-2" /> Font
+                                            <TypeOutline className="h-4 w-4 mr-2" /> Font
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
                                             {EIGEN_FONTS.map((font) => (

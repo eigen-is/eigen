@@ -6,7 +6,7 @@ category: Basics
 tags: [mobile, phone, getting-started, layout]
 related: [getting-started/your-first-steps, getting-started/search-and-command-palette]
 order: 6
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 Eigen runs in the browser on your phone, with the same account and the same files as on your computer. The apps rearrange themselves for the smaller screen rather than shrinking. This page covers what moves where, and the few things a phone cannot do.
