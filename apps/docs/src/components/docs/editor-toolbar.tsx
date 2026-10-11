@@ -23,6 +23,8 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
@@ -35,10 +37,12 @@ import { Label } from '@workspace/ui/components/label';
 import { ColorPickerButton, ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Separator } from '@workspace/ui/components/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
     ALargeSmall,
     AlignCenter,
+    AlignJustify,
     AlignLeft,
     AlignRight,
     Baseline,
@@ -60,6 +64,8 @@ import {
     Heading2,
     Heading3,
     Heading4,
+    Heading5,
+    Heading6,
     Highlighter,
     ImageIcon,
     ImagePlus,
@@ -68,6 +74,7 @@ import {
     Link2Off,
     List,
     ListOrdered,
+    type LucideIcon,
     MessageSquarePlus,
     Minus,
     Pilcrow,
@@ -88,8 +95,26 @@ import {
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useToolbarState } from './hooks/use-toolbar-state';
+import { TEXT_ALIGNMENTS, type TextAlignment, useToolbarState } from './hooks/use-toolbar-state';
 import { PageSetupDialog } from './page-setup-dialog';
+
+// Format › Paragraph styles and the style picker list these; the picker's sizes step down as the editor's do.
+const HEADINGS = [
+    { level: 1, icon: Heading1, size: 'text-xl' },
+    { level: 2, icon: Heading2, size: 'text-lg' },
+    { level: 3, icon: Heading3, size: 'text-base' },
+    { level: 4, icon: Heading4, size: 'text-sm' },
+    { level: 5, icon: Heading5, size: 'text-sm' },
+    { level: 6, icon: Heading6, size: 'text-sm' },
+] as const;
+
+// Format › Align and indent and the icon row's Align dropdown name each alignment alike.
+const ALIGNMENT_LOOK: Record<TextAlignment, { label: string; icon: LucideIcon }> = {
+    left: { label: 'Left', icon: AlignLeft },
+    center: { label: 'Center', icon: AlignCenter },
+    right: { label: 'Right', icon: AlignRight },
+    justify: { label: 'Justified', icon: AlignJustify },
+};
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -137,10 +162,11 @@ export const EditorToolbar = ({
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const active = useToolbarState(editor);
+    const AlignmentIcon = ALIGNMENT_LOOK[active.alignment].icon;
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
     // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sit centered beside the menus from 870, 1052 and 1311px.
+    // sit centered beside the menus from 870, 1052 and 1267px.
     const showsRow = useMediaQuery('(min-width: 900px)');
     const showsMiddle = useMediaQuery('(min-width: 1100px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
@@ -335,26 +361,16 @@ export const EditorToolbar = ({
                                             >
                                                 <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                            >
-                                                <Heading1 className="mr-2 h-4 w-4" /> Heading 1
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                            >
-                                                <Heading2 className="mr-2 h-4 w-4" /> Heading 2
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                                            >
-                                                <Heading3 className="mr-2 h-4 w-4" /> Heading 3
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-                                            >
-                                                <Heading4 className="mr-2 h-4 w-4" /> Heading 4
-                                            </DropdownMenuItem>
+                                            {HEADINGS.map(({ level, icon: Icon }) => (
+                                                <DropdownMenuItem
+                                                    key={level}
+                                                    onClick={() =>
+                                                        editor.chain().focus().toggleHeading({ level }).run()
+                                                    }
+                                                >
+                                                    <Icon className="mr-2 h-4 w-4" /> Heading {level}
+                                                </DropdownMenuItem>
+                                            ))}
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
@@ -368,21 +384,19 @@ export const EditorToolbar = ({
                                             <AlignLeft className="h-4 w-4 mr-2" /> Align and indent
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                            >
-                                                <AlignLeft className="h-4 w-4 mr-2" /> Left
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                            >
-                                                <AlignCenter className="h-4 w-4 mr-2" /> Center
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                            >
-                                                <AlignRight className="h-4 w-4 mr-2" /> Right
-                                            </DropdownMenuItem>
+                                            {TEXT_ALIGNMENTS.map((alignment) => {
+                                                const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
+                                                return (
+                                                    <DropdownMenuItem
+                                                        key={alignment}
+                                                        onClick={() =>
+                                                            editor.chain().focus().setTextAlign(alignment).run()
+                                                        }
+                                                    >
+                                                        <Icon className="h-4 w-4 mr-2" /> {label}
+                                                    </DropdownMenuItem>
+                                                );
+                                            })}
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
                                     <DropdownMenuSub>
@@ -557,30 +571,15 @@ export const EditorToolbar = ({
                                         <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                     </DropdownMenuItem>
                                     <Separator className="my-1" />
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                    >
-                                        <Heading1 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-xl font-medium">Heading 1</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                    >
-                                        <Heading2 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-lg font-medium">Heading 2</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                                    >
-                                        <Heading3 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-base font-medium">Heading 3</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-                                    >
-                                        <Heading4 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-sm font-medium">Heading 4</span>
-                                    </DropdownMenuItem>
+                                    {HEADINGS.map(({ level, icon: Icon, size }) => (
+                                        <DropdownMenuItem
+                                            key={level}
+                                            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+                                        >
+                                            <Icon className="mr-2 h-4 w-4" />{' '}
+                                            <span className={`${size} font-medium`}>Heading {level}</span>
+                                        </DropdownMenuItem>
+                                    ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
 
@@ -674,30 +673,44 @@ export const EditorToolbar = ({
                                 <>
                                     <ToolbarSeparator />
 
-                                    {/* Alignment toggle group */}
-                                    <div className="flex items-center gap-0.5">
-                                        <TooltipButton
-                                            icon={AlignLeft}
-                                            tooltipText="Align left"
-                                            active={active.alignLeft}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                        />
-                                        <TooltipButton
-                                            icon={AlignCenter}
-                                            tooltipText="Align center"
-                                            active={active.alignCenter}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                        />
-                                        <TooltipButton
-                                            icon={AlignRight}
-                                            tooltipText="Align right"
-                                            active={active.alignRight}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                        />
-                                    </div>
+                                    {/* Alignment, one dropdown as Google's */}
+                                    <DropdownMenu>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 px-2 gap-1"
+                                                        aria-label="Align"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                    >
+                                                        <AlignmentIcon className="h-4 w-4" />
+                                                        <ChevronDown className="h-3 w-3" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Align</TooltipContent>
+                                        </Tooltip>
+                                        <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
+                                            <DropdownMenuRadioGroup value={active.alignment}>
+                                                {TEXT_ALIGNMENTS.map((alignment) => {
+                                                    const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
+                                                    return (
+                                                        <DropdownMenuRadioItem
+                                                            key={alignment}
+                                                            value={alignment}
+                                                            onSelect={() =>
+                                                                editor.chain().focus().setTextAlign(alignment).run()
+                                                            }
+                                                        >
+                                                            <Icon className="h-4 w-4" /> {label}
+                                                        </DropdownMenuRadioItem>
+                                                    );
+                                                })}
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
 
                                     <ToolbarSeparator />
 

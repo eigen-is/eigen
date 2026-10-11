@@ -32,7 +32,7 @@ The heading selector sits next to the font picker. It shows the current style of
 
 1. Click inside the paragraph you want to change, or select several lines.
 2. Click the heading selector to open the dropdown, or open **Format**, then **Paragraph styles**.
-3. Choose one of **Heading 1**, **Heading 2**, **Heading 3**, **Heading 4**, or **Normal text**.
+3. Choose **Normal text** or one of **Heading 1** through **Heading 6**.
 
 Headings are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes any heading and returns the paragraph to the default style.
 
@@ -78,11 +78,12 @@ To remove the highlight, open the grid and click **None**.
 
 Alignment applies to the whole paragraph the cursor is in, or to all paragraphs in the selection.
 
-- **Align left** (the default)
-- **Align center**
-- **Align right**
+- **Left** (the default)
+- **Center**
+- **Right**
+- **Justified**: stretches each line to both margins, except the last line of the paragraph.
 
-Click the relevant button in the toolbar. The alignment buttons are the three icons showing horizontal lines in different positions. You can also open **Format**, then **Align and indent**, and choose **Left**, **Center**, or **Right**.
+Click the **Align** button in the toolbar, which shows the current alignment, and choose one. The current alignment is marked in the list. You can also open **Format**, then **Align and indent**, and choose **Left**, **Center**, **Right**, or **Justified**.
 
 ## Add a list
 

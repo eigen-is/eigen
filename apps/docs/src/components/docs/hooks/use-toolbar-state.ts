@@ -3,6 +3,10 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 
+// The paragraph alignments TextAlign offers, in the order the toolbar lists them.
+export const TEXT_ALIGNMENTS = ['left', 'center', 'right', 'justify'] as const;
+export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
+
 type ToolbarState = {
     headingLevel: number | undefined;
     fontName: string;
@@ -12,9 +16,7 @@ type ToolbarState = {
     italic: boolean;
     underline: boolean;
     highlight: boolean;
-    alignLeft: boolean;
-    alignCenter: boolean;
-    alignRight: boolean;
+    alignment: TextAlignment;
     bulletList: boolean;
     orderedList: boolean;
     taskList: boolean;
@@ -49,7 +51,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
             const active = (name: string | null, attributes?: Record<string, unknown>) =>
                 isActive(state, name, attributes);
             return {
-                headingLevel: [1, 2, 3, 4].find((level) => active('heading', { level })),
+                headingLevel: [1, 2, 3, 4, 5, 6].find((level) => active('heading', { level })),
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
                 color: getAttributes(state, 'textStyle')['color'] || '',
@@ -58,9 +60,8 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 italic: active('italic'),
                 underline: active('underline'),
                 highlight: active('highlight'),
-                alignLeft: active(null, { textAlign: 'left' }),
-                alignCenter: active(null, { textAlign: 'center' }),
-                alignRight: active(null, { textAlign: 'right' }),
+                // An unaligned paragraph's textAlign is null, and it and a range of mixed alignments read as left.
+                alignment: TEXT_ALIGNMENTS.find((alignment) => active(null, { textAlign: alignment })) ?? 'left',
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 taskList: active('taskList'),
