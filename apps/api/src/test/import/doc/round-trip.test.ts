@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { docSchema } from '../../../lib/document/doc-schema';
+import { HEADING_LOOKS } from '../../../lib/document/looks';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
@@ -356,11 +357,12 @@ describe("a heading's italic", () => {
 
 // Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
 // It keeps one placeholder for the export's media, so names don't say which image is which. The recording predates
-// caps.
+// caps, and Heading 6's italic, so its Heading 6 draws upright: there a plain run is the italic mark, and a marked one plain.
 function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSONContent {
+    const upright = node.type === 'heading' && !!HEADING_LOOKS[node.attrs?.['level'] - 1]?.italic;
     const content = node.content
         ?.filter((child) => !(child.type === 'pageBreak' && (node.type === 'tableCell' || node.type === 'tableHeader')))
-        .map((child, index) => googleLosses(child, imported?.content?.[index]));
+        .map((child, index) => googleLosses(upright ? toggleItalic(child) : child, imported?.content?.[index]));
     const attrs = node.attrs && {
         ...node.attrs,
         ...(node.type === 'codeBlock' && { language: null }),
@@ -374,6 +376,12 @@ function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSO
               : mark,
     );
     return { ...node, ...(attrs && { attrs }), ...(marks && { marks }), ...(content && { content }) };
+}
+
+function toggleItalic(node: JSONContent): JSONContent {
+    const marks = (node.marks ?? []).filter((mark) => mark.type !== 'italic');
+    if (marks.length === (node.marks ?? []).length) marks.push({ type: 'italic' });
+    return { ...node, marks };
 }
 
 describe("the all-features doc's Google Docs re-save", () => {

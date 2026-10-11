@@ -602,4 +602,15 @@ describe("a node's look", () => {
             [' upright', ['italic']],
         ]);
     });
+
+    // Word's own Heading 6 is not italic, so Word draws a plain run in it upright, as one set upright.
+    test.each([
+        ['a plain run', run('Fine')],
+        ['a run set upright', run('Fine', '<w:i w:val="0"/><w:iCs w:val="0"/>')],
+    ])('%s in a Heading 6 that is not italic is italic', async (_name, body) => {
+        const { json } = await importDocxBody(paragraph(body, '<w:pStyle w:val="Heading6"/>'), {
+            styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/></w:style>',
+        });
+        expect(marksOfType(json, 'italic')).toHaveLength(1);
+    });
 });
