@@ -519,6 +519,13 @@ export const EditorToolbar = ({
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().distributeColumns().run()}
+                                            >
+                                                <TABLE_ACTION_ICONS.distributeColumns className="h-4 w-4 mr-2" />{' '}
+                                                Distribute columns
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
                                                 disabled={!active.canMergeCells}
                                                 onClick={() => editor.chain().focus().mergeCells().run()}
                                             >

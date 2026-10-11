@@ -1,24 +1,75 @@
-import { Extension } from '@tiptap/core';
+import { type CommandProps, Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
+import { isInTable, selectedRect } from '@tiptap/pm/tables';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+
+declare module '@tiptap/core' {
+    interface Commands<ReturnType> {
+        tableWidthClamp: {
+            distributeColumns: () => ReturnType;
+        };
+    }
+}
 
 const DEFAULT_CELL_WIDTH = 100;
 
+// The text column of the page the editor sits on: the `[data-document]` box inside its padding.
+export function textColumnWidth(page: Element): number {
+    const style = getComputedStyle(page);
+    return page.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+}
+
 export const TableWidthClamp = Extension.create({
     name: 'tableWidthClamp',
+
+    addCommands() {
+        const editor = this.editor;
+        return {
+            // Google Docs' Distribute columns: one width for every column, splitting the table's own width, or the
+            // text column when a column has none and the table draws at the column's width.
+            distributeColumns:
+                () =>
+                ({ state, tr, dispatch }: CommandProps) => {
+                    if (!isInTable(state)) return false;
+                    const { map, table, tableStart } = selectedRect(state);
+                    const page = editor.view.dom.closest('[data-document]');
+                    const columnPx = page ? textColumnWidth(page) : 0;
+                    const widths = map.map
+                        .slice(0, map.width)
+                        .map(
+                            (pos, col): number => table.nodeAt(pos)?.attrs['colwidth']?.[col - map.colCount(pos)] ?? 0,
+                        );
+                    const tableWidth = widths.every((width) => width > 0)
+                        ? widths.reduce((sum, width) => sum + width, 0)
+                        : columnPx;
+                    const total = columnPx > 0 ? Math.min(tableWidth, columnPx) : tableWidth;
+                    if (total <= 0) return false;
+                    const width = Math.max(MIN_TABLE_COLUMN_PX, Math.floor(total / map.width));
+                    if (dispatch) {
+                        for (const pos of new Set(map.map)) {
+                            const cell = table.nodeAt(pos);
+                            if (!cell) continue;
+                            const colwidth = Array.from({ length: cell.attrs['colspan'] }, () => width);
+                            tr.setNodeMarkup(tableStart + pos, null, { ...cell.attrs, colwidth });
+                        }
+                    }
+                    return true;
+                },
+        };
+    },
 
     addProseMirrorPlugins() {
         const editor = this.editor;
 
         return [
             new Plugin({
+                // A column dragged past the text column ends here too: the drag writes its width, and this scales it.
                 appendTransaction(transactions, _oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;
 
-                    const container = editor.view.dom.closest('[data-document]');
-                    if (!container) return null;
-                    const cs = getComputedStyle(container);
-                    const maxWidth = container.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+                    const page = editor.view.dom.closest('[data-document]');
+                    if (!page) return null;
+                    const maxWidth = textColumnWidth(page);
                     if (maxWidth <= 0) return null;
 
                     const tr = newState.tr;

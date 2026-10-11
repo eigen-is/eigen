@@ -337,6 +337,8 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         'Delete column',
         'Delete table',
         '—',
+        'Distribute columns',
+        '—',
         'Merge cells',
         'Unmerge cells',
         '—',

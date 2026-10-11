@@ -10,7 +10,7 @@ The server never runs the editor, yet it renders the doc for the drive preview, 
 
 A figure names its image, and never holds bytes or a URL. The name is a file in the container's `media/` folder, resolved to a URL at render ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). A pending name, `pending:<uuid>`, stands in for an image whose upload has not landed yet. A panel is one of the right-side panes: comments, activity, and the figure and table properties.
 
-The sections cover the schema, figures, the page and its panels, page breaks, comments, the clipboard, and what keeps content inside the page. Four things in them surprise people:
+The sections cover the schema, figures, the page and its panels, page breaks, comments, the clipboard, what keeps content inside the page, and table columns. Four things in them surprise people:
 
 - The side panels overlay the page instead of taking room from it, and the page slides and scales to stay clear ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
 - A figure stores its width in the page's own pixels, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
@@ -21,7 +21,7 @@ The sections cover the schema, figures, the page and its panels, page breaks, co
 
 `getDocExtensions` (`packages/lib/src/docs/eigendoc/extensions.ts`) is the schema. The server builds it once, on first use, in `apps/api/src/lib/document/doc-schema.ts`, and the drive preview (`apps/api/src/lib/preview/eigendoc-render.ts`) and the export (`apps/api/src/lib/export/doc/transform.ts`) render through one helper over it, `renderDocHtml` (`export/doc/render.ts`). The docx import (`apps/api/src/lib/import/doc/from-docx.ts`) checks what it reads against the same schema, `docSchema()`, as do the test fixtures. So a node the editor writes is a node the server can parse and render. A node only one side knew would vanish from every preview and export.
 
-The editor leaves out the schema's `figure` and `comment` and adds `Figure` and `CommentMark` (`apps/docs/src/components/docs/extensions/`), which extend the lib nodes with the node view and the click, menu and decoration behavior. The stored shape stays the lib's, because an extension adds behavior, not attributes.
+The editor leaves out the schema's `figure` and `comment` and adds `Figure` and `CommentMark` (`apps/docs/src/components/docs/extensions/`), which extend the lib nodes with the node view and the click, menu and decoration behavior. It also swaps the schema's `table` for the same node configured to resize its columns ([§ A table column resizes by its border](#a-table-column-resizes-by-its-border-with-a-mouse-only)). The stored shape stays the lib's, because an extension adds behavior, not attributes.
 
 The code block exists only when the caller passes `lowlight`, the syntax highlighter. The server's schema passes the backend's one (`apps/api/src/lib/document/lowlight.ts`), so the docx import reads a code block's language back only when lowlight knows it, and the docx writer writes only such a language. A test fixture that writes a stored doc's code block takes `docSchema()` for the same reason.
 
@@ -122,6 +122,16 @@ On paste, a payload with an image item goes through `insertEigenItems`. A docs c
 ## Pasted content is fitted to the page
 
 Content wider than the text column would overflow the page and the export. So the editor's `transformPastedHTML` (`cleanPastedHTML`, `apps/docs/src/components/docs/paste.ts`) caps every pasted image and table at the text column's width, and maps common desktop fonts onto the bundled families ([TYPOGRAPHY.md](TYPOGRAPHY.md#foreign-fonts-map-onto-the-bundled-ones)). Heading 6 draws an italic mark upright, and Google Docs writes every run of its italic Heading 6 as `font-style: italic` and an upright one as `normal`, so in a heading `ITALIC_HEADING_LEVELS` (`@workspace/lib/docs/eigendoc`) names the cleaner makes the upright run the mark and drops the italic. A copy writes the mark there as `<em style="font-style: normal">` (`writeDocsClipboard`), so Google Docs reads it upright too. Word and web pages keep a heading's look in a `<style>` block or the browser's defaults, so their `<em>` and `<i>` in a Heading 6 are read by tag, not by look, and draw upright: an accepted gap, as italic inside a pasted Heading 6 is rare. A table resized or pasted past the column is scaled back after every change by `TableWidthClamp` (`apps/docs/src/components/docs/extensions/table-width-clamp.ts`), which shrinks every column by the same factor with a 25 px floor.
+
+## A table column resizes by its border, with a mouse only
+
+A cell stores its column's width as `colwidth`, prosemirror-tables' attribute, which the docx and the PDF and HTML exports read. The editor configures TipTap's `Table` with `resizable` (`editor.tsx`), so a drag on a column border writes that width to every cell of the column, never narrower than `MIN_TABLE_COLUMN_PX`. The setting adds a plugin and no attribute, so the stored doc and the server's schema are the same with it or without it, and it stays out of `getDocExtensions`, which the server builds headless.
+
+A drag that would take the table past the text column ends with `TableWidthClamp` scaling every column back by one factor, the dragged one included, so the table lands at the column's width. Google Docs takes the width from the neighbouring column instead.
+
+A coarse pointer gets no resize. prosemirror-tables reads mouse events only, so a finger drags nothing, and a tap beside a border fires the compatibility mousedown that starts a drag, which swallows the caret and writes the column's width. So the handle has no touch variant.
+
+Format › Table › Distribute columns and the table panel's button run `distributeColumns`, a command of `TableWidthClamp`: every column gets one width, the table's own width split evenly, or the text column's when a column has none and the table draws at full width. `apps/docs/src/test/components/docs/extensions/table-width-clamp.test.ts` drives the drag through the plugin and pins the clamp and the split.
 
 ## A font is stored as its name
 
