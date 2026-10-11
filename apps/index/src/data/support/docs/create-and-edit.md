@@ -51,7 +51,7 @@ A page break inside a list, a quote, or a table starts a new page in the Word fi
 The word count tells you how long the document is, or how long a part of it is.
 
 1. To count part of the document, select that text first.
-2. Open the **Tools** menu and choose **Word count**, or press Cmd+Shift+C (Mac) or Ctrl+Shift+C (Windows).
+2. Open the **Tools** menu and choose **Word count**, or press Cmd+Shift+C (Mac) or Ctrl+Shift+C (Windows). On a phone, **Word count** sits in the **⋮** menu at the top right.
 3. Read the counts, then click **OK**.
 
 The dialog shows **Words**, **Characters**, and **Characters excluding spaces**. With text selected, each count shows the selection out of the whole document, such as "12 of 340". Text in tables, lists, and image captions counts, and line breaks don't count as characters. You can count words in a document you can only view, too.

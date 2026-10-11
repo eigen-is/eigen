@@ -97,13 +97,17 @@ const SHORT_ROW = ['Normal text', 'Inter', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
-test.each([1920, 1300, 1000, 390])(
-    'a writer gets the File, Edit, Format, Insert and Tools menus at %ipx',
-    async (width) => {
-        await render(width, true);
-        expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Format', 'Insert', 'Tools']);
-    },
-);
+test.each([1920, 1300, 1000])('a writer gets the File, Edit, Format, Insert and Tools menus at %ipx', async (width) => {
+    await render(width, true);
+    expect(menus().slice(0, 5)).toEqual(['File', 'Edit', 'Format', 'Insert', 'Tools']);
+});
+
+// Five menus and the offline badge overflow a 360px phone, so Tools folds into the kebab there.
+test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', async () => {
+    await render(390, true);
+    expect(menus().slice(0, 4)).toEqual(['File', 'Edit', 'Format', 'Insert']);
+    expect(menus()).not.toContain('Tools');
+});
 
 test.each([
     [1920, FULL_ROW],
@@ -447,6 +451,20 @@ test('Tools › Word count counts a selection out of the whole doc, as Google do
         ['Characters', '9 of 21'],
         ['Characters excluding spaces', '8 of 18'],
     ]);
+});
+
+test.each([true, false])("on a phone the kebab's Word count opens the dialog (writer %p)", async (canWrite) => {
+    editor.commands.setContent(FOUR_WORDS);
+    editor.commands.setTextSelection(1);
+    await render(390, canWrite);
+    expect(menus()).not.toContain('Tools');
+    await openMenu('More actions');
+
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((entry) =>
+        entry.textContent?.trim().startsWith('Word count'),
+    );
+    await act(async () => item?.click());
+    expect(wordCountRows()[0]).toEqual(['Words', '4']);
 });
 
 test('Mod+Shift+C opens the word count, for a viewer too', async () => {

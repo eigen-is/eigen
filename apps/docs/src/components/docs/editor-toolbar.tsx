@@ -2,7 +2,7 @@ import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
@@ -167,12 +167,21 @@ export const EditorToolbar = ({
     const showsRow = useMediaQuery('(min-width: 900px)');
     const showsMiddle = useMediaQuery('(min-width: 1100px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
+    // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
+    const isMobile = useIsMobile();
 
     // Document-level: a viewer's editor is not editable, so an editor keymap would never see the key.
     useHotkey('Mod+Shift+C', (e) => {
         e.preventDefault();
         setWordCountOpen(true);
     });
+
+    const wordCountItem = (
+        <DropdownMenuItem onClick={() => setWordCountOpen(true)}>
+            <WholeWord className="h-4 w-4 mr-2" /> Word count
+            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+C')}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+    );
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -554,12 +563,11 @@ export const EditorToolbar = ({
                             </>
                         )}
 
-                        <ToolbarMenu label="Tools" onCloseAutoFocus={keepEditorFocus}>
-                            <DropdownMenuItem onClick={() => setWordCountOpen(true)}>
-                                <WholeWord className="h-4 w-4 mr-2" /> Word count
-                                <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+C')}</DropdownMenuShortcut>
-                            </DropdownMenuItem>
-                        </ToolbarMenu>
+                        {!isMobile && (
+                            <ToolbarMenu label="Tools" onCloseAutoFocus={keepEditorFocus}>
+                                {wordCountItem}
+                            </ToolbarMenu>
+                        )}
                     </div>
                 }
                 center={
@@ -785,6 +793,7 @@ export const EditorToolbar = ({
                         activityPanelOpen={activityPanelOpen}
                         assignedCommentCount={assignedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                        mobileMenuItems={wordCountItem}
                     />
                 }
             />
