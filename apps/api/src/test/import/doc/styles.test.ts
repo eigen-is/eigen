@@ -145,6 +145,16 @@ describe('headings in body-sized text', () => {
     });
 
     test.each([
+        ['Title', 'Title'],
+        ['Subtitle', 'Subtitle'],
+    ])('a 28 pt %s whose runs carry the 11 pt body size directly is a paragraph', async (_name, name) => {
+        const { json } = await importDocxBody(heading(name, sized('Plain', 22)), {
+            styles: `${STYLES}${style(name, name, '<w:rPr><w:sz w:val="56"/></w:rPr>')}`,
+        });
+        expect(types(json)).toEqual(['paragraph']);
+    });
+
+    test.each([
         ['Heading 1 with a direct size above the body', heading('Heading1', sized('Big', 24)), 'heading1'],
         ['Heading 6 of 10 pt with its own size set directly', heading('Heading6', sized('Six', 20)), 'heading6'],
         [

@@ -205,7 +205,8 @@ type Context = {
     after?: number;
     align?: string;
     list?: NumberingRef;
-    headingPt?: number;
+    // The size of the heading or title around the run, which an inline code's em is of.
+    blockPt?: number;
     // In a heading that draws italic, which draws an italic mark upright.
     upright?: boolean;
 };
@@ -488,10 +489,11 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 context,
             );
             const upright = !!HEADING_LOOKS[level - 1]?.italic;
-            return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt, upright }, true);
+            return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
         },
     ],
-    ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
+    ['title', titleOf('title', 'Title')],
+    ['subtitle', titleOf('subtitle', 'Subtitle')],
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
     [
         'horizontalRule',
@@ -565,7 +567,7 @@ function titleOf(type: keyof typeof TITLE_SELECTORS, style: StyleId) {
     return (node: JSONContent, context: Context): Block[] => {
         const props = textProps({ style, jc: justification(node) }, context);
         const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
-        return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
+        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt }, true);
     };
 }
 
@@ -607,7 +609,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         const written = write(node, {
             ...context,
             first: !textblock && index === 0,
-            headingPt: undefined,
+            blockPt: undefined,
             upright: undefined,
         });
         if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? '')) keepApart(blocks, written);
@@ -1281,12 +1283,12 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ['small', () => ({ spacing: twips(SMALL_LOOK.letterSpacingPt), size: halfPoints(SMALL_LOOK.sizePt) })],
     [
         'code',
-        (_attrs, { headingPt }) => ({
+        (_attrs, { blockPt }) => ({
             style: 'Code',
             size:
-                headingPt === undefined
+                blockPt === undefined
                     ? undefined
-                    : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), headingPt)),
+                    : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), blockPt)),
         }),
     ],
     [

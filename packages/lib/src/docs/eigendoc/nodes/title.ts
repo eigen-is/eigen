@@ -20,6 +20,13 @@ function titleNode(name: 'title' | 'subtitle') {
     });
 }
 
+// The size and color eigen-prose.css gives each, which a copy writes inline, as Google Docs and Word read a run by
+// its look.
+export const TITLE_LOOK_CSS: Record<'title' | 'subtitle', { fontSize: string; color?: string }> = {
+    title: { fontSize: '26pt' },
+    subtitle: { fontSize: '15pt', color: '#666666' },
+};
+
 export const TitleNode = titleNode('title');
 
 export const SubtitleNode = titleNode('subtitle');

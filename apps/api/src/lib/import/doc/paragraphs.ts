@@ -176,6 +176,9 @@ export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope)
     });
 }
 
+// The roles whose node draws its own size: set at the body's, it reads as body text, and no list holds it.
+const SIZED = new Set<Role['kind']>(['heading', 'title', 'subtitle']);
+
 const CHECKBOXES = new Map([
     [CHECKBOX_GLYPHS.unchecked, false],
     ['☑', true],
@@ -197,7 +200,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
-    if (role.kind === 'heading' && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
+    if (SIZED.has(role.kind) && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, paraRun)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
@@ -292,8 +295,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
     if (task?.checked || (task && looksDone)) stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
 
-    // A numbered heading keeps its number as text: the schema holds no numbered heading.
-    const label = list && role.kind === 'heading' ? list.label() : '';
+    // A numbered heading or title keeps its number as text: the schema holds no numbered heading.
+    const label = list && SIZED.has(role.kind) ? list.label() : '';
     if (label)
         halves[0]?.unshift({
             kind: 'node',
@@ -321,7 +324,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
         const para: Para = {
             kind: 'para',
-            // An empty heading is the blank line Word shows, not a heading's height.
+            // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
+            // draws it at the title's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
@@ -342,7 +346,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
         };
-        if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
+        if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
         if (para.list || para.task) para.numberAt = indLeft + Math.min(0, props.indFirst ?? 0);
         if (boxed) para.boxed = true;

@@ -9,6 +9,7 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
+import { TITLE_LOOK_CSS } from '@workspace/lib/docs/eigendoc';
 import { htmlToPlainText } from '@workspace/lib/html-dom';
 import type {
     EigenClipboardImageItem,
@@ -91,9 +92,9 @@ function copiedClipboardItems(
 
 // A copy or cut with eigen items writes them beside ProseMirror's own HTML and text, and a cut deletes the
 // selection as ProseMirror's handler would. Bound in handleDOMEvents, so it runs before that handler, whose
-// cut deletes the selection before any later listener reads it. An italic mark in a heading that draws italic is
-// written upright, as it draws, since Google Docs reads a run by its look. Neither → false, and the event is
-// ProseMirror's.
+// cut deletes the selection before any later listener reads it. Google Docs and Word read a run by its look, so an
+// italic mark in a heading that draws italic is written upright, as it draws, and a title's and a subtitle's look is
+// written on its p. None of these → false, and the event is ProseMirror's.
 export function writeDocsClipboard(
     view: EditorView,
     event: ClipboardEvent,
@@ -109,8 +110,12 @@ export function writeDocsClipboard(
               ...heading.querySelectorAll<HTMLElement>('em'),
           ])
         : [];
-    if (items.length === 0 && upright.length === 0) return false;
+    const titles = Object.entries(TITLE_LOOK_CSS).flatMap(([type, look]) =>
+        [...dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)].map((p) => ({ p, look })),
+    );
+    if (items.length === 0 && upright.length === 0 && titles.length === 0) return false;
     for (const em of upright) em.style.fontStyle = 'normal';
+    for (const { p, look } of titles) Object.assign(p.style, look);
     event.preventDefault();
     if (items.length > 0) writeEigenClipboard(event, { version: 1, items }, text || undefined, dom.innerHTML);
     else {
