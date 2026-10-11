@@ -43,6 +43,14 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                 >
                     <TABLE_ACTION_ICONS.deleteColumn className="h-3.5 w-3.5 mr-1" /> Delete column
                 </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={() => editor.chain().focus().distributeColumns().run()}
+                >
+                    <TABLE_ACTION_ICONS.distributeColumns className="h-3.5 w-3.5 mr-1" /> Distribute columns
+                </Button>
             </PropertySection>
 
             <PropertySection title="Rows">

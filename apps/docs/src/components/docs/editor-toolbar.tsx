@@ -54,6 +54,7 @@ import {
     ChevronDown,
     Code,
     CodeXml,
+    Copy,
     FileSliders,
     Heading2,
     Highlighter,
@@ -72,12 +73,15 @@ import {
     Printer,
     Quote,
     RemoveFormatting,
+    Scissors,
     SeparatorHorizontal,
     Settings2,
     Strikethrough,
     Subscript,
     Superscript,
     Table,
+    TextSelect,
+    Trash2,
     Type,
     TypeOutline,
     Underline,
@@ -212,6 +216,13 @@ export const EditorToolbar = ({
         if (editor.isFocused) e.preventDefault();
     };
 
+    // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's
+    // copy and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
+    const runClipboardCommand = (command: 'copy' | 'cut') => {
+        document.execCommand(command);
+        editor.commands.focus();
+    };
+
     const setTextColor = (color: string) => {
         if (color) {
             editor.chain().focus().setColor(color).run();
@@ -267,6 +278,35 @@ export const EditorToolbar = ({
                             onUndo={() => editor.chain().focus().undo().run()}
                             onRedo={() => editor.chain().focus().redo().run()}
                             onCloseAutoFocus={keepEditorFocus}
+                            selectionItems={
+                                <>
+                                    <DropdownMenuItem
+                                        disabled={!canWrite || active.selectionEmpty}
+                                        onClick={() => runClipboardCommand('cut')}
+                                    >
+                                        <Scissors className="h-4 w-4 mr-2" /> Cut
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        disabled={active.selectionEmpty}
+                                        onClick={() => runClipboardCommand('copy')}
+                                    >
+                                        <Copy className="h-4 w-4 mr-2" /> Copy
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().selectAll().run()}>
+                                        <TextSelect className="h-4 w-4 mr-2" /> Select all
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+A')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        disabled={!canWrite || active.selectionEmpty}
+                                        onClick={() => editor.chain().focus().deleteSelection().run()}
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                    </DropdownMenuItem>
+                                </>
+                            }
                         />
 
                         {canWrite && (
@@ -505,6 +545,13 @@ export const EditorToolbar = ({
                                                 onClick={() => editor.chain().focus().deleteTable().run()}
                                             >
                                                 <TABLE_ACTION_ICONS.deleteTable className="h-4 w-4 mr-2" /> Delete table
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().distributeColumns().run()}
+                                            >
+                                                <TABLE_ACTION_ICONS.distributeColumns className="h-4 w-4 mr-2" />{' '}
+                                                Distribute columns
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <DropdownMenuItem

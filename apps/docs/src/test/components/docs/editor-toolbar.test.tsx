@@ -357,6 +357,8 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         'Delete column',
         'Delete table',
         '—',
+        'Distribute columns',
+        '—',
         'Merge cells',
         'Unmerge cells',
         '—',
@@ -638,4 +640,93 @@ test('Mod+Shift+C opens the word count, for a viewer too', async () => {
         );
     });
     expect(wordCountRows()[0]).toEqual(['Words', '4']);
+});
+
+// Google Docs' Edit menu, Paste aside: Cut and Copy, then Select all and Delete, each group set apart.
+const editEntries = async () => {
+    await openMenu('Edit');
+    return openMenuEntries().map((entry, index) => {
+        const item = [...document.querySelectorAll('[role="menu"]')]
+            .at(-1)
+            ?.querySelectorAll('[role="menuitem"], [role="separator"]')[index];
+        return item?.hasAttribute('data-disabled') ? `${entry} (disabled)` : entry;
+    });
+};
+
+const TWO_WORDS = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello world' }] }] };
+
+test("Edit lists Cut, Copy, Select all and Delete in Google Docs' order and groups", async () => {
+    editor.commands.setContent(TWO_WORDS);
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    await render(1920, true);
+    expect(await editEntries()).toEqual([
+        `Undo${formatForDisplay('Mod+Z')} (disabled)`,
+        `Redo${formatForDisplay('Mod+Shift+Z')} (disabled)`,
+        '—',
+        `Cut${formatForDisplay('Mod+X')}`,
+        `Copy${formatForDisplay('Mod+C')}`,
+        '—',
+        `Select all${formatForDisplay('Mod+A')}`,
+        'Delete',
+    ]);
+});
+
+test('with only a caret Cut, Copy and Delete are disabled, and Select all is not', async () => {
+    editor.commands.setContent(TWO_WORDS);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    expect(await editEntries()).toEqual(
+        expect.arrayContaining([
+            `Cut${formatForDisplay('Mod+X')} (disabled)`,
+            `Copy${formatForDisplay('Mod+C')} (disabled)`,
+            `Select all${formatForDisplay('Mod+A')}`,
+            'Delete (disabled)',
+        ]),
+    );
+});
+
+test('a viewer can Copy and Select all, but not Cut or Delete', async () => {
+    editor.commands.setContent(TWO_WORDS);
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    await render(1920, false);
+    expect(await editEntries()).toEqual([
+        `Cut${formatForDisplay('Mod+X')} (disabled)`,
+        `Copy${formatForDisplay('Mod+C')}`,
+        '—',
+        `Select all${formatForDisplay('Mod+A')}`,
+        'Delete (disabled)',
+    ]);
+});
+
+test('Edit › Select all selects the whole doc and Edit › Delete removes it, focus back in the editor', async () => {
+    editor.commands.setContent(TWO_WORDS);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu('Edit');
+    await pickInBrowserFrames(() => clickItem(`Select all${formatForDisplay('Mod+A')}`));
+    expect([editor.state.selection.from, editor.state.selection.to]).toEqual([0, editor.state.doc.content.size]);
+    expect(document.activeElement === editor.view.dom).toBe(true);
+
+    editor.commands.setTextSelection({ from: 1, to: 7 });
+    await openMenu('Edit');
+    await pickInBrowserFrames(() => clickItem('Delete'));
+    expect(editor.getText()).toBe('world');
+    expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// The menu fires the native copy and cut ⌘C and ⌘X fire, which the editor's handlers write; a browser pass checks the
+// clipboard itself.
+test.each([
+    ['Cut', 'cut', 'Mod+X'],
+    ['Copy', 'copy', 'Mod+C'],
+])('Edit › %s runs the native %s, focus back in the editor', async (label, command, shortcut) => {
+    const execCommand = mock((_command: string) => true);
+    document.execCommand = execCommand;
+    editor.commands.setContent(TWO_WORDS);
+    editor.commands.setTextSelection({ from: 1, to: 6 });
+    await render(1920, true);
+    await openMenu('Edit');
+    await pickInBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
+    expect(execCommand.mock.calls).toEqual([[command]]);
+    expect(document.activeElement === editor.view.dom).toBe(true);
 });
