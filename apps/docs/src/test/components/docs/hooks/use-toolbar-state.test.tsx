@@ -153,6 +153,61 @@ test('a range reads the alignment all its blocks share, and none when they diffe
     aligned.destroy();
 });
 
+// setTextAlign aligns every cell of a cell selection, which ProseMirror's from and to span only one of.
+test('a cell selection reads the alignment all its cells share, and none when they differ', async () => {
+    const cell = (text: string, textAlign: string | null) => ({
+        type: 'tableCell',
+        content: [{ type: 'paragraph', attrs: { textAlign }, content: [{ type: 'text', text }] }],
+    });
+    const row = (left: string, leftAlign: string | null) => ({
+        type: 'tableRow',
+        content: [cell(left, leftAlign), cell(`${left}2`, 'center')],
+    });
+    // Column A left, then right in the last row; column B centred.
+    const table = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [{ type: 'table', content: [row('a', null), row('b', null), row('c', 'right')] }],
+        },
+    });
+    const cells: number[] = [];
+    table.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'tableCell') cells.push(pos);
+    });
+    const select = (anchorCell = 0, headCell = 0) => table.commands.setCellSelection({ anchorCell, headCell });
+    select(cells[0], cells[2]);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: table })));
+    expect(seen.at(-1)?.alignment).toBe('left');
+
+    await act(async () => select(cells[1], cells[5]));
+    expect(seen.at(-1)?.alignment).toBe('center');
+
+    await act(async () => select(cells[0], cells[4]));
+    expect(seen.at(-1)?.alignment).toBeUndefined();
+    table.destroy();
+});
+
+test('a range over two heading levels reads no level', async () => {
+    const heading = (level: number, text: string) => ({
+        type: 'heading',
+        attrs: { level },
+        content: [{ type: 'text', text }],
+    });
+    // "Two" at 1-4, "Three" at 6-11.
+    const headings = new Editor({
+        extensions: getDocExtensions(),
+        content: { type: 'doc', content: [heading(2, 'Two'), heading(3, 'Three')] },
+    });
+    headings.commands.setTextSelection({ from: 2, to: 3 });
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: headings })));
+    expect(seen.at(-1)?.headingLevel).toBe(2);
+
+    await act(async () => headings.commands.setTextSelection({ from: 2, to: 8 }));
+    expect(seen.at(-1)?.headingLevel).toBeUndefined();
+    headings.destroy();
+});
+
 test('outside a table no transaction tries the cell commands', async () => {
     editor.commands.setTextSelection(2);
     const can = spyOn(editor, 'can');

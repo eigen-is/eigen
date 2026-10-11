@@ -58,14 +58,21 @@ export function useToolbarState(editor: Editor): ToolbarState {
                     : e.state;
             const active = (name: string | null, attributes?: Record<string, unknown>) =>
                 isActive(state, name, attributes);
-            // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centred items.
+            // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centred items, and
+            // getAttributes reads the last heading. A cell selection has a range per cell, as setTextAlign aligns it.
             const alignments = new Set<TextAlign>();
-            state.doc.nodesBetween(state.selection.from, state.selection.to, (node) => {
-                if (node.isTextblock) alignments.add(oneOf(node.attrs['textAlign'], TEXT_ALIGNS, 'left'));
-            });
+            const headingLevels = new Set<number | undefined>();
+            for (const { $from, $to } of state.selection.ranges) {
+                state.doc.nodesBetween($from.pos, $to.pos, (node) => {
+                    if (!node.isTextblock) return;
+                    alignments.add(oneOf(node.attrs['textAlign'], TEXT_ALIGNS, 'left'));
+                    headingLevels.add(node.type.name === 'heading' ? node.attrs['level'] : undefined);
+                });
+            }
             const table = active('table');
             return {
-                headingLevel: active('heading') ? getAttributes(state, 'heading')['level'] : undefined,
+                // A range of mixed levels, or of headings and other blocks, reads as none.
+                headingLevel: headingLevels.size === 1 ? [...headingLevels][0] : undefined,
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
                 color: getAttributes(state, 'textStyle')['color'] || '',
