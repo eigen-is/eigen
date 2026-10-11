@@ -1,5 +1,5 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -20,6 +20,8 @@ afterEach(() => unmount());
 
 const editor = new Editor({ extensions: getDocExtensions() });
 
+const onReplaceImage = mock(() => {});
+
 async function render(width: number, canWrite: boolean) {
     window.happyDOM.setViewport({ width, height: 1000 });
     const toolbar = createElement(EditorToolbar, {
@@ -31,6 +33,7 @@ async function render(width: number, canWrite: boolean) {
         canRedo: false,
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
+        onReplaceImage,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
     });
     const router = createRouter({
@@ -136,6 +139,9 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         'Align and indent',
         'Bullets and numbering',
         '—',
+        'Table',
+        'Image',
+        '—',
         'Clear formatting',
     ]);
 });
@@ -166,6 +172,94 @@ test('Format › Bullets and numbering lists numbered before bulleted, as Google
     await openMenu('Format');
     await openSubmenu('Bullets and numbering');
     expect(openMenuEntries()).toEqual(['Numbered list', 'Bulleted list', 'Checklist']);
+});
+
+// "a" at 1, a figure at 2, then a 2×2 table whose first cell's text sits at 7.
+const TABLE_AND_FIGURE = {
+    type: 'doc',
+    content: [
+        {
+            type: 'paragraph',
+            content: [
+                { type: 'text', text: 'a' },
+                { type: 'figure', attrs: { mediaName: 'chart.png' } },
+            ],
+        },
+        {
+            type: 'table',
+            content: [0, 1].map(() => ({
+                type: 'tableRow',
+                content: [0, 1].map(() => ({ type: 'tableCell', content: [{ type: 'paragraph' }] })),
+            })),
+        },
+    ],
+};
+
+const submenuDisabled = (label: string) =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+        .find((item) => item.textContent?.trim() === label)
+        ?.getAttribute('aria-disabled') === 'true';
+
+async function clickItem(label: string) {
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (entry) => entry.textContent?.trim() === label,
+    );
+    await act(async () => item?.click());
+}
+
+test.each([
+    ['in a paragraph', false, false, () => editor.commands.setTextSelection(1)],
+    ['in a table', true, false, () => editor.commands.setTextSelection(7)],
+    ['on a figure', false, true, () => editor.commands.setNodeSelection(2)],
+])('%s, Format › Table is enabled %p and Format › Image %p', async (_, table, image, select) => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    select();
+    await render(1920, true);
+    await openMenu('Format');
+    expect(submenuDisabled('Table')).toBe(!table);
+    expect(submenuDisabled('Image')).toBe(!image);
+});
+
+test("Format › Table lists the table panel's actions in Google Docs' order and runs them", async () => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    editor.commands.setTextSelection(7);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Table');
+    expect(openMenuEntries()).toEqual([
+        'Insert row above',
+        'Insert row below',
+        'Insert column left',
+        'Insert column right',
+        '—',
+        'Delete row',
+        'Delete column',
+        'Delete table',
+        '—',
+        'Merge cells',
+        'Unmerge cells',
+        '—',
+        'Toggle header row',
+    ]);
+    // A caret merges nothing and splits only a merged cell.
+    expect(submenuDisabled('Merge cells')).toBe(true);
+    expect(submenuDisabled('Unmerge cells')).toBe(true);
+
+    await clickItem('Insert row below');
+    expect(editor.state.doc.child(1).childCount).toBe(3);
+});
+
+test('Format › Image › Replace image opens the picker the image panel opens', async () => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    editor.commands.setNodeSelection(2);
+    onReplaceImage.mockClear();
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Image');
+    expect(openMenuEntries()).toEqual(['Replace image']);
+
+    await clickItem('Replace image');
+    expect(onReplaceImage).toHaveBeenCalledTimes(1);
 });
 
 test('a viewer gets neither the Format and Insert menus nor the icon row', async () => {

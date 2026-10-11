@@ -38,6 +38,7 @@ import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
@@ -49,6 +50,7 @@ import {
     PanelColumn,
 } from '@workspace/ui/components/comments';
 import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
@@ -455,6 +457,9 @@ const TiptapEditor = ({
         }
     };
 
+    // The image panel's button and Format › Image › Replace image open the same picker.
+    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
+
     const handleReplaceImage = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
         const { pendingName, promise } = startUpload(file);
@@ -767,6 +772,7 @@ const TiptapEditor = ({
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                                     onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                                    onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
                                 />
                             }
@@ -818,8 +824,7 @@ const TiptapEditor = ({
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
                                                     editor={editor}
-                                                    onReplaceImage={handleReplaceImage}
-                                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                                    onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
                                             ) : (
                                                 <TablePropertiesPanel editor={editor} />
@@ -834,6 +839,16 @@ const TiptapEditor = ({
 
                 {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
             </div>
+
+            <DrivePickerWithUpload
+                open={replacePickerOpen}
+                onOpenChange={setReplacePickerOpen}
+                title="Replace image"
+                canPick={(item) => isImageMime(item.mimeType)}
+                onPickFromDrive={handleReplaceImageFromDrive}
+                onPickFromDevice={(files) => files[0] && handleReplaceImage(files[0])}
+                accept="image/*"
+            />
 
             <CardFormDialog
                 open={addOpen}

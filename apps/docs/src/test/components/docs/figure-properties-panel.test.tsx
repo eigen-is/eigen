@@ -1,14 +1,10 @@
 // The Image panel follows the figure selection, so a write from the panel must keep the figure selected, and the
 // panel must draw the new value though the selection didn't change.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
-
-// The Replace image picker needs a signed-in user; the panel's writes don't.
-const realDrive = await import('@workspace/ui/components/drive');
-mock.module('@workspace/ui/components/drive', () => ({ ...realDrive, DrivePickerWithUpload: () => null }));
 
 const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');

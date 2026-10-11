@@ -20,6 +20,10 @@ type ToolbarState = {
     taskList: boolean;
     link: boolean;
     selectionEmpty: boolean;
+    table: boolean;
+    figure: boolean;
+    canMergeCells: boolean;
+    canSplitCell: boolean;
 };
 
 // Each check walks every node a range spans, some 20 per transaction, and a collaborator's edit or caret is one too.
@@ -62,6 +66,10 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
+                table: active('table'),
+                figure: active('figure'),
+                canMergeCells: e.can().mergeCells(),
+                canSplitCell: e.can().splitCell(),
             };
         },
     });
