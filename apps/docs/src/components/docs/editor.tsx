@@ -254,6 +254,8 @@ const TiptapEditor = ({
         onSearchOpenChange,
     } = useDocumentPanels(isMobile);
     const [docHeight, setDocHeight] = useState(0);
+    // The image panel's button and Format › Image › Replace image open the same picker.
+    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -456,9 +458,6 @@ const TiptapEditor = ({
             swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
         }
     };
-
-    // The image panel's button and Format › Image › Replace image open the same picker.
-    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
 
     const handleReplaceImage = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;

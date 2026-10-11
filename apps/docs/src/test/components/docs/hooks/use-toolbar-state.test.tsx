@@ -1,5 +1,5 @@
 // The toolbar draws the marks and the block at the caret, and a caret move is a transaction that changes no content.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -119,4 +119,45 @@ test('a long selection starting after a bold word or a heading reads none of the
     await act(async () => long.commands.setTextSelection({ from: headingEnd, to: long.state.doc.content.size - 1 }));
     expect(seen.at(-1)).toMatchObject({ bold: false, headingLevel: undefined });
     long.destroy();
+});
+
+// Tiptap's isActive sums the ranges of the nodes an attribute matches, and a list's own range counts against them,
+// so a centred paragraph and a centred list item would read left.
+test('a range reads the alignment all its blocks share, and none when they differ', async () => {
+    const paragraph = (text: string, textAlign: string) => ({
+        type: 'paragraph',
+        attrs: { textAlign },
+        content: [{ type: 'text', text }],
+    });
+    // "centred" at 1-8, the list item's "item" at 12-16, "right" at 20-25.
+    const aligned = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                paragraph('centred', 'center'),
+                { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph('item', 'center')] }] },
+                paragraph('right', 'right'),
+            ],
+        },
+    });
+    aligned.commands.setTextSelection({ from: 2, to: 14 });
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: aligned })));
+    expect(seen.at(-1)?.alignment).toBe('center');
+
+    await act(async () => aligned.commands.setTextSelection({ from: 2, to: 22 }));
+    expect(seen.at(-1)?.alignment).toBeUndefined();
+
+    await act(async () => aligned.commands.setTextSelection(22));
+    expect(seen.at(-1)?.alignment).toBe('right');
+    aligned.destroy();
+});
+
+test('outside a table no transaction tries the cell commands', async () => {
+    editor.commands.setTextSelection(2);
+    const can = spyOn(editor, 'can');
+    ({ unmount } = await renderInDocument(createElement(Probe)));
+    await act(async () => editor.commands.setTextSelection(4));
+    expect(can).not.toHaveBeenCalled();
+    can.mockRestore();
 });

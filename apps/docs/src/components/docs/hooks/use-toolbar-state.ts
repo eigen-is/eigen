@@ -2,7 +2,7 @@ import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
-import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
+import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 
 type ToolbarState = {
     headingLevel: number | undefined;
@@ -13,7 +13,7 @@ type ToolbarState = {
     italic: boolean;
     underline: boolean;
     highlight: boolean;
-    alignment: TextAlign;
+    alignment: TextAlign | undefined;
     bulletList: boolean;
     orderedList: boolean;
     taskList: boolean;
@@ -24,6 +24,17 @@ type ToolbarState = {
     canMergeCells: boolean;
     canSplitCell: boolean;
 };
+
+// Format › Table and the table panel enable Merge and Unmerge by these; each dry-runs its command, so only in a table.
+export function selectCellCommands(
+    editor: Editor,
+    inTable: boolean,
+): { canMergeCells: boolean; canSplitCell: boolean } {
+    return {
+        canMergeCells: inTable && editor.can().mergeCells(),
+        canSplitCell: inTable && editor.can().splitCell(),
+    };
+}
 
 // Each check walks every node a range spans, some 20 per transaction, and a collaborator's edit or caret is one too.
 const MAX_READ_RANGE = 10_000;
@@ -47,8 +58,14 @@ export function useToolbarState(editor: Editor): ToolbarState {
                     : e.state;
             const active = (name: string | null, attributes?: Record<string, unknown>) =>
                 isActive(state, name, attributes);
+            // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centred items.
+            const alignments = new Set<TextAlign>();
+            state.doc.nodesBetween(state.selection.from, state.selection.to, (node) => {
+                if (node.isTextblock) alignments.add(oneOf(node.attrs['textAlign'], TEXT_ALIGNS, 'left'));
+            });
+            const table = active('table');
             return {
-                headingLevel: [1, 2, 3, 4, 5, 6].find((level) => active('heading', { level })),
+                headingLevel: active('heading') ? getAttributes(state, 'heading')['level'] : undefined,
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
                 color: getAttributes(state, 'textStyle')['color'] || '',
@@ -57,17 +74,16 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 italic: active('italic'),
                 underline: active('underline'),
                 highlight: active('highlight'),
-                // An unaligned paragraph's textAlign is null, and it and a range of mixed alignments read as left.
-                alignment: TEXT_ALIGNS.find((alignment) => active(null, { textAlign: alignment })) ?? 'left',
+                // An unaligned paragraph's textAlign is null and reads as left; a range of mixed alignments reads as none.
+                alignment: alignments.size === 1 ? [...alignments][0] : undefined,
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
-                table: active('table'),
+                table,
                 figure: active('figure'),
-                canMergeCells: e.can().mergeCells(),
-                canSplitCell: e.can().splitCell(),
+                ...selectCellCommands(e, table),
             };
         },
     });
