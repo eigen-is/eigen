@@ -256,6 +256,7 @@ export const EditorToolbar = ({
                             canRedo={canRedo}
                             onUndo={() => editor.chain().focus().undo().run()}
                             onRedo={() => editor.chain().focus().redo().run()}
+                            onCloseAutoFocus={keepEditorFocus}
                         />
 
                         {canWrite && (
@@ -567,7 +568,7 @@ export const EditorToolbar = ({
                                         <ChevronDown className="h-3 w-3" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent>
+                                <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
                                         <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                                     </DropdownMenuItem>
@@ -590,6 +591,7 @@ export const EditorToolbar = ({
                             <FontPicker
                                 value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
+                                onCloseAutoFocus={keepEditorFocus}
                             />
 
                             <ToolbarSeparator />

@@ -1,5 +1,5 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -18,7 +18,11 @@ const { EditorToolbar } = await import('../../../components/docs/editor-toolbar'
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const editor = new Editor({ extensions: getDocExtensions() });
+// Mounted in the document, so a test can read whether it holds focus.
+const editor = new Editor({
+    element: document.body.appendChild(document.createElement('div')),
+    extensions: getDocExtensions(),
+});
 
 const onReplaceImage = mock(() => {});
 
@@ -331,6 +335,36 @@ test('Format › Image › Replace image opens the picker the image panel opens'
 
     await clickItem('Replace image');
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
+});
+
+// Tiptap refocuses the editor a frame after a pick. A browser runs that frame once the menu has closed and before its
+// exit animation unmounts it, and the unmounting menu then hands focus back to its trigger unless told not to; happy-dom
+// runs it before the menu closes, under its focus trap, so a pick here defers it to a timer, as a frame would.
+async function pickInBrowserFrames(pick: () => Promise<void>) {
+    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        setTimeout(() => callback(performance.now()));
+        return 0;
+    });
+    try {
+        await pick();
+        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    } finally {
+        frame.mockRestore();
+    }
+}
+
+const ONE_PARAGRAPH = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] };
+
+test.each([
+    ['the style picker', 'Normal text', 'Heading 2'],
+    ['the font picker', 'Inter', 'Source Serif 4'],
+])('a choice in %s gives focus back to the editor', async (_, trigger, choice) => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu(trigger);
+    await pickInBrowserFrames(() => clickItem(choice));
+    expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
 test('a viewer gets neither the Format and Insert menus nor the icon row', async () => {
