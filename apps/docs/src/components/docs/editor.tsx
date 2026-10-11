@@ -74,7 +74,8 @@ import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
-import { TableWidthClamp, textColumnWidth } from './extensions/table-width-clamp';
+import { TableWidthClamp } from './extensions/table-width-clamp';
+import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { cleanPastedHTML } from './paste';
@@ -287,8 +288,7 @@ const TiptapEditor = ({
     };
 
     const getEditorMaxWidth = useCallback(() => {
-        const el = documentRef.current;
-        return el ? textColumnWidth(el) : TEXT_COLUMN_WIDTH_PX;
+        return textColumnWidth(documentRef.current) ?? TEXT_COLUMN_WIDTH_PX;
     }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);

@@ -2,6 +2,7 @@ import { type CommandProps, Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { isInTable, selectedRect } from '@tiptap/pm/tables';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { textColumnWidth } from './text-column';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -12,12 +13,6 @@ declare module '@tiptap/core' {
 }
 
 const DEFAULT_CELL_WIDTH = 100;
-
-// The text column of the page the editor sits on: the `[data-document]` box inside its padding.
-export function textColumnWidth(page: Element): number {
-    const style = getComputedStyle(page);
-    return page.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
-}
 
 export const TableWidthClamp = Extension.create({
     name: 'tableWidthClamp',
@@ -32,8 +27,7 @@ export const TableWidthClamp = Extension.create({
                 ({ state, tr, dispatch }: CommandProps) => {
                     if (!isInTable(state)) return false;
                     const { map, table, tableStart } = selectedRect(state);
-                    const page = editor.view.dom.closest('[data-document]');
-                    const columnPx = page ? textColumnWidth(page) : 0;
+                    const columnPx = textColumnWidth(editor.view.dom) ?? 0;
                     const widths = map.map
                         .slice(0, map.width)
                         .map(
@@ -67,10 +61,8 @@ export const TableWidthClamp = Extension.create({
                 appendTransaction(transactions, _oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;
 
-                    const page = editor.view.dom.closest('[data-document]');
-                    if (!page) return null;
-                    const maxWidth = textColumnWidth(page);
-                    if (maxWidth <= 0) return null;
+                    const maxWidth = textColumnWidth(editor.view.dom);
+                    if (!maxWidth || maxWidth <= 0) return null;
 
                     const tr = newState.tr;
                     let modified = false;

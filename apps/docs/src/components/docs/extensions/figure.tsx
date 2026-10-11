@@ -13,6 +13,7 @@ import { ObjectTransform } from '@workspace/ui/components/transform/object-trans
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { textColumnWidth } from './text-column';
 
 // The figure's resize floor (px).
 const FIGURE_MIN_WIDTH = 100;
@@ -26,10 +27,7 @@ const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
 
 // The text column, or half of it for a wrapped figure: the widest a resize makes it.
 export function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
-    const container = figure instanceof Element ? figure.closest('[data-document]') : null;
-    if (!container) return Infinity;
-    const style = getComputedStyle(container);
-    const fullWidth = container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const fullWidth = textColumnWidth(figure) ?? Infinity;
     return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
 }
 
