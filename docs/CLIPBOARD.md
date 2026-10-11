@@ -60,7 +60,7 @@ Docs claims text items only when `hasRichHtmlBeyondMarker` says the HTML is just
 
 A sheets copy writes the payload, but a sheets paste of it skips the payload. The copy tags its HTML with `COPY_ACTION_TABLE_MARKER`, and `classifyPaste`'s `internalMarkerText` drops the payload and the SVG on that tag. The paste is served from `ctx.copyState`, which holds coordinates and re-reads the live cells. That is why formulas, formats and links survive a same-tab paste though none of them exist on the wire. In another tab there is no `copyState`, the tag still suppresses the payload, and the paste falls through to the HTML table parser, lossy. Putting sheets on the wire is scoped in [SHEETS-TODO.md](SHEETS-TODO.md).
 
-A sheets menu copy has no native event either, and the async writer cannot set the custom type. So it stages its HTML with `setPendingCopy` and fires `execCommand('copy')`, and the Workbook's `copy` listener writes every flavor (`packages/sheet/src/state/modules/clipboard.ts`).
+A sheets menu copy has no native event either, and the async writer cannot set the custom type. So it stages its HTML with `setPendingCopy` and fires `execCommand('copy')`, and the Workbook's `copy` listener writes every flavor (`packages/sheet/src/state/modules/clipboard.ts`). A docs menu copy fires `execCommand` too, for the editor's own handlers ([DOCS.md](DOCS.md#a-docs-copy-with-an-image-writes-its-items-in-order-and-a-docs-paste-reads-its-html)).
 
 ## A canvas selection rides as its stored records
 
