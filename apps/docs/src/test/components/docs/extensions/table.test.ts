@@ -12,6 +12,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { history, undo, undoDepth } = await import('@tiptap/pm/history');
+const { Slice } = await import('@tiptap/pm/model');
 const { columnResizingPluginKey } = await import('@tiptap/pm/tables');
 const { getDocExtensions, MIN_TABLE_COLUMN_PX } = await import('@workspace/lib/docs/eigendoc');
 const { EditorTable } = await import('../../../../components/docs/extensions/table');
@@ -72,10 +73,12 @@ const drawCells = (editor: InstanceType<typeof Editor>, px: number) => {
 
 // A press on the right border of the cell at `cellPos`: the handle columnResizing sets on hover, then mousedown on the
 // editor at x 300. The moves and the mouseup go to the window.
-function press(editor: InstanceType<typeof Editor>, cellPos: number, button = 0) {
+function press(editor: InstanceType<typeof Editor>, cellPos: number, init: MouseEventInit = {}) {
     const { view } = editor;
     view.dispatch(view.state.tr.setMeta(columnResizingPluginKey, { setHandle: cellPos }));
-    view.dom.dispatchEvent(new MouseEvent('mousedown', { clientX: 300, button, bubbles: true, cancelable: true }));
+    view.dom.dispatchEvent(
+        new MouseEvent('mousedown', { clientX: 300, button: 0, bubbles: true, cancelable: true, ...init }),
+    );
 }
 const move = (dx: number, buttons = 1) =>
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: 300 + dx, buttons }));
@@ -155,9 +158,14 @@ test('a move draws the columns the drop writes', async () => {
 test('a click or a right-click on a border writes nothing and draws the columns as before', async () => {
     const editor = await mount([widthRow(null, null, null)]);
     drawCells(editor, 200);
-    press(editor, first, 2);
+    press(editor, first, { button: 2 });
     move(40, 2);
     release(40, 2);
+    expect(widths(editor)).toEqual([null, null, null]);
+    // macOS's right-click: the primary button with control.
+    press(editor, first, { ctrlKey: true });
+    move(40);
+    release(40);
     expect(widths(editor)).toEqual([null, null, null]);
     press(editor, first);
     move(0);
@@ -211,6 +219,54 @@ test('the drop reads the table again: a column deleted meanwhile keeps its width
     expect(widths(added)).toEqual([[130], [70], [100], [130], [70], [100]]);
 });
 
+// A collaborator's change reaches the editor through y-tiptap as one replace of the whole document.
+test("the drop writes its widths after a collaborator's change replaced the whole document", async () => {
+    const editor = await mount([widthRow(100, 100, 100)]);
+    const { view } = editor;
+    press(editor, first);
+    move(30);
+    view.dispatch(view.state.tr.replace(0, view.state.doc.content.size, new Slice(view.state.doc.content, 0, 0)));
+    // The replace drops columnResizing's handle; set back, it shows whether a hover still gets through.
+    view.dispatch(view.state.tr.setMeta(columnResizingPluginKey, { setHandle: first }));
+    view.dom
+        .querySelectorAll('td')[1]
+        ?.dispatchEvent(new MouseEvent('mousemove', { clientX: 340, buttons: 1, bubbles: true }));
+    expect(columnResizingPluginKey.getState(view.state)?.activeHandle).toBe(first);
+    move(40);
+    release(40);
+    expect(widths(editor)).toEqual([[140], [60], [100]]);
+    expect(colStyles(editor)).toEqual(['140px', '60px', '100px']);
+});
+
+test('the drop finds the table a paragraph moved, and a table deleted meanwhile takes nothing', async () => {
+    const moved = await mount([widthRow(100, 100, 100)]);
+    press(moved, first);
+    move(30);
+    moved.commands.insertContentAt(0, { type: 'paragraph', content: [{ type: 'text', text: 'above' }] });
+    release(30);
+    expect(widths(moved)).toEqual([[130], [70], [100]]);
+    await unmount();
+
+    const deleted = await mountDoc([{ type: 'paragraph' }, { type: 'table', content: [widthRow(100, 100, 100)] }]);
+    press(deleted, first + 2);
+    move(30);
+    deleted
+        .chain()
+        .setTextSelection(first + 4)
+        .deleteTable()
+        .run();
+    expect(deleted.view.dom.querySelector('table')).toBeNull();
+    const doc = deleted.state.doc;
+    // happy-dom reports a listener's throw as the window's error event.
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent) => errors.push(event.error);
+    window.addEventListener('error', onError);
+    release(30);
+    window.removeEventListener('error', onError);
+    expect(errors).toEqual([]);
+    expect(deleted.state.doc).toBe(doc);
+});
+
 test("columnResizing's hover leaves the handle where the drag started", async () => {
     const editor = await mount([widthRow(100, 100, 100)]);
     const { view } = editor;
@@ -224,13 +280,13 @@ test("columnResizing's hover leaves the handle where the drag started", async ()
     expect(widths(editor)).toEqual([[130], [70], [100]]);
 });
 
-test('a move with no button down ends the drag where it is', async () => {
+test('a move with no button down, its mouseup lost, ends the drag at the last move with the button down', async () => {
     const editor = await mount([widthRow(100, 100, 100)]);
     press(editor, first);
     move(30);
-    move(40, 0);
+    move(60, 0);
     release(80);
-    expect(widths(editor)).toEqual([[140], [60], [100]]);
+    expect(widths(editor)).toEqual([[130], [70], [100]]);
 });
 
 test('a viewer drags nothing', async () => {

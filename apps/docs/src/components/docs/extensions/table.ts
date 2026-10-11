@@ -1,7 +1,7 @@
 import type { CommandProps } from '@tiptap/core';
 import { Table } from '@tiptap/extension-table';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
+import { Plugin, type Transaction } from '@tiptap/pm/state';
 import {
     columnResizingPluginKey,
     isInTable,
@@ -95,9 +95,16 @@ function setColumnWidths(tr: Transaction, table: PMNode, tableStart: number, wid
     }
 }
 
-// The position of the table a drag is on, mapped through every change while it lasts, or null when there's no drag or
-// the table went.
-const columnDragKey = new PluginKey<number | null>('columnDrag');
+// The table node `tableDom` draws and its position, found from the DOM rather than a position mapped through the drag's
+// changes: y-tiptap applies a collaborator's change as one replace of the whole document, which no position survives,
+// while the table's node view does. Null when the table went.
+function tableOf(view: EditorView, tableDom: HTMLTableElement): { table: PMNode; pos: number } | null {
+    if (!view.dom.contains(tableDom)) return null;
+    // The position at the table's start, inside it.
+    const $start = view.state.doc.resolve(view.posAtDOM(tableDom, 0));
+    const pos = $start.before();
+    return view.nodeDOM(pos)?.firstChild === tableDom ? { table: $start.parent, pos } : null;
+}
 
 // Takes over columnResizing's drag from mousedown to mouseup and keeps the rest of it: the hover that finds the border,
 // and its handle and cursor, which this plugin holds still during a drag by taking the editor's mousemove and
@@ -105,28 +112,19 @@ const columnDragKey = new PluginKey<number | null>('columnDrag');
 // one moves width between the border's two columns instead. The first drag stores every column's width, so none is
 // left to the layout; a drag that changes nothing, a click, writes nothing.
 function columnDrag(cellMinWidth: number) {
-    return new Plugin<number | null>({
-        key: columnDragKey,
-        state: {
-            init: () => null,
-            apply(tr, tablePos) {
-                const meta: number | null | undefined = tr.getMeta(columnDragKey);
-                if (meta !== undefined) return meta;
-                if (tablePos === null || !tr.docChanged) return tablePos;
-                const mapped = tr.mapping.mapResult(tablePos, 1);
-                return mapped.deleted ? null : mapped.pos;
-            },
-        },
+    let dragging = false;
+    return new Plugin({
         props: {
             handleDOMEvents: {
-                mousemove: (view) => columnDragKey.getState(view.state) != null,
-                mouseleave: (view) => columnDragKey.getState(view.state) != null,
+                mousemove: () => dragging,
+                mouseleave: () => dragging,
                 mousedown(view, event) {
                     const handle = columnResizingPluginKey.getState(view.state)?.activeHandle ?? -1;
                     if (!view.editable || handle < 0) return false;
-                    // Only the primary button drags. Another one is taken here, or columnResizing's own mousedown
+                    // Only the primary button drags, without control or command, as tableEditing reads them: macOS's
+                    // control-click is its right-click. Another press is taken here, or columnResizing's own mousedown
                     // would start its drag and write the column's width on the mouseup.
-                    if (event.button !== 0) return true;
+                    if (event.button !== 0 || event.ctrlKey || event.metaKey) return true;
                     const $cell = view.state.doc.resolve(handle);
                     const table = $cell.node(-1);
                     const tablePos = $cell.before(-1);
@@ -143,33 +141,39 @@ function columnDrag(cellMinWidth: number) {
                         draggedWidths(start, col, (clientX - event.clientX) / scale, maxWidth);
 
                     const win = view.dom.ownerDocument.defaultView ?? window;
+                    // A move with no button down means the mouseup was lost, outside the window or to a native menu,
+                    // so the drag ends where the last move with the button down left it.
+                    let lastX = event.clientX;
                     const move = (moveEvent: MouseEvent) => {
-                        if (!moveEvent.buttons) return finish(moveEvent);
-                        drawColumns(dom, widthsAt(moveEvent.clientX));
+                        if (!moveEvent.buttons) return finish(lastX);
+                        lastX = moveEvent.clientX;
+                        drawColumns(dom, widthsAt(lastX));
                     };
-                    // The drop reads the table again from the state, where a collaborator's edit may have changed it;
-                    // a table whose columns changed meanwhile keeps its widths. Without a write the table draws from
-                    // its node again, as the moves drew over it.
-                    const finish = (upEvent: MouseEvent) => {
-                        win.removeEventListener('mouseup', finish);
+                    const up = (upEvent: MouseEvent) => finish(upEvent.clientX);
+                    // The drop finds the table again, where a collaborator's edit may have changed it; a table whose
+                    // columns changed meanwhile keeps its widths, and a table that went takes nothing. Without a write
+                    // the table draws from its node again, as the moves drew over it.
+                    const finish = (clientX: number) => {
+                        win.removeEventListener('mouseup', up);
                         win.removeEventListener('mousemove', move);
-                        const at = columnDragKey.getState(view.state);
-                        const current = at == null ? null : view.state.doc.nodeAt(at);
-                        const tr = view.state.tr.setMeta(columnDragKey, null);
-                        const widths = widthsAt(upEvent.clientX);
+                        dragging = false;
+                        const found = tableOf(view, dom);
+                        if (!found) return;
+                        const widths = widthsAt(clientX);
                         const changed = widths.some((width, index) => width !== start[index]);
-                        if (at != null && current && changed && TableMap.get(current).width === widths.length) {
-                            setColumnWidths(tr, current, at + 1, widths);
+                        if (changed && TableMap.get(found.table).width === widths.length) {
+                            const tr = view.state.tr;
+                            setColumnWidths(tr, found.table, found.pos + 1, widths);
+                            if (tr.docChanged) return view.dispatch(tr);
                         }
-                        view.dispatch(tr);
                         const colgroup = dom.firstChild;
-                        if (!tr.docChanged && current && colgroup instanceof HTMLTableColElement) {
-                            updateColumnsOnResize(current, colgroup, dom, cellMinWidth);
+                        if (colgroup instanceof HTMLTableColElement) {
+                            updateColumnsOnResize(found.table, colgroup, dom, cellMinWidth);
                         }
                     };
 
-                    view.dispatch(view.state.tr.setMeta(columnDragKey, tablePos));
-                    win.addEventListener('mouseup', finish);
+                    dragging = true;
+                    win.addEventListener('mouseup', up);
                     win.addEventListener('mousemove', move);
                     event.preventDefault();
                     return true;
