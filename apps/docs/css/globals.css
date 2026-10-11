@@ -15,14 +15,15 @@
 /* Shared tiptap editor + prose rules are in @workspace/ui eigen-prose.css */
 /* Below: docs-only styles (table resize, comments, cursors) */
 
-/* Table column resize handle (docs-specific: resizable tables) */
+/* A column's border while the mouse is on it: a thin line in the selection color over the cell border. A coarse
+   pointer gets no resize at all (Table's `resizable` in editor.tsx), so there is no touch variant. */
 .tiptap table .column-resize-handle {
     position: absolute;
-    right: -2px;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background-color: #3b82f6;
+    right: -1px;
+    top: -1px;
+    bottom: -1px;
+    width: 2px;
+    background-color: var(--selection-handle);
     pointer-events: none;
     z-index: 20;
 }
@@ -35,7 +36,8 @@
     table-layout: auto;
 }
 
-.resize-cursor {
+.tiptap.resize-cursor,
+.tiptap.resize-cursor * {
     cursor: col-resize;
 }
 

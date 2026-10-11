@@ -67,11 +67,17 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 
 Click inside the table. The **Table** panel opens on the right side of the editor (on a wide screen).
 
-The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Merge cells**, **Unmerge cells**, and **Toggle header row**. The **Table** item is greyed out until your cursor is in a table.
+The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, and **Toggle header row**. The **Table** item is greyed out until your cursor is in a table.
 
 **Add or remove columns**
 
 Under **Columns**, click **Before** or **After** to add a column on either side of the one your cursor is in. Click **Delete column** to remove the current column.
+
+**Resize columns**
+
+Point at the border between two columns until the cursor changes, then drag it left or right. One column gets wider and the one beside it narrower, so the table keeps its width. To make the whole table wider or narrower, drag its right edge; it stops at the edge of the page's text, or of the list item or table cell it sits in. Dragging needs a mouse or trackpad; on a touchscreen the columns keep their widths.
+
+Click **Distribute columns** under **Columns** to give every column the same width.
 
 **Add or remove rows**
 

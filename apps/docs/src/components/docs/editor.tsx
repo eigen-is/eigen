@@ -32,6 +32,7 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import { useIsCoarsePointer } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -66,7 +67,9 @@ import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
+import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
+import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { cleanPastedHTML } from './paste';
@@ -242,6 +245,7 @@ const TiptapEditor = ({
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
     const { isMobile } = useLayout();
+    const isCoarsePointer = useIsCoarsePointer();
     const {
         panel,
         commentPanelOpen,
@@ -278,10 +282,7 @@ const TiptapEditor = ({
     };
 
     const getEditorMaxWidth = useCallback(() => {
-        const el = documentRef.current;
-        if (!el) return TEXT_COLUMN_WIDTH_PX;
-        const style = getComputedStyle(el);
-        return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        return textColumnWidth(documentRef.current) ?? TEXT_COLUMN_WIDTH_PX;
     }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
@@ -321,7 +322,10 @@ const TiptapEditor = ({
         {
             editable: canWrite,
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
+                // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
+                // drags nothing, and a tap beside a border would start a drag that swallows the caret.
+                EditorTable.configure({ resizable: !isCoarsePointer }),
                 Figure.configure({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),

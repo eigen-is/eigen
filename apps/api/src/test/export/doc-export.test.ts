@@ -272,6 +272,34 @@ describe('doc export — page breaks', () => {
     });
 });
 
+describe('doc export — table column widths', () => {
+    // As a drag in the editor leaves them: every cell of a column holds its width.
+    const cell = (text: string, width: number): JSONContent => ({
+        type: 'tableCell',
+        attrs: { colwidth: [width] },
+        content: [paragraph(text)],
+    });
+    const row = (): JSONContent => ({ type: 'tableRow', content: [cell('a', 300), cell('b', 150), cell('c', 120)] });
+    const resized = () => seededDoc({ type: 'doc', content: [{ type: 'table', content: [row(), row()] }] });
+
+    test.each(['html', 'pdf-html'] as const)('%s draws each column at its width', async (format) => {
+        const { data } = await renderEigendocExport(resized(), format, 'Report.eigendoc', [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        const cols = [...document.querySelectorAll<HTMLTableColElement>('table col')];
+        expect(cols.map((col) => col.style.width)).toEqual(['300px', '150px', '120px']);
+        expect(document.querySelector('table')?.style.width).toBe('570px');
+    });
+
+    test('a docx export imports back with the same widths', async () => {
+        const { data } = await renderEigendocExport(resized(), 'docx', 'Report.eigendoc', [], undefined);
+        const { json } = docxToPmJson(Buffer.from(data));
+        const widths = json.content?.[0]?.content?.flatMap((tableRow) =>
+            (tableRow.content ?? []).map((node) => node.attrs?.['colwidth']),
+        );
+        expect(widths).toEqual([[300], [150], [120], [300], [150], [120]]);
+    });
+});
+
 describe('doc export — whitespace', () => {
     test.each(['html', 'pdf-html'] as const)(
         '%s keeps repeated spaces and prints no whitespace around the body',
