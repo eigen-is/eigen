@@ -470,6 +470,16 @@
         margin-bottom: 1em;
     }
 
+    /* A restarted list runs on from the one before it at the items' own step, as Google's does: the last item's margin
+       is all that is left between them. */
+    ol:has(+ ol) {
+        margin-bottom: 0;
+    }
+
+    ol + ol {
+        margin-top: 0;
+    }
+
     li {
         margin-bottom: 0.25em;
     }
