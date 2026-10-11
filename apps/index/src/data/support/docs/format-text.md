@@ -3,7 +3,7 @@ title: "Format text"
 description: "Apply bold, headings, lists, alignment, colors, and fonts to text in a Docs document using the toolbar."
 type: how-to
 category: Editing
-tags: [docs, formatting, fonts, headings, lists, color, alignment, caps]
+tags: [docs, formatting, fonts, headings, lists, numbering, color, alignment, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
 updated: 2026-10-11
@@ -96,6 +96,18 @@ Place your cursor on the line where you want the list to start, then click one o
 The same lists are in **Format**, then **Bullets and numbering**: **Numbered list**, **Bulleted list**, and **Checklist**.
 
 Press Enter to add the next item, and press Enter on an empty item to end the list. You can also click the same button again on a selected list to turn it back into regular paragraphs.
+
+### Choose a numbering style
+
+Open **Format**, then **Bullets and numbering**, then **Numbered list**, and choose one of five styles: **1. 2. 3.**, **a. b. c.**, **A. B. C.**, **i. ii. iii.**, or **I. II. III.** On a regular paragraph this starts a numbered list in that style. Inside a numbered list it changes the style of that list. The style of the list the cursor is in is marked.
+
+### Restart numbering
+
+1. Click in the list item where the new count should begin.
+2. Open **Format**, then **Bullets and numbering**, then **List options**, and choose **Restart numbering**.
+3. Enter the first number in **Start at** and click **OK**.
+
+On the first item, the whole list starts at that number. On a later item, the list splits in two there, and the second list counts on from your number. **List options** works only when the cursor is in a numbered list.
 
 ## Remove all formatting
 
