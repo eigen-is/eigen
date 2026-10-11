@@ -1,9 +1,12 @@
+import type { TextAlign } from '@workspace/lib/vector';
 import { AlignCenter, AlignLeft, AlignRight } from 'lucide-react';
 import { PropertyToggle } from './property-toggle';
 
+type PickedAlignment = Exclude<TextAlign, 'justify'>;
+
 type AlignmentPickerProps = {
-    value: 'left' | 'center' | 'right' | undefined;
-    onChange: (alignment: 'left' | 'center' | 'right') => void;
+    value: PickedAlignment | undefined;
+    onChange: (alignment: PickedAlignment) => void;
 };
 
 export function AlignmentPicker({ value, onChange }: AlignmentPickerProps) {

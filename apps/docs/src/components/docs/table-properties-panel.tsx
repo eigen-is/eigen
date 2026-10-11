@@ -1,15 +1,19 @@
-import type { Editor } from '@tiptap/react';
+import { type Editor, useEditorState } from '@tiptap/react';
 import { Button } from '@workspace/ui/components/button';
 import { PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
-import { Columns2, GripHorizontal, GripVertical, Merge, RowsIcon, Split, ToggleLeft, Trash2 } from 'lucide-react';
-import { useToolbarState } from './hooks/use-toolbar-state';
+import { selectCellCommands } from './hooks/use-toolbar-state';
+import { TABLE_ACTION_ICONS } from './table-action-icons';
 
 type TablePropertiesPanelProps = {
     editor: Editor;
 };
 
 export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
-    const { canMergeCells, canSplitCell } = useToolbarState(editor);
+    // The panel stays mounted through its exit, so a caret that has left the table reads no cell command.
+    const { canMergeCells, canSplitCell } = useEditorState({
+        editor,
+        selector: ({ editor: e }) => selectCellCommands(e, e.isActive('table')),
+    });
     return (
         <PropertiesPanel title="Table">
             <PropertySection title="Columns">
@@ -20,7 +24,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         className="text-xs"
                         onClick={() => editor.chain().focus().addColumnBefore().run()}
                     >
-                        <Columns2 className="h-3.5 w-3.5 mr-1" /> Before
+                        <TABLE_ACTION_ICONS.addColumnBefore className="h-3.5 w-3.5 mr-1" /> Before
                     </Button>
                     <Button
                         variant="outline"
@@ -28,7 +32,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         className="text-xs"
                         onClick={() => editor.chain().focus().addColumnAfter().run()}
                     >
-                        <Columns2 className="h-3.5 w-3.5 mr-1" /> After
+                        <TABLE_ACTION_ICONS.addColumnAfter className="h-3.5 w-3.5 mr-1" /> After
                     </Button>
                 </div>
                 <Button
@@ -37,7 +41,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     className="w-full text-xs"
                     onClick={() => editor.chain().focus().deleteColumn().run()}
                 >
-                    <GripVertical className="h-3.5 w-3.5 mr-1" /> Delete column
+                    <TABLE_ACTION_ICONS.deleteColumn className="h-3.5 w-3.5 mr-1" /> Delete column
                 </Button>
             </PropertySection>
 
@@ -49,7 +53,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         className="text-xs"
                         onClick={() => editor.chain().focus().addRowBefore().run()}
                     >
-                        <RowsIcon className="h-3.5 w-3.5 mr-1" /> Before
+                        <TABLE_ACTION_ICONS.addRowBefore className="h-3.5 w-3.5 mr-1" /> Before
                     </Button>
                     <Button
                         variant="outline"
@@ -57,7 +61,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         className="text-xs"
                         onClick={() => editor.chain().focus().addRowAfter().run()}
                     >
-                        <RowsIcon className="h-3.5 w-3.5 mr-1" /> After
+                        <TABLE_ACTION_ICONS.addRowAfter className="h-3.5 w-3.5 mr-1" /> After
                     </Button>
                 </div>
                 <Button
@@ -66,7 +70,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     className="w-full text-xs"
                     onClick={() => editor.chain().focus().deleteRow().run()}
                 >
-                    <GripHorizontal className="h-3.5 w-3.5 mr-1" /> Delete row
+                    <TABLE_ACTION_ICONS.deleteRow className="h-3.5 w-3.5 mr-1" /> Delete row
                 </Button>
             </PropertySection>
 
@@ -79,7 +83,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         disabled={!canMergeCells}
                         onClick={() => editor.chain().focus().mergeCells().run()}
                     >
-                        <Merge className="h-3.5 w-3.5 mr-1" /> Merge
+                        <TABLE_ACTION_ICONS.mergeCells className="h-3.5 w-3.5 mr-1" /> Merge
                     </Button>
                     <Button
                         variant="outline"
@@ -88,7 +92,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                         disabled={!canSplitCell}
                         onClick={() => editor.chain().focus().splitCell().run()}
                     >
-                        <Split className="h-3.5 w-3.5 mr-1" /> Unmerge
+                        <TABLE_ACTION_ICONS.splitCell className="h-3.5 w-3.5 mr-1" /> Unmerge
                     </Button>
                 </div>
                 <Button
@@ -97,7 +101,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     className="w-full text-xs"
                     onClick={() => editor.chain().focus().toggleHeaderRow().run()}
                 >
-                    <ToggleLeft className="h-3.5 w-3.5 mr-1" /> Toggle header row
+                    <TABLE_ACTION_ICONS.toggleHeaderRow className="h-3.5 w-3.5 mr-1" /> Toggle header row
                 </Button>
             </PropertySection>
 
@@ -108,7 +112,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     className="w-full"
                     onClick={() => editor.chain().focus().deleteTable().run()}
                 >
-                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete table
+                    <TABLE_ACTION_ICONS.deleteTable className="h-3.5 w-3.5 mr-1.5" /> Delete table
                 </Button>
             </div>
         </PropertiesPanel>

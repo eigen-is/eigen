@@ -16,7 +16,7 @@ import type {
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_IMAGE_BOX, TEXT_ALIGNS } from '@workspace/lib/vector';
+import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
 
 // The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
 // the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
@@ -123,11 +123,11 @@ function eigenTextItemContent(item: EigenClipboardTextItem): JSONContent[] {
     if (typo?.fontStyle === 'italic') marks.push({ type: 'italic' });
     if (typo?.textDecoration === 'underline') marks.push({ type: 'underline' });
     if (typo?.textDecoration === 'line-through') marks.push({ type: 'strike' });
-    // An unrecognized wire alignment drops rather than storing garbage.
-    const textAlign = TEXT_ALIGNS.find((align) => align === typo?.textAlign);
+    // An unrecognized wire alignment reads as left, the alignment an unaligned paragraph has, rather than storing garbage.
+    const textAlign = oneOf(typo?.textAlign, TEXT_ALIGNS, 'left');
     return text.split('\n').map((line) => ({
         type: 'paragraph',
-        ...(textAlign ? { attrs: { textAlign } } : {}),
+        ...(textAlign !== 'left' ? { attrs: { textAlign } } : {}),
         // A text node may not be empty, so an empty line is a paragraph with no content.
         ...(line ? { content: [{ type: 'text', text: line, ...(marks.length > 0 ? { marks } : {}) }] } : {}),
     }));

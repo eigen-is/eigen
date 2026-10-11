@@ -47,7 +47,7 @@ A board's columns are as wide as the screen, so you see one at a time and swipe 
 
 Rows of icons turn into one **⋮** menu. In a document, spreadsheet, presentation, drawing, or board, that menu collects what the toolbar icons do on a computer: **Edit** to rename, **Find in document**, **Activity**, **Watch**, **Comments**, and **Share**. Which of them you see depends on the app and on whether you can edit the file.
 
-In Calendar, **Today** and the month or week choice move into a **View options** menu on the right of the toolbar. In Docs, the formatting row folds into a **Format** menu, which holds **Text**, **Font**, **Paragraph styles**, **Align and indent**, and **Bullets and numbering**.
+In Calendar, **Today** and the month or week choice move into a **View options** menu on the right of the toolbar. In Docs, the formatting row folds into a **Format** menu, which holds **Text**, **Font**, **Paragraph styles**, **Align and indent**, **Bullets and numbering**, **Table**, **Image**, and **Clear formatting**. **Table** works when the cursor is in a table, and **Image** when an image is selected.
 
 ## Comments and activity
 

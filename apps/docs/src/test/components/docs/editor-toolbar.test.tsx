@@ -242,6 +242,23 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
     expect(checked()).toEqual(['Justified']);
 });
 
+test('a range of mixed alignments checks no Align item and draws Left', async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: ['center', 'right'].map((textAlign) => ({
+            type: 'paragraph',
+            attrs: { textAlign },
+            content: [{ type: 'text', text: 'a' }],
+        })),
+    });
+    editor.commands.setTextSelection({ from: 1, to: 5 });
+    await render(1920, true);
+    expect(alignIcon()).toMatch(/text-align-start/);
+
+    await openMenu('Align');
+    expect(document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')).toHaveLength(0);
+});
+
 test('Format › Bullets and numbering lists numbered before bulleted, as Google does', async () => {
     await render(1920, true);
     await openMenu('Format');
