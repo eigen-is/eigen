@@ -26,14 +26,12 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     IMAGE_CASCADE_OFFSET,
     num,
-    oneOf,
     type Point,
     pasteAnchorOffset,
     readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
     type StyleDefaults,
-    TEXT_ALIGNS,
     type TextAlign,
     type VectorElement,
     type VectorMeta,
@@ -346,13 +344,13 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
 
     // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
     // text, or the flattened text of pasted HTML, becomes one rich-text box. Prose alignment rides in
-    // text/html as a block text-align; carry it through toVectorTextAlign (justify→left). Returns true
+    // text/html as a block text-align, which readDominantTextAlign reads as a TextAlign. Returns true
     // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
     const pasteNonEigenText = useCallback(
         (html: string, plain: string): boolean => {
             const content = plain || htmlToPlainText(html);
             if (!content.trim()) return false;
-            pasteTextElement(content, html ? oneOf(readDominantTextAlign(html), TEXT_ALIGNS, 'left') : 'left');
+            pasteTextElement(content, (html && readDominantTextAlign(html)) || 'left');
             return true;
         },
         [pasteTextElement],

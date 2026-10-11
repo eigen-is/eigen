@@ -2,10 +2,7 @@ import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
-
-// The paragraph alignments TextAlign offers, in the order the toolbar lists them.
-export const TEXT_ALIGNMENTS = ['left', 'center', 'right', 'justify'] as const;
-export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
+import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 
 type ToolbarState = {
     headingLevel: number | undefined;
@@ -16,7 +13,7 @@ type ToolbarState = {
     italic: boolean;
     underline: boolean;
     highlight: boolean;
-    alignment: TextAlignment;
+    alignment: TextAlign;
     bulletList: boolean;
     orderedList: boolean;
     taskList: boolean;
@@ -61,7 +58,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 underline: active('underline'),
                 highlight: active('highlight'),
                 // An unaligned paragraph's textAlign is null, and it and a range of mixed alignments read as left.
-                alignment: TEXT_ALIGNMENTS.find((alignment) => active(null, { textAlign: alignment })) ?? 'left',
+                alignment: TEXT_ALIGNS.find((alignment) => active(null, { textAlign: alignment })) ?? 'left',
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 taskList: active('taskList'),

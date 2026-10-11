@@ -5,6 +5,7 @@ import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
+import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import {
     CenteredToolbar,
     DocumentShareCluster,
@@ -95,7 +96,7 @@ import {
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
-import { TEXT_ALIGNMENTS, type TextAlignment, useToolbarState } from './hooks/use-toolbar-state';
+import { useToolbarState } from './hooks/use-toolbar-state';
 import { PageSetupDialog } from './page-setup-dialog';
 
 // Format › Paragraph styles and the style picker list these; the picker's sizes step down as the editor's do.
@@ -109,7 +110,7 @@ const HEADINGS = [
 ] as const;
 
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
-const ALIGNMENT_LOOK: Record<TextAlignment, { label: string; icon: LucideIcon }> = {
+const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
     left: { label: 'Left', icon: AlignLeft },
     center: { label: 'Center', icon: AlignCenter },
     right: { label: 'Right', icon: AlignRight },
@@ -384,7 +385,7 @@ export const EditorToolbar = ({
                                             <AlignLeft className="h-4 w-4 mr-2" /> Align and indent
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
-                                            {TEXT_ALIGNMENTS.map((alignment) => {
+                                            {TEXT_ALIGNS.map((alignment) => {
                                                 const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
                                                 return (
                                                     <DropdownMenuItem
@@ -694,7 +695,7 @@ export const EditorToolbar = ({
                                         </Tooltip>
                                         <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
                                             <DropdownMenuRadioGroup value={active.alignment}>
-                                                {TEXT_ALIGNMENTS.map((alignment) => {
+                                                {TEXT_ALIGNS.map((alignment) => {
                                                     const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
                                                     return (
                                                         <DropdownMenuRadioItem
