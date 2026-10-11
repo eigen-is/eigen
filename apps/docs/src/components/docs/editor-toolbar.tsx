@@ -125,8 +125,8 @@ export const EditorToolbar = ({
     const active = useToolbarState(editor);
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
-    // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Heading 4") its three cuts
-    // sit centered beside the menus from 862, 1044 and 1303px.
+    // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
+    // sit centered beside the menus from 870, 1052 and 1311px.
     const showsRow = useMediaQuery('(min-width: 900px)');
     const showsMiddle = useMediaQuery('(min-width: 1100px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
@@ -222,25 +222,6 @@ export const EditorToolbar = ({
                                 <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger>
-                                            <Type className="h-4 w-4 mr-2" /> Font
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {EIGEN_FONTS.map((font) => (
-                                                <DropdownMenuItem
-                                                    key={font.name}
-                                                    onClick={() =>
-                                                        editor.chain().focus().setFontFamily(font.name).run()
-                                                    }
-                                                >
-                                                    <span style={{ fontFamily: getFontFamily(font.name) }}>
-                                                        {font.name}
-                                                    </span>
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
                                             <Type className="h-4 w-4 mr-2" /> Text
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
@@ -262,9 +243,6 @@ export const EditorToolbar = ({
                                             >
                                                 <Strikethrough className="h-4 w-4 mr-2" /> Strikethrough
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
-                                                <Code className="h-4 w-4 mr-2" /> Inline code
-                                            </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleSuperscript().run()}
                                             >
@@ -275,10 +253,18 @@ export const EditorToolbar = ({
                                             >
                                                 <Subscript className="h-4 w-4 mr-2" /> Subscript
                                             </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
+                                                <Code className="h-4 w-4 mr-2" /> Inline code
+                                            </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleSmall().run()}
                                             >
                                                 <ALargeSmall className="h-4 w-4 mr-2" /> Small
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleCaps('small').run()}
+                                            >
+                                                <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleCaps('all').run()}
@@ -287,11 +273,6 @@ export const EditorToolbar = ({
                                                 <DropdownMenuShortcut>
                                                     {formatForDisplay('Mod+Shift+A')}
                                                 </DropdownMenuShortcut>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleCaps('small').run()}
-                                            >
-                                                <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
                                             </DropdownMenuItem>
                                             <DropdownMenuSeparator />
                                             <ColorPickerMenuItem
@@ -310,10 +291,29 @@ export const EditorToolbar = ({
                                             />
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
+                                    <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger>
+                                            <Type className="h-4 w-4 mr-2" /> Font
+                                        </DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent>
+                                            {EIGEN_FONTS.map((font) => (
+                                                <DropdownMenuItem
+                                                    key={font.name}
+                                                    onClick={() =>
+                                                        editor.chain().focus().setFontFamily(font.name).run()
+                                                    }
+                                                >
+                                                    <span style={{ fontFamily: getFontFamily(font.name) }}>
+                                                        {font.name}
+                                                    </span>
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger>
-                                            <Heading2 className="h-4 w-4 mr-2" /> Heading
+                                            <Heading2 className="h-4 w-4 mr-2" /> Paragraph styles
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
                                             <DropdownMenuItem
@@ -351,7 +351,7 @@ export const EditorToolbar = ({
                                     </DropdownMenuSub>
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger>
-                                            <AlignLeft className="h-4 w-4 mr-2" /> Align
+                                            <AlignLeft className="h-4 w-4 mr-2" /> Align and indent
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
                                             <DropdownMenuItem
@@ -371,21 +371,20 @@ export const EditorToolbar = ({
                                             </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
-                                    <DropdownMenuSeparator />
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger>
-                                            <List className="h-4 w-4 mr-2" /> Lists
+                                            <List className="h-4 w-4 mr-2" /> Bullets and numbering
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
                                             <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleBulletList().run()}
-                                            >
-                                                <List className="h-4 w-4 mr-2" /> Bulleted
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
                                             >
-                                                <ListOrdered className="h-4 w-4 mr-2" /> Numbered
+                                                <ListOrdered className="h-4 w-4 mr-2" /> Numbered list
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => editor.chain().focus().toggleBulletList().run()}
+                                            >
+                                                <List className="h-4 w-4 mr-2" /> Bulleted list
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => editor.chain().focus().toggleTaskList().run()}
@@ -463,7 +462,7 @@ export const EditorToolbar = ({
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
                                         <span className="text-xs whitespace-nowrap">
-                                            {active.headingLevel ? `Heading ${active.headingLevel}` : 'Normal'}
+                                            {active.headingLevel ? `Heading ${active.headingLevel}` : 'Normal text'}
                                         </span>
                                         <ChevronDown className="h-3 w-3" />
                                     </Button>

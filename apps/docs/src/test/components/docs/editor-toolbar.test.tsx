@@ -53,6 +53,14 @@ const iconRow = () =>
 
 const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
 
+// The last-opened menu's items in order, a separator as '—'.
+const openMenuEntries = () =>
+    [
+        ...([...document.querySelectorAll('[role="menu"]')]
+            .at(-1)
+            ?.querySelectorAll('[role="menuitem"], [role="separator"]') ?? []),
+    ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim()));
+
 async function openMenu(label: string) {
     const trigger = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
         (button) => button.textContent === label,
@@ -72,7 +80,7 @@ async function openSubmenu(label: string) {
     });
 }
 
-const SHORT_ROW = ['Normal', 'Inter', 'Bold', 'Italic', 'Underline'];
+const SHORT_ROW = ['Normal text', 'Inter', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
 const FULL_ROW = [
     ...MIDDLE_ROW,
@@ -108,13 +116,56 @@ test.each([
 test.each(
     [1920, 1300, 1000, 390].flatMap((width) => [
         [width, 'Text', ['Text color', 'Highlight color']],
-        [width, 'Heading', ['Quote']],
+        [width, 'Paragraph styles', ['Quote']],
     ]),
 )('at %ipx Format › %s holds %p', async (width, submenu, items) => {
     await render(width, true);
     await openMenu('Format');
     await openSubmenu(submenu);
     expect(menuItems()).toEqual(expect.arrayContaining(items));
+});
+
+test("Format's submenus follow Google Docs' names and order", async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    expect(openMenuEntries()).toEqual([
+        'Text',
+        'Font',
+        '—',
+        'Paragraph styles',
+        'Align and indent',
+        'Bullets and numbering',
+        '—',
+        'Clear formatting',
+    ]);
+});
+
+test('Format › Text puts the Eigen-only marks after the scripts and capitalisation last', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Text');
+    expect(openMenuEntries()).toEqual([
+        'Bold',
+        'Italic',
+        'Underline',
+        'Strikethrough',
+        'Superscript',
+        'Subscript',
+        'Inline code',
+        'Small',
+        'Small caps',
+        expect.stringMatching(/^All caps/),
+        '—',
+        'Text color',
+        'Highlight color',
+    ]);
+});
+
+test('Format › Bullets and numbering lists numbered before bulleted, as Google does', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Bullets and numbering');
+    expect(openMenuEntries()).toEqual(['Numbered list', 'Bulleted list', 'Checklist']);
 });
 
 test('a viewer gets neither the Format and Insert menus nor the icon row', async () => {
