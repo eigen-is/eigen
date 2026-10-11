@@ -562,7 +562,11 @@ export const EditorToolbar = ({
                                         onMouseDown={(e) => e.preventDefault()}
                                     >
                                         <span className="text-xs whitespace-nowrap">
-                                            {active.headingLevel ? `Heading ${active.headingLevel}` : 'Normal text'}
+                                            {active.mixedStyles
+                                                ? ''
+                                                : active.headingLevel
+                                                  ? `Heading ${active.headingLevel}`
+                                                  : 'Normal text'}
                                         </span>
                                         <ChevronDown className="h-3 w-3" />
                                     </Button>

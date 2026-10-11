@@ -201,10 +201,10 @@ test('a range over two heading levels reads no level', async () => {
     });
     headings.commands.setTextSelection({ from: 2, to: 3 });
     ({ unmount } = await renderInDocument(createElement(Probe, { of: headings })));
-    expect(seen.at(-1)?.headingLevel).toBe(2);
+    expect(seen.at(-1)).toMatchObject({ headingLevel: 2, mixedStyles: false });
 
     await act(async () => headings.commands.setTextSelection({ from: 2, to: 8 }));
-    expect(seen.at(-1)?.headingLevel).toBeUndefined();
+    expect(seen.at(-1)).toMatchObject({ headingLevel: undefined, mixedStyles: true });
     headings.destroy();
 });
 

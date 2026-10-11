@@ -6,6 +6,7 @@ import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 
 type ToolbarState = {
     headingLevel: number | undefined;
+    mixedStyles: boolean;
     fontName: string;
     color: string;
     highlightColor: string;
@@ -73,6 +74,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
             return {
                 // A range of mixed levels, or of headings and other blocks, reads as none.
                 headingLevel: headingLevels.size === 1 ? [...headingLevels][0] : undefined,
+                mixedStyles: headingLevels.size > 1,
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
                 color: getAttributes(state, 'textStyle')['color'] || '',
