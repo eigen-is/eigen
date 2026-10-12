@@ -49,8 +49,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const updateTeam = useUpdateTeam(organizationId);
 
     const { data: settings } = useTeamSettings(team.id);
+    const calendarEnabled = settings?.calendar?.enabled !== false;
     // A team with its calendar off has no calendar list to fetch: the route answers 404.
-    const { data: calendars = [] } = useCalendars(ownerId, !!settings && settings.calendar?.enabled !== false);
+    const { data: calendars = [] } = useCalendars(ownerId, !!settings && calendarEnabled);
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSettings = useUpdateTeamSettings(team.id);
     const homeDataLabel = useHomeDataLabel();
@@ -58,7 +59,6 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const removeAvatar = useRemoveTeamAvatar(team.id);
 
     const defaultCal = calendars.find((c) => c.isDefault);
-    const calendarEnabled = settings?.calendar?.enabled !== false;
     const notifyMembers = settings?.notifyMembers !== false;
 
     const calendarPermission = useMemo(() => {

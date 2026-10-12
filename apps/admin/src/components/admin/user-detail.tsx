@@ -71,11 +71,11 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
         setDraftRole(user.role);
     }, [user.id, user.role]);
 
-    const handleSave = async () => {
+    const handleSave = () => {
         // Both are set wherever the select that changes the draft is rendered: a user with no
         // organization row has no role to pick and no member row to change.
         if (!user.memberId || !draftRole) return;
-        await updateRole.mutateAsync({ memberId: user.memberId, userId: user.id, role: draftRole });
+        updateRole.mutate({ memberId: user.memberId, userId: user.id, role: draftRole });
     };
 
     const handleCancel = () => {

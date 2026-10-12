@@ -19,7 +19,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
-// Remote images need no strip here: the composer has no image node, so a quote keeps only text and links.
+// The composer has no image node, so a quote carries text and links only.
 function formatEmailQuote(email: Email): string {
     const fromName = escapeHtml(email.from?.value[0]?.name || '');
     const fromAddress = escapeHtml(email.from?.value[0]?.address || '');
