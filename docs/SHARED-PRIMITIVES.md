@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1651 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1650 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -897,7 +897,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (790)
+## Utilities & constants (789)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1251,7 +1251,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `consumeRecentMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `CSS_FETCH_FUNCTIONS` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
-| `cssFetches` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `cssStatements` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `FETCHING_ATTRS` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `flattenAddresses` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |

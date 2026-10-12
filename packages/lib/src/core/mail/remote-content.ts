@@ -22,7 +22,7 @@ const CSS_REMOTE_URL = new RegExp(`url\\((?!\\s*(?:['"]\\s*)?${RASTER_DATA_URI})
 
 // Both refusals read a token, never a pair: a CSS escape spells `url(` invisibly to a regex (`u\72l(`), and
 // an unterminated `url(` fetches without ever closing.
-export function cssFetches(css: string): boolean {
+function cssFetches(css: string): boolean {
     return css.includes('\\') || CSS_FETCH_FUNCTIONS.test(css) || CSS_REMOTE_URL.test(css);
 }
 
