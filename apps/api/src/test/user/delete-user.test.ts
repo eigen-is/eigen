@@ -213,6 +213,14 @@ describe('Delete user', () => {
             });
             expect(raw.status).toBe(409);
             await expectStillSignedIn();
+            // A non-admin learns nothing about a running job: the plugin's own refusal.
+            const byMember = await authedRequest(ctx.bob.user.sessionToken, '/auth/admin/remove-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId }),
+            });
+            expect(byMember.status).toBe(403);
+            await expectStillSignedIn();
             await expect(deleteUserCompletely(userId, null)).rejects.toMatchObject({ status: 409 });
             await expectStillSignedIn();
             expect(existsSync(homePath)).toBe(true);

@@ -205,7 +205,8 @@ export const auth = betterAuth({
                 throw new APIError('FORBIDDEN', { message: "Only the owner can change the owner's account" });
             }
             // remove-user drops the sessions and the password before user.delete.before can refuse, with no rollback.
-            if (ctx.path === '/admin/remove-user') {
+            // Admins only: anyone else gets the plugin's 403, not word of a running job.
+            if (ctx.path === '/admin/remove-user' && session.user['role'] === 'admin') {
                 const { requireHomeSlotFree } = await import('../backup/jobs');
                 try {
                     requireHomeSlotFree(targetId);
