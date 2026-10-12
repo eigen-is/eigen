@@ -1,16 +1,11 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { Email } from '@workspace/lib/types/mail';
-import { Window } from 'happy-dom';
-import { formatEmailQuote } from '../../../../components/mail/hooks/use-mail-actions';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 // The strip parses with DOMParser.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const previousDomParser = g.DOMParser;
-g.DOMParser = new Window().DOMParser;
-afterAll(() => {
-    g.DOMParser = previousDomParser;
-});
+installHappyDom();
+
+const { formatEmailQuote } = await import('../../../../components/mail/hooks/use-mail-actions');
 
 const HOST = 'tracker.example';
 

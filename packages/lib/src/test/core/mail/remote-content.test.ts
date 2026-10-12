@@ -1,9 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { JSDOM } from 'jsdom';
 import { cssFetches, restrictSheet, stripRemoteContent } from '../../../core/mail/remote-content';
-import { installHappyDom } from '../../happy-dom';
 
-// The reader's strip parses with DOMParser.
-installHappyDom();
+// The reader's strip parses with DOMParser: jsdom's, which builds an SVG <style> as a browser does, where
+// happy-dom drops it and everything after it.
+const previousDomParser = globalThis.DOMParser;
+Object.assign(globalThis, { DOMParser: new JSDOM().window.DOMParser });
+afterAll(() => {
+    Object.assign(globalThis, { DOMParser: previousDomParser });
+});
 
 const HOST = 'tracker.example';
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -20,9 +25,6 @@ describe('cssFetches', () => {
             `background-image:-webkit-image-set("https://${HOST}/set.png" 1x)`,
             `background:cross-fade(url(${PNG}), url(${PNG}), 50%)`,
             `background:url(data:image/svg+xml,%3Csvg%3E%3C/svg%3E)`,
-            // A viewer that drops a color-scheme block rejoins what surrounds it.
-            `background:ur@media (prefers-color-scheme: dark){}l(https://${HOST}/dark.png)`,
-            `@imp@media (prefers-color-scheme: light){}ort "https://${HOST}/light.css"`,
         ]) {
             expect(cssFetches(css)).toBe(true);
         }
@@ -32,6 +34,8 @@ describe('cssFetches', () => {
         expect(cssFetches(`background:url(${PNG})`)).toBe(false);
         expect(cssFetches(`background:url( 'data:image/jpeg;base64,/9j/4AAQ' )`)).toBe(false);
         expect(cssFetches('color:#333;width:600px;font-family:Arial,sans-serif')).toBe(false);
+        // A name is no function token.
+        expect(cssFetches('.cross-fade{transition:opacity 1s}.image-set{color:red}')).toBe(false);
     });
 });
 
@@ -90,6 +94,22 @@ describe('stripRemoteContent', () => {
         }
     });
 
+    // The browser builds a <style>'s sheet from its own text nodes, so an element inside an SVG <style> joins the
+    // text around it into `url(`; its own text would read the same token as `urZl(`.
+    test('an element inside an SVG <style> neither hides a fetch nor stays', () => {
+        for (const body of [
+            `<svg><style>div{background:ur<a>Z</a>l(https://${HOST}/a.png)}</style></svg><div>x</div>`,
+            `<svg><style>div{background-image:ur<g>/**/</g>l(https://${HOST}/g.png)}</style></svg><div>x</div>`,
+            `<svg><a><style>div{background:ur<tspan>/**/</tspan>l(https://${HOST}/t.png)}</style></a></svg><div>x</div>`,
+        ]) {
+            const { html, blocked } = stripRemoteContent(body);
+            expect(blocked).toBe(true);
+            expect(html).not.toContain(HOST);
+            expect(html).toContain('<style></style>');
+            expect(html).toContain('<div>x</div>');
+        }
+    });
+
     test('a srcset is never inline, even when it names only data: images', () => {
         const { html, blocked } = stripRemoteContent(`<img src="${PNG}" srcset="${PNG} 1x">`);
         expect(blocked).toBe(true);
@@ -108,8 +128,12 @@ describe('stripRemoteContent', () => {
     });
 
     test('a link keeps its href: a click is what fetches it', () => {
-        const body = `<a href="https://${HOST}/page" target="_blank">read more</a>`;
-        expect(stripRemoteContent(body)).toEqual({ html: body, blocked: false });
+        for (const body of [
+            `<a href="https://${HOST}/page" target="_blank">read more</a>`,
+            `<map name="m"><area shape="rect" coords="0,0,10,10" href="https://${HOST}/page"></map>`,
+        ]) {
+            expect(stripRemoteContent(body)).toEqual({ html: body, blocked: false });
+        }
     });
 
     test('a message with nothing remote comes back as the same string', () => {

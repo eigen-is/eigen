@@ -1,4 +1,10 @@
-import { FETCHING_ATTRS, restrictSheet, stripRemoteRefs } from '@workspace/lib/mail/remote-content';
+import {
+    FETCHING_ATTRS,
+    LINK_TAGS,
+    restrictSheet,
+    sheetText,
+    stripRemoteRefs,
+} from '@workspace/lib/mail/remote-content';
 import type { ParsedMail } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
@@ -39,7 +45,7 @@ const DATA_URI = /data:[^\s"'<>)]+/g;
 function restrictNode(node: Element): void {
     stripRemoteRefs(node, REF_ATTRS);
 
-    if (node.tagName === 'A') {
+    if (LINK_TAGS.has(node.localName)) {
         const href = node.getAttribute('href');
         if (href !== null && !LINK_SCHEME.test(href.trim())) node.removeAttribute('href');
         node.setAttribute('target', '_blank');
@@ -53,7 +59,7 @@ function restrictNode(node: Element): void {
 function sanitizeEmlHtml(html: string): string {
     DOMPurify.addHook('afterSanitizeAttributes', restrictNode);
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
-        if (data.tagName === 'style') node.textContent = restrictSheet(node.textContent ?? '');
+        if (data.tagName === 'style') node.textContent = restrictSheet(sheetText(node));
     });
     try {
         return DOMPurify.sanitize(html, { ...READER_SANITIZE_CONFIG, FORBID_TAGS });

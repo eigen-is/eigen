@@ -36,8 +36,9 @@ type MessageViewProps = {
     attachments?: ReactNode;
     // What the host draws after the body, inside the message's own spacing — the reader's invite widgets.
     footer?: ReactNode;
-    // The reader's, until Load images: the body is drawn without its remote content. A served preview is
-    // stripped on the server and passes none.
+    // The body is drawn without its remote content until the viewer loads it. A served preview comes stripped
+    // from the server, so nothing is held back and no line shows.
+    remoteImagesLoaded?: boolean;
     onLoadRemoteImages?: () => void;
 };
 
@@ -58,11 +59,14 @@ export function MessageView({
     highlightTerm,
     attachments,
     footer,
+    remoteImagesLoaded,
     onLoadRemoteImages,
 }: MessageViewProps) {
     const formattedDate = date ? formatDateTime(date) : 'Unknown date';
-    const blockRemote = !!onLoadRemoteImages;
-    const stripped = useMemo(() => (blockRemote && html ? stripRemoteContent(html) : null), [blockRemote, html]);
+    const stripped = useMemo(
+        () => (html && !remoteImagesLoaded ? stripRemoteContent(html) : null),
+        [html, remoteImagesLoaded],
+    );
     const shownHtml = stripped ? stripped.html : html;
     const body = shownHtml || textAsHtml || text || '';
     const header: HeaderFields = { subject, from, replyTo, to, cc, bcc, formattedDate };
@@ -81,10 +85,19 @@ export function MessageView({
 
             {stripped?.blocked && (
                 <p className="text-xs text-muted-foreground">
-                    Remote images are hidden.{' '}
-                    <button type="button" className="text-foreground hover:underline" onClick={onLoadRemoteImages}>
-                        Load images
-                    </button>
+                    Remote images are hidden.
+                    {onLoadRemoteImages && (
+                        <>
+                            {' '}
+                            <button
+                                type="button"
+                                className="text-foreground hover:underline"
+                                onClick={onLoadRemoteImages}
+                            >
+                                Load images
+                            </button>
+                        </>
+                    )}
                 </p>
             )}
 

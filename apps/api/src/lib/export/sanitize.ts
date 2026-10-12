@@ -1,5 +1,5 @@
 import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
-import { CSS_FETCH_FUNCTIONS, cssStatements } from '@workspace/lib/mail/remote-content';
+import { CSS_FETCH_FUNCTIONS, cssStatements, sheetText } from '@workspace/lib/mail/remote-content';
 import type { VectorScene } from '@workspace/lib/vector';
 import { stripNonXmlChars } from '@workspace/lib/xml';
 import DOMPurify from 'isomorphic-dompurify';
@@ -130,16 +130,16 @@ function isSameDocumentUse(node: AttrNode): boolean {
 
 // Same restriction for CSS text inside <style> elements (the sheets export emits its class rules there). Only the
 // statements that fetch go, so the rules beside them survive; a sheet whose kept text still fetches is emptied.
-function restrictStyleTextToDataRefs(node: { textContent: string | null }, allowed: ReadonlySet<string>): void {
-    const text = node.textContent;
-    if (!text) return;
+// An element inside an SVG <style> goes too: the sheet is the style's own text, which the element splits.
+function restrictStyleTextToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
+    const text = sheetText(node);
     // Backslashes go first for the same reason as in style attributes: `@\69 mport` and `\75 rl(` are `@import` and
     // `url(` to a CSS parser but not to the scan.
     const kept = cssStatements(text.replace(/\\/g, ''))
         .filter((statement) => !cssFetches(statement, allowed))
         .join('');
     const stripped = cssFetches(kept, allowed) ? '' : kept;
-    if (stripped !== text) node.textContent = stripped;
+    if (stripped !== text || node.firstElementChild) node.textContent = stripped;
 }
 
 // Backs the data-only rule up in the browser: the export route sends it as a header, and every HTML
@@ -153,7 +153,7 @@ export function sanitizeExportHtml(html: string, options?: SanitizeOptions): str
     const { allowedRefs = NO_REFS, ...config } = options ?? {};
     DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
-        if (data.tagName === 'style') restrictStyleTextToDataRefs(node, allowedRefs);
+        if (data.tagName === 'style' && isElement(node)) restrictStyleTextToDataRefs(node, allowedRefs);
         // Decided per element. DOMPurify's namespace check drops a <use> outside a kept <svg>, whatever the profile.
         if (data.tagName === 'use') data.allowedTags['use'] = isElement(node) && isSameDocumentUse(node);
     });

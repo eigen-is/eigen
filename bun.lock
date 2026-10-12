@@ -230,9 +230,6 @@
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
       },
-      "devDependencies": {
-        "happy-dom": "^20.14.0",
-      },
     },
     "apps/sheets": {
       "name": "@apps/sheets",
@@ -311,7 +308,9 @@
         "yjs": "^13.6.32",
       },
       "devDependencies": {
+        "@types/jsdom": "^28.0.3",
         "happy-dom": "^20.14.0",
+        "jsdom": "^29.1.1",
       },
       "peerDependencies": {
         "@tiptap/core": "^3.31.3",

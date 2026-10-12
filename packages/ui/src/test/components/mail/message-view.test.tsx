@@ -47,7 +47,8 @@ function Reader({ html }: { html: string }) {
     return createElement(MessageView, {
         subject: 'Newsletter',
         html,
-        onLoadRemoteImages: loaded ? undefined : () => setLoaded(true),
+        remoteImagesLoaded: loaded,
+        onLoadRemoteImages: () => setLoaded(true),
     });
 }
 
@@ -81,9 +82,18 @@ test('a message with only inline images shows no line', async () => {
     expect(loadButton()).toBeUndefined();
 });
 
-test('without a Load images callback the body is drawn as given, as the server-stripped .eml preview needs', async () => {
+test('without a Load images callback the body is still held back, and the line offers no button', async () => {
     ({ unmount } = await renderInDocument(createElement(MessageView, { subject: 'Preview', html: HOSTILE })));
 
-    expect(shownBody()).toContain(`src="https://${HOST}/pixel.gif"`);
+    expect(shownBody()).not.toContain(HOST);
+    expect(document.body.textContent).toContain('Remote images are hidden.');
     expect(loadButton()).toBeUndefined();
+});
+
+test('a body the .eml preview served, stripped on the server, shows no line', async () => {
+    const html = `<p>Logo: <img src="${PNG}" alt="logo"></p><a href="https://example.com/page" target="_blank" rel="noopener noreferrer">read more</a>`;
+    ({ unmount } = await renderInDocument(createElement(MessageView, { subject: 'Preview', html })));
+
+    expect(shownBody()).toContain('read more');
+    expect(document.body.textContent).not.toContain('Remote images are hidden.');
 });

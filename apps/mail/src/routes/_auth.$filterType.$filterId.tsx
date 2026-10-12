@@ -414,7 +414,7 @@ function MailRoute() {
                                     toggleMailRead={actions.handleToggleMailRead}
                                     highlightTerm={q}
                                     remoteImagesLoaded={actions.imagesLoadedFor === selectedEmail.id}
-                                    onLoadRemoteImages={actions.loadRemoteImages}
+                                    onLoadRemoteImages={() => actions.loadRemoteImages(selectedEmail.id)}
                                 />
                             ) : isEmailPending ? null : (
                                 <EmptyState message="Email not found" />

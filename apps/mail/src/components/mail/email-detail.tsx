@@ -100,7 +100,7 @@ type EmailDetailProps = {
     toggleMailRead: (mail: Email, isRead: boolean) => void;
     highlightTerm?: string;
     remoteImagesLoaded: boolean;
-    onLoadRemoteImages: (emailId: string) => void;
+    onLoadRemoteImages: () => void;
 };
 
 export function EmailDetail({
@@ -142,7 +142,8 @@ export function EmailDetail({
                     text={email.text}
                     isSent={email.mailbox === MAILBOX_SENT}
                     highlightTerm={highlightTerm}
-                    onLoadRemoteImages={remoteImagesLoaded ? undefined : () => onLoadRemoteImages(email.id)}
+                    remoteImagesLoaded={remoteImagesLoaded}
+                    onLoadRemoteImages={onLoadRemoteImages}
                     attachments={<ReadAttachments emailId={email.id} attachments={email.attachments} />}
                     footer={email.attachments?.map(
                         (attachment: Attachment) =>

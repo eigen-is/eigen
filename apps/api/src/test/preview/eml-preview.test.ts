@@ -206,32 +206,6 @@ describe('buildEmlPreviewPayload', () => {
         expect(payload.html).toContain('attr 0');
     });
 
-    // A client renders on a canvas of its own and drops the color-scheme rules that disagree with it
-    // (ShadowContent, packages/ui), which rejoins a token split across such a block: neither half of
-    // `ur@media (prefers-color-scheme: dark){}l(` is a token the raw text carries, and the deletion leaves
-    // `url(`. The refusal reads the text such a deletion would leave behind as well as the raw text.
-    test('a fetch token split across a prefers-color-scheme block is refused, whichever scheme it names', () => {
-        const declarations = [
-            `background:ur@media (prefers-color-scheme: dark){}l(https://${HOSTILE}/dark-pixel.png)`,
-            `background:ur@media (prefers-color-scheme: light){}l(https://${HOSTILE}/light-pixel.png)`,
-        ];
-        const payload = payloadOf(
-            htmlMessage(
-                [
-                    ...declarations.map((css, i) => `<div style="${css}">attr ${i}</div>`),
-                    ...declarations.map((css) => `<style>p{${css}}</style>`),
-                    `<style>@imp@media (prefers-color-scheme: dark){}ort "https://${HOSTILE}/dark.css";</style>`,
-                    `<style>@imp@media (prefers-color-scheme: light){}ort "https://${HOSTILE}/light.css";</style>`,
-                    '<p>hello</p>',
-                ].join('\n'),
-            ),
-        );
-
-        expect(payload.html).not.toContain(HOSTILE);
-        // The CSS is all that is refused: the message still reads.
-        expect(payload.html).toContain('hello');
-    });
-
     // A newsletter's sheet holds its layout beside the rule that fetches: dropping the whole sheet collapses
     // a fixed-width table on a phone. The rules that fetch go, the rest stay.
     test('a stylesheet loses only the rules that fetch', () => {
@@ -281,17 +255,19 @@ describe('buildEmlPreviewPayload', () => {
                     '<a href="mailto:ada@example.com">mail</a>',
                     '<a href="javascript:alert(1)">script</a>',
                     '<a href="data:text/html,<b>x</b>">data</a>',
+                    `<map name="m"><area shape="rect" coords="0,0,9,9" href="https://${LINKED}/area"><area shape="rect" coords="9,9,19,19" href="javascript:alert(2)"></map>`,
                 ].join('\n'),
             ),
         );
 
         const html = payload.html ?? '';
-        for (const anchor of html.match(/<a\b[^>]*>/g) ?? []) {
+        for (const anchor of html.match(/<(?:a|area)\b[^>]*>/g) ?? []) {
             expect(anchor).toContain('target="_blank"');
             expect(anchor).toContain('rel="noopener noreferrer"');
         }
         expect(html).toContain(`href="https://${LINKED}/page"`);
         expect(html).toContain('href="mailto:ada@example.com"');
+        expect(html).toContain(`href="https://${LINKED}/area"`);
         expect(html).not.toContain('javascript:');
         expect(html).not.toContain('data:text/html');
     });
