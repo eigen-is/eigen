@@ -83,6 +83,8 @@ Whole-server and per-home backups go to `backups/` in the install folder, mounte
 
 `eigen-api` publishes no port. Every other service reaches it on the Docker network as `eigen-api:8000`.
 
+The mail ports listen on IPv4 only. Eigen's Docker network has no IPv6, so every IPv6 client would arrive from the Docker gateway's one address and share its limits ([MAIL.md § Submission is held to the login's own address](MAIL.md#submission-is-held-to-the-logins-own-address)). Mail servers and mail apps fall back to the A record. Under rootless Docker, set the `slirp4netns` port driver together with the `slirp4netns` network (`DOCKERD_ROOTLESS_ROOTLESSKIT_NET=slirp4netns` and `DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns`), or pasta with the `implicit` port driver: with the default `builtin` one, Postfix and Dovecot see every client as the gateway, and all clients share one limit on sign-in attempts.
+
 ## `.env.production`
 
 Setup writes it, readable by its owner and by group 1000 ([The API reads three secrets as group 1000](#the-api-reads-three-secrets-as-group-1000)). A rerun of setup keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:

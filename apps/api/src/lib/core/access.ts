@@ -2,34 +2,43 @@ import { isMailAppEnabled } from '../config/env';
 import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
-
-function ipv4ToNumber(ip: string): number {
-    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
-}
-
-function normalizeIp(ip: string): string {
-    return ip.startsWith('::ffff:') ? ip.slice(7) : ip;
-}
-
-function matchesCidr(ip: string, entry: string): boolean {
-    const normalized = normalizeIp(ip);
-
-    if (!entry.includes('/')) return normalized === entry || ip === entry;
-
-    const [network, prefixStr] = entry.split('/');
-    const prefix = parseInt(prefixStr, 10);
-    // Only handle IPv4 CIDRs (sufficient for Docker bridge + localhost)
-    if (!network.includes('.') || !normalized.includes('.')) return false;
-
-    const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
-    return (ipv4ToNumber(normalized) & mask) === (ipv4ToNumber(network) & mask);
-}
+import {
+    matchesCidr,
+    normalizeIp,
+    type Route,
+    readRouteTable,
+    scopeTrustedNetworks,
+    type TrustedNetworks,
+} from './route-table';
 
 const DEFAULT_TRUSTED = '127.0.0.0/8,::1';
 
+// Read once, at startup, as the postfix entrypoint does.
+let routes = readRouteTable();
+let trust: (TrustedNetworks & { source: string }) | null = null;
+
+function trustedNetworks(): TrustedNetworks {
+    const source = process.env['TRUSTED_NETWORKS'] || DEFAULT_TRUSTED;
+    if (trust?.source !== source) {
+        const entries = source.split(',').map((entry) => entry.trim());
+        trust = { source, ...scopeTrustedNetworks(entries, routes) };
+        for (const network of trust.untrusted) {
+            console.warn(
+                `TRUSTED_NETWORKS: the default route does not leave through ${network}, so its gateway is unknown; not trusting it`,
+            );
+        }
+    }
+    return trust;
+}
+
 export function isIpTrusted(ip: string): boolean {
-    const networks = (process.env['TRUSTED_NETWORKS'] || DEFAULT_TRUSTED).split(',');
-    return networks.some((entry) => matchesCidr(ip, entry.trim()));
+    const { networks, gateways } = trustedNetworks();
+    return !gateways.includes(normalizeIp(ip)) && networks.some((entry) => matchesCidr(ip, entry));
+}
+
+export function _setRouteTableForTests(table: Route[]): void {
+    routes = table;
+    trust = null;
 }
 
 type RequestServer = { requestIP(req: Request): { address: string } | null } | null;

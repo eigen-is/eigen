@@ -69,7 +69,8 @@ services:
       SMTP_HOST: postfix
       SMTP_PORT: 25
       # Loopback plus the docker bridge subnet (same EIGEN_SUBNET the network and postfix use), so
-      # Postfix/Dovecot bridge callers are trusted without the whole 172.16/12 range.
+      # Postfix/Dovecot bridge callers are trusted without the whole 172.16/12 range. The API leaves out
+      # the subnet's gateway, which a user on the host arrives from (lib/core/route-table.ts).
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET}"
     restart: unless-stopped
     # On SIGTERM the API gives a running backup job 30 s (SHUTDOWN_JOB_BUDGET_MS, jobs.ts), then
@@ -129,10 +130,13 @@ services:
   postfix:
     profiles: ["mail"]
     image: ${EIGEN_POSTFIX_IMAGE:-ghcr.io/eigen-is/eigen/postfix:local}
+    # IPv4 only. The `eigen` network has no IPv6, so docker-proxy would hand every IPv6 client to the mail services from
+    # the gateway's one address, and one of them could lock all of them out of AUTH or hold every connection slot. An
+    # IPv6 sender falls back to the A record. See docs/MAIL.md.
     ports:
-      - "25:25"
-      - "465:465"
-      - "587:587"
+      - "0.0.0.0:25:25"
+      - "0.0.0.0:465:465"
+      - "0.0.0.0:587:587"
     dns: ["${EIGEN_UNBOUND_IP}"]
     volumes:
       - ./data/dkim:/data/dkim
@@ -166,8 +170,9 @@ services:
   dovecot:
     profiles: ["mail"]
     image: ${EIGEN_DOVECOT_IMAGE:-ghcr.io/eigen-is/eigen/dovecot:local}
+    # IPv4 only, as postfix's ports.
     ports:
-      - "993:993"
+      - "0.0.0.0:993:993"
     volumes:
       - ./data:/data
       - ./data/certs:/certs
