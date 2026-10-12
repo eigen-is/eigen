@@ -13,6 +13,7 @@ smtp      inet  n       -       n       -       -       smtpd
 # mismatch check would refuse the empty-sender bounces and auto-replies RFC 3834 asks for.
 # The auth and message rate limits below are per client IP and per service (per anvil_rate_time_unit,
 # 60s by default); the message limit counts MAIL FROM and answers 450, so a burst is delayed, not lost.
+# They hold for every client: the exceptions default to $mynetworks, and nothing internal submits here.
 # The hard error limit counts errors within one SMTP session.
 # Why these values: docs/MAIL.md § Submission is held to the login's own address.
 submission inet n       -       n       -       -       smtpd
@@ -26,6 +27,7 @@ submission inet n       -       n       -       -       smtpd
     -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
     -o smtpd_client_auth_rate_limit=20
     -o smtpd_client_message_rate_limit=60
+    -o smtpd_client_event_limit_exceptions=
     -o smtpd_hard_error_limit=5
 
 # SMTPS (port 465) — implicit TLS, same auth and same limits as submission
@@ -41,6 +43,7 @@ smtps     inet  n       -       n       -       -       smtpd
     -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
     -o smtpd_client_auth_rate_limit=20
     -o smtpd_client_message_rate_limit=60
+    -o smtpd_client_event_limit_exceptions=
     -o smtpd_hard_error_limit=5
 pickup    unix  n       -       n       60      1       pickup
 cleanup   unix  n       -       n       -       0       cleanup

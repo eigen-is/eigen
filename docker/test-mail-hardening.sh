@@ -530,13 +530,16 @@ header "Probe 12 — mynetworks, OpenDKIM InternalHosts and the API trust range 
 # 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in the
 # entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
 # still carries the /12 and all three carry the subnet. Postfix and OpenDKIM also exclude the
-# subnet's gateway, which a client of a published port can arrive from (probe 16).
+# subnet's gateway, which a client of a published port can arrive from (probe 16), and the
+# submission ports have no limit exceptions, whose default is $mynetworks.
 if should_run 12; then
     expect_subnet="${EIGEN_SUBNET:-172.20.0.0/24}"
     gateway=$(bridge_gateway)
     mynetworks=$(dc exec -T postfix postconf -h mynetworks | tr -d '\r' || true)
     trusted=$(dc exec -T postfix cat /etc/opendkim/TrustedHosts | tr -d '\r' || true)
     api_trusted=$(dc exec -T eigen-api sh -c 'echo "$TRUSTED_NETWORKS"' | tr -d '\r' || true)
+    exceptions=$(dc exec -T postfix postconf -P submission/inet/smtpd_client_event_limit_exceptions \
+        smtps/inet/smtpd_client_event_limit_exceptions | tr -d '\r' || true)
     if [ -z "$gateway" ]; then
         fail "docker inspect gave no gateway for the postfix container"
     elif printf '%s' "$api_trusted" | grep -q '172\.16\.0\.0/12'; then
@@ -551,8 +554,10 @@ if should_run 12; then
         fail "OpenDKIM InternalHosts is missing the bridge subnet $expect_subnet: $(oneline "$trusted")"
     elif ! printf '%s\n' "$trusted" | grep -qxF "!$gateway"; then
         fail "OpenDKIM InternalHosts does not exclude the gateway $gateway: $(oneline "$trusted")"
+    elif [ "$(printf '%s\n' "$exceptions" | grep -cE '^(submission|smtps)/inet/smtpd_client_event_limit_exceptions =$')" != 2 ]; then
+        fail "submission and smtps must set an empty smtpd_client_event_limit_exceptions: $(oneline "$exceptions")"
     else
-        ok "mynetworks + InternalHosts scoped to loopback + $expect_subnet minus $gateway, API TRUSTED_NETWORKS to loopback + $expect_subnet"
+        ok "mynetworks + InternalHosts scoped to loopback + $expect_subnet minus $gateway, API TRUSTED_NETWORKS to loopback + $expect_subnet, no submission limit exceptions"
     fi
 else
     skip "probe 12 not selected"
