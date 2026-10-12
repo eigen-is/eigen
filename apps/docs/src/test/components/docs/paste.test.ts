@@ -40,7 +40,17 @@ describe('paste maps foreign fonts onto the bundled ones', () => {
         expect(pastedFont(`'${font}'`)).toBe(bundled);
     });
 
-    test.each(['Arial', 'Calibri', 'Roboto', 'Inter', 'Wingdings', "'Times New Roman', serif"])(
+    // Google Docs writes a run's font as a stack, Word as a quoted name before its generic family.
+    test.each([
+        ["'Times New Roman', serif", 'Source Serif 4'],
+        ['Georgia,serif', 'Source Serif 4'],
+        ["'Source Serif 4', serif", 'Source Serif 4'],
+        ["Wingdings, 'Courier New', monospace", 'JetBrains Mono'],
+    ])('the stack %s pastes as its first bundled family, %s', (stack, bundled) => {
+        expect(pastedFont(stack)).toBe(bundled);
+    });
+
+    test.each(['Arial', 'Calibri', 'Roboto', 'Inter', 'Wingdings', 'Arial, serif'])(
         '%s pastes in the document font',
         (font) => {
             expect(pastedFont(font)).toBe('');

@@ -1,4 +1,5 @@
 import type { Node } from '@tiptap/pm/model';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     Heading,
     Heading1,
@@ -13,7 +14,7 @@ import {
 
 type ParagraphStyle = {
     name: string;
-    type: 'title' | 'subtitle' | 'heading';
+    type: TitleType | 'heading';
     attrs?: { level: number };
     icon: LucideIcon;
     preview: string;
