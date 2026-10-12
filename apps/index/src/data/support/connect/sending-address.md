@@ -34,7 +34,7 @@ One address per account is what makes the check possible, and the check is what 
 
 ## Sending many messages at once stalls
 
-**Each submission port accepts up to 20 sign-in attempts a minute from one internet address.** Most clients sign in once per message, so sending more than 20 messages in a minute from the same network reaches the cap. Wait a minute, then send the rest. The limit counts per internet address, so one busy client cannot use up another one's allowance.
+**Each submission port accepts up to 20 sign-in attempts and 60 messages a minute from one internet address.** Most clients sign in once per message, so sending more than 20 messages in a minute from the same network reaches the sign-in cap, and 60 reaches the message cap. Wait a minute, then send the rest; a message the server turns away this way is retried by most clients, not lost. The limit counts per internet address, so one busy client cannot use up another one's allowance.
 
 <div class="eigen-callout">
 
