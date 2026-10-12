@@ -59,6 +59,16 @@ describe('scopeTrustedNetworks', () => {
         expect(scopeTrustedNetworks(TRUSTED, [])).toEqual({ networks: TRUSTED, gateways: [], untrusted: [] });
     });
 
+    test('leaves out the gateway when a wider entry than its subnet holds it', () => {
+        const routes = parseRouteTable(table(DEFAULT_VIA_EIGEN, EIGEN_SUBNET));
+        const trusted = ['127.0.0.0/8', '172.16.0.0/12'];
+        expect(scopeTrustedNetworks(trusted, routes)).toEqual({
+            networks: trusted,
+            gateways: ['172.20.0.1'],
+            untrusted: [],
+        });
+    });
+
     test('keeps entries no route reaches directly', () => {
         const routes = parseRouteTable(table(DEFAULT_VIA_OTHER, OTHER_SUBNET));
         const trusted = ['127.0.0.0/8', '10.0.0.0/8', '10.0.0.5', '172.20.0.0/24'];

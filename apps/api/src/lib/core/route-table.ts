@@ -25,6 +25,28 @@ export function parseRouteTable(text: string): Route[] {
         }));
 }
 
+function ipv4ToNumber(ip: string): number {
+    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+}
+
+export function normalizeIp(ip: string): string {
+    return ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+}
+
+export function matchesCidr(ip: string, entry: string): boolean {
+    const normalized = normalizeIp(ip);
+
+    if (!entry.includes('/')) return normalized === entry || ip === entry;
+
+    const [network, prefixStr] = entry.split('/');
+    const prefix = parseInt(prefixStr, 10);
+    // Only handle IPv4 CIDRs (sufficient for Docker bridge + localhost)
+    if (!network.includes('.') || !normalized.includes('.')) return false;
+
+    const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+    return (ipv4ToNumber(normalized) & mask) === (ipv4ToNumber(network) & mask);
+}
+
 // None outside Linux (macOS dev), where nothing is excluded.
 export function readRouteTable(): Route[] {
     return existsSync(ROUTE_TABLE) ? parseRouteTable(readFileSync(ROUTE_TABLE, 'utf8')) : [];
@@ -36,15 +58,17 @@ export function readRouteTable(): Route[] {
 // second network's default route wins, it is unknown and the subnet is not trusted at all.
 export function scopeTrustedNetworks(networks: string[], routes: Route[]): TrustedNetworks {
     const defaultRoute = routes.find((route) => route.destination === '0.0.0.0' && route.prefix === 0);
-    const gateways: string[] = [];
     const untrusted: string[] = [];
     for (const network of networks) {
         const subnet = routes.find(
             (route) => route.gateway === '0.0.0.0' && `${route.destination}/${route.prefix}` === network,
         );
         if (!subnet) continue;
-        if (defaultRoute?.iface === subnet.iface) gateways.push(defaultRoute.gateway);
-        else untrusted.push(network);
+        if (defaultRoute?.iface !== subnet.iface) untrusted.push(network);
     }
-    return { networks: networks.filter((network) => !untrusted.includes(network)), gateways, untrusted };
+    const kept = networks.filter((network) => !untrusted.includes(network));
+    // A wider entry than the subnet holding the gateway trusts it too.
+    const gateways =
+        defaultRoute && kept.some((entry) => matchesCidr(defaultRoute.gateway, entry)) ? [defaultRoute.gateway] : [];
+    return { networks: kept, gateways, untrusted };
 }

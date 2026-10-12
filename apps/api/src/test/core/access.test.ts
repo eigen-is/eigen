@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { _setRouteTableForTests, clientIpKey, isIpTrusted, requireLocalhost } from '../../lib/core/access';
 import { parseRouteTable, readRouteTable } from '../../lib/core/route-table';
 
@@ -11,6 +11,8 @@ function mkServer(address: string) {
 }
 
 describe('isIpTrusted', () => {
+    beforeEach(() => _setRouteTableForTests([]));
+
     const originalEnv = process.env['TRUSTED_NETWORKS'];
 
     afterEach(() => {

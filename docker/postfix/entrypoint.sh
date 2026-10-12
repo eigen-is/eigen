@@ -33,7 +33,7 @@ EOF
         BRIDGE_GATEWAY=$(printf '%d.%d.%d.%d' $(echo "$gateway_hex" | sed 's/\(..\)\(..\)\(..\)\(..\)/0x\4 0x\3 0x\2 0x\1/'))
         MAIL_TRUST_NETWORKS="127.0.0.0/8 !${BRIDGE_GATEWAY} ${EIGEN_SUBNET}"
     else
-        echo "WARNING: the default route does not leave through ${EIGEN_SUBNET}, so its gateway is unknown; trusting loopback only, and eigen-api cannot relay through port 25. Give the eigen network the highest gw_priority."
+        echo "WARNING: the default route does not leave through ${EIGEN_SUBNET}, so its gateway is unknown; trusting loopback only, and eigen-api cannot relay through port 25. Give the eigen network the highest gw_priority (needs Docker Engine 28 or newer)."
     fi
 fi
 export MAIL_TRUST_NETWORKS
