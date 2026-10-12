@@ -4,7 +4,7 @@ import { EigenLoader } from '../braket/eigen-loader';
 
 type ImagePlaceholderProps = {
     className?: string;
-    // The image's name is known not to resolve: stop the loader and show it as missing.
+    // Draw the missing look instead of the loader.
     missing?: boolean;
 };
 

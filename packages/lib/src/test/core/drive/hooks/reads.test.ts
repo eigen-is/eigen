@@ -64,12 +64,17 @@ const icsPayload = {
     dropped: 0,
     total: 1,
 };
-// The media folder's listing as the server holds it right now; a test edits it between fetches.
-const folder: { listing: { id: string; name: string }[]; fetches: number } = { listing: [], fetches: 0 };
+// The media folder's listing as the server holds it right now; a test edits it between fetches, or fails them.
+const folder: { listing: { id: string; name: string }[]; fetches: number; failing: boolean } = {
+    listing: [],
+    fetches: 0,
+    failing: false,
+};
 g.fetch = async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
     if (url.includes('/folder/')) {
         folder.fetches++;
+        if (folder.failing) return Response.json({ message: 'unavailable' }, { status: 503 });
         return Response.json(folder.listing);
     }
     if (url.includes('eml-preview')) return Response.json(emlPayload);
@@ -163,7 +168,8 @@ describe('useFolderLookup', () => {
             return null;
         }
         const root = createRoot(document.createElement('div'));
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        // The folder query sets its own retry; no delay lets a failed fetch settle within a flush.
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
         const render = () =>
             act(async () => {
                 root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
@@ -222,6 +228,19 @@ describe('useFolderLookup', () => {
         folder.listing = [{ id: 'p-late', name: 'late.png' }];
         await harness.invalidate();
         expect(harness.lookup().isMissing('late.png')).toBe(false);
+        await harness.unmount();
+    });
+
+    test('a refetch that fails marks nothing missing', async () => {
+        folder.listing = [];
+        folder.fetches = 0;
+        const harness = await mountLookup('media-1');
+        folder.failing = true;
+        await harness.ask('unknown.png');
+        // The listing, then the refetch the unknown name asked for and its one retry.
+        expect(folder.fetches).toBe(3);
+        expect(harness.lookup().isMissing('unknown.png')).toBe(false);
+        folder.failing = false;
         await harness.unmount();
     });
 

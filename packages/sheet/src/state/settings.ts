@@ -119,7 +119,7 @@ export type Hooks = {
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;
-    // True once a mediaName is known not to resolve, so the image draws as missing instead of loading.
+    // The media resolver's isMediaMissing: such an image draws as missing.
     isImageMissing?: (mediaName: string) => boolean;
     // Resolve a floating image's mediaName to its portable DrivePath, so an image copy can carry a
     // cross-mount source path. `undefined` when the media isn't resolvable yet (a
