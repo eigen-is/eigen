@@ -89,7 +89,7 @@ The Users page (`GET /settings/users`) lists org members **and** orphans, non-gu
 `teardownUserData` (`apps/api/src/lib/user/delete-user.ts`) runs from the `databaseHooks.user.delete.before` hook in `auth.ts`, the one hook every better-auth deletion path passes through while the user row still exists:
 
 1. Evicts the cached Home (closes its databases)
-2. Deletes the home folder (`data/home/{userId}/`, or the guest home for a guest)
+2. Deletes the home folder (`data/home/{userId}/`, or the guest home for a guest) and the safety copies a restore left beside it ([BACKUP.md](BACKUP.md#a-safety-copy-stays-until-it-or-its-user-is-deleted)), then, in the background, every object their `s3` mounts name in a bucket (`collectHomeObjects` in `apps/api/src/lib/backup/safety-copy.ts`). The keys are read before the folders go, since nothing else records whose objects they are. A mount with no S3 config of its own is on the server's, as the live one is. A delete the bucket refuses is logged and the object stays: a revoked bucket must not make a user undeletable
 3. Cleans the share registry: the entries the user created always, the entries addressed to the user only for a non-guest, so a guest who signs in again gets the same shares back ([GUEST-ACCESS.md](GUEST-ACCESS.md#the-share-registry-is-a-durable-record-not-a-queue))
 4. Removes the auth rows that reference the user (org and team memberships, 2FA, API keys) through `authDeleteUserReferences`. The deletion is explicit because SQLite's CASCADE does nothing with `PRAGMA foreign_keys` off, and a leftover member row 500s `listMembers` org-wide. The org and team membership deletes also remove every row whose user no longer exists
 

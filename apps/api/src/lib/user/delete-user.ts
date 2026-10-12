@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { auth, authDeleteUserReferences } from '../auth/auth';
+import { collectHomeObjects, forgetSafetyCopySize } from '../backup/safety-copy';
 import { getGuestHomePath, getUserHomePath } from '../config/paths';
 import { ApiError } from '../core';
 import { evictHome } from '../home/get-home';
@@ -10,6 +11,13 @@ import { shareRegistry } from '../share/schema';
 import type { User } from './user';
 import { getUserById } from './user';
 
+const pendingObjectDeletes = new Set<Promise<void>>();
+
+// Awaits every bucket delete a user deletion started, for tests.
+export async function drainUserObjectDeletes(): Promise<void> {
+    await Promise.all(pendingObjectDeletes);
+}
+
 // Runs from the user.delete.before database hook in auth.ts — the one seam every
 // better-auth deletion path passes through while the user row still exists — so the
 // raw /auth/admin/remove-user endpoint tears down exactly as much as Eigen's own
@@ -18,11 +26,23 @@ export async function teardownUserData(user: User): Promise<void> {
     // 1. Shut down cached Home singleton (closes databases, clears timeout)
     await evictHome(user.id);
 
-    // 2. Delete user's home directory
+    // 2. Delete user's home directory and the safety copies a restore left beside it, then the bucket objects
+    //    they name, in the background: a bucket that refuses must not keep the user.
     const homePath = user.role === 'guest' ? getGuestHomePath(user.id) : getUserHomePath(user.id);
-    if (fs.existsSync(homePath)) {
-        fs.rmSync(homePath, { recursive: true, force: true });
+    const { folders, objectCount, deleteObjects } = collectHomeObjects(homePath);
+    for (const folder of folders) {
+        fs.rmSync(folder, { recursive: true, force: true });
+        forgetSafetyCopySize(folder);
     }
+    // Nothing records these keys once the folders are gone: a restart mid-way leaves the operator this number.
+    if (objectCount > 0) console.log(`[delete-user] deleting ${objectCount} bucket objects of ${user.id}`);
+    const deleting = deleteObjects()
+        .then((failed) => {
+            if (failed > 0) console.warn(`[delete-user] ${failed} bucket objects of ${user.id} could not be deleted`);
+        })
+        .catch((error) => console.error(`[delete-user] deleting the bucket objects of ${user.id} failed:`, error));
+    pendingObjectDeletes.add(deleting);
+    deleting.finally(() => pendingObjectDeletes.delete(deleting));
 
     // 3. Clean up share registry — entries FROM this user always; entries TO this user
     //    only for non-guests. Guest registry entries persist so re-OTP after deletion
