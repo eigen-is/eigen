@@ -195,6 +195,8 @@ type Package = {
 type Context = {
     pkg: Package;
     first: boolean;
+    // The type of the block after this one, which a numbered list runs on to when it is another.
+    next?: string;
     column: number;
     indent: number;
     depth: number;
@@ -609,6 +611,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         const written = write(node, {
             ...context,
             first: !textblock && index === 0,
+            next: nodes[index + 1]?.type,
             blockPt: undefined,
             upright: undefined,
         });
@@ -799,7 +802,8 @@ function listOf(
     const items = { ...context, list };
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
-    return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'));
+    const runsOn = tag === 'ol' && context.next === 'orderedList';
+    return withAfter(blocks, proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'));
 }
 
 // Each list is a w:num of its own, so lists side by side stay apart; a bullet counts nothing, so bullet lists at one
