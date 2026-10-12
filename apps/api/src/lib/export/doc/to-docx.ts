@@ -48,6 +48,7 @@ import {
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    nodeLook,
     proseBorder,
     proseColor,
     proseTextLook,
@@ -56,6 +57,7 @@ import {
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
+    type TitleType,
     twips,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
@@ -209,7 +211,7 @@ type Context = {
     list?: NumberingRef;
     // The size of the heading or title around the run, which an inline code's em is of.
     blockPt?: number;
-    // In a heading that draws italic, which draws an italic mark upright.
+    // In a node that draws italic, which draws an italic mark upright.
     upright?: boolean;
 };
 
@@ -490,12 +492,11 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 },
                 context,
             );
-            const upright = !!HEADING_LOOKS[level - 1]?.italic;
+            const upright = !!nodeLook('heading', level).italic;
             return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
         },
     ],
-    ['title', titleOf('title', 'Title')],
-    ['subtitle', titleOf('subtitle', 'Subtitle')],
+    ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
     [
         'horizontalRule',
@@ -565,11 +566,12 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     ],
 ]);
 
-function titleOf(type: keyof typeof TITLE_SELECTORS, style: StyleId) {
+function titleOf(type: TitleType, style: StyleId) {
     return (node: JSONContent, context: Context): Block[] => {
         const props = textProps({ style, jc: justification(node) }, context);
         const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
-        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt }, true);
+        const upright = !!nodeLook(type).italic;
+        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
     };
 }
 

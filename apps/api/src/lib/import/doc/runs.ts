@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { HEADING_LOOKS, LINK_LOOK } from '../../document/looks';
+import { LINK_LOOK, nodeLook } from '../../document/looks';
 import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -318,7 +318,7 @@ function marksOf(
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
     // A heading that draws italic draws an italic mark upright, so there the mark is a run Word draws upright.
-    const upright = role.kind === 'heading' && !!HEADING_LOOKS[role.level - 1]?.italic;
+    const upright = !!nodeLook(role.kind, role.kind === 'heading' ? role.level : undefined).italic;
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
     // A link to a bookmark is no link, its look the run's, but in a table of contents: Word draws its link look there

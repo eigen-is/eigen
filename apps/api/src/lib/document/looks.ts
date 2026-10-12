@@ -126,8 +126,10 @@ export const CAPTION_LOOK = {
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
 
+type TextLook = { color?: string; italic?: true };
+
 // The color and italic eigen-prose.css gives an element's text, where it gives any: a highlighted code token's, a heading's.
-export function proseTextLook(selector: string): { color?: string; italic?: true } {
+export function proseTextLook(selector: string): TextLook {
     return {
         ...(proseValueIfSet(selector, 'color') !== undefined && { color: proseColor(selector, 'color') }),
         ...(proseValueIfSet(selector, 'font-style') === 'italic' && { italic: true }),
@@ -147,6 +149,15 @@ export const TITLE_LOOKS = {
     title: proseTextLook(TITLE_SELECTORS.title),
     subtitle: proseTextLook(TITLE_SELECTORS.subtitle),
 };
+
+export type TitleType = keyof typeof TITLE_LOOKS;
+
+// The look a text node draws its text in, which no mark carries; an italic one draws an italic mark upright. Word's
+// Heading 7 to 9 are an Eigen Heading 6.
+export function nodeLook(type: string, level = 1): TextLook {
+    if (type === 'heading') return HEADING_LOOKS[Math.min(level, HEADING_LOOKS.length) - 1] ?? {};
+    return type === 'title' || type === 'subtitle' ? TITLE_LOOKS[type] : {};
+}
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 

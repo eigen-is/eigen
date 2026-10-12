@@ -15,6 +15,7 @@ import {
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    nodeLook,
     QUOTE_LOOK,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
@@ -89,6 +90,21 @@ describe('the writer draws the editor look from the vocabulary', () => {
         expect(TITLE_LOOKS).toEqual({ title: {}, subtitle: { color: '666666' } });
         expect(prop('Title', 'rPr', 'color')).toBeUndefined();
         expect(w(prop('Subtitle', 'rPr', 'color'), 'val')).toBe(TITLE_LOOKS.subtitle.color);
+    });
+
+    // The reader, the writer, the renderer and the audit all ask nodeLook, so a node's look is looked up once.
+    test("a node's own look: a heading's by its level, Word's 7 to 9 as 6, a title's and a subtitle's, none for the rest", () => {
+        expect([1, 5, 6, 9].map((level) => nodeLook('heading', level))).toEqual([
+            {},
+            { color: '666666' },
+            { color: '666666', italic: true },
+            { color: '666666', italic: true },
+        ]);
+        expect([nodeLook('title'), nodeLook('subtitle'), nodeLook('paragraph')]).toEqual([
+            TITLE_LOOKS.title,
+            TITLE_LOOKS.subtitle,
+            {},
+        ]);
     });
 
     test('a done task: its strike and color', () => {

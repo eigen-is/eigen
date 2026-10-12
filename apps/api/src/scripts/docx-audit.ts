@@ -46,7 +46,7 @@ import {
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
-import { HEADING_LOOKS, TITLE_LOOKS } from '../lib/document/looks';
+import { nodeLook, type TitleType } from '../lib/document/looks';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
@@ -203,6 +203,10 @@ const ALIGNMENTS = new Map<string, Feature>([
 
 // Lowercased style names, as Word writes the built-in ones.
 const QUOTE_STYLES = new Set(['quote', 'intense quote', 'block text']);
+const TITLE_NAMES = new Map<string, TitleType>([
+    [STYLE_NAMES.Title.toLowerCase(), 'title'],
+    [STYLE_NAMES.Subtitle.toLowerCase(), 'subtitle'],
+]);
 const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
 const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
@@ -400,7 +404,7 @@ type Styles = {
 
 type ParagraphLook = {
     heading?: number;
-    title?: 'title' | 'subtitle';
+    title?: TitleType;
     quote: boolean;
     code: boolean;
     caption: boolean;
@@ -689,10 +693,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         let title: ParagraphLook['title'];
         for (const [index, style] of chain.entries()) {
             const name = names[index];
-            if (name === 'title' || name === 'subtitle') {
-                title = name;
-                break;
-            }
+            title = TITLE_NAMES.get(name);
+            if (title) break;
             const named = headingLevel(name) ?? 0;
             const outline = val(child(child(style, 'pPr'), 'outlineLvl'));
             if (!named && outline === undefined) continue;
@@ -1095,12 +1097,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
-            // Word's Heading 7 to 9 are an Eigen Heading 6.
-            drawn: look.heading
-                ? HEADING_LOOKS[Math.min(look.heading, HEADING_LOOKS.length) - 1]
-                : look.title
-                  ? TITLE_LOOKS[look.title]
-                  : {},
+            drawn: look.heading ? nodeLook('heading', look.heading) : nodeLook(look.title ?? 'paragraph'),
             marks: !look.code && !caption,
         });
         // A deleted paragraph mark joins the paragraph to the next.
