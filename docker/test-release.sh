@@ -382,6 +382,8 @@ upgrade_published() {
     # The level the launcher got from $RELEASE's CLI: full when a release since $PUBLISHED is breaking or marked
     # (full backup).
     level=$(docker run --rm "$(api_image)" update-check --from "$PUBLISHED" --level </dev/null | sed -n 's/^level=//p' || :)
+    # A breaking release may convert what a light archive leaves out, whatever the CLI answers.
+    [ -z "$breaking" ] || [ "$level" = full ] || fail "$RELEASE is breaking, but update-check --level answers '$level', not full"
     saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
     if [[ $saved == server-pre-update-$level-*.tar ]] && backups | grep -qxF "$saved"; then
         ok ".eigen/last-update names backups/$saved, made on $PUBLISHED before the update"

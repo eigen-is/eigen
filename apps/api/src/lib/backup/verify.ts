@@ -231,7 +231,11 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
         root,
         new Map(manifest.entries.map((entry) => [entry.path, entry])),
         fail,
-        warnings.add,
+        // Logged too: a server backup or a restore keeps no sidecar, only the status.
+        (message) => {
+            console.warn(`[backup] ${message}`);
+            warnings.add(message);
+        },
     );
     for (const [index, database] of databases.entries()) {
         if (fs.existsSync(database.abs)) {

@@ -1,9 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { CONTAINER_DB_CONFIGS } from '../../lib/backup/archive-layout';
 import {
     containerDbMarkerError,
     containerDbVersionsAt,
     previousRelease,
+    shallowCloneError,
 } from '../../scripts/check-container-db-marker';
 
 const CHANGELOG = `# Changelog
@@ -71,5 +72,28 @@ describe('containerDbVersionsAt', () => {
             Object.values(CONTAINER_DB_CONFIGS).map(({ name, currentVersion }) => [name, currentVersion]),
         );
         expect(containerDbVersionsAt('HEAD')).toEqual(declared);
+    });
+});
+
+describe('shallowCloneError', () => {
+    test('a shallow clone fails rather than reading as the first release', () => {
+        const spawnSync = Bun.spawnSync;
+        const git = spyOn(Bun, 'spawnSync').mockImplementationOnce(() => spawnSync(['echo', 'true']));
+        try {
+            expect(shallowCloneError()).toContain('shallow clone');
+            expect(git.mock.calls[0]?.[0]).toEqual(['git', 'rev-parse', '--is-shallow-repository']);
+        } finally {
+            git.mockRestore();
+        }
+    });
+
+    test('a clone with full history passes', () => {
+        const spawnSync = Bun.spawnSync;
+        const git = spyOn(Bun, 'spawnSync').mockImplementationOnce(() => spawnSync(['echo', 'false']));
+        try {
+            expect(shallowCloneError()).toBeNull();
+        } finally {
+            git.mockRestore();
+        }
     });
 });

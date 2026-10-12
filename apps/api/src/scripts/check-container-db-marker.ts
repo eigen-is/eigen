@@ -23,6 +23,13 @@ function git(args: string[]): { code: number; stdout: string } {
     return { code: run.exitCode, stdout: run.stdout.toString() };
 }
 
+// Why this checkout cannot be checked, or null: a shallow clone has no tags below it, so it would read as the first
+// release and pass.
+export function shallowCloneError(): string | null {
+    if (git(['rev-parse', '--is-shallow-repository']).stdout.trim() !== 'true') return null;
+    return 'This checkout is a shallow clone, so the release before it cannot be read. Check it out with full history (fetch-depth: 0).';
+}
+
 // The release `version` follows: the highest release tag below it, so a backport compares with its own line.
 // Prerelease tags are skipped, so a release whose candidates' sections were folded into its own still compares
 // with the release before them.
@@ -44,7 +51,10 @@ export function containerDbVersionsAt(ref: string): Map<string, number> {
         const [file, ...others] = git(['grep', '-l', `name: '${name}'`, ref, '--', DB_CONFIG_FILES])
             .stdout.split('\n')
             .filter(Boolean);
-        if (!file) continue;
+        if (!file) {
+            console.log(`${name} is new since ${ref}.`);
+            continue;
+        }
         if (others.length > 0) throw new Error(`${[file, ...others].join(', ')} all name the database ${name}`);
         const version = CURRENT_VERSION.exec(git(['show', file]).stdout)?.[1];
         if (!version) throw new Error(`${file} declares no literal currentVersion`);
@@ -75,6 +85,11 @@ if (import.meta.main) {
     const [version] = Bun.argv.slice(2);
     if (!version || !VERSION_PATTERN.test(version)) {
         console.error('Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version>');
+        process.exit(1);
+    }
+    const shallow = shallowCloneError();
+    if (shallow) {
+        console.error(shallow);
         process.exit(1);
     }
     const previous = previousRelease(git(['tag', '--list', 'v*']).stdout.split('\n'), version);
