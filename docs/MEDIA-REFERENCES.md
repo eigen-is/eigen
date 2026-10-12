@@ -32,6 +32,8 @@ A chat message's or a comment card's attachment (`ChatAttachment`) is either a n
 
 `MediaResolverProvider` wraps the docs, sheets, slides, vector and stickies editors. It resolves a name to a preview URL (`resolveMediaUrl`), a path (`resolveMediaPath`) or a thread id (`resolveChatId`) through `useFolderLookup`, the folder listing plus a refetch on a miss. A collaborator's upload reaches this tab through Yjs before the listing does, so an unknown name triggers one refetch, and only one per name, so a name that never appears can't loop.
 
+A name still absent once its own refetch settled reads as missing (`isMediaMissing`), and the docs figure and the sheets image draw it as a muted `ImageOff` instead of the loader, so a deleted file stops looking like it is still on its way. Until then they show the loader. Missing needs a known folder id: the editor routes mount the provider only after the document's listing loaded, so a null `mediaFolderId` means the document has no media folder, and every name in it is missing at once. A `pending:` name is never missing, and a name that shows up later in the listing clears.
+
 For a file a mutation just returned, use `resolveMediaUrlByPath`: the listing still predates that write, so the by-name lookup would miss. A chat resolves its attachments the same way, through `useAttachmentSubjects` on the room's `media/` folder.
 
 ## A new upload renders from a `pending:` name

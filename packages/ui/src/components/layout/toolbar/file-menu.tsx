@@ -9,6 +9,7 @@ import {
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
+    EXPORT_FORMAT_LABELS,
     exportFormatsFor,
 } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -37,18 +38,6 @@ const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     chat: { mime: DRIVE_MIME_CHAT, title: 'Open chat' },
     vector: { mime: DRIVE_MIME_VECTOR, title: 'Open vector' },
 };
-
-const DOWNLOAD_LABELS: Record<ExportFormat, string> = {
-    docx: 'Microsoft Word (.docx)',
-    pdf: 'PDF (.pdf)',
-    html: 'Web Page (.html)',
-    xlsx: 'Microsoft Excel (.xlsx)',
-    svg: 'SVG image (.svg)',
-};
-
-export function formatDownloadLabel(format: ExportFormat): string {
-    return DOWNLOAD_LABELS[format];
-}
 
 type FileMenuProps = {
     path: DrivePath;
@@ -92,6 +81,7 @@ export function FileMenu({
     // (useEigenDocEditorRoute); usePaletteSelectionActions stabilises these handlers.
     usePaletteSelectionActions({
         onShare: onAccessDialogOpen,
+        onExport: canDownload && onExport ? (_, format) => onExport(format) : undefined,
         onRename: canWrite ? () => setRenameOpen(true) : undefined,
         onEmailCollaborators: canWrite ? () => setEmailOpen(true) : undefined,
         onDelete: canWrite ? () => setDeleteOpen(true) : undefined,
@@ -123,7 +113,7 @@ export function FileMenu({
                         <DropdownMenuSubContent>
                             {downloadFormats.map((format) => (
                                 <DropdownMenuItem key={format} onClick={() => onExport(format)}>
-                                    {formatDownloadLabel(format)}
+                                    {EXPORT_FORMAT_LABELS[format]}
                                 </DropdownMenuItem>
                             ))}
                         </DropdownMenuSubContent>

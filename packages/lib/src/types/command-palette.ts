@@ -7,7 +7,7 @@ import type {
     DocSearchMatch,
     DocSearchSession,
 } from './doc-search';
-import type { DrivePath, EigenDocType } from './drive';
+import type { DrivePath, EigenDocType, ExportFormat } from './drive';
 import type { EmailSummary } from './mail';
 import type { HelpSearchDoc } from './search';
 
@@ -35,10 +35,11 @@ export type PaletteSelection = { items: DrivePath[]; isCurrentDocument?: boolean
 // Handlers a route publishes alongside the selection. Pure cross-app actions (Open
 // in new tab, Copy link, Mail to…) live in the catalog and don't need this — only
 // actions that depend on route-local dialog state (Rename, Share, Delete, Download,
-// Email collaborators) come through here. Quick preview is global (via openPreview
+// Download as, Email collaborators) come through here. Quick preview is global (via openPreview
 // on CommandContext) and not part of this surface.
 export type PaletteSelectionActions = {
     onDownload?: (item: DrivePath) => void;
+    onExport?: (item: DrivePath, format: ExportFormat) => void;
     onRename?: (item: DrivePath) => void;
     onShare?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
