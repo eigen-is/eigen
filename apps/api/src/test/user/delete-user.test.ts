@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OrgMember } from '@workspace/lib/types/admin';
@@ -575,7 +575,7 @@ describe("Delete user: the home's bucket objects", () => {
         try {
             const { objectCount, deleteObjects } = collectHomeObjects(homeDirOf(user.id));
             expect(objectCount).toBe(30);
-            expect(await deleteObjects()).toBe(30);
+            expect((await deleteObjects()).sort()).toEqual([...keys].sort());
             const attempts = keys.reduce((sum, key) => sum + (fake.deletes.get(key) ?? 0), 0);
             expect(attempts).toBeGreaterThanOrEqual(10);
             expect(attempts).toBeLessThan(20);
@@ -585,10 +585,11 @@ describe("Delete user: the home's bucket objects", () => {
         }
     });
 
-    test('a bucket that refuses a delete does not keep the user', async () => {
+    test('a bucket that refuses a delete does not keep the user, and the log names the key it left', async () => {
         const { user, keys } = await s3UserWithUploads('Refused S3', 2);
         const [refused, deletable] = keys;
         fake.faults.set(refused, 'deny');
+        const warn = spyOn(console, 'warn');
         try {
             const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${user.id}`, {
                 method: 'DELETE',
@@ -596,11 +597,45 @@ describe("Delete user: the home's bucket objects", () => {
             expect(res.status).toBe(200);
             expect(existsSync(homeDirOf(user.id))).toBe(false);
             await deleted([deletable]);
-            await eventually(async () => fake.deletes.get(refused), `the DELETE of ${refused}`);
+            const line = await eventually(
+                async () => failedObjectsLine(warn.mock.calls, user.id),
+                'the failed-objects log',
+            );
+            expect(line).toContain(refused);
+            expect(line).not.toContain(deletable);
             expect(await fake.store.exists(refused)).toBe(true);
             expect(await fake.store.exists(deletable)).toBe(false);
         } finally {
+            warn.mockRestore();
             fake.faults.delete(refused);
         }
     });
+
+    test('the log of a refusing bucket names the first 50 keys left and counts the rest', async () => {
+        const { user, keys } = await s3UserWithUploads('Refused Many S3', 55);
+        for (const key of keys) fake.faults.set(key, 'deny');
+        const warn = spyOn(console, 'warn');
+        try {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${user.id}`, {
+                method: 'DELETE',
+            });
+            expect(res.status).toBe(200);
+            const line = await eventually(
+                async () => failedObjectsLine(warn.mock.calls, user.id),
+                'the failed-objects log',
+            );
+            expect(line).toContain('55 bucket objects');
+            expect(keys.filter((key) => line.includes(key))).toHaveLength(50);
+            expect(line).toContain('5 more');
+        } finally {
+            warn.mockRestore();
+            for (const key of keys) fake.faults.delete(key);
+        }
+    });
+
+    function failedObjectsLine(calls: unknown[][], userId: string): string | undefined {
+        return calls
+            .map((args) => String(args[0]))
+            .find((message) => message.includes(`of ${userId} could not be deleted`));
+    }
 });

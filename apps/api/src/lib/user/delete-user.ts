@@ -12,6 +12,9 @@ import { shareRegistry } from '../share/schema';
 import type { User } from './user';
 import { getUserById } from './user';
 
+// Enough of the keys a refusing bucket kept for an operator to clean up, without one log line per object.
+const FAILED_KEYS_LOGGED = 50;
+
 // Runs from the user.delete.before database hook in auth.ts — the one seam every
 // better-auth deletion path passes through while the user row still exists — so the
 // raw /auth/admin/remove-user endpoint tears down exactly as much as Eigen's own
@@ -37,7 +40,11 @@ export async function teardownUserData(user: User): Promise<void> {
     if (objectCount > 0) console.log(`[delete-user] deleting ${objectCount} bucket objects of ${user.id}`);
     deleteObjects()
         .then((failed) => {
-            if (failed > 0) console.warn(`[delete-user] ${failed} bucket objects of ${user.id} could not be deleted`);
+            if (failed.length === 0) return;
+            const more = failed.length > FAILED_KEYS_LOGGED ? `, and ${failed.length - FAILED_KEYS_LOGGED} more` : '';
+            console.warn(
+                `[delete-user] ${failed.length} bucket objects of ${user.id} could not be deleted: ${failed.slice(0, FAILED_KEYS_LOGGED).join(', ')}${more}`,
+            );
         })
         .catch((error) => console.error(`[delete-user] deleting the bucket objects of ${user.id} failed:`, error));
 

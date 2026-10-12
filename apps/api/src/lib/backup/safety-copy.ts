@@ -203,7 +203,7 @@ export async function deleteSafetyCopy(folder: string, homeDir: string): Promise
 export function collectHomeObjects(homeDir: string): {
     folders: string[];
     objectCount: number;
-    deleteObjects: () => Promise<number>;
+    deleteObjects: () => Promise<string[]>;
 } {
     const folders = homeFolders(homeDir).filter((folder) => fs.existsSync(folder));
     const buckets = new Map<string, { storage: StorageBackend; keys: Set<string> }>();
@@ -228,21 +228,22 @@ export function collectHomeObjects(homeDir: string): {
             for (const key of keys) bucket.keys.add(key);
         }
     }
-    // A failed DELETE is counted and the rest go on, since nothing retries them; a bucket that refuses a run of
+    // A failed DELETE is kept and the rest go on, since nothing retries them; a bucket that refuses a run of
     // them is down or revoked, and its remaining keys count as failed rather than waiting out a timeout each.
-    const deleteObjects = async (): Promise<number> => {
-        let failed = 0;
+    const deleteObjects = async (): Promise<string[]> => {
+        const failed: string[] = [];
         for (const { storage, keys } of buckets.values()) {
             const pending = [...keys];
             let refusedInARow = 0;
             for (let start = 0; start < pending.length; start += OBJECT_DELETES_IN_FLIGHT) {
                 const chunk = pending.slice(start, start + OBJECT_DELETES_IN_FLIGHT);
-                for (const deleted of await Promise.all(chunk.map((key) => storage.delete(key)))) {
+                const results = await Promise.all(chunk.map((key) => storage.delete(key)));
+                for (const [i, deleted] of results.entries()) {
                     refusedInARow = deleted ? 0 : refusedInARow + 1;
-                    if (!deleted) failed++;
+                    if (!deleted) failed.push(chunk[i]);
                 }
                 if (refusedInARow >= MAX_REFUSED_DELETES_IN_A_ROW) {
-                    failed += pending.length - start - chunk.length;
+                    failed.push(...pending.slice(start + chunk.length));
                     break;
                 }
             }
