@@ -613,4 +613,24 @@ describe("a node's look", () => {
         });
         expect(marksOfType(json, 'italic')).toHaveLength(1);
     });
+
+    // A checkbox makes a task of a heading's text, a plain paragraph, so its runs keep the look Word draws them in.
+    const W14 = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+    const checkbox = `<w:sdt><w:sdtPr><w14:checkbox ${W14}/></w:sdtPr><w:sdtContent>${run('☐')}</w:sdtContent></w:sdt>`;
+    test.each([
+        ["Word's upright", '', []],
+        ["Google's italic grey", '<w:i/><w:iCs/><w:color w:val="666666"/>', ['textStyle', 'italic']],
+    ])('a plain run in a task in %s Heading 6 is drawn as Word draws it', async (_name, rPr, marks) => {
+        const { json } = await importDocxBody(
+            paragraph(`${checkbox}${run(' Plain text')}`, '<w:pStyle w:val="Heading6"/>'),
+            {
+                styles: `<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr>${rPr}</w:rPr></w:style>`,
+            },
+        );
+        const [item] = nodesOfType(json, 'taskItem');
+        expect(nodesOfType(item ?? {}, 'paragraph')).toHaveLength(1);
+        expect(nodesOfType(item ?? {}, 'text').map((node) => (node.marks ?? []).map((mark) => mark.type))).toEqual([
+            marks,
+        ]);
+    });
 });

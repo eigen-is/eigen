@@ -3,7 +3,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_HIGHLIGHT, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { HEADING_LOOKS, LINK_LOOK } from '../../document/looks';
+import { LINK_LOOK } from '../../document/looks';
 import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -24,8 +24,9 @@ import {
 } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
+// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string }
+    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -281,9 +282,9 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
 
 export function pushText(reader: Reader, text: string, direct: DocxRunProps, context: RunContext): void {
     if (!text) return;
-    for (const { text: part, marks, small, font } of marksOf(reader, text, direct, context)) {
+    for (const { text: part, marks, small, font, italic } of marksOf(reader, text, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
-        context.pieces.push({ kind: 'node', node, small, font });
+        context.pieces.push({ kind: 'node', node, small, font, italic });
     }
 }
 
@@ -313,12 +314,10 @@ function marksOf(
     text: string,
     direct: DocxRunProps,
     context: RunContext,
-): { text: string; marks: Marks; small: boolean; font?: string }[] {
+): { text: string; marks: Marks; small: boolean; font?: string; italic?: boolean }[] {
     const { styles } = reader;
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
-    // A heading that draws italic draws an italic mark upright, so there the mark is a run Word draws upright.
-    const upright = role.kind === 'heading' && !!HEADING_LOOKS[role.level - 1]?.italic;
     const paraRun = mergeRun(scope.tableRun ?? {}, styles.run(context.paraStyle));
     const charRun = { ...styles.run(direct.style) };
     // A link to a bookmark is no link, its look the run's, but in a table of contents: Word draws its link look there
@@ -385,8 +384,7 @@ function marksOf(
         const small = isSmall(complex);
         const shape: Marks = [];
         if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
-        const italic = complex ? props.italicCs : props.italic;
-        if (upright ? !italic : italic) shape.push({ type: 'italic' });
+        const italic = !!(complex ? props.italicCs : props.italic);
         if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
@@ -407,6 +405,6 @@ function marksOf(
                       },
                   ]
                 : [];
-        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font };
+        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font, italic };
     });
 }

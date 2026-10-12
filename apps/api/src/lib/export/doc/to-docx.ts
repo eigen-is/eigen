@@ -48,6 +48,7 @@ import {
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    nodeLook,
     proseBorder,
     proseColor,
     proseTextLook,
@@ -56,6 +57,7 @@ import {
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
+    type TitleType,
     twips,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
@@ -195,6 +197,8 @@ type Package = {
 type Context = {
     pkg: Package;
     first: boolean;
+    // The type of the block after this one, which a numbered list runs on to when it is another.
+    next?: string;
     column: number;
     indent: number;
     depth: number;
@@ -207,7 +211,7 @@ type Context = {
     list?: NumberingRef;
     // The size of the heading or title around the run, which an inline code's em is of.
     blockPt?: number;
-    // In a heading that draws italic, which draws an italic mark upright.
+    // In a node that draws italic, which draws an italic mark upright.
     upright?: boolean;
 };
 
@@ -488,12 +492,11 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 },
                 context,
             );
-            const upright = !!HEADING_LOOKS[level - 1]?.italic;
+            const upright = !!nodeLook('heading', level).italic;
             return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
         },
     ],
-    ['title', titleOf('title', 'Title')],
-    ['subtitle', titleOf('subtitle', 'Subtitle')],
+    ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
     [
         'horizontalRule',
@@ -563,11 +566,12 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     ],
 ]);
 
-function titleOf(type: keyof typeof TITLE_SELECTORS, style: StyleId) {
+function titleOf(type: TitleType, style: StyleId) {
     return (node: JSONContent, context: Context): Block[] => {
         const props = textProps({ style, jc: justification(node) }, context);
         const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
-        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt }, true);
+        const upright = !!nodeLook(type).italic;
+        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
     };
 }
 
@@ -609,6 +613,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         const written = write(node, {
             ...context,
             first: !textblock && index === 0,
+            next: nodes[index + 1]?.type,
             blockPt: undefined,
             upright: undefined,
         });
@@ -799,7 +804,8 @@ function listOf(
     const items = { ...context, list };
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
-    return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'));
+    const runsOn = tag === 'ol' && context.next === 'orderedList';
+    return withAfter(blocks, proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'));
 }
 
 // Each list is a w:num of its own, so lists side by side stay apart; a bullet counts nothing, so bullet lists at one

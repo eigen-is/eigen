@@ -5,7 +5,7 @@ import { getFontName } from '@workspace/lib/constants/fonts';
 import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
-import { BODY, HEADING_LOOKS, QUOTE_LOOK } from '../../document/looks';
+import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
 
@@ -107,15 +107,14 @@ const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 // (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals.
 function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
     const quoted = new Set<Node>();
-    // A heading that draws italic draws an italic mark upright.
+    // A node that draws italic draws an italic mark upright.
     const upright = new Set<Node>();
     doc.descendants((node, _pos, parent) => {
         if (node.type.name === 'blockquote')
             node.descendants((child) => {
                 if (child.isText) quoted.add(child);
             });
-        if (node.isText && parent?.type.name === 'heading' && HEADING_LOOKS[parent.attrs['level'] - 1]?.italic)
-            upright.add(node);
+        if (node.isText && parent && nodeLook(parent.type.name, parent.attrs['level']).italic) upright.add(node);
     });
     return ({ node }) => {
         const text = node.text ?? '';

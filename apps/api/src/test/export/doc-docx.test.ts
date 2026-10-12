@@ -941,6 +941,14 @@ describe('docx writer — lists', () => {
         expect(nums.map((num) => w(child(num, 'abstractNumId'), 'val'))).toEqual(['0', '1']);
     });
 
+    // eigen-prose.css drops the margin under a numbered list that another follows, as Google runs a restarted list on.
+    test("a numbered list right before another ends at its item's step, 0.25em", async () => {
+        expect(await paragraphsOf(doc(ol({}, li(p(text('a')))), ol({ start: 5 }, li(p(text('b'))))))).toEqual([
+            numbered(0, 1, 55, run('a')),
+            numbered(0, 2, 220, run('b')),
+        ]);
+    });
+
     test('each list is a num of its own; bullet lists of one indent share one abstractNum, a nested one a level in; ordered ones keep their own', async () => {
         const json = doc(
             ul(li(p(text('a')), ul(li(p(text('b')))))),
