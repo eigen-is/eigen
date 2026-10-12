@@ -263,8 +263,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // Google Docs writes a node's own look as direct formatting; in an italic heading an italic mark is an upright run.
-    const look = nodeLook(role.kind, role.kind === 'heading' ? role.level : undefined);
+    // A task's heading is a paragraph (assemble.ts). In an italic node an italic mark is a run Word draws upright, and
+    // Google Docs writes the node's own look as direct formatting.
+    const look = task ? {} : nodeLook(role.kind, role.kind === 'heading' ? role.level : undefined);
+    for (const piece of pieces)
+        if (piece.kind === 'node' && piece.italic !== undefined && piece.italic !== !!look.italic)
+            piece.node.marks = [...(piece.node.marks ?? []), { type: 'italic' }];
     if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic && !look.italic ? 'italic' : undefined, QUOTE_LOOK.color);
     if (look.color) stripLook(pieces, undefined, look.color);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
