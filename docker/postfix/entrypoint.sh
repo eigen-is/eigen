@@ -10,11 +10,13 @@ export MAIL_DOMAIN
 # the docker bridge subnet so eigen-api (172.20.0.x by default) can submit and get its mail
 # DKIM-signed. EIGEN_SUBNET comes from docker-compose.yml, kept in step with the `eigen` network.
 # Unset → loopback only (fail closed), never the whole 172.16/12 range.
+#
 # The subnet's gateway is excluded: a client of a published port can arrive from it (the host
 # itself, Docker Desktop, rootless Docker), and would otherwise relay. It is the gateway of the
 # container's default route when that route leaves through the subnet's interface, read from
 # /proc/net/route (little-endian hex), since the image has no `ip`. Otherwise, as when an override
 # attaches a second network whose default route wins, the gateway is unknown, so loopback only.
+# The API applies the same rule: apps/api/src/lib/core/trusted-networks.ts.
 MAIL_TRUST_NETWORKS="127.0.0.0/8"
 BRIDGE_GATEWAY=""
 if [ -n "${EIGEN_SUBNET:-}" ]; then

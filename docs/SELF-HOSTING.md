@@ -133,6 +133,8 @@ services:
 
 Then `./eigen restart`.
 
+Don't attach `postfix` or `eigen-api` to another network that wins the container's default route (before Docker Engine 28 it goes alphabetically, so a `backend`, `caddy` or `default` network beats `eigen`): both then fail closed, so outbound mail stops, IMAP sign-in fails and inbound mail defers; set `gw_priority` on the `eigen` network (Engine 28 or newer) or leave them unattached ([MAIL.md](MAIL.md#submission-is-held-to-the-logins-own-address)).
+
 ## Proxy snippets
 
 With the `static` profile, setup fills in the templates in `docker/proxy/` (`{{DOMAIN}}` and `{{TARGET}}`, the listen address) and writes `eigen.nginx.conf`, `eigen.apache.conf` and `eigen.Caddyfile` next to `.env.production`. `docker/test-host-proxies.sh` runs all three in front of a real install.

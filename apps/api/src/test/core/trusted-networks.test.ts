@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseRouteTable, scopeTrustedNetworks } from '../../lib/core/route-table';
+import { parseRouteTable, scopeTrustedNetworks } from '../../lib/core/trusted-networks';
 
 const HEADER = 'Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT';
 

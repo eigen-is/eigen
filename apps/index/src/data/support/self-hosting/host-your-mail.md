@@ -34,7 +34,7 @@ Add these records:
 | TXT | `_caldavs._tcp.eigen.example.com` | `"path=/dav/"` |
 | TXT | `_carddavs._tcp.eigen.example.com` | `"path=/dav/"` |
 
-The mail server listens on IPv4 only, so `eigen.example.com` needs an A record. An AAAA record beside it does no harm: other mail servers fall back to the A record.
+The mail server listens on IPv4 only, so `eigen.example.com` needs an A record. An AAAA record beside it still serves the apps, but the mail ports don't answer on IPv6: other mail servers fall back to the A record, and an uptime check of the mail ports over IPv6 reports them down.
 
 Sending through a relay? Add its SPF domain to the SPF record, like `"v=spf1 mx include:your-relay.com ~all"`.
 

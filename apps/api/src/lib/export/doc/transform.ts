@@ -63,8 +63,10 @@ async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
         if (node.type === 'figure') {
             const attrs = readFigureAttrs(node.attrs ?? {});
             const key = figureMediaKey(attrs);
-            const split = key !== null && key === attrs.src ? splitDataUri(key) : null;
-            if (key && split) pasted.set(key, split);
+            if (key && key === attrs.src) {
+                const split = splitDataUri(key);
+                if (split) pasted.set(key, split);
+            }
         }
         for (const child of node.content ?? []) visit(child);
     };
