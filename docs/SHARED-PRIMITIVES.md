@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1640 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1641 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -516,7 +516,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (375)
+## Types (376)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -551,6 +551,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `TitleType` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/title.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `RecipientField` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
@@ -1194,6 +1195,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
+| `ITALIC_HEADING_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
 | `pageBoxStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1204,7 +1206,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PROSE_TEXTBLOCKS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `readFigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
-| `TITLE_LOOK_CSS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/title.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `filenameFromDisposition` | `@workspace/lib/download` | packages/lib/src/core/download.ts |

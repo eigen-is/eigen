@@ -1,5 +1,5 @@
 // A paste through the eigen clipboard: what a docs copy writes, placed by the paste.
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -7,8 +7,9 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
-const { classifyPaste } = await import('@workspace/lib/clipboard');
-const { getDocExtensions, TITLE_LOOK_CSS } = await import('@workspace/lib/docs/eigendoc');
+const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
+const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
+const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { insertEigenItems, writeDocsClipboard } = await import('../../../components/docs/clipboard');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
@@ -182,25 +183,64 @@ test('a copy writes an italic mark in Heading 6 upright and pastes it back as th
     expect(target.getJSON()).toEqual(expected.getJSON());
 });
 
-// A title's look is its node's, which Google Docs and Word don't read: the copy writes it on the p, and a paste here
-// reads the node from its data-type.
+// A title's look is its node's, which Google Docs and Word don't read: the copy writes the size and color the page
+// draws it in on the p, the body's color left to the target, and a paste here reads the node from its data-type.
+// happy-dom computes no nested CSS, so the page's look is stubbed.
 test('a copy writes the title and subtitle look inline and pastes them back as the nodes', async () => {
     const content = [
         { type: 'title', content: [text('Report')] },
         { type: 'subtitle', content: [text('Third quarter')] },
         paragraph(text('Body')),
     ];
+    const looks: Record<string, [string, string]> = {
+        title: ['34.6667px', 'rgb(26, 26, 46)'],
+        subtitle: ['20px', 'rgb(102, 102, 102)'],
+    };
+    const computed = spyOn(globalThis, 'getComputedStyle').mockImplementation((element) => {
+        const [fontSize, color] = looks[element.getAttribute('data-type') ?? ''] ?? ['14.6667px', 'rgb(26, 26, 46)'];
+        const { style } = document.createElement('p');
+        Object.assign(style, { fontSize, color });
+        return style;
+    });
     const clipboard = copy(content);
+    computed.mockRestore();
     const html = new DOMParser().parseFromString(clipboard.html, 'text/html');
     expect(
         [...html.querySelectorAll<HTMLElement>('p')].map((p) => [p.dataset['type'], p.style.fontSize, p.style.color]),
     ).toEqual([
-        ['title', TITLE_LOOK_CSS.title.fontSize, ''],
-        ['subtitle', TITLE_LOOK_CSS.subtitle.fontSize, TITLE_LOOK_CSS.subtitle.color],
+        ['title', '34.6667px', ''],
+        ['subtitle', '20px', 'rgb(102, 102, 102)'],
         [undefined, '', ''],
     ]);
 
     const target = await paste(clipboard);
     const expected = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
     expect(target.getJSON()).toEqual(expected.getJSON());
+});
+
+// ProseMirror's copy writes a font as its CSS stack, which the paste reads back as the font.
+test.each(EIGEN_FONTS.map((font) => font.name))('a run in %s copies and pastes back in it', async (font) => {
+    const clipboard = copy([paragraph(text('Body', { type: 'textStyle', attrs: { fontFamily: font } }))]);
+    const marks = (await paste(clipboard)).state.doc.firstChild?.firstChild?.marks ?? [];
+    const fontFamily = marks.find((mark) => mark.type.name === 'textStyle')?.attrs['fontFamily'];
+    expect(fontFamily).toBe(font === DOCUMENT_FONT ? undefined : font);
+});
+
+// A text item is plain, so its text lands as typed, never read as markup.
+test('a text item pastes its text literally', async () => {
+    const item = buildTextClipboardItem({ text: 'if a<b and c>d then\nAT&amp;T', box: { width: 100, height: 20 } });
+    const target = await paste({ eigen: { version: 1, items: [item] }, html: '', text: '', files: [], imageFiles: [] });
+    expect(blocks(target)).toEqual([['if a<b and c>d then'], ['AT&amp;T']]);
+});
+
+// A copy with no figure, title or upright italic is ProseMirror's own, so it never serializes the selection itself.
+test('a plain copy leaves the event to ProseMirror without serializing', () => {
+    const editor = source([
+        { type: 'heading', attrs: { level: 6 }, content: [text('Fine print')] },
+        paragraph(text('Body', { type: 'italic' })),
+    ]);
+    const serialize = spyOn(editor.view, 'serializeForClipboard');
+    const event = new ClipboardEvent('copy', { clipboardData: new DataTransfer(), cancelable: true });
+    expect(writeDocsClipboard(editor.view, event, () => undefined)).toBe(false);
+    expect(serialize).not.toHaveBeenCalled();
 });

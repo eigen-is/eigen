@@ -9,8 +9,8 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { TITLE_LOOK_CSS } from '@workspace/lib/docs/eigendoc';
-import { htmlToPlainText } from '@workspace/lib/html-dom';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardImageItem,
     EigenClipboardItem,
@@ -18,7 +18,6 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
-import { ITALIC_HEADINGS } from './paste';
 
 // The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
 // the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
@@ -93,8 +92,7 @@ function copiedClipboardItems(
 // A copy or cut with eigen items writes them beside ProseMirror's own HTML and text, and a cut deletes the
 // selection as ProseMirror's handler would. Bound in handleDOMEvents, so it runs before that handler, whose
 // cut deletes the selection before any later listener reads it. Google Docs and Word read a run by its look, so an
-// italic mark in a heading that draws italic is written upright, as it draws, and a title's and a subtitle's look is
-// written on its p. None of these → false, and the event is ProseMirror's.
+// italic mark in an italic heading is written upright, and a title's and a subtitle's look on its p.
 export function writeDocsClipboard(
     view: EditorView,
     event: ClipboardEvent,
@@ -104,35 +102,51 @@ export function writeDocsClipboard(
     const cut = event.type === 'cut';
     if (selection.empty || !event.clipboardData || (cut && !view.editable)) return false;
     const items = copiedClipboardItems(view, selection.from, selection.to, resolveMediaPath);
+    // The first title and subtitle on the page, whose look every copied one shares.
+    const titles = new Map<TitleType, number>();
+    let upright = false;
+    view.state.doc.nodesBetween(selection.from, selection.to, (node, pos, parent) => {
+        if (node.type.name === 'title' || node.type.name === 'subtitle') {
+            if (!titles.has(node.type.name)) titles.set(node.type.name, pos);
+        } else if (
+            parent?.type.name === 'heading' &&
+            ITALIC_HEADING_LEVELS.has(parent.attrs['level']) &&
+            node.marks.some((mark) => mark.type.name === 'italic')
+        )
+            upright = true;
+    });
+    if (items.length === 0 && titles.size === 0 && !upright) return false;
+
     const { dom, text } = view.serializeForClipboard(selection.content());
-    const upright = ITALIC_HEADINGS
-        ? [...dom.querySelectorAll(ITALIC_HEADINGS)].flatMap((heading) => [
-              ...heading.querySelectorAll<HTMLElement>('em'),
-          ])
-        : [];
-    const titles = Object.entries(TITLE_LOOK_CSS).flatMap(([type, look]) =>
-        [...dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)].map((p) => ({ p, look })),
-    );
-    if (items.length === 0 && upright.length === 0 && titles.length === 0) return false;
-    for (const em of upright) em.style.fontStyle = 'normal';
-    for (const { p, look } of titles) Object.assign(p.style, look);
+    for (const heading of dom.querySelectorAll(ITALIC_HEADING_SELECTOR)) {
+        for (const em of heading.querySelectorAll<HTMLElement>('em')) em.style.fontStyle = 'normal';
+    }
+    for (const [type, pos] of titles) {
+        const drawn = view.nodeDOM(pos);
+        if (!(drawn instanceof HTMLElement)) continue;
+        const { fontSize, color } = getComputedStyle(drawn);
+        // The body's color is left to the target, as a copied paragraph's is.
+        const ownColor = color !== getComputedStyle(view.dom).color;
+        for (const p of dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)) {
+            p.style.fontSize = fontSize;
+            if (ownColor) p.style.color = color;
+        }
+    }
     event.preventDefault();
-    if (items.length > 0) writeEigenClipboard(event, { version: 1, items }, text || undefined, dom.innerHTML);
+    if (items.length > 0) writeEigenClipboard(event, { version: 1, items }, text, dom.innerHTML);
     else {
         event.clipboardData.clearData();
         event.clipboardData.setData('text/html', dom.innerHTML);
-        event.clipboardData.setData('text/plain', text);
+        if (text) event.clipboardData.setData('text/plain', text);
     }
     if (cut) view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut'));
     return true;
 }
 
 // A text item lands as a paragraph per line at the caret, with the typography docs models; it has no
-// fontSize, letter-spacing or line-height. htmlToPlainText guards against a non-conforming payload.
-function eigenTextItemContent(item: EigenClipboardTextItem): JSONContent[] {
-    const text = htmlToPlainText(item.text);
+// fontSize, letter-spacing or line-height.
+function eigenTextItemContent({ text, typography: typo }: EigenClipboardTextItem): JSONContent[] {
     if (!text.trim()) return [];
-    const typo = item.typography;
     const textStyleAttrs: Record<string, string> = {};
     if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
     if (typo?.color) textStyleAttrs.color = typo.color;

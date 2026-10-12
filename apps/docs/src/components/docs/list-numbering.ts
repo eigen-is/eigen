@@ -1,4 +1,4 @@
-import type { ResolvedPos } from '@tiptap/pm/model';
+import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
 
 // The depth of the innermost list around a position when that list is numbered, as Google's numbering acts on the
@@ -12,6 +12,10 @@ export function orderedListDepth($pos: ResolvedPos): number | undefined {
 }
 
 // Decimal is the schema's default, which a list stores as no type.
+export function numberedListType(list: PMNode): string {
+    return list.attrs['type'] ?? '1';
+}
+
 export function setNumberedListType(editor: Editor, type: string): void {
     editor
         .chain()

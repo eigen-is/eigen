@@ -113,6 +113,8 @@ const NUMBERED_LIST_STYLES = [
     { type: 'I', preview: 'I. II. III.' },
 ] as const;
 
+const WORD_COUNT_HOTKEY = 'Mod+Shift+C';
+
 type EditorToolbarProps = {
     editor: Editor;
     canWrite: boolean;
@@ -166,15 +168,15 @@ export const EditorToolbar = ({
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
     // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sit centered beside the menus from 870, 1052 and 1267px.
-    const showsRow = useMediaQuery('(min-width: 900px)');
-    const showsMiddle = useMediaQuery('(min-width: 1100px)');
+    // sit centered beside the five menus from 997, 1179 and 1394px.
+    const showsRow = useMediaQuery('(min-width: 1000px)');
+    const showsMiddle = useMediaQuery('(min-width: 1200px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
     // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
     const isMobile = useIsMobile();
 
     // Document-level: a viewer's editor is not editable, so an editor keymap would never see the key.
-    useHotkey('Mod+Shift+C', (e) => {
+    useHotkey(WORD_COUNT_HOTKEY, (e) => {
         e.preventDefault();
         setWordCountOpen(true);
     });
@@ -182,7 +184,7 @@ export const EditorToolbar = ({
     const wordCountItem = (
         <DropdownMenuItem onClick={() => setWordCountOpen(true)}>
             <WholeWord className="h-4 w-4 mr-2" /> Word count
-            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+C')}</DropdownMenuShortcut>
+            <DropdownMenuShortcut>{formatForDisplay(WORD_COUNT_HOTKEY)}</DropdownMenuShortcut>
         </DropdownMenuItem>
     );
 

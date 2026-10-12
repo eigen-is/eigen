@@ -1,11 +1,8 @@
 import { bundledFont, DOCUMENT_FONT, getFontFamily } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
-
-export const ITALIC_HEADINGS = [...ITALIC_HEADING_LEVELS].map((level) => `h${level}`).join(', ');
+import { ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
 
 // Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, images and tables no wider than the
-// column, no comment anchor for a card this document's map lacks, as one copied from another document, and in a
-// heading that draws italic, which draws an italic mark upright, a run spelled upright as the mark and none italic.
+// column, no anchor for a comment card this document lacks, and in an italic heading an upright run as the mark.
 export function cleanPastedHTML(html: string, maxWidth: number, cardIds: ReadonlySet<string>): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
@@ -14,7 +11,7 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
     }
 
     // A text's look is its nearest font-style; document order visits a parent before its children.
-    for (const heading of ITALIC_HEADINGS ? doc.querySelectorAll<HTMLElement>(ITALIC_HEADINGS) : []) {
+    for (const heading of doc.querySelectorAll<HTMLElement>(ITALIC_HEADING_SELECTOR)) {
         const upright = new Map<Node | null, boolean>();
         const runs: Text[] = [];
         const walker = doc.createTreeWalker(heading, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
@@ -35,8 +32,12 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
     }
 
     for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
-        const font = bundledFont(el.style.fontFamily.replace(/['"]/g, ''));
-        // The document font needs no mark.
+        // A stack's first family the map knows: Google Docs and Word write a font before its generic family, and a
+        // copy here writes a bundled font's stack. The document font needs no mark.
+        const font = el.style.fontFamily
+            .split(',')
+            .map((family) => bundledFont(family.replace(/['"]/g, '')))
+            .find((bundled) => bundled !== undefined);
         el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
     }
 
