@@ -459,10 +459,9 @@ describe('document transform (eigensheets preview)', () => {
 
 // Pinned bytes of the golden fixture's export documents (the html download and the
 // wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
-// change — last moved by the default cell size becoming the editor's 100 × 20 (2026-09-15),
-// one constant shared by the grid, the importer and this renderer.
-const GOLDEN_EXPORT_HTML_SHA256 = 'f1ff5a76ce0a250cd5e80df381b275e72d9b7fcdd6b35c5541ab236d0f89c2fa';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'da0451eba08df85751fefd322d88d3bf3a9596e19fdf5070e7511b0301e43e11';
+// change — last moved by the table taking the body's FONT_STACK_SANS (2026-10-12).
+const GOLDEN_EXPORT_HTML_SHA256 = '7237285629cf37d274ebdccb41375c534f13a8fc29602d19a79e530dd269c391';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'e411e94a27817d76929b53fb8a033e62a2ebf94cc6a7e537297368d6bee168a4';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
