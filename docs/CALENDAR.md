@@ -58,7 +58,7 @@ bun:sqlite already makes a transaction atomic and serial. `Calendar.writeLock` e
 
 Every resource write ends in `Calendar.writeResource`. It takes a `PreparedResource` computed once (`resource-store.ts`), so the bytes the checks judged are the bytes that land. It checks `EVENT_MAX_BYTES` (5 MiB), then the Home's storage budget, then commits. The commit is one transaction: the ctag bump, the blob, a delete-and-reinsert of the resource's `events` rows, and clearing any tombstone at that uri. A throw anywhere leaves the old bytes and the old projection in place. `purgeResource` is the same in reverse.
 
-`Calendar` holds what must be one per Home: the database, the lock, the byte counter and the broadcast batch. The domain logic is plain functions over it in the sibling modules.
+`Calendar` holds what must be one per Home: the database, the lock, the byte counter and the broadcast batch. The domain logic is plain functions over it in the sibling modules. `Calendar` is the one entry point on purpose: routes and DAV call it, and the sibling modules take it as their first argument.
 
 `moveEvent` re-homes a resource between two calendars of one Home in one transaction, so no window shows it in both. A lone occurrence can't be moved, a UID the target holds is a 409, and a uri the target holds becomes a fresh name. `deleteCalendar` deletes the calendar's tombstones itself, since no cascade reaches them and a calendar recreated at that id would inherit them.
 
