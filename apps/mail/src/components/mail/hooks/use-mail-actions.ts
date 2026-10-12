@@ -6,6 +6,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import {
     createDraftEmail,
     flattenAddresses,
+    stripRemoteContent,
     useDeleteEmail,
     useEmailById,
     useMoveEmail,
@@ -15,9 +16,23 @@ import {
     useUpdateDraft,
 } from '@workspace/lib/mail';
 import type { DraftInput, DraftUpdateOptions, Email, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
+
+// The body as the reader shows it: without its remote content until Load images was clicked for it, or the
+// composer would load what the reader held back.
+export function formatEmailQuote(email: Email, remoteImagesLoaded: boolean): string {
+    const fromName = escapeHtml(email.from?.value[0]?.name || '');
+    const fromAddress = escapeHtml(email.from?.value[0]?.address || '');
+    const dateText = escapeHtml(formatFullDateTime(new Date(email.date)));
+    const header = `On ${dateText} ${fromName} &lt;${fromAddress}&gt; wrote:`;
+    // email.html is already sanitized by the backend via isomorphic-dompurify in mail-parse.ts,
+    // and email.text is plain text (not HTML) so it's safe to embed as-is in a blockquote.
+    const html = email.html && !remoteImagesLoaded ? stripRemoteContent(email.html).html : email.html;
+    const content = html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
+    return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
+}
 
 // Single-slot undo (Gmail-style): only the most recent reversible action is remembered. `done` is a
 // one-shot latch so the same action can't be reversed twice (e.g. `z` then clicking its still-visible toast).
@@ -41,6 +56,8 @@ export function useMailActions() {
 
     // Single-slot undo: overwritten by each new reversible action; `z` / the toast Undo reverses it.
     const lastAction = useRef<Undoable | null>(null);
+    // The one message whose remote images the reader shows, until another is loaded; Reply and Forward read it too.
+    const [imagesLoadedFor, setImagesLoadedFor] = useState<string | null>(null);
 
     // Reverse a specific recorded action with the RAW mutations (never the recording helpers, or the
     // undo would record itself). The {...email, isRead/isFlagged: !prev} spread defeats each mutation's
@@ -329,17 +346,6 @@ export function useMailActions() {
         if (undoItems.length > 0) lastAction.current = { kind: 'flag', items: undoItems };
     };
 
-    const formatEmailQuote = (email: Email) => {
-        const fromName = escapeHtml(email.from?.value[0]?.name || '');
-        const fromAddress = escapeHtml(email.from?.value[0]?.address || '');
-        const dateText = escapeHtml(formatFullDateTime(new Date(email.date)));
-        const header = `On ${dateText} ${fromName} &lt;${fromAddress}&gt; wrote:`;
-        // email.html is already sanitized by the backend via isomorphic-dompurify in mail-parse.ts,
-        // and email.text is plain text (not HTML) so it's safe to embed as-is in a blockquote.
-        const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
-        return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
-    };
-
     // Seed RFC 5322 threading from the message being replied to: In-Reply-To points at its
     // Message-ID, References appends it to whatever chain it already carried. Skipped when the
     // original has no Message-ID (nothing to thread against).
@@ -356,7 +362,7 @@ export function useMailActions() {
             ...createDraftEmail({
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-                html: formatEmailQuote(email),
+                html: formatEmailQuote(email, imagesLoadedFor === email.id),
                 ...replyThreadingHeaders(email),
             }),
             repliedToId: email.id,
@@ -383,7 +389,7 @@ export function useMailActions() {
             ...createDraftEmail({
                 to: { value: allRecipients, text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-                html: formatEmailQuote(email),
+                html: formatEmailQuote(email, imagesLoadedFor === email.id),
                 ...replyThreadingHeaders(email),
             }),
             repliedToId: email.id,
@@ -396,7 +402,7 @@ export function useMailActions() {
         openPrefilledCompose(
             createDraftEmail({
                 subject: `FW: ${email.subject}`,
-                html: formatEmailQuote(email),
+                html: formatEmailQuote(email, imagesLoadedFor === email.id),
             }),
         );
     };
@@ -438,5 +444,7 @@ export function useMailActions() {
             }),
         handleDraftIdAssigned,
         isSendPending: sendDraftMutation.isPending,
+        imagesLoadedFor,
+        loadRemoteImages: setImagesLoadedFor,
     };
 }

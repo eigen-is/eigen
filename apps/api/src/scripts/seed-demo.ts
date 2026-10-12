@@ -864,6 +864,7 @@ async function main(): Promise<void> {
             const recipientHome = await getHome(recipient.id);
             // The thread's external party (booker) — the other end of every message.
             const externalParty = flow.messages.find((m) => m.fromExternal)?.fromExternal;
+            let answeredId: string | undefined;
             for (const message of flow.messages) {
                 const external = message.fromExternal;
                 const sender = external ? undefined : userByKey.get(resolvePersona(message.from!).key)!;
@@ -881,10 +882,15 @@ async function main(): Promise<void> {
                 if (!external) {
                     await recipientHome.mail.messageMove(deliveredId, MAILBOX_SENT);
                     await recipientHome.mail.messageSetRead(deliveredId, true);
+                    // The inbound message it answers shows the reply arrow, as a real send leaves it.
+                    if (answeredId) await recipientHome.mail.messageSetReplied(answeredId);
                 }
+                answeredId = external ? deliveredId : undefined;
             }
         } else {
             const to = `${TEAM_NAME} <crew@${MAIL_DOMAIN}>`;
+            // Each persona's copy of the previous message, which the next sender's reply answers.
+            let previousCopies = new Map<string, string>();
             for (const [i, message] of flow.messages.entries()) {
                 const senderKey = resolvePersona(message.from!).key;
                 const sender = userByKey.get(senderKey)!;
@@ -902,15 +908,20 @@ async function main(): Promise<void> {
                     to,
                     html,
                 });
+                const copies = new Map<string, string>();
                 for (const persona of PERSONAS) {
                     const home = await getHome(userByKey.get(persona.key)!.id);
                     const deliveredId = await home.mail.mailboxDeliver(buffer);
+                    copies.set(persona.key, deliveredId);
                     // The sender's own copy belongs in their Sent box, same as an inbox-thread reply.
                     if (persona.key === senderKey) {
                         await home.mail.messageMove(deliveredId, MAILBOX_SENT);
                         await home.mail.messageSetRead(deliveredId, true);
+                        const answeredId = previousCopies.get(persona.key);
+                        if (answeredId) await home.mail.messageSetReplied(answeredId);
                     }
                 }
+                previousCopies = copies;
             }
         }
     }

@@ -99,9 +99,17 @@ type EmailDetailProps = {
     email: Email;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
     highlightTerm?: string;
+    remoteImagesLoaded: boolean;
+    onLoadRemoteImages: () => void;
 };
 
-export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetailProps) {
+export function EmailDetail({
+    email,
+    toggleMailRead,
+    highlightTerm,
+    remoteImagesLoaded,
+    onLoadRemoteImages,
+}: EmailDetailProps) {
     const hasMarkedAsRead = useRef<string | null>(null);
 
     // Mark on email change only; read the latest (unstable) toggleMailRead via an Effect Event.
@@ -134,6 +142,8 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
                     text={email.text}
                     isSent={email.mailbox === MAILBOX_SENT}
                     highlightTerm={highlightTerm}
+                    remoteImagesLoaded={remoteImagesLoaded}
+                    onLoadRemoteImages={onLoadRemoteImages}
                     attachments={<ReadAttachments emailId={email.id} attachments={email.attachments} />}
                     footer={email.attachments?.map(
                         (attachment: Attachment) =>
