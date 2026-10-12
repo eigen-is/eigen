@@ -62,4 +62,4 @@ Every restore keeps the account as it stood beforehand. These show up under a **
 
 To undo a restore, hover over the matching **The account before a restore** row and click **Restore this copy**. The account goes back to that earlier state, and the version it is in now becomes a new safety copy beside it.
 
-To free up space, click **Delete safety copy** on any row. Safety copies are never removed automatically and each one keeps a full second copy of the account on disk, so delete them once you are sure you no longer need them. Deleting the user removes their safety copies too.
+To free up space, click **Delete safety copy** on any row. Each safety copy keeps a full second copy of the account on disk until you delete it or delete the user, so delete them once you are sure you no longer need them.
