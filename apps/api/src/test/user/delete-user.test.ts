@@ -27,6 +27,9 @@ import {
     TEST_PNG_BYTES,
 } from '../setup';
 
+// list-members answers a page of 100, and one sequential run of the suite holds more users than that.
+const EVERY_MEMBER = 100_000;
+
 describe('Delete user', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let deleteTarget: { id: string; email: string; sessionToken: string };
@@ -163,7 +166,7 @@ describe('Delete user', () => {
         // Check: can admin still list members?
         const listRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}`,
+            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
         );
         expect(listRes.status).toBe(200);
         const data = await assertJson<{ members: OrgMember[] }>(listRes);
@@ -270,7 +273,7 @@ describe('Delete user', () => {
 
         const listRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}`,
+            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
         );
         expect(listRes.status).toBe(200);
     });
@@ -305,7 +308,7 @@ describe('Delete user', () => {
         // listMembers for the whole org
         const listRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}`,
+            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
         );
         expect(listRes.status).toBe(200);
     });
@@ -360,7 +363,7 @@ describe('Delete user', () => {
 
         const listRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}`,
+            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
         );
         expect(listRes.status).toBe(200);
     });
@@ -413,7 +416,7 @@ describe('Delete user', () => {
             .run();
         const brokenRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}`,
+            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
         );
         expect(brokenRes.status).toBe(500);
 
@@ -429,7 +432,7 @@ describe('Delete user', () => {
         expect(db.select().from(member).where(eq(member.userId, 'ghost-user-id')).all()).toHaveLength(0);
         const listRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}`,
+            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
         );
         expect(listRes.status).toBe(200);
     });
