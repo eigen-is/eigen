@@ -6,7 +6,7 @@ category: Basics
 tags: [self-hosting, install, requirements, server, memory, ports]
 related: [self-hosting/install, self-hosting/get-started]
 order: 20
-updated: 2026-10-02
+updated: 2026-10-12
 ---
 
 Eigen runs in Docker on one server. This page lists what that server needs before you [install Eigen](/support/self-hosting/install).
@@ -64,9 +64,11 @@ Which ports must be open to the internet depends on two setup answers.
 |---|---|
 | Eigen handles HTTPS | 80 and 443 (TCP) |
 | Your web server forwards to Eigen | None for Eigen. It listens on `127.0.0.1:8080` by default, and your web server keeps 80 and 443. |
-| Eigen hosts your mail | 25, 465, 587, and 993 (TCP) |
+| Eigen hosts your mail | 25, 465, 587, and 993 (TCP), on IPv4 |
 | Your mail stays with your current provider | None |
 
 Leave SSH (22) open too, or whatever port you use for it.
+
+The mail ports listen on IPv4 only, so hosting mail needs an IPv4 address. Mail servers and mail apps that try IPv6 first fall back to IPv4.
 
 Hosting mail also needs outgoing port 25, so Eigen can deliver to other mail servers. Some providers block it on new accounts. Then you send through a relay, which you also need when your mail stays with your current provider. See [Choose a mail relay](/support/self-hosting/mail-relay).
