@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { auth, authDeleteUserReferences } from '../auth/auth';
+import { requireHomeSlotFree } from '../backup/jobs';
 import { collectHomeObjects, forgetSafetyCopySize } from '../backup/safety-copy';
 import { getGuestHomePath, getUserHomePath } from '../config/paths';
 import { ApiError } from '../core';
@@ -18,6 +19,9 @@ import { getUserById } from './user';
 export async function teardownUserData(user: User): Promise<void> {
     // 1. Shut down cached Home singleton (closes databases, clears timeout)
     await evictHome(user.id);
+    // A restore, safety-copy delete or capture of this home must finish first: it may hold the only good copy.
+    // Nothing awaits between this check and the deletes, so no job can take the slot in between.
+    requireHomeSlotFree(user.id);
 
     // 2. Delete user's home directory and the safety copies a restore left beside it, then the bucket objects
     //    they name, in the background: a bucket that refuses must not keep the user.

@@ -22,6 +22,10 @@ import { parseSafetyCopyName, resolveMountDir } from './paths';
 // would act on.
 const MAX_WALKED_FILES = 50_000;
 
+// Deleting an owner's objects: how many DELETEs one bucket gets at once, and how many refusals in a row give it up.
+const OBJECT_DELETES_IN_FLIGHT = 8;
+const MAX_REFUSED_DELETES_IN_A_ROW = 10;
+
 type FolderSize = { bytes: number; truncated: boolean };
 
 // A safety copy never changes after the restore that made it, so it is measured once per process.
@@ -224,11 +228,24 @@ export function collectHomeObjects(homeDir: string): {
             for (const key of keys) bucket.keys.add(key);
         }
     }
-    // One DELETE in flight at a time; a failed one is counted and the rest go on, since nothing retries them.
+    // A failed DELETE is counted and the rest go on, since nothing retries them; a bucket that refuses a run of
+    // them is down or revoked, and its remaining keys count as failed rather than waiting out a timeout each.
     const deleteObjects = async (): Promise<number> => {
         let failed = 0;
         for (const { storage, keys } of buckets.values()) {
-            for (const key of keys) if (!(await storage.delete(key))) failed++;
+            const pending = [...keys];
+            let refusedInARow = 0;
+            for (let start = 0; start < pending.length; start += OBJECT_DELETES_IN_FLIGHT) {
+                const chunk = pending.slice(start, start + OBJECT_DELETES_IN_FLIGHT);
+                for (const deleted of await Promise.all(chunk.map((key) => storage.delete(key)))) {
+                    refusedInARow = deleted ? 0 : refusedInARow + 1;
+                    if (!deleted) failed++;
+                }
+                if (refusedInARow >= MAX_REFUSED_DELETES_IN_A_ROW) {
+                    failed += pending.length - start - chunk.length;
+                    break;
+                }
+            }
         }
         return failed;
     };
