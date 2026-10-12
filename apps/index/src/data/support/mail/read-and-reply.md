@@ -17,7 +17,7 @@ Click any message in the list to open it. It opens in the reading pane next to t
 
 Opening a message marks it as read.
 
-Images that a message loads from the internet are hidden when you open it, so the sender can't tell when you read it. A line above the message says **Remote images are hidden.** Click **Load images** to show them for that message. If you reply or forward before you load them, the quoted message leaves them out too.
+Images that a message loads from the internet are hidden when you open it, so the sender can't tell when you read it. A line above the message says **Remote images are hidden.** Click **Load images** to show them for that message. When you reply or forward, the quoted message keeps its text and links but never its images.
 
 On a narrow screen the message fills the window. Use the back arrow at the top to return to the list.
 

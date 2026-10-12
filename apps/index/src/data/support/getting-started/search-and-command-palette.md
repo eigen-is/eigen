@@ -79,7 +79,7 @@ The palette understands a couple of things you paste in:
 
 In Drive, select a file or folder first, then open the palette. The actions for that item appear at the top under a **Selection** heading, named after what you picked. From there you can **Share** it, **Rename** it, **Copy link** to it, **Download** it, **Move to trash**, and more, without leaving the keyboard.
 
-Inside a document, the palette acts on the document you have open. Type "download" to see a **Download as** row for each format the **File → Download** menu offers, such as **Download as Microsoft Word (.docx)**.
+Inside a document, the palette acts on the document you have open. Type "download" to see a row for each format the **File → Download** menu offers, named after the document, such as **Download Budget as Microsoft Word (.docx)**.
 
 <div class="eigen-callout">
 

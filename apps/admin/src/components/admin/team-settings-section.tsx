@@ -48,9 +48,10 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
 
     const updateTeam = useUpdateTeam(organizationId);
 
-    const { data: calendars = [] } = useCalendars(ownerId);
-    const updateCalendar = useUpdateCalendar(ownerId);
     const { data: settings } = useTeamSettings(team.id);
+    // A team with its calendar off has no calendar list to fetch: the route answers 404.
+    const { data: calendars = [] } = useCalendars(ownerId, !!settings && settings.calendar?.enabled !== false);
+    const updateCalendar = useUpdateCalendar(ownerId);
     const updateSettings = useUpdateTeamSettings(team.id);
     const homeDataLabel = useHomeDataLabel();
     const uploadAvatar = useUploadTeamAvatar(team.id);

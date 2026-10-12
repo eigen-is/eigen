@@ -5,6 +5,7 @@ import type { AddressObject } from '@workspace/lib/types/mail';
 import { ChevronDown } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
 import { cn } from '../../lib/utils';
+import { Button } from '../button';
 import { ABOVE_PREVIEW_Z } from '../dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
 import { useOptionalPreview } from '../preview-provider/preview-context';
@@ -89,13 +90,15 @@ export function MessageView({
                     {onLoadRemoteImages && (
                         <>
                             {' '}
-                            <button
+                            <Button
                                 type="button"
-                                className="text-foreground hover:underline"
+                                variant="link"
+                                size="xs"
+                                className="h-auto px-0 text-foreground"
                                 onClick={onLoadRemoteImages}
                             >
                                 Load images
-                            </button>
+                            </Button>
                         </>
                     )}
                 </p>

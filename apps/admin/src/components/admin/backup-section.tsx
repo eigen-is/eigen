@@ -18,7 +18,7 @@ import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { BackupArtifactRow, VerifyBadge, VerifyFailures, VerifyWarnings } from './backup-artifact-row';
+import { BackupArtifactRow, VerifyBadge, VerifyFailures, VerifyLines, VerifyWarnings } from './backup-artifact-row';
 import { BackupJobStatus } from './backup-job-status';
 
 const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
@@ -280,11 +280,7 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                 </p>
             ))}
             {/* Still restorable: what it lacks, the live home cannot serve either. */}
-            {artifact.manifest?.warnings?.map((warning) => (
-                <p key={warning} className="text-xs text-warning pl-7">
-                    {warning}
-                </p>
-            ))}
+            <VerifyLines lines={artifact.manifest?.warnings ?? []} tone="warning" />
             {/* Verified all the same: a file row that does not describe its bytes. */}
             <VerifyWarnings verify={artifact.verify} />
             <VerifyFailures verify={artifact.verify} />

@@ -1,10 +1,12 @@
 // One React root for every hook that has to be rendered to be observed. Call `installHappyDom()` first:
-// react-dom renders into its document.
+// react-dom renders into its document. `wrap` puts the providers a hook reads around it.
 import type { QueryClient } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 export async function renderHook<T>(
     use: () => T,
     queryClient: QueryClient,
+    wrap: (children: ReactNode) => ReactNode = (children) => children,
 ): Promise<{ latest: T; unmount: () => Promise<void> }> {
     const { act, createElement } = await import('react');
     const { createRoot } = await import('react-dom/client');
@@ -17,7 +19,7 @@ export async function renderHook<T>(
     }
     const root = createRoot(document.createElement('div'));
     await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
+        root.render(createElement(QueryClientProvider, { client: queryClient }, wrap(createElement(Harness, null))));
     });
     // Unmount inside act too: React's scheduler would otherwise run the teardown after the test,
     // when the DOM globals are already gone.

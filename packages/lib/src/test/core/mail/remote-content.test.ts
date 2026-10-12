@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { cssFetches, restrictSheet, stripRemoteContent } from '../../../core/mail/remote-content';
+import { restrictSheet, stripRemoteContent } from '../../../core/mail/remote-content';
 
 // The reader's strip parses with DOMParser: jsdom's, which builds an SVG <style> as a browser does, where
 // happy-dom drops it and everything after it.
@@ -13,7 +13,7 @@ afterAll(() => {
 const HOST = 'tracker.example';
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
 
-describe('cssFetches', () => {
+describe('restrictSheet', () => {
     test('every token that fetches is refused, however it is spelled', () => {
         for (const css of [
             `background:url(https://${HOST}/a.png)`,
@@ -26,20 +26,22 @@ describe('cssFetches', () => {
             `background:cross-fade(url(${PNG}), url(${PNG}), 50%)`,
             `background:url(data:image/svg+xml,%3Csvg%3E%3C/svg%3E)`,
         ]) {
-            expect(cssFetches(css)).toBe(true);
+            expect(restrictSheet(`.x{${css}}`)).toBe('');
         }
     });
 
     test('a raster data: image and plain layout fetch nothing', () => {
-        expect(cssFetches(`background:url(${PNG})`)).toBe(false);
-        expect(cssFetches(`background:url( 'data:image/jpeg;base64,/9j/4AAQ' )`)).toBe(false);
-        expect(cssFetches('color:#333;width:600px;font-family:Arial,sans-serif')).toBe(false);
-        // A name is no function token.
-        expect(cssFetches('.cross-fade{transition:opacity 1s}.image-set{color:red}')).toBe(false);
+        for (const sheet of [
+            `.x{background:url(${PNG})}`,
+            `.x{background:url( 'data:image/jpeg;base64,/9j/4AAQ' )}`,
+            '.x{color:#333;width:600px;font-family:Arial,sans-serif}',
+            // A name is no function token.
+            '.cross-fade{transition:opacity 1s}.image-set{color:red}',
+        ]) {
+            expect(restrictSheet(sheet)).toBe(sheet);
+        }
     });
-});
 
-describe('restrictSheet', () => {
     test('only the statements that fetch go', () => {
         const sheet = `.hero{background:url(https://${HOST}/hero.png)}.wide{width:900px}@import "https://${HOST}/s.css";@media (max-width:600px){.wide{width:100%}}`;
         expect(restrictSheet(sheet)).toBe('.wide{width:900px}@media (max-width:600px){.wide{width:100%}}');
