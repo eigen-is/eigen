@@ -116,6 +116,8 @@ The preview routes feed Drive's bytes-in renderers, so the quick look draws a ma
 
 `POST /mail/deliver/:to` is unauthenticated but `requireLocalhost`, for Postfix. It appends the bytes to the INBOX and scans them for iMIP ([CALENDAR.md § Inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified)). Mail to `postmaster`, `abuse` or `noreply` (`isRoleAddress`) goes to every org admin, so DMARC reports and bounces reach a human. No account and no guest can claim those addresses.
 
+`requireLocalhost` (`lib/core/access.ts`) admits a direct caller from loopback or `TRUSTED_NETWORKS`, the `eigen` subnet compose passes, and refuses any request Caddy proxied. It leaves out the subnet's gateway, which it reads from the default route at startup the way the Postfix entrypoint does (`lib/core/route-table.ts`). A user on the host reaches the API from that gateway, and could otherwise post mail with a forged `Authentication-Results`, ask `/internal/auth/verify` about a password for any client IP, or raise a queue alert. When a second network's default route wins, the gateway is unknown and the API stops trusting the subnet, as Postfix does. Without a route table, on macOS, nothing is left out.
+
 An imported `.eml` is not an [arrival](IMAP.md#only-a-delivered-message-is-new-mail). It lands unread, and no notification shows a stranger's name for the user's own action. It never runs iMIP: the file has no DKIM verdict this server recorded, so an invitation inside it can't touch the calendar.
 
 ## See also
