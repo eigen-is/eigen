@@ -88,6 +88,8 @@ The app sends to `postfix:25` without authenticating. External clients submit on
 
 Port 25 relays without a login only for `mynetworks`: loopback and the `eigen` bridge subnet minus its gateway (`docker/postfix/entrypoint.sh`). A client of a published port can reach Postfix from that gateway: the host itself, Docker Desktop, rootless Docker, and on Linux every IPv6 client, which docker-proxy forwards because the network is IPv4-only. Trusting the gateway would make Postfix an open relay for all of them. OpenDKIM's `InternalHosts` leaves it out too, or it would sign their forged mail from our domain. A program on the host submits on 587 with a login, like any other client.
 
+The entrypoint learns the gateway from the container's default route, and only when that route leaves through the subnet's interface. An override that attaches Postfix to a second network whose default route wins would otherwise exclude that network's gateway and trust ours again. Then the gateway is unknown, so Postfix trusts loopback only and warns, and the app can't send to other servers until the `eigen` network carries the default route.
+
 Password guessing meets three layers:
 
 - The API counts failures per address and per client IP in a 15-minute window (`protocol-rate-limit.ts`). A valid app password is checked first, so a full bucket never locks one out.

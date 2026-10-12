@@ -11,19 +11,29 @@ export MAIL_DOMAIN
 # DKIM-signed. EIGEN_SUBNET comes from docker-compose.yml, kept in step with the `eigen` network.
 # Unset → loopback only (fail closed), never the whole 172.16/12 range.
 # The subnet's gateway is excluded: a client of a published port can arrive from it (the host
-# itself, Docker Desktop, rootless Docker, and every IPv6 client through docker-proxy), and would
-# otherwise relay. It is the container's default route, read from /proc/net/route (little-endian
-# hex), since the image has no `ip`; without one the gateway is unknown, so loopback only.
+# itself, Docker Desktop, rootless Docker), and would otherwise relay. It is the gateway of the
+# container's default route when that route leaves through the subnet's interface, read from
+# /proc/net/route (little-endian hex), since the image has no `ip`. Otherwise, as when an override
+# attaches a second network whose default route wins, the gateway is unknown, so loopback only.
 MAIL_TRUST_NETWORKS="127.0.0.0/8"
 BRIDGE_GATEWAY=""
 if [ -n "${EIGEN_SUBNET:-}" ]; then
-    gateway_hex=$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)
+    IFS=. read -r a b c d <<EOF
+${EIGEN_SUBNET%/*}
+EOF
+    mask=$(((0xFFFFFFFF << (32 - ${EIGEN_SUBNET#*/})) & 0xFFFFFFFF))
+    subnet_hex=$(printf '%02X%02X%02X%02X' "$d" "$c" "$b" "$a")
+    mask_hex=$(printf '%02X%02X%02X%02X' $((mask & 255)) $((mask >> 8 & 255)) $((mask >> 16 & 255)) $((mask >> 24)))
+    gateway_hex=$(awk -v net="$subnet_hex" -v mask="$mask_hex" '
+        $2 == net && $8 == mask && $3 == "00000000" { subnet_if = $1 }
+        $2 == "00000000" && $8 == "00000000" && default_if == "" { default_if = $1; default_gw = $3 }
+        END { if (subnet_if != "" && subnet_if == default_if) print default_gw }' /proc/net/route)
     if [ -n "$gateway_hex" ]; then
         # shellcheck disable=SC2046 # four hex bytes, split on purpose
         BRIDGE_GATEWAY=$(printf '%d.%d.%d.%d' $(echo "$gateway_hex" | sed 's/\(..\)\(..\)\(..\)\(..\)/0x\4 0x\3 0x\2 0x\1/'))
         MAIL_TRUST_NETWORKS="127.0.0.0/8 !${BRIDGE_GATEWAY} ${EIGEN_SUBNET}"
     else
-        echo "WARNING: no default route, so no bridge gateway to exclude; trusting loopback only."
+        echo "WARNING: the default route does not leave through ${EIGEN_SUBNET}, so its gateway is unknown; trusting loopback only, and eigen-api cannot relay through port 25. Give the eigen network the highest gw_priority."
     fi
 fi
 export MAIL_TRUST_NETWORKS
