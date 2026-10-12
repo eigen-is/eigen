@@ -15,6 +15,7 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { Semaphore } from '../../utils/semaphore';
 import { captureBytes, type SnapshotProgress, snapshotHome } from '../backup/snapshot-home';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
@@ -142,18 +143,33 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
         case 'notification':
             if (home instanceof TeamHome) {
                 const members = await home.membersToNotify(message.notification.actorEmail);
-                await Promise.all(
-                    members.map((member) =>
-                        sendToHome(member.id, message).catch((err) =>
-                            console.error(`home-relay: notifying ${member.id} for ${targetUserId} failed:`, err),
-                        ),
-                    ),
+                await sendToUserHomes(
+                    members.map((member) => member.id),
+                    message,
                 );
             } else {
                 home.notifications?.persist(message.notification);
             }
             break;
     }
+}
+
+// Every fan-out that opens other homes shares this budget, since an open holds ~25–30 fds. Only deliveries to
+// user homes take it, and those relay no further, so a delivery never waits on a permit its own fan-out holds.
+const HOME_DELIVERIES_IN_FLIGHT = 8;
+const deliveryBudget = new Semaphore(HOME_DELIVERIES_IN_FLIGHT);
+
+// One message to each of these user homes within the budget; a failed delivery is logged and the rest go on.
+export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    await Promise.all(
+        [...userIds].map((id) =>
+            deliveryBudget.run(() =>
+                sendToHome(id, message).catch((err) =>
+                    console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
+                ),
+            ),
+        ),
+    );
 }
 
 // One fan-out for the chat and drive broadcasters, so their null-guard and catch behavior cannot drift apart.
