@@ -4,7 +4,7 @@ import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { assertJson, authedRequest, driveGet, drivePost, getTestContext } from '../setup';
+import { assertJson, authedRequest, driveGet, drivePost, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -64,9 +64,8 @@ describe('Access-request email', () => {
 
         const doc = await createDoc('access-request-on');
         await requestAccess(doc.id, { message: 'Please' });
-        await new Promise((r) => setTimeout(r, 100));
 
-        const calls = toAlice();
+        const calls = await eventually(async () => (toAlice().length > 0 ? toAlice() : undefined), 'the mail');
         expect(calls.length).toBe(1);
         expect(calls[0][0].subject).toContain(ctx.bob.user.name);
         expect(calls[0][0].html).toContain('Please');
@@ -75,7 +74,9 @@ describe('Access-request email', () => {
         const notifs = await assertJson<Notification[]>(
             await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`),
         );
-        const req = notifs.find((n) => n.type === 'access-request' && n.actorEmail === ctx.bob.user.email);
+        const req = notifs.find(
+            (n) => n.tag === `access-request:${ctx.alice.user.id}:${aliceMountId}:${doc.id}:${ctx.bob.user.email}`,
+        );
         expect(req?.title).toBe(`${ctx.bob.user.name} requested access`);
         expect(req?.body).toBe('access-request-on');
         expect(req?.details).toEqual({ message: 'Please', pathType: 'doc' });
@@ -89,9 +90,10 @@ describe('Access-request email', () => {
         const other = await createDoc('access-request-repeat-other');
         for (let i = 0; i < 5; i++) await requestAccess(doc.id);
         await requestAccess(other.id);
-        await new Promise((r) => setTimeout(r, 100));
 
-        expect(toAlice().length).toBe(2);
+        expect(
+            await eventually(async () => (toAlice().length >= 2 ? toAlice() : undefined), 'both mails'),
+        ).toHaveLength(2);
         spy.mockRestore();
     });
 

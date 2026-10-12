@@ -48,6 +48,10 @@ Team routes take `:ownerId` in its `team_{teamId}` form, not the bare team id. E
 
 No team user ever logs in, so team members always reach team data through `SharedDrive`, where they count as co-owners ([ACL.md § Design Decisions](ACL.md#design-decisions)).
 
+## A notification to a team goes to its members
+
+No one signs in as a team, so a notification addressed to a team id goes to every member except the actor, and so does its email. Only an access request on a team-owned path is addressed to a team ([GUEST-ACCESS.md](GUEST-ACCESS.md#an-access-request-notifies-the-owner-and-never-reveals-the-path)). The team's `notifyMembers` setting (missing means on) turns both off, from the admin team detail page. The default team holds every new user, so a request on its drive reaches nearly everyone, and an admin who finds that too loud switches it off there.
+
 ## A team avatar is one file, and the admin page busts its cache
 
 Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by `requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`, written via `pushTeamAvatar` in `home-relay.ts`. File existence is the only source of truth: no settings pointer, no schema column. Deleting the team removes the file (`afterDeleteTeam`). Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG, with the same 24h public `Cache-Control` as user avatars.

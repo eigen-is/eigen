@@ -9,6 +9,7 @@ import { ApiError, JsonStore, LocalFilesystem, PATHS } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
 import { checkS3Connection } from '../storage/s3-storage';
+import { getTeamMembers } from '../team';
 import { makeSyntheticUser, type User } from '../user';
 import { Home } from './home';
 
@@ -46,6 +47,15 @@ export class TeamHome extends Home {
             throw new ApiError(404, 'Team calendar is disabled');
         }
         return this._calendar;
+    }
+
+    // A team home has no notification center, so a notification relayed to it goes to these members instead.
+    async membersToNotify(actorEmail?: string | null): Promise<User[]> {
+        if (this.settings.get().notifyMembers === false) return [];
+        const members = await getTeamMembers(this.teamId);
+        return members
+            .map((member) => member.user)
+            .filter((member) => member.email.toLowerCase() !== actorEmail?.toLowerCase());
     }
 
     async addMount(input: {

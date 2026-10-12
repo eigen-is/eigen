@@ -64,7 +64,7 @@ Each `notifications.email` flag turns one email on or off. The in-app notificati
 | `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | The email is the guest's only way in ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 | `userOnAclAdd` | off | A registered user is added to an ACL | The bell already tells them |
 | `userOnCalendarInvite` | on | An Eigen user is invited to an event | An invitation is time-sensitive, and Google and Outlook mail it too |
-| `ownerOnAccessRequest` | on | Someone asks for access to a user's path | A team-owned path sends no email |
+| `ownerOnAccessRequest` | on | Someone asks for access to a path: the user who owns it, or each member of the team that owns it while the team's `notifyMembers` is on | A mail reaches an owner who doesn't have Eigen open |
 
 The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts` and the invite flag in `invite-propagation.ts`. See [ACL.md](ACL.md).
 
