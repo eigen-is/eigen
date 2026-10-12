@@ -9,18 +9,19 @@ import {
     readRouteTable,
     scopeTrustedNetworks,
     type TrustedNetworks,
-} from './route-table';
+} from './trusted-networks';
 
 const DEFAULT_TRUSTED = '127.0.0.0/8,::1';
 
-// Read once, at startup, as the postfix entrypoint does.
-let routes = readRouteTable();
+// Read once, on first use rather than at import, since the core barrel re-exports this module.
+let routes: Route[] | null = null;
 let trust: (TrustedNetworks & { source: string }) | null = null;
 
 function trustedNetworks(): TrustedNetworks {
     const source = process.env['TRUSTED_NETWORKS'] || DEFAULT_TRUSTED;
     if (trust?.source !== source) {
         const entries = source.split(',').map((entry) => entry.trim());
+        routes ??= readRouteTable();
         trust = { source, ...scopeTrustedNetworks(entries, routes) };
         for (const network of trust.untrusted) {
             console.warn(

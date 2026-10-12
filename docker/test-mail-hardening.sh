@@ -67,6 +67,11 @@ setTimeout(() => socket.destroy(), 10000).unref();
 ' 2>/dev/null || true
 }
 
+# A message from $1 to Alice's local mailbox with subject $2, for either sender above.
+local_dialog() {
+    printf '%s' "EHLO $HELO_NAME\nMAIL FROM:<$1>\nRCPT TO:<$ALICE_EMAIL>\nDATA\nFrom: $1\nTo: $ALICE_EMAIL\nSubject: $2\n\nprobe\n.\nQUIT\n"
+}
+
 # The `eigen` network's gateway as Docker reports it for the postfix container. The network's IPAM config
 # names it only when compose set one, which it does not.
 bridge_gateway() {
@@ -672,13 +677,10 @@ if should_run 16; then
         sed -n 's/.*RCPT from [^[]*\[\([^]]*\)\].*/\1/p' || true)
     dc exec -T postfix sh -c 'postconf -e "defer_transports=smtp eigen" && postfix reload' >/dev/null 2>&1
     forged="postmaster@$MAIL_DOMAIN"
-    local_dialog() {
-        printf '%s' "EHLO $HELO_NAME\nMAIL FROM:<$forged>\nRCPT TO:<$ALICE_EMAIL>\nDATA\nFrom: $forged\nTo: $ALICE_EMAIL\nSubject: $1\n\nprobe\n.\nQUIT\n"
-    }
     host_subject="gateway-dkim-probe-$RUN"
     api_subject="api-dkim-probe-$RUN"
-    queued_from_host=$(smtp25 "$(local_dialog "$host_subject")") || true
-    smtp25_from_api "$(local_dialog "$api_subject")" >/dev/null
+    queued_from_host=$(smtp25 "$(local_dialog "$forged" "$host_subject")") || true
+    smtp25_from_api "$(local_dialog "$forged" "$api_subject")" >/dev/null
     host_queued=''
     api_queued=''
     for _ in $(seq 1 30); do

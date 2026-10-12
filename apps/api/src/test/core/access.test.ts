@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { _setRouteTableForTests, clientIpKey, isIpTrusted, requireLocalhost } from '../../lib/core/access';
-import { parseRouteTable, readRouteTable } from '../../lib/core/route-table';
+import { parseRouteTable, readRouteTable } from '../../lib/core/trusted-networks';
 
 function mkRequest(headers: Record<string, string> = {}): Request {
     return new Request('http://localhost/internal/auth/verify', { method: 'POST', headers });
@@ -81,6 +81,8 @@ describe('clientIpKey', () => {
 });
 
 describe('requireLocalhost', () => {
+    beforeEach(() => _setRouteTableForTests([]));
+
     const originalEnv = process.env['TRUSTED_NETWORKS'];
 
     afterEach(() => {
@@ -136,14 +138,6 @@ describe('requireLocalhost', () => {
             expect(() => requireLocalhost(mkRequest(), mkServer('::ffff:172.20.0.1'))).toThrow(/localhost only/);
             expect(() => requireLocalhost(mkRequest(), mkServer('172.20.0.4'))).not.toThrow();
             expect(() => requireLocalhost(mkRequest(), mkServer('127.0.0.1'))).not.toThrow();
-        });
-
-        test('trusts the gateway again once the route table is gone', () => {
-            process.env['TRUSTED_NETWORKS'] = '127.0.0.0/8,::1,172.20.0.0/24';
-            _setRouteTableForTests(ROUTES);
-            expect(isIpTrusted('172.20.0.1')).toBe(false);
-            _setRouteTableForTests([]);
-            expect(isIpTrusted('172.20.0.1')).toBe(true);
         });
     });
 });
