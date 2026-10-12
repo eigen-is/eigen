@@ -1,12 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
 import { isCompleteArchive } from '@workspace/lib/validation';
 import * as archive from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
+import * as jobs from '../../lib/backup/jobs';
 import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
 import {
     buildHomeFolderName,
@@ -31,7 +32,7 @@ import { ApiError, PATHS } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
-import { countLoopTurns, createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
+import { countLoopTurns, createTeam, createTestUser, findOrFail, getTestContext, type TestContext } from '../setup';
 import {
     alertTitlesTo,
     expectRealShapeServed,
@@ -47,6 +48,7 @@ import {
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
 const JOB_TIMEOUT_MS = 120_000;
 const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
+const waitForHomeSlot = jobs.waitForHomeSlot;
 const packFolder = archive.packFolder;
 const createArchiveWriter = archive.createArchiveWriter;
 
@@ -287,6 +289,47 @@ describe('Server backup job', () => {
         JOB_TIMEOUT_MS,
     );
 
+    test(
+        "a home's verify warnings are in its row, beside its capture's",
+        async () => {
+            quietRelay();
+            const user = await createTestUser(`verify-warned-${Date.now()}@test.eigen.is`, 'testpassword123', 'VW');
+            const home = await getHome(user.id);
+            const [mount] = home.drive.getMounts();
+            const rootId = (await mount.getRootFolder())!.id;
+            const bytes = new TextEncoder().encode('sixsix');
+            const fileId = await mount.createFile(rootId, 'six.txt', 'text/plain', bytes.byteLength, bytes);
+            spies.push(
+                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                    const manifest = await pullHomeSnapshot(ownerId, dir, options);
+                    if (ownerId !== user.id) return manifest;
+                    // A row that no longer describes its bytes, restated so only the row is left to judge.
+                    const folder = join(dir, buildHomeFolderName(ownerId));
+                    const relMetadata = `home/mounts/${mount.id}/${PATHS.DRIVE.METADATA_DB}`;
+                    const db = new Database(join(folder, relMetadata));
+                    db.run('UPDATE paths SET size = 1 WHERE id = ?', [fileId]);
+                    db.close();
+                    const metadata = readFileSync(join(folder, relMetadata));
+                    const entry = findOrFail(manifest.entries, (candidate) => candidate.path === relMetadata);
+                    entry.bytes = metadata.byteLength;
+                    entry.sha256 = new Bun.CryptoHasher('sha256').update(metadata).digest('hex');
+                    writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+                    return manifest;
+                }),
+            );
+            try {
+                const { job, archivePath } = await runJob();
+                expect(job.state).toBe('done');
+                const row = (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === user.id);
+                expect(row?.member).toBeDefined();
+                expect(row?.warnings).toEqual([`home/mounts/${mount.id}/data/six.txt: 6 bytes, its row says 1`]);
+            } finally {
+                await deleteUserCompletely(user.id, null);
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test('warned nights never push out the last complete archive, and rotate at keep', async () => {
         removeServerRecords();
         const night = (day: number, outcome: 'complete' | 'warned') => {
@@ -317,10 +360,11 @@ describe('Server backup job', () => {
             const doomed = await createTestUser(`doomed-${Date.now()}@test.eigen.is`, 'testpassword123', 'Doomed');
             const deleted = doomed.id;
             await getHome(deleted);
+            // Just before the job takes the home's slot: during the capture the deletion answers 409.
             spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                spyOn(jobs, 'waitForHomeSlot').mockImplementation(async (ownerId, holder) => {
                     if (ownerId === deleted) await deleteUserCompletely(deleted, null);
-                    return pullHomeSnapshot(ownerId, dir, options);
+                    return waitForHomeSlot(ownerId, holder);
                 }),
             );
             const { job, archivePath } = await runJob();
@@ -340,23 +384,29 @@ describe('Server backup job', () => {
     );
 
     test(
-        'a home deleted mid-capture, whatever the capture then throws, is skipped',
+        'deleting a user mid-capture answers 409, and the home is archived',
         async () => {
             quietRelay();
-            const doomed = await createTestUser(`mid-capture-${Date.now()}@test.eigen.is`, 'testpassword123', 'Gone');
-            await getHome(doomed.id);
+            const kept = await createTestUser(`mid-capture-${Date.now()}@test.eigen.is`, 'testpassword123', 'Kept');
+            await getHome(kept.id);
+            let refused: unknown = null;
             spies.push(
                 spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
-                    if (ownerId !== doomed.id) return pullHomeSnapshot(ownerId, dir, options);
-                    await deleteUserCompletely(doomed.id, null);
-                    throw new Error('Database has closed');
+                    if (ownerId === kept.id) refused = await deleteUserCompletely(kept.id, null).catch((e) => e);
+                    return pullHomeSnapshot(ownerId, dir, options);
                 }),
             );
-            const { job, archivePath } = await runJob();
-            expect(job.error).toBeUndefined();
-            expect(job.state).toBe('done');
-            const home = (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === doomed.id);
-            expect(home?.skipped).toBe('deleted during the backup');
+            try {
+                const { job, archivePath } = await runJob();
+                expect(job.state).toBe('done');
+                expect(refused).toBeInstanceOf(ApiError);
+                expect(refused).toMatchObject({ status: 409 });
+                const home = (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === kept.id);
+                expect(home?.member).toBeDefined();
+                expect(home?.skipped).toBeUndefined();
+            } finally {
+                await deleteUserCompletely(kept.id, null);
+            }
         },
         JOB_TIMEOUT_MS,
     );
