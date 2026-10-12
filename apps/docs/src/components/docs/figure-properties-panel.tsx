@@ -1,10 +1,7 @@
 import { type Editor, useEditorState } from '@tiptap/react';
 import { readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import { isImageMime } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { Input } from '@workspace/ui/components/input';
 import {
     AlignmentPicker,
@@ -15,17 +12,20 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
 import { useState } from 'react';
+import { clampFigureWidth, figureMaxWidth } from './extensions/figure';
 
-// Alt or Cap. Enter or a blur writes a changed value; Enter leaves the caret in the field, so the blur after it
-// finds nothing new. While it has focus it shows its draft, so a transaction that moves the figure, a
-// collaborator typing above it, neither resets nor blurs it.
-function FigureTextField({
+// Alt, Cap or Width. Enter or a blur writes a changed value, and Escape drops it; both leave the caret in the field,
+// showing the value as written, so the blur after them finds nothing new. While it has focus it shows its draft, so
+// a transaction that moves the figure, a collaborator typing above it, neither resets nor blurs it.
+function FigureField({
     value,
     placeholder,
+    type,
     onCommit,
 }: {
     value: string;
-    placeholder: string;
+    placeholder?: string;
+    type?: 'number';
     onCommit: (value: string) => void;
 }) {
     const [draft, setDraft] = useState<string | null>(null);
@@ -33,6 +33,7 @@ function FigureTextField({
     return (
         <Input
             className="h-7 text-xs"
+            type={type}
             value={draft ?? value}
             placeholder={placeholder}
             onFocus={() => setDraft(value)}
@@ -42,7 +43,9 @@ function FigureTextField({
                 setDraft(null);
             }}
             onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.nativeEvent.isComposing) commit(e.currentTarget.value);
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === 'Enter') commit(e.currentTarget.value);
+                if (e.key === 'Enter' || e.key === 'Escape') setDraft(null);
             }}
         />
     );
@@ -50,19 +53,18 @@ function FigureTextField({
 
 type FigurePropertiesPanelProps = {
     editor: Editor;
-    onReplaceImage: (file: File) => void;
-    onReplaceImageFromDrive?: (paths: DrivePath[]) => void;
+    onReplaceImage: () => void;
 };
 
-export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFromDrive }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
-    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
-    const { layout, alignment, alt, caption, mediaName } = useEditorState({
+    const { width, layout, alignment, alt, caption, mediaName } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const attrs = readFigureAttrs(e.getAttributes('figure'));
             return {
+                width: attrs.width,
                 layout: attrs.layout || 'block',
                 alignment: attrs.alignment || 'center',
                 alt: attrs.alt || '',
@@ -82,6 +84,25 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
                     </div>
                 </div>
             )}
+
+            <PropertySection title="Size">
+                <PropertyRow label="Width">
+                    <div className="flex items-center gap-1.5">
+                        <FigureField
+                            type="number"
+                            value={String(width ?? '')}
+                            onCommit={(value) => {
+                                const next = Number(value);
+                                if (!value || !Number.isFinite(next)) return;
+                                editor.commands.updateFigure({
+                                    width: clampFigureWidth(next, figureMaxWidth(editor.view.dom, layout)),
+                                });
+                            }}
+                        />
+                        <span className="text-xs text-muted-foreground">px</span>
+                    </div>
+                </PropertyRow>
+            </PropertySection>
 
             <PropertySection title="Layout">
                 <PropertyRow label="Style">
@@ -118,32 +139,23 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
 
             <PropertySection title="Image">
                 <PropertyRow label="Alt">
-                    <FigureTextField
+                    <FigureField
                         value={alt}
                         placeholder="Alt text"
                         onCommit={(value) => editor.commands.updateFigure({ alt: value || null })}
                     />
                 </PropertyRow>
                 <PropertyRow label="Cap">
-                    <FigureTextField
+                    <FigureField
                         value={caption}
                         placeholder="Caption"
                         onCommit={(value) => editor.commands.updateFigure({ caption: value || null })}
                     />
                 </PropertyRow>
-                <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setReplacePickerOpen(true)}>
+                <Button variant="outline" size="sm" className="w-full mt-1" onClick={onReplaceImage}>
                     <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                     Replace image
                 </Button>
-                <DrivePickerWithUpload
-                    open={replacePickerOpen}
-                    onOpenChange={setReplacePickerOpen}
-                    title="Replace image"
-                    canPick={(item) => isImageMime(item.mimeType)}
-                    onPickFromDrive={(paths) => onReplaceImageFromDrive?.(paths)}
-                    onPickFromDevice={(files) => files[0] && onReplaceImage(files[0])}
-                    accept="image/*"
-                />
             </PropertySection>
         </PropertiesPanel>
     );

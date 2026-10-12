@@ -8,43 +8,30 @@ order: 20
 updated: 2026-09-13
 ---
 
-Chat has two kinds of rooms: personal rooms that you own and share yourself, and team rooms that belong to a
-team and are open to every team member. Both appear in the same sidebar, and messaging works the same way in
-both. The difference is in who has access and who controls it.
+Chat has two kinds of rooms: personal rooms that you own and share yourself, and team rooms that belong to a team and are open to every team member. Both appear in the same sidebar, and messaging works the same way in both. The difference is in who has access and who controls it.
 
 ## Personal chat rooms
 
-A personal room lives in your Drive. You create it, you name it, and you decide who can read or write in it.
-The people you pick when you create it get access straight away.
+A personal room lives in your Drive. You create it, you name it, and you decide who can read or write in it. The people you pick when you create it get access straight away.
 
-To give other people access, open the room and click the **Share** button in the toolbar at the top. The
-sharing dialog lets you add people by email address and set them as **Viewer** or **Editor**. The toolbar also
-shows small avatars for everyone who has access to the room, so you can see at a glance who's in it.
+To give other people access, open the room and click the **Share** button in the toolbar at the top. The sharing dialog lets you add people by email address and set them as **Viewer** or **Editor**. The toolbar also shows small avatars for everyone who has access to the room, so you can see at a glance who's in it.
 
 Personal rooms appear at the top of the sidebar, without a section heading.
 
 ## Team chat rooms
 
-A team room belongs to a team. Any team member can see every room the team has, without needing to be added
-individually. If your organization has several teams, you can be in rooms for each of them.
+A team room belongs to a team. Any team member can see every room the team has, without needing to be added individually. If your organization has several teams, you can be in rooms for each of them.
 
-When you open a team room, the toolbar shows the team's avatar rather than a list of individuals. You cannot
-change the access list for a team room the same way you can for a personal room: access follows team
-membership. Adding or removing someone from a team room means changing their team membership, which
-requires admin access.
+When you open a team room, the toolbar shows the team's avatar rather than a list of individuals. You cannot change the access list for a team room the same way you can for a personal room: access follows team membership. Adding or removing someone from a team room means changing their team membership, which requires admin access.
 
-Team rooms appear in the **Team Chats** section of the sidebar, separated from your personal rooms by a
-divider. The section only appears if you belong to at least one team that has chat rooms.
+Team rooms appear in the **Team Chats** section of the sidebar, separated from your personal rooms by a divider. The section only appears if you belong to at least one team that has chat rooms.
 
 ## Unread indicators
 
-Both personal and team rooms show a small dot on their sidebar icon when there are messages you haven't read.
-Chat clears the dot automatically when you open the room.
+Both personal and team rooms show a small dot on their sidebar icon when there are messages you haven't read. Chat clears the dot automatically when you open the room.
 
 ## Create a new room
 
-Click **New chat** at the top of the sidebar to create a room. In the dialog that opens, add the people you want
-to chat with, then confirm the name and the location. To make a team room instead, click **Team chat** in the
-bottom-left of the dialog and pick the team.
+Click **New chat** at the top of the sidebar to create a room. In the dialog that opens, add the people you want to chat with, then confirm the name and the location. To make a team room instead, click **Team chat** in the bottom-left of the dialog and pick the team.
 
 See [Create a chat room](/support/chat/create-room) for step-by-step instructions.

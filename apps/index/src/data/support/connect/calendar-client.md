@@ -10,27 +10,21 @@ order: 40
 updated: 2026-09-22
 ---
 
-Eigen Calendar syncs over CalDAV, so you can keep your events in step with Apple Calendar, Thunderbird, or any
-other CalDAV-compatible app on your computer or phone.
+Eigen Calendar syncs over CalDAV, so you can keep your events in step with Apple Calendar, Thunderbird, or any other CalDAV-compatible app on your computer or phone.
 
 ## Before you start
 
 You need two things: the CalDAV server address, and an app password.
 
-**Find the server address.** Open the [**Integrations** page](/space/services) in Space and look at the
-**CalDAV (Calendar sync)** section. Three kinds of address are listed there:
+**Find the server address.** Open the [**Integrations** page](/space/services) in Space and look at the **CalDAV (Calendar sync)** section. Three kinds of address are listed there:
 
 - **Server URL**: the address to use in most CalDAV clients.
-- **Server URL (Thunderbird)**: a longer address that points directly to your calendar collection. Use this
-  one in Thunderbird and in any other client that does not follow CalDAV auto-discovery.
-- **Calendar — …**: one address per calendar, named after it. Use it to add a single calendar to a client
-  that subscribes to calendars one at a time, or to add a calendar you created after you connected.
+- **Server URL (Thunderbird)**: a longer address that points directly to your calendar collection. Use this one in Thunderbird and in any other client that does not follow CalDAV auto-discovery.
+- **Calendar — …**: one address per calendar, named after it. Use it to add a single calendar to a client that subscribes to calendars one at a time, or to add a calendar you created after you connected.
 
 Copy the address from the page rather than typing it. A single wrong character stops the connection.
 
-**Generate an app password.** App passwords are separate credentials you give to external clients instead of
-your main Eigen password. If you have two-factor authentication switched on, an app password is required;
-your main password will not work for CalDAV.
+**Generate an app password.** App passwords are separate credentials you give to external clients instead of your main Eigen password. If you have two-factor authentication switched on, an app password is required; your main password will not work for CalDAV.
 
 1. On the same [**Integrations** page](/space/services), scroll down to **App passwords**.
 2. Type a name in the field, such as `Apple Calendar` or `My phone`, then click **Generate**.
@@ -65,14 +59,12 @@ Thunderbird needs the longer **Server URL (Thunderbird)** from the Integrations 
 2. Click the **New Calendar** button (or right-click the calendar list and choose **New Calendar**).
 3. Select **On the Network** and click **Next**.
 4. Choose **CalDAV** as the format.
-5. Paste the **Server URL (Thunderbird)** into the **Location** field. To add one calendar only, paste
-   that calendar's own **Calendar — …** address instead.
+5. Paste the **Server URL (Thunderbird)** into the **Location** field. To add one calendar only, paste that calendar's own **Calendar — …** address instead.
 6. Click **Find Calendars**.
 7. Enter your Eigen **email address** as the username and the app password when prompted.
 8. Thunderbird lists your calendars. Tick the ones you want to subscribe to and click **Subscribe**.
 
-Thunderbird remembers the calendars it found when you connected. A calendar you create in Eigen later does
-not appear on its own: add it as a new calendar with its **Calendar — …** address.
+Thunderbird remembers the calendars it found when you connected. A calendar you create in Eigen later does not appear on its own: add it as a new calendar with its **Calendar — …** address.
 
 ## Sign in
 
@@ -83,33 +75,24 @@ For all clients, use:
 
 ## What syncs over CalDAV
 
-CalDAV gives access to the calendars you own. Calendars that other people have shared with you, and team
-calendars, do not appear in an external client. You can see those by opening [Calendar](/calendar) in the
-browser.
+CalDAV gives access to the calendars you own. Calendars that other people have shared with you, and team calendars, do not appear in an external client. You can see those by opening [Calendar](/calendar) in the browser.
 
 You can create a new calendar from your client and it appears in Eigen straight away. Deleting a calendar in your client removes it from Eigen too. Your default calendar is the exception: it stays, and the client is told the delete was refused.
 
 <div class="eigen-callout">
 
-Events created in your calendar client appear in Eigen within a minute or two, and vice versa. Many clients
-sync on a schedule rather than instantly.
+Events created in your calendar client appear in Eigen within a minute or two, and vice versa. Many clients sync on a schedule rather than instantly.
 
 </div>
 
 ## Troubleshooting
 
-**The client asks for a password again and again.** The app password was probably not copied correctly.
-Delete it on the [**Integrations** page](/space/services), generate a new one, and update your calendar
-client.
+**The client asks for a password again and again.** The app password was probably not copied correctly. Delete it on the [**Integrations** page](/space/services), generate a new one, and update your calendar client.
 
-**The server address is rejected.** Make sure you copied the full address including the trailing `/`. Some
-clients, including Thunderbird, need the **Server URL (Thunderbird)** rather than the shorter **Server URL**.
+**The server address is rejected.** Make sure you copied the full address including the trailing `/`. Some clients, including Thunderbird, need the **Server URL (Thunderbird)** rather than the shorter **Server URL**.
 
-**Only one calendar syncs.** Each calendar is its own subscription in Thunderbird. Add the missing one as a
-new calendar, using its **Calendar — …** address from the Integrations page.
+**Only one calendar syncs.** Each calendar is its own subscription in Thunderbird. Add the missing one as a new calendar, using its **Calendar — …** address from the Integrations page.
 
-**No calendars appear after connecting.** Try signing out and back in to force your client to rediscover your
-calendar list. If you still see nothing, check that you are using the right address for your client.
+**No calendars appear after connecting.** Try signing out and back in to force your client to rediscover your calendar list. If you still see nothing, check that you are using the right address for your client.
 
-**401 Unauthorized.** Your username or password is wrong. Confirm the username is your Eigen email address and
-the password is the app password, not your main account password.
+**401 Unauthorized.** Your username or password is wrong. Confirm the username is your Eigen email address and the password is the app password, not your main account password.

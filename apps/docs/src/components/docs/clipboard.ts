@@ -9,17 +9,14 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { htmlToPlainText } from '@workspace/lib/html-dom';
+import { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, type TitleType } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardImageItem,
     EigenClipboardItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
-
-// Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
-const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
+import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
 
 // The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
 // the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
@@ -93,7 +90,8 @@ function copiedClipboardItems(
 
 // A copy or cut with eigen items writes them beside ProseMirror's own HTML and text, and a cut deletes the
 // selection as ProseMirror's handler would. Bound in handleDOMEvents, so it runs before that handler, whose
-// cut deletes the selection before any later listener reads it. No items → false, and the event is ProseMirror's.
+// cut deletes the selection before any later listener reads it. Google Docs and Word read a run by its look, so an
+// italic mark in an italic heading is written upright, and a title's and a subtitle's look on its p.
 export function writeDocsClipboard(
     view: EditorView,
     event: ClipboardEvent,
@@ -103,20 +101,51 @@ export function writeDocsClipboard(
     const cut = event.type === 'cut';
     if (selection.empty || !event.clipboardData || (cut && !view.editable)) return false;
     const items = copiedClipboardItems(view, selection.from, selection.to, resolveMediaPath);
-    if (items.length === 0) return false;
+    // The first title and subtitle in the selection: a node's own look is the same for every node of its type.
+    const titles = new Map<TitleType, number>();
+    let upright = false;
+    view.state.doc.nodesBetween(selection.from, selection.to, (node, pos, parent) => {
+        if (node.type.name === 'title' || node.type.name === 'subtitle') {
+            if (!titles.has(node.type.name)) titles.set(node.type.name, pos);
+        } else if (
+            parent?.type.name === 'heading' &&
+            ITALIC_HEADING_LEVELS.has(parent.attrs['level']) &&
+            node.marks.some((mark) => mark.type.name === 'italic')
+        )
+            upright = true;
+    });
+    if (items.length === 0 && titles.size === 0 && !upright) return false;
+
     const { dom, text } = view.serializeForClipboard(selection.content());
+    for (const heading of dom.querySelectorAll(ITALIC_HEADING_SELECTOR)) {
+        for (const em of heading.querySelectorAll<HTMLElement>('em')) em.style.fontStyle = 'normal';
+    }
+    for (const [type, pos] of titles) {
+        const drawn = view.nodeDOM(pos);
+        if (!(drawn instanceof HTMLElement) || !drawn.parentElement) continue;
+        const { fontSize, color } = getComputedStyle(drawn);
+        // An inherited color (the body's, a quote's) is left to the target, as a copied paragraph's is.
+        const ownColor = color !== getComputedStyle(drawn.parentElement).color;
+        for (const p of dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)) {
+            p.style.fontSize = fontSize;
+            if (ownColor) p.style.color = color;
+        }
+    }
     event.preventDefault();
-    writeEigenClipboard(event, { version: 1, items }, text || undefined, dom.innerHTML);
+    if (items.length > 0) writeEigenClipboard(event, { version: 1, items }, text, dom.innerHTML);
+    else {
+        event.clipboardData.clearData();
+        event.clipboardData.setData('text/html', dom.innerHTML);
+        if (text) event.clipboardData.setData('text/plain', text);
+    }
     if (cut) view.dispatch(view.state.tr.deleteSelection().scrollIntoView().setMeta('uiEvent', 'cut'));
     return true;
 }
 
 // A text item lands as a paragraph per line at the caret, with the typography docs models; it has no
-// fontSize, letter-spacing or line-height. htmlToPlainText guards against a non-conforming payload.
-function eigenTextItemContent(item: EigenClipboardTextItem): JSONContent[] {
-    const text = htmlToPlainText(item.text);
+// fontSize, letter-spacing or line-height.
+function eigenTextItemContent({ text, typography: typo }: EigenClipboardTextItem): JSONContent[] {
     if (!text.trim()) return [];
-    const typo = item.typography;
     const textStyleAttrs: Record<string, string> = {};
     if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
     if (typo?.color) textStyleAttrs.color = typo.color;
@@ -126,9 +155,11 @@ function eigenTextItemContent(item: EigenClipboardTextItem): JSONContent[] {
     if (typo?.fontStyle === 'italic') marks.push({ type: 'italic' });
     if (typo?.textDecoration === 'underline') marks.push({ type: 'underline' });
     if (typo?.textDecoration === 'line-through') marks.push({ type: 'strike' });
+    // An unrecognized wire alignment reads as left, the alignment an unaligned paragraph has, rather than storing garbage.
+    const textAlign = oneOf(typo?.textAlign, TEXT_ALIGNS, 'left');
     return text.split('\n').map((line) => ({
         type: 'paragraph',
-        ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
+        ...(textAlign !== 'left' ? { attrs: { textAlign } } : {}),
         // A text node may not be empty, so an empty line is a paragraph with no content.
         ...(line ? { content: [{ type: 'text', text: line, ...(marks.length > 0 ? { marks } : {}) }] } : {}),
     }));

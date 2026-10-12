@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -46,6 +46,16 @@ In the document, the page break shows as a dashed line labeled "Page break". The
 
 A page break inside a list, a quote, or a table starts a new page in the Word file too. See [Export to Word, PDF, or HTML](/support/docs/export).
 
+## Count words
+
+The word count tells you how long the document is, or how long a part of it is.
+
+1. To count part of the document, select that text first.
+2. Open the **Tools** menu and choose **Word count**, or press Cmd+Shift+C (Mac) or Ctrl+Shift+C (Windows). On a phone, **Word count** sits in the **⋮** menu at the top right.
+3. Read the counts, then click **OK**.
+
+The dialog shows **Words**, **Characters**, and **Characters excluding spaces**. With text selected, each count shows the selection out of the whole document, such as "12 of 340". Text in tables, lists, and image captions counts, and line breaks don't count as characters. You can count words in a document you can only view, too.
+
 ## Rename a document
 
 Open the **File** menu and click **Rename**. Type the new name and press Enter.
@@ -56,6 +66,12 @@ Open the **Edit** menu in the toolbar and choose **Undo** or **Redo**, or use th
 
 - **Undo**: Cmd+Z (Mac) or Ctrl+Z (Windows)
 - **Redo**: Cmd+Y (Mac) or Ctrl+Y (Windows)
+
+## Cut, copy, and select
+
+The **Edit** menu also has **Cut**, **Copy**, **Select all**, and **Delete**. Select some text first for **Cut**, **Copy**, and **Delete**. To paste, press Cmd+V (Mac) or Ctrl+V (Windows).
+
+If you can only view the document, you can still use **Copy** and **Select all**.
 
 ## Next steps
 

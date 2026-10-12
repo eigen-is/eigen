@@ -567,4 +567,87 @@ describe("a node's look", () => {
             { color: null, fontFamily: null, caps: 'all' },
         ]);
     });
+
+    // Google Docs' Heading 6 is grey and italic, in its style and on its runs; the editor draws that look itself.
+    test("Heading 6's grey and italic go, another color stays", async () => {
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Fine', '<w:i/><w:color w:val="666666"/>')}${run(' print', '<w:color w:val="C00000"/>')}`,
+                '<w:pStyle w:val="Heading6"/>',
+            ),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr><w:i/><w:color w:val="666666"/></w:rPr></w:style>',
+            },
+        );
+        expect(nodesOfType(json, 'heading').map((node) => node.attrs?.['level'])).toEqual([6]);
+        expect(marksOfType(json, 'italic')).toEqual([]);
+        expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs?.['color'])).toEqual(['#c00000']);
+    });
+
+    // Heading 6 is italic, so the editor draws an italic mark in it upright, as Google Docs and Word do.
+    test('a run set upright in Heading 6 is italic, one italic through the style or its own w:i is not', async () => {
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Fine', '<w:i/>')}${run(' print')}${run(' upright', '<w:i w:val="0"/><w:iCs w:val="0"/>')}`,
+                '<w:pStyle w:val="Heading6"/>',
+            ),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr><w:i/><w:iCs/></w:rPr></w:style>',
+            },
+        );
+        expect(
+            nodesOfType(json, 'text').map((node) => [node.text, (node.marks ?? []).map((mark) => mark.type)]),
+        ).toEqual([
+            ['Fine print', []],
+            [' upright', ['italic']],
+        ]);
+    });
+
+    // Word's own Heading 6 is not italic, so Word draws a plain run in it upright, as one set upright.
+    test.each([
+        ['a plain run', run('Fine')],
+        ['a run set upright', run('Fine', '<w:i w:val="0"/><w:iCs w:val="0"/>')],
+    ])('%s in a Heading 6 that is not italic is italic', async (_name, body) => {
+        const { json } = await importDocxBody(paragraph(body, '<w:pStyle w:val="Heading6"/>'), {
+            styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/></w:style>',
+        });
+        expect(marksOfType(json, 'italic')).toHaveLength(1);
+    });
+
+    // A checkbox makes a task of a heading's text, a plain paragraph, so its runs keep the look Word draws them in.
+    const W14 = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+    const checkbox = `<w:sdt><w:sdtPr><w14:checkbox ${W14}/></w:sdtPr><w:sdtContent>${run('☐')}</w:sdtContent></w:sdt>`;
+    test.each([
+        ["Word's upright", '', []],
+        ["Google's italic grey", '<w:i/><w:iCs/><w:color w:val="666666"/>', ['textStyle', 'italic']],
+    ])('a plain run in a task in %s Heading 6 is drawn as Word draws it', async (_name, rPr, marks) => {
+        const { json } = await importDocxBody(
+            paragraph(`${checkbox}${run(' Plain text')}`, '<w:pStyle w:val="Heading6"/>'),
+            {
+                styles: `<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr>${rPr}</w:rPr></w:style>`,
+            },
+        );
+        const [item] = nodesOfType(json, 'taskItem');
+        expect(nodesOfType(item ?? {}, 'paragraph')).toHaveLength(1);
+        expect(nodesOfType(item ?? {}, 'text').map((node) => (node.marks ?? []).map((mark) => mark.type))).toEqual([
+            marks,
+        ]);
+    });
+
+    // Only the half before a page break is the task; the half after it stays the heading, which draws its own look.
+    test("the half after a task's page break in Google's Heading 6 keeps the heading's look", async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${checkbox}${run(' Plain text')}${PAGE_BREAK}${run('More')}`, '<w:pStyle w:val="Heading6"/>'),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr><w:i/><w:iCs/><w:color w:val="666666"/></w:rPr></w:style>',
+            },
+        );
+        const [task] = nodesOfType(json, 'paragraph');
+        expect(nodesOfType(task ?? {}, 'text').map((node) => (node.marks ?? []).map((mark) => mark.type))).toEqual([
+            ['textStyle', 'italic'],
+        ]);
+        const [heading] = nodesOfType(json, 'heading');
+        expect(heading?.attrs?.['level']).toBe(6);
+        expect(nodesOfType(heading ?? {}, 'text').map((node) => [node.text, node.marks ?? []])).toEqual([['More', []]]);
+    });
 });

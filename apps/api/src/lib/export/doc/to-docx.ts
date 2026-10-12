@@ -3,7 +3,13 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    MIN_TABLE_COLUMN_PX,
+    pageTwips,
+    readFigureAttrs,
+    type TitleType,
+} from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import {
@@ -45,13 +51,18 @@ import {
     CODE_LOOK,
     cssPt,
     HEADER_CELL_LOOK,
+    HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    nodeLook,
     proseBorder,
     proseColor,
+    proseTextLook,
     QUOTE_LOOK,
     SMALL_LOOK,
     TASK_DONE_LOOK,
+    TITLE_LOOKS,
+    TITLE_SELECTORS,
     twips,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
@@ -191,6 +202,8 @@ type Package = {
 type Context = {
     pkg: Package;
     first: boolean;
+    // The type of the block after this one, which a numbered list runs on to when it is another.
+    next?: string;
     column: number;
     indent: number;
     depth: number;
@@ -201,7 +214,10 @@ type Context = {
     after?: number;
     align?: string;
     list?: NumberingRef;
-    headingPt?: number;
+    // The size of the heading or title around the run, which an inline code's em is of.
+    blockPt?: number;
+    // In a node that draws italic, which draws an italic mark upright.
+    upright?: boolean;
 };
 
 const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
@@ -354,7 +370,8 @@ type RunProps = {
     style?: StyleId;
     font?: string;
     bold?: true;
-    italic?: true;
+    // false undoes a style's italic.
+    italic?: boolean;
     caps?: true;
     smallCaps?: true;
     // false undoes a style's strike.
@@ -427,7 +444,8 @@ function rPrXml(props: RunProps): string {
         style && `<w:rStyle w:val="${style}"/>`,
         font && `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>`,
         bold && '<w:b/><w:bCs/>',
-        italic && '<w:i/><w:iCs/>',
+        italic === true && '<w:i/><w:iCs/>',
+        italic === false && '<w:i w:val="0"/><w:iCs w:val="0"/>',
         caps && '<w:caps/>',
         smallCaps && '<w:smallCaps/>',
         strike === true && '<w:strike/>',
@@ -452,6 +470,12 @@ function paragraphXml({ props, runs }: Paragraph): string {
 
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// Word's built-in Title and Subtitle, in its gallery's order.
+const TITLE_STYLES = [
+    { type: 'title', id: 'Title', uiPriority: 10 },
+    { type: 'subtitle', id: 'Subtitle', uiPriority: 11 },
+] as const;
+
 const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>([
     [
         'paragraph',
@@ -461,7 +485,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'heading',
         (node, context) => {
             const level = clampInt(node.attrs?.['level'], 1, 6, 1);
-            const { sizePt } = headingMetrics(level);
+            const { sizePt } = textMetrics(`.eigen-prose h${level}`);
             const firstMargin = context.first
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
                 : undefined;
@@ -473,9 +497,11 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 },
                 context,
             );
-            return blocksOf(node.content ?? [], props, { ...context, headingPt: sizePt }, true);
+            const upright = !!nodeLook('heading', level).italic;
+            return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
         },
     ],
+    ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
     ['pageBreak', () => [{ props: { style: 'PageBreak' }, runs: '<w:r><w:br w:type="page"/></w:r>' }]],
     [
         'horizontalRule',
@@ -545,6 +571,15 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     ],
 ]);
 
+function titleOf(type: TitleType, style: StyleId) {
+    return (node: JSONContent, context: Context): Block[] => {
+        const props = textProps({ style, jc: justification(node) }, context);
+        const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
+        const upright = !!nodeLook(type).italic;
+        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
+    };
+}
+
 // Never fails on structure: inline content where a block belongs is wrapped in a paragraph, a nested block hoisted out.
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
     const blocks: Block[] = [];
@@ -580,7 +615,13 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         if (inline.length > 0) flush();
         const write = BLOCKS.get(node.type ?? '');
         if (!write) throw new Error(`no docx mapping for ${node.type}`);
-        const written = write(node, { ...context, first: !textblock && index === 0, headingPt: undefined });
+        const written = write(node, {
+            ...context,
+            first: !textblock && index === 0,
+            next: nodes[index + 1]?.type,
+            blockPt: undefined,
+            upright: undefined,
+        });
         if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? '')) keepApart(blocks, written);
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
@@ -768,7 +809,8 @@ function listOf(
     const items = { ...context, list };
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
-    return withAfter(blocks, proseTwips(`.eigen-prose ${tag}`, 'margin-bottom'));
+    const runsOn = tag === 'ol' && context.next === 'orderedList';
+    return withAfter(blocks, proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'));
 }
 
 // Each list is a w:num of its own, so lists side by side stay apart; a bullet counts nothing, so bullet lists at one
@@ -1154,19 +1196,12 @@ function codeLines(tree: HastNode, pkg: Package): string[] {
             return;
         }
         const token = { ...props };
-        for (const name of node.properties?.className ?? []) Object.assign(token, tokenLook(name));
+        for (const name of node.properties?.className ?? [])
+            Object.assign(token, proseTextLook(`.eigen-prose pre .${name}`));
         for (const child of node.children ?? []) walk(child, token);
     };
     walk(tree, {});
     return lines;
-}
-
-function tokenLook(className: string): RunProps {
-    const selector = `.eigen-prose pre .${className}`;
-    const look: RunProps = {};
-    if (proseValueIfSet(selector, 'color') !== undefined) look.color = proseColor(selector, 'color');
-    if (proseValueIfSet(selector, 'font-style') === 'italic') look.italic = true;
-    return look;
 }
 
 const JUSTIFICATION = new Map([
@@ -1250,7 +1285,7 @@ function textXml(text: string): string {
 
 const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context) => RunProps>([
     ['bold', () => ({ bold: true })],
-    ['italic', () => ({ italic: true })],
+    ['italic', (_attrs, { upright }) => ({ italic: !upright })],
     ['underline', () => ({ underline: true })],
     ['strike', () => ({ strike: true })],
     ['subscript', () => ({ vertAlign: 'subscript' })],
@@ -1259,12 +1294,12 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ['small', () => ({ spacing: twips(SMALL_LOOK.letterSpacingPt), size: halfPoints(SMALL_LOOK.sizePt) })],
     [
         'code',
-        (_attrs, { headingPt }) => ({
+        (_attrs, { blockPt }) => ({
             style: 'Code',
             size:
-                headingPt === undefined
+                blockPt === undefined
                     ? undefined
-                    : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), headingPt)),
+                    : halfPoints(cssPt(proseValue('.eigen-prose code', 'font-size'), blockPt)),
         }),
     ],
     [
@@ -1346,9 +1381,8 @@ function proseTwips(selector: string, property: string): number {
     return twips(cssPt(proseValue(selector, property), BODY.sizePt));
 }
 
-// A heading without its own size or line height inherits the prose root's, as h5 and h6 do.
-function headingMetrics(level: number) {
-    const selector = `.eigen-prose h${level}`;
+// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do.
+function textMetrics(selector: string) {
     const sizePt = cssPt(
         proseValueIfSet(selector, 'font-size') ?? proseValue('.eigen-prose', 'font-size'),
         BODY.sizePt,
@@ -1442,8 +1476,27 @@ function styleDefinitions(): StyleDef[] {
     const codeMargin = proseValue('.eigen-prose pre', 'margin');
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
-    const headings = [1, 2, 3, 4, 5, 6].map((level): StyleDef => {
-        const { sizePt, before, after, line, tracking } = headingMetrics(level);
+    const titles = TITLE_STYLES.map(({ type, id, uiPriority }): StyleDef => {
+        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type]);
+        return {
+            type: 'paragraph',
+            id,
+            name: STYLE_NAMES[id],
+            basedOn: 'Normal',
+            next: 'Normal',
+            uiPriority,
+            qFormat: true,
+            pPr: {
+                keepNext: true,
+                keepLines: true,
+                spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
+            },
+            rPr: { spacing: tracking, size: halfPoints(sizePt), ...TITLE_LOOKS[type] },
+        };
+    });
+    const headings = HEADING_LOOKS.map((look, index): StyleDef => {
+        const level = index + 1;
+        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`);
         return {
             type: 'paragraph',
             id: `Heading${level}`,
@@ -1458,7 +1511,7 @@ function styleDefinitions(): StyleDef[] {
                 spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
                 outlineLvl: level - 1,
             },
-            rPr: { spacing: tracking, size: halfPoints(sizePt) },
+            rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },
         };
     });
     return [
@@ -1503,6 +1556,7 @@ function styleDefinitions(): StyleDef[] {
             semiHidden: true,
             unhideWhenUsed: true,
         },
+        ...titles,
         ...headings,
         {
             type: 'paragraph',

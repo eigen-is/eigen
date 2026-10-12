@@ -80,6 +80,17 @@ describe('doc export — the stylesheet', () => {
         expect(css.match(/font-size: 11pt/g)).toHaveLength(1);
     });
 
+    // Google Docs' Title and Subtitle, which the docx writer reads too.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws the title and subtitle at their size, the subtitle grey',
+        async (format) => {
+            const css = await exportStyle(format);
+            expect(css).toMatch(/\.eigen-prose p\[data-type="title"\] \{[^}]*font-size: 26pt;[^}]*line-height: 1\.2;/);
+            expect(css).toMatch(/\.eigen-prose p\[data-type="subtitle"\] \{ font-size: 15pt;/);
+            expect(css).toMatch(/, \.eigen-prose p\[data-type="subtitle"\] \{ color: #666666; \}/);
+        },
+    );
+
     test('the body text font and color are set once, by eigen-prose', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/(^|\n)\s*body \{/);
@@ -204,6 +215,16 @@ describe('doc export — trailing breaks', () => {
         );
     });
 
+    test('a title and a subtitle render as the p the editor holds, an empty one keeping its line', async () => {
+        const body = await bodyOf(
+            { type: 'title', content: [{ type: 'text', text: 'Plan' }] },
+            { type: 'subtitle', attrs: { textAlign: 'center' } },
+        );
+        expect(body).toContain(
+            '<p data-type="title">Plan</p><p data-type="subtitle" style="text-align: center"><br></p>',
+        );
+    });
+
     test('a textblock ending in an inline node or a newline gets the break, one ending in text none', async () => {
         const body = await bodyOf(
             { type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'hardBreak' }] },
@@ -269,6 +290,34 @@ describe('doc export — page breaks', () => {
         const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
         const { json } = docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+    });
+});
+
+describe('doc export — table column widths', () => {
+    // As a drag in the editor leaves them: every cell of a column holds its width.
+    const cell = (text: string, width: number): JSONContent => ({
+        type: 'tableCell',
+        attrs: { colwidth: [width] },
+        content: [paragraph(text)],
+    });
+    const row = (): JSONContent => ({ type: 'tableRow', content: [cell('a', 300), cell('b', 150), cell('c', 120)] });
+    const resized = () => seededDoc({ type: 'doc', content: [{ type: 'table', content: [row(), row()] }] });
+
+    test.each(['html', 'pdf-html'] as const)('%s draws each column at its width', async (format) => {
+        const { data } = await renderEigendocExport(resized(), format, 'Report.eigendoc', [], undefined);
+        const { document } = new JSDOM(new TextDecoder().decode(data)).window;
+        const cols = [...document.querySelectorAll<HTMLTableColElement>('table col')];
+        expect(cols.map((col) => col.style.width)).toEqual(['300px', '150px', '120px']);
+        expect(document.querySelector('table')?.style.width).toBe('570px');
+    });
+
+    test('a docx export imports back with the same widths', async () => {
+        const { data } = await renderEigendocExport(resized(), 'docx', 'Report.eigendoc', [], undefined);
+        const { json } = docxToPmJson(Buffer.from(data));
+        const widths = json.content?.[0]?.content?.flatMap((tableRow) =>
+            (tableRow.content ?? []).map((node) => node.attrs?.['colwidth']),
+        );
+        expect(widths).toEqual([[300], [150], [120], [300], [150], [120]]);
     });
 });
 
@@ -339,6 +388,19 @@ describe('doc export — caps', () => {
         expect(html).toContain(`Q${small('UOTE')}`);
         expect(html).toContain(`M${small('ONO')}`);
         expect(html).toContain(`B${small('ODY')}`);
+    });
+
+    // Heading 6 draws italic, and an italic mark in it upright.
+    test("the pdf reads Heading 6's italic, an italic mark in it upright", async () => {
+        const html = await exportBody('pdf-html', [
+            {
+                type: 'heading',
+                attrs: { level: 6 },
+                content: [caps('Plain', 'small', 'Source Serif 4'), caps(' Marked', 'small', 'Source Serif 4', true)],
+            },
+        ]);
+        expect(html).toContain('P<span style="font-size: 0.7em">LAIN</span>');
+        expect(html).toContain('<em> Marked</em>');
     });
 
     test('the pdf keeps upright Source Serif 4 small caps as typed', async () => {

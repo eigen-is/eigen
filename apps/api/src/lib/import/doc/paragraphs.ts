@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -169,6 +169,9 @@ export function readBlocks(reader: Reader, elements: XmlElement[], scope: Scope)
     });
 }
 
+// The roles whose node draws its own size: set at the body's, it reads as body text, and no list holds it.
+const SIZED = new Set<Role['kind']>(['heading', 'title', 'subtitle']);
+
 const CHECKBOXES = new Map([
     [CHECKBOX_GLYPHS.unchecked, false],
     ['☑', true],
@@ -190,7 +193,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const numId = direct.numId ?? styled.numId;
     const listed = numId !== undefined && numId !== '0';
     // A numbered heading is outline structure, and demoted its number would read as a list.
-    if (role.kind === 'heading' && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
+    if (SIZED.has(role.kind) && !listed && isBodySized(reader, p, paraRun)) role = { kind: 'paragraph' };
     if (role.kind === 'code' && !isMonospace(reader, p, paraRun)) role = { kind: 'paragraph' };
 
     // No fill of its own is transparent: a cell's shows through.
@@ -260,8 +263,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // The quote's and the done task's look, which Google Docs writes as direct formatting, is the node's.
-    if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+    const roleLook = nodeLook(role.kind, role.kind === 'heading' ? role.level : undefined);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
     const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>
@@ -276,8 +278,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
     if (task?.checked || (task && looksDone)) stripLook(pieces, 'strike', TASK_DONE_LOOK.color);
 
-    // A numbered heading keeps its number as text: the schema holds no numbered heading.
-    const label = list && role.kind === 'heading' ? list.label() : '';
+    // A numbered heading or title keeps its number as text: the schema holds no numbered heading.
+    const label = list && SIZED.has(role.kind) ? list.label() : '';
     if (label)
         halves[0]?.unshift({
             kind: 'node',
@@ -294,6 +296,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     let numbered = false;
     for (const [index, half] of halves.entries()) {
         if (index > 0) items.push({ kind: 'break' });
+        // A task's heading is a paragraph (assemble.ts), and only the half that takes the task is one. In an italic
+        // node an italic mark is a run Word draws upright, and Google Docs writes the node's own look as direct
+        // formatting.
+        const look = !numbered && task ? {} : roleLook;
+        for (const piece of half)
+            if (piece.kind === 'node' && piece.italic !== undefined && piece.italic !== !!look.italic)
+                piece.node.marks = [...(piece.node.marks ?? []), { type: 'italic' }];
+        if (quote > 0) stripLook(half, QUOTE_LOOK.italic && !look.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+        if (look.color) stripLook(half, undefined, look.color);
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
         if (!numbered && task) trimStart(content);
         if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
@@ -305,7 +316,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         );
         const para: Para = {
             kind: 'para',
-            // An empty heading is the blank line Word shows, not a heading's height.
+            // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
+            // draws it at the title's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
             textAlign: alignmentOf(props.jc, props.bidi),
@@ -326,7 +338,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
         };
-        if (!numbered && list && role.kind !== 'heading') para.list = { ...list, ilvl };
+        if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
         if (para.list || para.task) para.numberAt = indLeft + Math.min(0, props.indFirst ?? 0);
         if (boxed) para.boxed = true;

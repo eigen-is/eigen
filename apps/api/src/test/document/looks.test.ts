@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import { ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
@@ -9,10 +10,13 @@ import {
     CODE_BLOCK_LOOK,
     CODE_LOOK,
     HEADER_CELL_LOOK,
+    HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    nodeLook,
     QUOTE_LOOK,
     TASK_DONE_LOOK,
+    TITLE_LOOKS,
 } from '../../lib/document/looks';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
@@ -78,6 +82,27 @@ describe('the writer draws the editor look from the vocabulary', () => {
         expect(w(prop('Quote', 'rPr', 'color'), 'val')).toBe(QUOTE_LOOK.color);
     });
 
+    test('a title and a subtitle: no color of their own on the title, the subtitle grey', () => {
+        expect(TITLE_LOOKS).toEqual({ title: {}, subtitle: { color: '666666' } });
+        expect(prop('Title', 'rPr', 'color')).toBeUndefined();
+        expect(w(prop('Subtitle', 'rPr', 'color'), 'val')).toBe(TITLE_LOOKS.subtitle.color);
+    });
+
+    // The reader, the writer, the renderer and the audit all ask nodeLook, so a node's look is looked up once.
+    test("a node's own look: a heading's by its level, Word's 7 to 9 as 6, a title's and a subtitle's, none for the rest", () => {
+        expect([1, 5, 6, 9].map((level) => nodeLook('heading', level))).toEqual([
+            {},
+            { color: '666666' },
+            { color: '666666', italic: true },
+            { color: '666666', italic: true },
+        ]);
+        expect([nodeLook('title'), nodeLook('subtitle'), nodeLook('paragraph')]).toEqual([
+            TITLE_LOOKS.title,
+            TITLE_LOOKS.subtitle,
+            {},
+        ]);
+    });
+
     test('a done task: its strike and color', () => {
         expect(prop('TaskDone', 'rPr', 'strike') !== undefined).toBe(TASK_DONE_LOOK.strike);
         expect(w(prop('TaskDone', 'rPr', 'color'), 'val')).toBe(TASK_DONE_LOOK.color);
@@ -116,4 +141,10 @@ describe('the writer draws its body in the document font', () => {
     test('the prose body is the font a doc draws without a mark', () => {
         expect(BODY.font).toBe(DOCUMENT_FONT);
     });
+});
+
+// The docs app reads which headings draw italic from lib, as a paste and a copy turn an italic mark upright in them.
+test("lib's italic heading levels are those eigen-prose.css sets in italic", () => {
+    const italic = HEADING_LOOKS.flatMap((look, index) => (look.italic ? [index + 1] : []));
+    expect(new Set(italic)).toEqual(new Set(ITALIC_HEADING_LEVELS));
 });

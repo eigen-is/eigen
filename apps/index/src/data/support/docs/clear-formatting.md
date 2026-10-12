@@ -6,22 +6,19 @@ category: Editing
 tags: [docs, formatting, text]
 related: [docs/format-text]
 order: 60
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
-When text has accumulated bold, italic, color, font changes, or other styles you no longer want, you
-can strip them all in one step rather than toggling each one off individually.
+When text has accumulated bold, italic, color, font changes, or other styles you no longer want, you can strip them all in one step rather than toggling each one off individually.
 
 ## What gets removed
 
 Clearing formatting removes two kinds of style at once:
 
 - **Inline marks**: bold, italic, underline, strikethrough, inline code, superscript, subscript, small, all caps, small caps, text color, and highlight.
-- **Block styles**: headings, blockquotes, code blocks, and lists. These are converted to normal
-  paragraphs.
+- **Block styles**: titles, subtitles, headings, blockquotes, code blocks, and lists. These are converted to normal paragraphs.
 
-Links are also removed as part of the inline marks. If you want to keep a link, remove it separately
-first using the **Remove link** button.
+Links are also removed as part of the inline marks. If you want to keep a link, remove it separately first using the **Remove link** button.
 
 ## Clear formatting with the toolbar button
 
@@ -40,8 +37,6 @@ The **Format** menu works on any screen, also when the toolbar doesn't show the 
 
 ## What is not removed
 
-Clearing formatting acts only on selected text. Text outside the selection is not changed. Tables and
-images within the selection stay in place; the command removes styles from the text around them, not
-the elements themselves.
+Clearing formatting acts only on selected text. Text outside the selection is not changed. Tables and images within the selection stay in place; the command removes styles from the text around them, not the elements themselves.
 
 If you want to undo a clear-formatting action, press Cmd+Z (macOS) or Ctrl+Z (Windows).

@@ -8,22 +8,15 @@ order: 50
 updated: 2026-10-05
 ---
 
-Guest access lets people outside your organization view files you have shared with them. Guests sign in
-with a one-time code sent to their email address, not a password, so they do not need a full account on
-your server.
+Guest access lets people outside your organization view files you have shared with them. Guests sign in with a one-time code sent to their email address, not a password, so they do not need a full account on your server.
 
 ## How guest access works
 
-When you share a file or folder with an email address that does not belong to a member, Eigen adds that
-email to the share. The next time that person visits your Eigen server and enters their email address,
-Eigen sends a six-digit code to their inbox. They enter the code to sign in and see only the content
-shared with them.
+When you share a file or folder with an email address that does not belong to a member, Eigen adds that email to the share. The next time that person visits your Eigen server and enters their email address, Eigen sends a six-digit code to their inbox. They enter the code to sign in and see only the content shared with them.
 
-A code works for 5 minutes. If a guest asks for another code, only the newest one works. A mistyped code
-can be entered again.
+A code works for 5 minutes. If a guest asks for another code, only the newest one works. A mistyped code can be entered again.
 
-Guest accounts are separate from member accounts. They cannot access any app, setting, or file that has
-not been explicitly shared with them.
+Guest accounts are separate from member accounts. They cannot access any app, setting, or file that has not been explicitly shared with them.
 
 ## Configure guest access settings
 
@@ -34,20 +27,15 @@ The guest access settings are only visible to the server **Owner**. Admins canno
 
 ### Allow open guest signup
 
-When **Allow open guest signup** is on (the default), anyone can enter their email address and request a
-sign-in code, even before anything has been shared with them. They will be able to sign in, though they
-will see an empty workspace until you share something.
+When **Allow open guest signup** is on (the default), anyone can enter their email address and request a sign-in code, even before anything has been shared with them. They will be able to sign in, though they will see an empty workspace until you share something.
 
-Turn this off if you want to restrict sign-in codes to email addresses that already have a pending share.
-With open signup off, someone whose email is not in any share gets an error when they request a code.
+Turn this off if you want to restrict sign-in codes to email addresses that already have a pending share. With open signup off, someone whose email is not in any share gets an error when they request a code.
 
 ### Days of inactivity before deletion
 
-Eigen runs a daily sweep that removes guest accounts that have not been active for longer than this many
-days. The default is 7. You can set any value from 1 to 365.
+Eigen runs a daily sweep that removes guest accounts that have not been active for longer than this many days. The default is 7. You can set any value from 1 to 365.
 
-Deletion removes the guest account, but the share record is preserved. If the same person signs in
-again later, their access is restored automatically.
+Deletion removes the guest account, but the share record is preserved. If the same person signs in again later, their access is restored automatically.
 
 ## Review and remove guest accounts
 
@@ -57,9 +45,6 @@ Click a guest to open their detail panel, which shows when they were last active
 
 ## Email notifications for guests
 
-When you share a file with a guest's email address, Eigen can send them a notification email. You
-control this from [**Settings**](/admin/settings), under **Email notifications**, using the
-**Email guests when added to share** toggle.
+When you share a file with a guest's email address, Eigen can send them a notification email. You control this from [**Settings**](/admin/settings), under **Email notifications**, using the **Email guests when added to share** toggle.
 
-This is on by default. Guests have no in-app notification channel, so turning it off means they will not
-know a file has been shared with them unless you tell them yourself.
+This is on by default. Guests have no in-app notification channel, so turning it off means they will not know a file has been shared with them unless you tell them yourself.

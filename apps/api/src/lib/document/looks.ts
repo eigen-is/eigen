@@ -1,6 +1,7 @@
 import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from './colors';
-import { proseValue } from './prose-css';
+import { proseValue, proseValueIfSet } from './prose-css';
 
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
 // re-save drops the writer's styles and keeps it as direct formatting.
@@ -125,6 +126,37 @@ export const CAPTION_LOOK = {
     sizePt: cssPt(proseValue('.eigen-prose figcaption', 'font-size'), BODY.sizePt),
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
+
+type TextLook = { color?: string; italic?: true };
+
+// The color and italic eigen-prose.css gives an element's text, where it gives any: a highlighted code token's, a heading's.
+export function proseTextLook(selector: string): TextLook {
+    return {
+        ...(proseValueIfSet(selector, 'color') !== undefined && { color: proseColor(selector, 'color') }),
+        ...(proseValueIfSet(selector, 'font-style') === 'italic' && { italic: true }),
+    };
+}
+
+// Each heading level's own look, by level - 1: Heading 5 and 6 draw Google Docs' grey, and 6 italic.
+export const HEADING_LOOKS = [1, 2, 3, 4, 5, 6].map((level) => proseTextLook(`.eigen-prose h${level}`));
+
+export const TITLE_SELECTORS: Record<TitleType, string> = {
+    title: '.eigen-prose p[data-type="title"]',
+    subtitle: '.eigen-prose p[data-type="subtitle"]',
+};
+
+// The title's and subtitle's own look, by node: the subtitle draws Google Docs' grey.
+export const TITLE_LOOKS: Record<TitleType, TextLook> = {
+    title: proseTextLook(TITLE_SELECTORS.title),
+    subtitle: proseTextLook(TITLE_SELECTORS.subtitle),
+};
+
+// The look a text node draws its text in, which no mark carries; an italic one draws an italic mark upright. Word's
+// Heading 7 to 9 are an Eigen Heading 6.
+export function nodeLook(type: string, level = 1): TextLook {
+    if (type === 'heading') return HEADING_LOOKS[Math.min(level, HEADING_LOOKS.length) - 1] ?? {};
+    return type === 'title' || type === 'subtitle' ? TITLE_LOOKS[type] : {};
+}
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 

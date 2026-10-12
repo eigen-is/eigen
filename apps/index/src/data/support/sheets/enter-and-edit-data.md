@@ -9,8 +9,7 @@ order: 30
 updated: 2026-09-23
 ---
 
-You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time.
-Changes are saved automatically.
+You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
 
 ## Type into a cell
 
@@ -28,27 +27,23 @@ Select the cell, then do one of the following:
 - Press **F2** to open the cell for editing at the end of its contents.
 - Click the formula bar (the input area below the menu bar) and edit there.
 
-While the cell is open for editing, the arrow keys move the cursor within the text rather than moving to a
-neighboring cell. Press **Enter** when you are done.
+While the cell is open for editing, the arrow keys move the cursor within the text rather than moving to a neighboring cell. Press **Enter** when you are done.
 
 <div class="eigen-callout">
 
-If you select a cell and start typing, the new text **replaces** the existing contents rather than appending
-to them. To add to what is already there, open the cell with double-click or **F2** first.
+If you select a cell and start typing, the new text **replaces** the existing contents rather than appending to them. To add to what is already there, open the cell with double-click or **F2** first.
 
 </div>
 
 ## Add a line break inside a cell
 
-Press **Alt+Enter** (Mac: **⌥+Enter**) while a cell is open for editing. The cursor moves to a new line
-within the same cell. Press **Enter** on its own to confirm and move to the next row.
+Press **Alt+Enter** (Mac: **⌥+Enter**) while a cell is open for editing. The cursor moves to a new line within the same cell. Press **Enter** on its own to confirm and move to the next row.
 
 ## Clear cell contents
 
 Select one or more cells, then press **Delete** or **Backspace**. The values and formulas are removed.
 
-To clear contents from the right-click menu, right-click the selection and choose **Clear contents**.
-The same option is available under **Edit → Delete → Clear contents**.
+To clear contents from the right-click menu, right-click the selection and choose **Clear contents**. The same option is available under **Edit → Delete → Clear contents**.
 
 ## Select a range of cells
 

@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { isOn, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
@@ -296,7 +296,7 @@ function widths(columnPx: number[], column: number, colspan: number): number[] |
 // A cell whose paragraphs share one alignment is an aligned cell.
 function hoistAlignment(content: JSONContent[]): { align?: string } {
     const aligns = content.map((node) =>
-        node.type === 'paragraph' || node.type === 'heading' ? node.attrs?.['textAlign'] : 'mixed',
+        PROSE_TEXTBLOCKS.includes(node.type ?? '') ? node.attrs?.['textAlign'] : 'mixed',
     );
     const [first] = aligns;
     if (typeof first !== 'string' || first === 'mixed' || !aligns.every((align) => align === first)) return {};

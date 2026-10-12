@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { textColumnWidth } from './text-column';
 
 const DEFAULT_CELL_WIDTH = 100;
 
@@ -15,19 +16,17 @@ export const TableWidthClamp = Extension.create({
                 appendTransaction(transactions, _oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;
 
-                    const container = editor.view.dom.closest('[data-document]');
-                    if (!container) return null;
-                    const cs = getComputedStyle(container);
-                    const maxWidth = container.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-                    if (maxWidth <= 0) return null;
-
                     const tr = newState.tr;
                     let modified = false;
+                    // A layout read, so made once a table is found.
+                    let maxWidth: number | null | undefined;
 
                     newState.doc.descendants((node, pos) => {
                         if (node.type.name !== 'table') return;
                         const firstRow = node.firstChild;
                         if (!firstRow) return;
+                        if (maxWidth === undefined) maxWidth = textColumnWidth(editor.view.dom);
+                        if (maxWidth === null) return false;
 
                         // Sum column widths from the first row
                         let totalWidth = 0;

@@ -32,12 +32,14 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import { useIsCoarsePointer } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
@@ -49,6 +51,7 @@ import {
     PanelColumn,
 } from '@workspace/ui/components/comments';
 import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
@@ -64,7 +67,9 @@ import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
+import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
+import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { cleanPastedHTML } from './paste';
@@ -240,6 +245,7 @@ const TiptapEditor = ({
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
     const { isMobile } = useLayout();
+    const isCoarsePointer = useIsCoarsePointer();
     const {
         panel,
         commentPanelOpen,
@@ -252,6 +258,8 @@ const TiptapEditor = ({
         onSearchOpenChange,
     } = useDocumentPanels(isMobile);
     const [docHeight, setDocHeight] = useState(0);
+    // The image panel's button and Format › Image › Replace image open the same picker.
+    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -274,10 +282,7 @@ const TiptapEditor = ({
     };
 
     const getEditorMaxWidth = useCallback(() => {
-        const el = documentRef.current;
-        if (!el) return TEXT_COLUMN_WIDTH_PX;
-        const style = getComputedStyle(el);
-        return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        return textColumnWidth(documentRef.current) ?? TEXT_COLUMN_WIDTH_PX;
     }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
@@ -317,7 +322,10 @@ const TiptapEditor = ({
         {
             editable: canWrite,
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
+                // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
+                // drags nothing, and a tap beside a border would start a drag that swallows the caret.
+                EditorTable.configure({ resizable: !isCoarsePointer }),
                 Figure.configure({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
@@ -767,6 +775,7 @@ const TiptapEditor = ({
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                                     onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                                    onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
                                 />
                             }
@@ -818,8 +827,7 @@ const TiptapEditor = ({
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
                                                     editor={editor}
-                                                    onReplaceImage={handleReplaceImage}
-                                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                                    onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
                                             ) : (
                                                 <TablePropertiesPanel editor={editor} />
@@ -834,6 +842,16 @@ const TiptapEditor = ({
 
                 {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
             </div>
+
+            <DrivePickerWithUpload
+                open={replacePickerOpen}
+                onOpenChange={setReplacePickerOpen}
+                title="Replace image"
+                canPick={(item) => isImageMime(item.mimeType)}
+                onPickFromDrive={handleReplaceImageFromDrive}
+                onPickFromDevice={(files) => files[0] && handleReplaceImage(files[0])}
+                accept="image/*"
+            />
 
             <CardFormDialog
                 open={addOpen}

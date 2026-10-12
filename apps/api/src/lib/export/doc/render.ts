@@ -2,10 +2,10 @@ import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { type FigureAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
-import { BODY, QUOTE_LOOK } from '../../document/looks';
+import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
 
@@ -92,7 +92,7 @@ function renderFigureNode(
 // with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
 function withTrailingBreaks(node: JSONContent): JSONContent {
     const content = node.content?.map(withTrailingBreaks);
-    if (node.type !== 'paragraph' && node.type !== 'heading') return content ? { ...node, content } : node;
+    if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) return content ? { ...node, content } : node;
     const last = content?.at(-1);
     if (last?.type === 'text' && !last.text?.endsWith('\n')) return { ...node, content };
     return { ...node, content: [...(content ?? []), { type: 'hardBreak' }] };
@@ -107,12 +107,14 @@ const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 // (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals.
 function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
     const quoted = new Set<Node>();
-    doc.descendants((node) => {
-        if (node.type.name !== 'blockquote') return true;
-        node.descendants((child) => {
-            if (child.isText) quoted.add(child);
-        });
-        return false;
+    // A node that draws italic draws an italic mark upright.
+    const upright = new Set<Node>();
+    doc.descendants((node, _pos, parent) => {
+        if (node.type.name === 'blockquote')
+            node.descendants((child) => {
+                if (child.isText) quoted.add(child);
+            });
+        if (node.isText && parent && nodeLook(parent.type.name, parent.attrs['level']).italic) upright.add(node);
     });
     return ({ node }) => {
         const text = node.text ?? '';
@@ -120,8 +122,8 @@ function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) 
         if (style?.['caps'] !== 'small') return escapeHtml(text);
         const font = style['fontFamily'];
         const family = typeof font === 'string' ? getFontName(font) : BODY.font;
-        const italic =
-            (QUOTE_LOOK.italic && quoted.has(node)) || node.marks.some((mark) => mark.type.name === 'italic');
+        const marked = node.marks.some((mark) => mark.type.name === 'italic');
+        const italic = upright.has(node) ? !marked : (QUOTE_LOOK.italic && quoted.has(node)) || marked;
         if (hasSmallCaps(family, italic ? 'italic' : 'normal')) return escapeHtml(text);
         let html = '';
         let capitals = '';

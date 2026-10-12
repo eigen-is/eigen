@@ -1,16 +1,15 @@
-import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
+import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import {
     CenteredToolbar,
     DocumentShareCluster,
     EditMenu,
     FileMenu,
-    ToolbarMenu,
     ToolbarSeparator,
     TooltipButton,
 } from '@workspace/ui';
@@ -23,37 +22,25 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPickerButton, ColorPickerMenuItem } from '@workspace/ui/components/media';
+import { ColorPickerButton } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
-import { Separator } from '@workspace/ui/components/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
-    ALargeSmall,
-    AlignCenter,
-    AlignLeft,
-    AlignRight,
     Baseline,
     Bold,
-    CaseSensitive,
-    CaseUpper,
     CheckSquare,
     ChevronDown,
-    Code,
-    CodeXml,
+    Copy,
     FileSliders,
-    Heading1,
-    Heading2,
-    Heading3,
-    Heading4,
     Highlighter,
     ImagePlus,
     Italic,
@@ -61,23 +48,22 @@ import {
     Link2Off,
     List,
     ListOrdered,
-    MessageSquarePlus,
-    Minus,
-    Pilcrow,
     Printer,
-    Quote,
     RemoveFormatting,
-    SeparatorHorizontal,
-    Strikethrough,
-    Subscript,
-    Superscript,
-    Table,
-    Type,
+    Scissors,
+    TextSelect,
+    Trash2,
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ALIGNMENT_LOOK, FormatMenu } from './format-menu';
 import { useToolbarState } from './hooks/use-toolbar-state';
+import { InsertMenu } from './insert-menu';
 import { PageSetupDialog } from './page-setup-dialog';
+import { RestartNumberingDialog } from './restart-numbering-dialog';
+import { StylePicker } from './style-picker';
+import { ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
+import { WordCountDialog } from './word-count-dialog';
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -95,6 +81,7 @@ type EditorToolbarProps = {
     assignedCommentCount?: number;
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
+    onReplaceImage: () => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
 };
@@ -115,6 +102,7 @@ export const EditorToolbar = ({
     assignedCommentCount,
     onImageUpload,
     onImagePickFromDrive,
+    onReplaceImage,
     onAddComment,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
@@ -122,14 +110,28 @@ export const EditorToolbar = ({
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
+    const [wordCountOpen, setWordCountOpen] = useState(false);
+    const [restartNumberingOpen, setRestartNumberingOpen] = useState(false);
     const active = useToolbarState(editor);
+    // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
+    const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
-    // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Heading 4") its three cuts
-    // sit centered beside the menus from 862, 1044 and 1303px.
-    const showsRow = useMediaQuery('(min-width: 900px)');
-    const showsMiddle = useMediaQuery('(min-width: 1100px)');
+    // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
+    // sit centered beside the five menus from 997, 1179 and 1394px.
+    const showsRow = useMediaQuery('(min-width: 1000px)');
+    const showsMiddle = useMediaQuery('(min-width: 1200px)');
     const showsAll = useMediaQuery('(min-width: 1400px)');
+    // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
+    const isMobile = useIsMobile();
+
+    // Document-level: a viewer's editor is not editable, so an editor keymap would never see the key.
+    useHotkey(WORD_COUNT_HOTKEY, (e) => {
+        e.preventDefault();
+        setWordCountOpen(true);
+    });
+
+    const openWordCount = () => setWordCountOpen(true);
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -159,6 +161,13 @@ export const EditorToolbar = ({
     // Radix restore focus to the menu trigger, which would swallow the next keystrokes.
     const keepEditorFocus = (e: Event) => {
         if (editor.isFocused) e.preventDefault();
+    };
+
+    // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's
+    // copy and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
+    const runClipboardCommand = (command: 'copy' | 'cut') => {
+        document.execCommand(command);
+        editor.commands.focus();
     };
 
     const setTextColor = (color: string) => {
@@ -215,236 +224,63 @@ export const EditorToolbar = ({
                             canRedo={canRedo}
                             onUndo={() => editor.chain().focus().undo().run()}
                             onRedo={() => editor.chain().focus().redo().run()}
+                            onCloseAutoFocus={keepEditorFocus}
+                            selectionItems={
+                                <>
+                                    <DropdownMenuItem
+                                        disabled={!canWrite || active.selectionEmpty}
+                                        onClick={() => runClipboardCommand('cut')}
+                                    >
+                                        <Scissors className="h-4 w-4 mr-2" /> Cut
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        disabled={active.selectionEmpty}
+                                        onClick={() => runClipboardCommand('copy')}
+                                    >
+                                        <Copy className="h-4 w-4 mr-2" /> Copy
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().selectAll().run()}>
+                                        <TextSelect className="h-4 w-4 mr-2" /> Select all
+                                        <DropdownMenuShortcut>{formatForDisplay('Mod+A')}</DropdownMenuShortcut>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        disabled={!canWrite || active.selectionEmpty}
+                                        onClick={() => editor.chain().focus().deleteSelection().run()}
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                    </DropdownMenuItem>
+                                </>
+                            }
                         />
 
                         {canWrite && (
                             <>
-                                <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <Type className="h-4 w-4 mr-2" /> Font
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {EIGEN_FONTS.map((font) => (
-                                                <DropdownMenuItem
-                                                    key={font.name}
-                                                    onClick={() =>
-                                                        editor.chain().focus().setFontFamily(font.name).run()
-                                                    }
-                                                >
-                                                    <span style={{ fontFamily: getFontFamily(font.name) }}>
-                                                        {font.name}
-                                                    </span>
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <Type className="h-4 w-4 mr-2" /> Text
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
-                                                <Bold className="h-4 w-4 mr-2" /> Bold
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleItalic().run()}
-                                            >
-                                                <Italic className="h-4 w-4 mr-2" /> Italic
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleUnderline().run()}
-                                            >
-                                                <Underline className="h-4 w-4 mr-2" /> Underline
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleStrike().run()}
-                                            >
-                                                <Strikethrough className="h-4 w-4 mr-2" /> Strikethrough
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
-                                                <Code className="h-4 w-4 mr-2" /> Inline code
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleSuperscript().run()}
-                                            >
-                                                <Superscript className="h-4 w-4 mr-2" /> Superscript
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleSubscript().run()}
-                                            >
-                                                <Subscript className="h-4 w-4 mr-2" /> Subscript
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleSmall().run()}
-                                            >
-                                                <ALargeSmall className="h-4 w-4 mr-2" /> Small
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleCaps('all').run()}
-                                            >
-                                                <CaseUpper className="h-4 w-4 mr-2" /> All caps
-                                                <DropdownMenuShortcut>
-                                                    {formatForDisplay('Mod+Shift+A')}
-                                                </DropdownMenuShortcut>
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleCaps('small').run()}
-                                            >
-                                                <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <ColorPickerMenuItem
-                                                icon={Baseline}
-                                                label="Text color"
-                                                value={active.color}
-                                                resetLabel="Default"
-                                                onChange={setTextColor}
-                                            />
-                                            <ColorPickerMenuItem
-                                                icon={Highlighter}
-                                                label="Highlight color"
-                                                value={active.highlightColor}
-                                                resetLabel="None"
-                                                onChange={setHighlightColor}
-                                            />
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <Heading2 className="h-4 w-4 mr-2" /> Heading
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setParagraph().run()}
-                                            >
-                                                <Pilcrow className="mr-2 h-4 w-4" /> Normal text
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                            >
-                                                <Heading1 className="mr-2 h-4 w-4" /> Heading 1
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                            >
-                                                <Heading2 className="mr-2 h-4 w-4" /> Heading 2
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                                            >
-                                                <Heading3 className="mr-2 h-4 w-4" /> Heading 3
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-                                            >
-                                                <Heading4 className="mr-2 h-4 w-4" /> Heading 4
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                                            >
-                                                <Quote className="mr-2 h-4 w-4" /> Quote
-                                            </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <AlignLeft className="h-4 w-4 mr-2" /> Align
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                            >
-                                                <AlignLeft className="h-4 w-4 mr-2" /> Left
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                            >
-                                                <AlignCenter className="h-4 w-4 mr-2" /> Center
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                            >
-                                                <AlignRight className="h-4 w-4 mr-2" /> Right
-                                            </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <List className="h-4 w-4 mr-2" /> Lists
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleBulletList().run()}
-                                            >
-                                                <List className="h-4 w-4 mr-2" /> Bulleted
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                                            >
-                                                <ListOrdered className="h-4 w-4 mr-2" /> Numbered
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => editor.chain().focus().toggleTaskList().run()}
-                                            >
-                                                <CheckSquare className="h-4 w-4 mr-2" /> Checklist
-                                            </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={clearFormatting}>
-                                        <RemoveFormatting className="h-4 w-4 mr-2" /> Clear formatting
-                                    </DropdownMenuItem>
-                                </ToolbarMenu>
+                                <FormatMenu
+                                    editor={editor}
+                                    active={active}
+                                    keepEditorFocus={keepEditorFocus}
+                                    setTextColor={setTextColor}
+                                    setHighlightColor={setHighlightColor}
+                                    clearFormatting={clearFormatting}
+                                    onRestartNumbering={() => setRestartNumberingOpen(true)}
+                                    onReplaceImage={onReplaceImage}
+                                />
 
-                                <ToolbarMenu label="Insert" onCloseAutoFocus={keepEditorFocus}>
-                                    <DropdownMenuItem onClick={handleLinkOperation}>
-                                        <Link className="h-4 w-4 mr-2" /> Link
-                                    </DropdownMenuItem>
-                                    {onImageUpload && (
-                                        <DropdownMenuItem onClick={() => setImagePickerOpen(true)}>
-                                            <ImagePlus className="h-4 w-4 mr-2" /> Image
-                                        </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                        <Minus className="h-4 w-4 mr-2" /> Horizontal rule
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
-                                        <SeparatorHorizontal className="h-4 w-4 mr-2" /> Page break
-                                        <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() =>
-                                            editor
-                                                .chain()
-                                                .focus()
-                                                .insertTable({
-                                                    rows: 3,
-                                                    cols: 3,
-                                                    withHeaderRow: true,
-                                                })
-                                                .run()
-                                        }
-                                    >
-                                        <Table className="h-4 w-4 mr-2" /> Table
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
-                                        <CodeXml className="h-4 w-4 mr-2" /> Code block
-                                    </DropdownMenuItem>
-                                    {onAddComment && (
-                                        <>
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem disabled={active.selectionEmpty} onClick={onAddComment}>
-                                                <MessageSquarePlus className="h-4 w-4 mr-2" /> Comment
-                                            </DropdownMenuItem>
-                                        </>
-                                    )}
-                                </ToolbarMenu>
+                                <InsertMenu
+                                    editor={editor}
+                                    active={active}
+                                    keepEditorFocus={keepEditorFocus}
+                                    onLink={handleLinkOperation}
+                                    onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
+                                    onAddComment={onAddComment}
+                                />
                             </>
                         )}
+
+                        {!isMobile && <ToolsMenu keepEditorFocus={keepEditorFocus} onWordCount={openWordCount} />}
                     </div>
                 }
                 center={
@@ -454,51 +290,7 @@ export const EditorToolbar = ({
                             <ToolbarSeparator />
 
                             {/* Heading / paragraph selector */}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 px-2 gap-1"
-                                        onMouseDown={(e) => e.preventDefault()}
-                                    >
-                                        <span className="text-xs whitespace-nowrap">
-                                            {active.headingLevel ? `Heading ${active.headingLevel}` : 'Normal'}
-                                        </span>
-                                        <ChevronDown className="h-3 w-3" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                                        <Pilcrow className="mr-2 h-4 w-4" /> Normal text
-                                    </DropdownMenuItem>
-                                    <Separator className="my-1" />
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                    >
-                                        <Heading1 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-xl font-medium">Heading 1</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                    >
-                                        <Heading2 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-lg font-medium">Heading 2</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                                    >
-                                        <Heading3 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-base font-medium">Heading 3</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-                                    >
-                                        <Heading4 className="mr-2 h-4 w-4" />{' '}
-                                        <span className="text-sm font-medium">Heading 4</span>
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            <StylePicker editor={editor} active={active} keepEditorFocus={keepEditorFocus} />
 
                             <ToolbarSeparator />
 
@@ -506,6 +298,7 @@ export const EditorToolbar = ({
                             <FontPicker
                                 value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
+                                onCloseAutoFocus={keepEditorFocus}
                             />
 
                             <ToolbarSeparator />
@@ -590,30 +383,44 @@ export const EditorToolbar = ({
                                 <>
                                     <ToolbarSeparator />
 
-                                    {/* Alignment toggle group */}
-                                    <div className="flex items-center gap-0.5">
-                                        <TooltipButton
-                                            icon={AlignLeft}
-                                            tooltipText="Align left"
-                                            active={active.alignLeft}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('left').run()}
-                                        />
-                                        <TooltipButton
-                                            icon={AlignCenter}
-                                            tooltipText="Align center"
-                                            active={active.alignCenter}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('center').run()}
-                                        />
-                                        <TooltipButton
-                                            icon={AlignRight}
-                                            tooltipText="Align right"
-                                            active={active.alignRight}
-                                            preventFocusLoss
-                                            onClick={() => editor.chain().focus().setTextAlign('right').run()}
-                                        />
-                                    </div>
+                                    {/* Alignment, one dropdown as Google's */}
+                                    <DropdownMenu>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 px-2 gap-1"
+                                                        aria-label="Align"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                    >
+                                                        <AlignmentIcon className="h-4 w-4" />
+                                                        <ChevronDown className="h-3 w-3" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Align</TooltipContent>
+                                        </Tooltip>
+                                        <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
+                                            <DropdownMenuRadioGroup value={active.alignment}>
+                                                {TEXT_ALIGNS.map((alignment) => {
+                                                    const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
+                                                    return (
+                                                        <DropdownMenuRadioItem
+                                                            key={alignment}
+                                                            value={alignment}
+                                                            onSelect={() =>
+                                                                editor.chain().focus().setTextAlign(alignment).run()
+                                                            }
+                                                        >
+                                                            <Icon className="h-4 w-4" /> {label}
+                                                        </DropdownMenuRadioItem>
+                                                    );
+                                                })}
+                                            </DropdownMenuRadioGroup>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
 
                                     <ToolbarSeparator />
 
@@ -666,6 +473,7 @@ export const EditorToolbar = ({
                         activityPanelOpen={activityPanelOpen}
                         assignedCommentCount={assignedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                        mobileMenuItems={<WordCountItem onClick={openWordCount} />}
                     />
                 }
             />
@@ -716,6 +524,14 @@ export const EditorToolbar = ({
             </Dialog>
 
             <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} />
+
+            <WordCountDialog editor={editor} open={wordCountOpen} onOpenChange={setWordCountOpen} />
+
+            <RestartNumberingDialog
+                editor={editor}
+                open={restartNumberingOpen}
+                onOpenChange={setRestartNumberingOpen}
+            />
 
             <ExportProgressDialog open={isExporting} />
 

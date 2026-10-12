@@ -24,8 +24,9 @@ import {
 } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
+// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string }
+    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -281,9 +282,9 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
 
 export function pushText(reader: Reader, text: string, direct: DocxRunProps, context: RunContext): void {
     if (!text) return;
-    for (const { text: part, marks, small, font } of marksOf(reader, text, direct, context)) {
+    for (const { text: part, marks, small, font, italic } of marksOf(reader, text, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
-        context.pieces.push({ kind: 'node', node, small, font });
+        context.pieces.push({ kind: 'node', node, small, font, italic });
     }
 }
 
@@ -313,7 +314,7 @@ function marksOf(
     text: string,
     direct: DocxRunProps,
     context: RunContext,
-): { text: string; marks: Marks; small: boolean; font?: string }[] {
+): { text: string; marks: Marks; small: boolean; font?: string; italic?: boolean }[] {
     const { styles } = reader;
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
@@ -383,7 +384,7 @@ function marksOf(
         const small = isSmall(complex);
         const shape: Marks = [];
         if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
-        if (complex ? props.italicCs : props.italic) shape.push({ type: 'italic' });
+        const italic = !!(complex ? props.italicCs : props.italic);
         if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
@@ -404,6 +405,6 @@ function marksOf(
                       },
                   ]
                 : [];
-        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font };
+        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font, italic };
     });
 }

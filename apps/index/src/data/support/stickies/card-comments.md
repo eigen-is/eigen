@@ -8,8 +8,7 @@ order: 80
 updated: 2026-09-13
 ---
 
-Every card on a Stickies board has a built-in comment thread. You can use it to ask questions, post updates,
-or keep a record of decisions, all in one place alongside the card itself.
+Every card on a Stickies board has a built-in comment thread. You can use it to ask questions, post updates, or keep a record of decisions, all in one place alongside the card itself.
 
 ## Open a card's comment thread
 
@@ -21,20 +20,14 @@ You can also open the thread from the context menu: right-click any card and cho
 
 ## Reply count
 
-When a card has at least one message, a small reply count appears at the bottom of the card face, for
-example "3 replies". This lets you see at a glance which cards have active discussion without opening them.
+When a card has at least one message, a small reply count appears at the bottom of the card face, for example "3 replies". This lets you see at a glance which cards have active discussion without opening them.
 
 ## Who can comment
 
-Anyone who has access to the board can read the comment thread. To send a message you need write access
-to the board. If you only have view access, the input area shows "You have read-only access to this chat"
-and no send box appears.
+Anyone who has access to the board can read the comment thread. To send a message you need write access to the board. If you only have view access, the input area shows "You have read-only access to this chat" and no send box appears.
 
-See [Share a board and manage access](/support/stickies/share-board) for how to adjust who can view or
-edit a board.
+See [Share a board and manage access](/support/stickies/share-board) for how to adjust who can view or edit a board.
 
 ## Share a link to a specific card
 
-To send someone directly to a card's thread, open the card and click the link icon (**Copy link**) in the
-strip below the description. Eigen copies a link to your clipboard. Anyone with access to the board can open that
-link and land straight on the card.
+To send someone directly to a card's thread, open the card and click the link icon (**Copy link**) in the strip below the description. Eigen copies a link to your clipboard. Anyone with access to the board can open that link and land straight on the card.

@@ -15,15 +15,17 @@
 /* Shared tiptap editor + prose rules are in @workspace/ui eigen-prose.css */
 /* Below: docs-only styles (table resize, comments, cursors) */
 
-/* Table column resize handle (docs-specific: resizable tables) */
+/* A column's border while the mouse is on it: a thin line in the selection color over the cell border. A coarse
+   pointer gets no resize at all (Table's `resizable` in editor.tsx), so there is no touch variant. */
 .tiptap table .column-resize-handle {
     position: absolute;
-    right: -2px;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background-color: #3b82f6;
+    right: -1px;
+    top: -1px;
+    bottom: -1px;
+    width: 2px;
+    background-color: var(--selection-handle);
     pointer-events: none;
+    /* The next cell is positioned and paints later, so it would cover the line's half over it. */
     z-index: 20;
 }
 
@@ -35,25 +37,13 @@
     table-layout: auto;
 }
 
-.resize-cursor {
+.tiptap.resize-cursor,
+.tiptap.resize-cursor * {
     cursor: col-resize;
 }
 
 /* Collaboration cursors moved to @workspace/ui globals.css so docs + sheets share
    one label visual (see presence-label in packages/ui). */
-
-/* Text alignment (tiptap extension) */
-.tiptap .has-text-align-center {
-    text-align: center;
-}
-
-.tiptap .has-text-align-right {
-    text-align: right;
-}
-
-.tiptap .has-text-align-left {
-    text-align: left;
-}
 
 /* The page's narrow-viewport scale-to-fit is cloned with its inline transform; paper gets the
    unscaled layout. !important is the only way a stylesheet rule can override a cloned inline style. */

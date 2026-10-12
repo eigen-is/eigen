@@ -1,5 +1,6 @@
 import { useIsMobile } from '@workspace/lib/media';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Button } from '../../button';
 import { CountBadge } from '../../count-badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
@@ -24,6 +25,8 @@ type DocumentShareClusterProps = {
     offline?: boolean;
     // The server's storage is failing and the collab socket is retrying; edits stay local meanwhile.
     storageUnavailable?: boolean;
+    // Menu items the toolbar folds into the kebab on a phone, where its own menus run out of room.
+    mobileMenuItems?: ReactNode;
 };
 
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
@@ -115,6 +118,7 @@ function MobileClusterKebab({
     assignedCommentCount,
     watchTarget,
     onToggleActivityPanel,
+    mobileMenuItems,
 }: DocumentShareClusterProps) {
     const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
@@ -131,6 +135,7 @@ function MobileClusterKebab({
                     )}
                     {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
                     <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
+                    {mobileMenuItems}
                     {onToggleActivityPanel && (
                         <DropdownMenuItem onClick={onToggleActivityPanel}>
                             <Activity className="mr-2" />

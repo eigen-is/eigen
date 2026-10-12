@@ -358,6 +358,7 @@ type Style = {
 // What a paragraph style means in eigendoc. Its look is the node's, so the props it absorbs are no marks.
 export type Role =
     | { kind: 'heading'; level: number }
+    | { kind: 'title' }
     | { kind: 'subtitle' }
     | { kind: 'quote' }
     | { kind: 'code'; language: string | null }
@@ -371,9 +372,9 @@ const lowercase = (names: string[]) => names.map((name) => name.toLowerCase());
 
 const ROLE_BY_NAME = new Map<string, Role>([
     // LibreOffice's parent of its numbered headings.
-    ['title', { kind: 'heading', level: 1 }],
     ['heading', { kind: 'heading', level: 1 }],
-    ['subtitle', { kind: 'subtitle' }],
+    [STYLE_NAMES.Title.toLowerCase(), { kind: 'title' }],
+    [STYLE_NAMES.Subtitle.toLowerCase(), { kind: 'subtitle' }],
     [STYLE_NAMES.Quote.toLowerCase(), { kind: 'quote' }],
     ['intense quote', { kind: 'quote' }],
     ...lowercase(CODE_PARAGRAPH_STYLES).map((name): [string, Role] => [name, { kind: 'code', language: null }]),
@@ -393,11 +394,11 @@ function roleOf({ name, language }: Style): Role | undefined {
     return ROLE_BY_NAME.get(name);
 }
 
-// What the node draws itself: a heading its size and weight, so a style's italic or color stays a mark; a subtitle
-// draws as a paragraph, and so does a caption, whose marks a figure drops as plain text and a paragraph keeps.
+// What each node draws itself, so no mark; its own color and italic are nodeLook's, which paragraphs.ts reads.
 export const ABSORBED: Record<Role['kind'], (keyof DocxRunProps)[] | 'all'> = {
     heading: ['bold', 'boldCs', 'size', 'sizeCs'],
-    subtitle: [],
+    title: ['size', 'sizeCs'],
+    subtitle: ['size', 'sizeCs'],
     quote: ['italic', 'italicCs', 'color'],
     code: 'all',
     caption: [],

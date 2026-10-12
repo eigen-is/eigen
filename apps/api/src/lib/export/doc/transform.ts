@@ -117,12 +117,6 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 .figure, table, pre, blockquote { page-break-inside: avoid; }
 table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
-h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
-
-.has-text-align-center { text-align: center; }
-.has-text-align-right { text-align: right; }
-.has-text-align-left { text-align: left; }
-
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */

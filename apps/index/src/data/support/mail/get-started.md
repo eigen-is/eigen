@@ -10,14 +10,11 @@ order: 10
 updated: 2026-09-20
 ---
 
-Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a
-quick tour of the layout, so you know where everything is.
+Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a quick tour of the layout, so you know where everything is.
 
-Some Eigen servers are set up without email. On those, Mail is missing from the app switcher, and opening it says
-so. Ask whoever runs your Eigen which mail app to use instead.
+Some Eigen servers are set up without email. On those, Mail is missing from the app switcher, and opening it says so. Ask whoever runs your Eigen which mail app to use instead.
 
-The screen has three parts: the list of mailboxes on the left, the message list in the middle, and the reading
-pane on the right where the open message appears.
+The screen has three parts: the list of mailboxes on the left, the message list in the middle, and the reading pane on the right where the open message appears.
 
 ## Your mailboxes
 
@@ -32,23 +29,19 @@ The sidebar on the left holds your mailboxes. Click one to see the messages in i
 
 When a mailbox has unread messages, the count appears next to its name, like **Inbox (3)**.
 
-If you also read this account in another mail app and made folders of your own there, they appear below the six,
-under **Folders**. See [Email is missing or not syncing](/support/mail/email-missing-or-not-syncing).
+If you also read this account in another mail app and made folders of your own there, they appear below the six, under **Folders**. See [Email is missing or not syncing](/support/mail/email-missing-or-not-syncing).
 
 ## The message list
 
-The middle column lists the messages in the mailbox you've opened, newest first. Each row shows who the message is
-from, the subject, a short preview of the text, and the date.
+The middle column lists the messages in the mailbox you've opened, newest first. Each row shows who the message is from, the subject, a short preview of the text, and the date.
 
 Unread messages are shown in bold, so they stand out. A paperclip next to a message means it has an attachment.
 
-To find a message, type in the **Search emails...** box at the top of the list. See
-[Search your email](/support/mail/search-your-email) for more.
+To find a message, type in the **Search emails...** box at the top of the list. See [Search your email](/support/mail/search-your-email) for more.
 
 ## The reading pane
 
-Click a message to open it in the reading pane on the right. You see the subject, who it's from and to, the date,
-any attachments, and the full message. Opening a message marks it as read.
+Click a message to open it in the reading pane on the right. You see the subject, who it's from and to, the date, any attachments, and the full message. Opening a message marks it as read.
 
 The toolbar above the message has the actions you'll use most:
 
@@ -61,14 +54,10 @@ The **More actions** menu (the **⋮** button) adds **Print**, **Download**, and
 
 ## Write a message
 
-Click **Compose** at the top of the sidebar to start a new message. To reply to one you're reading, use **Reply**
-or **Reply All**. See [Compose and send an email](/support/mail/compose-and-send) for the details, and
-[Read and reply to email](/support/mail/read-and-reply) for working through your Inbox.
+Click **Compose** at the top of the sidebar to start a new message. To reply to one you're reading, use **Reply** or **Reply All**. See [Compose and send an email](/support/mail/compose-and-send) for the details, and [Read and reply to email](/support/mail/read-and-reply) for working through your Inbox.
 
-You can add a signature that's included on the messages you write. See
-[Create an email signature](/support/mail/email-signature).
+You can add a signature that's included on the messages you write. See [Create an email signature](/support/mail/email-signature).
 
 ## Calendar invites
 
-When a message contains a calendar invite, Mail shows it as a card inside the message, with the event name, time,
-and location. Click **View in Calendar** to open it in Calendar.
+When a message contains a calendar invite, Mail shows it as a card inside the message, with the event name, time, and location. Click **View in Calendar** to open it in Calendar.

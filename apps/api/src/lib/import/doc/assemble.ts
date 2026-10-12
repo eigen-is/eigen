@@ -120,6 +120,9 @@ function joinDeletedMarks(raw: Item[]): Item[] {
     });
 }
 
+// The roles that become a textblock, which a float before it joins.
+const HOLDS_FLOATS = new Set<Role['kind']>(['paragraph', 'heading', 'title', 'subtitle', 'taskDone']);
+
 function attachFloatsAndCaptions(raw: Item[]): Item[] {
     const items: Item[] = [];
     let floats: JSONContent[] = [];
@@ -130,10 +133,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
         }
         if (item.kind === 'break') while (isBlank(items.at(-1))) items.pop();
         if (item.kind === 'para') {
-            if (
-                floats.length > 0 &&
-                (item.role.kind === 'paragraph' || item.role.kind === 'heading' || item.role.kind === 'taskDone')
-            ) {
+            if (floats.length > 0 && HOLDS_FLOATS.has(item.role.kind)) {
                 // After a numbered heading's number, as joined text goes.
                 const at = item.labelled ? 1 : 0;
                 item.inlines = [...item.inlines.slice(0, at), ...floats, ...item.inlines.slice(at)];
@@ -585,6 +585,8 @@ function textblockOf(para: Para): JSONContent {
         return { type: 'paragraph', content };
     }
     if (para.role.kind === 'heading') return { type: 'heading', attrs: { level: para.role.level, textAlign }, content };
+    if (para.role.kind === 'title' || para.role.kind === 'subtitle')
+        return { type: para.role.kind, attrs: { textAlign }, content };
     return { type: 'paragraph', attrs: { textAlign }, content };
 }
 

@@ -88,6 +88,18 @@ describe('counters', () => {
         ]);
     });
 
+    // No list holds a title either: it keeps its look and its number as text.
+    test.each(['Title', 'Subtitle'])('a numbered %s keeps its label as text', async (name) => {
+        const styles = `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/></w:style>`;
+        const { json } = await importDocxBody(numbered(10, 'Report', 0, `<w:pStyle w:val="${name}"/>`), {
+            numbering: NUMBERING,
+            styles,
+        });
+        expect((json.content ?? []).map((node) => [node.type, nodesOfType(node, 'text')[0]?.text])).toEqual([
+            [name.toLowerCase(), '1. Report'],
+        ]);
+    });
+
     const headings = async (body: string, numbering: string, styles = '') =>
         nodesOfType((await importDocxBody(body, { numbering, styles })).json, 'heading').map(
             (node) => nodesOfType(node, 'text')[0]?.text,
