@@ -435,16 +435,22 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         expect(listed.map((item) => item.name)).toContain('before.png');
     });
 
-    test('a copy of a home whose owner is gone cannot be restored', async () => {
+    test('deleting the owner takes its safety copies, and a copy that outlived its owner cannot be restored', async () => {
         const ctx = await getTestContext();
         const [copy] = safetyCopies(userId);
+        const copyDir = join(TEST_DATA_DIR, 'home', copy);
+        const aside = join(TEST_DATA_DIR, `${copy}-aside`);
+        cpSync(copyDir, aside, { recursive: true });
         const del = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, { method: 'DELETE' });
         expect(del.status).toBe(200);
         expect(existsSync(homeDir)).toBe(false);
+        expect(existsSync(copyDir)).toBe(false);
 
+        renameSync(aside, copyDir);
         await expect(restoreSafetyCopy(userId, copy, `safety-rollback-gone-${Date.now()}`)).rejects.toThrow(
             'no longer exists',
         );
-        expect(existsSync(join(TEST_DATA_DIR, 'home', copy))).toBe(true);
+        expect(existsSync(copyDir)).toBe(true);
+        rmSync(copyDir, { recursive: true, force: true });
     });
 });

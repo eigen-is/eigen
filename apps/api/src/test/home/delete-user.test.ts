@@ -1,9 +1,29 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { OrgMember } from '@workspace/lib/types/admin';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
-import { addMember, assertJson, authedRequest, createTeam, findOrFail, getTestContext, TEST_DATA_DIR } from '../setup';
+import { updateServerSettings } from '../../lib/config/server-settings';
+import { evictHome } from '../../lib/home/get-home';
+import { LocalStorage } from '../../lib/storage/local-storage';
+import { drainUserObjectDeletes } from '../../lib/user/delete-user';
+import { FakeS3Server } from '../fake-s3-server';
+import type { TestUser } from '../setup';
+import {
+    addMember,
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestUserOnStorage,
+    driveUpload,
+    findOrFail,
+    getTestContext,
+    openMountMetadata,
+    TEST_DATA_DIR,
+    TEST_PNG_BYTES,
+} from '../setup';
 
 describe('Delete user', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -355,5 +375,140 @@ describe('Delete user', () => {
             `/auth/organization/list-members?organizationId=${orgId}`,
         );
         expect(listRes.status).toBe(200);
+    });
+});
+
+describe("Delete user: the home's bucket objects", () => {
+    const backing = join(TEST_DATA_DIR, 'delete-user-s3-backing');
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let fake: FakeS3Server;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        fake = new FakeS3Server(new LocalStorage(backing));
+        await updateServerSettings({ defaults: { mount: { s3Config: await fake.start() } } });
+    });
+
+    afterAll(async () => {
+        await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
+        await fake.stop();
+        rmSync(backing, { recursive: true, force: true });
+    });
+
+    function homeDirOf(userId: string): string {
+        return join(TEST_DATA_DIR, 'home', userId);
+    }
+
+    function metadataPathOf(folder: string): string {
+        return join(folder, 'mounts', 'default', 'metadata.db');
+    }
+
+    // A user whose default drive is the server's bucket: its settings.json carries no S3 config of its own.
+    async function s3UserWithUploads(name: string, count = 1): Promise<{ user: TestUser; keys: string[] }> {
+        const user = await createTestUserOnStorage('s3', name);
+        const root = await assertJson<DrivePath>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/default/root`),
+        );
+        for (let i = 0; i < count; i++) {
+            const file = new File([TEST_PNG_BYTES], `photo-${i}.png`, { type: 'image/png' });
+            await driveUpload(user.sessionToken, user.id, 'default', root.id, file);
+        }
+        await evictHome(user.id);
+        const settings = JSON.parse(readFileSync(join(homeDirOf(user.id), 'settings.json'), 'utf8'));
+        expect(settings.mounts.default.storageType).toBe('s3');
+        expect(settings.mounts.default.s3Config).toBeUndefined();
+        const keys = fileKeysOf(metadataPathOf(homeDirOf(user.id)));
+        expect(keys).toHaveLength(count);
+        for (const key of keys) expect(await fake.store.exists(key)).toBe(true);
+        return { user, keys };
+    }
+
+    function fileKeysOf(metadataPath: string): string[] {
+        const db = openMountMetadata(metadataPath);
+        try {
+            return db
+                .query<{ file: string }, []>("SELECT file FROM paths WHERE type = 'file'")
+                .all()
+                .map((row) => row.file);
+        } finally {
+            db.close();
+        }
+    }
+
+    // A copy of the folder `source` whose file rows all name `key`, an object only this copy points at.
+    async function copyNaming(source: string, target: string, metadataPath: string, key: string): Promise<void> {
+        cpSync(source, target, { recursive: true });
+        const db = openMountMetadata(metadataPath);
+        try {
+            db.run("UPDATE paths SET file = ? WHERE type = 'file'", [key]);
+        } finally {
+            db.close();
+        }
+        await fake.store.write(key, TEST_PNG_BYTES);
+    }
+
+    test('deleting a user takes every object its s3 drives and safety copies name, and the copies', async () => {
+        const { user: doomed, keys: doomedKeys } = await s3UserWithUploads('Doomed S3');
+        const { user: kept, keys: keptKeys } = await s3UserWithUploads('Kept S3');
+        const homeDir = homeDirOf(doomed.id);
+
+        const preRestore = `${homeDir}${PRE_RESTORE_SUFFIX}20200101-000000`;
+        const failedRestore = `${homeDir}${FAILED_RESTORE_SUFFIX}20200102-000000`;
+        await copyNaming(homeDir, preRestore, metadataPathOf(preRestore), 'pre-restore-only.png');
+        await copyNaming(homeDir, failedRestore, metadataPathOf(failedRestore), 'failed-restore-only.png');
+
+        // A local-key drive's keys are files in its folder: an object of the same name in the bucket is not its.
+        const settingsPath = join(homeDir, 'settings.json');
+        const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+        settings.mounts.side = { storageType: 'local-key', enabled: true };
+        writeFileSync(settingsPath, JSON.stringify(settings));
+        const sideDir = join(homeDir, 'mounts', 'side');
+        await copyNaming(
+            join(homeDir, 'mounts', 'default'),
+            sideDir,
+            join(sideDir, 'metadata.db'),
+            'local-key-only.png',
+        );
+
+        // Another home's safety copy, and an object nothing in this server names.
+        const keptCopy = `${homeDirOf(kept.id)}${PRE_RESTORE_SUFFIX}20200101-000000`;
+        await copyNaming(homeDirOf(kept.id), keptCopy, metadataPathOf(keptCopy), 'kept-copy-only.png');
+        await fake.store.write('stranger.bin', TEST_PNG_BYTES);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${doomed.id}`, {
+            method: 'DELETE',
+        });
+        expect(res.status).toBe(200);
+        expect(existsSync(homeDir)).toBe(false);
+        expect(existsSync(preRestore)).toBe(false);
+        expect(existsSync(failedRestore)).toBe(false);
+        await drainUserObjectDeletes();
+
+        for (const key of [...doomedKeys, 'pre-restore-only.png', 'failed-restore-only.png']) {
+            expect(await fake.store.exists(key)).toBe(false);
+        }
+        for (const key of [...keptKeys, 'kept-copy-only.png', 'local-key-only.png', 'stranger.bin']) {
+            expect(await fake.store.exists(key)).toBe(true);
+        }
+        expect(existsSync(keptCopy)).toBe(true);
+        rmSync(keptCopy, { recursive: true, force: true });
+    });
+
+    test('a bucket that refuses a delete does not keep the user', async () => {
+        const { user, keys } = await s3UserWithUploads('Refused S3', 2);
+        const [refused, deletable] = keys;
+        fake.faults.set(refused, 'deny');
+        try {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${user.id}`, {
+                method: 'DELETE',
+            });
+            expect(res.status).toBe(200);
+            expect(existsSync(homeDirOf(user.id))).toBe(false);
+            await drainUserObjectDeletes();
+            expect(await fake.store.exists(refused)).toBe(true);
+            expect(await fake.store.exists(deletable)).toBe(false);
+        } finally {
+            fake.faults.delete(refused);
+        }
     });
 });

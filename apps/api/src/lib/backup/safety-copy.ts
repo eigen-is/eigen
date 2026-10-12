@@ -4,7 +4,8 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { ApiError, PATHS } from '../core';
-import { createMountStorage } from '../mount/helpers';
+import { createMountConfig, createMountStorage } from '../mount/helpers';
+import type { StorageBackend } from '../storage';
 import { flatStorageKey } from './archive-layout';
 import { readHomeMounts } from './enumerate-homes';
 import { resolveHomeDir } from './home-dir';
@@ -105,18 +106,16 @@ function storageKeysIn(metadataPath: string): Set<string> {
     }
 }
 
-// Every folder beside the home that still stands for a state of it: the home itself and its other
-// safety copies. Two copies can name the same object — a restore only rekeys the rows it carries —
-// so an object one of them still points at is not garbage, whatever the folder being deleted says.
-function foldersReferencingObjects(homeDir: string, deleting: string): string[] {
+// Every folder that stands for a state of the home: the home itself and the safety copies beside it.
+function homeFolders(homeDir: string): string[] {
     const parent = path.dirname(homeDir);
     const homeName = path.basename(homeDir);
     const folders = [homeDir];
+    if (!fs.existsSync(parent)) return folders;
     for (const entry of fs.readdirSync(parent, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const abs = path.join(parent, entry.name);
-        if (abs === deleting) continue;
-        if (parseSafetyCopyName(entry.name)?.homeName === homeName) folders.push(abs);
+        if (entry.isDirectory() && parseSafetyCopyName(entry.name)?.homeName === homeName) {
+            folders.push(path.join(parent, entry.name));
+        }
     }
     return folders;
 }
@@ -137,7 +136,9 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         console.warn(`[backup] ${path.basename(folder)}: no live home to compare against, leaving its objects alone`);
         return;
     }
-    const referencing = foldersReferencingObjects(homeDir, folder);
+    // Two copies can name the same object (a restore only rekeys the rows it carries), so an object one of
+    // them still points at is not garbage, whatever the folder being deleted says.
+    const referencing = homeFolders(homeDir).filter((dir) => dir !== folder);
     for (const [id, mount] of remote) {
         // settings.json came from an archive, so its keys are untrusted: a mount id that resolves
         // outside this folder would have this reading — and deleting the objects of — another home.
@@ -182,4 +183,59 @@ export async function deleteSafetyCopy(folder: string, homeDir: string): Promise
     await deleteRemoteObjects(folder, homeDir);
     await fsp.rm(folder, { recursive: true, force: true });
     forgetSafetyCopySize(folder);
+}
+
+// What deleting an owner leaves in buckets: every object its home and safety copies name on an s3 mount. Read
+// before the folders go, since they are the only record of whose objects these are. All of them go: no other
+// home names these keys (a copy writes new objects, a restore rekeys, a team's mount is its own). A mount
+// with no S3 config of its own is on the server's, as the live one is.
+export function collectHomeObjects(homeDir: string): { folders: string[]; deleteObjects: () => Promise<number> } {
+    const folders = homeFolders(homeDir).filter((folder) => fs.existsSync(folder));
+    const buckets = new Map<string, { storage: StorageBackend; keys: Set<string> }>();
+    for (const folder of folders) {
+        const mounts = readHomeMounts(folder);
+        if (!mounts) {
+            console.warn(`[backup] ${path.basename(folder)}: ${PATHS.SETTINGS} is unreadable, leaving its objects`);
+            continue;
+        }
+        for (const [id, settings] of Object.entries(mounts)) {
+            if (settings.storageType !== 's3') continue;
+            // settings.json of a safety copy came from an archive: an id must not lead out of its folder.
+            const mountDir = resolveMountDir(folder, id);
+            if (!mountDir) continue;
+            const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
+            if (!fs.existsSync(metadataPath)) continue;
+            const config = createMountConfig(id, settings);
+            if (!config.s3Config) {
+                console.warn(`[backup] ${path.basename(folder)}: mount ${id} has no S3 config, leaving its objects`);
+                continue;
+            }
+            let keys: Set<string>;
+            try {
+                keys = storageKeysIn(metadataPath);
+            } catch (error) {
+                console.warn(
+                    `[backup] ${path.basename(folder)}: mount ${id} does not read, leaving its objects:`,
+                    error,
+                );
+                continue;
+            }
+            const destination = JSON.stringify(config.s3Config);
+            const bucket = buckets.get(destination) ?? {
+                storage: createMountStorage(config, mountDir),
+                keys: new Set(),
+            };
+            buckets.set(destination, bucket);
+            for (const key of keys) bucket.keys.add(key);
+        }
+    }
+    // One DELETE in flight at a time; a failed one is counted and the rest go on, since nothing retries them.
+    const deleteObjects = async (): Promise<number> => {
+        let failed = 0;
+        for (const { storage, keys } of buckets.values()) {
+            for (const key of keys) if (!(await storage.delete(key))) failed++;
+        }
+        return failed;
+    };
+    return { folders, deleteObjects };
 }

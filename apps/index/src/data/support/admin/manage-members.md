@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, members, users, roles, password]
 related: [admin/teams, admin/guests]
 order: 20
-updated: 2026-10-04
+updated: 2026-10-12
 ---
 
 Members are the people with full accounts on your Eigen server. You manage them from the [**Users**](/admin/users) page in Admin. You need an admin or owner role to do any of this.
@@ -45,7 +45,7 @@ Only the owner can reset the owner's password here. Whoever runs the server can 
 
 <div class="eigen-callout">
 
-Deleting a user permanently removes their account, files, emails, contacts, and calendars. This cannot be undone.
+Deleting a user permanently removes their account, files, emails, contacts, and calendars, including their files in an S3 bucket and the [safety copies](/support/admin/restore-home) of their account. This cannot be undone.
 
 </div>
 
