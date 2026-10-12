@@ -17,7 +17,7 @@ import {
 import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
-import { encodeDocxImage } from './docx-image';
+import { encodeDocxImage, figureMediaKey } from './docx-image';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -61,9 +61,10 @@ async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
     const pasted = new Map<string, { mediaType: string | null; base64: string }>();
     const visit = (node: JSONContent) => {
         if (node.type === 'figure') {
-            const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
-            const split = !mediaName && src ? splitDataUri(src) : null;
-            if (src && split) pasted.set(src, split);
+            const attrs = readFigureAttrs(node.attrs ?? {});
+            const key = figureMediaKey(attrs);
+            const split = key !== null && key === attrs.src ? splitDataUri(key) : null;
+            if (key && split) pasted.set(key, split);
         }
         for (const child of node.content ?? []) visit(child);
     };

@@ -460,6 +460,20 @@ describe('docx import quota', () => {
         expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(image(2)));
     }, 120_000);
 
+    test('a folder where an image would go is not overwritten or credited: the import is refused untouched', async () => {
+        const docPath = await createDoc('quota-folder-in-the-way');
+        const home = await getHome(ctx.alice.user.id);
+        const { mount } = await home.drive.resolveFile(mountId, docPath.id);
+        const mediaFolder = await mount.getChildByName(docPath.id, 'media');
+        if (!mediaFolder) throw new Error('media folder missing');
+        await mount.createFolder(mediaFolder.id, GOLDEN_DOCX_IMAGE_NAME);
+        const before = await readDocJson(docPath.id);
+        const res = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
+        expect(res.status).toBe(409);
+        expect(await readDocJson(docPath.id)).toEqual(before);
+        expect((await mount.listFolder(mediaFolder.id)).map((child) => child.name)).toEqual([GOLDEN_DOCX_IMAGE_NAME]);
+    }, 120_000);
+
     test('a convert whose images exceed the room is refused before the document is created', async () => {
         const uploaded = await upload(await deflatedDocx(image(3)), 'quota-convert.docx');
         await withMountRoom(IMAGE_BYTES / 2, async () => {

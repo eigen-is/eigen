@@ -91,7 +91,7 @@ Used by:
 
 Push-based sharing for Drive and Calendar. On share: resolve targets, write to recipient's DB. If the target doesn't exist yet, write to the share registry. On account/team join: pull from registry to reconcile missed shares.
 
-`Drive.updateACL` awaits the target resolution and its registry writes, because they are the durable record for targets without an account. The pushes to recipient homes are queued (`acl-propagation.ts`): bounded concurrency, in order per path, since an out-of-order add and revoke would resurrect a stale mirror row. A crash loses deliveries still in flight: the "Durable home-relay outbox" row of [ROADMAP.md](ROADMAP.md) closes that, and [SCALABILITY.md](SCALABILITY.md#a-relay-message-in-flight-is-lost-on-a-crash) has the relay side.
+`Drive.updateACL` awaits the target resolution and its registry writes, because they are the durable record for targets without an account. The pushes to recipient homes are queued (`acl-propagation.ts`): eight at a time under the relay's one delivery budget (`sendToUserHomes` in `home-relay.ts`, which a team notification's per-member fan-out shares), in order per path, since an out-of-order add and revoke would resurrect a stale mirror row. A crash loses deliveries still in flight: the "Durable home-relay outbox" row of [ROADMAP.md](ROADMAP.md) closes that, and [SCALABILITY.md](SCALABILITY.md#a-relay-message-in-flight-is-lost-on-a-crash) has the relay side.
 
 A saved ACL change also closes the live collab sockets of anyone who lost read below that path (`enforceReadAccessBelow`), so a revoke takes effect now, not at the next reconnect. How it walks the open documents: [COLLAB.md](COLLAB.md#read-is-checked-at-open-write-on-every-message).
 

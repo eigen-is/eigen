@@ -19,8 +19,8 @@
     ],
     "text": "recipient@example.com"
   },
-  "text": "Broken image: [cid:missing@x]",
+  "text": "Broken image:",
   "html": "<p>Broken image: <img src=\"cid:missing@x\"></p>\n",
-  "textAsHtml": "<p>Broken image: [cid:missing@x]</p>",
+  "textAsHtml": "<p>Broken image:</p>",
   "attachments": []
 }

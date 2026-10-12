@@ -5,8 +5,9 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
+import { collectHomeObjects } from '../../lib/backup/safety-copy';
 import { updateServerSettings } from '../../lib/config/server-settings';
-import { evictHome } from '../../lib/home/get-home';
+import { evictHome, getHome } from '../../lib/home/get-home';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { FakeS3Server } from '../fake-s3-server';
@@ -177,6 +178,37 @@ describe('Delete user', () => {
         const { getOrgRole } = await import('../../lib/user/user');
         const bobRole = await getOrgRole(ctx.bob.user.id);
         expect(bobRole).toBe('member');
+    });
+
+    test("a deletion while the user's home slot is held answers 409 and keeps the home", async () => {
+        const { auth } = await import('../../lib/auth/auth');
+        const { waitForHomeSlot } = await import('../../lib/backup/jobs');
+        const signUp = await auth.api.signUpEmail({
+            body: { email: 'busy-home@test.eigen.is', password: 'testpassword123', name: 'Busy Home' },
+        });
+        const userId = signUp.user.id;
+        await getHome(userId);
+        await evictHome(userId);
+        const homePath = join(TEST_DATA_DIR, 'home', userId);
+        const preRestore = `${homePath}${PRE_RESTORE_SUFFIX}20200101-000000`;
+        cpSync(homePath, preRestore, { recursive: true });
+
+        const release = await waitForHomeSlot(userId, 'restore');
+        try {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, {
+                method: 'DELETE',
+            });
+            expect(res.status).toBe(409);
+            expect(existsSync(homePath)).toBe(true);
+            expect(existsSync(preRestore)).toBe(true);
+        } finally {
+            release();
+        }
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, { method: 'DELETE' });
+        expect(res.status).toBe(200);
+        expect(existsSync(homePath)).toBe(false);
+        expect(existsSync(preRestore)).toBe(false);
     });
 
     test('deleting same user again returns 404', async () => {
@@ -508,6 +540,22 @@ describe("Delete user: the home's bucket objects", () => {
         }
         expect(existsSync(keptCopy)).toBe(true);
         rmSync(keptCopy, { recursive: true, force: true });
+    });
+
+    test('a bucket that refuses every delete is given up on early, and every object counts as failed', async () => {
+        const { user, keys } = await s3UserWithUploads('Dead Bucket S3', 30);
+        for (const key of keys) fake.faults.set(key, 'deny');
+        try {
+            const { objectCount, deleteObjects } = collectHomeObjects(homeDirOf(user.id));
+            expect(objectCount).toBe(30);
+            expect(await deleteObjects()).toBe(30);
+            const attempts = keys.reduce((sum, key) => sum + (fake.deletes.get(key) ?? 0), 0);
+            expect(attempts).toBeGreaterThanOrEqual(10);
+            expect(attempts).toBeLessThan(20);
+        } finally {
+            for (const key of keys) fake.faults.delete(key);
+            kept.push({ user, keys });
+        }
     });
 
     test('a bucket that refuses a delete does not keep the user', async () => {

@@ -10,8 +10,16 @@ const MAX_HTML_TEXT_LENGTH = 2 * 1024 * 1024;
 
 export type CidImage = { cid: string; contentType: string; content: Buffer };
 
+// The words alone: this text is the snippet and the search index, where a tracking pixel's or a link's url is noise.
+const HTML_TO_TEXT_OPTIONS = {
+    selectors: [
+        { selector: 'img', format: 'skip' },
+        { selector: 'a', options: { ignoreHref: true } },
+    ],
+};
+
 export function htmlToText(html: string): string {
-    return convert(html.slice(0, MAX_HTML_TEXT_LENGTH));
+    return convert(html.slice(0, MAX_HTML_TEXT_LENGTH), HTML_TO_TEXT_OPTIONS);
 }
 
 export function textToHtml(str: string): string {

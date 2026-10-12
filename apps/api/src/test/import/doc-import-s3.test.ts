@@ -53,7 +53,8 @@ describe('Eigendoc docx import into an S3 mount', () => {
         const key = await mount.getStorageKey(image.id);
         const before = s3.fake.gets.get(key) ?? 0;
         const file = await mount.readFile(image.id);
-        expect(Buffer.from(await file!.arrayBuffer())).toEqual(Buffer.from(TEST_PNG_BYTES));
+        if (!file) throw new Error(`${GOLDEN_DOCX_IMAGE_NAME} unreadable`);
+        expect(Buffer.from(await file.arrayBuffer())).toEqual(Buffer.from(TEST_PNG_BYTES));
         expect(s3.fake.gets.get(key) ?? 0).toBeGreaterThan(before);
 
         const json = readEigendocFromDoc((await drive.getCollabDocument(MOUNT_ID, docPath.id)).doc);
