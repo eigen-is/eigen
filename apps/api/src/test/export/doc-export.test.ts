@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { JSDOM } from 'jsdom';
+import sharp from 'sharp';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
 import { proseValue } from '../../lib/document/prose-css';
@@ -533,6 +534,62 @@ describe('doc export — docx SVG size', () => {
         const [cx, cy] = await extentPx(attrs);
         expect(Math.abs(cx - width)).toBeLessThanOrEqual(1);
         expect(Math.abs(cy - height)).toBeLessThanOrEqual(1);
+    });
+});
+
+// A figure pasted with a data: src has no media file; the docx encodes it as it does one.
+describe('doc export — docx data: figures', () => {
+    const dataUri = (type: string, bytes: Buffer | string) =>
+        `data:${type};base64,${Buffer.from(bytes).toString('base64')}`;
+
+    async function docxOf(...srcs: string[]) {
+        const doc = seededDoc({
+            type: 'doc',
+            content: srcs.map((src) => ({ type: 'paragraph', content: [{ type: 'figure', attrs: { src } }] })),
+        });
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
+        const zip = openZip(new Uint8Array(data));
+        return { zip, parts: zip.names().filter((name) => name.startsWith('word/media/')) };
+    }
+
+    const red = (width: number, height: number, alpha = 1) =>
+        sharp({ create: { width, height, channels: 4, background: { r: 255, g: 0, b: 0, alpha } } });
+
+    test('a data: PNG writes its PNG part at its own size, and one shown twice is one part', async () => {
+        const src = dataUri('image/png', await red(80, 50).png().toBuffer());
+        const { zip, parts } = await docxOf(src, src);
+        expect(parts).toEqual(['word/media/image1.png']);
+        const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
+        expect([format, width, height]).toEqual(['png', 80, 50]);
+    });
+
+    test('a data: JPEG is re-encoded: its EXIF, GPS included, stays out, and past 2560 px it shrinks', async () => {
+        const photo = await red(3000, 1000)
+            .flatten()
+            .jpeg()
+            .withExif({ IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '52/1 5/1 0/1' } })
+            .toBuffer();
+        const { zip, parts } = await docxOf(dataUri('image/jpeg', photo));
+        expect(parts).toEqual(['word/media/image1.jpeg']);
+        const { format, width, height, exif } = await sharp(zip.read('word/media/image1.jpeg')).metadata();
+        expect([format, width, height, exif]).toEqual(['jpeg', 2560, 853, undefined]);
+    });
+
+    test('a transparent data: WebP takes PNG', async () => {
+        const { parts } = await docxOf(dataUri('image/webp', await red(40, 40, 0).webp().toBuffer()));
+        expect(parts).toEqual(['word/media/image1.png']);
+    });
+
+    test('a data: SVG is sanitized and draws its PNG fallback', async () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="20"><rect width="30" height="20"/><image href="https://example.com/beacon.png"/></svg>`;
+        const { zip, parts } = await docxOf(dataUri('image/svg+xml', svg));
+        expect(parts).toEqual(['word/media/image1.png', 'word/media/image1.svg']);
+        expect(new TextDecoder().decode(zip.read('word/media/image1.svg'))).not.toContain('beacon');
+    });
+
+    test('a data: src that is not base64 or not an image writes nothing', async () => {
+        const { parts } = await docxOf('data:image/svg+xml,%3Csvg%2F%3E', dataUri('image/png', 'not a png'));
+        expect(parts).toEqual([]);
     });
 });
 

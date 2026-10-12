@@ -144,15 +144,6 @@ export function getVersion(lines: VCardLine[]): string | null {
     return lines.find((l) => l.name === 'VERSION')?.value ?? null;
 }
 
-// Null when the value is not a `;base64` data: URI, so the parser and the photo transcoder can both fall back.
-export function splitDataUri(value: string): { mediaType: string | null; base64: string } | null {
-    const comma = value.indexOf(',');
-    if (comma === -1) return null;
-    const header = value.slice('data:'.length, comma);
-    if (!header.endsWith(';base64')) return null;
-    return { mediaType: header.slice(0, -';base64'.length) || null, base64: value.slice(comma + 1) };
-}
-
 // vCard 3.0 PHOTO TYPE is the bare, uppercased image subtype ('image/jpeg' -> 'JPEG').
 export function photoParams(mediaType: string): [string, string][] {
     const subtype = mediaType.split('/')[1] ?? mediaType;
