@@ -580,12 +580,16 @@ describe('doc export — docx data: figures', () => {
         expect(parts).toEqual(['word/media/image1.png']);
     });
 
-    test('a data: SVG is sanitized and draws its PNG fallback', async () => {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="20"><rect width="30" height="20"/><image href="https://example.com/beacon.png"/></svg>`;
-        const { zip, parts } = await docxOf(dataUri('image/svg+xml', svg));
-        expect(parts).toEqual(['word/media/image1.png', 'word/media/image1.svg']);
-        expect(new TextDecoder().decode(zip.read('word/media/image1.svg'))).not.toContain('beacon');
-    });
+    // A web copy names its charset, and a media type is case-insensitive.
+    test.each(['image/svg+xml', 'image/svg+xml;charset=utf-8', 'Image/SVG+XML'])(
+        'a data: SVG typed %s is sanitized and draws its PNG fallback',
+        async (type) => {
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="20"><rect width="30" height="20"/><image href="https://example.com/beacon.png"/></svg>`;
+            const { zip, parts } = await docxOf(dataUri(type, svg));
+            expect(parts).toEqual(['word/media/image1.png', 'word/media/image1.svg']);
+            expect(new TextDecoder().decode(zip.read('word/media/image1.svg'))).not.toContain('beacon');
+        },
+    );
 
     test('a data: src that is not base64 or not an image writes nothing', async () => {
         const { parts } = await docxOf('data:image/svg+xml,%3Csvg%2F%3E', dataUri('image/png', 'not a png'));
