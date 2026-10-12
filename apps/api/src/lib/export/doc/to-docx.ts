@@ -3,7 +3,13 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, MIN_TABLE_COLUMN_PX, pageTwips, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    MIN_TABLE_COLUMN_PX,
+    pageTwips,
+    readFigureAttrs,
+    type TitleType,
+} from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import {
@@ -57,7 +63,6 @@ import {
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
-    type TitleType,
     twips,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';

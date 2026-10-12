@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
     BORDER_SIDES,
@@ -46,7 +47,7 @@ import {
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
-import { nodeLook, type TitleType } from '../lib/document/looks';
+import { nodeLook } from '../lib/document/looks';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';

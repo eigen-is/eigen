@@ -1,4 +1,5 @@
 import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
 
@@ -139,18 +140,16 @@ export function proseTextLook(selector: string): TextLook {
 // Each heading level's own look, by level - 1: Heading 5 and 6 draw Google Docs' grey, and 6 italic.
 export const HEADING_LOOKS = [1, 2, 3, 4, 5, 6].map((level) => proseTextLook(`.eigen-prose h${level}`));
 
-export const TITLE_SELECTORS = {
+export const TITLE_SELECTORS: Record<TitleType, string> = {
     title: '.eigen-prose p[data-type="title"]',
     subtitle: '.eigen-prose p[data-type="subtitle"]',
 };
 
 // The title's and subtitle's own look, by node: the subtitle draws Google Docs' grey.
-export const TITLE_LOOKS = {
+export const TITLE_LOOKS: Record<TitleType, TextLook> = {
     title: proseTextLook(TITLE_SELECTORS.title),
     subtitle: proseTextLook(TITLE_SELECTORS.subtitle),
 };
-
-export type TitleType = keyof typeof TITLE_LOOKS;
 
 // The look a text node draws its text in, which no mark carries; an italic one draws an italic mark upright. Word's
 // Heading 7 to 9 are an Eigen Heading 6.
