@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
 import { isCompleteArchive } from '@workspace/lib/validation';
+import { auth } from '../../lib/auth/auth';
 import * as archive from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import * as jobs from '../../lib/backup/jobs';
@@ -24,6 +25,7 @@ import {
     recoverInterruptedServerBackups,
 } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
+import * as snapshotModule from '../../lib/backup/snapshot-home';
 import { readServerArchive } from '../../lib/backup/verify';
 import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -48,6 +50,7 @@ import {
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
 const JOB_TIMEOUT_MS = 120_000;
 const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
+const snapshotHome = snapshotModule.snapshotHome;
 const waitForHomeSlot = jobs.waitForHomeSlot;
 const packFolder = archive.packFolder;
 const createArchiveWriter = archive.createArchiveWriter;
@@ -390,14 +393,18 @@ describe('Server backup job', () => {
             const kept = await createTestUser(`mid-capture-${Date.now()}@test.eigen.is`, 'testpassword123', 'Kept');
             await getHome(kept.id);
             let refused: unknown = null;
+            // From inside the capture, past getHomeForBackup, and straight into better-auth so only the
+            // user.delete.before teardown stands between it and the evict that would close the databases read.
+            const { internalAdapter } = await auth.$context;
             spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
-                    if (ownerId === kept.id) refused = await deleteUserCompletely(kept.id, null).catch((e) => e);
-                    return pullHomeSnapshot(ownerId, dir, options);
+                spyOn(snapshotModule, 'snapshotHome').mockImplementation(async (home, dir, options) => {
+                    if (home.user.id === kept.id) refused = await internalAdapter.deleteUser(kept.id).catch((e) => e);
+                    return snapshotHome(home, dir, options);
                 }),
             );
             try {
                 const { job, archivePath } = await runJob();
+                expect(job.error).toBeUndefined();
                 expect(job.state).toBe('done');
                 expect(refused).toBeInstanceOf(ApiError);
                 expect(refused).toMatchObject({ status: 409 });

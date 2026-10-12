@@ -17,10 +17,12 @@ import { getUserById } from './user';
 // raw /auth/admin/remove-user endpoint tears down exactly as much as Eigen's own
 // delete route. A throw here aborts better-auth's user-row deletion.
 export async function teardownUserData(user: User): Promise<void> {
+    // A restore, safety-copy delete or capture of this home must finish first: it may hold the only good copy,
+    // and a capture reads through the live Home the evict would close.
+    requireHomeSlotFree(user.id);
     // 1. Shut down cached Home singleton (closes databases, clears timeout)
     await evictHome(user.id);
-    // A restore, safety-copy delete or capture of this home must finish first: it may hold the only good copy.
-    // Nothing awaits between this check and the deletes, so no job can take the slot in between.
+    // Again past the await: nothing awaits between this check and the deletes, so no job can take the slot in between.
     requireHomeSlotFree(user.id);
 
     // 2. Delete user's home directory and the safety copies a restore left beside it, then the bucket objects
@@ -65,6 +67,8 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
     if (!user) {
         throw new ApiError(404, 'User not found');
     }
+    // better-auth drops the sessions and the password before the hook can refuse, with no rollback.
+    requireHomeSlotFree(userId);
 
     if (requestHeaders) {
         await auth.api.removeUser({ body: { userId }, headers: requestHeaders });

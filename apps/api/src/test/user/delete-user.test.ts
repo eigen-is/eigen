@@ -180,13 +180,14 @@ describe('Delete user', () => {
         expect(bobRole).toBe('member');
     });
 
-    test("a deletion while the user's home slot is held answers 409 and keeps the home", async () => {
+    test("a deletion while the user's home slot is held answers 409 and keeps the home and the sign-in", async () => {
         const { auth } = await import('../../lib/auth/auth');
         const { waitForHomeSlot } = await import('../../lib/backup/jobs');
-        const signUp = await auth.api.signUpEmail({
-            body: { email: 'busy-home@test.eigen.is', password: 'testpassword123', name: 'Busy Home' },
-        });
+        const credentials = { email: 'busy-home@test.eigen.is', password: 'testpassword123' };
+        const signUp = await auth.api.signUpEmail({ body: { ...credentials, name: 'Busy Home' } });
         const userId = signUp.user.id;
+        const signIn = await auth.api.signInEmail({ returnHeaders: true, body: credentials });
+        const token = (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/)![1];
         await getHome(userId);
         await evictHome(userId);
         const homePath = join(TEST_DATA_DIR, 'home', userId);
@@ -198,7 +199,22 @@ describe('Delete user', () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, {
                 method: 'DELETE',
             });
+            // better-auth drops sessions and the password before the user row, and nothing rolls them back.
+            const expectStillSignedIn = async () => {
+                expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+                expect((await auth.api.signInEmail({ body: credentials })).user.id).toBe(userId);
+            };
             expect(res.status).toBe(409);
+            await expectStillSignedIn();
+            const raw = await authedRequest(ctx.alice.user.sessionToken, '/auth/admin/remove-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId }),
+            });
+            expect(raw.status).toBe(409);
+            await expectStillSignedIn();
+            await expect(deleteUserCompletely(userId, null)).rejects.toMatchObject({ status: 409 });
+            await expectStillSignedIn();
             expect(existsSync(homePath)).toBe(true);
             expect(existsSync(preRestore)).toBe(true);
         } finally {
