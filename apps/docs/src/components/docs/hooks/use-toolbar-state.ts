@@ -6,7 +6,7 @@ import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { numberedListType, orderedListDepth } from '../list-numbering';
 import { paragraphStyleOf } from '../paragraph-styles';
 
-type ToolbarState = {
+export type ToolbarState = {
     // The paragraph style's name, none for Normal text.
     paragraphStyle: string | undefined;
     mixedStyles: boolean;
