@@ -11,13 +11,6 @@ import { shareRegistry } from '../share/schema';
 import type { User } from './user';
 import { getUserById } from './user';
 
-const pendingObjectDeletes = new Set<Promise<void>>();
-
-// Awaits every bucket delete a user deletion started, for tests.
-export async function drainUserObjectDeletes(): Promise<void> {
-    await Promise.all(pendingObjectDeletes);
-}
-
 // Runs from the user.delete.before database hook in auth.ts — the one seam every
 // better-auth deletion path passes through while the user row still exists — so the
 // raw /auth/admin/remove-user endpoint tears down exactly as much as Eigen's own
@@ -36,13 +29,11 @@ export async function teardownUserData(user: User): Promise<void> {
     }
     // Nothing records these keys once the folders are gone: a restart mid-way leaves the operator this number.
     if (objectCount > 0) console.log(`[delete-user] deleting ${objectCount} bucket objects of ${user.id}`);
-    const deleting = deleteObjects()
+    deleteObjects()
         .then((failed) => {
             if (failed > 0) console.warn(`[delete-user] ${failed} bucket objects of ${user.id} could not be deleted`);
         })
         .catch((error) => console.error(`[delete-user] deleting the bucket objects of ${user.id} failed:`, error));
-    pendingObjectDeletes.add(deleting);
-    deleting.finally(() => pendingObjectDeletes.delete(deleting));
 
     // 3. Clean up share registry — entries FROM this user always; entries TO this user
     //    only for non-guests. Guest registry entries persist so re-OTP after deletion

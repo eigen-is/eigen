@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome } from '../../lib/home/get-home';
 import { LocalStorage } from '../../lib/storage/local-storage';
-import { drainUserObjectDeletes } from '../../lib/user/delete-user';
+import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { FakeS3Server } from '../fake-s3-server';
 import type { TestUser } from '../setup';
 import {
@@ -18,6 +18,7 @@ import {
     createTeam,
     createTestUserOnStorage,
     driveUpload,
+    eventually,
     findOrFail,
     getTestContext,
     openMountMetadata,
@@ -382,6 +383,8 @@ describe("Delete user: the home's bucket objects", () => {
     const backing = join(TEST_DATA_DIR, 'delete-user-s3-backing');
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let fake: FakeS3Server;
+    // Users the tests keep: a later whole-server backup would try their homes on a bucket that is gone.
+    const kept: { user: TestUser; keys: string[] }[] = [];
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -390,10 +393,25 @@ describe("Delete user: the home's bucket objects", () => {
     });
 
     afterAll(async () => {
+        for (const { user, keys } of kept) {
+            await deleteUserCompletely(user.id, null);
+            await deleted(keys);
+        }
         await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
         await fake.stop();
         rmSync(backing, { recursive: true, force: true });
     });
+
+    // The bucket deletes a user deletion runs in the background.
+    async function deleted(keys: string[]): Promise<void> {
+        await eventually(
+            async () => {
+                for (const key of keys) if (await fake.store.exists(key)) return undefined;
+                return true;
+            },
+            `the bucket deletes of ${keys.join(', ')}`,
+        );
+    }
 
     function homeDirOf(userId: string): string {
         return join(TEST_DATA_DIR, 'home', userId);
@@ -449,7 +467,8 @@ describe("Delete user: the home's bucket objects", () => {
 
     test('deleting a user takes every object its s3 drives and safety copies name, and the copies', async () => {
         const { user: doomed, keys: doomedKeys } = await s3UserWithUploads('Doomed S3');
-        const { user: kept, keys: keptKeys } = await s3UserWithUploads('Kept S3');
+        const { user: keptUser, keys: keptKeys } = await s3UserWithUploads('Kept S3');
+        kept.push({ user: keptUser, keys: keptKeys });
         const homeDir = homeDirOf(doomed.id);
 
         const preRestore = `${homeDir}${PRE_RESTORE_SUFFIX}20200101-000000`;
@@ -471,8 +490,8 @@ describe("Delete user: the home's bucket objects", () => {
         );
 
         // Another home's safety copy, and an object nothing in this server names.
-        const keptCopy = `${homeDirOf(kept.id)}${PRE_RESTORE_SUFFIX}20200101-000000`;
-        await copyNaming(homeDirOf(kept.id), keptCopy, metadataPathOf(keptCopy), 'kept-copy-only.png');
+        const keptCopy = `${homeDirOf(keptUser.id)}${PRE_RESTORE_SUFFIX}20200101-000000`;
+        await copyNaming(homeDirOf(keptUser.id), keptCopy, metadataPathOf(keptCopy), 'kept-copy-only.png');
         await fake.store.write('stranger.bin', TEST_PNG_BYTES);
 
         const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${doomed.id}`, {
@@ -482,11 +501,8 @@ describe("Delete user: the home's bucket objects", () => {
         expect(existsSync(homeDir)).toBe(false);
         expect(existsSync(preRestore)).toBe(false);
         expect(existsSync(failedRestore)).toBe(false);
-        await drainUserObjectDeletes();
+        await deleted([...doomedKeys, 'pre-restore-only.png', 'failed-restore-only.png']);
 
-        for (const key of [...doomedKeys, 'pre-restore-only.png', 'failed-restore-only.png']) {
-            expect(await fake.store.exists(key)).toBe(false);
-        }
         for (const key of [...keptKeys, 'kept-copy-only.png', 'local-key-only.png', 'stranger.bin']) {
             expect(await fake.store.exists(key)).toBe(true);
         }
@@ -504,7 +520,8 @@ describe("Delete user: the home's bucket objects", () => {
             });
             expect(res.status).toBe(200);
             expect(existsSync(homeDirOf(user.id))).toBe(false);
-            await drainUserObjectDeletes();
+            await deleted([deletable]);
+            await eventually(async () => fake.deletes.get(refused), `the DELETE of ${refused}`);
             expect(await fake.store.exists(refused)).toBe(true);
             expect(await fake.store.exists(deletable)).toBe(false);
         } finally {

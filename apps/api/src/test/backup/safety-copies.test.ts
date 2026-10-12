@@ -29,6 +29,7 @@ import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
 import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
+import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     createHomeFaultMount,
@@ -44,10 +45,12 @@ import {
     authedRequest,
     createTestUserOnStorage,
     driveUpload,
+    eventually,
     getTestContext,
     openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
+    type TestUser,
 } from '../setup';
 
 const MOUNT_ID = 'safety-s3';
@@ -476,6 +479,9 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
 describe('Backup safety copies of a home on the server bucket', () => {
     const backing = join(TEST_DATA_DIR, 'safety-default-s3-backing');
     let fake: FakeS3Server;
+    // Kept to the end: a later whole-server backup would try its home on a bucket that is gone.
+    let user: TestUser | undefined;
+    let liveKeys: string[] = [];
 
     beforeAll(async () => {
         await getTestContext();
@@ -484,13 +490,20 @@ describe('Backup safety copies of a home on the server bucket', () => {
     });
 
     afterAll(async () => {
+        if (user) {
+            await deleteUserCompletely(user.id, null);
+            await eventually(async () => {
+                for (const key of liveKeys) if (await fake.store.exists(key)) return undefined;
+                return true;
+            }, 'the bucket deletes of the deleted user');
+        }
         await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
         await fake.stop();
         rmSync(backing, { recursive: true, force: true });
     });
 
     test('deleting a copy of a default drive takes the objects only it names from the server bucket', async () => {
-        const user = await createTestUserOnStorage('s3', 'Safety Default S3');
+        user = await createTestUserOnStorage('s3', 'Safety Default S3');
         const root = await assertJson<DrivePath>(
             await authedRequest(user.sessionToken, `/drive/${user.id}/default/root`),
         );
@@ -502,7 +515,7 @@ describe('Backup safety copies of a home on the server bucket', () => {
         const homeDir = join(TEST_DATA_DIR, 'home', user.id);
         const settings = JSON.parse(readFileSync(join(homeDir, 'settings.json'), 'utf8'));
         expect(settings.mounts.default.s3Config).toBeUndefined();
-        const liveKeys = fileKeysOf(join(homeDir, 'mounts', 'default', 'metadata.db'));
+        liveKeys = fileKeysOf(join(homeDir, 'mounts', 'default', 'metadata.db'));
         expect(liveKeys).toHaveLength(2);
 
         // The copy names one object the live home still points at and one only it does.
