@@ -107,7 +107,8 @@ function SheetEditorInner({
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
-    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, startUpload } = useMediaResolver();
+    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
+        useMediaResolver();
     // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
     // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
     const { isMobile } = useLayout();
@@ -409,6 +410,7 @@ function SheetEditorInner({
                                                   }
                                                 : {}),
                                             resolveImageUrl: resolveMediaUrl,
+                                            isImageMissing: isMediaMissing,
                                             resolveImagePath: resolveMediaPath,
                                             ...(canWrite && chatFolderId
                                                 ? {

@@ -7,7 +7,7 @@ import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppError, retryWhenTransformBusy } from '../../api-error';
 import { driveKeys } from './keys';
 
@@ -64,10 +64,12 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
 // FOLDER LOOKUP — wraps useFolderContent with refetch-on-miss for name-based lookups.
 // When a collaborator uploads a file, Yjs propagates the name before our cache updates.
 // findByName() triggers a single refetch per unknown name, preventing infinite loops.
+// isMissing() reads true once that refetch settled without the name, so a renderer can stop waiting.
 export function useFolderLookup(ownerId: string, mountId: string, folderId: string | null) {
     const { data = [], refetch } = useFolderContent(ownerId, mountId, folderId || '');
     const attemptedRef = useRef(new Set<string>());
     const refetchQueuedRef = useRef(false);
+    const [missing, setMissing] = useState<ReadonlySet<string>>(() => new Set());
 
     useEffect(() => {
         for (const name of attemptedRef.current) {
@@ -75,6 +77,10 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
                 attemptedRef.current.delete(name);
             }
         }
+        setMissing((prev) => {
+            const next = new Set([...prev].filter((name) => !data.some((f) => f.name === name)));
+            return next.size === prev.size ? prev : next;
+        });
     }, [data]);
 
     const findByName = useCallback(
@@ -90,7 +96,13 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
                     refetchQueuedRef.current = true;
                     queueMicrotask(() => {
                         refetchQueuedRef.current = false;
-                        refetch();
+                        // Only names asked before this refetch started can be judged by its result.
+                        const asked = [...attemptedRef.current];
+                        refetch().then((result) => {
+                            if (!result.isSuccess) return;
+                            const absent = asked.filter((n) => !result.data.some((f) => f.name === n));
+                            if (absent.length > 0) setMissing((prev) => new Set([...prev, ...absent]));
+                        });
                     });
                 }
             }
@@ -99,9 +111,11 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
         [data, folderId, refetch],
     );
 
+    const isMissing = useCallback((name: string): boolean => missing.has(name), [missing]);
+
     // Stable return object — MediaResolver's context value memoizes on it, and a fresh
     // literal per render would re-render every context subscriber (e.g. all board cards).
-    return useMemo(() => ({ contents: data, findByName }), [data, findByName]);
+    return useMemo(() => ({ contents: data, findByName, isMissing }), [data, findByName, isMissing]);
 }
 
 // GET MIME CONTENTS (aggregates over all mounts of one owner)
