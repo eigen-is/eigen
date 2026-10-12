@@ -28,6 +28,7 @@ import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from 
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
 import { atHome, getHome, getHomeForBackup, getTeamHome, isHomeOpen } from './get-home';
+import { TeamHome } from './team-home';
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
@@ -139,7 +140,18 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             home.broadcast(message.event);
             break;
         case 'notification':
-            home.notifications?.persist(message.notification);
+            if (home instanceof TeamHome) {
+                const members = await home.membersToNotify(message.notification.actorEmail);
+                await Promise.all(
+                    members.map((member) =>
+                        sendToHome(member.id, message).catch((err) =>
+                            console.error(`home-relay: notifying ${member.id} for ${targetUserId} failed:`, err),
+                        ),
+                    ),
+                );
+            } else {
+                home.notifications?.persist(message.notification);
+            }
             break;
     }
 }
@@ -375,6 +387,12 @@ export async function pullTeamMounts(
             return { id, name: m.name || id, rootPathId: root?.id ?? null };
         }),
     );
+}
+
+// The producer's own mail to a team goes to the same members its relayed notification reaches.
+export async function pullTeamMembersToNotify(ownerId: string, actorEmail: string): Promise<User[]> {
+    const home = await getTeamHome(ownerId);
+    return home.membersToNotify(actorEmail);
 }
 
 // Team membership grants read of the whole mount by design, so the caller-side membership check is the only gate.

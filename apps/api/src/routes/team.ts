@@ -65,6 +65,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                         defaultMountMaxSizeMB: t.Optional(t.Nullable(t.Number({ minimum: 10 }))),
                     }),
                 ),
+                notifyMembers: t.Optional(t.Boolean()),
             }),
             auth: true,
         },

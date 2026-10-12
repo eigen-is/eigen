@@ -75,7 +75,9 @@ describe('Access-request email', () => {
         const notifs = await assertJson<Notification[]>(
             await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`),
         );
-        const req = notifs.find((n) => n.type === 'access-request' && n.actorEmail === ctx.bob.user.email);
+        const req = notifs.find(
+            (n) => n.tag === `access-request:${ctx.alice.user.id}:${aliceMountId}:${doc.id}:${ctx.bob.user.email}`,
+        );
         expect(req?.title).toBe(`${ctx.bob.user.name} requested access`);
         expect(req?.body).toBe('access-request-on');
         expect(req?.details).toEqual({ message: 'Please', pathType: 'doc' });
