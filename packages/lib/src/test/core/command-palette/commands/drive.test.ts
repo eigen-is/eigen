@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { driveCommands } from '../../../../core/command-palette/commands/drive';
 import { navCommands } from '../../../../core/command-palette/commands/nav';
-import type { CommandContext } from '../../../../types/command-palette';
-import type { DrivePath, DrivePathType } from '../../../../types/drive';
+import type { CommandContext, PaletteSelectionActions } from '../../../../types/command-palette';
+import type { DrivePath, DrivePathType, ExportFormat } from '../../../../types/drive';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
     return {
@@ -25,12 +25,16 @@ function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): Dr
     };
 }
 
-function context(items: DrivePath[], mailEnabled = true): CommandContext {
+function context(
+    items: DrivePath[],
+    mailEnabled = true,
+    selectionActions: PaletteSelectionActions = { onDownload: () => {} },
+): CommandContext {
     return {
         ownerId: 'owner-1',
         mailEnabled,
         selection: { items },
-        selectionActions: { onDownload: () => {} },
+        selectionActions,
         docSearch: null,
         docSearchSession: null,
         docCommentSearch: null,
@@ -51,6 +55,14 @@ function isAvailable(commandId: string, items: DrivePath[], mailEnabled = true):
 const file = path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' });
 const folder = path({ name: 'Photos', type: 'folder', mimeType: 'folder' });
 const doc = path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' });
+const sheet = path({ name: 'Budget.eigensheets', type: 'sheets', mimeType: 'application/eigensheets' });
+
+function downloadAsFormats(items: DrivePath[], selectionActions: PaletteSelectionActions): string[] {
+    const ctx = context(items, true, selectionActions);
+    return driveCommands
+        .filter((c) => c.id.startsWith('drive.download-as.') && (c.availability?.(ctx) ?? true))
+        .map((c) => c.id.replace('drive.download-as.', ''));
+}
 
 // Both gates read the file-action registry, so these pin that the palette offers exactly what the
 // item menu does for the same item.
@@ -79,5 +91,30 @@ describe('drive selection commands', () => {
         expect(isAvailable('drive.mail-to', [file], false)).toBe(false);
         expect(isAvailable('nav.mail', [], false)).toBe(false);
         expect(isAvailable('nav.drive', [], false)).toBe(true);
+    });
+});
+
+// Published by the File menu, so each open document offers exactly its File › Download formats.
+describe('download as', () => {
+    const onExport = () => {};
+
+    test('offers the formats of the item type, in menu order', () => {
+        expect(downloadAsFormats([doc], { onExport })).toEqual(['docx', 'pdf', 'html']);
+        expect(downloadAsFormats([sheet], { onExport })).toEqual(['xlsx', 'pdf', 'html']);
+    });
+
+    test('offers nothing for a plain file, a multi-selection or without a published onExport', () => {
+        expect(downloadAsFormats([file], { onExport })).toEqual([]);
+        expect(downloadAsFormats([doc, sheet], { onExport })).toEqual([]);
+        expect(downloadAsFormats([doc], { onDownload: () => {} })).toEqual([]);
+    });
+
+    test('runs onExport with its format and labels itself as the Download submenu does', () => {
+        const calls: [string, ExportFormat][] = [];
+        const ctx = context([doc], true, { onExport: (item, format) => calls.push([item.name, format]) });
+        const command = driveCommands.find((c) => c.id === 'drive.download-as.docx');
+        command?.run(ctx);
+        expect(calls).toEqual([['Notes.eigendoc', 'docx']]);
+        expect(command?.title).toBe('Download as Microsoft Word (.docx)');
     });
 });

@@ -55,8 +55,10 @@ export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 
 export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 
-// Every download format the export route can produce. A type's own list is below.
-export type ExportFormat = 'docx' | 'xlsx' | 'pdf' | 'html' | 'svg';
+// Every download format the export route can produce. A type's own list is below and keeps this order,
+// so ⌘K's per-format rows read like that type's Download menu.
+export const EXPORT_FORMATS = ['docx', 'xlsx', 'svg', 'pdf', 'html'] as const;
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // What the convert route turns an office file into.
 export const CONVERT_TARGETS = ['eigensheets', 'eigendoc'] as const;
@@ -186,6 +188,14 @@ export const DRIVE_EXTENSIONS = {
 export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
     return getEigenDocInfoByType(type)?.exportFormats ?? [];
 }
+
+export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+    docx: 'Microsoft Word (.docx)',
+    xlsx: 'Microsoft Excel (.xlsx)',
+    svg: 'SVG image (.svg)',
+    pdf: 'PDF (.pdf)',
+    html: 'Web Page (.html)',
+};
 
 export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {
     return isDocumentType(type) ? EIGEN_DOC_TYPE_INFO[type] : undefined;
