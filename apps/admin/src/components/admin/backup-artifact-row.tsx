@@ -22,8 +22,8 @@ export function VerifyBadge({ verify }: { verify: BackupVerifyRecord }) {
 
 const LINE_TONE = { destructive: 'text-destructive', warning: 'text-warning' } as const;
 
-// A verify record carries up to a hundred and one lines, so the list scrolls.
-function VerifyLines({ lines, tone }: { lines: string[]; tone: keyof typeof LINE_TONE }) {
+// A verify record carries up to a hundred and one lines, so the list scrolls. A manifest's warnings draw the same way.
+export function VerifyLines({ lines, tone }: { lines: string[]; tone: keyof typeof LINE_TONE }) {
     if (lines.length === 0) return null;
     return (
         <ul className={cn('text-xs max-h-24 overflow-y-auto pl-7 list-disc', LINE_TONE[tone])}>
