@@ -169,9 +169,9 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         const referenced = new Set<string>();
         for (const dir of referencing) {
             const referencingMount = resolveMountDir(dir, id);
-            const metadataPath = referencingMount && path.join(referencingMount, PATHS.DRIVE.METADATA_DB);
-            if (metadataPath && fs.existsSync(metadataPath)) {
-                for (const key of storageKeysIn(metadataPath)) referenced.add(key);
+            const referencingDb = referencingMount && path.join(referencingMount, PATHS.DRIVE.METADATA_DB);
+            if (referencingDb && fs.existsSync(referencingDb)) {
+                for (const key of storageKeysIn(referencingDb)) referenced.add(key);
             }
         }
 
