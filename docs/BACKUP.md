@@ -125,7 +125,7 @@ A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-
 Every home archive is verified after the backup that wrote it, on **Verify**, and again before every restore:
 
 1. Transport: every file the manifest lists has exactly its size and sha256, and the folder holds nothing it does not list.
-2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open. A plain file whose row gives another size or sha256 than the manifest is a warning in the log, not a failure: an archive written before the capture rewrote such a row must still restore.
+2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open. A plain file whose row gives another size or sha256 than the manifest is a warning, not a failure: an archive written before the capture rewrote such a row must still restore. The sidecar's verify record keeps the warnings, only when there are some, and the archive's row lists them.
 3. Content: for the ten largest collab documents plus ten more, a sample that is the same on every run, every Yjs blob decodes and a document with blobs decodes to shared types. Chat containers are skipped, since their `data.db` is not Yjs.
 
 The verdict goes into the sidecar, which the admin pane's list reads. The manifest inside the archive is canonical; the sidecar is a cache.

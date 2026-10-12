@@ -285,6 +285,12 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                     {warning}
                 </p>
             ))}
+            {/* Verified all the same: a file row that does not describe its bytes. */}
+            {artifact.verify.warnings?.map((warning) => (
+                <p key={warning} className="text-xs text-warning pl-7">
+                    {warning}
+                </p>
+            ))}
             <VerifyFailures verify={artifact.verify} />
         </BackupArtifactRow>
     );

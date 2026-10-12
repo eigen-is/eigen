@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type {
     BackupJob,
     BackupManifest,
+    BackupVerifyRecord,
     ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
@@ -11,6 +12,7 @@ import {
     incompleteReason,
     isCompleteArchive,
     parseBackupManifest,
+    parseBackupSidecar,
     parseServerArchiveManifest,
     parseServerArchiveName,
     parseServerArchiveSidecar,
@@ -79,6 +81,27 @@ describe('parseBackupManifest', () => {
         for (const warnings of ['a.png', [3], [null], {}]) {
             expect(parseBackupManifest(JSON.stringify({ ...valid, warnings }))).toBeNull();
         }
+    });
+
+    describe('parseBackupSidecar', () => {
+        const checkedAt = new Date('2026-09-30T02:10:00.000Z');
+        const verify: BackupVerifyRecord = { status: 'verified', checkedAt, failures: [] };
+
+        test("reads a verify record's warnings, and a record written before them", () => {
+            const warned = { ...verify, warnings: ['home/mounts/drive/data/a.png: 6 bytes, its row says 1'] };
+            expect(parseBackupSidecar(JSON.stringify({ manifest: valid, verify: warned }))).toEqual({
+                manifest: valid,
+                verify: warned,
+            });
+            expect(parseBackupSidecar(JSON.stringify({ manifest: valid, verify }))?.verify).toEqual(verify);
+        });
+
+        test('drops warnings that are not a list of strings, and keeps the record', () => {
+            for (const warnings of ['a.png', [3], ['a.png', null], {}, []]) {
+                const read = parseBackupSidecar(JSON.stringify({ manifest: valid, verify: { ...verify, warnings } }));
+                expect(read?.verify).toEqual(verify);
+            }
+        });
     });
 });
 

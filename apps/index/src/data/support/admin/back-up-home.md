@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-10-05
+updated: 2026-10-12
 ---
 
 You can make a backup of a single user or a single team in Admin. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -28,7 +28,7 @@ A file Eigen has on record that is gone from its disk or bucket, for example bec
 
 Each archive is one file named `home-<id>-<date>-<time>.tar.zst`. Its row shows the date and size, and a badge:
 
-- **Verified**: the archive passed every check and is ready to restore.
+- **Verified**: the archive passed every check and is ready to restore. A file whose size or contents differ from what Eigen has on record for it is named in a warning on the row, and the archive still restores.
 - **Not verified**: the archive has not been checked yet.
 - **Failed**: a check found a problem. The row lists what went wrong and keeps the file, but offers no restore, so make a fresh backup.
 
