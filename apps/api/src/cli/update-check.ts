@@ -4,10 +4,13 @@ import type { parseArgs } from 'node:util';
 import { DECLINED, ROOT, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, wrap } from './ui';
 
-type ReleaseNote = { version: string; intro: string; breaking: string[] };
+type ReleaseNote = { version: string; intro: string; breaking: string[]; fullBackup: string[] };
 
 // This image's own changelog, which knows every version up to it.
-const CHANGELOG = join(ROOT, 'CHANGELOG.md');
+export const CHANGELOG = join(ROOT, 'CHANGELOG.md');
+// A release that migrates what a Light backup leaves out, such as a document's own database: the backup before the
+// update is Full, so a rollback brings it back. Unlike (breaking), nothing asks.
+export const FULL_BACKUP_MARKER = '(full backup)';
 const HEADING = /^\[([^\]]+)\]/;
 // A terminal shows a link as its text and its URL, a word wrap() keeps whole.
 const plainLinks = (text: string) => text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
@@ -24,9 +27,17 @@ A breaking change is asked about on a terminal and refused elsewhere (run by ./e
 
   --accept-breaking   Go ahead despite breaking changes
   --level             Print only the level of the backup the update makes first: level=full when a release
-                      since <version> has breaking changes, else level=light`;
+                      since <version> has breaking changes or is marked ${FULL_BACKUP_MARKER}, else level=light`;
 
-// The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and (breaking) lines; no [Unreleased].
+// A section's list items that carry `marker`, as plain text.
+function markedLines(lines: string[], marker: string): string[] {
+    return lines
+        .filter((line) => line.includes(marker))
+        .map((line) => plainLinks(line.replace(/^\s*-\s*/, '').replaceAll('**', '')));
+}
+
+// The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and their (breaking) and (full backup)
+// lines; no [Unreleased].
 export function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
     return changelog
         .split(/^## /m)
@@ -48,18 +59,21 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
                     version,
                     // A section that opens with a heading or a list has no intro.
                     intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : plainLinks(paragraph.join(' ')),
-                    breaking: lines
-                        .filter((line) => line.includes('(breaking)'))
-                        .map((line) => plainLinks(line.replace(/^\s*-\s*/, '').replaceAll('**', ''))),
+                    breaking: markedLines(lines, '(breaking)'),
+                    fullBackup: markedLines(lines, FULL_BACKUP_MARKER),
                 },
             ];
         })
         .sort((a, b) => Bun.semver.order(a.version, b.version));
 }
 
-// A breaking release may convert what a Light backup leaves out, so only a Full one could bring it back.
 function hasBreaking(notes: ReleaseNote[]): boolean {
     return notes.some(({ breaking }) => breaking.length > 0);
+}
+
+// A breaking or marked release may convert what a Light backup leaves out, so only a Full one could bring it back.
+export function backupLevel(notes: ReleaseNote[]): 'full' | 'light' {
+    return notes.some(({ breaking, fullBackup }) => breaking.length > 0 || fullBackup.length > 0) ? 'full' : 'light';
 }
 
 export async function updateCheck(
@@ -78,7 +92,7 @@ export async function updateCheck(
     // What changed since `from` up to this image.
     const notes = releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
     if (flags.level) {
-        console.log(`level=${hasBreaking(notes) ? 'full' : 'light'}`);
+        console.log(`level=${backupLevel(notes)}`);
         return;
     }
     for (const { version, intro, breaking } of notes) {

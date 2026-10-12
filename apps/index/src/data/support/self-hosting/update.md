@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-04
+updated: 2026-10-12
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -30,7 +30,7 @@ To see whether there is an update, and what it brings, without installing it: `.
 
 ## The backup an update makes
 
-Usually the backup is a Light one: the accounts, settings, and databases, without the files and the mail. It is a Full one, files and mail included, when a release since yours marks a change as breaking, or when you run `./eigen update --full`.
+Usually the backup is a Light one: the accounts, settings, and databases, without the files and the mail. It is a Full one, files and mail included, when a release since yours marks a change as breaking or as `(full backup)`, or when you run `./eigen update --full`. A `(full backup)` change converts how documents, chats, or comments store their data and keeps working after the update, so Eigen does not ask about it, but only a Full backup can bring the old version back.
 
 It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest good ones, and always the one `./eigen rollback` would restore. They stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 

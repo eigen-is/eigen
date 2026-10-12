@@ -1147,8 +1147,8 @@ update_get() {
     fi
     pin_images "$tag"
     # Before the files of the new version, which a failure would leave with the old images, and before its
-    # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release gets a
-    # full backup, since it may convert what a light one leaves out.
+    # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release, or one
+    # marked (full backup), gets a full backup, since it may convert what a light one leaves out.
     level=full
     if [ -z "$full" ] && [ -z "$no_backup" ]; then
         levels=$(cli update-check --from "$old_version" --level </dev/null)

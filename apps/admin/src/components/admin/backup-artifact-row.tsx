@@ -1,6 +1,7 @@
 import { formatDateTime } from '@workspace/lib/date';
 import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { Badge } from '@workspace/ui/components/badge';
+import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Archive } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -19,15 +20,27 @@ export function VerifyBadge({ verify }: { verify: BackupVerifyRecord }) {
     return <Badge variant="outline">{label}</Badge>;
 }
 
-export function VerifyFailures({ verify }: { verify: BackupVerifyRecord }) {
-    if (verify.status !== 'failed') return null;
+const LINE_TONE = { destructive: 'text-destructive', warning: 'text-warning' } as const;
+
+// A verify record carries up to a hundred and one lines, so the list scrolls.
+function VerifyLines({ lines, tone }: { lines: string[]; tone: keyof typeof LINE_TONE }) {
+    if (lines.length === 0) return null;
     return (
-        <ul className="text-xs text-destructive max-h-24 overflow-y-auto pl-7 list-disc">
-            {verify.failures.map((failure) => (
-                <li key={failure}>{failure}</li>
+        <ul className={cn('text-xs max-h-24 overflow-y-auto pl-7 list-disc', LINE_TONE[tone])}>
+            {lines.map((line) => (
+                <li key={line}>{line}</li>
             ))}
         </ul>
     );
+}
+
+export function VerifyFailures({ verify }: { verify: BackupVerifyRecord }) {
+    if (verify.status !== 'failed') return null;
+    return <VerifyLines lines={verify.failures} tone="destructive" />;
+}
+
+export function VerifyWarnings({ verify }: { verify: BackupVerifyRecord }) {
+    return <VerifyLines lines={verify.warnings ?? []} tone="warning" />;
 }
 
 type BackupArtifactRowProps = {

@@ -18,7 +18,7 @@ import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { BackupArtifactRow, VerifyBadge, VerifyFailures } from './backup-artifact-row';
+import { BackupArtifactRow, VerifyBadge, VerifyFailures, VerifyWarnings } from './backup-artifact-row';
 import { BackupJobStatus } from './backup-job-status';
 
 const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
@@ -285,6 +285,8 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                     {warning}
                 </p>
             ))}
+            {/* Verified all the same: a file row that does not describe its bytes. */}
+            <VerifyWarnings verify={artifact.verify} />
             <VerifyFailures verify={artifact.verify} />
         </BackupArtifactRow>
     );

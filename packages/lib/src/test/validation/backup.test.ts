@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type {
     BackupJob,
     BackupManifest,
+    BackupVerifyRecord,
     ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
@@ -11,6 +12,7 @@ import {
     incompleteReason,
     isCompleteArchive,
     parseBackupManifest,
+    parseBackupSidecar,
     parseServerArchiveManifest,
     parseServerArchiveName,
     parseServerArchiveSidecar,
@@ -51,33 +53,56 @@ describe('incompleteReason', () => {
     });
 });
 
-describe('parseBackupManifest', () => {
-    const valid: BackupManifest = {
-        formatVersion: 1,
-        kind: 'user',
-        ownerId: 'u'.repeat(32),
-        name: 'U',
-        createdAt: '2026-09-30T02:03:04.000Z',
-        appVersion: '0.3.1',
-        server: { domain: 'example.org', orgId: 'org' },
-        counts: { databases: 1, files: 0, bytes: 10 },
-        level: 'full',
-        mounts: [mount('drive', 'local')],
-        entries: [{ path: 'home/mounts/drive/metadata.db', bytes: 10, sha256: 'a'.repeat(64) }],
-    };
+const homeManifest: BackupManifest = {
+    formatVersion: 1,
+    kind: 'user',
+    ownerId: 'u'.repeat(32),
+    name: 'U',
+    createdAt: '2026-09-30T02:03:04.000Z',
+    appVersion: '0.3.1',
+    server: { domain: 'example.org', orgId: 'org' },
+    counts: { databases: 1, files: 0, bytes: 10 },
+    level: 'full',
+    mounts: [mount('drive', 'local')],
+    entries: [{ path: 'home/mounts/drive/metadata.db', bytes: 10, sha256: 'a'.repeat(64) }],
+};
 
+describe('parseBackupManifest', () => {
     test('reads the warnings of a home backed up with them, and a manifest written before them', () => {
         const warned = {
-            ...valid,
+            ...homeManifest,
             warnings: ['mount drive: files with no object in storage, archived without their bytes: a.png'],
         };
         expect(parseBackupManifest(JSON.stringify(warned))).toEqual(warned);
-        expect(parseBackupManifest(JSON.stringify(valid))).toEqual(valid);
+        expect(parseBackupManifest(JSON.stringify(homeManifest))).toEqual(homeManifest);
     });
 
     test('refuses warnings that are not a list of strings', () => {
         for (const warnings of ['a.png', [3], [null], {}]) {
-            expect(parseBackupManifest(JSON.stringify({ ...valid, warnings }))).toBeNull();
+            expect(parseBackupManifest(JSON.stringify({ ...homeManifest, warnings }))).toBeNull();
+        }
+    });
+});
+
+describe('parseBackupSidecar', () => {
+    const checkedAt = new Date('2026-09-30T02:10:00.000Z');
+    const verify: BackupVerifyRecord = { status: 'verified', checkedAt, failures: [] };
+
+    test("reads a verify record's warnings, and a record written before them", () => {
+        const warned = { ...verify, warnings: ['home/mounts/drive/data/a.png: 6 bytes, its row says 1'] };
+        expect(parseBackupSidecar(JSON.stringify({ manifest: homeManifest, verify: warned }))).toEqual({
+            manifest: homeManifest,
+            verify: warned,
+        });
+        expect(parseBackupSidecar(JSON.stringify({ manifest: homeManifest, verify }))?.verify).toEqual(verify);
+    });
+
+    test('drops warnings that are not a list of strings, and keeps the record', () => {
+        for (const warnings of ['a.png', [3], ['a.png', null], {}, []]) {
+            const read = parseBackupSidecar(
+                JSON.stringify({ manifest: homeManifest, verify: { ...verify, warnings } }),
+            );
+            expect(read?.verify).toEqual(verify);
         }
     });
 });

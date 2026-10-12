@@ -310,7 +310,7 @@ header "Updating $PUBLISHED, as published, to $RELEASE"
 # upgrade_published: $PUBLISHED from $PUBLISHED_REGISTRY, seeded, updated to $RELEASE and rolled back, as a
 # self-hoster does when $RELEASE comes out.
 upgrade_published() {
-    local before after pinned saved missing level=light breaking=''
+    local before after pinned saved missing level breaking=''
     release_install "eigentest-published-$$" "$PUBLISHED" "$PUBLISHED_REGISTRY"
     run_setup "$SCRATCH/setup-published.log" "${SETUP_FLAGS[@]}" --domain localhost
     if ! create_admin "$SCRATCH/setup-published.log" "$PASSWORD"; then
@@ -343,8 +343,6 @@ upgrade_published() {
         fi
         ok "$RELEASE lists breaking changes since $PUBLISHED, accepted by ACCEPT_BREAKING=1"
         breaking=1
-        # A breaking release may convert what a light archive leaves out.
-        level=full
         started=$SECONDS
         eigen update "$RELEASE" --accept-breaking
         show
@@ -381,6 +379,11 @@ upgrade_published() {
     else
         fail ".env.production changed: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
     fi
+    # The level the launcher got from $RELEASE's CLI: full when a release since $PUBLISHED is breaking or marked
+    # (full backup).
+    level=$(docker run --rm "$(api_image)" update-check --from "$PUBLISHED" --level </dev/null | sed -n 's/^level=//p' || :)
+    # A breaking release may convert what a light archive leaves out, whatever the CLI answers.
+    [ -z "$breaking" ] || [ "$level" = full ] || fail "$RELEASE is breaking, but update-check --level answers '$level', not full"
     saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
     if [[ $saved == server-pre-update-$level-*.tar ]] && backups | grep -qxF "$saved"; then
         ok ".eigen/last-update names backups/$saved, made on $PUBLISHED before the update"

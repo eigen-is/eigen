@@ -502,6 +502,37 @@ describe('Backup pack and verify', () => {
     });
 
     test(
+        'a file row whose size or sha256 differs from its bytes verifies, its warnings kept in the sidecar',
+        async () => {
+            const dir = await extractFresh('extract-row-warnings-');
+            const folder = join(dir, folderName);
+            const relMetadata = `home/mounts/${mountId}/metadata.db`;
+            const db = new Database(join(folder, relMetadata));
+            try {
+                db.run("UPDATE paths SET size = 1 WHERE name = 'café ünïcode.png'");
+                db.run("UPDATE paths SET hash = ? WHERE name LIKE 'long-name-%'", ['0'.repeat(64)]);
+            } finally {
+                db.close();
+            }
+            await restateManifestEntry(folder, relMetadata);
+            const cafe = manifest.entries.find((entry) => entry.path.includes('café ünïcode.png'))!;
+
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('verified');
+            expect(record.warnings?.toSorted()).toEqual(
+                [
+                    `${cafe.path}: ${cafe.bytes} bytes, its row says 1`,
+                    `${longPath}: sha256 does not match its row`,
+                ].toSorted(),
+            );
+            const sidecarOf = join(dir, buildArtifactName(ownerId, new Date()));
+            await writeSidecar(sidecarOf, manifest, record);
+            expect((await readSidecar(sidecarOf))?.verify).toEqual(record);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
         'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));

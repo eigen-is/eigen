@@ -193,13 +193,9 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         entry.bytes = metadata.byteLength;
         entry.sha256 = new Bun.CryptoHasher('sha256').update(metadata).digest('hex');
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
-        const warn = spyOn(console, 'warn');
-        try {
-            expect((await verifyFolder(folder)).status).toBe('verified');
-            expect(warn).toHaveBeenCalledWith(`[backup] home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`);
-        } finally {
-            warn.mockRestore();
-        }
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('verified');
+        expect(record.warnings).toEqual([`home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`]);
     });
 
     test('a file row with no hash on record and its folder sizes are archived as they are', async () => {

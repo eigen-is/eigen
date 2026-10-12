@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import pkg from '../../../../../package.json' with { type: 'json' };
-import { releaseNotes } from '../../cli/update-check';
+import { backupLevel, releaseNotes } from '../../cli/update-check';
 import { runCli } from '../cli-test-helpers';
 
 const { version } = pkg;
@@ -60,8 +60,9 @@ describe('releaseNotes', () => {
             version: '0.2.9',
             intro: 'Nine.',
             breaking: ['Contacts (breaking) — a new vCard shape'],
+            fullBackup: [],
         });
-        expect(ten).toEqual({ version: '0.2.10', intro: 'Ten comes after nine.', breaking: [] });
+        expect(ten).toEqual({ version: '0.2.10', intro: 'Ten comes after nine.', breaking: [], fullBackup: [] });
         expect(three?.intro).toBe('Big release. It spans two lines.');
         expect(three?.breaking).toEqual(['Sheets border storage (breaking) — borders are stored per cell']);
     });
@@ -72,7 +73,12 @@ describe('releaseNotes', () => {
             '0.2.0',
             '0.2.1',
         );
-        expect(note).toEqual({ version: '0.2.1', intro: '', breaking: ['Mail (breaking) — a new store'] });
+        expect(note).toEqual({
+            version: '0.2.1',
+            intro: '',
+            breaking: ['Mail (breaking) — a new store'],
+            fullBackup: [],
+        });
     });
 
     test('a link reads as its text and its URL, which a wrap never splits', () => {
@@ -85,6 +91,21 @@ describe('releaseNotes', () => {
             version: '0.2.1',
             intro: 'The steps are in the Self-hosting section (https://eigen.is/support/self-hosting/get-started).',
             breaking: ['Backups (breaking) — see the guide (https://eigen.is/support)'],
+            fullBackup: [],
+        });
+    });
+
+    test('a (full backup) line is no breaking change: the listing and the prompt never see it', () => {
+        const [note] = releaseNotes(
+            '## [0.2.1] - 2026-09-01\n\nComments.\n\n- **Comments (full backup)** — a new column\n',
+            '0.2.0',
+            '0.2.1',
+        );
+        expect(note).toEqual({
+            version: '0.2.1',
+            intro: 'Comments.',
+            breaking: [],
+            fullBackup: ['Comments (full backup) — a new column'],
         });
     });
 
@@ -101,6 +122,15 @@ describe('releaseNotes', () => {
     test('a downgrade or the same version has no notes', () => {
         expect(releaseNotes(CHANGELOG, '0.3.0', '0.2.9')).toEqual([]);
         expect(releaseNotes(CHANGELOG, '0.2.10', '0.2.10')).toEqual([]);
+    });
+});
+
+describe('backupLevel', () => {
+    test('is full when a release is breaking or marked (full backup), else light', () => {
+        const note = { version: '0.2.1', intro: '', breaking: [], fullBackup: [] };
+        expect(backupLevel([note])).toBe('light');
+        expect(backupLevel([note, { ...note, breaking: ['Mail (breaking)'] }])).toBe('full');
+        expect(backupLevel([{ ...note, fullBackup: ['Comments (full backup)'] }, note])).toBe('full');
     });
 });
 

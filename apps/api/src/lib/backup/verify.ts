@@ -40,13 +40,27 @@ import type { SnapshotProgress } from './snapshot-home';
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
 const SAMPLE_REST = 10;
-// A wrecked archive can fail on every entry; the record is a sidecar and an SSE payload, not a log.
-const MAX_FAILURES = 100;
+// A wrecked archive can fail on every entry, an old one warn on every row; the record is a sidecar and an SSE
+// payload, not a log.
+const MAX_LINES = 100;
 // And how many of them a one-line message quotes: the record carries the whole list.
 const FAILURES_IN_MESSAGE = 3;
 
 export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): string {
     return verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
+}
+
+// Failures or warnings, the first MAX_LINES of them and a count of the rest.
+function cappedLines(noun: string): { add: (message: string) => void; lines: () => string[] } {
+    const kept: string[] = [];
+    let suppressed = 0;
+    return {
+        add: (message) => {
+            if (kept.length < MAX_LINES) kept.push(message);
+            else suppressed++;
+        },
+        lines: () => (suppressed > 0 ? [...kept, `…and ${suppressed} more ${noun}`] : kept),
+    };
 }
 
 // The refusal of what does not verify, `name` being what was judged.
@@ -81,6 +95,7 @@ function listArchiveDatabases(
     root: string,
     entries: ReadonlyMap<string, BackupEntry>,
     fail: (message: string) => void,
+    warn: (message: string) => void,
 ): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
     // A home folder holds the first, the server member the second; neither holds the other's.
@@ -123,9 +138,9 @@ function listArchiveDatabases(
                     );
                     if (!file) continue;
                     if (row.size !== file.bytes) {
-                        console.warn(`[backup] ${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
+                        warn(`${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
                     } else if (row.hash !== null && row.hash !== file.sha256) {
-                        console.warn(`[backup] ${file.path}: sha256 does not match its row`);
+                        warn(`${file.path}: sha256 does not match its row`);
                     }
                 }
                 for (const managed of listManagedDatabases(rows)) {
@@ -187,12 +202,9 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
     // Every path below is compared against this, so the folder's own real path is the baseline.
     const root = fs.realpathSync(dir);
 
-    const failures: string[] = [];
-    let suppressed = 0;
-    const fail = (message: string): void => {
-        if (failures.length < MAX_FAILURES) failures.push(message);
-        else suppressed++;
-    };
+    const failures = cappedLines('failures');
+    const warnings = cappedLines('warnings');
+    const fail = failures.add;
 
     // Stage 1 — transport: the manifest and the folder describe the same set of bytes.
     const present = new Set<string>();
@@ -215,7 +227,16 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
 
     // Stage 2 — structure: SQLite's own verdict on every database the archive owns. A file already
     // reported missing by stage 1 is skipped rather than reported twice.
-    const databases = listArchiveDatabases(root, new Map(manifest.entries.map((entry) => [entry.path, entry])), fail);
+    const databases = listArchiveDatabases(
+        root,
+        new Map(manifest.entries.map((entry) => [entry.path, entry])),
+        fail,
+        // Logged too: a server backup or a restore keeps no sidecar, only the status.
+        (message) => {
+            console.warn(`[backup] ${message}`);
+            warnings.add(message);
+        },
+    );
     for (const [index, database] of databases.entries()) {
         if (fs.existsSync(database.abs)) {
             try {
@@ -265,8 +286,14 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
         onProgress?.('verify documents', index + 1, targets.length);
     }
 
-    if (suppressed > 0) failures.push(`…and ${suppressed} more failures`);
-    return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
+    const failed = failures.lines();
+    const warned = warnings.lines();
+    return {
+        status: failed.length === 0 ? 'verified' : 'failed',
+        checkedAt,
+        failures: failed,
+        ...(warned.length > 0 && { warnings: warned }),
+    };
 }
 
 // The manifest a whole-server archive closes with, or why it has none.
