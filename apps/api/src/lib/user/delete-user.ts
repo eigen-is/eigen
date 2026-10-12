@@ -29,11 +29,13 @@ export async function teardownUserData(user: User): Promise<void> {
     // 2. Delete user's home directory and the safety copies a restore left beside it, then the bucket objects
     //    they name, in the background: a bucket that refuses must not keep the user.
     const homePath = user.role === 'guest' ? getGuestHomePath(user.id) : getUserHomePath(user.id);
-    const { folders, deleteObjects } = collectHomeObjects(homePath);
+    const { folders, objectCount, deleteObjects } = collectHomeObjects(homePath);
     for (const folder of folders) {
         fs.rmSync(folder, { recursive: true, force: true });
         forgetSafetyCopySize(folder);
     }
+    // Nothing records these keys once the folders are gone: a restart mid-way leaves the operator this number.
+    if (objectCount > 0) console.log(`[delete-user] deleting ${objectCount} bucket objects of ${user.id}`);
     const deleting = deleteObjects()
         .then((failed) => {
             if (failed > 0) console.warn(`[delete-user] ${failed} bucket objects of ${user.id} could not be deleted`);
