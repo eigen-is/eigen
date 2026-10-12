@@ -86,6 +86,8 @@ When a mail links documents and has external recipients, internal recipients sha
 
 The app sends to `postfix:25` without authenticating. External clients submit on 587 and 465, where a login may only send as its own address (`docker/postfix/sender_login.regexp`). There are no aliases, so login and sender are one string. The empty sender `MAIL FROM:<>` is exempt, because read receipts and vacation replies must use it (RFC 3834).
 
+Port 25 relays without a login only for `mynetworks`: loopback and the `eigen` bridge subnet minus its gateway (`docker/postfix/entrypoint.sh`). A client of a published port can reach Postfix from that gateway: the host itself, Docker Desktop, rootless Docker, and on Linux every IPv6 client, which docker-proxy forwards because the network is IPv4-only. Trusting the gateway would make Postfix an open relay for all of them. OpenDKIM's `InternalHosts` leaves it out too, or it would sign their forged mail from our domain. A program on the host submits on 587 with a login, like any other client.
+
 Password guessing meets three layers:
 
 - The API counts failures per address and per client IP in a 15-minute window (`protocol-rate-limit.ts`). A valid app password is checked first, so a full bucket never locks one out.

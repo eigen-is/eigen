@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Verify the outbound mail-relay hardening against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
-# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, and a TLS key
-# the server backup reads too.
+# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, a TLS key
+# the server backup reads too, and a port 25 that relays for the API but not for the Docker gateway.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
@@ -52,6 +52,25 @@ smtp465() {
 
 smtp25() {
     printf '%b' "$1" | nc -w 10 localhost "$PORT_SMTP" 2>/dev/null
+}
+
+# The same dialog from eigen-api, a bridge-subnet client like the API's own mailer, to postfix:25.
+smtp25_from_api() {
+    dc exec -T -e DIALOG="$1" eigen-api bun -e '
+const socket = require("node:net").connect(25, "postfix");
+let reply = "";
+socket.on("connect", () => socket.write(process.env.DIALOG.replaceAll("\\n", "\r\n")));
+socket.on("data", (chunk) => { reply += chunk; });
+socket.on("close", () => process.stdout.write(reply.replaceAll("\r", "")));
+setTimeout(() => socket.destroy(), 10000).unref();
+' 2>/dev/null || true
+}
+
+# The `eigen` network's gateway as Docker reports it for the postfix container. The network's IPAM config
+# names it only when compose set one, which it does not.
+bridge_gateway() {
+    docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' \
+        "$(dc ps -q postfix | tr -d '\r')" 2>/dev/null || true
 }
 
 auth_plain() {
@@ -510,28 +529,30 @@ header "Probe 12 — mynetworks, OpenDKIM InternalHosts and the API trust range 
 # The trust range must be loopback plus the actual docker bridge subnet, not the whole
 # 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in the
 # entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
-# still carries the /12 and all three carry the subnet.
+# still carries the /12 and all three carry the subnet. Postfix and OpenDKIM also exclude the
+# subnet's gateway, which a client of a published port can arrive from (probe 16).
 if should_run 12; then
     expect_subnet="${EIGEN_SUBNET:-172.20.0.0/24}"
+    gateway=$(bridge_gateway)
     mynetworks=$(dc exec -T postfix postconf -h mynetworks | tr -d '\r' || true)
     trusted=$(dc exec -T postfix cat /etc/opendkim/TrustedHosts | tr -d '\r' || true)
     api_trusted=$(dc exec -T eigen-api sh -c 'echo "$TRUSTED_NETWORKS"' | tr -d '\r' || true)
-    if printf '%s' "$api_trusted" | grep -q '172\.16\.0\.0/12'; then
+    if [ -z "$gateway" ]; then
+        fail "docker inspect gave no gateway for the postfix container"
+    elif printf '%s' "$api_trusted" | grep -q '172\.16\.0\.0/12'; then
         fail "the API's TRUSTED_NETWORKS still carries the 172.16.0.0/12 range: $(oneline "$api_trusted")"
     elif ! printf '%s' "$api_trusted" | grep -qF "$expect_subnet"; then
         fail "the API's TRUSTED_NETWORKS is missing the bridge subnet $expect_subnet: $(oneline "$api_trusted")"
-    elif printf '%s' "$mynetworks" | grep -q '172\.16\.0\.0/12'; then
-        fail "mynetworks still carries the 172.16.0.0/12 range: $(oneline "$mynetworks")"
-    elif ! printf '%s' "$mynetworks" | grep -qF "$expect_subnet"; then
-        fail "mynetworks is missing the bridge subnet $expect_subnet: $(oneline "$mynetworks")"
-    elif ! printf '%s' "$mynetworks" | grep -qF '127.0.0.0/8'; then
-        fail "mynetworks dropped loopback: $(oneline "$mynetworks")"
+    elif [ "$mynetworks" != "127.0.0.0/8 !$gateway $expect_subnet" ]; then
+        fail "mynetworks is not loopback plus $expect_subnet minus the gateway $gateway: $(oneline "$mynetworks")"
     elif printf '%s' "$trusted" | grep -q '172\.16\.0\.0/12'; then
         fail "OpenDKIM InternalHosts still carries the 172.16.0.0/12 range: $(oneline "$trusted")"
-    elif ! printf '%s' "$trusted" | grep -qF "$expect_subnet"; then
+    elif ! printf '%s\n' "$trusted" | grep -qxF "$expect_subnet"; then
         fail "OpenDKIM InternalHosts is missing the bridge subnet $expect_subnet: $(oneline "$trusted")"
+    elif ! printf '%s\n' "$trusted" | grep -qxF "!$gateway"; then
+        fail "OpenDKIM InternalHosts does not exclude the gateway $gateway: $(oneline "$trusted")"
     else
-        ok "mynetworks + InternalHosts + API TRUSTED_NETWORKS scoped to loopback + $expect_subnet (no 172.16/12)"
+        ok "mynetworks + InternalHosts scoped to loopback + $expect_subnet minus $gateway, API TRUSTED_NETWORKS to loopback + $expect_subnet"
     fi
 else
     skip "probe 12 not selected"
@@ -624,6 +645,36 @@ if should_run 15 && [ "$HAVE_LOGIN" = 1 ]; then
     fi
 else
     skip_login_probe 15
+fi
+
+##############################################################################
+header "Probe 16 — port 25 relays for the API but not for the Docker gateway"
+##############################################################################
+# A client of a published port can reach postfix from the bridge gateway: this host, Docker Desktop,
+# rootless Docker, and every IPv6 client through docker-proxy. mynetworks excludes the gateway, so
+# such a client meets the relay check, while eigen-api, elsewhere in the subnet, still relays. The
+# client address postfix logged for the refusal must be the gateway, or the probe proved nothing.
+if should_run 16; then
+    gateway=$(bridge_gateway)
+    relay_rcpt="relay-probe-$RUN@example.com"
+    dialog="EHLO $HELO_NAME\nMAIL FROM:<$SENDER_FOREIGN>\nRCPT TO:<$relay_rcpt>\nQUIT\n"
+    from_host=$(smtp25 "$dialog") || true
+    from_api=$(smtp25_from_api "$dialog")
+    refused_from=$(dc logs --tail=200 postfix 2>&1 | grep -F "<$relay_rcpt>: Relay access denied" | tail -1 |
+        sed -n 's/.*RCPT from [^[]*\[\([^]]*\)\].*/\1/p' || true)
+    if printf '%s\n' "$from_host" | grep -q '^250 2\.1\.5'; then
+        fail "an unauthenticated client on the host relays to <$relay_rcpt>: $(oneline "$from_host")"
+    elif ! printf '%s\n' "$from_host" | grep -q 'Relay access denied'; then
+        fail "expected a relay refusal for the host's RCPT TO:<$relay_rcpt>: $(oneline "$from_host")"
+    elif [ -z "$gateway" ] || [ "$refused_from" != "$gateway" ]; then
+        fail "postfix refused the relay from '$refused_from', not the gateway '$gateway', so the gateway was not tested"
+    elif ! printf '%s\n' "$from_api" | grep -q '^250 2\.1\.5'; then
+        fail "eigen-api can no longer relay through postfix:25: $(oneline "$from_api")"
+    else
+        ok "postfix refuses to relay for the gateway $gateway and relays for eigen-api"
+    fi
+else
+    skip "probe 16 not selected"
 fi
 
 ##############################################################################

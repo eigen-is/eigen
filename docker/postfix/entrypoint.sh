@@ -10,7 +10,23 @@ export MAIL_DOMAIN
 # the docker bridge subnet so eigen-api (172.20.0.x by default) can submit and get its mail
 # DKIM-signed. EIGEN_SUBNET comes from docker-compose.yml, kept in step with the `eigen` network.
 # Unset → loopback only (fail closed), never the whole 172.16/12 range.
-export MAIL_TRUST_NETWORKS="127.0.0.0/8${EIGEN_SUBNET:+ ${EIGEN_SUBNET}}"
+# The subnet's gateway is excluded: a client of a published port can arrive from it (the host
+# itself, Docker Desktop, rootless Docker, and every IPv6 client through docker-proxy), and would
+# otherwise relay. It is the container's default route, read from /proc/net/route (little-endian
+# hex), since the image has no `ip`; without one the gateway is unknown, so loopback only.
+MAIL_TRUST_NETWORKS="127.0.0.0/8"
+BRIDGE_GATEWAY=""
+if [ -n "${EIGEN_SUBNET:-}" ]; then
+    gateway_hex=$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)
+    if [ -n "$gateway_hex" ]; then
+        # shellcheck disable=SC2046 # four hex bytes, split on purpose
+        BRIDGE_GATEWAY=$(printf '%d.%d.%d.%d' $(echo "$gateway_hex" | sed 's/\(..\)\(..\)\(..\)\(..\)/0x\4 0x\3 0x\2 0x\1/'))
+        MAIL_TRUST_NETWORKS="127.0.0.0/8 !${BRIDGE_GATEWAY} ${EIGEN_SUBNET}"
+    else
+        echo "WARNING: no default route, so no bridge gateway to exclude; trusting loopback only."
+    fi
+fi
+export MAIL_TRUST_NETWORKS
 
 echo "=== Eigen Postfix Container ==="
 echo "Hostname:    ${DOMAIN}"
@@ -73,13 +89,17 @@ fi
 # Hosts whose mail OpenDKIM signs (rather than just verifying). Must include the
 # docker bridge subnet — eigen-api submits SMTP from 172.20.0.x, and OpenDKIM's
 # default InternalHosts is loopback only, which would silently fall back to
-# verify-only and ship mail unsigned. Scoped to EIGEN_SUBNET (see MAIL_TRUST_NETWORKS
-# above); loopback only when it is unset, never the whole 172.16/12 range.
+# verify-only and ship mail unsigned. Scoped to EIGEN_SUBNET minus its gateway (see
+# MAIL_TRUST_NETWORKS above), or a forged From: of ours from outside would be signed; loopback
+# only without them, never the whole 172.16/12 range. The most specific entry wins, `!` excludes.
 mkdir -p /etc/opendkim
 {
     echo "127.0.0.0/8"
     echo "::1"
-    if [ -n "${EIGEN_SUBNET:-}" ]; then echo "${EIGEN_SUBNET}"; fi
+    if [ -n "$BRIDGE_GATEWAY" ]; then
+        echo "!${BRIDGE_GATEWAY}"
+        echo "${EIGEN_SUBNET}"
+    fi
 } > /etc/opendkim/TrustedHosts
 
 # OpenDKIM config — signs outbound mail as ${MAIL_DOMAIN} and, in verify mode (Mode sv), stamps
