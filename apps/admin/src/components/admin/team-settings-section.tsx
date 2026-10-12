@@ -14,7 +14,6 @@ import { Switch } from '@workspace/ui/components/switch';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { Pencil } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { SwitchRow } from './switch-row';
 
 // What a team's members may do with the team calendar. 'read' is the absence of a share row rather
 // than one of the two permissions the API takes, so it lives only here.
@@ -180,12 +179,10 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
 
                     <Separator />
 
-                    <SwitchRow
-                        label="Notify members"
-                        description="Tell every member when someone asks for access to a file on this team's drives."
-                        checked={draftNotifyMembers}
-                        onChange={setDraftNotifyMembers}
-                    />
+                    <div className="flex items-center justify-between">
+                        <Label>Notify members</Label>
+                        <Switch checked={draftNotifyMembers} onCheckedChange={setDraftNotifyMembers} />
+                    </div>
 
                     <Separator />
 

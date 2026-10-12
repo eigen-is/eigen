@@ -10,6 +10,7 @@ import {
     createTeam,
     driveGet,
     drivePost,
+    eventually,
     firstMountId,
     getTestContext,
     type TestContext,
@@ -93,7 +94,8 @@ describe('An access request on a team drive', () => {
         const { spy, to } = await catchMail();
         const doc = await createTeamDoc('team-request-on');
         expect((await requestAccess(doc.id, ctx.bob.user)).status).toBe(200);
-        await new Promise((r) => setTimeout(r, 100));
+        // The mails go out after the rows, so they mark the fan-out done.
+        await eventually(async () => (to(ctx.alice.user).length && to(ctx.charlie.user).length ? true : undefined));
 
         const tag = tagFor(doc.id, ctx.bob.user);
         expect(await rowsTagged(ctx.alice.user, tag)).toHaveLength(1);
@@ -109,12 +111,30 @@ describe('An access request on a team drive', () => {
         const { spy, to } = await catchMail();
         const doc = await createTeamDoc('team-request-self');
         await requestAccess(doc.id, ctx.alice.user);
-        await new Promise((r) => setTimeout(r, 100));
+        await eventually(async () => (to(ctx.charlie.user).length ? true : undefined));
 
         const tag = tagFor(doc.id, ctx.alice.user);
         expect(await rowsTagged(ctx.alice.user, tag)).toHaveLength(0);
         expect(await rowsTagged(ctx.charlie.user, tag)).toHaveLength(1);
         expect(to(ctx.alice.user)).toHaveLength(0);
+        expect(to(ctx.charlie.user)).toHaveLength(1);
+        spy.mockRestore();
+    });
+
+    test("a member's failed mail is retried for that member alone", async () => {
+        const { spy, to } = await catchMail();
+        let aliceFailed = false;
+        spy.mockImplementation(async (mail) => {
+            if (aliceFailed || !mail.to.some((t) => t.address === ctx.alice.user.email)) return true;
+            aliceFailed = true;
+            return false;
+        });
+        const doc = await createTeamDoc('team-request-retry');
+        await requestAccess(doc.id, ctx.bob.user);
+        await eventually(async () => (to(ctx.alice.user).length && to(ctx.charlie.user).length ? true : undefined));
+        await requestAccess(doc.id, ctx.bob.user);
+
+        await eventually(async () => (to(ctx.alice.user).length === 2 ? true : undefined), "Alice's retry");
         expect(to(ctx.charlie.user)).toHaveLength(1);
         spy.mockRestore();
     });

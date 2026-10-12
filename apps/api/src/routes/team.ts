@@ -46,14 +46,16 @@ export const teamRouter = new Elysia({ name: 'team' })
         async ({ params, body, user }): Promise<TeamSettings> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
+            const { memberOverrides, ...rest } = body;
+            // Only a body that names memberOverrides replaces them: the merge copies an undefined through.
             return await home.settings.set({
-                ...body,
-                memberOverrides: body.memberOverrides
-                    ? {
-                          mailAndContactsMaxMB: body.memberOverrides.mailAndContactsMaxMB ?? undefined,
-                          defaultMountMaxSizeMB: body.memberOverrides.defaultMountMaxSizeMB ?? undefined,
-                      }
-                    : undefined,
+                ...rest,
+                ...(memberOverrides && {
+                    memberOverrides: {
+                        mailAndContactsMaxMB: memberOverrides.mailAndContactsMaxMB ?? undefined,
+                        defaultMountMaxSizeMB: memberOverrides.defaultMountMaxSizeMB ?? undefined,
+                    },
+                }),
             });
         },
         {

@@ -4,7 +4,7 @@ import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { assertJson, authedRequest, driveGet, drivePost, getTestContext } from '../setup';
+import { assertJson, authedRequest, driveGet, drivePost, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -64,9 +64,8 @@ describe('Access-request email', () => {
 
         const doc = await createDoc('access-request-on');
         await requestAccess(doc.id, { message: 'Please' });
-        await new Promise((r) => setTimeout(r, 100));
 
-        const calls = toAlice();
+        const calls = await eventually(async () => (toAlice().length > 0 ? toAlice() : undefined), 'the mail');
         expect(calls.length).toBe(1);
         expect(calls[0][0].subject).toContain(ctx.bob.user.name);
         expect(calls[0][0].html).toContain('Please');
@@ -91,9 +90,10 @@ describe('Access-request email', () => {
         const other = await createDoc('access-request-repeat-other');
         for (let i = 0; i < 5; i++) await requestAccess(doc.id);
         await requestAccess(other.id);
-        await new Promise((r) => setTimeout(r, 100));
 
-        expect(toAlice().length).toBe(2);
+        expect(
+            await eventually(async () => (toAlice().length >= 2 ? toAlice() : undefined), 'both mails'),
+        ).toHaveLength(2);
         spy.mockRestore();
     });
 
