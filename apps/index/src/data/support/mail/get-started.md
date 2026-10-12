@@ -7,7 +7,7 @@ tags: [mail, getting-started, email, inbox]
 related: [mail/read-and-reply, mail/compose-and-send, drive/get-started]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-20
+updated: 2026-10-12
 ---
 
 Mail is your email in Eigen. You read, write, and organize messages without leaving the browser. This page is a quick tour of the layout, so you know where everything is.
@@ -35,7 +35,7 @@ If you also read this account in another mail app and made folders of your own t
 
 The middle column lists the messages in the mailbox you've opened, newest first. Each row shows who the message is from, the subject, a short preview of the text, and the date.
 
-Unread messages are shown in bold, so they stand out. A paperclip next to a message means it has an attachment.
+Unread messages are shown in bold, so they stand out. A paperclip next to a message means it has an attachment, and a curved arrow next to the date means you've replied to it.
 
 To find a message, type in the **Search emails...** box at the top of the list. See [Search your email](/support/mail/search-your-email) for more.
 

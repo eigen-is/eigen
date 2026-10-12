@@ -11,7 +11,7 @@ import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-select
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Keyboard, Paperclip, Star } from 'lucide-react';
+import { Keyboard, Paperclip, Reply, Star } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
 
@@ -265,6 +265,12 @@ export function EmailList({
                                                     {correspondent || 'Unknown'}
                                                 </div>
                                                 <div className="flex items-center gap-1 ml-2 shrink-0">
+                                                    {email.isReplied && (
+                                                        <Reply
+                                                            aria-hidden
+                                                            className="h-3 w-3 shrink-0 text-muted-foreground"
+                                                        />
+                                                    )}
                                                     {email.isFlagged && (
                                                         // Match the date's text size so a flagged row doesn't grow the
                                                         // line box and nudge the date up (the row aligns to baseline).
