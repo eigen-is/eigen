@@ -109,12 +109,13 @@ describe('download as', () => {
         expect(downloadAsFormats([doc], { onDownload: () => {} })).toEqual([]);
     });
 
-    test('runs onExport with its format and labels itself as the Download submenu does', () => {
+    test('runs onExport with its format and labels itself as the Download submenu does, naming the item', () => {
         const calls: [string, ExportFormat][] = [];
         const ctx = context([doc], true, { onExport: (item, format) => calls.push([item.name, format]) });
         const command = driveCommands.find((c) => c.id === 'drive.download-as.docx');
         command?.run(ctx);
         expect(calls).toEqual([['Notes.eigendoc', 'docx']]);
         expect(command?.title).toBe('Download as Microsoft Word (.docx)');
+        expect(command?.dynamicTitle?.(ctx)).toBe('Download Notes as Microsoft Word (.docx)');
     });
 });

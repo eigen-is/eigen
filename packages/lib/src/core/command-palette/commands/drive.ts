@@ -215,6 +215,7 @@ export const driveCommands: Command[] = [
                 !!ctx.selectionActions?.onExport
             );
         },
+        dynamicTitle: (ctx) => `Download ${selectionLabel(ctx)} as ${EXPORT_FORMAT_LABELS[format]}`,
         run: (ctx) => {
             const item = ctx.selection?.items[0];
             if (item) ctx.selectionActions?.onExport?.(item, format);
