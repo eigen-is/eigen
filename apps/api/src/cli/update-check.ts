@@ -11,6 +11,8 @@ export const CHANGELOG = join(ROOT, 'CHANGELOG.md');
 // A release that migrates what a Light backup leaves out, such as a document's own database: the backup before the
 // update is Full, so a rollback brings it back. Unlike (breaking), nothing asks.
 export const FULL_BACKUP_MARKER = '(full backup)';
+// A release whose update asks first, and refuses without a terminal.
+const BREAKING_MARKER = '(breaking)';
 const HEADING = /^\[([^\]]+)\]/;
 // A terminal shows a link as its text and its URL, a word wrap() keeps whole.
 const plainLinks = (text: string) => text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
@@ -59,7 +61,7 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
                     version,
                     // A section that opens with a heading or a list has no intro.
                     intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : plainLinks(paragraph.join(' ')),
-                    breaking: markedLines(lines, '(breaking)'),
+                    breaking: markedLines(lines, BREAKING_MARKER),
                     fullBackup: markedLines(lines, FULL_BACKUP_MARKER),
                 },
             ];
@@ -73,7 +75,7 @@ function hasBreaking(notes: ReleaseNote[]): boolean {
 
 // A breaking or marked release may convert what a Light backup leaves out, so only a Full one could bring it back.
 export function backupLevel(notes: ReleaseNote[]): 'full' | 'light' {
-    return notes.some(({ breaking, fullBackup }) => breaking.length > 0 || fullBackup.length > 0) ? 'full' : 'light';
+    return hasBreaking(notes) || notes.some(({ fullBackup }) => fullBackup.length > 0) ? 'full' : 'light';
 }
 
 export async function updateCheck(

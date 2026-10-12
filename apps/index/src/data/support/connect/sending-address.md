@@ -7,7 +7,7 @@ tags: [mail, smtp, sending, aliases, integrations, "553"]
 related: [connect/mail-client, connect/auth-failures]
 crossSections: [mail]
 order: 210
-updated: 2026-09-13
+updated: 2026-10-12
 ---
 
 Eigen gives you one email address, with no aliases and no send-as addresses. A mail client has to send using that exact address. If it is set up with any other sender address, it still receives your mail normally, but every message you try to send is refused.
@@ -34,7 +34,7 @@ One address per account is what makes the check possible, and the check is what 
 
 ## Sending many messages at once stalls
 
-**Each submission port accepts up to 20 sign-in attempts and 60 messages a minute from one internet address.** Most clients sign in once per message, so sending more than 20 messages in a minute from the same network reaches the sign-in cap, and 60 reaches the message cap. Wait a minute, then send the rest; a message the server turns away this way is retried by most clients, not lost. The limit counts per internet address, so one busy client cannot use up another one's allowance.
+**Each submission port accepts up to 20 sign-in attempts and 60 messages a minute from one internet address.** Most clients sign in once per message, so sending more than 20 messages in a minute from the same network reaches the sign-in cap. A client that signs in once and sends many messages reaches the message cap at 60. Wait a minute, then send the rest; a message the server turns away this way is retried by most clients, not lost. The limit counts per internet address, so one busy client cannot use up another one's allowance.
 
 <div class="eigen-callout">
 

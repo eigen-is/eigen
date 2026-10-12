@@ -103,8 +103,8 @@ Usage: ./eigen update [version] [--check] [--accept-breaking] [--full | --no-bac
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
 the backup ./eigen rollback goes back to: a light one, of the accounts, settings and
-databases, unless the new version lists breaking changes. ./eigen update main follows the
-main channel instead of releases.
+databases, unless the new version lists breaking changes or marks a change (full backup),
+when it is full. ./eigen update main follows the main channel instead of releases.
 
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
