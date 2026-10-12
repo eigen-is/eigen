@@ -2,7 +2,7 @@
 # Verify the outbound mail-relay hardening against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
 # SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, a TLS key
-# the server backup reads too, and a port 25 that relays for the API but not for the Docker gateway.
+# the server backup reads too, and a port 25 that relays and DKIM-signs for the API but not for the Docker gateway.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
@@ -12,9 +12,10 @@
 # Needs:  docker, openssl, nc, curl, git. The install is fresh, so the script creates the admin
 #         alice@eigen.test through the setup wizard's API and logs in as her.
 #
-# Probes 8 and 13 set `defer_transports=smtp` and seed queue files; the scratch stack goes away afterwards.
+# Probes 8, 13 and 16 set `defer_transports` and seed queue files; the scratch stack goes away afterwards.
 #
-# No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
+# No message is ever delivered: the submission dialogs stop at RCPT TO, and the messages probes 13 and 16
+# queue stay parked by `defer_transports`.
 #
 # Runtime is about 7 minutes: probe 10 paces itself under Postfix's anvil AUTH cap and probe 8 waits
 # for the queue monitor's next interval; everything else is quick. A PROBES subset that names any
@@ -653,12 +654,14 @@ else
 fi
 
 ##############################################################################
-header "Probe 16 — port 25 relays for the API but not for the Docker gateway"
+header "Probe 16 — port 25 relays and DKIM-signs for the API but not for the Docker gateway"
 ##############################################################################
-# A client of a published port can reach postfix from the bridge gateway: this host, Docker Desktop,
-# rootless Docker, and every IPv6 client through docker-proxy. mynetworks excludes the gateway, so
-# such a client meets the relay check, while eigen-api, elsewhere in the subnet, still relays. The
-# client address postfix logged for the refusal must be the gateway, or the probe proved nothing.
+# A client of a published port can reach postfix from the bridge gateway: this host, Docker Desktop and
+# rootless Docker. mynetworks excludes the gateway, so such a client meets the relay check, while eigen-api,
+# elsewhere in the subnet, still relays. The client address postfix logged for the refusal must be the
+# gateway, or the probe proved nothing. Mail from our domain that the gateway queues for a local mailbox is
+# accepted, but OpenDKIM's InternalHosts excludes the gateway too, so it stays unsigned, while the same
+# message from eigen-api is signed. defer_transports parks both in the queue, where postcat shows them.
 if should_run 16; then
     gateway=$(bridge_gateway)
     relay_rcpt="relay-probe-$RUN@example.com"
@@ -667,6 +670,23 @@ if should_run 16; then
     from_api=$(smtp25_from_api "$dialog")
     refused_from=$(dc logs --tail=200 postfix 2>&1 | grep -F "<$relay_rcpt>: Relay access denied" | tail -1 |
         sed -n 's/.*RCPT from [^[]*\[\([^]]*\)\].*/\1/p' || true)
+    dc exec -T postfix sh -c 'postconf -e "defer_transports=smtp eigen" && postfix reload' >/dev/null 2>&1
+    forged="postmaster@$MAIL_DOMAIN"
+    local_dialog() {
+        printf '%s' "EHLO $HELO_NAME\nMAIL FROM:<$forged>\nRCPT TO:<$ALICE_EMAIL>\nDATA\nFrom: $forged\nTo: $ALICE_EMAIL\nSubject: $1\n\nprobe\n.\nQUIT\n"
+    }
+    host_subject="gateway-dkim-probe-$RUN"
+    api_subject="api-dkim-probe-$RUN"
+    queued_from_host=$(smtp25 "$(local_dialog "$host_subject")") || true
+    smtp25_from_api "$(local_dialog "$api_subject")" >/dev/null
+    host_queued=''
+    api_queued=''
+    for _ in $(seq 1 30); do
+        host_queued=$(dkim_headers "$host_subject")
+        api_queued=$(dkim_headers "$api_subject")
+        [ -n "$host_queued" ] && [ -n "$api_queued" ] && break
+        sleep 1
+    done
     if printf '%s\n' "$from_host" | grep -q '^250 2\.1\.5'; then
         fail "an unauthenticated client on the host relays to <$relay_rcpt>: $(oneline "$from_host")"
     elif ! printf '%s\n' "$from_host" | grep -q 'Relay access denied'; then
@@ -675,8 +695,16 @@ if should_run 16; then
         fail "postfix refused the relay from '$refused_from', not the gateway '$gateway', so the gateway was not tested"
     elif ! printf '%s\n' "$from_api" | grep -q '^250 2\.1\.5'; then
         fail "eigen-api can no longer relay through postfix:25: $(oneline "$from_api")"
+    elif [ -z "$host_queued" ]; then
+        fail "the host's message to <$ALICE_EMAIL> never reached the queue: $(oneline "$queued_from_host")"
+    elif ! printf '%s\n' "$host_queued" | grep -q "^Received: .*\[${gateway//./\\.}\]"; then
+        fail "the host's message did not arrive from the gateway $gateway, so the gateway was not tested: $(oneline "$host_queued")"
+    elif printf '%s\n' "$host_queued" | grep -q '^DKIM-Signature:'; then
+        fail "OpenDKIM signed mail from $forged that the gateway $gateway queued: $(oneline "$host_queued")"
+    elif ! printf '%s\n' "$api_queued" | grep -q '^DKIM-Signature:'; then
+        fail "OpenDKIM did not sign eigen-api's message either, so the unsigned one proves nothing: $(oneline "$api_queued")"
     else
-        ok "postfix refuses to relay for the gateway $gateway and relays for eigen-api"
+        ok "postfix refuses to relay for the gateway $gateway and relays for eigen-api; OpenDKIM signs eigen-api's mail from $forged, not the gateway's"
     fi
 else
     skip "probe 16 not selected"
