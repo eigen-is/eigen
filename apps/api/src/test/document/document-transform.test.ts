@@ -1481,7 +1481,6 @@ describe('document transform (admission)', () => {
             },
         });
         const drive = {} as unknown as Drive;
-        const mount = {} as unknown as Mount;
         const user = {} as unknown as User;
 
         for (const target of [
@@ -1491,7 +1490,7 @@ describe('document transform (admission)', () => {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(drive, mount, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(drive, { id: 'refused', ...target } as DrivePath, upload, user);
             } catch (err) {
                 error = err;
             } finally {

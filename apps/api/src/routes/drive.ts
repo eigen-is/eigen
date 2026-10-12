@@ -266,7 +266,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
-            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            const { path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
@@ -275,7 +275,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const bytes = await readBoundedBodyBytes(request, maxSize);
             await importIntoDocument(
                 drive,
-                mount,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                 user,
@@ -291,7 +290,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
-            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            const { path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
@@ -304,7 +303,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             });
             await importIntoDocument(
                 drive,
-                mount,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                 user,
