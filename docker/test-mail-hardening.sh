@@ -16,7 +16,7 @@
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
-# Runtime is about 6 minutes: probe 10 paces itself under Postfix's anvil AUTH cap and probe 8 waits
+# Runtime is about 7 minutes: probe 10 paces itself under Postfix's anvil AUTH cap and probe 8 waits
 # for the queue monitor's next interval; everything else is quick. A PROBES subset that names any
 # login probe also runs probe 1, which is what proves the credentials.
 
@@ -207,7 +207,7 @@ fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
 # when one of these is selected: excluding it would skip every login probe and still print green.
-LOGIN_PROBES="2 3 4 5 6 10 11"
+LOGIN_PROBES="2 3 4 5 6 10 11 15"
 NEEDS_LOGIN=0
 for p in $LOGIN_PROBES; do
     if should_run "$p"; then NEEDS_LOGIN=1; fi
@@ -596,6 +596,34 @@ if should_run 14; then
     fi
 else
     skip "probe 14 not selected"
+fi
+
+##############################################################################
+header "Probe 15 — one client IP is held to 60 messages a minute on a submission port"
+##############################################################################
+# smtpd_client_message_rate_limit=60 counts MAIL FROM per client IP per service per anvil window,
+# and answers 450 4.7.1. One AUTHed session sends MAIL FROM/RSET pairs and must see the 450 within
+# 61 of them; the exact message is not asserted, since anvil counts per window and the earlier
+# probes have already spent a few. Last of the 465 probes, so the spent window harms none.
+if should_run 15 && [ "$HAVE_LOGIN" = 1 ]; then
+    log "waiting 62s for the anvil windows to roll over..."
+    sleep 62
+    auth=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
+    dialog="EHLO $HELO_NAME\nAUTH PLAIN $auth\n"
+    for _ in $(seq 1 70); do
+        dialog="${dialog}MAIL FROM:<$ALICE_EMAIL>\nRSET\n"
+    done
+    transcript=$(smtp465 "${dialog}QUIT\n") || true
+    accepted=$(printf '%s\n' "$transcript" | grep -c '^250 2\.1\.0' || true)
+    if ! printf '%s\n' "$transcript" | grep -q '^235'; then
+        fail "AUTH itself failed (no 235): $(oneline "$transcript" | cut -c1-300)"
+    elif printf '%s\n' "$transcript" | grep -q '^450 4\.7\.1' && [ "$accepted" -le 61 ]; then
+        ok "the 450 4.7.1 came after $accepted accepted MAIL FROMs on one port"
+    else
+        fail "expected a 450 4.7.1 within 61 MAIL FROMs, $accepted were accepted: $(oneline "$transcript" | tail -c 300)"
+    fi
+else
+    skip_login_probe 15
 fi
 
 ##############################################################################
