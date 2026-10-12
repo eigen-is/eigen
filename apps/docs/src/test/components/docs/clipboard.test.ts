@@ -218,6 +218,34 @@ test('a copy writes the title and subtitle look inline and pastes them back as t
     expect(target.getJSON()).toEqual(expected.getJSON());
 });
 
+// A title in a quote draws the quote's grey, which is not the title's own: the copy compares a node's color with the
+// one it inherits, so neither title carries it and the subtitle keeps its own grey.
+test("a copy leaves a quote's color off every title and writes the subtitle's own", () => {
+    const quoteGrey = 'rgb(107, 114, 128)';
+    const computed = spyOn(globalThis, 'getComputedStyle').mockImplementation((element) => {
+        const type = element.getAttribute('data-type');
+        const quoted = element.closest('blockquote') !== null;
+        const color = type === 'subtitle' ? 'rgb(102, 102, 102)' : quoted ? quoteGrey : 'rgb(26, 26, 46)';
+        const { style } = document.createElement('p');
+        Object.assign(style, { fontSize: type ? '20px' : '14.6667px', color });
+        return style;
+    });
+    const clipboard = copy([
+        { type: 'blockquote', content: [{ type: 'title', content: [text('Quoted')] }] },
+        { type: 'title', content: [text('Plain')] },
+        { type: 'subtitle', content: [text('Third quarter')] },
+    ]);
+    computed.mockRestore();
+    const html = new DOMParser().parseFromString(clipboard.html, 'text/html');
+    expect(
+        [...html.querySelectorAll<HTMLElement>('p[data-type]')].map((p) => [p.dataset['type'], p.style.color]),
+    ).toEqual([
+        ['title', ''],
+        ['title', ''],
+        ['subtitle', 'rgb(102, 102, 102)'],
+    ]);
+});
+
 // ProseMirror's copy writes a font as its CSS stack, which the paste reads back as the font.
 test.each(EIGEN_FONTS.map((font) => font.name))('a run in %s copies and pastes back in it', async (font) => {
     const clipboard = copy([paragraph(text('Body', { type: 'textStyle', attrs: { fontFamily: font } }))]);

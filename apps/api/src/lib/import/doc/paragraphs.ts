@@ -263,14 +263,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const indLeft = (props.indLeft ?? 0) + (list || task ? 0 : Math.min(0, props.indFirst ?? 0));
     // Code nests by its indent alone, which assemble.ts reads against the list item around it.
     const quote = leftBar ? Math.max(1, Math.round(indLeft / QUOTE_LOOK.indent)) : role.kind === 'quote' ? 1 : 0;
-    // A task's heading is a paragraph (assemble.ts). In an italic node an italic mark is a run Word draws upright, and
-    // Google Docs writes the node's own look as direct formatting.
-    const look = task ? {} : nodeLook(role.kind, role.kind === 'heading' ? role.level : undefined);
-    for (const piece of pieces)
-        if (piece.kind === 'node' && piece.italic !== undefined && piece.italic !== !!look.italic)
-            piece.node.marks = [...(piece.node.marks ?? []), { type: 'italic' }];
-    if (quote > 0) stripLook(pieces, QUOTE_LOOK.italic && !look.italic ? 'italic' : undefined, QUOTE_LOOK.color);
-    if (look.color) stripLook(pieces, undefined, look.color);
+    const roleLook = nodeLook(role.kind, role.kind === 'heading' ? role.level : undefined);
     // Under a done task the editor strikes nested open ones too, so their look is the done one's.
     const done = markColor(TASK_DONE_LOOK.color);
     const shown = texts.flatMap((piece) =>
@@ -303,6 +296,15 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     let numbered = false;
     for (const [index, half] of halves.entries()) {
         if (index > 0) items.push({ kind: 'break' });
+        // A task's heading is a paragraph (assemble.ts), and only the half that takes the task is one. In an italic
+        // node an italic mark is a run Word draws upright, and Google Docs writes the node's own look as direct
+        // formatting.
+        const look = !numbered && task ? {} : roleLook;
+        for (const piece of half)
+            if (piece.kind === 'node' && piece.italic !== undefined && piece.italic !== !!look.italic)
+                piece.node.marks = [...(piece.node.marks ?? []), { type: 'italic' }];
+        if (quote > 0) stripLook(half, QUOTE_LOOK.italic && !look.italic ? 'italic' : undefined, QUOTE_LOOK.color);
+        if (look.color) stripLook(half, undefined, look.color);
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
         if (!numbered && task) trimStart(content);
         if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);

@@ -633,4 +633,21 @@ describe("a node's look", () => {
             marks,
         ]);
     });
+
+    // Only the half before a page break is the task; the half after it stays the heading, which draws its own look.
+    test("the half after a task's page break in Google's Heading 6 keeps the heading's look", async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${checkbox}${run(' Plain text')}${PAGE_BREAK}${run('More')}`, '<w:pStyle w:val="Heading6"/>'),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:rPr><w:i/><w:iCs/><w:color w:val="666666"/></w:rPr></w:style>',
+            },
+        );
+        const [task] = nodesOfType(json, 'paragraph');
+        expect(nodesOfType(task ?? {}, 'text').map((node) => (node.marks ?? []).map((mark) => mark.type))).toEqual([
+            ['textStyle', 'italic'],
+        ]);
+        const [heading] = nodesOfType(json, 'heading');
+        expect(heading?.attrs?.['level']).toBe(6);
+        expect(nodesOfType(heading ?? {}, 'text').map((node) => [node.text, node.marks ?? []])).toEqual([['More', []]]);
+    });
 });

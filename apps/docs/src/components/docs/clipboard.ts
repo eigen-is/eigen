@@ -9,8 +9,7 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import type { TitleType } from '@workspace/lib/docs/eigendoc';
-import { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
+import { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, type TitleType } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardImageItem,
     EigenClipboardItem,
@@ -102,7 +101,7 @@ export function writeDocsClipboard(
     const cut = event.type === 'cut';
     if (selection.empty || !event.clipboardData || (cut && !view.editable)) return false;
     const items = copiedClipboardItems(view, selection.from, selection.to, resolveMediaPath);
-    // The first title and subtitle on the page, whose look every copied one shares.
+    // The first title and subtitle in the selection: a node's own look is the same for every node of its type.
     const titles = new Map<TitleType, number>();
     let upright = false;
     view.state.doc.nodesBetween(selection.from, selection.to, (node, pos, parent) => {
@@ -123,10 +122,10 @@ export function writeDocsClipboard(
     }
     for (const [type, pos] of titles) {
         const drawn = view.nodeDOM(pos);
-        if (!(drawn instanceof HTMLElement)) continue;
+        if (!(drawn instanceof HTMLElement) || !drawn.parentElement) continue;
         const { fontSize, color } = getComputedStyle(drawn);
-        // The body's color is left to the target, as a copied paragraph's is.
-        const ownColor = color !== getComputedStyle(view.dom).color;
+        // An inherited color (the body's, a quote's) is left to the target, as a copied paragraph's is.
+        const ownColor = color !== getComputedStyle(drawn.parentElement).color;
         for (const p of dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)) {
             p.style.fontSize = fontSize;
             if (ownColor) p.style.color = color;

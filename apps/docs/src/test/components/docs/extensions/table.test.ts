@@ -23,7 +23,7 @@ afterEach(() => unmount());
 
 const COLUMN_PX = 600;
 
-type CellAttrs = { colspan?: number; colwidth: number[] | null };
+type CellAttrs = { colspan?: number; rowspan?: number; colwidth: number[] | null };
 const cell = (attrs: CellAttrs) => ({
     type: 'tableCell',
     attrs,
@@ -131,6 +131,20 @@ test('a cell spanning both columns keeps its width and splits it anew', async ()
     // The spanning cell's own right border is the border between the second and third columns.
     drag(editor, first, 20);
     expect(widths(editor)).toEqual([[140, 80], [80], [140], [80], [80]]);
+});
+
+test('a cell spanning both rows is written once, and the cells beside it in each row take their widths', async () => {
+    const editor = await mount([
+        row(cell({ rowspan: 2, colwidth: [100] }), cell({ colwidth: [100] }), cell({ colwidth: [100] })),
+        row(cell({ colwidth: [100] }), cell({ colwidth: [100] })),
+    ]);
+    let steps = 0;
+    editor.on('transaction', ({ transaction }) => {
+        steps += transaction.steps.length;
+    });
+    drag(editor, first, 50);
+    expect(widths(editor)).toEqual([[150], [50], [100], [50], [100]]);
+    expect(steps).toBe(3);
 });
 
 test("the first drag stores every column's drawn width, and undo draws the columns as before", async () => {
