@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { openZip } from '../../lib/core/zip';
+import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home';
 import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedDocumentMedia, seedEigendoc } from '../fixtures/golden-documents';
@@ -16,6 +17,7 @@ const MOUNT_ID = 'export-s3';
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let s3: FakeS3Mount;
 let docPath: DrivePath;
+let mediaId: string;
 let mediaKey: string;
 
 beforeAll(async () => {
@@ -27,7 +29,7 @@ beforeAll(async () => {
 
     docPath = await drive.create(MOUNT_ID, (await mount.getRootFolder())!.id, 'S3 Doc', 'doc', home.user);
     seedEigendoc((await drive.getCollabDocument(MOUNT_ID, docPath.id)).doc, buildGoldenDocJson());
-    const mediaId = await seedDocumentMedia(mount, docPath, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
+    mediaId = await seedDocumentMedia(mount, docPath, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
     // Uploaded, so the export reads the image from the bucket and not from its staged copy.
     await mount.drainPendingUploads({ flushNow: true });
     mediaKey = await mount.getStorageKey(mediaId);
@@ -38,16 +40,46 @@ afterAll(async () => {
     rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
+function exportRequest(format: string): Promise<Response> {
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${MOUNT_ID}/file/${docPath.id}/export/${format}`,
+    );
+}
+
 describe('Eigendoc export from an S3 mount', () => {
     test('a docx export whose image HEAD answers 503 SlowDown once still embeds the image', async () => {
         s3.fake.slowDowns.set(mediaKey, 1);
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${MOUNT_ID}/file/${docPath.id}/export/docx`,
-        );
+        const res = await exportRequest('docx');
         expect(res.status).toBe(200);
         const zip = openZip(new Uint8Array(await res.arrayBuffer()));
         expect(zip.names()).toContain('word/media/image1.png');
         expect(s3.fake.heads.get(mediaKey)).toBe(2);
+    }, 120_000);
+
+    test('an html export inlines the image its screen preview reads from the bucket', async () => {
+        const before = s3.fake.gets.get(mediaKey) ?? 0;
+        const res = await exportRequest('html');
+        expect(res.status).toBe(200);
+        expect(await res.text()).toContain('src="data:image/');
+        expect(s3.fake.gets.get(mediaKey) ?? 0).toBeGreaterThan(before);
+    }, 120_000);
+});
+
+const pdfSuite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+
+pdfSuite('Eigendoc PDF export from an S3 mount', () => {
+    test('a pdf export draws the image from the bucket', async () => {
+        // The html case leaves the screen preview in the local cache, which would spare the bucket its read.
+        for (const name of readdirSync(s3.mount.previewsDir)) {
+            if (name.startsWith(`${mediaId}-`)) rmSync(join(s3.mount.previewsDir, name));
+        }
+        const before = s3.fake.gets.get(mediaKey) ?? 0;
+        const res = await exportRequest('pdf');
+        expect(res.status).toBe(200);
+        const pdf = Buffer.from(await res.arrayBuffer());
+        expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+        expect(pdf.toString('latin1')).toContain('/Subtype /Image');
+        expect(s3.fake.gets.get(mediaKey) ?? 0).toBeGreaterThan(before);
     }, 120_000);
 });

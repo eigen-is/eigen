@@ -439,6 +439,6 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: the default cell size is
-// 100 × 20, the editor's value, one constant with the renderer (2026-09-15).
-const GOLDEN_BODY_SHA256 = '58dca95a4f86e8c60264a12c277b5139159a8ab43c96c65068dde7121bbc3041';
+// an intentional renderer or preview-budget change. Last move: the table takes the
+// body's FONT_STACK_SANS (2026-10-12).
+const GOLDEN_BODY_SHA256 = '67ba3cd82d871c20fb15de38060d10a4c45a073a7ff0bd8bcd4542ea92acb0c9';

@@ -5,7 +5,8 @@
 // TEL values, ISO-basic BDAY dates and numeric PREF get their real 3.0 form; every construct with no 3.0
 // equivalent (ANNIVERSARY, KIND, PID/ALTID params, …) rides through verbatim rather than failing the card.
 // Any non-4.0 card is returned unchanged.
-import { getVersion, makeLine, parseVCardLines, photoParams, serializeVCardLines, splitDataUri } from './ast';
+import { splitDataUri } from '../shared/data-uri';
+import { getVersion, makeLine, parseVCardLines, photoParams, serializeVCardLines } from './ast';
 import { normalizeBirthday } from './parse';
 import type { VCardLine } from './types';
 
@@ -30,10 +31,8 @@ function to30(line: VCardLine, preferred: Set<VCardLine>): VCardLine {
         // 4.0 inline photos are data: URIs, remote ones bare/MEDIATYPE URIs. Rewrite to the 3.0 ENCODING=b /
         // VALUE=uri form, keeping the group; a data: URI's base64 payload rides across untouched. A
         // malformed (comma-less) data: value is still a URI-shaped value, so it falls through to VALUE=uri.
-        if (line.value.startsWith('data:')) {
-            const dataUri = splitDataUri(line.value);
-            if (dataUri) return makeLine('PHOTO', dataUri.base64, photoParams(dataUri.mediaType ?? ''), line.group);
-        }
+        const dataUri = splitDataUri(line.value);
+        if (dataUri) return makeLine('PHOTO', dataUri.base64, photoParams(dataUri.mediaType ?? ''), line.group);
         return makeLine('PHOTO', line.value, [['VALUE', 'uri']], line.group);
     }
 

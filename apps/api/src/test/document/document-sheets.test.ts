@@ -693,7 +693,7 @@ describe('document/sheets — patch op replay', () => {
 
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        await importIntoDocument(home.drive, mount, path, buffer, home.user);
+        await importIntoDocument(home.drive, path, buffer, home.user);
 
         const { sheets: result } = await readSheets(mount, path);
 

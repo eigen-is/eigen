@@ -222,10 +222,10 @@ if (args.includes('--memory')) {
 const xlsxPath = process.env['EIGEN_BENCH_XLSX'];
 if (xlsxPath && fs.existsSync(xlsxPath)) {
     const doc = await createDocument('bench-real-xlsx', 'sheets');
-    const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
+    const { path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
     await measure(`real xlsx: import (${buffer.byteLength} bytes)`, () =>
-        importIntoDocument(home.drive, mount, path, buffer, home.user),
+        importIntoDocument(home.drive, path, buffer, home.user),
     );
     console.log(`imported ${xlsxPath}`);
     await runScenario('real xlsx', doc.id, 'xlsx');

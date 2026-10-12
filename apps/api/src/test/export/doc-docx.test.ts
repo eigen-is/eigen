@@ -2048,6 +2048,21 @@ describe('docx writer — figures', () => {
         ).toEqual(plain);
     });
 
+    test('a figure with a data: src and no media name draws the media item named by that src', async () => {
+        const src = 'data:image/png;base64,iVBORw0KGgo=';
+        const pasted: ExportMedia[] = [
+            { name: src, contentType: 'image/png', data: toTransferableText('pasted png'), width: 800, height: 500 },
+        ];
+        const json = doc(p(figure({ src, width: 320 })), p(figure({ src, mediaName: 'gone' })));
+        expect(await blocksOf(json, pasted)).toEqual([
+            imageParagraph(drawing({ id: 1, px: 320, ratio: 500 / 800, part: 'image1.png', embed: 'rId5' })),
+            '<w:p/>',
+        ]);
+        const zip = await unzip(json, undefined, pasted);
+        expect((await relationshipsOf(zip)).slice(4)).toEqual([['rId5', IMAGE_REL, 'media/image1.png']]);
+        expect(entryText(zip, 'word/media/image1.png')).toBe('pasted png');
+    });
+
     // A PNG named x as the prep would hand it over, but for what each case changes.
     const media = (over: Partial<ExportMedia>): ExportMedia[] => [
         { name: 'x', contentType: 'image/png', data: toTransferableText('x'), width: 10, height: 10, ...over },
