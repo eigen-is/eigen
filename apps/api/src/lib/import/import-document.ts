@@ -2,6 +2,7 @@ import {
     type ConvertTarget,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_TYPE_FILE,
     type DrivePath,
     isCollabType,
 } from '@workspace/lib/types/drive';
@@ -68,11 +69,15 @@ async function saveDocImages(
     if (images.length === 0) return;
     const mediaFolder = await drive.getChildByName(docPath.mountId, docPath.id, 'media');
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
-    // Extracted names are deterministic (image-1.png, …), so a repeat import overwrites them in place, credited their
+    // Extracted names are deterministic (image-1.png, …), so a repeat import overwrites its files in place, credited their
     // size: a create would rename the collision to one the update doesn't name. Names the new import doesn't produce stay.
     const existing = await Promise.all(
         images.map((image) => drive.getChildByName(docPath.mountId, mediaFolder.id, image.name)),
     );
+    // Anything else under that name is neither written over nor credited, and a create would rename the image away
+    // from the name the document gives it.
+    const blocked = existing.find((path) => path && path.type !== DRIVE_TYPE_FILE);
+    if (blocked) throw new ApiError(409, `media/${blocked.name} is not a file`);
     const credit = existing.reduce((sum, path) => sum + (path?.size ?? 0), 0);
     await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images), credit);
     for (const [i, image] of images.entries()) {

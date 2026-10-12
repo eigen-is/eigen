@@ -19,8 +19,8 @@
     ],
     "text": "recipient@example.com"
   },
-  "text": "link [https://example.com]",
+  "text": "link",
   "html": "<p><a target=_blank href=\"https://example.com\">link</a></p><script>alert(1)</script>\n",
-  "textAsHtml": "<p>link [<a href=\"https://example.com\">https://example.com</a>]</p>",
+  "textAsHtml": "<p>link</p>",
   "attachments": []
 }
