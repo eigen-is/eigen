@@ -24,7 +24,11 @@ Mail is the one domain whose truth is files, because Dovecot moves and renames t
 
 DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message), and almost nothing that parses a message wants its body. So `parseEml` returns an `IndexedEmail`, whose `html` is `null` by type, for the index, the sync and attachment reads. `parseEmlForReader` sanitizes, and only `MaildirStore.getMessage` calls it. The type guarantees that a caller that never asked for a body never gets an unsanitized one.
 
-The reader's sanitize keeps remote images, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`). So a message loads its remote images as it opens, and a tracking pixel tells its sender. Blocking them takes an opt-in toggle or an image proxy, a [ROADMAP](ROADMAP.md) row.
+## The reader holds back what a message would fetch until Load images
+
+The reader's sanitize keeps remote references, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`), so that Load images can show them. Left alone, a message would load its remote images as it opens, and a tracking pixel would tell its sender. So `MessageView` runs `stripRemoteContent` (`packages/lib/src/core/mail/remote-content.ts`) over the body in the browser, and Load images needs no second request. It removes every reference that is not a raster image the parser inlined: `src`, `srcset`, `poster`, `background`, an `href` off a link, a style or SVG attribute whose CSS fetches, and each `<style>` statement that fetches. A link keeps its `href`, because only a click follows it. The strip runs before the string reaches `ShadowContent`, because an `<img>` fetches as soon as its `src` is set, even on a detached element.
+
+When the strip removed anything, a muted line says "Remote images are hidden" beside a Load images button, which draws the body as it came. The choice covers one message, the last one loaded, and is not stored. Reply and Forward quote the body as the reader shows it (`formatEmailQuote`), so the composer never loads what the reader held back. An image part inlined as an SVG waits for the click like a remote image, since an SVG `data:` URI is a document of its own. The `.eml` preview applies the same rules on the server ([PREVIEWS.md § The `.eml` payload is where a message is made safe](PREVIEWS.md#the-eml-payload-is-where-a-message-is-made-safe)) and draws its body as served.
 
 ## The inbox is INBOX, and only URLs lowercase it
 

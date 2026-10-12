@@ -1,9 +1,9 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
-import { flattenAddresses, NO_SUBJECT } from '@workspace/lib/mail';
+import { flattenAddresses, NO_SUBJECT, stripRemoteContent } from '@workspace/lib/mail';
 import type { AddressObject } from '@workspace/lib/types/mail';
 import { ChevronDown } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { cn } from '../../lib/utils';
 import { ABOVE_PREVIEW_Z } from '../dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
@@ -36,6 +36,9 @@ type MessageViewProps = {
     attachments?: ReactNode;
     // What the host draws after the body, inside the message's own spacing — the reader's invite widgets.
     footer?: ReactNode;
+    // The reader's, until Load images: the body is drawn without its remote content. A served preview is
+    // stripped on the server and passes none.
+    onLoadRemoteImages?: () => void;
 };
 
 // One message, drawn the same way wherever its fields came from: the mail reader's stored message and the
@@ -55,9 +58,13 @@ export function MessageView({
     highlightTerm,
     attachments,
     footer,
+    onLoadRemoteImages,
 }: MessageViewProps) {
     const formattedDate = date ? formatDateTime(date) : 'Unknown date';
-    const body = html || textAsHtml || text || '';
+    const blockRemote = !!onLoadRemoteImages;
+    const stripped = useMemo(() => (blockRemote && html ? stripRemoteContent(html) : null), [blockRemote, html]);
+    const shownHtml = stripped ? stripped.html : html;
+    const body = shownHtml || textAsHtml || text || '';
     const header: HeaderFields = { subject, from, replyTo, to, cc, bcc, formattedDate };
 
     return (
@@ -72,14 +79,23 @@ export function MessageView({
 
             {attachments}
 
+            {stripped?.blocked && (
+                <p className="text-xs text-muted-foreground">
+                    Remote images are hidden.{' '}
+                    <button type="button" className="text-foreground hover:underline" onClick={onLoadRemoteImages}>
+                        Load images
+                    </button>
+                </p>
+            )}
+
             {/* Email body — left-aligned with the header, capped at the document reading
                 width (max-w-4xl, same as drive's editor and eigendoc preview) */}
             <div className="prose prose-sm max-w-4xl">
-                {html || textAsHtml ? (
+                {shownHtml || textAsHtml ? (
                     <ShadowContent
                         content={body}
                         contentType="html"
-                        scheme={html ? 'light' : 'theme'}
+                        scheme={shownHtml ? 'light' : 'theme'}
                         className="w-full"
                         highlightTerm={highlightTerm}
                     />

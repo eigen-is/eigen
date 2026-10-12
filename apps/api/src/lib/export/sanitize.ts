@@ -1,4 +1,5 @@
 import { LIGHT_EDITOR_ATTRS, LIGHT_EDITOR_HREF, LIGHT_EDITOR_TAGS } from '@workspace/lib/html';
+import { CSS_FETCH_FUNCTIONS, cssStatements } from '@workspace/lib/mail/remote-content';
 import type { VectorScene } from '@workspace/lib/vector';
 import { stripNonXmlChars } from '@workspace/lib/xml';
 import DOMPurify from 'isomorphic-dompurify';
@@ -13,7 +14,7 @@ type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 type SanitizeOptions = SanitizeConfig & { allowedRefs?: ReadonlySet<string> };
 
 // Minimal structural view of the jsdom element passed to DOMPurify hooks.
-export type AttrNode = {
+type AttrNode = {
     tagName?: string;
     getAttribute(name: string): string | null;
     setAttribute(name: string, value: string): void;
@@ -30,9 +31,9 @@ const CSS_URL =
 // One of the exact allowed refs as a whole url(), read where CSS_URL matched; none holds a quote, a paren or whitespace.
 // The ref is never empty, so no two whitespace runs can trade characters: a long run costs one pass, not its square.
 const CSS_ALLOWED_URL = /url\([\t\n\f\r ]*(['"]?)([^'"()\s]+)\1[\t\n\f\r ]*\)/iy;
-// What fetches without a url(): @import's string form, the image functions that take a string, and attr(), which can
-// read an attribute as a URL. WeasyPrint fails the whole export on `attr(name url)`.
-const CSS_OTHER_FETCHES = /@import|image-set\(|image\(|cross-fade\(|element\(|attr\(/i;
+// What fetches without a url(): the mail rules' function tokens, and attr(), which can read an attribute as a URL.
+// WeasyPrint fails the whole export on `attr(name url)`.
+const CSS_OTHER_FETCHES = new RegExp(`${CSS_FETCH_FUNCTIONS.source}|attr\\(`, 'i');
 const NO_REFS: ReadonlySet<string> = new Set();
 
 // The element hook types its node as a bare Node.
@@ -62,7 +63,7 @@ const FRAGMENT_REF_TAGS = new Set([
 // A reference into the same document (a gradient, a clip, a <use> glyph) fetches nothing.
 const isFragmentRef = (value: string): boolean => /^[\t\n\f\r ]*#\S*[\t\n\f\r ]*$/.test(value);
 
-// Read as a token, never a pair, as eml-preview.ts reads a message's CSS: a comment after `url(` is no fragment or
+// Read as a token, never a pair, as remote-content.ts reads a message's CSS: a comment after `url(` is no fragment or
 // data: URI, so it fails the lookahead.
 function urlFetches(text: string, allowed: ReadonlySet<string>): boolean {
     for (const { index } of text.matchAll(CSS_URL)) {
@@ -79,25 +80,6 @@ const escapesCss = (value: string): boolean => value.includes('\\') && value.inc
 
 const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
     CSS_OTHER_FETCHES.test(css) || urlFetches(css, allowed);
-
-// A sheet's top-level statements: a rule or block ends at the `}` that closes it, an at-statement at its `;`.
-// Braces in strings and comments can misplace a cut, which is why the kept text is checked again whole.
-function cssStatements(css: string): string[] {
-    const statements: string[] = [];
-    let depth = 0;
-    let start = 0;
-    for (let i = 0; i < css.length; i++) {
-        if (css[i] === '{') depth++;
-        else if (css[i] === '}') depth = Math.max(depth - 1, 0);
-        else if (css[i] !== ';') continue;
-        if (depth === 0) {
-            statements.push(css.slice(start, i + 1));
-            start = i + 1;
-        }
-    }
-    statements.push(css.slice(start));
-    return statements;
-}
 
 // Every export resource is embedded as a data: URI (fonts + images) and every preview resource is one
 // of the prepared media URLs, so any other CSS url() or fetching attribute is attacker-injected via

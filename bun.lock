@@ -230,6 +230,9 @@
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
       },
+      "devDependencies": {
+        "happy-dom": "^20.14.0",
+      },
     },
     "apps/sheets": {
       "name": "@apps/sheets",

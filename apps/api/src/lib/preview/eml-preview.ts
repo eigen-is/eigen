@@ -1,8 +1,8 @@
+import { FETCHING_ATTRS, restrictSheet, stripRemoteRefs } from '@workspace/lib/mail/remote-content';
 import type { ParsedMail } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../core/errors';
-import type { AttrNode } from '../export/sanitize';
 import { READER_SANITIZE_CONFIG } from '../mail/mail-parse';
 import { parseMail } from '../mail/mail-parser';
 
@@ -15,23 +15,8 @@ export const EML_PREVIEW_MAX_TEXT_CHARS = 1024 * 1024;
 
 export const parseEmlPreview = (body: string): EmlPreview => JSON.parse(body);
 
-// Fetched without a click, on any element DOMPurify keeps. `href` is here for SVG <image>/<use> and for
-// <link>; an <a> keeps its link through the branch below.
-const REF_ATTRS = [
-    'src',
-    'srcset',
-    'poster',
-    'background',
-    'href',
-    'xlink:href',
-    'action',
-    'formaction',
-    'ping',
-    'cite',
-    'longdesc',
-    'usemap',
-    'data',
-];
+// On top of what renders: what a click or a reader of the source follows.
+const REF_ATTRS = [...FETCHING_ATTRS, 'action', 'formaction', 'ping', 'cite', 'longdesc', 'usemap'];
 
 // Tags on top of the reader's own <form> refusal: each one fetches (media, <picture>/<source>, <input
 // type=image>) or carries a second document tree DOMPurify's URL rules do not reach into (SVG, MathML).
@@ -49,73 +34,12 @@ const FORBID_TAGS = [
 ];
 
 const LINK_SCHEME = /^(?:https?:|mailto:)/i;
-const CSS_FETCHES = /\\|@import|image-set|image\(|cross-fade|element\(/i;
-// The one reference a message may keep: a raster image the parser inlined. An SVG or HTML data: URI is a
-// document tree of its own, and only the browser's SVG-as-image rules would stand between it and a fetch.
-const RASTER_DATA_URI = String.raw`data:image\/(?:png|jpe?g|gif|webp|avif|bmp)[;,]`;
-const INLINE_IMAGE = new RegExp(`^\\s*${RASTER_DATA_URI}`, 'i');
-const CSS_REMOTE_URL = new RegExp(`url\\((?!\\s*(?:['"]\\s*)?${RASTER_DATA_URI})`, 'i');
 const DATA_URI = /data:[^\s"'<>)]+/g;
 
-// Defense in depth: a viewer that deleted a color-scheme block as text would rejoin what surrounds it
-// (`ur@media (prefers-color-scheme: dark){}l(https://…)`), so the text each deletion would leave is checked too.
-const schemeMediaBlock = (scheme: string) =>
-    new RegExp(
-        String.raw`@media\s*\([^)]*prefers-color-scheme:\s*${scheme}[^)]*\)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}`,
-        'gi',
-    );
-const SCHEME_MEDIA_BLOCKS = [schemeMediaBlock('dark'), schemeMediaBlock('light')];
+function restrictNode(node: Element): void {
+    stripRemoteRefs(node, REF_ATTRS);
 
-// Both refusals read a token, never a pair: a CSS escape spells `url(` invisibly to a regex (`u\72l(`), and
-// an unterminated `url(` fetches without ever closing.
-function fetchTokens(css: string): boolean {
-    return CSS_FETCHES.test(css) || CSS_REMOTE_URL.test(css);
-}
-
-function cssFetches(css: string): boolean {
-    return fetchTokens(css) || SCHEME_MEDIA_BLOCKS.some((block) => fetchTokens(css.replace(block, '')));
-}
-
-// A sheet's top-level statements: a rule or block ends at the `}` that closes it, an at-statement at its `;`.
-// Braces in strings and comments can misplace a cut, which is why the kept text is checked again whole.
-function cssStatements(css: string): string[] {
-    const statements: string[] = [];
-    let depth = 0;
-    let start = 0;
-    for (let i = 0; i < css.length; i++) {
-        if (css[i] === '{') depth++;
-        else if (css[i] === '}') depth = Math.max(depth - 1, 0);
-        else if (css[i] !== ';') continue;
-        if (depth === 0) {
-            statements.push(css.slice(start, i + 1));
-            start = i + 1;
-        }
-    }
-    statements.push(css.slice(start));
-    return statements;
-}
-
-// Only the statements that fetch go, so the layout beside them survives; a sheet whose kept text still
-// fetches is emptied.
-function restrictSheet(css: string): string {
-    const kept = cssStatements(css)
-        .filter((statement) => !cssFetches(statement))
-        .join('');
-    return cssFetches(kept) ? '' : kept;
-}
-
-function restrictNode(node: AttrNode): void {
-    const style = node.getAttribute('style');
-    if (style !== null && cssFetches(style)) node.removeAttribute('style');
-
-    const anchor = node.tagName === 'A';
-    for (const attr of REF_ATTRS) {
-        if (anchor && attr === 'href') continue;
-        const value = node.getAttribute(attr);
-        if (value !== null && !INLINE_IMAGE.test(value)) node.removeAttribute(attr);
-    }
-
-    if (anchor) {
+    if (node.tagName === 'A') {
         const href = node.getAttribute('href');
         if (href !== null && !LINK_SCHEME.test(href.trim())) node.removeAttribute('href');
         node.setAttribute('target', '_blank');
