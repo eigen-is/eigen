@@ -28,7 +28,7 @@ const sum = (widths: number[]) => widths.reduce((total, width) => total + width,
 // Google Docs' column drag, by dx on column `col`'s right border: a border between two columns moves width from one to
 // the other, each kept at the floor, so the table keeps its width; the last column's border sets the table's width, up
 // to maxTableWidth. A column already past a limit is never pushed further past it.
-export function draggedWidths(start: number[], col: number, dx: number, maxTableWidth: number): number[] {
+function draggedWidths(start: number[], col: number, dx: number, maxTableWidth: number): number[] {
     const widths = [...start];
     const own = start[col] ?? 0;
     const next = start[col + 1];
@@ -54,22 +54,26 @@ function maxTableWidth(view: EditorView, tablePos: number): number | null {
     return fits !== null && column !== null ? Math.min(fits, column) : (fits ?? column);
 }
 
+// Every column's stored width, read off its first-row cell, 0 for none.
+function storedWidths(table: PMNode, map: TableMap): number[] {
+    return map.map
+        .slice(0, map.width)
+        .map((pos, col): number => table.nodeAt(pos)?.attrs['colwidth']?.[col - map.colCount(pos)] || 0);
+}
+
 // Every column's width: its stored one, or the share it draws at of its first-row cell's width.
 function columnWidths(view: EditorView, table: PMNode, tableStart: number, map: TableMap): number[] {
-    const widths: number[] = [];
-    for (let col = 0; col < map.width; ) {
+    const stored = storedWidths(table, map);
+    return stored.map((width, col) => {
+        if (width) return width;
         const pos = map.map[col] ?? 0;
-        const cell = table.nodeAt(pos);
-        const colspan: number = cell?.attrs['colspan'] ?? 1;
-        const stored = Array.from({ length: colspan }, (_, k): number => cell?.attrs['colwidth']?.[k] || 0);
-        const unknown = stored.filter((width) => !width).length;
-        const dom = unknown > 0 ? view.nodeDOM(tableStart + pos) : null;
+        const first = map.colCount(pos);
+        const spanned = stored.slice(first, first + (table.nodeAt(pos)?.attrs['colspan'] ?? 1));
+        const dom = view.nodeDOM(tableStart + pos);
         const drawn = dom instanceof HTMLElement ? dom.offsetWidth : 0;
-        const share = unknown > 0 ? Math.max(MIN_TABLE_COLUMN_PX, Math.round((drawn - sum(stored)) / unknown)) : 0;
-        widths.push(...stored.map((width) => width || share));
-        col += colspan;
-    }
-    return widths;
+        const unknown = spanned.filter((spannedWidth) => !spannedWidth).length;
+        return Math.max(MIN_TABLE_COLUMN_PX, Math.round((drawn - sum(spanned)) / unknown));
+    });
 }
 
 function drawColumns(tableDom: HTMLTableElement, widths: number[]) {
@@ -81,18 +85,25 @@ function drawColumns(tableDom: HTMLTableElement, widths: number[]) {
     tableDom.style.minWidth = '';
 }
 
-// Every cell of the table takes its columns' widths; a cell that has them already is left as it is.
+// Every cell of the table takes its columns' widths; a cell that has them already is left as it is. A row's map
+// meets its own cells in their order, each first at its leftmost column, so the walk reads each cell once.
 function setColumnWidths(tr: Transaction, table: PMNode, tableStart: number, widths: number[]) {
     const map = TableMap.get(table);
-    for (const pos of new Set(map.map)) {
-        const cell = table.nodeAt(pos);
-        if (!cell) continue;
-        const first = map.colCount(pos);
-        const colwidth = widths.slice(first, first + cell.attrs['colspan']);
-        const old: number[] | null = cell.attrs['colwidth'];
-        if (old && colwidth.every((width, k) => width === old[k])) continue;
-        tr.setNodeMarkup(tableStart + pos, null, { ...cell.attrs, colwidth });
-    }
+    const seen = new Set<number>();
+    table.forEach((row, _offset, rowIndex) => {
+        let next = 0;
+        for (let col = 0; col < map.width; col++) {
+            const pos = map.map[rowIndex * map.width + col];
+            if (pos === undefined || seen.has(pos)) continue;
+            seen.add(pos);
+            const cell = row.maybeChild(next++);
+            if (!cell) continue;
+            const colwidth = widths.slice(col, col + cell.attrs['colspan']);
+            const old: number[] | null = cell.attrs['colwidth'];
+            if (old && colwidth.every((width, k) => width === old[k])) continue;
+            tr.setNodeMarkup(tableStart + pos, null, { ...cell.attrs, colwidth });
+        }
+    });
 }
 
 // The table node `tableDom` draws and its position, found from the DOM rather than a position mapped through the drag's
@@ -196,11 +207,7 @@ export const EditorTable = Table.extend({
                 ({ state, tr, dispatch, view }: CommandProps) => {
                     if (!isInTable(state)) return false;
                     const { map, table, tableStart } = selectedRect(state);
-                    const stored = map.map
-                        .slice(0, map.width)
-                        .map(
-                            (pos, col): number => table.nodeAt(pos)?.attrs['colwidth']?.[col - map.colCount(pos)] ?? 0,
-                        );
+                    const stored = storedWidths(table, map);
                     const maxWidth = maxTableWidth(view, tableStart - 1);
                     const tableWidth = stored.every((width) => width > 0) ? sum(stored) : (maxWidth ?? 0);
                     const total = Math.min(tableWidth, maxWidth ?? Infinity);

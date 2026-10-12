@@ -113,10 +113,10 @@ test.each([
     [1920, FULL_ROW],
     [1400, FULL_ROW],
     [1399, MIDDLE_ROW],
-    [1100, MIDDLE_ROW],
-    [1099, SHORT_ROW],
-    [900, SHORT_ROW],
-    [899, []],
+    [1200, MIDDLE_ROW],
+    [1199, SHORT_ROW],
+    [1000, SHORT_ROW],
+    [999, []],
     [390, []],
 ])('at %ipx the icon row holds its first controls in priority order', async (width, row) => {
     await render(width, true);

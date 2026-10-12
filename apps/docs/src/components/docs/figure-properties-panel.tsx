@@ -16,8 +16,7 @@ import { clampFigureWidth, figureMaxWidth } from './extensions/figure';
 
 // Alt, Cap or Width. Enter or a blur writes a changed value, and Escape drops it; both leave the caret in the field,
 // showing the value as written, so the blur after them finds nothing new. While it has focus it shows its draft, so
-// a transaction that moves the figure, a collaborator typing above it, neither resets nor blurs it. The canvas
-// panels' MergedNumberInput writes on every keystroke, which the width's floor would snap a half-typed "25" to.
+// a transaction that moves the figure, a collaborator typing above it, neither resets nor blurs it.
 function FigureField({
     value,
     placeholder,

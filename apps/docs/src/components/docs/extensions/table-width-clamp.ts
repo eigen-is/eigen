@@ -16,16 +16,17 @@ export const TableWidthClamp = Extension.create({
                 appendTransaction(transactions, _oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;
 
-                    const maxWidth = textColumnWidth(editor.view.dom);
-                    if (maxWidth === null) return null;
-
                     const tr = newState.tr;
                     let modified = false;
+                    // A layout read, so made once a table is found.
+                    let maxWidth: number | null | undefined;
 
                     newState.doc.descendants((node, pos) => {
                         if (node.type.name !== 'table') return;
                         const firstRow = node.firstChild;
                         if (!firstRow) return;
+                        if (maxWidth === undefined) maxWidth = textColumnWidth(editor.view.dom);
+                        if (maxWidth === null) return false;
 
                         // Sum column widths from the first row
                         let totalWidth = 0;

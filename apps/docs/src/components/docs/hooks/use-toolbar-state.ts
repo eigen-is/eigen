@@ -3,7 +3,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
-import { orderedListDepth } from '../list-numbering';
+import { numberedListType, orderedListDepth } from '../list-numbering';
 import { paragraphStyleOf } from '../paragraph-styles';
 
 type ToolbarState = {
@@ -94,7 +94,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 orderedListType:
-                    listDepth === undefined ? undefined : (selection.$from.node(listDepth).attrs['type'] ?? '1'),
+                    listDepth === undefined ? undefined : numberedListType(selection.$from.node(listDepth)),
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
