@@ -1,6 +1,6 @@
 # Document Content Layer
 
-> **TLDR:** The server reads Eigen documents to export them, preview them and index them for search, and writes docs, sheets and slide decks to import a file into them. `apps/api/src/lib/document/` holds a reader for every Eigen document type and a writer for docs, sheets and decks. The heavy readers run in a Worker thread, off the API's event loop, and import parses its file there too. **The docs and sheets writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first. The deck writer appends.
+> **TLDR:** The server reads Eigen documents to export them, preview them and index them for search, and writes docs and sheets to import a file into them. `apps/api/src/lib/document/` holds a reader for every Eigen document type and a writer for docs, sheets and decks. The heavy readers run in a Worker thread, off the API's event loop, and import parses its file there too. **The docs and sheets writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first. The deck writer appends.
 
 Most of the time the server does not look inside a document. A collab document is Yjs data that the browsers edit, and the server only relays and stores it ([COLLAB.md](COLLAB.md)). Four features need the content as content. Export turns a document into a file such as DOCX, XLSX, PDF or SVG ([EXPORT.md](EXPORT.md)). Preview renders what Drive shows of a file before it is opened ([PREVIEWS.md](PREVIEWS.md)). Search pulls the text out for its content index ([SEARCH.md](SEARCH.md)). Import turns a `.docx` into a doc or an `.xlsx` into a sheet, either a new one or by replacing an existing one's content.
 
@@ -25,7 +25,7 @@ The caller captures the blobs with `captureCollabSource`, and the Worker hands t
 
 ## The canvas reader lives in packages/lib
 
-`readVectorFromDoc` serves both canvas types and reaches the API over the React-free `./vector` subpath. The editor and the server share it because it is the scene's trust boundary ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The deck writer reads its update back through it before writing, and writes through the same package's `write-vector.ts` ([SLIDES.md](SLIDES.md#an-import-appends-and-never-rewrites-the-deck)). A drawing has no writer.
+`readVectorFromDoc` serves both canvas types and reaches the API over the React-free `./vector` subpath. The editor and the server share it because it is the scene's trust boundary ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The deck writer reads its update back through it before writing, and writes through the same package's `write-vector.ts` ([SLIDES.md](SLIDES.md#the-deck-writer-appends-and-never-rewrites-the-deck)). A drawing has no writer.
 
 ## Capture leaves the database open
 
@@ -51,7 +51,7 @@ Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md §
 
 Both write into the live `CollabDocument`, so the change persists and reaches connected editors like any edit, and a sheet editor remounts on the new snapshot. But nothing merges. The sheet ops a peer made since the last flush are cleared with the rest, and a peer's unsynced typing inside a deleted paragraph has nowhere to land. `convertToDocument` writes into a document it has just created, so no one can be editing it. `importIntoDocument` writes into an existing one, and `Drive` has no check for an open session. The live-safe writers are open work in [ROADMAP.md](ROADMAP.md).
 
-The deck writers append instead: every imported slide and element is a new record under a fresh id, and nothing the deck holds is rewritten, so a live editor keeps its slides, its undo stack and its comments ([SLIDES.md](SLIDES.md#an-import-appends-and-never-rewrites-the-deck)).
+The deck writers append instead: every slide and element they write is a new record under a fresh id, and nothing the deck holds is rewritten, so a live editor keeps its slides, its undo stack and its comments ([SLIDES.md](SLIDES.md#the-deck-writer-appends-and-never-rewrites-the-deck)).
 
 ## See also
 

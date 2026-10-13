@@ -9,7 +9,7 @@ So the shell adds only what the engine has no word for: a deck as an ordered lis
 - The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
 - A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
 - A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
-- An import appends under fresh ids and never rewrites what the deck holds ([§ An import appends and never rewrites the deck](#an-import-appends-and-never-rewrites-the-deck)).
+- The deck writer appends an import's update under fresh ids and never rewrites what the deck holds ([§ The deck writer appends and never rewrites the deck](#the-deck-writer-appends-and-never-rewrites-the-deck)).
 
 ## A slide is a frame, and the shell adds only the deck's words
 
@@ -47,13 +47,13 @@ The background panel (`slide-background-panel.tsx`) mounts in the engine panel's
 
 A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover` or `contain`. `getBackgroundStyle` renders it on the canvas, the rail and in present mode, and `backgroundCss` renders it on the server, so a gradient prints the way it looks. An image is copied into the container's `media/` folder and stored by name ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)).
 
-## An import appends and never rewrites the deck
+## The deck writer appends and never rewrites the deck
 
-The server writes an imported deck with `apps/api/src/lib/document/slides.ts`. The import arrives as a Yjs update built from an untrusted pptx, so it is first read back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)).
+The server has a deck writer for an import, `apps/api/src/lib/document/slides.ts`, which appends a Yjs update into a deck. The update is untrusted, so the writer first reads it back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The caller bounds the update's size and record count, and hands it media names that are already free in the deck's `media/` folder, since the writer stores them as given.
 
 The write appends in one transaction. Every slide and element gets a fresh id and an index after the deck's topmost, in the update's own order. Element frame ids and arrow bindings are remapped to the new ids, and an imported element starts with no comment cards. Nothing already in the deck is cleared or rewritten, because an open tab's undo stack and its comments point at those Y.Maps. The work is linear in the update's records.
 
-`writeSlidesUpdateToYjs` fills a brand-new deck, so it also writes the update's `meta`. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone.
+`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone.
 
 ## Export and preview render the pages the canvas draws
 
