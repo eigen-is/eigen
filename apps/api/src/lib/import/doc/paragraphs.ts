@@ -9,15 +9,7 @@ import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assem
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
-import {
-    alternative,
-    type DocxPackage,
-    descendants,
-    type Part,
-    twipsOf,
-    w,
-    wChild,
-} from './package';
+import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
     type DocxRunProps,
