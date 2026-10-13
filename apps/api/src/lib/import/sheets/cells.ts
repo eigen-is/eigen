@@ -1,12 +1,6 @@
 import type { CellBorderSides, Cell as FortuneCell } from '@workspace/lib/sheets';
-import {
-    booleanDisplay,
-    functionCopy,
-    numberDisplay,
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
-    update,
-} from '@workspace/sheet/engine';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';

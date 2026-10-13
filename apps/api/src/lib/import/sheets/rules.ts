@@ -7,7 +7,8 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { iscelldata, parseA1Range, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, toA1 } from '@workspace/sheet/engine';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import { isOn, SML_NS, X14_NS, XM_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import { DAY_MS, DAYS_1904, EXCEL_EPOCH_MS } from './cells';

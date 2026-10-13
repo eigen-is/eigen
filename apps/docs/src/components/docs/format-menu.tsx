@@ -38,6 +38,7 @@ import {
     Pilcrow,
     Quote,
     RemoveFormatting,
+    RotateCwSquare,
     Settings2,
     Strikethrough,
     Subscript,
@@ -77,6 +78,7 @@ type FormatMenuProps = {
     setHighlightColor: (color: string) => void;
     clearFormatting: () => void;
     onRestartNumbering: () => void;
+    onPageSetup: () => void;
     onReplaceImage: () => void;
 };
 
@@ -88,6 +90,7 @@ export const FormatMenu = ({
     setHighlightColor,
     clearFormatting,
     onRestartNumbering,
+    onPageSetup,
     onReplaceImage,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
@@ -242,6 +245,10 @@ export const FormatMenu = ({
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onPageSetup}>
+            <RotateCwSquare className="h-4 w-4 mr-2" /> Page orientation
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={!active.table}>

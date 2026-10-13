@@ -14,6 +14,7 @@ export {
     unquoteSheetName,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
+export { resolveRangeChartData } from './chart-data';
 export type {
     CellFormatStyle,
     ComputeMap,
@@ -29,7 +30,6 @@ export { booleanDisplay, cellWrapsText, is_date, numberDisplay, update } from '.
 export { FormulaEngine } from './formula-engine';
 export { functionCopy } from './formula-shift';
 export { iscelldata } from './formula-utils';
-export { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './parser/helper/cell';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';
 export { normalizeSheetConfig } from './sheet-config';

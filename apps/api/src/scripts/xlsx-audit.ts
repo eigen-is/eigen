@@ -19,10 +19,10 @@ import { parseArgs } from 'node:util';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { toA1, valueIsError } from '@workspace/sheet/engine';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/core/ooxml';
+import { peakRss } from '../lib/core/peak-rss';
 import { openZip, writeZip, type ZipWriteEntry } from '../lib/core/zip';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
-import { peakRss } from '../test/rss-test-helpers';
 
 const FEATURES = [
     ['sheets', 'Sheets'],

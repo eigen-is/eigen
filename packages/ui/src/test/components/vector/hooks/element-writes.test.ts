@@ -1,10 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { readVectorFromDoc, serializeBinding } from '@workspace/lib/vector';
+import { sampleChartSpec } from '@workspace/lib/charts';
+import {
+    convertToShapes,
+    readVectorFromDoc,
+    serializeBinding,
+    VECTOR_STYLE_DEFAULTS,
+    type VectorElement,
+} from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc } from '../../../../components/vector/hooks/element-writes';
+import { duplicateElementsInDoc, replaceElementInDoc } from '../../../../components/vector/hooks/element-writes';
+import { addFrameInDoc } from '../../../../components/vector/hooks/frame-writes';
+import { sealed } from '../../../../components/vector/hooks/use-canvas-doc';
 
-function docWith(elements: Record<string, unknown>[]): Y.Doc {
-    const doc = new Y.Doc();
+function docWith(elements: Record<string, unknown>[], doc = new Y.Doc()): Y.Doc {
     doc.transact(() => {
         const map = doc.getMap('elements');
         for (const fields of elements) {
@@ -61,5 +69,104 @@ describe('duplicateElementsInDoc', () => {
             serializeBinding({ elementId: rectClone, fixedPoint: [0.5, 0.5] }),
         );
         expect(clone?.type === 'arrow' && clone.endBinding).toBe('');
+    });
+});
+
+const CHART = {
+    type: 'chart',
+    id: 'c1',
+    x: 40,
+    y: 20,
+    width: 640,
+    height: 400,
+    index: 'a1',
+    seed: 5,
+    chart: JSON.stringify(sampleChartSpec('column')),
+};
+
+function shapesOfChart(doc: Y.Doc): VectorElement[] {
+    const chart = readVectorFromDoc(doc).elements.find((el) => el.id === 'c1');
+    if (!chart) throw new Error('expected the chart');
+    return convertToShapes(chart);
+}
+
+function replaceChart(doc: Y.Doc, shapes: VectorElement[]): string[] {
+    return replaceElementInDoc(doc, 'c1', shapes, VECTOR_STYLE_DEFAULTS);
+}
+
+const storedIds = (doc: Y.Doc): string[] => [...doc.getMap('elements').keys()].sort();
+
+describe('replaceElementInDoc', () => {
+    test('the shapes take the chart z slot, between its neighbours, in their own order', () => {
+        const doc = docWith([{ ...RECT, id: 'below', index: 'a0' }, CHART, { ...RECT, id: 'above', index: 'a2' }]);
+        const shapes = shapesOfChart(doc);
+        const ids = replaceChart(doc, shapes);
+        expect(ids).toHaveLength(shapes.length);
+        expect(readVectorFromDoc(doc).elements.map((el) => el.id)).toEqual(['below', ...ids, 'above']);
+    });
+
+    test('fresh ids, the given seeds and the chart frame on every shape', () => {
+        const frames = new Y.Doc();
+        const frameId = addFrameInDoc(frames, null);
+        const doc = docWith([{ ...CHART, frameId }], frames);
+        const shapes = shapesOfChart(doc);
+        const ids = replaceChart(doc, shapes);
+        const elements = doc.getMap('elements');
+        expect(elements.has('c1')).toBe(false);
+        for (const [i, id] of ids.entries()) {
+            const stored = elements.get(id);
+            if (!(stored instanceof Y.Map)) throw new Error('expected a stored element');
+            expect(id.startsWith('c1:')).toBe(false);
+            expect(stored.get('id')).toBe(id);
+            expect(stored.get('seed')).toBe(shapes[i].seed);
+            expect(stored.get('frameId')).toBe(frameId);
+        }
+    });
+
+    test('one undo step: undo brings the chart back, redo the shapes', () => {
+        const doc = docWith([CHART]);
+        const undoManager = new Y.UndoManager(doc.getMap('elements'));
+        const ids = sealed(undoManager, () => replaceChart(doc, shapesOfChart(doc)));
+        expect(undoManager.undoStack).toHaveLength(1);
+        undoManager.undo();
+        expect(storedIds(doc)).toEqual(['c1']);
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ type: 'chart', index: 'a1', x: 40 });
+        undoManager.redo();
+        expect(storedIds(doc)).toEqual([...ids].sort());
+    });
+
+    test('an arrow bound to the chart keeps its endpoints and loses the binding, as on delete', () => {
+        const binding = serializeBinding({ elementId: 'c1', fixedPoint: [0, 0.5] });
+        const arrow = {
+            type: 'arrow',
+            id: 'ar',
+            index: 'a2',
+            x: -100,
+            y: 220,
+            width: 140,
+            height: 0,
+            points: '[[0,0],[140,0]]',
+            endBinding: binding,
+        };
+        const doc = docWith([CHART, arrow]);
+        replaceChart(doc, shapesOfChart(doc));
+        const stored = readVectorFromDoc(doc).elements.find((el) => el.id === 'ar');
+        expect(stored).toMatchObject({ x: -100, y: 220, width: 140, points: '[[0,0],[140,0]]', endBinding: '' });
+    });
+
+    test('a chart with a malformed index converts on top rather than throwing', () => {
+        const doc = docWith([
+            { ...CHART, index: 'not an index' },
+            { ...RECT, id: 'r1', index: 'a3' },
+        ]);
+        const ids = replaceChart(doc, shapesOfChart(doc));
+        expect(readVectorFromDoc(doc).elements.map((el) => el.id)).toEqual(['r1', ...ids]);
+    });
+
+    test('a missing element writes nothing', () => {
+        const doc = docWith([CHART]);
+        const shapes = shapesOfChart(doc);
+        expect(replaceElementInDoc(doc, 'gone', shapes, VECTOR_STYLE_DEFAULTS)).toEqual([]);
+        expect(storedIds(doc)).toEqual(['c1']);
     });
 });

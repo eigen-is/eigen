@@ -1,6 +1,11 @@
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
-import { parseA1Range, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, unquoteSheetName } from '@workspace/sheet/engine';
+import {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_DIGIT_WIDTH,
+    SHEET_DEFAULT_FONT,
+} from '@workspace/lib/sheets';
+import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import { isOn, R_NS, SML_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';

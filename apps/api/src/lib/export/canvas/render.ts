@@ -20,10 +20,10 @@ import {
 // preview body. A layer carries the same box CSS the live canvas sets (layerBoxCss), so what a user
 // sees is what prints. Worker-pure: no Mount, no preview cache, no DOM.
 //
-// A kind points at its own gradient with `fill="url(#g-<id>)"` / `stroke="url(#…)"` and clips an
-// image with `clip-path="url(#…)"` — SVG ATTRIBUTES, never a CSS declaration. That is load-bearing
-// on the export path: sanitize.ts rewrites every non-data url() found in a `style` attribute or a
-// <style> block to `url()`, so a gradient moved into CSS would silently stop painting in the PDF.
+// A kind points at its own gradient with `fill="url(#…)"` / `stroke="url(#…)"` and clips an image with
+// `clip-path="url(#…)"`, into the <defs> of the same fragment. That is load-bearing on the PDF path:
+// WeasyPrint resolves `url(#id)` only within one <svg>, so each layer's references stay inside the one
+// viewport layerInnerHtml gives it.
 
 // A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.

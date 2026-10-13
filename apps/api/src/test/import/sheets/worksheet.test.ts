@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT } from '@workspace/sheet/engine';
+import { REFERENCE_COLUMN_COUNT, SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import type { Relationship } from '../../../lib/core/opc';
 import { xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';

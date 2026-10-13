@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -41,7 +41,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Tables keep their column widths and borders, and a header row repeats on every page.
 - Code blocks keep their colors, and quotes keep the bar along their left edge.
 
-The PDF and the Word file use the same page as the editor: A4 with 2 cm margins. You can see it under **File → Page setup…**.
+The PDF and the Word file use an A4 page with 2 cm margins, even when the document's page setup is different.
 
 <div class="eigen-callout">
 

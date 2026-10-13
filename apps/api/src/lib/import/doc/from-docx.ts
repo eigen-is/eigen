@@ -1,16 +1,17 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
-import { ApiError } from '../../core/errors';
+import { ApiError, isOutOfMemory } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
 import { docSchema } from '../../document/doc-schema';
 import type { TransformWarning } from '../../document/transform/protocol';
+import { DOCUMENT_TOO_LARGE } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
-import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
+import { NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
 
-// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
+// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
 
 export type DocxImage = {
     name: string;
@@ -79,16 +80,18 @@ export function readDocx(
     }
 }
 
-// The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
-export function importError(error: unknown): ApiError {
+// The zip's and the XML's messages speak of archives and markup; the user uploaded a document. An out-of-memory passes as
+// it is: the transform process answers it for every format.
+export function importError(error: unknown): Error {
+    if (isOutOfMemory(error)) return error;
     if (error instanceof ZipError)
         return new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
     if (error instanceof XmlError) return new ApiError(400, NOT_A_DOCX, { cause: error });
     if (error instanceof ApiError) return error;
-    // A stack or an allocation the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
-    if (error instanceof RangeError && /call stack|out of memory/i.test(error.message))
+    // A stack the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
+    if (error instanceof RangeError && /call stack/i.test(error.message))
         return new ApiError(413, DOCUMENT_TOO_LARGE, { cause: error });
-    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
+    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the transform's log.
     console.warn('[import] docx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
     return new ApiError(400, NOT_A_DOCX, { cause: error });
 }
@@ -116,7 +119,8 @@ function fits(block: JSONContent): boolean {
     try {
         docSchema().nodeFromJSON(block).check();
         return true;
-    } catch {
+    } catch (error) {
+        if (isOutOfMemory(error)) throw error;
         return false;
     }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, toA1 } from '@workspace/sheet/engine';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { toA1 } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
 import {
     MAX_CELLS,
@@ -138,7 +139,7 @@ function measuredImport(file: Buffer): {
         env: {
             ...process.env,
             READER: Bun.resolveSync('../../../lib/import/sheets/from-xlsx', import.meta.dir),
-            PEAK_RSS: Bun.resolveSync('../../rss-test-helpers', import.meta.dir),
+            PEAK_RSS: Bun.resolveSync('../../../lib/core/peak-rss', import.meta.dir),
         },
         stdin: new Uint8Array(file),
         timeout: 20_000,

@@ -1,17 +1,17 @@
 # Shared Primitives
 
 > **Generated — do not edit by hand.** Run `bun run primitives` to regenerate;
-> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib` +
-> `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
+> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib`,
+> `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1655 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1738 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (172)
+## Components (176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -82,6 +82,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
+| `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
 | `ChatCreateWizard` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-create-wizard.tsx |
 | `ChatMessageInput` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `ChatMessageList` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-list.tsx |
@@ -163,8 +165,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MergedSelect` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
 | `MergedSlider` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-slider.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `PropertyRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertySection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `PropertyTextInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-text-input.tsx |
 | `PropertyToggle` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-toggle.tsx |
 | `TransformSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/transform-section.tsx |
 | `ZOrderButtons` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
@@ -200,7 +204,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (10)
+## Contexts, schemas & classes (11)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -210,6 +214,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `CreateUnconfirmedError` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `MathError` | `@workspace/math` | packages/math/src/error.ts |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
@@ -516,7 +521,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (376)
+## Types (405)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -551,6 +556,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `PaperSizeName` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `TitleType` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/title.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
@@ -577,6 +583,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Op` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Range` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Sheet` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `SheetChart` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetConfig` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -753,6 +760,25 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ServerArchiveManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveSidecar` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveUpload` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `CellRangeRef` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartBlanks` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartBox` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartDataError` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartLabel` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartLayout` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartLayoutInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartPaint` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSeriesStyle` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSpecSvgInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `InlineChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `LegendPosition` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `RangeChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `RangeChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -801,6 +827,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ElementKindRegistry` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `ElementOfType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Extent` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `FaceWidths` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FixedSegment` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
@@ -820,8 +847,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `StyleDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TextLine` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorChartElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorDiamondElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -831,11 +860,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorImageElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorMeta` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorPieElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRectangleElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `MathNode` | `@workspace/math` | packages/math/src/tree.ts |
+| `MathRow` | `@workspace/math` | packages/math/src/tree.ts |
+| `MathVariant` | `@workspace/math` | packages/math/src/tree.ts |
+| `MathXmlElement` | `@workspace/math` | packages/math/src/xml.ts |
 | `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
 | `AvatarEditorProps` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
@@ -897,7 +931,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (794)
+## Utilities & constants (843)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1028,6 +1062,25 @@ rather than inlining `queryClient.invalidateQueries`.
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CHART_MESSAGES` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `CHART_PALETTE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `chartLabel` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `FLAT_CHART_PAINT` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `formatTickValue` | `@workspace/lib/charts` | packages/lib/src/charts/ticks.ts |
+| `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `layoutChartMessage` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `MAX_CHART_LABEL_LENGTH` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_SPEC_BYTES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `parseChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `sampleChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `formatChatPreview` | `@workspace/lib/chat` | packages/lib/src/core/chat/format-preview.ts |
@@ -1197,15 +1250,20 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `ITALIC_HEADING_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
+| `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
+| `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
+| `PAGE_ROOT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pageBoxStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pagePx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `pageRecord` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pageStylesheet` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pageTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PAPER_SIZES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PROSE_TEXTBLOCKS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `readFigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
+| `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
@@ -1290,6 +1348,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_COL_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_DIGIT_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `SHEET_DEFAULT_FONT` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
@@ -1379,6 +1439,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_JOB_STATES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
@@ -1452,6 +1515,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `commentAnchorTexts` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `convertToShapes` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `cornerRadius` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `CORNERS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `CREATION_TOOL_TYPES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
@@ -1469,6 +1533,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1489,6 +1554,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `elementsInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ellipseOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `EMPTY_OUTLINE` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `fitFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
@@ -1534,6 +1600,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `labelText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `layerBoxCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `layerContent` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `layerInnerHtml` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `LINEAR_HIT_SCREEN_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `linearLocalToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1543,6 +1610,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `materializeFirstPin` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `MAX_ARROW_LABEL_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `measureLabel` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1573,7 +1641,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `placeLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `PLACEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `pointInPolygon` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1586,6 +1657,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rectOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `renderChartSpecSvg` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/chart-render.ts |
 | `renormalize` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `replaceEigenMediaHrefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `rescalePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1625,10 +1697,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
@@ -1641,11 +1714,21 @@ rather than inlining `queryClient.invalidateQueries`.
 | `escapeXml` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
+| `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
+| `MATH_LIMITS` | `@workspace/math` | packages/math/src/tree.ts |
+| `MATHML_NAMESPACE` | `@workspace/math` | packages/math/src/mathml.ts |
+| `OMML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |
+| `readOmml` | `@workspace/math` | packages/math/src/omml.ts |
+| `WORDML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `writeMathml` | `@workspace/math` | packages/math/src/mathml.ts |
+| `writeOmml` | `@workspace/math` | packages/math/src/omml.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
 | `ATTENDEE_STATUS_ICON` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
 | `ATTENDEE_STATUS_LABEL` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
+| `CHART_TYPE_OPTIONS` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-types.ts |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
