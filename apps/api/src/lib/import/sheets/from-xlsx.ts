@@ -62,10 +62,21 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             if (emitted.translated > MAX_SHARED_FORMULA_TEXT) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
         };
         const sheets: Sheet[] = [];
-        for (const { name, path } of book.sheets) {
+        // Excel refuses two sheets of one name, in any case: the first keeps it, so a formula naming it means that one,
+        // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
+        const taken = new Set(book.sheets.map(({ name }) => name.toLowerCase()));
+        const named = new Set<string>();
+        for (const { name: written, path } of book.sheets) {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
             const id = `sheet-${sheets.length}`;
+            let name = written;
+            for (let copy = 2; named.has(name.toLowerCase()); copy++) {
+                name = `${written} (${copy})`;
+                if (taken.has(name.toLowerCase())) name = written;
+            }
+            named.add(name.toLowerCase());
+            taken.add(name.toLowerCase());
             // The rest is parsed before the rows, so the merges and links are placed when the grid reads its cells.
             const { rest, children } = readInBatches(part, 'sheetData', 'row', budget);
             // A damaged rels part costs the external links, not the workbook.
@@ -114,6 +125,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
                     date1904: book.date1904,
                     rows: grid.rows,
                     columns: grid.columns,
+                    dates: grid.dates,
                     charge,
                     chargeElements: budget.chargeElements,
                 }),

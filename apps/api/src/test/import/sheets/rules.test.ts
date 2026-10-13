@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
+import { cellKey } from '../../../lib/import/sheets/worksheet';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 
 // A worksheet's conditional formats and data validations, Excel 2010's extensions besides, and each rule's output
@@ -30,6 +31,7 @@ type Options = {
     date1904?: boolean;
     charge?: (cells: number, text: number) => void;
     chargeElements?: (count: number) => void;
+    dates?: number[][];
 };
 
 function read(after: string, options: Options = {}) {
@@ -42,6 +44,7 @@ function read(after: string, options: Options = {}) {
         columns: options.columns ?? 5,
         charge: options.charge ?? ((cells, text) => charged.push({ cells, text })),
         chargeElements: options.chargeElements ?? (() => {}),
+        dates: new Set((options.dates ?? []).map(([r, c]) => cellKey(r, c))),
     });
     return { ...rules, charged };
 }
@@ -353,6 +356,21 @@ describe('a conditional format', () => {
         );
         expect(performance.now() - started).toBeLessThan(1000);
     });
+
+    // A 1904 workbook's date cell holds its serial from 1904, which the reader moves to the 1900 system: a comparison
+    // with a date moves with it, one with a number doesn't.
+    test("a 1904 workbook's comparison over dates counts from 1904", () => {
+        const rule = (sqref: string) =>
+            cf(
+                sqref,
+                '<cfRule type="cellIs" dxfId="0" priority="1" operator="between"><formula>43000</formula><formula>"x"</formula></cfRule>',
+            );
+        const { conditionalFormatRules } = read(`${rule('A1:A3')}${rule('B1')}`, { date1904: true, dates: [[0, 0]] });
+        expect(conditionalFormatRules?.map((format) => 'conditionValue' in format && format.conditionValue)).toEqual([
+            ['44462', 'x'],
+            ['43000', 'x'],
+        ]);
+    });
 });
 
 describe('a data validation', () => {
@@ -511,6 +529,7 @@ test('a sheet without rules has none', () => {
             columns: 0,
             charge: () => {},
             chargeElements: () => {},
+            dates: new Set(),
         }),
     ).toEqual({});
 });

@@ -131,6 +131,11 @@ describe('views and the filter', () => {
             range: { row_focus: 3, column_focus: 2 },
         });
         expect(pane('xSplit="2880" ySplit="1440"').frozen).toBeUndefined();
+        // A split past the grid freezes all of it.
+        expect(pane('xSplit="99999" ySplit="999999999" state="frozen"').frozen).toEqual({
+            type: 'rangeBoth',
+            range: { row_focus: 1_048_575, column_focus: 16_383 },
+        });
         expect(pane('xSplit="abc" ySplit="2" state="frozen"').frozen).toEqual({
             type: 'rangeRow',
             range: { row_focus: 1, column_focus: 0 },

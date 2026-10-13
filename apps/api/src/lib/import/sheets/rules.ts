@@ -13,6 +13,7 @@ import { isOn, SML_NS, X14_NS, XM_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import { DAY_MS, DAYS_1904, EXCEL_EPOCH_MS } from './cells';
 import { colorOf, type DxfLook, dxfLook, resolveColor, type ThemePalette } from './styles';
+import { cellKey } from './worksheet';
 
 // A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
 // the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
@@ -25,6 +26,8 @@ export type RulesContext = {
     // The span of the grid's cells.
     rows: number;
     columns: number;
+    // A 1904 workbook's date cells, by cellKey.
+    dates: ReadonlySet<number>;
     // Throws past the budget: a range or a key counts as a cell, text as its characters.
     charge(cells: number, text: number): void;
     // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
@@ -81,7 +84,9 @@ export function readRules(
                     formulas.reduce((text, formula) => text + formula.length, 0),
                 );
                 ranges ??= [...rangesOf(sqref, context)];
-                const format = mapCfRule(rule, formulas, lookOf(rule), ranges, context.palette);
+                // A comparison with a date in a 1904 workbook counts from 1904, as its cells' serials did.
+                const days = context.dates.has(cellKey(ranges[0].row[0], ranges[0].column[0])) ? DAYS_1904 : 0;
+                const format = mapCfRule(rule, formulas, lookOf(rule), ranges, context.palette, days);
                 if (format)
                     formats.push({ priority: Number.parseInt(xmlAttr(rule, '', 'priority') ?? '', 10), format });
             }
@@ -196,6 +201,7 @@ function mapCfRule(
     look: DxfLook | undefined,
     ranges: SingleRange[],
     palette: ThemePalette,
+    days: number,
 ): ConditionalFormatRule | undefined {
     const type = xmlAttr(rule, '', 'type') ?? '';
     const flag = (name: string) => isOn(xmlAttr(rule, '', name));
@@ -224,7 +230,11 @@ function mapCfRule(
     if (type === 'cellIs' && comparison) {
         if (formulas.length === 0) return undefined;
         const literals = formulas.map(parseCfLiteral);
-        if (literals.every((value) => value !== null)) return condition(comparison, literals);
+        if (literals.every((value) => value !== null))
+            return condition(
+                comparison,
+                literals.map((value) => (days > 0 && NUMERIC.test(value) ? String(Number(value) + days) : value)),
+            );
         // The engine's comparisons hold literals only, so a reference compares in a formula.
         const tl = toA1(ranges[0].row[0], ranges[0].column[0]);
         if (operator === 'between' || operator === 'notBetween') {
@@ -285,9 +295,11 @@ function unquoteXlsxLiteral(txt: string): string | null {
 // refs/functions (→ null, handled via the formula-rule fallback). Quoted percent strings
 // like "5%" come from Google Sheets exports that serialize a percent-format threshold as
 // text — coerce them to the numeric form the engine's comparisons expect.
+const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
+
 export function parseCfLiteral(operand: string): string | null {
     const txt = operand.trim();
-    if (/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt)) return txt;
+    if (NUMERIC.test(txt)) return txt;
     const inner = unquoteXlsxLiteral(txt);
     if (inner == null) return null;
     const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);

@@ -46,13 +46,28 @@ export type Grid = {
     // The rows and columns the cells reach; recalc materialises at least a default grid's.
     rows: number;
     columns: number;
+    // A 1904 workbook's date cells, by cellKey, whose serials the reader moved to the 1900 system.
+    dates: Set<number>;
 };
 
 // `rows` are the <row> elements of <sheetData>, in the file's order.
 export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid {
-    const grid: Grid = { celldata: [], borderInfo: {}, heights: new Map(), rowhidden: {}, rows: 0, columns: 0 };
+    const grid: Grid = {
+        celldata: [],
+        borderInfo: {},
+        heights: new Map(),
+        rowhidden: {},
+        rows: 0,
+        columns: 0,
+        dates: new Set(),
+    };
+    // Cells come in order, each past the last; one that isn't may repeat an earlier cell, which keeps its first, so from
+    // then on the cells emitted are kept by key.
+    let last = -1;
+    let emitted: Set<number> | undefined;
     const emit = (entry: PlacedCell) => {
         grid.celldata.push(entry);
+        emitted?.add(cellKey(entry.r, entry.c));
         grid.rows = Math.max(grid.rows, entry.r + 1);
         grid.columns = Math.max(grid.columns, entry.c + 1);
     };
@@ -73,7 +88,15 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
         }
         let c = -1;
         for (const element of xmlChildren(row, SML_NS, 'c')) {
-            c = indexOf(columnNumber(xmlAttr(element, '', 'r')), c, REFERENCE_COLUMN_COUNT);
+            const cellReference = xmlAttr(element, '', 'r');
+            c = indexOf(columnNumber(cellReference), c, REFERENCE_COLUMN_COUNT);
+            // A cell naming another row than its row's is no Excel's.
+            const named = rowNumber(cellReference);
+            if (named !== undefined && named !== r + 1) continue;
+            const key = cellKey(r, c);
+            if (key <= last) emitted ??= new Set(grid.celldata.map((entry) => cellKey(entry.r, entry.c)));
+            last = Math.max(last, key);
+            if (emitted?.has(key)) continue;
             const look = context.looks[Number(xmlAttr(element, '', 's'))] ?? NO_LOOK;
             const cell = readCell(
                 element,
@@ -81,7 +104,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
                 context,
                 formulaOf(xmlChild(element, SML_NS, 'f'), r, c, shared, context),
             );
-            const placed = context.placed.get(cellKey(r, c));
+            const placed = context.placed.get(key);
             const empty =
                 !placed &&
                 cell.v === undefined &&
@@ -92,7 +115,8 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
             context.charge(placed ? 0 : 1, length(cell.v) + length(cell.m) + length(cell.f) + length(cell.ct?.fa));
             if (look.border) grid.borderInfo[`${r}_${c}`] = look.border;
             if (empty) continue;
-            context.placed.delete(cellKey(r, c));
+            context.placed.delete(key);
+            if (context.date1904 && cell.ct?.t === 'd') grid.dates.add(key);
             emit({ r, c, v: placed ? { ...cell, ...placed.v } : cell });
         }
     }
@@ -119,7 +143,11 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         else if (type === 'd') {
             value = isoSerial(raw);
             date = value !== undefined;
-        } else value = Number.parseFloat(raw);
+        } else {
+            // A value Excel never writes, INF or 1e999, is the text it is.
+            const number = DECIMAL.test(raw.trim()) ? Number(raw) : Number.NaN;
+            value = Number.isFinite(number) ? number : raw;
+        }
     }
     if (typeof value === 'number' && Number.isFinite(value) && !date && look.isDate) {
         date = true;
@@ -179,6 +207,8 @@ function dateDisplay(serial: number, numFmt: string | undefined): string {
     return update(numFmt ?? 'm/d/yyyy', serial);
 }
 
+const DECIMAL = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
 // A date cell, as Strict and LibreOffice write one: ISO 8601, read as a serial in the 1900 system.
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?)?/;
 
@@ -202,6 +232,12 @@ function columnNumber(reference: string | undefined): number | undefined {
         column = column * 26 + code - 0x60;
     }
     return letters > 0 ? column : Number.NaN;
+}
+
+// The digits after a cell reference's letters; undefined for none.
+function rowNumber(reference: string | undefined): number | undefined {
+    const at = reference?.search(/\d/) ?? -1;
+    return reference === undefined || at < 0 ? undefined : Number(reference.slice(at));
 }
 
 // 0-based. A row or cell without its reference is the one after the previous.

@@ -235,6 +235,32 @@ describe('the grid', () => {
         expect(cell('B2')?.f).toBe('=SORT(C2:C3)');
     });
 
+    // Excel writes neither; read as written, a value that is no finite number is text.
+    test('a number that is no number is its text', () => {
+        const { cell } = read(
+            '<row r="1"><c r="A1"><v>abc</v></c><c r="B1"><v>INF</v></c><c r="C1"><v>1e999</v></c><c r="D1"><v>0x10</v></c><c r="E1"><v> -1.5E+3 </v></c></row>',
+        );
+        expect(['A1', 'B1', 'C1', 'D1'].map((ref) => cell(ref)?.v)).toEqual(['abc', 'INF', '1e999', '0x10']);
+        expect(cell('A1')?.ct).toEqual({ fa: 'General', t: 's' });
+        expect(cell('E1')?.v).toBe(-1500);
+    });
+
+    test("a cell naming another row than its row's is dropped, and a cell met again keeps the first", () => {
+        const { grid, cell } = read(
+            '<row r="1"><c r="A2"><v>1</v></c><c r="B1"><v>2</v></c><c r="B1"><v>3</v></c></row><row r="1"><c r="B1"><v>4</v></c><c r="C1"><v>5</v></c></row>',
+            {
+                placed: [
+                    { r: 0, c: 1, v: { mc: { r: 0, c: 1, rs: 1, cs: 2 } } },
+                    { r: 0, c: 2, v: { mc: { r: 0, c: 1 } } },
+                ],
+            },
+        );
+        expect(cell('A2')).toBeUndefined();
+        expect(cell('B1')).toMatchObject({ v: 2, mc: { r: 0, c: 1, rs: 1, cs: 2 } });
+        expect(cell('C1')).toMatchObject({ v: 5, mc: { r: 0, c: 1 } });
+        expect(grid.celldata).toHaveLength(2);
+    });
+
     // A 1 MB formula's 20 copies were a 1 MB file that translated into 2.9 GB.
     test("a shared formula past Excel's 8,192 characters is not translated: its copies keep their values", () => {
         const shared = (text: string) =>

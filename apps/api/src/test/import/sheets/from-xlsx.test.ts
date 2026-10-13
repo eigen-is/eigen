@@ -599,6 +599,22 @@ describe("the reader's output budget", () => {
         expect(refused(wide(fits + 1))).toEqual({ status: 413, message: 'Spreadsheet too large' });
     });
 
+    // Excel refuses two sheets of one name, in any case; a formula naming it means the first.
+    test('a sheet named as an earlier one is numbered as Excel numbers a copy', () => {
+        const sheets = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    { name: 'S', data: '<row r="1"><c r="A1"><f>s!A1+1</f><v>1</v></c></row>' },
+                    { name: 's' },
+                    { name: 'S (2)' },
+                    { name: 'S' },
+                ],
+            }),
+        );
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 's (3)', 'S (2)', 'S (4)']);
+        expect(sheets[0].celldata?.[0].v?.f).toBe('=s!A1+1');
+    });
+
     // Imported, a workbook of no sheets would replace a document's with none.
     test('a workbook without a sheet it can read is no xlsx file', () => {
         const fixture = xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><v>1</v></c></row>' }] });

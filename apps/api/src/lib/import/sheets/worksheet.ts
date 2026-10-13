@@ -65,7 +65,10 @@ export function readWorksheet(rest: XmlElement | undefined, context: WorksheetCo
         if (xSplit > 0 || ySplit > 0)
             worksheet.sheet.frozen = {
                 type: xSplit > 0 && ySplit > 0 ? 'rangeBoth' : ySplit > 0 ? 'rangeRow' : 'rangeColumn',
-                range: { row_focus: Math.max(ySplit - 1, 0), column_focus: Math.max(xSplit - 1, 0) },
+                range: {
+                    row_focus: Math.min(Math.max(ySplit - 1, 0), REFERENCE_ROW_COUNT - 1),
+                    column_focus: Math.min(Math.max(xSplit - 1, 0), REFERENCE_COLUMN_COUNT - 1),
+                },
             };
     }
     // Only the span: a column's criteria need the editor's condition model, and a filter without them is what a fresh
