@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { MATH_LIMITS, MathError } from '../error';
-import { readMathml, writeMathml } from '../mathml';
+import { MathError } from '../error';
+import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
-import { MATH_ENCLOSURES, type MathRow } from '../tree';
+import { MATH_ENCLOSURES, MATH_LIMITS, type MathRow } from '../tree';
 import { elementsOf } from '../xml';
 import { el } from './parse';
 
@@ -28,8 +28,8 @@ function widest(units: number): MathRow {
 describe('MATH_LIMITS', () => {
     test('the deepest admitted tree round-trips; one level more is an error', () => {
         const deepest = nested(MATH_LIMITS.depth);
-        expect(viaMathml(deepest)).toEqual(deepest);
-        expect(viaOmml(deepest)).toEqual(deepest);
+        expect(viaMathml(deepest)).toStrictEqual(deepest);
+        expect(viaOmml(deepest)).toStrictEqual(deepest);
         expect(() => viaMathml(nested(MATH_LIMITS.depth + 1))).toThrow(MathError);
         expect(() => viaOmml(nested(MATH_LIMITS.depth + 1))).toThrow(MathError);
     });
@@ -37,8 +37,8 @@ describe('MATH_LIMITS', () => {
     test('the largest admitted tree fits the MathML cap and round-trips; one unit more is an error', () => {
         const largest = widest(MATH_LIMITS.size);
         expect(writeMathml(largest).length).toBeLessThanOrEqual(MATH_LIMITS.mathmlLength);
-        expect(viaMathml(largest)).toEqual(largest);
-        expect(viaOmml(largest)).toEqual(largest);
+        expect(viaMathml(largest)).toStrictEqual(largest);
+        expect(viaOmml(largest)).toStrictEqual(largest);
         expect(() => viaMathml(widest(MATH_LIMITS.size + 2))).toThrow(MathError);
     });
 
@@ -53,5 +53,20 @@ describe('MATH_LIMITS', () => {
         expect(() => readMathml(el(mathml))).toThrow(MathError);
         const ins = `<m:oMath xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${'<w:ins>'.repeat(depth)}<m:r><m:t>x</m:t></m:r>${'</w:ins>'.repeat(depth)}</m:oMath>`;
         expect(() => readOmml(el(ins))).toThrow(MathError);
+    });
+
+    test('whitespace costs linear time, so a forged run of spaces near the string cap reads at once', () => {
+        const spaces = ' '.repeat(MATH_LIMITS.mathmlLength - 256);
+        const omml = el(
+            `<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:d><m:dPr><m:begChr m:val="(${spaces}("/></m:dPr><m:e/></m:d></m:oMath>`,
+        );
+        const mathml = el(
+            `<math xmlns="${MATHML_NAMESPACE}"><mrow><mo fence="true">(${spaces}(</mo><mo fence="true">)</mo></mrow></math>`,
+        );
+        for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
+            const start = performance.now();
+            read();
+            expect(performance.now() - start).toBeLessThan(250);
+        }
     });
 });

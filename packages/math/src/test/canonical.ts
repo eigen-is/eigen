@@ -2,7 +2,8 @@ import { COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SPACES } from '../nota
 import { MATH_ENCLOSURES, type MathNode, type MathRow, type MathToken } from '../tree';
 
 // A3's canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every
-// generated tree must pass it.
+// generated tree must pass it. It restates the readers' character classes rather than importing them, so a wrong
+// class in a reader can't pass its own yardstick.
 
 const COLOR = /^#[0-9A-F]{6}$/;
 const SPACE_TEXTS = new Set([...Object.values(SPACES).map((space) => space.text), '\u00A0', '\t', '\n', '\r']);
@@ -78,7 +79,8 @@ function nodeIssue(node: MathNode): string | undefined {
             return tokenIssue(node);
         case 'text':
             if (node.color !== undefined && !COLOR.test(node.color)) return `colour ${node.color}`;
-            if (node.text === '' || NOT_XML.test(node.text)) return `text ${JSON.stringify(node.text)}`;
+            if (node.text === '' || NOT_XML.test(node.text) || /[\t\n\r]/.test(node.text))
+                return `text ${JSON.stringify(node.text)}`;
             return /^[ \u00A0]*\u00A0|\u00A0[ \u00A0]*$/.test(node.text)
                 ? 'a no-break space at the edge of text'
                 : undefined;
@@ -117,8 +119,9 @@ function nodeIssue(node: MathNode): string | undefined {
                 return `notation ${node.notation}`;
             return canonicalIssue(node.body);
         case 'table':
+            if (node.rows.length === 0) return 'a table without rows';
             for (const cells of node.rows) {
-                if (node.layout === 'equations' && cells.length === 0) return 'an equation row without cells';
+                if (cells.length === 0) return 'a row without cells';
                 const issue = cells.map((cell) => canonicalIssue(cell, node.layout === 'equations')).find(Boolean);
                 if (issue) return issue;
             }

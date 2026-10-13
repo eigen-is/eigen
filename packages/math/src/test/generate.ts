@@ -23,8 +23,9 @@ const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(ran
 const LETTERS = ['x', 'y', 'Z', 'α', 'Ω', 'ж', 'ℏ', 'h', 'R'];
 const WORDS = ['sin', 'dx', 'lim', 'если'];
 const NUMBERS = ['0', '42', '3.14'];
-// No `&`: in an equations table it is the cell break.
+// `&` stays out of an equations cell, where it is the cell break.
 const OPERATORS = [
+    '&',
     '+',
     '−',
     '=',
@@ -86,12 +87,12 @@ function token(random: Random): MathNode {
     }
 }
 
-function row(random: Random, depth: number, nonEmpty = false): MathRow {
+function row(random: Random, depth: number, nonEmpty = false, equationCell = false): MathRow {
     const nodes: MathRow = [];
     const length = Math.floor(random() * 4) + (nonEmpty ? 1 : 0);
     while (nodes.length < length) {
         const next = node(random, depth);
-        if (canonicalIssue([...nodes.slice(-2), next]) === undefined) nodes.push(next);
+        if (canonicalIssue([...nodes.slice(-2), next], equationCell) === undefined) nodes.push(next);
     }
     return nodes;
 }
@@ -188,7 +189,7 @@ function node(random: Random, depth: number): MathNode {
             const layout = pick(random, ['matrix', 'equations'] as const);
             const columns = 1 + Math.floor(random() * 3);
             const rows = Array.from({ length: 1 + Math.floor(random() * 3) }, () =>
-                Array.from({ length: columns }, () => row(random, inner)),
+                Array.from({ length: columns }, () => row(random, inner, false, layout === 'equations')),
             );
             return { kind: 'table', layout, rows };
         }
@@ -197,6 +198,5 @@ function node(random: Random, depth: number): MathNode {
 
 export function generateTree(seed: number): MathRow {
     // Through JSON, so absent fields are absent rather than undefined, as a reader leaves them.
-    const tree: MathRow = JSON.parse(JSON.stringify(row(seeded(seed), 1)));
-    return tree;
+    return JSON.parse(JSON.stringify(row(seeded(seed), 1)));
 }

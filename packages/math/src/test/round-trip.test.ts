@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readMathml, writeMathml } from '../mathml';
 import { readOmml } from '../omml';
+import type { MathNode } from '../tree';
 import { canonicalIssue } from './canonical';
 import { CORPUS } from './corpus';
 import { generateTree } from './generate';
@@ -12,7 +13,7 @@ describe('C2: tree → MathML → tree is the identity', () => {
         test(`fixture #${equation.i}`, () => {
             const tree = readOmml(el(equation.omml));
             const read = readMathml(el(writeMathml(tree))).row;
-            expect(read).toEqual(tree);
+            expect(read).toStrictEqual(tree);
             expect(canonicalIssue(read)).toBeUndefined();
         });
     }
@@ -21,7 +22,22 @@ describe('C2: tree → MathML → tree is the identity', () => {
         for (let seed = 1; seed <= 1000; seed++) {
             const tree = generateTree(seed);
             expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
-            expect({ seed, tree: readMathml(el(writeMathml(tree))).row }).toEqual({ seed, tree });
+            expect({ seed, tree: readMathml(el(writeMathml(tree))).row }).toStrictEqual({ seed, tree });
         }
+    });
+});
+
+describe('canonicalIssue', () => {
+    test.each([
+        { kind: 'table', layout: 'matrix', rows: [] },
+        { kind: 'table', layout: 'matrix', rows: [[]] },
+        { kind: 'table', layout: 'equations', rows: [[[]], []] },
+        { kind: 'text', text: '\tif' },
+        { kind: 'text', text: 'a\nb' },
+        { kind: 'text', text: '\r' },
+        { kind: 'identifier', text: 'x', color: 'red' },
+        { kind: 'text', text: 'x', color: '#ff0000' },
+    ] satisfies MathNode[])('rejects %j', (node) => {
+        expect(canonicalIssue([node])).toBeDefined();
     });
 });

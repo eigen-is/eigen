@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
-import type { MathRow } from '../tree';
+import type { MathNode, MathRow } from '../tree';
 import { elementsOf, type MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { type CanonicalItem, type CanonicalObject, canonicalOmml } from './canonical-omml';
@@ -113,11 +113,10 @@ describe('C1: OMML → tree → OMML keeps what Word shows', () => {
         }
     });
 
-    // The research prototype's misses that are in the fixture; #146 and #151 are Zenodo, checked locally (C7).
-    test.each([3, 87, 173, 174])('prototype miss #%i passes', (index) => {
-        const equation = CORPUS.find((candidate) => candidate.i === index);
-        expect(equation).toBeDefined();
-        if (equation) expectRoundTrip(equation);
+    // The research prototype's misses that are in the fixture, so the loop above covers them; #146 and #151 are
+    // Zenodo, checked locally (C7).
+    test('the prototype misses are in the fixture', () => {
+        expect([3, 87, 173, 174].filter((index) => !CORPUS.some((equation) => equation.i === index))).toEqual([]);
     });
 
     test('every fixture equation reads to a canonical tree', () => {
@@ -132,7 +131,7 @@ describe('C1: OMML → tree → OMML keeps what Word shows', () => {
     test('seeded canonical trees survive OMML unchanged', () => {
         for (let seed = 1; seed <= 1000; seed++) {
             const tree = generateTree(seed);
-            expect({ seed, tree: readOmml(parseWritten(writeOmml(tree))) }).toEqual({ seed, tree });
+            expect({ seed, tree: readOmml(parseWritten(writeOmml(tree))) }).toStrictEqual({ seed, tree });
         }
     });
 });
@@ -223,6 +222,44 @@ describe('readOmml', () => {
         ]);
     });
 
+    test('an object whose control character is a tracked deletion goes whole', () => {
+        const deleted = '<m:ctrlPr><w:del w:id="1" w:author="a"><w:rPr/></w:del></m:ctrlPr>';
+        expect(
+            read(
+                `<m:d><m:dPr>${deleted}</m:dPr><m:e><m:r><w:del w:id="2" w:author="a"><m:t>x</m:t></w:del></m:r></m:e></m:d>` +
+                    `<m:acc><m:accPr><m:ctrlPr><w:moveFrom w:id="3" w:author="a"/></m:ctrlPr></m:accPr><m:e/></m:acc>` +
+                    `<m:d><m:dPr><m:ctrlPr><w:ins w:id="4" w:author="a"/></m:ctrlPr></m:dPr><m:e>${run('y')}</m:e></m:d>`,
+            ),
+        ).toEqual([
+            { kind: 'fenced', open: '(', close: ')', separator: '', parts: [[{ kind: 'identifier', text: 'y' }]] },
+        ]);
+        const U: MathNode = { kind: 'identifier', text: 'U' };
+        const fenced = (open: string, close: string, ...part: MathRow): MathNode => ({
+            kind: 'fenced',
+            open,
+            close,
+            separator: '',
+            parts: [part],
+        });
+        // Word, after accepting the changes, shows Ū. and P(E[U])≠E[P(U)].
+        expect(
+            CORPUS.filter((equation) => [87, 89].includes(equation.i)).map((equation) => readOmml(el(equation.omml))),
+        ).toEqual([
+            [
+                { kind: 'accent', accent: '\u0305', body: [U] },
+                { kind: 'operator', text: '.' },
+            ],
+            [
+                { kind: 'identifier', text: 'P' },
+                fenced('(', ')', { kind: 'identifier', text: 'E' }, fenced('[', ']', U)),
+                { kind: 'operator', text: '≠' },
+                { kind: 'identifier', text: 'E' },
+                fenced('[', ']', { kind: 'identifier', text: 'P' }, fenced('(', ')', U)),
+                { kind: 'operator', text: '.' },
+            ],
+        ]);
+    });
+
     test('mc:AlternateContent reads its fallback', () => {
         expect(
             read(
@@ -252,8 +289,20 @@ describe('readOmml', () => {
         const colored = (value: string) => read(run('x', `<w:rPr><w:color w:val="${value}"/></w:rPr>`))[0];
         expect(colored('00b050')).toEqual({ kind: 'identifier', text: 'x', color: '#00B050' });
         expect(colored('000000')).toEqual({ kind: 'identifier', text: 'x', color: '#000000' });
-        for (const value of ['auto', 'red', '#FF0000', '0000FF&quot; onload=&quot;x', 'FF00001']) {
+        const text = (value: string) =>
+            read(run('if', `<m:rPr><m:nor/></m:rPr><w:rPr><w:color w:val="${value}"/></w:rPr>`))[0];
+        for (const value of [
+            'auto',
+            'red',
+            '#FF0000',
+            '0000FF&quot; onload=&quot;x',
+            'FF00001',
+            ' 00FF00',
+            'GG0000',
+            '',
+        ]) {
             expect(colored(value)).toEqual({ kind: 'identifier', text: 'x' });
+            expect(text(value)).toEqual({ kind: 'text', text: 'if' });
         }
     });
 
@@ -299,6 +348,25 @@ describe('readOmml', () => {
                     [[{ kind: 'identifier', text: 'y' }]],
                 ],
             },
+        ]);
+    });
+
+    test('a table without rows, or a row without cells, reads as one empty cell', () => {
+        for (const [omml, layout] of [
+            ['<m:m/>', 'matrix'],
+            ['<m:m><m:mr/></m:m>', 'matrix'],
+            ['<m:eqArr/>', 'equations'],
+        ] as const) {
+            const row = read(omml);
+            expect(row).toEqual([{ kind: 'table', layout, rows: [[[]]] }]);
+            expect(writeOmml(row)).not.toMatch(/<m:m><\/m:m>|<m:mr><\/m:mr>|<m:eqArr><\/m:eqArr>/);
+        }
+    });
+
+    test('a tab, CR or LF in text reads as a space', () => {
+        const normal = '<m:rPr><m:nor/></m:rPr>';
+        expect(read(`<m:r>${normal}<m:t xml:space="preserve">&#9;if&#13;a&#10;</m:t></m:r>`)).toEqual([
+            { kind: 'text', text: ' if a ' },
         ]);
     });
 

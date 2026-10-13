@@ -1,6 +1,6 @@
-import { MATH_LIMITS, MathError } from './error';
+import { MathError } from './error';
 import { fromAlphanumeric, SPACES } from './notation';
-import { trimXmlSpace } from './xml';
+import { checkedXml, replaceEdges, trimXmlSpace } from './xml';
 
 export const MATH_VARIANTS = [
     'normal',
@@ -62,6 +62,19 @@ export type MathToken = Extract<MathNode, { kind: 'identifier' | 'number' | 'ope
 
 export type MathBudget = { size: number };
 
+// The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 30× headroom.
+const SIZE = 10_000;
+
+export const MATH_LIMITS = {
+    // Levels a reader walks: a node's row, or an element it reads through.
+    depth: 32,
+    // Every node, row, table row and character of text counts one.
+    size: SIZE,
+    // The largest admitted tree's MathML: a unit writes at most 64 characters (an menclose drawing every line),
+    // plus the root.
+    mathmlLength: 64 * SIZE + 256,
+} as const;
+
 // Every reader calls this as it builds: at each level it walks, and for each node, row and character it makes.
 export function bound(budget: MathBudget, depth: number, size: number): void {
     budget.size += size;
@@ -69,7 +82,6 @@ export function bound(budget: MathBudget, depth: number, size: number): void {
     if (budget.size > MATH_LIMITS.size) throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`);
 }
 
-const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 const INVISIBLE = /^[\u200B\u2061-\u2064]$/u;
 const LETTER = /^\p{L}$/u;
 const DIGIT = /^[0-9]$/;
@@ -86,14 +98,9 @@ const SPACE_OF_CHAR = new Map<string, MathSpace>([
     ['\r', 'normal'],
 ]);
 
-function checked(text: string): string {
-    if (NOT_XML.test(text)) throw new MathError('An equation holds a character XML cannot hold');
-    return text;
-}
-
 // The one character a fence, accent, brace or large operator holds; '' for none.
 export function mark(text: string): string {
-    const [char = ''] = checked(trimXmlSpace(text));
+    const [char = ''] = checkedXml(trimXmlSpace(text));
     return INVISIBLE.test(char) ? '' : char;
 }
 
@@ -108,7 +115,22 @@ function token(kind: MathToken['kind'], text: string, variant: MathVariant | und
     return node;
 }
 
+export const optional = (row: MathRow) => (row.length > 0 ? row : undefined);
+
+// Word marks alignment points with & in an equation: they split it into cells.
+export function equationCells(row: MathRow): MathRow[] {
+    const cells: MathRow[] = [[]];
+    for (const node of row) {
+        if (node.kind === 'operator' && node.text === '&') cells.push([]);
+        else cells[cells.length - 1].push(node);
+    }
+    return cells;
+}
+
 type StyledChar = { char: string; variant: MathVariant; color: string | undefined };
+
+// The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
+const TEXT_EDGE: ReadonlySet<string> = new Set(' \u00A0');
 
 // One row as a reader builds it. Characters wait until the next node, so tokens come out canonical whatever the
 // runs or elements they were spread over: a maximal number, an upright word, one styled letter at a time.
@@ -124,15 +146,17 @@ export class RowBuilder {
     }
 
     chars(text: string, letters: MathVariant, others: MathVariant, color: string | undefined): void {
-        for (const char of checked(text)) {
+        for (const char of checkedXml(text)) {
             if (INVISIBLE.test(char)) continue;
             const [base, variant] = fromAlphanumeric(char) ?? [char, LETTER.test(char) ? letters : others];
             this.#chars.push({ char: base, variant, color });
         }
     }
 
-    text(text: string, color: string | undefined): void {
-        if (checked(text) === '') return;
+    text(raw: string, color: string | undefined): void {
+        // A tab or line break is a space: MathML would trim it at an edge.
+        const text = checkedXml(raw).replace(/[\t\n\r]/g, ' ');
+        if (text === '') return;
         this.#flush();
         const last = this.#row.at(-1);
         if (last?.kind === 'text' && last.color === color) {
@@ -151,9 +175,7 @@ export class RowBuilder {
     done(): MathRow {
         this.#flush();
         for (const node of this.#row) {
-            // The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
-            if (node.kind === 'text')
-                node.text = node.text.replace(/^[ \u00A0]+|[ \u00A0]+$/g, (edge) => ' '.repeat(edge.length));
+            if (node.kind === 'text') node.text = replaceEdges(node.text, TEXT_EDGE, ' ');
         }
         return this.#row;
     }

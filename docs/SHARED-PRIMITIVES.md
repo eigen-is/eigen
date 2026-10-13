@@ -1642,7 +1642,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
-| `MATH_LIMITS` | `@workspace/math` | packages/math/src/error.ts |
+| `MATH_LIMITS` | `@workspace/math` | packages/math/src/tree.ts |
 | `MATHML_NAMESPACE` | `@workspace/math` | packages/math/src/mathml.ts |
 | `OMML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
 | `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |

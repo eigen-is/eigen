@@ -41,7 +41,7 @@ export const SPACES: Readonly<Record<MathSpace, { text: string; width: string }>
 // Characters MathML stretches as fences, so a bare one is written unstretched.
 export const FENCES: ReadonlySet<string> = new Set('()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄〈〉');
 
-export const INTEGRALS: ReadonlySet<string> = new Set('∫∬∭∮∯∰∱∲∳⨋⨌⨍⨎⨏⨐⨑⨒⨓⨔⨕⨖⨗⨘⨙⨚⨛⨜');
+const INTEGRALS: ReadonlySet<string> = new Set('∫∬∭∮∯∰∱∲∳⨋⨌⨍⨎⨏⨐⨑⨒⨓⨔⨕⨖⨗⨘⨙⨚⨛⨜');
 
 export const LARGE_OPERATORS: ReadonlySet<string> = new Set([...INTEGRALS, ...'∑∏∐⋀⋁⋂⋃⨀⨁⨂⨃⨄⨅⨆⨉']);
 

@@ -39,11 +39,13 @@ const child = (element: MathXmlElement | undefined, local: string) =>
 const val = (element: MathXmlElement | undefined) => (element ? (attribute(element, 'val') ?? '') : undefined);
 const isOn = (value: string | undefined) => value !== undefined && !['0', 'off', 'false'].includes(value);
 
-// Tracked insertions show; deletions don't.
+// Tracked insertions show; deletions don't, nor does an object whose control character is deleted (§22.1.2.23).
 function shown(elements: MathXmlElement[]): MathXmlElement[] {
     return elements.flatMap((element) => {
         if (isW(element, 'ins', 'moveTo')) return shown(elementsOf(element));
-        return isW(element, 'del', 'moveFrom') ? [] : [element];
+        if (isW(element, 'del', 'moveFrom')) return [];
+        const control = child(child(element, `${element.local}Pr`), 'ctrlPr');
+        return control && elementsOf(control).some((part) => isW(part, 'del', 'moveFrom')) ? [] : [element];
     });
 }
 

@@ -1,3 +1,5 @@
+import { MathError } from './error';
+
 // The element the readers take: the API's Bun-parsed XmlElement as is, or a DOM element through fromDom. Attributes
 // are keyed as written, so `m:val` and `val` both answer to `val`.
 export type MathXmlElement = {
@@ -8,7 +10,7 @@ export type MathXmlElement = {
 };
 
 // Bun's tree also holds comment and processing-instruction objects, which have no `local`.
-export function isElement(child: string | object): child is MathXmlElement {
+function isElement(child: string | object): child is MathXmlElement {
     return typeof child === 'object' && 'local' in child;
 }
 
@@ -27,8 +29,26 @@ export function attribute(element: MathXmlElement, local: string): string | unde
     return undefined;
 }
 
+const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
+
+export function checkedXml(text: string): string {
+    if (NOT_XML.test(text)) throw new MathError('An equation holds a character XML cannot hold');
+    return text;
+}
+
+// A loop, not a regex: an anchored end pattern backtracks through every interior run, in quadratic time.
+export function replaceEdges(text: string, edge: ReadonlySet<string>, by: string): string {
+    let start = 0;
+    let end = text.length;
+    while (start < end && edge.has(text[start])) start++;
+    while (end > start && edge.has(text[end - 1])) end--;
+    return by.repeat(start) + text.slice(start, end) + by.repeat(text.length - end);
+}
+
+const XML_SPACE: ReadonlySet<string> = new Set(' \t\n\r');
+
 export function trimXmlSpace(text: string): string {
-    return text.replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, '');
+    return replaceEdges(text, XML_SPACE, '');
 }
 
 const ESCAPES: Record<string, string> = {

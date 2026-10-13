@@ -1,6 +1,7 @@
 import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
 import {
     bound,
+    equationCells,
     MATH_ENCLOSURES,
     type MathBudget,
     type MathEnclosure,
@@ -8,6 +9,7 @@ import {
     type MathRow,
     type MathVariant,
     mark,
+    optional,
     RowBuilder,
     toColor,
 } from './tree';
@@ -136,8 +138,6 @@ function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number)
     for (const element of elements) readInto(row, element, depth);
 }
 
-const optional = (row: MathRow) => (row.length > 0 ? row : undefined);
-
 function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
     if (is(element, MARKUP_COMPATIBILITY_NAMESPACE, 'AlternateContent')) {
         const fallback = childOf(element, MARKUP_COMPATIBILITY_NAMESPACE, 'Fallback');
@@ -152,6 +152,9 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
     const { budget } = row;
     const own = childOf(element, OMML_NAMESPACE, `${element.local}Pr`);
     const property = (local: string) => childOf(own, OMML_NAMESPACE, local);
+    // ECMA-376 §22.1.2.23: a tracked deletion of its control character deletes the object.
+    const control = property('ctrlPr');
+    if (control && elementsOf(control).some((part) => part.ns === WORDML_NAMESPACE && DELETED.has(part.local))) return;
     const content = (local: string) => {
         const slot = childOf(element, OMML_NAMESPACE, local);
         return slot ? elementsOf(slot) : [];
@@ -261,38 +264,35 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                 body: slot('e'),
             });
             return;
-        case 'm':
+        // ECMA-376 needs a row in m:m, a cell in m:mr and an equation in m:eqArr: an empty one reads as one empty cell.
+        case 'm': {
+            const rows = elementsOf(element)
+                .filter((matrixRow) => is(matrixRow, OMML_NAMESPACE, 'mr'))
+                .map((matrixRow) => elementsOf(matrixRow).filter((cell) => is(cell, OMML_NAMESPACE, 'e')));
             row.node({
                 kind: 'table',
                 layout: 'matrix',
-                rows: elementsOf(element)
-                    .filter((matrixRow) => is(matrixRow, OMML_NAMESPACE, 'mr'))
-                    .map((matrixRow) => {
-                        bound(budget, depth + 1, 1);
-                        return elementsOf(matrixRow)
-                            .filter((cell) => is(cell, OMML_NAMESPACE, 'e'))
-                            .map((cell) => readRow(elementsOf(cell), budget, depth + 1));
-                    }),
+                rows: (rows.length > 0 ? rows : [[]]).map((cells) => {
+                    bound(budget, depth + 1, 1);
+                    return (cells.length > 0 ? cells.map(elementsOf) : [[]]).map((cell) =>
+                        readRow(cell, budget, depth + 1),
+                    );
+                }),
             });
             return;
-        case 'eqArr':
+        }
+        case 'eqArr': {
+            const equations = elementsOf(element).filter((equation) => is(equation, OMML_NAMESPACE, 'e'));
             row.node({
                 kind: 'table',
                 layout: 'equations',
-                rows: elementsOf(element)
-                    .filter((equation) => is(equation, OMML_NAMESPACE, 'e'))
-                    .map((equation) => {
-                        bound(budget, depth + 1, 1);
-                        // Word marks alignment points with & in the run text: they split the row into cells.
-                        const cells: MathRow[] = [[]];
-                        for (const node of readRow(elementsOf(equation), budget, depth + 1)) {
-                            if (node.kind === 'operator' && node.text === '&') cells.push([]);
-                            else cells[cells.length - 1].push(node);
-                        }
-                        return cells;
-                    }),
+                rows: (equations.length > 0 ? equations.map(elementsOf) : [[]]).map((equation) => {
+                    bound(budget, depth + 1, 1);
+                    return equationCells(readRow(equation, budget, depth + 1));
+                }),
             });
             return;
+        }
         default:
             // Properties are their object's; a box, a phantom and what this reader doesn't know read as their content.
             if (!element.local.endsWith('Pr')) readThrough(row, elementsOf(element), depth + 1);
