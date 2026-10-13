@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import { readGrid } from '../../../lib/import/sheets/cells';
-import { readInBatches } from '../../../lib/import/sheets/package';
+import { readBudget, readInBatches } from '../../../lib/import/sheets/package';
 import { readSharedStrings } from '../../../lib/import/sheets/strings';
 import { readLooks } from '../../../lib/import/sheets/styles';
 import { cellKey, type PlacedCell } from '../../../lib/import/sheets/worksheet';
@@ -20,9 +20,10 @@ function read(data: string, options: { strings?: string[]; date1904?: boolean; p
         `<sst xmlns="${SML}">${(options.strings ?? []).map((si) => `<si>${si}</si>`).join('')}</sst>`,
     );
     const part = new TextEncoder().encode(sheetXml({ data }));
-    const grid = readGrid(readInBatches(part, 'sheetData', 'row').children, {
+    const budget = readBudget();
+    const grid = readGrid(readInBatches(part, 'sheetData', 'row', budget).children, {
         looks: readLooks(parseOoxml(`<styleSheet xmlns="${SML}">${STYLES}</styleSheet>`) ?? undefined, PALETTE),
-        strings: readSharedStrings(sst, PALETTE),
+        strings: readSharedStrings(sst, PALETTE, budget),
         date1904: options.date1904 ?? false,
         palette: PALETTE,
         charge: (cells, text) => charged.push([cells, text]),
@@ -190,14 +191,15 @@ describe('the grid', () => {
         expect(thrown(() => read('<row r="1"><c r="11"><v>1</v></c></row>'))).toMatchObject({ status: 400 });
     });
 
+    // Its format too: the snapshot spells it per cell.
     test('charges each cell it emits with the characters it writes, a border alone too', () => {
         const { charged } = read(
             `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>A1</f><v>12</v></c><c r="C1" s="${BORDERED}"/><c r="D1"/></row>`,
             { strings: ['<t>abc</t>'] },
         );
         expect(charged).toEqual([
-            [1, 6],
-            [1, 5],
+            [1, 6 + 'General'.length],
+            [1, 5 + 'General'.length],
             [1, 0],
         ]);
     });
@@ -225,6 +227,21 @@ describe('the grid', () => {
         expect(copied).toEqual([4, 4]);
     });
 
+    // A 1 MB formula's 20 copies were a 1 MB file that translated into 2.9 GB.
+    test("a shared formula past Excel's 8,192 characters is not translated: its copies keep their values", () => {
+        const shared = (text: string) =>
+            read(
+                `<row r="1"><c r="A1"><f t="shared" ref="A1:A2" si="0">${text}</f><v>2</v></c></row><row r="2"><c r="A2"><f t="shared" si="0"/><v>2</v></c></row>`,
+            );
+        const longest = `${'B1+'.repeat(2730)}B1`;
+        expect(longest).toHaveLength(8192);
+        expect(shared(longest).cell('A2')?.f).toBe(`=${'B2+'.repeat(2730)}B2`);
+        const longer = shared(`${longest}0`);
+        expect(longer.cell('A2')).toMatchObject({ v: 2 });
+        expect(longer.cell('A2')?.f).toBeUndefined();
+        expect(longer.copied).toEqual([]);
+    });
+
     test("a placed cell takes the grid's cell there, charged for its text alone, and one the grid lacks is emitted", () => {
         const { grid, cell, charged } = read('<row r="1"><c r="A1"><v>1</v></c><c r="B1"/></row>', {
             placed: [
@@ -245,7 +262,7 @@ describe('the grid', () => {
         expect(grid.celldata).toHaveLength(3);
         expect([grid.rows, grid.columns]).toEqual([5, 3]);
         expect(charged).toEqual([
-            [0, 1],
+            [0, 1 + 'General'.length],
             [0, 0],
         ]);
     });

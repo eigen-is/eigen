@@ -4,8 +4,8 @@ import { MAX_CELLS, MAX_TEXT } from '../../../lib/import/sheets/from-xlsx';
 import { build, deflated } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted xlsx meets. The zip refuses an archive past its caps before anything inflates; past that the
-// reader emits only what it charges against one output budget (from-xlsx.ts), so a range a file declares costs what
-// it emits, never what it spans. The probes are the hostile files the ExcelJS import's review rounds built, each read
+// reader parses only what it charges against the read budget (package.ts), and emits only what it charges against one
+// output budget (from-xlsx.ts), so a range a file declares costs what it emits, never what it spans. The probes are the hostile files the ExcelJS import's review rounds built, each read
 // in a process of its own so its peak and its time are the import's alone.
 
 const SML = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -255,9 +255,9 @@ describe('each cap', () => {
     }, 30_000);
 
     test('emitted text may reach its cap across the workbook', () => {
-        // A plain shared string reaches every cell as one string, its value and its display.
-        const text = 'a'.repeat(1_000_000);
-        const cells = MAX_TEXT / (2 * text.length);
+        // A plain shared string reaches every cell as one string, its value and its display, beside its format.
+        const cells = 128;
+        const text = 'a'.repeat((MAX_TEXT / cells - 'General'.length) / 2);
         const half = Math.floor(cells / 2);
         const shared = (count: number) => rowsOf(count, (r) => `<c r="A${r}" t="s"><v>0</v></c>`);
         const file = (more: string) =>
@@ -299,8 +299,55 @@ describe('text the import reads', () => {
     // Each sheet entry read its part's hyperlinks again: 1,000 entries naming one 190 MB part took 140 s.
     test('sheets naming one part read it once', () => {
         const entries = Array.from({ length: 200 }, (_, i) => `<sheet name="T${i}" sheetId="${i + 2}" r:id="rId1"/>`);
-        const result = measuredImport(xlsx({ entries: entries.join(''), after: `<!--${'x'.repeat(50_000_000)}-->` }));
+        const result = measuredImport(xlsx({ entries: entries.join(''), after: `<!--${'x'.repeat(30_000_000)}-->` }));
         expect(result.cells).toEqual([1]);
         expect(result.cpuMs).toBeLessThan(5_000);
+    }, 30_000);
+});
+
+// Each a file of about 1 MB that the reader parsed for 10 to 120 s, or into gigabytes, emitting little or nothing: what
+// it parses is charged before it is parsed.
+describe('what a file holds costs its parse', () => {
+    test('a grid of more empty cells and rows than the element budget is too large before any is parsed', () => {
+        const result = measuredImport(xlsx({ data: rowsOf(3_001, () => '<c/>'.repeat(10_000)) }));
+        expect(result).toMatchObject(TOO_LARGE);
+        expect(result.rssGrowth).toBeLessThan(512 * MB);
+        expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    test('a row or a shared string longer than a batch may be is too large', () => {
+        const runs = '<r><t>a</t></r>'.repeat(1_000_000);
+        for (const file of [
+            xlsx({ data: `<row r="1"><c r="A1" t="inlineStr"><is>${runs}</is></c></row>` }),
+            xlsx({}, [sst(`<si>${runs}</si>`)]),
+        ]) {
+            const result = measuredImport(file);
+            expect(result).toMatchObject(TOO_LARGE);
+            expect(result.rssGrowth).toBeLessThan(512 * MB);
+        }
+    }, 30_000);
+
+    test('a part past its grid of more bytes or elements than a whole parse may hold is too large before it is parsed', () => {
+        for (const after of [
+            validation(Array(3_300_000).fill('XFD1048576').join(' ')),
+            `<rowBreaks>${'<brk/>'.repeat(1_600_000)}</rowBreaks>`,
+        ]) {
+            const result = measuredImport(xlsx({ after }));
+            expect(result).toMatchObject(TOO_LARGE);
+            expect(result.rssGrowth).toBeLessThan(256 * MB);
+            expect(result.cpuMs).toBeLessThan(2_000);
+        }
+    }, 30_000);
+
+    test('a 1 MB number format on 1,000 cells shows them as General', () => {
+        const styles = {
+            name: 'xl/styles.xml',
+            xml: `<styleSheet xmlns="${SML}"><numFmts count="1"><numFmt numFmtId="164" formatCode="0;m${'0'.repeat(1_000_000)}"/></numFmts><cellXfs count="2"><xf/><xf numFmtId="164"/></cellXfs></styleSheet>`,
+        };
+        const result = measuredImport(
+            xlsx({ data: rowsOf(1_000, (r) => `<c r="A${r}" s="1"><v>1</v></c>`) }, [styles]),
+        );
+        expect(result).toMatchObject({ cells: [1_000] });
+        expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
 });

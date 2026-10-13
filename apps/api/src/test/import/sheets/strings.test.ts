@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { parseOoxml } from '../../../lib/core/ooxml';
-import { BATCH_BYTES } from '../../../lib/import/sheets/package';
+import { BATCH_BYTES, MAX_XLSX_ELEMENTS, readBudget } from '../../../lib/import/sheets/package';
 import { readSharedStrings, stringOf, textOf } from '../../../lib/import/sheets/strings';
 import { SML } from '../../fixtures/xlsx';
 
@@ -14,7 +14,11 @@ const sst = (items: string[]) =>
 describe('a shared string', () => {
     test("is its text, as written, spaces and line breaks too; an empty one is ''", () => {
         expect(
-            readSharedStrings(sst(['<t>plain</t>', '<t xml:space="preserve">  two\nlines </t>', '<t/>', '']), PALETTE),
+            readSharedStrings(
+                sst(['<t>plain</t>', '<t xml:space="preserve">  two\nlines </t>', '<t/>', '']),
+                PALETTE,
+                readBudget(),
+            ),
         ).toEqual(['plain', '  two\nlines ', '', '']);
     });
 
@@ -24,6 +28,7 @@ describe('a shared string', () => {
                 '<r><t>Bold</t><rPr><b/></rPr></r><r><rPr><i/><rFont val="Arial"/><color theme="1"/></rPr><t xml:space="preserve"> and plain</t></r>',
             ]),
             PALETTE,
+            readBudget(),
         );
         expect(rich).toEqual({
             text: 'Bold and plain',
@@ -40,6 +45,7 @@ describe('a shared string', () => {
             readSharedStrings(
                 sst(['<t>東京</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh><phoneticPr fontId="1"/>']),
                 PALETTE,
+                readBudget(),
             ),
         ).toEqual(['東京']);
     });
@@ -49,6 +55,7 @@ describe('a shared string', () => {
             readSharedStrings(
                 sst(['<t>a_x000D__x000a_b</t>', '<t>_x005F_x0041_</t>', '<t>_x12_ _xZZZZ_</t>']),
                 PALETTE,
+                readBudget(),
             ),
         ).toEqual(['a\r\nb', '_x0041_', '_x12_ _xZZZZ_']);
     });
@@ -58,13 +65,21 @@ describe('a shared string', () => {
         const strings = readSharedStrings(
             sst(Array.from({ length: count }, (_, index) => `<t>${index}</t><rPh><t>x</t></rPh>`)),
             PALETTE,
+            readBudget(),
         );
         expect(strings).toHaveLength(count);
         expect(strings[count - 1]).toBe(String(count - 1));
     });
 
+    // 40 million empty strings, never shown, were a 1 MB file read for 14 s into 4.2 GB.
+    test('are charged their elements before any is read', () => {
+        const budget = readBudget();
+        budget.chargeElements(MAX_XLSX_ELEMENTS - 1);
+        expect(() => readSharedStrings(sst(['', '']), PALETTE, budget)).toThrow('Spreadsheet too large');
+    });
+
     test('no part is no strings', () => {
-        expect(readSharedStrings(undefined, PALETTE)).toEqual([]);
+        expect(readSharedStrings(undefined, PALETTE, readBudget())).toEqual([]);
     });
 });
 

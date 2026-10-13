@@ -19,6 +19,8 @@ export const DAY_MS = 86_400_000;
 // A 1904 workbook counts its days from 1904-01-01, 1,462 days after the 1900 system's day 0.
 export const DAYS_1904 = 1462;
 
+const MAX_FORMULA_LENGTH = 8192;
+
 export type GridContext = {
     looks: Look[];
     strings: SharedString[];
@@ -86,7 +88,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
                 cell.bg === undefined &&
                 cell.fc === undefined;
             if (empty && !look.border) continue;
-            context.charge(placed ? 0 : 1, length(cell.v) + length(cell.m) + length(cell.f));
+            context.charge(placed ? 0 : 1, length(cell.v) + length(cell.m) + length(cell.f) + length(cell.ct?.fa));
             if (look.border) grid.borderInfo[`${r}_${c}`] = look.border;
             if (empty) continue;
             context.placed.delete(cellKey(r, c));
@@ -165,19 +167,15 @@ function formulaOf(
         return text;
     }
     const anchor = shared.get(si);
-    if (!anchor?.text) return undefined;
+    // Past Excel's 8,192 characters a formula is no Excel's, and its translation costs about a hundred times its text.
+    if (!anchor?.text || anchor.text.length > MAX_FORMULA_LENGTH) return undefined;
     context.chargeCopy(anchor.text.length);
     return functionCopy(anchor.text, r - anchor.r, c - anchor.c);
 }
 
-// numfmt renders a bare serial under General as a number, so a date without a date format shows as m/d/yyyy; a
-// malformed format, which a hostile workbook can carry, as yyyy-mm-dd.
+// numfmt renders a bare serial under General as a number, so a date without a format numfmt can draw shows as m/d/yyyy.
 function dateDisplay(serial: number, numFmt: string | undefined): string {
-    try {
-        return update(numFmt && numFmt !== 'General' ? numFmt : 'm/d/yyyy', serial);
-    } catch {
-        return update('yyyy-mm-dd', serial);
-    }
+    return update(numFmt ?? 'm/d/yyyy', serial);
 }
 
 // A date cell, as Strict and LibreOffice write one: ISO 8601, read as a serial in the 1900 system.

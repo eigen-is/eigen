@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { bundledFont } from '@workspace/lib/constants/fonts';
+import { ApiError } from '../../../lib/core/errors';
 import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
 import { fontLook, readLooks, themePalette } from '../../../lib/import/sheets/styles';
 import { OFFICE_COLORS, SML } from '../../fixtures/xlsx';
@@ -52,15 +53,33 @@ describe('a number format', () => {
         expect(hours).toMatchObject({ numFmt: '0\\h', isDate: false });
     });
 
-    // A long code read once per xf was a 4 KB zip that held the reader for a minute.
-    test('is resolved once however many formats name it', () => {
-        const code = 'h:mm:ss '.repeat(12_500);
-        const started = performance.now();
+    // A long code read once per xf was a 4 KB zip that held the reader for a minute; past 1,000 formats they're refused.
+    test('is resolved once however many cell formats name it', () => {
+        const code = 'h:mm:ss '.repeat(31);
         const resolved = looks(
             `<numFmts><numFmt numFmtId="164" formatCode="${code}"/></numFmts>${xfs(...Array.from({ length: 2_000 }, () => '<xf numFmtId="164"/>'))}`,
         );
-        expect(performance.now() - started).toBeLessThan(2_000);
         expect(resolved[1999]).toMatchObject({ numFmt: code, isDate: true });
+    });
+
+    // Each was a 1 MB code, which every display parsed again: 1,000 cells formatted for over two minutes.
+    test("a code past Excel's 255 characters is General, and one numfmt can't parse keeps its code but shows General", () => {
+        const [, longest, longer, malformed] = looks(
+            `<numFmts><numFmt numFmtId="164" formatCode="${'0'.repeat(255)}"/><numFmt numFmtId="165" formatCode="${'0'.repeat(256)}"/><numFmt numFmtId="166" formatCode="0;m00[h"/></numFmts>${xfs('<xf/>', '<xf numFmtId="164"/>', '<xf numFmtId="165"/>', '<xf numFmtId="166"/>')}`,
+        );
+        expect(longest).toMatchObject({ numFmt: '0'.repeat(255), fa: '0'.repeat(255) });
+        expect(longer).toMatchObject({ numFmt: undefined, fa: undefined, isDate: false });
+        expect(malformed).toMatchObject({ numFmt: undefined, fa: '0;M00[h', isDate: false });
+    });
+
+    test('cell formats naming more than 1,000 formats are too large', () => {
+        const ids = Array.from({ length: 1_001 }, (_, index) => 164 + index);
+        const many = (count: number) =>
+            looks(
+                `<numFmts>${ids.map((id) => `<numFmt numFmtId="${id}" formatCode="0.${'0'.repeat(id % 30)}"/>`).join('')}</numFmts>${xfs('<xf/>', ...ids.slice(0, count).map((id) => `<xf numFmtId="${id}"/>`))}`,
+            );
+        expect(many(1_000)).toHaveLength(1_001);
+        expect(() => many(1_001)).toThrow(new ApiError(413, 'Spreadsheet too large'));
     });
 
     test('General, id 0 or an id nothing names is no format', () => {

@@ -24,7 +24,13 @@ const DXFS = readDxfs(
     PALETTE,
 );
 
-type Options = { rows?: number; columns?: number; date1904?: boolean; charge?: (cells: number, text: number) => void };
+type Options = {
+    rows?: number;
+    columns?: number;
+    date1904?: boolean;
+    charge?: (cells: number, text: number) => void;
+    chargeElements?: (count: number) => void;
+};
 
 function read(after: string, options: Options = {}) {
     const charged: { cells: number; text: number }[] = [];
@@ -35,6 +41,7 @@ function read(after: string, options: Options = {}) {
         rows: options.rows ?? 10,
         columns: options.columns ?? 5,
         charge: options.charge ?? ((cells, text) => charged.push({ cells, text })),
+        chargeElements: options.chargeElements ?? (() => {}),
     });
     return { ...rules, charged };
 }
@@ -309,6 +316,32 @@ describe('a conditional format', () => {
         ).toThrow(refusal);
     });
 
+    // A sqref of millions of references, parsed whatever they emit, held the reader for 10 to 16 s.
+    test('each reference of a sqref is charged before it is parsed, and a block without rules reads none of its', () => {
+        let references = 0;
+        const chargeElements = (count: number) => {
+            references += count;
+        };
+        read(cf('A1:A5 nowhere C1', '<cfRule type="expression" priority="1"><formula>1</formula></cfRule>'), {
+            chargeElements,
+        });
+        // Counted, then built.
+        expect(references).toBe(6);
+        references = 0;
+        const list = (sqref: string) =>
+            dv(`<dataValidation type="list" sqref="${sqref}"><formula1>"a"</formula1></dataValidation>`);
+        read(`${cf('A1 B1 C1')}${list('XFD1048576 A1')}`, { chargeElements });
+        expect(references).toBe(2);
+        const refusal = new Error('over budget');
+        expect(() =>
+            read(list('A1'), {
+                chargeElements: () => {
+                    throw refusal;
+                },
+            }),
+        ).toThrow(refusal);
+    });
+
     test('reads a million digits before no number, and a million spaces between ranges, in linear time', () => {
         const started = performance.now();
         read(
@@ -470,6 +503,14 @@ describe('a data validation', () => {
 test('a sheet without rules has none', () => {
     expect(read('')).toEqual({ charged: [] });
     expect(
-        readRules(undefined, { dxfs: [], palette: [], date1904: false, rows: 0, columns: 0, charge: () => {} }),
+        readRules(undefined, {
+            dxfs: [],
+            palette: [],
+            date1904: false,
+            rows: 0,
+            columns: 0,
+            charge: () => {},
+            chargeElements: () => {},
+        }),
     ).toEqual({});
 });

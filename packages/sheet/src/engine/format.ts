@@ -1,5 +1,5 @@
 import numeral from 'numeral';
-import { format, isDateFormat } from 'numfmt';
+import { format, isDateFormat, isValidFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
@@ -267,6 +267,10 @@ export function numberDisplay(value: Cell['v'] | null, fa = 'General'): string {
         // numfmt throws on a malformed format, which an xlsx numFmt can carry into ct.fa.
         return update('General', value);
     }
+}
+
+export function isValidNumberFormat(fmt: string): boolean {
+    return isValidFormat(fmt);
 }
 
 export function is_date(fmt: number | string): boolean {

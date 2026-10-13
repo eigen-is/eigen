@@ -7,7 +7,7 @@ import { optional } from '../../core/opc';
 import { xmlAttr, xmlChild } from '../../core/xml';
 import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
-import { readInBatches, readPackage } from './package';
+import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
 import { readDxfs, readLooks, themePalette } from './styles';
@@ -41,9 +41,10 @@ export const MAX_GRID_SLOTS = 110_000_000;
 export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
     try {
         const book = readPackage(bytes);
+        const budget = readBudget();
         const palette = themePalette(book.theme);
         const looks = readLooks(book.styles, palette);
-        const strings = readSharedStrings(book.sharedStrings, palette);
+        const strings = readSharedStrings(book.sharedStrings, palette, budget);
         const dxfs = readDxfs(book.styles, palette);
         const fonts = book.styles && xmlChild(book.styles, SML_NS, 'fonts');
         const font = fonts && xmlChild(fonts, SML_NS, 'font');
@@ -66,7 +67,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             if (!part) continue;
             const id = `sheet-${sheets.length}`;
             // The rest is parsed before the rows, so the merges and links are placed when the grid reads its cells.
-            const { rest, children } = readInBatches(part, 'sheetData', 'row');
+            const { rest, children } = readInBatches(part, 'sheetData', 'row', budget);
             // A damaged rels part costs the external links, not the workbook.
             const rels = optional(() => book.pkg.relationships(path)) ?? new Map();
             const worksheet = readWorksheet(rest, { id, digitWidth, rels, charge });
@@ -114,6 +115,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
                     rows: grid.rows,
                     columns: grid.columns,
                     charge,
+                    chargeElements: budget.chargeElements,
                 }),
             };
             sheets.push(sheet);

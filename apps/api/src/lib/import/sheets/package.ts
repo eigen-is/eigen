@@ -55,6 +55,44 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
 // parses in at most twice its length.
 export const BATCH_BYTES = 1024 * 1024;
 
+// A batch ends at the first child past BATCH_BYTES, so one long row or shared string is a batch of its own, parsed as
+// one tree: past this it is refused. The corpus's longest is a 2.5 MB row.
+export const MAX_BATCH_BYTES = 12 * 1024 * 1024;
+
+// A node costs its parse and its memory whatever it emits, so the grids and the shared strings are charged their
+// elements before the first batch of a part is parsed, together, and a sqref its references before they are parsed: a
+// file of empty cells, rows or strings is refused before any is read. The 1,050 workbooks of the corpus hold at most
+// 7.3M (a Zenodo workbook of a million rows); four times that.
+export const MAX_XLSX_ELEMENTS = 30_000_000;
+
+// What the sheets parse whole, each part past its grid, together: openPackage's budget for the parts it parses, in
+// bytes and in elements. The corpus's most is 1.6 MB and 50,000 elements (POI's many-merges test file).
+export const MAX_WHOLE_BYTES = 32 * 1024 * 1024;
+export const MAX_WHOLE_ELEMENTS = 1_500_000;
+
+export type ReadBudget = {
+    // Throws past MAX_XLSX_ELEMENTS.
+    chargeElements(count: number): void;
+    // Called with what is about to be parsed whole; throws past its budget.
+    chargeWhole(text: Uint8Array): void;
+};
+
+export function readBudget(): ReadBudget {
+    const spent = { elements: 0, wholeBytes: 0, wholeElements: 0 };
+    return {
+        chargeElements(count) {
+            spent.elements += count;
+            if (spent.elements > MAX_XLSX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+        },
+        chargeWhole(text) {
+            spent.wholeBytes += text.length;
+            if (spent.wholeBytes > MAX_WHOLE_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            spent.wholeElements += elementsIn(text);
+            if (spent.wholeElements > MAX_WHOLE_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+        },
+    };
+}
+
 // Bun has no streaming XML, and a tree costs about 100× its text (core/xml.ts), so the children of the part's root, or
 // of its child `container`, are parsed a batch of whole children at a time. A batch is parsed behind the part's prolog
 // and the start tags around the children, so prefixes bind and a DOCTYPE is still refused. The cut is checked, not
@@ -66,6 +104,7 @@ export function readInBatches(
     part: Uint8Array,
     container: string | undefined,
     child: string,
+    budget: ReadBudget,
 ): { rest: XmlElement | undefined; children: Iterable<XmlElement> } {
     const holderOf = (root: XmlElement | undefined) => (root && container ? xmlChild(root, SML_NS, container) : root);
     const childrenOf = (root: XmlElement | undefined) => {
@@ -74,19 +113,24 @@ export function readInBatches(
     };
     const text = Buffer.from(part.buffer, part.byteOffset, part.byteLength);
     const span = childrenSpan(text, container);
-    const rest = span && parseRest(Buffer.concat([text.subarray(0, span.start), MARKER, text.subarray(span.end)]));
+    const restText = span && Buffer.concat([text.subarray(0, span.start), MARKER, text.subarray(span.end)]);
+    if (restText) budget.chargeWhole(restText);
+    const rest = restText && parseRest(restText);
     const holder = holderOf(rest);
     if (!span || !holder?.children.some(isMarker)) {
+        budget.chargeWhole(text);
         const whole = parseOoxml(part) ?? undefined;
         return { rest: whole, children: childrenOf(whole) };
     }
     holder.children = holder.children.filter((node) => !isMarker(node));
+    budget.chargeElements(elementsIn(text.subarray(span.start, span.end)));
     function* batches(within: Span): Generator<XmlElement> {
         const open = Buffer.from(`<${within.prefix}${child}`);
         const step = Math.max(BATCH_BYTES, within.wrapper.length);
         for (let at = within.start; at < within.end; ) {
             const next = at + step < within.end ? findTag(text, open, at + step) : -1;
             const end = next < 0 || next > within.end ? within.end : next;
+            if (end - at > MAX_BATCH_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
             yield* childrenOf(
                 parseOoxml(Buffer.concat([within.wrapper, text.subarray(at, end), within.closing])) ?? undefined,
             );
@@ -154,6 +198,14 @@ const QUOTES = new Set([0x22, 0x27]);
 const SPACES = new Set([0x20, 0x09, 0x0a, 0x0d]);
 // Whitespace, `/` or `>` ends a name, so `<rows` is no `<row`.
 const NAME_ENDS = new Set([...SPACES, SLASH, GREATER_THAN]);
+
+// A '<' that opens an element, a comment or an instruction; an end tag adds no node.
+function elementsIn(text: Uint8Array): number {
+    let elements = 0;
+    // A plain walk: indexOf's call per '<' is ten times slower on a part of empty elements.
+    for (let at = 0; at < text.length; at++) if (text[at] === LESS_THAN && text[at + 1] !== SLASH) elements++;
+    return elements;
+}
 
 // Past a BOM, the XML declaration, comments and processing instructions; -1 for anything else, a DOCTYPE or UTF-16
 // say, which a whole parse reads or refuses.

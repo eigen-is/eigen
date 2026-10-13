@@ -27,6 +27,8 @@ export type RulesContext = {
     columns: number;
     // Throws past the budget: a range or a key counts as a cell, text as its characters.
     charge(cells: number, text: number): void;
+    // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
+    chargeElements(count: number): void;
 };
 
 export function readRules(
@@ -63,20 +65,22 @@ export function readRules(
     const formats: { priority: number; format: ConditionalFormatRule }[] = [];
     for (const { blocks, sqrefOf, rulesOf, formulasOf, lookOf } of formatLists) {
         for (const block of blocks) {
+            const rules = rulesOf(block);
+            if (rules.length === 0) continue;
             const sqref = sqrefOf(block) ?? '';
             let count = 0;
-            for (const _range of rangesOf(sqref)) count++;
+            for (const _range of rangesOf(sqref, context)) count++;
             if (count === 0) continue;
             // Every rule holds all the block's ranges, which a sqref can repeat by the million: each rule is charged
             // them before it is read, and they are built after the first charge.
             let ranges: SingleRange[] | undefined;
-            for (const rule of rulesOf(block)) {
+            for (const rule of rules) {
                 const formulas = formulasOf(rule).map(xmlText);
                 context.charge(
                     count,
                     formulas.reduce((text, formula) => text + formula.length, 0),
                 );
-                ranges ??= [...rangesOf(sqref)];
+                ranges ??= [...rangesOf(sqref, context)];
                 const format = mapCfRule(rule, formulas, lookOf(rule), ranges, context.palette);
                 if (format)
                     formats.push({ priority: Number.parseInt(xmlAttr(rule, '', 'priority') ?? '', 10), format });
@@ -115,7 +119,7 @@ export function readRules(
             );
             if (!rule) continue;
             const text = rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length;
-            for (const { row, column } of rangesOf(sqrefOf(validation) ?? '')) {
+            for (const { row, column } of rangesOf(sqrefOf(validation) ?? '', context)) {
                 const bottom = Math.min(row[1], context.rows + DV_ROW_MARGIN - 1);
                 const right = Math.min(column[1], context.columns + DV_COL_MARGIN - 1);
                 if (row[0] > bottom || column[0] > right) continue;
@@ -136,8 +140,9 @@ export function readRules(
 
 // A sqref's ranges, corners in order and cut to the grid; a piece that is no reference, or starts past the grid, is
 // skipped.
-function* rangesOf(sqref: string): Generator<SingleRange> {
+function* rangesOf(sqref: string, context: RulesContext): Generator<SingleRange> {
     for (const [reference] of sqref.matchAll(/\S+/g)) {
+        context.chargeElements(1);
         const parsed = parseA1Range(reference);
         if (!parsed) continue;
         const { start, end } = parsed;

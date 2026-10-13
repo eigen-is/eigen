@@ -1,15 +1,20 @@
 import type { InlineStringSegment } from '@workspace/lib/sheets';
 import { SML_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { readInBatches } from './package';
+import { type ReadBudget, readInBatches } from './package';
 import { fontLook, type ThemePalette } from './styles';
 
 // Shared and inline strings. A rich string keeps its runs, each with its font's look, beside the text a cell shows.
 export type SharedString = string | { text: string; runs: InlineStringSegment[] };
 
-export function readSharedStrings(part: Uint8Array | undefined, palette: ThemePalette): SharedString[] {
+export function readSharedStrings(
+    part: Uint8Array | undefined,
+    palette: ThemePalette,
+    budget: ReadBudget,
+): SharedString[] {
     const strings: SharedString[] = [];
-    for (const si of part ? readInBatches(part, undefined, 'si').children : []) strings.push(stringOf(si, palette));
+    for (const si of part ? readInBatches(part, undefined, 'si', budget).children : [])
+        strings.push(stringOf(si, palette));
     return strings;
 }
 

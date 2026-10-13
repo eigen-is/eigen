@@ -7,9 +7,11 @@ import type {
     Cell as FortuneCell,
 } from '@workspace/lib/sheets';
 import { BORDER_STYLES } from '@workspace/lib/sheets';
-import { is_date } from '@workspace/sheet/engine';
+import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
+import { ApiError } from '../../core/errors';
 import { A_NS, isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { IMPORT_MESSAGES } from '../messages';
 
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
 // formats, theme colours and tints; and the conditional formats' looks (dxf).
@@ -22,7 +24,8 @@ export type XlsxColor = { argb?: string; theme?: number; tint?: number };
 export type Look = {
     // The keys every cell of the format carries.
     cell: FortuneCell;
-    // As written; undefined for General.
+    // What a value displays with, as written; undefined for General and for a format numfmt can't parse, which shows
+    // General.
     numFmt?: string;
     // The cell's ct.fa: numFmt with month and minute in the Google convention.
     fa?: string;
@@ -89,6 +92,13 @@ const BUILTIN_FORMATS = new Map<number, string>([
 
 export const NO_LOOK: Look = { cell: {}, aligned: false, isDate: false };
 
+// Excel's own limits are a format of 255 characters and 250 of the workbook's own. A format's date test and canonical
+// form cost per character, and so does every display through it: a longer one reads as General, and cell formats that
+// name more formats than four times Excel's allowance are refused. The corpus's longest is 76 characters, its most
+// formats 126.
+const MAX_NUMBER_FORMAT_LENGTH = 255;
+const MAX_NUMBER_FORMATS = 1000;
+
 export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePalette): Look[] {
     const list = (group: string, item: string) => {
         const parent = styleSheet && xmlChild(styleSheet, SML_NS, group);
@@ -110,12 +120,15 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
     // Once per format, not per xf: a long code costs its canonical form and date test, and many xfs can name it.
     const resolved = new Map<number, Pick<Look, 'numFmt' | 'fa' | 'isDate'>>();
     const resolve = (id: number) => {
+        if (resolved.size >= MAX_NUMBER_FORMATS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
         const code = formats.get(id);
-        const numFmt = code === 'General' ? undefined : code;
+        const numFmt = code === 'General' || (code?.length ?? 0) > MAX_NUMBER_FORMAT_LENGTH ? undefined : code;
+        // numfmt parses a format it can't read again on every display, to throw; it shows General.
+        const drawn = numFmt && isValidNumberFormat(numFmt) ? numFmt : undefined;
         const format = {
-            numFmt,
+            numFmt: drawn,
             fa: numFmt && normalizeMonthMinuteTokens(numFmt),
-            isDate: numFmt !== undefined && is_date(numFmt),
+            isDate: drawn !== undefined && is_date(drawn),
         };
         resolved.set(id, format);
         return format;

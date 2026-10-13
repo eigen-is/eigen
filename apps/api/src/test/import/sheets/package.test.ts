@@ -2,7 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
 import { XmlError, xmlAttr, xmlChild, xmlElements } from '../../../lib/core/xml';
 import { writeZip, ZipError } from '../../../lib/core/zip';
-import { BATCH_BYTES, readInBatches, readPackage } from '../../../lib/import/sheets/package';
+import {
+    BATCH_BYTES,
+    MAX_WHOLE_BYTES,
+    MAX_WHOLE_ELEMENTS,
+    MAX_XLSX_ELEMENTS,
+    readBudget,
+    readInBatches,
+    readPackage,
+} from '../../../lib/import/sheets/package';
 import { OFFICE_COLORS, SML, sheetXml, xlsxFixture } from '../../fixtures/xlsx';
 
 // The workbook part through the package's relationships, and a part's children read a batch at a time.
@@ -156,7 +164,7 @@ describe('the workbook', () => {
 describe("a part's children, a batch at a time", () => {
     const encode = (text: string) => new TextEncoder().encode(text);
     const rowsOf = (part: string) => {
-        const { rest, children } = readInBatches(encode(part), 'sheetData', 'row');
+        const { rest, children } = readInBatches(encode(part), 'sheetData', 'row', readBudget());
         return { rows: [...children].map((row) => xmlAttr(row, '', 'r') ?? ''), rest };
     };
     // Enough rows to cut the grid into several batches.
@@ -186,7 +194,7 @@ describe("a part's children, a batch at a time", () => {
 
     test('the root itself can hold the children, as the shared strings do', () => {
         const part = `<?xml version="1.0"?><sst xmlns="${SML}">${Array.from({ length: COUNT }, (_, index) => `<si><t>${index}${'x'.repeat(40)}</t></si>`).join('')}</sst>`;
-        expect([...readInBatches(encode(part), undefined, 'si').children]).toHaveLength(COUNT);
+        expect([...readInBatches(encode(part), undefined, 'si', readBudget()).children]).toHaveLength(COUNT);
     });
 
     // A cut inside a comment, CDATA or a tag leaves a batch malformed: a 400, never a misread.
@@ -223,10 +231,51 @@ describe("a part's children, a batch at a time", () => {
             `﻿${sheetXml({ data: '<row r="1"/><row r="2"/>' }).replace('UTF-8', 'UTF-16')}`,
             'utf16le',
         );
-        const rows = [...readInBatches(utf16, 'sheetData', 'row').children].map((row) => xmlAttr(row, '', 'r'));
+        const rows = [...readInBatches(utf16, 'sheetData', 'row', readBudget()).children].map((row) =>
+            xmlAttr(row, '', 'r'),
+        );
         expect(rows).toEqual(['1', '2']);
         expect(rowsOf(`<worksheet xmlns="${SML}"><sheetData/></worksheet>`).rows).toEqual([]);
         expect(rowsOf(`<worksheet xmlns="${SML}"/>`).rest?.local).toBe('worksheet');
+    });
+
+    test("the children's elements are charged together, before the first batch is parsed", () => {
+        // Five elements: two rows, two cells and a value.
+        const part = encode(sheetXml({ data: '<row><c/></row><row r="2"><c><v>1</v></c></row>' }));
+        const budget = readBudget();
+        budget.chargeElements(MAX_XLSX_ELEMENTS - 8);
+        readInBatches(part, 'sheetData', 'row', budget);
+        expect(thrown(() => readInBatches(part, 'sheetData', 'row', budget))).toMatchObject({
+            status: 413,
+            message: 'Spreadsheet too large',
+        });
+    });
+
+    test('what is parsed whole, the rest of a part or a part that must be, is charged its bytes and elements', () => {
+        const part = encode(sheetXml({ data: '<row r="1"/>' }));
+        const nearlyFull = (spend: (budget: ReturnType<typeof readBudget>) => void) => {
+            const budget = readBudget();
+            spend(budget);
+            return budget;
+        };
+        for (const budget of [
+            nearlyFull((budget) => budget.chargeWhole(new Uint8Array(MAX_WHOLE_BYTES - 100))),
+            nearlyFull((budget) => budget.chargeWhole(Buffer.from('<a>'.repeat(MAX_WHOLE_ELEMENTS - 2)))),
+        ]) {
+            expect(thrown(() => readInBatches(part, 'sheetData', 'row', budget))).toMatchObject({ status: 413 });
+            expect(
+                thrown(() => readInBatches(encode(`<worksheet xmlns="${SML}"/>`), 'sheetData', 'row', budget)),
+            ).toMatchObject({
+                status: 413,
+            });
+        }
+    });
+
+    // A single 40 MB row was one batch of 2.25 GB.
+    test('a child longer than a batch may be is too large before it is parsed', () => {
+        const part = encode(sheetXml({ data: `<row r="1">${'<c><v>1</v></c>'.repeat(900_000)}</row><row r="2"/>` }));
+        const { children } = readInBatches(part, 'sheetData', 'row', readBudget());
+        expect(thrown(() => [...children])).toMatchObject({ status: 413, message: 'Spreadsheet too large' });
     });
 
     test('a malformed batch is malformed XML', () => {
