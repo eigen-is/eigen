@@ -27,9 +27,15 @@ type DeckElement = { id: string; element: NewVectorElement };
 
 export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
     const frameKeys = generateNKeysBetween(null, null, slides.length);
+    const frames = slides.map((slide, i) => ({
+        id: `frame-${slide.key}`,
+        index: frameKeys[i],
+        name: slide.name,
+        background: serializeBackgroundFill(slide.background),
+    }));
     const ordered: DeckElement[] = [];
-    for (const slide of slides) {
-        const frameId = `frame-${slide.key}`;
+    for (const [slideIndex, slide] of slides.entries()) {
+        const frameId = frames[slideIndex].id;
         const images = (slide.images ?? []).map((image, i) => buildImage(image, slide.key, frameId, i));
         const texts = slide.texts.map((text, i) => buildText(text, slide.key, frameId, i));
         // Bottom-up within the slide: images, then every text on top.
@@ -40,14 +46,7 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
     // what orders a slide's painting.
     const keys = generateNKeysBetween(null, null, ordered.length);
     doc.transact(() => {
-        for (const [i, slide] of slides.entries()) {
-            writeFrameInDoc(doc, {
-                id: `frame-${slide.key}`,
-                index: frameKeys[i],
-                name: slide.name,
-                background: serializeBackgroundFill(slide.background),
-            });
-        }
+        for (const frame of frames) writeFrameInDoc(doc, frame);
         for (const [i, { id, element }] of ordered.entries()) writeElementInDoc(doc, element, keys[i], DECK_STYLE, id);
     });
 }
