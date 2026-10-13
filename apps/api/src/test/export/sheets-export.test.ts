@@ -62,6 +62,26 @@ function dvRule(
     return { value2: '', prohibitInput: false, hintShow: false, hintValue: '', ...partial };
 }
 
+describe("Excel's future functions", () => {
+    test('are written with their prefixes, so Excel reads them as functions, and read back without', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 1, f: '=IFNA(B1,0)' } },
+                    { r: 0, c: 1, v: { v: 2, f: '=SORT(C1:C2)+SUM(C1:C2)' } },
+                ],
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        expect(xml).toContain('<f>_xlfn.IFNA(B1,0)</f>');
+        expect(xml).toContain('<f>_xlfn._xlws.SORT(C1:C2)+SUM(C1:C2)</f>');
+        const cells = xlsxToSheets(buffer)[0].celldata ?? [];
+        expect(cells.map((cell) => cell.v?.f)).toEqual(['=IFNA(B1,0)', '=SORT(C1:C2)+SUM(C1:C2)']);
+    });
+});
+
 describe('Sheets xlsx export', () => {
     test('writes textRotation in signed degrees', async () => {
         const sheets: Sheet[] = [

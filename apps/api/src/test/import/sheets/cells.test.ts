@@ -227,6 +227,14 @@ describe('the grid', () => {
         expect(copied).toEqual([4, 4]);
     });
 
+    test("Excel's future functions lose their prefixes, in a shared formula's copies too", () => {
+        const { cell } = read(
+            '<row r="1"><c r="A1"><f>_xlfn.IFNA(B1,0)</f><v>0</v></c><c r="B1"><f t="shared" ref="B1:B2" si="0">_xlfn._xlws.SORT(C1:C2)</f></c></row><row r="2"><c r="B2"><f t="shared" si="0"/></c></row>',
+        );
+        expect(cell('A1')?.f).toBe('=IFNA(B1,0)');
+        expect(cell('B2')?.f).toBe('=SORT(C2:C3)');
+    });
+
     // A 1 MB formula's 20 copies were a 1 MB file that translated into 2.9 GB.
     test("a shared formula past Excel's 8,192 characters is not translated: its copies keep their values", () => {
         const shared = (text: string) =>

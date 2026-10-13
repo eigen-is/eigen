@@ -4,6 +4,7 @@ import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
+import { withoutFuturePrefixes } from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
@@ -158,8 +159,8 @@ function formulaOf(
 ): string | undefined {
     if (!f) return undefined;
     const type = xmlAttr(f, '', 't');
-    const text = xmlText(f);
     if (type === 'dataTable') return undefined;
+    const text = withoutFuturePrefixes(xmlText(f));
     if (type !== 'shared') return text;
     const si = xmlAttr(f, '', 'si') ?? '';
     if (xmlAttr(f, '', 'ref')) {

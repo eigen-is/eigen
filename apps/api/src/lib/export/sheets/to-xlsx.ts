@@ -42,6 +42,7 @@ import type {
 import { relsPathOf } from '../../core/opc';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
+import { withFuturePrefixes } from '../../document/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 
 // Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
@@ -290,7 +291,7 @@ function rewritePackage(buffer: Buffer, labelsBySheet: Map<number, Map<string, s
 
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
     if (v.f) {
-        const formula = v.f.startsWith('=') ? v.f.slice(1) : v.f;
+        const formula = withFuturePrefixes(v.f.startsWith('=') ? v.f.slice(1) : v.f);
         cell.value = { formula, result: v.v ?? undefined };
         if (v.ct?.fa) cell.numFmt = v.ct.fa;
         return;
