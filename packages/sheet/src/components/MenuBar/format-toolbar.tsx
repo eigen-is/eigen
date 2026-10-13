@@ -1,6 +1,7 @@
+import { nextFontSize } from '@workspace/lib/constants/fonts';
 import { useMediaQuery } from '@workspace/lib/media';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
-import { ColorPickerButton } from '@workspace/ui/components/media';
+import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
@@ -16,7 +17,6 @@ import {
     resolveFontName,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
-import { FontSizeStepper } from './font-size-stepper';
 
 // Width seam below which this toolbar hides — MenuBar keys its grid on the same seam.
 export const formatToolbarQuery = '(min-width: 1360px)';
@@ -43,6 +43,11 @@ export function FormatToolbar() {
     const fontSize = Number(cell?.fs) || settings.defaultFontSize;
     const bold = Number(cell?.bl) === 1;
     const italic = Number(cell?.it) === 1;
+    const setFontSize = (size: number) => {
+        setContext((ctx) => {
+            handleTextSize(ctx, refs.cellInput.current!, size);
+        });
+    };
 
     return (
         <div className="flex items-center gap-0.5">
@@ -59,11 +64,8 @@ export function FormatToolbar() {
 
             <FontSizeStepper
                 value={fontSize}
-                onChange={(size) => {
-                    setContext((ctx) => {
-                        handleTextSize(ctx, refs.cellInput.current!, size);
-                    });
-                }}
+                onChange={setFontSize}
+                onStep={(by) => setFontSize(nextFontSize(fontSize, by))}
             />
 
             <ToolbarSeparator />
