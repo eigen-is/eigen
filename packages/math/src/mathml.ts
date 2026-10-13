@@ -11,10 +11,10 @@ import {
 } from './notation';
 import {
     bound,
-    clusters,
     defaultVariant,
     equationCells,
     hexColor,
+    isCluster,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     MATH_SPACES,
@@ -175,7 +175,7 @@ function readToken(row: RowBuilder, element: MathXmlElement): void {
     const mathvariant = attribute(element, 'mathvariant');
     const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
     // MathML draws a lone letter in an mi italic and anything else upright.
-    const lone = element.local === 'mi' && clusters(text).length === 1;
+    const lone = element.local === 'mi' && isCluster(text);
     row.chars(text, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
 }
 
@@ -348,9 +348,7 @@ function writeToken(node: MathToken): string {
     const tag = node.kind === 'identifier' ? 'mi' : node.kind === 'number' ? 'mn' : 'mo';
     // MathML draws a lone letter italic, so an upright one says so.
     const upright =
-        node.kind === 'identifier' &&
-        clusters(node.text).length === 1 &&
-        defaultVariant(node.kind, node.text) === 'normal';
+        node.kind === 'identifier' && isCluster(node.text) && defaultVariant(node.kind, node.text) === 'normal';
     const variant = node.variant ?? (upright ? 'normal' : undefined);
     // Chrome draws Unicode's alphanumerics but honours only mathvariant="normal": a variant is a character where
     // Unicode has one.

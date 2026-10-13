@@ -108,6 +108,9 @@ const SPACE_OF_CHAR = new Map<string, MathSpace>([
 // Each character with the combining marks after it: a token's letters, as a word counts them.
 export const clusters = (text: string) => text.match(/\P{M}\p{M}*/gu) ?? [];
 
+// One character with its marks, tested without splitting a long token.
+export const isCluster = (text: string) => /^\P{M}\p{M}*$/u.test(text);
+
 // The one character a fence, accent, brace or large operator holds; '' for none.
 export function mark(text: string): string {
     const [char = ''] = checkedXml(trimXmlSpace(text));
