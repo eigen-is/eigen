@@ -714,6 +714,8 @@ describe('pptx text', () => {
         expect(attr(runProps(shape, 'gone'), 'strike')).toBe('sngStrike');
         const link = runProps(shape, 'link');
         expect(attr(link, 'u')).toBe('sng');
+        // canvas-text.css draws a link in its text's color, black on a black box.
+        expect(srgb(link).val).toBe(srgb(runProps(shape, 'plain ')).val);
         const rId = String(xmlAttr(first(link, A, 'hlinkClick'), R, 'id'));
         expect(relationships(zip, 'ppt/slides/slide1.xml').get(rId)).toEqual({
             type: `${R}/hyperlink`,
