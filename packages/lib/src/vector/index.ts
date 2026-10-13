@@ -17,7 +17,7 @@ export { renderChartSpecSvg } from './kinds/chart-render';
 // `num` are the same coercions the document reader clamps a stored field with, so a pasted value can't be
 // anything a peer write couldn't be. `labelText` travels with them so the in-canvas textarea commits
 // exactly what the reader keeps.
-export { labelText, MAX_ARROW_LABEL_BYTES, num, oneOf } from './kinds/read-fields';
+export { labelText, MAX_ARROW_LABEL_BYTES, MAX_HTML_DEPTH, num, oneOf } from './kinds/read-fields';
 export { SVG_NS } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';

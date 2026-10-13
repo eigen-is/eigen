@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { MAX_HTML_DEPTH, readVectorFromDoc } from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
+import * as Y from 'yjs';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
-import { EXPORT_CSP } from '../../lib/export/sanitize';
+import { EXPORT_CSP, sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -192,6 +194,26 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
         expect(svg).not.toContain('onclick');
         expect(svg).not.toContain('javascript:');
     }, 120_000);
+});
+
+describe('Eigenvector export — rich-text nesting', () => {
+    test('a list a peer nested 3,000 deep reaches the sanitizer at the reader cap', () => {
+        // jsdom walks every ancestor of each node it inserts, so this body took seconds per parse uncapped.
+        const deep = `${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`;
+        const scene = buildGoldenVectorScene();
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, {
+            ...scene,
+            elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html: deep } : el)),
+        });
+        const start = performance.now();
+        const sanitized = sanitizeSceneHtml(readVectorFromDoc(doc));
+        expect(performance.now() - start).toBeLessThan(1_000);
+        const text = sanitized.elements.find((el) => el.type === 'richtext');
+        const html = text?.type === 'richtext' ? text.html : '';
+        expect(html.split('<ul>').length - 1).toBe(MAX_HTML_DEPTH / 2);
+        expect(html.replace(/<[^>]*>/g, '')).toBe('x'.repeat(3_000));
+    });
 });
 
 describe('Eigenvector export — the .svg download is XML', () => {

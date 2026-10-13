@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { Window } from 'happy-dom';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
-import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES } from '../../vector/kinds/read-fields';
+import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
 import {
     DEFAULT_CORNERS,
@@ -278,6 +279,62 @@ describe('readVectorFromDoc', () => {
         const html = el.type === 'richtext' ? el.html : '';
         expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(64 * 1024);
         expect(html).toBe('☃'.repeat(Math.floor((64 * 1024) / 3)));
+    });
+
+    describe('html nesting', () => {
+        const readHtml = (html: string): string => {
+            const [el] = readVectorFromDoc(
+                docWith((elements) => writeElement(elements, 't', { type: 'richtext', index: 'a0', html })),
+            ).elements;
+            return el.type === 'richtext' ? el.html : '';
+        };
+        // What a DOM parse of the body builds: jsdom pays per element for every ancestor it has.
+        const parse = (html: string) => new new Window().DOMParser().parseFromString(html, 'text/html').body;
+        const depth = (node: { children: ArrayLike<unknown> }): number => {
+            let deepest = 0;
+            for (const child of Array.from(node.children) as { children: ArrayLike<unknown> }[]) {
+                deepest = Math.max(deepest, 1 + depth(child));
+            }
+            return deepest;
+        };
+
+        test.each([2_000, 3_000])('%i nested list levels read in linear time, capped, every x kept', (levels) => {
+            const html = `${'<ul><li>x'.repeat(levels)}${'</li></ul>'.repeat(levels)}`;
+            const start = performance.now();
+            const read = readHtml(html);
+            expect(performance.now() - start).toBeLessThan(200);
+            const body = parse(read);
+            expect(depth(body)).toBe(MAX_HTML_DEPTH);
+            expect(body.textContent).toBe('x'.repeat(levels));
+        });
+
+        // 29 list levels around a paragraph with every mark and a link: exactly MAX_HTML_DEPTH elements.
+        const listLevels = (MAX_HTML_DEPTH - 6) / 2;
+        const atCap =
+            Array.from({ length: listLevels }, (_, i) => `<ul><li><p>level<br>${i}</p>`).join('') +
+            '<p><strong><em><u><s><a target="_blank" rel="noopener noreferrer" href="https://eigen.is?a=1&amp;b=2">deep</a></s></u></em></strong></p>' +
+            '</li></ul>'.repeat(listLevels);
+
+        test('an editor body at the cap reads byte-identical', () => {
+            expect(depth(parse(atCap))).toBe(MAX_HTML_DEPTH);
+            expect(readHtml(atCap)).toBe(atCap);
+        });
+
+        test('one element past the cap loses that element and keeps its text', () => {
+            const read = readHtml(`<blockquote>${atCap}</blockquote>`);
+            expect(depth(parse(read))).toBe(MAX_HTML_DEPTH);
+            expect(parse(read).textContent).toBe(parse(atCap).textContent);
+        });
+
+        // Markup the scan cannot follow tag for tag counts every start tag from there on and closes none.
+        test.each([
+            ['a close tag in a comment', '<ul><li><!--</li></ul>-->x'],
+            ['stray close tags', '<ul><li></b></i>x'],
+            ['a bare <', 'a < b<ul><li>x'],
+            ['a tag past the editor set', '<div><span>x'],
+        ])('%s cannot nest past the cap', (_, unit) => {
+            expect(depth(parse(readHtml(unit.repeat(2_000))))).toBeLessThanOrEqual(MAX_HTML_DEPTH);
+        });
     });
 
     test('materializes an arrow: heads, canonical bindings, and label fields', () => {

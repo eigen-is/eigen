@@ -3,6 +3,7 @@
 // instead of reaching roughjs, SVG or a layout pass.
 
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
+import { LIGHT_EDITOR_TAGS } from '../../core/html';
 import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
@@ -22,6 +23,19 @@ const MAX_FONT_SIZE = 400;
 // mount seam does it instead: ElementLayer (every live/preview/present surface) and the paste planner
 // both run sanitizeToLightEditorHtml, so a torn tag here is a cosmetic loss, never an injection.
 const MAX_HTML_BYTES = 64 * 1024;
+
+// Rich text nested past this many elements is flattened on read. jsdom walks every ancestor of each node it
+// inserts, so the export sanitizer's parse costs depth²: 3,000 nested list levels fit in MAX_HTML_BYTES and
+// held it for 30 s. The LightEditor indents without limit; 64 holds 29 list levels around every mark and a
+// link, where Word and Google Docs stop at 9.
+export const MAX_HTML_DEPTH = 64;
+
+const EDITOR_TAGS = new Set(LIGHT_EDITOR_TAGS);
+
+// One token as every HTML tokenizer reads it: a comment, ending where the tokenizer ends one; a start tag with
+// plain attributes; an end tag; or text.
+const HTML_TOKEN =
+    /<!--(?:-?>|[\s\S]*?--!?>)|<([a-zA-Z][a-zA-Z0-9]*)(?:[\t\n\f\r ]+[a-zA-Z_:][-\w:.]*(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r "'=<>`]+))?)*[\t\n\f\r ]*\/?>|<\/([a-zA-Z][a-zA-Z0-9]*)[\t\n\f\r ]*>|[^<]+/y;
 
 // An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
 // count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
@@ -129,7 +143,44 @@ export function fillField(v: unknown): string {
 // The cap lands on a code-point boundary, not a markup one: a torn tag is repaired by every consumer,
 // which parses the body as HTML before it renders or serializes it.
 export function htmlField(v: unknown): string {
-    return capBytes(cleanStr(v, ''), MAX_HTML_BYTES);
+    return capDepth(capBytes(cleanStr(v, ''), MAX_HTML_BYTES));
+}
+
+// A start tag past MAX_HTML_DEPTH goes, with its end tag, and its text stays: a too-deep list is a peer's
+// mistake or an attack, and its words are still the box's content. Only the LightEditor's own tags in plain
+// syntax nest the same in every parser. Past anything else (an unclosed comment, a <table> that
+// opens a <tbody>, a raw-text <style>), every start tag counts and none closes, and one past the cap is
+// escaped to text, so no parser can nest deeper than the scan counted.
+function capDepth(html: string): string {
+    const open: { tag: string; kept: boolean }[] = [];
+    let depth = 0;
+    let out = '';
+    let at = 0;
+    HTML_TOKEN.lastIndex = 0;
+    for (let m = HTML_TOKEN.exec(html); m; m = HTML_TOKEN.exec(html)) {
+        const [token, startTag, endTag] = m;
+        let keep = true;
+        if (startTag) {
+            const tag = startTag.toLowerCase();
+            if (!EDITOR_TAGS.has(tag)) break;
+            if (tag !== 'br') {
+                keep = depth < MAX_HTML_DEPTH;
+                open.push({ tag, kept: keep });
+                if (keep) depth++;
+            }
+        } else if (endTag) {
+            const top = open.at(-1);
+            if (top?.tag === endTag.toLowerCase()) {
+                open.pop();
+                keep = top.kept;
+                if (keep) depth--;
+            }
+        }
+        if (keep) out += token;
+        at = HTML_TOKEN.lastIndex;
+    }
+    let count = depth;
+    return out + html.slice(at).replace(/<(?=[a-zA-Z])/g, () => (++count > MAX_HTML_DEPTH ? '&lt;' : '<'));
 }
 
 // Newlines normalize here, not at the consumers, so the line cap and the label's height math count

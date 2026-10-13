@@ -2,6 +2,8 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
+    MAX_HTML_DEPTH,
+    readElementFromFields,
     serializeBinding,
     serializePoints,
     solidFill,
@@ -255,6 +257,15 @@ describe('rich text is sanitized at the mount seam', () => {
         );
         expect(html).not.toContain('javascript:');
         expect(html).toContain('click');
+    });
+
+    test('a list a peer nested 3,000 deep mounts at the reader cap, every x kept', () => {
+        const deep = `${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`;
+        const el = readElementFromFields(new Map(Object.entries(richtext(deep))));
+        if (!el) throw new Error('the reader dropped the text box');
+        const html = renderToStaticMarkup(<ElementLayer el={el} />);
+        expect(html.split('<ul>').length - 1).toBe(MAX_HTML_DEPTH / 2);
+        expect(html.replace(/<[^>]*>/g, '')).toBe('x'.repeat(3_000));
     });
 });
 
