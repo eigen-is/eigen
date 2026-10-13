@@ -151,6 +151,20 @@ describe('materializeYjsState', () => {
             errorSpy.mockRestore();
         }
     });
+
+    // A blob too big for the memory left is not a corrupt one: skipping it would export a truncated document.
+    test('an out-of-memory applying a blob is thrown, not skipped', async () => {
+        const { managedDb } = await makeCollabDb();
+        const outOfMemory = new RangeError('Out of memory');
+        const apply = spyOn(Y, 'applyUpdate').mockImplementationOnce(() => {
+            throw outOfMemory;
+        });
+        try {
+            expect(() => materializeYjsState(readYjsStatePayload(managedDb))).toThrow(outOfMemory);
+        } finally {
+            apply.mockRestore();
+        }
+    });
 });
 
 describe('readYjsStateFromFile (unchanged fail-loud contract)', () => {

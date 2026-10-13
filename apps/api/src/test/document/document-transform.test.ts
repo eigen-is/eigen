@@ -30,6 +30,7 @@ import { captureCollabSource } from '../../lib/document/transform/collab-source'
 import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
+    type TransformError,
     toTransferableBuffer,
     toTransferableText,
 } from '../../lib/document/transform/protocol';
@@ -43,6 +44,7 @@ import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
 import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
+import { DOCUMENT_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
@@ -490,6 +492,25 @@ describe('document transform (eigensheets export)', () => {
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 
+    // An export has no format to blame, so a child that ran out of memory is the server's failure.
+    test('an export whose child ran out of memory is a 500', async () => {
+        const runSpy = interceptRunOnce('export', async () => ({
+            ok: false as const,
+            error: { code: 'out-of-memory' as const, message: 'Out of memory' },
+        }));
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${golden.path.id}/export/html`,
+            );
+            expect(res.status).toBe(500);
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
+        }
+    }, 120_000);
+
     test('xlsx export through the Worker returns a parseable workbook', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'xlsx');
         const workbook = new ExcelJS.Workbook();
@@ -555,6 +576,7 @@ type ImportFormatFixture = {
     build: () => Promise<ArrayBuffer>;
     readState: (pathId: string) => Promise<unknown>;
     expectSeeded: (state: unknown) => void;
+    tooLarge: string;
 };
 
 async function liveState(pathId: string, read: (doc: Y.Doc) => unknown): Promise<unknown> {
@@ -571,6 +593,7 @@ const XLSX_FIXTURE: ImportFormatFixture = {
     build: buildImportFixture,
     readState: (pathId) => liveState(pathId, (doc) => doc.getMap('state').get('snapshot')),
     expectSeeded: (state) => expect(typeof state).toBe('string'),
+    tooLarge: SPREADSHEET_TOO_LARGE,
 };
 
 const DOCX_FIXTURE: ImportFormatFixture = {
@@ -581,15 +604,28 @@ const DOCX_FIXTURE: ImportFormatFixture = {
     build: () => buildGoldenDocx(TEST_PNG_BYTES),
     readState: (pathId) => liveState(pathId, readEigendocFromDoc),
     expectSeeded: (state) => expect((state as JSONContent).content?.length).toBeGreaterThan(0),
+    tooLarge: DOCUMENT_TOO_LARGE,
 };
 
-async function expectFailedImportLeavesTargetUntouched(fixture: ImportFormatFixture): Promise<void> {
+// A crashed child is the server's failure; one that ran out of memory says the file was too large for it, in the
+// format's words.
+const FAILED_IMPORTS = [
+    ['crashed', 500, () => 'Internal server error'],
+    ['out-of-memory', 413, (fixture: ImportFormatFixture) => fixture.tooLarge],
+] as const;
+
+async function expectFailedImportLeavesTargetUntouched(
+    fixture: ImportFormatFixture,
+    code: TransformError['code'],
+    status: number,
+    message: string,
+): Promise<void> {
     const target = await drivePost<DrivePath>(
         ctx.alice.user.sessionToken,
         ctx.alice.user.id,
         mountId,
         `folder/${rootId}/create/${fixture.createType}`,
-        { fileName: `${fixture.extension}-import-crash-target` },
+        { fileName: `${fixture.extension}-import-${code}-target` },
     );
     expect((await importRequest(target.id, await fixture.build())).status).toBe(200);
     const before = await fixture.readState(target.id);
@@ -597,12 +633,13 @@ async function expectFailedImportLeavesTargetUntouched(fixture: ImportFormatFixt
 
     const runSpy = interceptRunOnce('import', async () => ({
         ok: false as const,
-        error: { code: 'crashed' as const, message: 'forced failure' },
+        error: { code, message: 'forced failure' },
     }));
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     try {
         const res = await importRequest(target.id, await fixture.build());
-        expect(res.status).toBe(500);
+        expect(res.status).toBe(status);
+        expect(await res.text()).toBe(message);
         expect(await fixture.readState(target.id)).toEqual(before);
     } finally {
         errorSpy.mockRestore();
@@ -734,11 +771,15 @@ describe('document transform (xlsx import)', () => {
         }
     }, 120_000);
 
-    test('a failed import Worker leaves the target document untouched', async () => {
-        await expectFailedImportLeavesTargetUntouched(XLSX_FIXTURE);
-    }, 120_000);
+    test.each(FAILED_IMPORTS)(
+        'an import whose child %s is a %d and leaves the target untouched',
+        async (code, status, message) => {
+            await expectFailedImportLeavesTargetUntouched(XLSX_FIXTURE, code, status, message(XLSX_FIXTURE));
+        },
+        120_000,
+    );
 
-    test('a failed convert Worker creates no destination document', async () => {
+    test('a failed convert creates no destination document', async () => {
         await expectFailedConvertCreatesNoDestination(XLSX_FIXTURE);
     }, 120_000);
 });
@@ -909,7 +950,7 @@ describe('document transform (eigendoc)', () => {
         expect(body.length).toBeLessThan(1000);
     }, 60_000);
 
-    test('export media crosses the boundary as transferred buffers', async () => {
+    test('export media crosses the boundary as copies the caller keeps', async () => {
         const { mount, path } = golden;
         const media = await collectExportMedia(mount, path, 'html');
         expect(media).toHaveLength(1);
@@ -927,8 +968,8 @@ describe('document transform (eigendoc)', () => {
             },
             EXPORT_OPTIONS,
         );
-        // Ownership moved to the Worker, and the bytes came back as a data URI.
-        expect(media[0].data.byteLength).toBe(0);
+        // The child got a copy, and the bytes came back as a data URI.
+        expect(media[0].data.byteLength).toBeGreaterThan(0);
         expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
     }, 120_000);
 
@@ -1350,7 +1391,7 @@ describe('document transform (eigenvector)', () => {
 // a Yjs commit into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
-// survive the transfer untouched. Regenerate only for an intentional converter change.
+// survive the boundary untouched. Regenerate only for an intentional converter change.
 const GOLDEN_DOCX_PM_JSON_SHA256 = 'a10269abb8310898d89830d5dc5912645b76ce686437d7afa7888a7fe0813860';
 const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde59984c3f50bfb836136c70';
 
@@ -1399,7 +1440,7 @@ describe('document transform (docx import)', () => {
         expect(committed).toEqual(await referenceDocument());
         expect(sha256(JSON.stringify(committed))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
 
-        // The extracted image crossed the boundary as a transferred buffer, byte-intact.
+        // The extracted image crossed the boundary byte-intact.
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
             { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
         ]);
@@ -1412,11 +1453,15 @@ describe('document transform (docx import)', () => {
         expect(!response.ok && response.error).toMatchObject({ status: 400, message: 'Not a valid docx file' });
     }, 120_000);
 
-    test('a failed import Worker leaves the target document untouched', async () => {
-        await expectFailedImportLeavesTargetUntouched(DOCX_FIXTURE);
-    }, 120_000);
+    test.each(FAILED_IMPORTS)(
+        'an import whose child %s is a %d and leaves the target untouched',
+        async (code, status, message) => {
+            await expectFailedImportLeavesTargetUntouched(DOCX_FIXTURE, code, status, message(DOCX_FIXTURE));
+        },
+        120_000,
+    );
 
-    test('a failed convert Worker creates no destination document', async () => {
+    test('a failed convert creates no destination document', async () => {
         await expectFailedConvertCreatesNoDestination(DOCX_FIXTURE);
     }, 120_000);
 });

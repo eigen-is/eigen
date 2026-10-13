@@ -145,7 +145,6 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
     test.each([
         ['a TypeError', new TypeError('slip'), 400, 'Not a valid docx file', 1],
         ['a stack overflow', new RangeError('Maximum call stack size exceeded.'), 413, 'Document too large', 0],
-        ['an allocation past memory', new RangeError('Out of memory'), 413, 'Document too large', 0],
         ['a schema RangeError', new RangeError('Invalid content for node table'), 400, 'Not a valid docx file', 1],
     ])('%s is a %d', async (_name, thrown, status, message, logged) => {
         const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
@@ -163,6 +162,23 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
         } finally {
             slip.mockRestore();
             warn.mockRestore();
+        }
+    });
+
+    // The transform process answers an out-of-memory for every format, so the reader lets it through as it is.
+    test('an allocation past memory passes through', async () => {
+        const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));
+        const outOfMemory = new RangeError('Out of memory');
+        const slip = spyOn(TableMap, 'get').mockImplementationOnce(() => {
+            throw outOfMemory;
+        });
+        try {
+            const error = await Promise.resolve()
+                .then(() => importDocxToEigendocUpdate(docx, undefined))
+                .catch((reason: unknown) => reason);
+            expect(error).toBe(outOfMemory);
+        } finally {
+            slip.mockRestore();
         }
     });
 });

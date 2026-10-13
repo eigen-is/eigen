@@ -6,6 +6,7 @@ import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
+import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
@@ -1088,6 +1089,39 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         expect(result.blocks).toBeGreaterThan(10_000);
         expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
+    }, 120_000);
+});
+
+// The transform process's memory limit is Linux's alone. At 1 GiB of data segment the child has about 0.35 GB to use, which
+// the honest document outgrows: the limit ends it, never the kernel's OOM killer, whose SIGKILL the job line would show.
+describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the memory of the transform process', () => {
+    test('is 413, ended by the memory limit', async () => {
+        const runner = documentTransformRunner as unknown as { memoryLimitKiB: number };
+        const limit = runner.memoryLimitKiB;
+        runner.memoryLimitKiB = 1024 * 1024;
+        const logSpy = spyOn(console, 'log');
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const docx = await buildDocxWithBody(await honestBody());
+            const job = {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+            } as const;
+            const error = await runImportToDocumentUpdate(job, docx, {}).catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(ApiError);
+            expect(error).toMatchObject({ status: 413, message: 'Document too large' });
+            const line = logSpy.mock.calls
+                .map((args) => String(args[0]))
+                .find((logged) => logged.includes('[transform] job=') && logged.includes('format=docx'));
+            expect(line).toContain('outcome=out-of-memory');
+            expect(line).not.toContain('signal=SIGKILL');
+        } finally {
+            runner.memoryLimitKiB = limit;
+            logSpy.mockRestore();
+            errorSpy.mockRestore();
+        }
     }, 120_000);
 });
 
