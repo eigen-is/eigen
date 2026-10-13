@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
-import { isOn, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
+import { isOn, MAX_TABLE_COLUMNS, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
 import { build, COLUMN_PX, type Item, inlineText, isWhitespace, type Para } from './assemble';
@@ -9,9 +9,6 @@ import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };
-
-// Word's column limit, on the grid and every row: a span is walked by column, the widest row sets every row's width.
-const MAX_COLUMNS = 63;
 
 // findWidth rescans the rows above each row after a rowspan, so a table that merges splits here.
 export const MAX_MERGED_ROWS = 2000;
@@ -27,8 +24,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => is(col, W_NS, 'gridCol'))
         .map((col) => twipsOf(w(col, 'w')) ?? 0)
-        .slice(0, MAX_COLUMNS);
-    const columns = grid.length || MAX_COLUMNS;
+        .slice(0, MAX_TABLE_COLUMNS);
+    const columns = grid.length || MAX_TABLE_COLUMNS;
     const columnPx = scaled(grid, scope.room ?? COLUMN_PX);
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
@@ -89,7 +86,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         let column = Math.min(
             Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0),
             columns,
-            MAX_COLUMNS - 1,
+            MAX_TABLE_COLUMNS - 1,
         );
         // Word draws no cell over the columns a row skips: the cell beside them spans them, unless it merges down.
         const unmerged = (cell: XmlElement | undefined) => !!cell && !wChild(wChild(cell, 'tcPr'), 'vMerge');
@@ -97,13 +94,13 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (column > lead) cells.push(gridFiller(columnPx, 0, column));
         let last: { attrs: CellAttrs; start: number } | undefined;
         for (const [index, cell] of row.cells.entries()) {
-            if (column >= MAX_COLUMNS) break;
+            if (column >= MAX_TABLE_COLUMNS) break;
             const tcPr = wChild(cell, 'tcPr');
             const vMerge = wChild(tcPr, 'vMerge');
             // Only where the cell above starts, and over its columns: anywhere else the two would overlap.
             const above = vMerge && w(vMerge, 'val') !== 'restart' ? open.get(column) : undefined;
             // Into the last column with cells after it, a cell of its own: it holds their text.
-            if (above && (column + above.colspan < MAX_COLUMNS || index === row.cells.length - 1)) {
+            if (above && (column + above.colspan < MAX_TABLE_COLUMNS || index === row.cells.length - 1)) {
                 extended.push(above);
                 next.set(column, above);
                 column += above.colspan;
@@ -120,7 +117,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             const own = cell === onlyCell && onlyItems ? onlyItems : cellItems(cell, rowIndex, colwidth);
             // Word's last column holds the text of the cells a row runs on past it, not their empty lines.
             const past =
-                column + colspan < MAX_COLUMNS
+                column + colspan < MAX_TABLE_COLUMNS
                     ? []
                     : cellItems(cell, rowIndex, colwidth, row.cells.slice(index + 1).flatMap(cellContent)).filter(
                           (item) => item.kind !== 'para' || !item.empty,

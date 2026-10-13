@@ -2,7 +2,8 @@ import { XML } from 'bun';
 import { ApiError } from './errors';
 
 // Bun's tree shape keeps document order; namespaces are resolved here, since Bun reports names as written.
-// Callers bound their input: a tree costs about 100× the input in memory.
+// Callers bound their input: a tree costs about 100× the input in memory when the input is all small elements, and
+// 20–40× for text in runs, as in a docx.
 
 export type XmlElement = {
     name: string;

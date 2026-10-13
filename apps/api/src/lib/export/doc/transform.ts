@@ -6,7 +6,6 @@ import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
-    DOCX_IMAGE_MAX_SIZE,
     type EigendocExportFormat,
     type ExportMedia,
     htmlExportMode,
@@ -17,7 +16,7 @@ import {
 import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
-import { encodeDocxImage, figureMediaKey } from './docx-image';
+import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 

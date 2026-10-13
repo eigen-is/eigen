@@ -1,7 +1,10 @@
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
-import { DOCX_IMAGE_MAX_SIZE, type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
+import { type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
 import { splitDataUri } from '../../shared/data-uri';
 import type { ImageResult, WorkerInput } from '../../shared/thumbnail-worker';
+
+// A docx image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to in the Worker.
+export const DOCX_IMAGE_MAX_SIZE = 2560;
 
 // Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha
 // retries as PNG.
