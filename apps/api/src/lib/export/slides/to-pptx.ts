@@ -54,6 +54,7 @@ import {
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
+import { canvasTextValue } from '../../document/prose-css';
 import { uriReference } from '../doc/to-docx';
 import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { isElement } from '../sanitize';
@@ -851,14 +852,21 @@ function paragraphsOf(html: string): Paragraph[] {
 const ANCHORS: Record<VerticalAlign, string> = { top: 't', center: 'ctr', bottom: 'b' };
 const ALIGNS: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
 
-// canvas-text.css: a list level indents 1.5em, a quote 0.75em past its 3 px bar, and draws at 70% of what holds it.
-const LIST_INDENT_EM = 1.5;
+// A length canvas-text.css states in the unit the writer reads it in; a shorthand's first value.
+function canvasTextLength(selector: string, property: string, unit: 'em' | 'px'): number {
+    const [length = ''] = canvasTextValue(selector, property).split(/\s+/);
+    if (!length.endsWith(unit)) throw new Error(`canvas-text.css ${property} on ${selector} is not in ${unit}`);
+    return Number(length.slice(0, -unit.length));
+}
+
+// canvas-text.css: a list level's indent, a quote's indent past its bar, and the opacity a quote draws at.
+const LIST_INDENT_EM = canvasTextLength('.eigen-canvas-text ul', 'padding-left', 'em');
 // The marker's hang: a disc sits close to its text, a number right-aligned in the list's indent.
 const MARKER_EM = { bullet: 0.75, number: 1.5 };
-const QUOTE_INDENT_EM = 0.75;
-const QUOTE_BAR_PX = 3;
-const QUOTE_OPACITY = 0.7;
-const PARAGRAPH_GAP_EM = 0.5;
+const QUOTE_INDENT_EM = canvasTextLength('.eigen-canvas-text blockquote', 'padding-left', 'em');
+const QUOTE_BAR_PX = canvasTextLength('.eigen-canvas-text blockquote', 'border-left', 'px');
+const QUOTE_OPACITY = Number(canvasTextValue('.eigen-canvas-text blockquote', 'opacity'));
+const PARAGRAPH_GAP_EM = canvasTextLength('.eigen-canvas-text p + p', 'margin-top', 'em');
 // The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's, which a tall line or a deep nesting passes.
 const MAX_SPACING = 158_400;
 const MAX_MARGIN = 51_206_400;
