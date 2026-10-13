@@ -5,8 +5,8 @@
 // read-only rather than as thousands of cells.
 
 import {
-    chartColor,
     chartLabel,
+    DEFAULT_CHART_SERIES_STYLE,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
@@ -39,8 +39,9 @@ type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
 // A cell holds what was typed, so a value that isn't a number stays on screen, flagged, instead of vanishing.
 type GridColumn = { name: string; style: ChartSeriesStyle };
-// A row carries its slice color, so a removed row takes its pie slice's color with it.
-type GridRow = { category: string; color: string; cells: string[] };
+// A row carries its slice color, so a removed row takes its pie slice's color with it. New series and rows
+// are automatic (null), so the palette colors them by position.
+type GridRow = { category: string; color: string | null; cells: string[] };
 type Grid = { columns: GridColumn[]; rows: GridRow[] };
 
 // Grid coordinates: row 0 is the series names (the sheet's row 1), column 0 the categories (column A), so
@@ -52,15 +53,8 @@ type GridSelection = { anchor: CellRef; focus: CellRef; whole?: 'rows' | 'column
 // where an arrow moves the caret. As in Sheets.
 type Editing = { mode: 'replace' | 'in-place'; text: string };
 
-const newColumn = (index: number): GridColumn => ({
-    name: '',
-    style: { color: chartColor(index), markers: false, smooth: false },
-});
-const newRow = (index: number, columns: number): GridRow => ({
-    category: '',
-    color: chartColor(index),
-    cells: Array(columns).fill(''),
-});
+const newColumn = (): GridColumn => ({ name: '', style: DEFAULT_CHART_SERIES_STYLE });
+const newRow = (columns: number): GridRow => ({ category: '', color: null, cells: Array(columns).fill('') });
 
 function gridOf({ data, sliceColors }: InlineChartSpec): Grid {
     const count = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
@@ -68,7 +62,7 @@ function gridOf({ data, sliceColors }: InlineChartSpec): Grid {
         columns: data.series.map(({ name, values, ...style }) => ({ name, style })),
         rows: Array.from({ length: count }, (_, i) => ({
             category: data.categories[i] ?? '',
-            color: sliceColors[i] ?? chartColor(i),
+            color: sliceColors[i] ?? null,
             cells: data.series.map((series) => String(series.values[i] ?? '')),
         })),
     };
@@ -112,9 +106,9 @@ function fill(grid: Grid, row: number, column: number, block: string[][]): { gri
     while (!fitsInlineGrid(series, rows) && series > grid.columns.length) series -= 1;
     while (!fitsInlineGrid(series, rows) && rows > grid.rows.length) rows -= 1;
 
-    const columns = Array.from({ length: series }, (_, j) => ({ ...(grid.columns[j] ?? newColumn(j)) }));
+    const columns = Array.from({ length: series }, (_, j) => ({ ...(grid.columns[j] ?? newColumn()) }));
     const next = Array.from({ length: rows }, (_, i) => {
-        const source = grid.rows[i] ?? newRow(i, series);
+        const source = grid.rows[i] ?? newRow(series);
         return { ...source, cells: Array.from({ length: series }, (_, j) => source.cells[j] ?? '') };
     });
     let clipped = false;
@@ -156,7 +150,7 @@ function removeWhole(grid: Grid, whole: 'rows' | 'columns', range: Range): Grid 
     const cleared = clearRange(grid, whole === 'rows' ? { ...range, bottom: 0 } : { ...range, right: 0 });
     if (whole === 'rows') {
         const rows = cleared.rows.filter((_, i) => i + 1 < range.top || i + 1 > range.bottom);
-        return { ...cleared, rows: rows.length > 0 ? rows : [newRow(0, grid.columns.length)] };
+        return { ...cleared, rows: rows.length > 0 ? rows : [newRow(grid.columns.length)] };
     }
     const keep = (j: number) => j + 1 < range.left || j + 1 > range.right;
     const columns = cleared.columns.filter((_, j) => keep(j));

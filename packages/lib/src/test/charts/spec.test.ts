@@ -15,7 +15,13 @@ import {
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
-import { CHART_TYPES, type ChartSpec, type InlineChartData, type RangeChartData } from '../../types/chart';
+import {
+    CHART_STACKINGS,
+    CHART_TYPES,
+    type ChartSpec,
+    type InlineChartData,
+    type RangeChartData,
+} from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
 
 const style = { color: '#2a78d6', markers: false, smooth: false };
@@ -70,11 +76,10 @@ describe('sampleChartSpec', () => {
         expect(column.valueAxis.gridlines).toBe(true);
         expect(column.data).toMatchObject({ source: 'inline', categories: ['Team 1', 'Team 2', 'Team 3', 'Team 4'] });
         expect(column.data.series.map((s) => s.name)).toEqual(['Period 1', 'Period 2']);
-        expect(column.sliceColors).toEqual([]);
+        expect(column.stacking).toBe('none');
         const pie = sampleChartSpec('pie');
         expect(pie.legend).toBe('none');
         expect(pie.data.series).toHaveLength(1);
-        expect(pie.sliceColors).toEqual([0, 1, 2, 3].map(chartColor));
     });
 
     test("the sample draws in Google's Inter", () => {
@@ -87,7 +92,14 @@ describe('palette', () => {
 
     test('series take the shared accent colors in the shuffled order calendars assign, so neighbors stay apart', () => {
         expect(palette.map((_, i) => chartColor(i))).toEqual(palette);
-        expect(sampleChartSpec('column').data.series.map((s) => s.color)).toEqual(palette.slice(0, 2));
+    });
+
+    test('a sample stores no colors, so its series and slices take the palette as it is when drawn', () => {
+        for (const type of CHART_TYPES) {
+            const { data, sliceColors } = sampleChartSpec(type);
+            expect(data.series.map((s) => s.color)).toEqual(data.series.map(() => null));
+            expect(sliceColors).toEqual([]);
+        }
     });
 
     test('the grid’s series never repeat a color, and the one past the palette starts over', () => {
@@ -118,7 +130,7 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(stored({ legend: 'center' }))?.legend).toBe('top');
         expect(parseChartSpec(stored({ type: 'pie', legend: 'center' }))?.legend).toBe('none');
         expect(parseChartSpec(stored({ blanks: 'skip' }))?.blanks).toBe('gap');
-        expect(parseChartSpec(stored({ stacked: 'yes' }))?.stacked).toBe(false);
+        expect(parseChartSpec(stored({ stacking: 'yes' }))?.stacking).toBe('none');
         expect(parseChartSpec(stored({ title: 7 }))?.title).toBe('');
         expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
             valueAxis,
@@ -161,7 +173,14 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(JSON.stringify(chart({ data })))?.data).toEqual(data);
     });
 
-    test("a color that is not a color token reads as the palette's color for its series or slice", () => {
+    test("stacking reads Excel's grouping: none, stacked or percent", () => {
+        for (const stacking of CHART_STACKINGS) expect(parseChartSpec(stored({ stacking }))?.stacking).toBe(stacking);
+        expect(parseChartSpec(stored({ stacking: 'normal' }))?.stacking).toBe('none');
+        const { stacking, ...rest } = chart();
+        expect(parseChartSpec(JSON.stringify({ ...rest, stacked: true }))?.stacking).toBe('none');
+    });
+
+    test('a missing color, or one that is not a color token, reads null: the palette color at its index', () => {
         const series = (color: unknown) =>
             parseChartSpec(
                 stored({
@@ -174,15 +193,21 @@ describe('parseChartSpec', () => {
                     },
                 }),
             )?.data.series[1];
-        expect(series('url(#x)')?.color).toBe(chartColor(1));
-        expect(series('red')?.color).toBe(chartColor(1));
+        expect(series(null)?.color).toBeNull();
+        expect(series('url(#x)')?.color).toBeNull();
+        expect(series('red')?.color).toBeNull();
+        expect(series('#eb6834')?.color).toBe('#eb6834');
         expect(series('transparent')?.color).toBe('transparent');
         const { color, markers, smooth, ...rest } = style;
         expect(
             parseChartSpec(stored({ data: { ...inlineData(1, 1), series: [{ ...rest, name: 7, values: [1] }] } }))?.data
                 .series[0],
-        ).toEqual({ color: chartColor(0), markers: false, smooth: false, name: '', values: [1] });
-        expect(parseChartSpec(stored({ sliceColors: ['#fff', 'blue'] }))?.sliceColors).toEqual(['#fff', chartColor(1)]);
+        ).toEqual({ color: null, markers: false, smooth: false, name: '', values: [1] });
+        expect(parseChartSpec(stored({ sliceColors: ['#fff', 'blue', null] }))?.sliceColors).toEqual([
+            '#fff',
+            null,
+            null,
+        ]);
         expect(parseChartSpec(stored({ sliceColors: 'blue' }))?.sliceColors).toEqual([]);
     });
 

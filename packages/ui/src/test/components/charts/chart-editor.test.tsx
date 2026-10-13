@@ -120,12 +120,27 @@ async function mount(
         });
         return [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
     };
+    // The Automatic row of a color row's popover, absent while the color is automatic.
+    const automatic = async (label: string) => {
+        const trigger = row(label).querySelector('button');
+        await act(async () => trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        const popover = [...document.querySelectorAll('[data-slot="popover-content"]')].at(-1);
+        const found = [...(popover?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+            (button) => button.textContent === 'Automatic',
+        );
+        if (!found) {
+            await act(async () => {
+                document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            });
+        }
+        return found;
+    };
     const last = () => {
         const change = changes.at(-1);
         if (!change) throw new Error('the editor wrote nothing');
         return change;
     };
-    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options, fonts };
+    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options, fonts, automatic };
 }
 
 const sample = (type: ChartType) => sampleChartSpec(type);
@@ -138,19 +153,22 @@ describe('ChartEditor', () => {
         expect(editor.last().type).toBe('bar');
     });
 
-    test('a switch to pie gives every category a slice color', async () => {
+    test('a switch to pie leaves its slices on the palette', async () => {
         const editor = await mount(sample('column'));
         await editor.choose('Type', 'Pie');
-        expect(editor.last().type).toBe('pie');
-        expect(editor.last().sliceColors).toEqual([0, 1, 2, 3].map(chartColor));
+        expect(editor.changes).toEqual([{ ...sample('column'), type: 'pie' }]);
     });
 
-    test('stacking shows for column and bar, writes the flag, and is gone for line and pie', async () => {
+    test('stacking shows for column and bar, writes the grouping, and is gone for line and pie', async () => {
         const column = await mount(sample('column'));
         expect(column.rowLabels()).toContain('Stacking');
-        expect(await column.options('Stacking')).toEqual(['None', 'Stacked']);
+        expect(await column.options('Stacking')).toEqual(['None', 'Stacked', '100% stacked']);
+        await column.choose('Stacking', '100% stacked');
+        expect(column.last().stacking).toBe('percent');
         await column.choose('Stacking', 'Stacked');
-        expect(column.last().stacked).toBe(true);
+        expect(column.last().stacking).toBe('stacked');
+        await column.choose('Stacking', 'None');
+        expect(column.last().stacking).toBe('none');
 
         expect((await mount(sample('bar'))).rowLabels()).toContain('Stacking');
         expect((await mount(sample('line'))).rowLabels()).not.toContain('Stacking');
@@ -246,7 +264,6 @@ describe('ChartEditor', () => {
         const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
         const editor = await mount(range, undefined, { categories: ['Ajax', 'PSV', ''] });
         await editor.choose('Type', 'Pie');
-        expect(editor.last().sliceColors).toEqual([0, 1, 2].map(chartColor));
         expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Ajax', 'PSV', 'Slice 3']));
     });
 
@@ -255,12 +272,41 @@ describe('ChartEditor', () => {
         expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Period 1', 'Period 2']));
         const trigger = editor.row('Period 2').querySelector('button');
         await act(async () => trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-        const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title]');
+        const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
         if (!swatch) throw new Error('the color popover has no swatch');
         await act(async () => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         const [first, second] = editor.last().data.series;
-        expect(first.color).toBe(sample('column').data.series[0].color);
-        expect(second.color).not.toBe(sample('column').data.series[1].color);
+        expect(first.color).toBeNull();
+        expect(second.color).toBe(swatch.title);
+    });
+
+    test('an automatic color shows its palette color and says Automatic; a picked one resets to it in one write', async () => {
+        const picked = sample('column');
+        if (picked.data.source !== 'inline') throw new Error('the sample is inline');
+        const [first, second] = picked.data.series;
+        const spec: ChartSpec = {
+            ...picked,
+            data: { ...picked.data, series: [first, { ...second, color: '#123456' }] },
+        };
+        const editor = await mount(spec);
+        expect(editor.row('Period 1').textContent).toBe('Automatic');
+        expect(editor.row('Period 1').querySelector<HTMLElement>('div')?.style.backgroundColor).toBeTruthy();
+        expect(editor.row('Period 2').textContent).toBe('#123456');
+        const reset = await editor.automatic('Period 2');
+        if (!reset) throw new Error('a picked color offers no Automatic');
+        await act(async () => reset.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        expect(editor.changes).toEqual([picked]);
+        expect(editor.row('Period 2').textContent).toBe('Automatic');
+        expect(await editor.automatic('Period 1')).toBeUndefined();
+    });
+
+    test('a picked slice color resets to the palette in one write', async () => {
+        const editor = await mount({ ...sample('pie'), sliceColors: [null, '#123456'] });
+        expect(editor.row('Team 2').textContent).toBe('#123456');
+        expect(editor.row('Team 3').textContent).toBe('Automatic');
+        const reset = await editor.automatic('Team 2');
+        await act(async () => reset?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        expect(editor.changes.map((spec) => spec.sliceColors)).toEqual([[null, null, null, null]]);
     });
 
     test("a range chart's series rows take the names its sheet resolved, and a deleted series has none", async () => {
@@ -288,7 +334,7 @@ describe('ChartEditor', () => {
         expect(series).toEqual(['North', 'East']);
         const trigger = editor.row('East').querySelector('button');
         await act(async () => trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-        const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title]');
+        const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
         if (!swatch) throw new Error('the color popover has no swatch');
         await act(async () => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         expect(editor.last().data.series.map((s) => s.color)).toEqual([chartColor(0), chartColor(1), swatch.title]);

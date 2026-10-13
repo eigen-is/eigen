@@ -4,7 +4,6 @@
 
 import type {
     ChartBox,
-    ChartData,
     ChartLabel,
     ChartLayout,
     ChartLayoutInput,
@@ -26,7 +25,7 @@ import type {
     VectorRectangleElement,
 } from '../vector/types';
 import { chartColor } from './spec';
-import { nice, tickStep, ticks } from './ticks';
+import { formatPercentTick, nice, tickStep, ticks } from './ticks';
 
 // Every line a chart draws in place of a plot.
 export const CHART_MESSAGES = {
@@ -98,6 +97,7 @@ type Context = {
 };
 
 type LegendItem = { name: string; color: string };
+type PaintedSeries = InlineChartSeries & { color: string };
 
 export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
     const ctx = context(box, spec.fontFamily);
@@ -113,6 +113,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
         }),
     );
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
+    const series = data.series.map((s, i) => ({ ...s, color: s.color ?? chartColor(i) }));
 
     if (spec.type === 'pie') {
         const slices = values[0];
@@ -124,14 +125,14 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const items: LegendItem[] =
         spec.type === 'pie'
             ? categories.map((name, i) => ({ name, color: sliceColor(spec, i) }))
-            : data.series.map((series) => ({ name: series.name, color: series.color }));
+            : series.map(({ name, color }) => ({ name, color }));
     const legend = placeLegend(ctx, spec.legend, items, frame);
     frame = legend.frame;
 
     const plot =
         spec.type === 'pie'
             ? layoutPie(ctx, spec, categories, values[0], frame)
-            : layoutCartesian(ctx, spec, { categories, series: data.series }, values, frame, formatTick);
+            : layoutCartesian(ctx, spec, categories, series, values, frame, formatTick);
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }
@@ -266,24 +267,31 @@ type ValueAxis = { lo: number; hi: number; ticks: number[]; texts: string[]; wid
 
 // Column and line chart a vertical value axis left of a horizontal band axis; bar turns both. The axis
 // left of the plot takes its title turned -90°, the one below takes it upright.
+// A 100% stack plots shares and labels its ticks as percents, whatever the source cells' format.
 function layoutCartesian(
     ctx: Context,
     spec: ChartSpec,
-    data: ChartData,
-    values: (number | null)[][],
+    categories: string[],
+    series: PaintedSeries[],
+    stored: (number | null)[][],
     frame: Frame,
-    formatTick: ChartLayoutInput['formatTick'],
+    sourceFormat: ChartLayoutInput['formatTick'],
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const horizontal = spec.type === 'bar';
-    const stacked = spec.stacked && spec.type !== 'line';
-    const extent = valueExtent(values, stacked, spec.blanks === 'zero');
+    const stacked = spec.stacking !== 'none' && spec.type !== 'line';
+    const percent = stacked && spec.stacking === 'percent';
+    const values = percent ? shares(stored) : stored;
+    const formatTick = percent ? formatPercentTick : sourceFormat;
+    const [low, high] = valueExtent(values, stacked, spec.blanks === 'zero');
+    // Float sums can run a hair past ±100%, which nice ends would round up a whole step.
+    const extent: [number, number] = percent ? [Math.max(-1, low), Math.min(1, high)] : [low, high];
     const [sideTitle, bottomTitle] = horizontal
         ? [spec.categoryAxis.title, spec.valueAxis.title]
         : [spec.valueAxis.title, spec.categoryAxis.title];
     const sideReserve = sideTitle === '' ? 0 : lh + gap;
     const bottomReserve = bottomTitle === '' ? 0 : lh + gap;
-    const count = data.categories.length;
+    const count = categories.length;
 
     let plot: Frame;
     let axis: ValueAxis;
@@ -294,7 +302,7 @@ function layoutCartesian(
         const band = bandScale(count, top, bottom);
         const every = Math.max(1, Math.ceil(lh / band.step));
         const room = (frame.right - frame.left - sideReserve) * LABEL_SHARE;
-        const names = data.categories.map((name, i) => (i % every === 0 ? fit(ctx, name, room, fontSize, false) : ''));
+        const names = categories.map((name, i) => (i % every === 0 ? fit(ctx, name, room, fontSize, false) : ''));
         const left = frame.left + sideReserve + Math.max(0, ...names.map((name) => measure(ctx, name))) + gap;
         // Fewer ticks until their labels stop touching, each try as many as the last one's widest pair has
         // room for; the end labels overhang the plot by half a label.
@@ -330,13 +338,7 @@ function layoutCartesian(
             ctx,
         );
         const left = frame.left + sideReserve + Math.max(...axis.widths) + gap;
-        const placed = placeCategoryLabels(
-            ctx,
-            data.categories,
-            bandScale(count, left, frame.right),
-            frame,
-            bottomReserve,
-        );
+        const placed = placeCategoryLabels(ctx, categories, bandScale(count, left, frame.right), frame, bottomReserve);
         plot = { left, top, right: frame.right, bottom: frame.bottom - bottomReserve - placed.height };
         categoryLabels = placed.labels.map((placedLabel) => ({ ...placedLabel, y: placedLabel.y + plot.bottom + gap }));
     }
@@ -376,8 +378,8 @@ function layoutCartesian(
         );
         if (spec.valueAxis.gridlines && t !== zero) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
-    if (spec.type === 'line') shapes.push(...lineMarks(ctx, spec, data.series, values, band, scale));
-    else shapes.push(...barMarks(ctx, spec, data.series, values, band, scale, horizontal, stacked));
+    if (spec.type === 'line') shapes.push(...lineMarks(ctx, spec, series, values, band, scale));
+    else shapes.push(...barMarks(ctx, spec, series, values, band, scale, horizontal, stacked));
     shapes.push(rule('baseline', scale(zero)));
 
     const side = fit(ctx, sideTitle, plot.bottom - plot.top, fontSize, false);
@@ -412,6 +414,13 @@ function valueExtent(values: (number | null)[][], stacked: boolean, zeroBlanks: 
         lo = Math.min(lo, down);
     }
     return lo === hi ? [0, 1] : [lo, hi];
+}
+
+// Each value as its share of its category's absolute sum (Excel's percentStacked, Plot's normalize), so
+// positives and negatives together span 100%. A category summing to zero has no shares and draws no bar.
+function shares(values: (number | null)[][]): (number | null)[][] {
+    const totals = values[0].map((_, c) => values.reduce((sum, row) => sum + Math.abs(row[c] ?? 0), 0));
+    return values.map((row) => row.map((value, c) => (value === null || totals[c] === 0 ? null : value / totals[c])));
 }
 
 // Nice ends unless min or max pins one; ticks from d3 over the final domain.
@@ -483,7 +492,7 @@ function placeCategoryLabels(
 function barMarks(
     ctx: Context,
     spec: ChartSpec,
-    series: InlineChartSeries[],
+    series: PaintedSeries[],
     values: (number | null)[][],
     band: Band,
     scale: (v: number) => number,
@@ -522,7 +531,7 @@ function barMarks(
 function lineMarks(
     ctx: Context,
     spec: ChartSpec,
-    series: InlineChartSeries[],
+    series: PaintedSeries[],
     values: (number | null)[][],
     band: Band,
     scale: (v: number) => number,

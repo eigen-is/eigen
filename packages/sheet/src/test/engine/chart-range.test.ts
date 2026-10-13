@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
-import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import {
@@ -120,10 +119,10 @@ describe('chartRangeData', () => {
         expect(data?.series[0]).toMatchObject({ name: '', values: ref([0, 3], [0, 0]) });
     });
 
-    test('keeps the series styles it is given and colors new series from the palette', () => {
+    test('keeps the series styles it is given, and a new series takes the palette color at its index', () => {
         const data = chartRangeData(range, [{ color: '#000000', markers: true, smooth: false }]);
         expect(data?.series[0]).toMatchObject({ color: '#000000', markers: true });
-        expect(data?.series[1].color).not.toBe('#000000');
+        expect(data?.series[1].color).toBeNull();
     });
 
     test('a range with no values or more series than a chart holds has no data', () => {
@@ -194,11 +193,10 @@ describe('suggestChartSpec', () => {
         expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
     });
 
-    test('the series take the shared accent colors in the order calendars assign them, in Inter', () => {
+    test('the series store no color, so they draw in the palette as it is, in Inter', () => {
         const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
         if (typeof spec === 'string') throw new Error(spec);
-        const accents = EIGEN_ACCENT_COLORS_SHUFFLED.slice(0, 3).map(({ value }) => value);
-        expect(spec.data.series.map((series) => series.color)).toEqual(accents);
+        expect(spec.data.series.map((series) => series.color)).toEqual([null, null, null]);
         expect(spec.fontFamily).toBe('Inter');
     });
 

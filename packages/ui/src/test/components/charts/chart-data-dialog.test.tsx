@@ -361,7 +361,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
 });
 
 describe('ChartDataDialog: growing the grid', () => {
-    test('typing in the trailing row adds a category with gaps and a slice color', async () => {
+    test('typing in the trailing row adds a category with gaps and an automatic slice color', async () => {
         const dialog = await open(sample('pie'));
         await dialog.select(5, 0);
         await dialog.type('Team 5');
@@ -371,10 +371,10 @@ describe('ChartDataDialog: growing the grid', () => {
         const spec = await dialog.save();
         expect(spec.data.categories.at(-1)).toBe('Team 5');
         expect(spec.data.series[0].values.at(-1)).toBeNull();
-        expect(spec.sliceColors).toEqual([0, 1, 2, 3, 4].map(chartColor));
+        expect(spec.sliceColors).toEqual([null, null, null, null, null]);
     });
 
-    test('typing in the trailing column adds a palette-colored series', async () => {
+    test('typing in the trailing column adds a series in an automatic color', async () => {
         const dialog = await open(sample());
         await dialog.select(2, 3);
         await dialog.type('5');
@@ -383,7 +383,7 @@ describe('ChartDataDialog: growing the grid', () => {
         const spec = await dialog.save();
         expect(spec.data.series[2]).toEqual({
             ...style,
-            color: chartColor(2),
+            color: null,
             name: '',
             values: [null, 5, null, null],
         });
@@ -440,7 +440,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
         await dialog.paste(1, 0, { 'text/plain': 'North\r\nSouth' });
         const spec = await dialog.save();
         expect(spec.data.series.map((series) => series.name)).toEqual(['A', 'B', 'C']);
-        expect(spec.data.series[2]).toMatchObject({ color: chartColor(2), values: [3, 6, 9, 12, 15] });
+        expect(spec.data.series[2]).toMatchObject({ color: null, values: [3, 6, 9, 12, 15] });
         expect(spec.data.categories).toEqual(['North', 'South', 'Team 3', 'Team 4', '']);
     });
 

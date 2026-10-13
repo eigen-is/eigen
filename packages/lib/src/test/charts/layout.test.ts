@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { chartColor, formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
 import {
+    CHART_STACKINGS,
     CHART_TYPES,
     type ChartData,
     type ChartLabel,
@@ -30,7 +31,7 @@ const PAINT: ChartPaint = {
 
 const style = { markers: false, smooth: false };
 
-function series(name: string, values: (number | null)[], color = '#2a78d6') {
+function series(name: string, values: (number | null)[], color: string | null = '#2a78d6') {
     return { ...style, color, name, values };
 }
 
@@ -127,18 +128,18 @@ const SIZES: [number, number][] = [
 describe('layoutChart invariants', () => {
     const cases = CHART_TYPES.flatMap((type) =>
         LEGEND_POSITIONS.flatMap((legend) =>
-            [false, true].flatMap((stacked) =>
-                SIZES.map(([width, height]) => ({ type, legend, stacked, width, height })),
+            CHART_STACKINGS.flatMap((stacking) =>
+                SIZES.map(([width, height]) => ({ type, legend, stacking, width, height })),
             ),
         ),
     );
 
     test.each(cases)(
-        '$type legend $legend stacked $stacked at $width × $height',
-        ({ type, legend, stacked, width, height }) => {
+        '$type legend $legend stacking $stacking at $width × $height',
+        ({ type, legend, stacking, width, height }) => {
             const spec: Partial<ChartSpec> = {
                 legend,
-                stacked,
+                stacking,
                 categoryAxis: { title: 'Teams' },
                 valueAxis: { title: 'Points', min: null, max: null, gridlines: true, format: null },
             };
@@ -299,7 +300,7 @@ describe('column and bar', () => {
 
     test('stacked: positives and negatives stack apart, each top at its sum', () => {
         for (const type of ['column', 'bar'] as const) {
-            const out = layout(type, { stacked: true }, { data });
+            const out = layout(type, { stacking: 'stacked' }, { data });
             const bars = rects(out, 'bar');
             const along = (bar: VectorRectangleElement) => (type === 'column' ? bar.height : bar.width);
             const perUnit = along(bars[0]) / 10;
@@ -323,6 +324,56 @@ describe('column and bar', () => {
             else expect(b1.x + b1.width).toBeCloseTo(b0.x);
             // stacked bars of one category share one band
             expect(new Set(a.map((bar) => (type === 'column' ? bar.x : bar.y))).size).toBe(1);
+        }
+    });
+
+    test('100% stacked: every category fills the axis, each bar its share, the ticks percents', () => {
+        const shares: ChartData = {
+            categories: ['A', 'B'],
+            series: [series('S1', [10, 1]), series('S2', [30, 3], '#eb6834')],
+        };
+        for (const type of ['column', 'bar'] as const) {
+            const out = layout(type, { stacking: 'percent' }, { data: shares });
+            const bars = rects(out, 'bar');
+            const along = (bar: VectorRectangleElement) => (type === 'column' ? bar.height : bar.width);
+            const span = (c: number) =>
+                bars.filter((bar) => bar.id.endsWith(`:${c}`)).reduce((sum, bar) => sum + along(bar), 0);
+            expect(span(1)).toBeCloseTo(span(0));
+            expect(along(bars[0]) / span(0)).toBeCloseTo(0.25);
+            const ticks = out.labels.map((label) => label.text).filter((text) => text.endsWith('%'));
+            expect(ticks[0]).toBe('0%');
+            expect(ticks.at(-1)).toBe('100%');
+            // The stack ends on the 100% tick.
+            const top = lines(out, 'gridline').at(-1);
+            if (type === 'column') expect(Math.min(...bars.map((bar) => bar.y))).toBeCloseTo(top?.y ?? 0);
+            else expect(Math.max(...bars.map((bar) => bar.x + bar.width))).toBeCloseTo(top?.x ?? 0);
+        }
+    });
+
+    test('100% stacked with mixed signs: shares of the absolute sum, negatives below zero', () => {
+        const mixed: ChartData = {
+            categories: ['A', 'B'],
+            series: [series('S1', [5, 4]), series('S2', [-3, 4], '#eb6834')],
+        };
+        const out = layout('column', { stacking: 'percent' }, { data: mixed });
+        const bar = (id: string) => rects(out, 'bar').find((shape) => shape.id === `c1:${id}`);
+        const [up, down, b0, b1] = ['bar:0:0', 'bar:1:0', 'bar:0:1', 'bar:1:1'].map(bar);
+        expect((up?.height ?? 0) / (down?.height ?? 1)).toBeCloseTo(5 / 3);
+        expect((up?.height ?? 0) + (down?.height ?? 0)).toBeCloseTo((b0?.height ?? 0) + (b1?.height ?? 0));
+        expect(down?.y).toBeCloseTo(lines(out, 'baseline')[0].y);
+        expect(out.labels.some((label) => /^-\d+%$/.test(label.text))).toBe(true);
+    });
+
+    test('100% stacked: a category that totals zero draws no bar and no NaN', () => {
+        const zero: ChartData = {
+            categories: ['A', 'B', 'C'],
+            series: [series('S1', [0, 10, null]), series('S2', [0, 30, null], '#eb6834')],
+        };
+        for (const type of ['column', 'bar'] as const) {
+            const out = layout(type, { stacking: 'percent' }, { data: zero });
+            const ids = rects(out, 'bar').map((bar) => bar.id);
+            expect(ids).toEqual(['c1:bar:0:1', 'c1:bar:1:1']);
+            for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
         }
     });
 
@@ -513,6 +564,18 @@ describe('legend', () => {
         expect(rects(layout('column', { legend: 'none' }), 'legend')).toEqual([]);
     });
 
+    test('a null series color is the palette color at its index, on the bar and the swatch', () => {
+        const data: ChartData = {
+            categories: ['A'],
+            series: [series('S1', [1], null), series('S2', [2], '#123456'), series('S3', [3], null)],
+        };
+        const out = layout('column', {}, { data });
+        const colors = [chartColor(0), '#123456', chartColor(2)];
+        expect(rects(out, 'legend').map((swatch) => swatch.strokeColor)).toEqual(colors);
+        expect(rects(out, 'bar').map((bar) => bar.strokeColor)).toEqual(colors);
+        expect(rects(out, 'bar').map((bar) => bar.fill)).toEqual(colors.map((color) => solidFill(color)));
+    });
+
     test('a wide legend wraps into rows that stay inside the box', () => {
         const names = Array.from({ length: 12 }, (_, i) => `Series number ${i + 1}`);
         const out = layout(
@@ -596,6 +659,10 @@ describe('pie', () => {
         expect(pie.every((slice) => slice.strokeColor === '#ffffff')).toBe(true);
         const bare = slices(layout('pie', {}, { paint: { background: serializeFill(TRANSPARENT_FILL) } }));
         expect(bare[1].strokeColor).toBe(chartColor(1));
+        const automatic = slices(layout('pie', { sliceColors: [null, '#000000'] }));
+        expect(automatic.map((slice) => slice.fill)).toEqual(
+            [chartColor(0), '#000000', chartColor(2), chartColor(3)].map((color) => solidFill(color)),
+        );
     });
 
     test('labels read name and percent; slices under 5% go unlabeled', () => {
@@ -690,10 +757,10 @@ describe('unusable data', () => {
     });
 
     test('extreme values stay finite', () => {
-        for (const type of CHART_TYPES) {
+        for (const [type, stacking] of CHART_TYPES.flatMap((type) => CHART_STACKINGS.map((s) => [type, s] as const))) {
             const out = layout(
                 type,
-                { stacked: true },
+                { stacking },
                 {
                     data: {
                         categories: ['A', 'B'],

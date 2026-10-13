@@ -3,6 +3,7 @@ export {
     chartColor,
     chartLabel,
     DEFAULT_CHART_FONT,
+    DEFAULT_CHART_SERIES_STYLE,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,

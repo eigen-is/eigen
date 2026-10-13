@@ -4,7 +4,7 @@
 // (PropertyGestureContext), so a typed title is one undo step.
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
-import { type ChartSpec, type ChartType, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
+import { type ChartSpec, type ChartStacking, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     ColorRow,
@@ -26,9 +26,10 @@ const LEGEND_LABELS: Record<LegendPosition, string> = {
     none: 'None',
 };
 const LEGEND_OPTIONS = LEGEND_POSITIONS.map((value) => ({ value, label: LEGEND_LABELS[value] }));
-const STACKING_OPTIONS: { value: 'none' | 'stacked'; label: string }[] = [
+const STACKING_OPTIONS: { value: ChartStacking; label: string }[] = [
     { value: 'none', label: 'None' },
     { value: 'stacked', label: 'Stacked' },
+    { value: 'percent', label: '100% stacked' },
 ];
 
 type ChartEditorProps = {
@@ -52,7 +53,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
     const sliceLabels = (
         data.source === 'inline' ? data.categories : (categories ?? spec.sliceColors.map(() => ''))
     ).map((category, i) => category || `Slice ${i + 1}`);
-    const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? chartColor(i));
+    const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? null);
 
     const setValueAxis = (patch: Partial<ChartSpec['valueAxis']>) => {
         const next = { ...valueAxis, ...patch };
@@ -61,8 +62,11 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
         onChange({ ...spec, valueAxis: next });
     };
 
-    const setSeriesColor = (index: number, color: string) => {
-        const recolor = <S extends { color: string }>(series: S[]) =>
+    const setSliceColor = (index: number, color: string | null) =>
+        onChange({ ...spec, sliceColors: sliceColors.map((c, i) => (i === index ? color : c)) });
+
+    const setSeriesColor = (index: number, color: string | null) => {
+        const recolor = <S extends { color: string | null }>(series: S[]) =>
             series.map((s, i) => (i === index ? { ...s, color } : s));
         onChange({
             ...spec,
@@ -127,22 +131,15 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     <MergedSelect
                         value={type}
                         options={CHART_TYPE_OPTIONS}
-                        // A pie colors each category, so a switch to one stores a color per slice.
-                        onChange={(next: ChartType) =>
-                            onChange({
-                                ...spec,
-                                type: next,
-                                sliceColors: next === 'pie' ? sliceColors : spec.sliceColors,
-                            })
-                        }
+                        onChange={(next) => onChange({ ...spec, type: next })}
                     />
                 </PropertyRow>
                 {(type === 'column' || type === 'bar') && (
                     <PropertyRow label="Stacking">
                         <MergedSelect
-                            value={spec.stacked ? 'stacked' : 'none'}
+                            value={spec.stacking}
                             options={STACKING_OPTIONS}
-                            onChange={(next) => onChange({ ...spec, stacked: next === 'stacked' })}
+                            onChange={(stacking) => onChange({ ...spec, stacking })}
                         />
                     </PropertyRow>
                 )}
@@ -182,10 +179,9 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                         <ColorRow
                             key={i}
                             label={label}
-                            value={sliceColors[i]}
-                            onChange={(color) =>
-                                onChange({ ...spec, sliceColors: sliceColors.map((c, j) => (j === i ? color : c)) })
-                            }
+                            value={sliceColors[i] ?? chartColor(i)}
+                            onChange={(color) => setSliceColor(i, color)}
+                            automatic={{ active: sliceColors[i] === null, onReset: () => setSliceColor(i, null) }}
                         />
                     ))}
                 </PropertySection>
@@ -201,8 +197,12 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                                     (typeof series.name === 'string' && series.name) ||
                                     `Series ${i + 1}`
                                 }
-                                value={series.color}
+                                value={series.color ?? chartColor(i)}
                                 onChange={(color) => setSeriesColor(i, color)}
+                                automatic={{
+                                    active: series.color === null,
+                                    onReset: () => setSeriesColor(i, null),
+                                }}
                             />
                         ),
                     )}

@@ -81,3 +81,8 @@ export function formatTickValue(value: number, step: number): string {
         signDisplay: 'negative',
     }).format(value);
 }
+
+// A 100% stack's ticks, shares read as percents ("0%", "25%").
+export function formatPercentTick(value: number, step: number): string {
+    return `${formatTickValue(value * 100, step * 100)}%`;
+}
