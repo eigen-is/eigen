@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 - **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor and printing follow it; PDF and Word downloads stay A4 with 2 cm margins for now
 - **Equations in Docs** — Insert → **Equation** opens the Equation panel: type LaTeX with a live preview, or pick from Google's five symbol menus. **Display** puts an equation on a line of its own. Equations take comments, count in word count and search, and download to Word as Word equations
+- **Word import and PDF** — a Word file's equations come in as equations you can edit, and the PDF draws equations
 
 ## [0.3.3] - 2026-10-13
 

@@ -59,7 +59,11 @@ Click the equation, then press Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows), or ch
 
 ## Equations in Word files and downloads
 
-When you download a document as a Word file, each equation becomes a Word equation that you can edit in Word, and a displayed one stays on its own line. Word has no place for LaTeX, so the file keeps the equation but not what you typed. A web page download keeps equations as math.
+When you download a document as a Word file, each equation becomes a Word equation that you can edit in Word, and a displayed one stays on its own line. When you [import a Word file](/support/docs/import-word), its equations come in as equations you can edit here, with their LaTeX written out for you.
+
+Word has no place for LaTeX, so a Word file keeps the equation but not what you typed. If you download a document to Word and import it again, each equation looks the same, but its **LaTeX** field shows Eigen's way of writing it, which may differ from yours.
+
+The PDF and the web page download show equations too. A PDF draws up to 1,000 different equations. Past that, or when the equations are very large, the rest print as their LaTeX, and an equation from a Word file that nobody has edited since is left out. The web page download and the preview in Drive have a similar limit, which only far larger documents reach.
 
 ## Word count, search, and copying as text
 

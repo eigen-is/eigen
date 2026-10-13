@@ -5,10 +5,10 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
-You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, and images.
+You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, and equations.
 
 <div class="eigen-callout">
 
@@ -46,6 +46,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Footnotes and endnotes become a numbered list at the end of the document, linked from the text.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
 - Blank lines stay, except the ones right before a new page.
+- Equations become equations you can edit, and one that Word shows on its own line stays on its own line. See [Insert and edit equations](/support/docs/equations).
 - A Word file you downloaded from Eigen keeps its code blocks' languages.
 
 ## What doesn't come across
@@ -54,7 +55,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Tracked changes come in as if you had accepted them all.
 - Font sizes, line spacing, and indents follow Eigen's own. Text set noticeably smaller than the rest becomes **Small** text.
 - A SmartArt graphic comes in as its text, one paragraph per shape, and a chart as its title only.
-- Equations come in as plain text.
+- An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
 - A WMF or EMF picture, a format older Office files often use, shows as a broken image with its description. You can delete it. When you download the document, it's left out.
 
 A password-protected Word file can't be imported. Open it in Word, remove the password, save it, and import it again.
