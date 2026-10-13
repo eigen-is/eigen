@@ -1,20 +1,23 @@
 // Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN
-// spec (content.ts) — the stickies-board approach without a fixture. Every element carries the same
-// full field set an editor-authored element would (use-canvas-doc's addElement), so the doc reads
-// back through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM
+// spec (content.ts) — the stickies-board approach without a fixture. Every element is built typed,
+// because the docking math runs on the shapes before anything is written, then goes through the
+// editor's own writer (write-vector.ts), so the doc reads back through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM
 // to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
 
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import {
+    type Box,
+    baseDefaultsFor,
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
     DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    ELEMENT_FIELDS,
+    ELEMENT_KINDS,
     elbowBindPoint,
+    followBindings,
     generateNKeysBetween,
     getFontMetrics,
     getLineHeightPx,
@@ -29,24 +32,17 @@ import {
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
+    type VectorElementBase,
+    type VectorElementType,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorRichTextElement,
     type VectorShapeElement,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import {
-    baseElement,
-    type CanvasSide,
-    imageElement,
-    mulberry32,
-    richTextElement,
-    SIDE_INDEX,
-    settleEndpoints,
-    toYMap,
-    ZERO_BOX,
-} from './canvas-build';
 import type {
+    CanvasSide,
     SITE_PLAN,
     SitePlanArrow,
     SitePlanEnd,
@@ -81,6 +77,12 @@ function measureRichTextBox(text: string, fontSize: number): { width: number; he
     const { width, height } = measureExcalifont(text, fontSize);
     return { width: width * RICH_TEXT_SLACK, height };
 }
+
+// Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
+const SIDE_INDEX: Record<CanvasSide, number> = { right: 0, bottom: 1, left: 2, top: 3 };
+
+// normalizeLinear rebases a route onto its own bounds, so the box it starts from is empty.
+const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 
 export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const shapes: VectorShapeElement[] = plan.shapes.map(buildShape);
@@ -121,8 +123,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     }
 
     doc.transact(() => {
-        const map = doc.getMap('elements');
-        for (const el of ordered) map.set(el.id, toYMap(el, ELEMENT_FIELDS));
+        for (const el of ordered) writeElementInDoc(doc, el, el.index, SITE_PLAN_STYLE, el.id);
         doc.getMap('meta').set('background', plan.background);
     });
 }
@@ -292,4 +293,61 @@ function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichT
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
     });
+}
+
+// The base every element shares, under the KIND's own overrides — the same table the apps create with,
+// so a seeded image or text box arrives unframed rather than wearing the shared 2px ink border.
+function baseElement(
+    type: VectorElementType,
+    id: string,
+    style: StyleDefaults,
+): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
+    return { ...baseDefaultsFor(type, style), id, index: '' };
+}
+
+// What a builder supplies on top of the kind's defaults: its box, plus whatever it overrides. `id` and
+// `type` are the factory's own, so a caller cannot make an element the registry would not recognize.
+type ElementFields<T extends VectorElement> = Omit<Partial<T>, 'id' | 'type'> & Box;
+
+// Typed rather than partial, because sceneBounds measures them before the write: shared base, the
+// kind's defaults under the drawing's style table, then the caller's box and overrides.
+function richTextElement(
+    id: string,
+    style: StyleDefaults,
+    fields: ElementFields<VectorRichTextElement>,
+): VectorRichTextElement {
+    return {
+        ...baseElement('richtext', id, style),
+        ...ELEMENT_KINDS.richtext.defaults(style),
+        type: 'richtext',
+        ...fields,
+    };
+}
+
+function imageElement(id: string, style: StyleDefaults, fields: ElementFields<VectorImageElement>): VectorImageElement {
+    return { ...baseElement('image', id, style), ...ELEMENT_KINDS.image.defaults(style), type: 'image', ...fields };
+}
+
+// Settle a bound arrow's endpoints exactly where the editor would leave them at rest, keeping the
+// patch only when it moved anything.
+function settleEndpoints(arrow: VectorArrowElement, byId: Map<string, VectorElement>): void {
+    const patch = followBindings(arrow, byId);
+    if (!patch) return;
+    arrow.x = patch.x;
+    arrow.y = patch.y;
+    arrow.width = patch.width;
+    arrow.height = patch.height;
+    arrow.points = patch.points;
+    arrow.fixedSegments = patch.fixedSegments;
+}
+
+// mulberry32 — a tiny deterministic PRNG, one draw per element (matches randomSeed's range).
+function mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6d2b_79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    };
 }
