@@ -3,6 +3,7 @@ export { functionCopy } from '../../engine/formula-shift';
 export * from './border';
 export * from './cell';
 export * from './cell-glyph';
+export * from './chart';
 export * from './clipboard';
 export * from './color';
 export * from './condition-format';

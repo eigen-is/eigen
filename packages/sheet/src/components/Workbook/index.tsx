@@ -26,6 +26,7 @@ import {
     type Context,
     defaultContext,
     defaultSettings,
+    editsDeletedChart,
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
@@ -260,6 +261,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.undoList.pop();
             if (history) {
                 setContext((ctx_) => {
+                    // A peer deleted the chart this entry edits: drop the entry, applying it would throw.
+                    if (editsDeletedChart(ctx_, history.inversePatches)) return ctx_;
                     if (history.options?.deleteSheetOp) {
                         history.inversePatches[0].path[1] = ctx_.sheets.length;
                         const order = history.options.deletedSheet?.value?.order as number;
@@ -316,6 +319,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
+                    if (editsDeletedChart(ctx_, history.patches)) return ctx_;
                     const newContext = produce(applyPatches(ctx_, history.patches), (draft: Context) => {
                         settleCurrentSheet(draft);
                         const si = getSheetIndex(draft, draft.currentSheetId);
