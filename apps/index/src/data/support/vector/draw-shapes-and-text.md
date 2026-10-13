@@ -1,15 +1,15 @@
 ---
 title: "Draw shapes, freehand lines, and text"
-description: "Place rectangles, diamonds, ellipses, freehand lines, text, and images on a Vector drawing."
+description: "Place rectangles, diamonds, ellipses, freehand lines, text, images, and charts on a Vector drawing."
 type: how-to
 category: Editing
-tags: [vector, drawing, shapes, text, images]
+tags: [vector, drawing, shapes, text, images, charts]
 related: [vector/get-started, vector/connect-with-arrows, vector/style-objects]
 order: 20
-updated: 2026-09-29
+updated: 2026-10-13
 ---
 
-You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. This page covers each tool and what happens after you place something.
+You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. Charts come from the **Insert** menu. This page covers each tool and what happens after you place something.
 
 You need editor access to add objects. If you can only view the drawing, the tools are not shown.
 
@@ -58,6 +58,24 @@ Once a text object is selected but not being edited, the properties panel on the
 3. The image appears on the canvas.
 
 You can also drag one or more image files from your desktop and drop them onto the canvas. A **Drop images to add** overlay appears while you drag, and Vector places each image where you drop it.
+
+## Add a chart
+
+1. Open the **Insert** menu and choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
+2. The chart appears in the middle of your view with sample data, and stays selected.
+
+With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, and where the **Legend** goes. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title**. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty, and **Gridlines**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice.
+
+### Edit the numbers
+
+1. Double-click the chart, or click **Edit data** in the properties panel.
+2. The **Edit data** dialog shows the data as a grid: categories down the first column, series across the top row. Type in any cell. A cell left empty leaves a gap in the chart.
+3. Use **Add row** and **Add column** to grow the grid, or the **×** beside a row or series name to remove it.
+4. Click **Save** to update the chart, or **Cancel** to leave it as it was.
+
+You can paste cells copied from a spreadsheet into the grid. They fill it from the cell you paste into, and the grid grows to fit. A chart holds up to 12 series, 200 rows, and 2,000 values. A chart with more data than that, for example from an imported file, opens its data read-only.
+
+**Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back. See [Arrange and align](/support/vector/arrange-and-align).
 
 ## Erase objects
 
