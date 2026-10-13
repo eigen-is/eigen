@@ -19,7 +19,7 @@ import { attribute, checkedXml, elementsOf, escapeXml, type MathXmlElement, text
 
 export const OMML_NAMESPACE = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
 export const WORDML_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+export const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
 // ECMA-376's defaults for an absent property.
 const DEFAULT_ACCENT = '\u0302';
