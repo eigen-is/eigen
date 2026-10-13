@@ -21,17 +21,30 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// The card a node anchors: an image holds it as an attribute, text as the comment mark.
+// The nodes that hold their card as an attribute, as the Yjs binding keeps a mark only on text, by the word a comment
+// on one alone quotes, having no text of its own.
+const ATTRIBUTE_ANCHORS = new Map([
+    ['figure', 'Image'],
+    ['chart', 'Chart'],
+]);
+
+export function anchorsByAttribute(node: Node): boolean {
+    return ATTRIBUTE_ANCHORS.has(node.type.name);
+}
+
+// The card a node anchors: an image or a chart holds it as an attribute, text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
-    if (node.type.name === 'figure') return node.attrs.commentCardId;
+    if (anchorsByAttribute(node)) return node.attrs.commentCardId;
     return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
 }
 
-// A comment on an image alone has no text to quote, so the image reads as "Image".
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
-        .textBetween(from, to, ' ', (leaf) =>
-            leaf.type.name === 'figure' ? 'Image' : (leaf.type.spec.leafText?.(leaf) ?? ''),
+        .textBetween(
+            from,
+            to,
+            ' ',
+            (leaf) => ATTRIBUTE_ANCHORS.get(leaf.type.name) ?? leaf.type.spec.leafText?.(leaf) ?? '',
         )
         .slice(0, 100);
 }
@@ -43,9 +56,9 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
         if (cardId) {
             const end = pos + node.nodeSize;
 
-            // An image's node view paints the corner mark from this spec, resolved or not, like a
+            // An image's or a chart's node view paints the corner mark from this spec, resolved or not, like a
             // commented canvas element.
-            if (node.type.name === 'figure') {
+            if (anchorsByAttribute(node)) {
                 decorations.push(Decoration.node(pos, end, {}, { commentColor: meta.colorMap.get(cardId) }));
             } else if (meta.resolvedIds.has(cardId)) {
                 // Resolved comments: no decoration, keep default highlight appearance.

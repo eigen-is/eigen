@@ -63,9 +63,17 @@ import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
+import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
-import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
+import { Chart } from './extensions/chart';
+import {
+    anchorsByAttribute,
+    CommentMark,
+    commentAnchorText,
+    nodeCommentCardId,
+    updateCommentDecorations,
+} from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
 import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
@@ -253,6 +261,9 @@ const TiptapEditor = ({
     const [docHeight, setDocHeight] = useState(0);
     // The image panel's button and Format › Image › Replace image open the same picker.
     const [replacePickerOpen, setReplacePickerOpen] = useState(false);
+    // The chart panel's Edit data and a double-click on a chart open one dialog, for the selected chart.
+    const [chartDataOpen, setChartDataOpen] = useState(false);
+    const closeChartData = useCallback(() => setChartDataOpen(false), []);
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -324,13 +335,18 @@ const TiptapEditor = ({
         {
             editable: canWrite,
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'chart', 'comment', 'table'] }),
                 // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
                 // drags nothing, and a tap beside a border would start a drag that swallows the caret.
                 EditorTable.configure({ resizable: !isCoarsePointer }),
                 Figure.configure({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+                }),
+                Chart.configure({
+                    onOpenComment: handleCommentClick,
+                    onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+                    onEditData: () => setChartDataOpen(true),
                 }),
                 TableWidthClamp,
                 SearchHighlight,
@@ -526,8 +542,8 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
-    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
-    const lastPanelRef = useRef<'figure' | 'table'>('figure');
+    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'chart' | 'table'>('document');
+    const lastPanelRef = useRef<'figure' | 'chart' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
 
     const activeComments = useActiveComments(editor);
@@ -569,7 +585,7 @@ const TiptapEditor = ({
         const { tr } = editor.state;
         const commentType = editor.state.schema.marks.comment;
         for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
-            if (node.type.name === 'figure') tr.setNodeAttribute(pos, 'commentCardId', null);
+            if (anchorsByAttribute(node)) tr.setNodeAttribute(pos, 'commentCardId', null);
             else tr.removeMark(pos, end, commentType);
         }
         editor.view.dispatch(tr);
@@ -581,7 +597,7 @@ const TiptapEditor = ({
             const range = pendingMarkRange;
             const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) => {
                 const node = editor.state.doc.nodeAt(range.from);
-                if (node?.type.name === 'figure' && range.to === range.from + node.nodeSize) {
+                if (node && anchorsByAttribute(node) && range.to === range.from + node.nodeSize) {
                     editor.view.dispatch(editor.state.tr.setNodeAttribute(range.from, 'commentCardId', card.id));
                     return;
                 }
@@ -590,10 +606,10 @@ const TiptapEditor = ({
                     .focus()
                     .setTextSelection({ from: range.from, to: range.to })
                     .setComment(card.id)
-                    // A figure the selection spans would keep the mark only until reload; it anchors by attribute.
+                    // A figure or chart the selection spans would keep the mark only until reload; it anchors by attribute.
                     .command(({ tr }) => {
                         tr.doc.nodesBetween(range.from, range.to, (n, pos) => {
-                            if (n.type.name === 'figure')
+                            if (anchorsByAttribute(n))
                                 tr.removeMark(pos, pos + n.nodeSize, n.type.schema.marks.comment);
                         });
                         return true;
@@ -630,6 +646,7 @@ const TiptapEditor = ({
         if (!editor) return;
         const onUpdate = () => {
             if (editor.isActive('figure')) setSidebarContext('figure');
+            else if (editor.isActive('chart')) setSidebarContext('chart');
             else if (editor.isActive('table')) setSidebarContext('table');
             else setSidebarContext('document');
         };
@@ -699,7 +716,7 @@ const TiptapEditor = ({
         if (anchors.length === 0) return;
         const { node, pos } = anchors[0];
         const chain = editor.chain().focus();
-        const selected = node.type.name === 'figure' ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
+        const selected = anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
         selected.scrollIntoView().run();
     };
 
@@ -833,6 +850,12 @@ const TiptapEditor = ({
                                                     editor={editor}
                                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
+                                            ) : lastPanelRef.current === 'chart' ? (
+                                                <ChartPropertiesPanel
+                                                    editor={editor}
+                                                    undoManager={undoManager}
+                                                    onEditData={() => setChartDataOpen(true)}
+                                                />
                                             ) : (
                                                 <TablePropertiesPanel editor={editor} />
                                             )}
@@ -856,6 +879,8 @@ const TiptapEditor = ({
                 onPickFromDevice={(files) => files[0] && handleReplaceImage(files[0])}
                 accept="image/*"
             />
+
+            {chartDataOpen && <ChartDataEditor editor={editor} undoManager={undoManager} onClose={closeChartData} />}
 
             <CardFormDialog
                 open={addOpen}
