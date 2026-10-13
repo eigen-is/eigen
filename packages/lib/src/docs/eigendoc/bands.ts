@@ -1,4 +1,5 @@
 import type { Node } from '@tiptap/pm/model';
+import { readEquation } from './nodes/equation';
 
 // The doc's header and footer, each a root XmlFragment beside `default`, edited by an editor of its own. The first
 // two print on every page, the last two on page 1 when the page map's differentFirstPage is set.
@@ -11,12 +12,14 @@ export type BandRoot = (typeof BAND_ROOTS)[number];
 export const BAND_EXCLUDED_NODES = ['pageBreak', 'title', 'subtitle', 'codeBlock'] as const;
 
 // A band prints, and the page draws it, only with something to show: focusing an empty band leaves an empty paragraph,
-// and a line break alone shows nothing either.
+// and a line break or an empty equation alone shows nothing either.
 export function bandHasContent(doc: Node): boolean {
     let found = false;
     doc.descendants((node) => {
         if (found) return false;
-        found = node.isText ? /\S/.test(node.text ?? '') : node.isLeaf && node.type.name !== 'hardBreak';
+        if (node.isText) found = /\S/.test(node.text ?? '');
+        else if (node.type.name === 'equation') found = readEquation(node.attrs).row.length > 0;
+        else found = node.isLeaf && node.type.name !== 'hardBreak';
         return !found;
     });
     return found;

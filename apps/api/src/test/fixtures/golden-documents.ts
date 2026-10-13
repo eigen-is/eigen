@@ -20,6 +20,7 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
+import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
@@ -210,6 +211,46 @@ function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSON
     return { type: 'text', text, marks };
 }
 
+// (a+b)/2 with a red a, and the sum of i² from i = 1 to n.
+export const GOLDEN_FRACTION: MathRow = [
+    {
+        kind: 'fraction',
+        numerator: [
+            { kind: 'identifier', text: 'a', color: '#C00000' },
+            { kind: 'operator', text: '+' },
+            { kind: 'identifier', text: 'b' },
+        ],
+        denominator: [{ kind: 'number', text: '2' }],
+        line: 'bar',
+    },
+];
+
+export const GOLDEN_SUM: MathRow = [
+    {
+        kind: 'nary',
+        operator: '∑',
+        limits: 'under',
+        sub: [
+            { kind: 'identifier', text: 'i' },
+            { kind: 'operator', text: '=' },
+            { kind: 'number', text: '1' },
+        ],
+        sup: [{ kind: 'identifier', text: 'n' }],
+        body: [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'i' }], sup: [{ kind: 'number', text: '2' }] }],
+    },
+];
+
+export function equation(mathml: string, display = false): JSONContent {
+    return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
+}
+
+// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
+export function withoutEquations(json: JSONContent): JSONContent {
+    return json.content
+        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
+        : json;
+}
+
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
 // to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
@@ -299,10 +340,20 @@ export function buildAllFeaturesDocJson(): JSONContent {
             {
                 type: 'paragraph',
                 content: [
+                    { type: 'text', text: 'Half the sum is ' },
+                    equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
+                    { type: 'text', text: ', and the squares add up to' },
+                    equation(writeMathml(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}'), true),
+                    { type: 'text', text: 'for every n.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
                     { type: 'text', text: 'Page ' },
-                    { type: 'pageNumber', attrs: { kind: 'page' }, marks: [{ type: 'bold' }] },
+                    { type: 'pageNumber', attrs: { kind: 'page' } },
                     { type: 'text', text: ' of ' },
-                    { type: 'pageNumber', attrs: { kind: 'pages' }, marks: [{ type: 'italic' }] },
+                    { type: 'pageNumber', attrs: { kind: 'pages' } },
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },

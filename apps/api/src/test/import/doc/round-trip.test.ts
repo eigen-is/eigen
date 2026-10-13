@@ -6,7 +6,7 @@ import { docSchema } from '../../../lib/document/doc-schema';
 import { HEADING_LOOKS } from '../../../lib/document/looks';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../../fixtures/golden-documents';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -28,10 +28,9 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) The reader doesn't read a PAGE or NUMPAGES
-// field yet, so a page number is its cached 1.
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A page number is its cached 1, before the
+// schema joins the text (cachedPageNumbers).
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
-    if (source.type === 'pageNumber') return { type: 'text', text: '1', marks: source.marks };
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
         for (const name of ['colwidth', 'width'])
@@ -76,14 +75,23 @@ function withSourceNames(node: JSONContent, names: Map<string, string>): JSONCon
     };
 }
 
+// The reader doesn't read a PAGE or NUMPAGES field yet, so a page number is its cached 1, run into the text beside it
+// once the schema joins them.
+function cachedPageNumbers(node: JSONContent): JSONContent {
+    if (node.type === 'pageNumber') return { type: 'text', text: '1' };
+    return node.content ? { ...node, content: node.content.map(cachedPageNumbers) } : node;
+}
+
 // JSON round trips drop undefined keys, so both sides compare as stored.
 const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const source = docSchema()
+            .nodeFromJSON(cachedPageNumbers(withoutEquations(buildAllFeaturesDocJson())))
+            .toJSON();
         const docx = await eigendocToDocx(
-            buildAllFeaturesDocJson(),
+            withoutEquations(buildAllFeaturesDocJson()),
             DEFAULT_PAGE_SETUP,
             buildAllFeaturesDocMedia(),
             'All features',
@@ -434,12 +442,15 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title, the subtitle and the page number, so it holds none of them.
+        // The recording predates the title, the subtitle, the equations' paragraph and the page number, so it holds
+        // none of them.
         source.content = source.content.filter(
             (block: JSONContent) =>
                 block.type !== 'title' &&
                 block.type !== 'subtitle' &&
-                !block.content?.some((inline) => inline.type === 'pageNumber'),
+                !block.content?.some(
+                    (inline: JSONContent) => inline.type === 'pageNumber' || inline.type === 'equation',
+                ),
         );
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });

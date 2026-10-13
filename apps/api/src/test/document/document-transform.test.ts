@@ -64,6 +64,7 @@ import {
     seedDocumentMedia,
     seedEigendoc,
     seedVectorDoc,
+    withoutEquations,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -788,7 +789,7 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bb25cd1e2163fb2bb069c5bf414283446fb84eb5fa382cec73af1fd7c32b838f';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '8e95237c637e358447508983b2fb27d3d7a20dd81a6622c976d188e57f7c61e4';
@@ -1230,7 +1231,7 @@ describe('document transform (docx round trip)', () => {
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
-        const original = buildAllFeaturesDocJson();
+        const original = withoutEquations(buildAllFeaturesDocJson());
         const { json, images } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);

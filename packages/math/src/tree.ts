@@ -115,6 +115,9 @@ function token(kind: MathToken['kind'], text: string, variant: MathVariant | und
     return node;
 }
 
+// A text node's text: a tab or line break is a space, as MathML would trim it at an edge.
+export const mathText = (raw: string) => checkedXml(raw).replace(/[\t\n\r]/g, ' ');
+
 export const optional = (row: MathRow) => (row.length > 0 ? row : undefined);
 
 // Word marks alignment points with & in an equation: they split it into cells.
@@ -154,8 +157,7 @@ export class RowBuilder {
     }
 
     text(raw: string, color: string | undefined): void {
-        // A tab or line break is a space: MathML would trim it at an edge.
-        const text = checkedXml(raw).replace(/[\t\n\r]/g, ' ');
+        const text = mathText(raw);
         if (text === '') return;
         this.#flush();
         const last = this.#row.at(-1);

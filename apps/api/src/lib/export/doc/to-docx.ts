@@ -13,6 +13,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
+import { writeOmml } from '@workspace/math';
 import {
     A_NS,
     ASVG_NS,
@@ -20,6 +21,7 @@ import {
     CORE_PROPERTIES_NS,
     DC_NS,
     EMU_PER_PX,
+    M_NS,
     MC_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PIC_NS,
@@ -30,6 +32,7 @@ import {
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
+import { readStoredEquation } from '../../document/equation';
 import {
     BODY,
     type Border,
@@ -159,6 +162,7 @@ const DOCUMENT_NAMESPACES = [
     `xmlns:pic="${PIC_NS}"`,
     `xmlns:w14="${W14_NS}"`,
     `xmlns:mc="${MC_NS}"`,
+    `xmlns:m="${M_NS}"`,
     'mc:Ignorable="w14"',
 ].join(' ');
 
@@ -593,7 +597,7 @@ function titleOf(type: TitleType, style: StyleId) {
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
-    // The in-flow pieces a figure splits a textblock into, by index in blocks.
+    // The in-flow pieces a figure or a display equation splits a textblock into, by index in blocks.
     const pieces: number[] = [];
     const flush = () => {
         const faces: RunFace[] = [];
@@ -615,6 +619,13 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
                 const index = blocks.push(block) - 1;
                 if (!('table' in block)) pieces.push(index);
             }
+            continue;
+        }
+        // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
+        if (node.type === 'equation' && readStoredEquation(node.attrs ?? {}).display) {
+            if (inline.length > 0) flush();
+            inline.push(node);
+            flush();
             continue;
         }
         if (INLINES.has(node.type ?? '')) {
@@ -1245,13 +1256,24 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // Word lays out the page and updates the field; 1 is what a reader without fields shows.
+    // Word lays out the page and updates the field; 1 is what a reader without fields shows. The run takes no marks:
+    // the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
         (node, linked, context, style, faces) => {
             const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
-            const run = runXml(textXml('1'), node, linked, context, style, faces);
+            const run = runXml(textXml('1'), {}, linked, context, style, faces);
             return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
+        },
+    ],
+    // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
+    // math zone, as the editor draws an empty box.
+    [
+        'equation',
+        (node) => {
+            const { row, display } = readStoredEquation(node.attrs ?? {});
+            const math = writeOmml(row);
+            return display ? `<m:oMathPara>${math}</m:oMathPara>` : math;
         },
     ],
 ]);

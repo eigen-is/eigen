@@ -3,6 +3,7 @@ import { expect, spyOn, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import { writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -113,6 +114,27 @@ test('a figure that does not resolve is left out', async () => {
         paragraph(text('Two'), figure('chart.png')),
     ]);
     expect(blocks(await paste(clipboard))).toEqual([['One'], [], ['Two', 'chart.png']]);
+});
+
+// Slides and sheets read the text item, so an equation beside an image keeps its LaTeX there.
+test("an equation copied beside an image is its LaTeX in the copy's text item", () => {
+    const equation = {
+        type: 'equation',
+        attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'x' }], '\\pi r^2') },
+    };
+    const { eigen } = copy([paragraph(text('Area '), equation), paragraph(figure('chart.png'))]);
+    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual([
+        'Area \\pi r^2',
+        'image',
+    ]);
+});
+
+test("a page number copied beside an image is # in the copy's text item", () => {
+    const { eigen } = copy([
+        paragraph(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }),
+        paragraph(figure('chart.png')),
+    ]);
+    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Page #', 'image']);
 });
 
 test('a figure whose re-upload fails is left out', async () => {

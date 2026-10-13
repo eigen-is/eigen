@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
@@ -320,6 +321,46 @@ describe('doc export — page breaks', () => {
         const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
         const { json } = docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+    });
+});
+
+describe('doc export — equations', () => {
+    const MATH = `<math xmlns="${MATHML_NAMESPACE}">`;
+    const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+
+    async function exportHtml(...attrs: Record<string, unknown>[]): Promise<string> {
+        const equations = attrs.map((a) => ({ type: 'equation', attrs: a }));
+        const doc = seededDoc({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        return new TextDecoder().decode(data);
+    }
+
+    // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text.
+    test('an equation is its MathML without the LaTeX, display="block" when it is displayed', async () => {
+        const html = await exportHtml({ mathml: writeMathml(x, 'x') }, { mathml: writeMathml(x, 'x'), display: true });
+        expect(html).toContain(
+            `<p>${MATH}<mi>x</mi></math><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math>`,
+        );
+        expect(html).not.toContain('x-tex');
+    });
+
+    // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
+    test('a prescript keeps its empty slot', async () => {
+        const html = await exportHtml({
+            mathml: writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]),
+        });
+        expect(html).toContain(
+            '<mmultiscripts><mi>x</mi><mprescripts></mprescripts><mn>1</mn><none></none></mmultiscripts>',
+        );
+    });
+
+    test('a forged or malformed stored string never reaches the HTML', async () => {
+        const html = await exportHtml(
+            { mathml: `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script></math>` },
+            { mathml: `${MATH}<mi>x</mi>` },
+        );
+        expect(html).toContain(`<p>${MATH}<mi>x</mi></math>${MATH}</math><br></p>`);
+        expect(html).not.toContain('alert');
     });
 });
 

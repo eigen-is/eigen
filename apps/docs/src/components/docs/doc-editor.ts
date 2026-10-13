@@ -34,6 +34,7 @@ import { type DependencyList, useEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
+import { AtomMarks } from './extensions/atom-marks';
 import { Figure, type FigureOptions } from './extensions/figure';
 import { PageNumber } from './extensions/page-number';
 import { EditorTable } from './extensions/table';
@@ -236,6 +237,7 @@ export function docEditorOptions({
             Figure.configure(figure),
             PageNumber,
             TableWidthClamp.configure({ textColumnWidth }),
+            AtomMarks,
             ...extensions,
             Collaboration.configure(
                 band
