@@ -11,7 +11,7 @@ const { formatForDisplay } = await import('@tanstack/react-hotkeys');
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { CommandPaletteProvider } = await import('@workspace/ui');
@@ -37,6 +37,8 @@ async function render(width: number, canWrite: boolean) {
         storageUnavailable: false,
         canUndo: false,
         canRedo: false,
+        pageSetup: DEFAULT_PAGE_SETUP,
+        onPageSetupChange: () => {},
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
@@ -146,6 +148,8 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         'Paragraph styles',
         'Align and indent',
         'Bullets and numbering',
+        '—',
+        'Page orientation',
         '—',
         'Table',
         'Image',
@@ -383,6 +387,14 @@ test('Format › Image › Replace image opens the picker the image panel opens'
 
     await clickItem('Replace image');
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
+});
+
+// Google has Format › Page orientation beside File › Page setup; both open the one dialog.
+test('Format › Page orientation opens Page setup', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await clickItem('Page orientation');
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Page setup');
 });
 
 // Tiptap refocuses the editor a frame after a pick. A browser runs that frame once the menu has closed and before its
