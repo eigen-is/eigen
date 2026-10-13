@@ -33,21 +33,22 @@ const STACKING_OPTIONS: { value: 'none' | 'stacked'; label: string }[] = [
 type ChartEditorProps = {
     spec: ChartSpec;
     onChange: (spec: ChartSpec) => void;
+    // A sheet's resolved categories, which name a range chart's pie slices.
+    categories?: string[];
     // The host's actions on the chart (the canvas's Edit data), at the end of the Chart section.
     children?: ReactNode;
 };
 
-export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
+export function ChartEditor({ spec, onChange, categories, children }: ChartEditorProps) {
     const { type, data, valueAxis, categoryAxis } = spec;
     const pie = type === 'pie';
     // A bar chart lies on its side, so its value axis is the horizontal one.
     const valueHorizontal = type === 'bar';
 
-    // Range data names no categories until a sheet resolves it, so its slices go by number.
-    const sliceLabels =
-        data.source === 'inline'
-            ? data.categories.map((category, i) => category || `Slice ${i + 1}`)
-            : spec.sliceColors.map((_, i) => `Slice ${i + 1}`);
+    // Range data names no categories until a sheet resolves it; without them its slices go by number.
+    const sliceLabels = (
+        data.source === 'inline' ? data.categories : (categories ?? spec.sliceColors.map(() => ''))
+    ).map((category, i) => category || `Slice ${i + 1}`);
     const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? chartColor(i));
 
     const setValueAxis = (patch: Partial<ChartSpec['valueAxis']>) => {

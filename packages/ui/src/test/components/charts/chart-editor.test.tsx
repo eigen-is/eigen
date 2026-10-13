@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 // Mounts the editor over `spec`, feeding every change back in as the new spec, as a host does.
-async function mount(spec: ChartSpec, beginGesture?: () => () => void) {
+async function mount(spec: ChartSpec, beginGesture?: () => () => void, categories?: string[]) {
     const changes: ChartSpec[] = [];
     const container = document.createElement('div');
     document.body.append(container);
@@ -29,6 +29,7 @@ async function mount(spec: ChartSpec, beginGesture?: () => () => void) {
     const draw = async () => {
         const editor = createElement(ChartEditor, {
             spec: current,
+            categories,
             onChange: (next: ChartSpec) => {
                 changes.push(next);
                 current = next;
@@ -212,6 +213,16 @@ describe('ChartEditor', () => {
         expect(editor.sectionTitles()).toEqual(['Chart', 'Slices']);
         expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Team 1', 'Team 2', 'Team 3', 'Team 4']));
         expect(editor.rowLabels()).not.toContain('Period 1');
+    });
+
+    test("a range chart's slices take the categories its sheet resolved", async () => {
+        const ref = { sheetId: 's1', row: [1, 3] as [number, number], column: [1, 1] as [number, number] };
+        const series = { name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
+        const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
+        const editor = await mount(range, undefined, ['Ajax', 'PSV', '']);
+        await editor.choose('Type', 'Pie');
+        expect(editor.last().sliceColors).toEqual([0, 1, 2].map(chartColor));
+        expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Ajax', 'PSV', 'Slice 3']));
     });
 
     test('a series color row is named for its series and writes that series alone', async () => {

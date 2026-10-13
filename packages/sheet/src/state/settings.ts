@@ -22,8 +22,14 @@ export type CommentInfo = {
     indicatorColor: string | null;
 };
 
-// The chart whose editor sidebar is open, on the current sheet, and every sheet's name for its data range.
-export type ChartEditorState = { chart: SheetChart; sheetId: string; sheets: { id: string; name: string }[] };
+// The chart whose editor sidebar is open, on the current sheet; every sheet's name, for its data range; and
+// the categories its range resolves to, which name a pie's slices.
+export type ChartEditorState = {
+    chart: SheetChart;
+    sheetId: string;
+    sheets: { id: string; name: string }[];
+    categories: string[];
+};
 
 export type Hooks = {
     beforeUpdateCell?: (r: number, c: number, value: CellValueInput) => boolean;

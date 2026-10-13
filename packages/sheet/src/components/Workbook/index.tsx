@@ -1,3 +1,4 @@
+import { parseChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
@@ -16,14 +17,17 @@ import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } 
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
+import { resolveRangeChartData } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
     api,
     applySheetView,
     type CellWithRowAndCol,
+    type ChartEditorState,
     COPY_ACTION_TABLE_MARKER,
     type Context,
+    createContextResolver,
     defaultContext,
     defaultSettings,
     editsDeletedChart,
@@ -366,17 +370,24 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const editingChart = context.activeChart?.editor
             ? context.sheets[currentSheetIndex ?? -1]?.charts?.[context.activeChart.id]
             : undefined;
+        // Rebuilt on every sheet change while the editor is open: a renamed sheet renames its data range,
+        // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
+        // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
+        const chartEditor = useMemo((): ChartEditorState | null => {
+            if (!editingChart) return null;
+            const data = parseChartSpec(editingChart.spec)?.data;
+            const resolved =
+                data?.source === 'range' ? resolveRangeChartData(data, createContextResolver(context)) : data;
+            return {
+                chart: editingChart,
+                sheetId: context.currentSheetId,
+                sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
+                categories: typeof resolved === 'object' ? resolved.categories : [],
+            };
+        }, [editingChart, context.currentSheetId, context.sheets]);
         useEffect(() => {
-            mergedSettings.hooks?.onChartEditorChange?.(
-                editingChart
-                    ? {
-                          chart: editingChart,
-                          sheetId: context.currentSheetId,
-                          sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
-                      }
-                    : null,
-            );
-        }, [editingChart, context.currentSheetId, context.sheets, mergedSettings.hooks]);
+            mergedSettings.hooks?.onChartEditorChange?.(chartEditor);
+        }, [chartEditor, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
