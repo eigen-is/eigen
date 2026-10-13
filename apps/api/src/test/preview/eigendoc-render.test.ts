@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { type MathRow, writeMathml } from '@workspace/math';
+import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
+import { MAX_MATHML_ELEMENTS } from '../../lib/export/doc/render';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';
 
@@ -51,6 +52,28 @@ describe('renderEigendocPreviewBody', () => {
             content: [{ type: 'paragraph', content: [{ type: 'equation', attrs: { mathml } }] }],
         });
         expect(body).toContain('<mprescripts></mprescripts><mn>1</mn><none></none>');
+    });
+
+    // A viewer's open runs it, and the block cap leaves a paragraph any number of equations: jsdom pays per element.
+    test(`a paragraph's equations write at most ${MAX_MATHML_ELEMENTS} elements of MathML, the rest as their LaTeX`, () => {
+        const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
+        const equations = Array.from({ length: 20 }, (_, i) => ({
+            type: 'equation',
+            attrs: {
+                mathml: writeMathml(
+                    [{ kind: 'number', text: `${i}` }, ...Array.from({ length: 4899 }, () => fence)],
+                    `f${i}`,
+                ),
+            },
+        }));
+        const body = previewOf({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
+        const drawn = body.match(/<math[\s\S]*?<\/math>/g) ?? [];
+
+        expect(drawn.reduce((sum, math) => sum + (math.match(/<[a-z]/g)?.length ?? 0), 0)).toBeLessThanOrEqual(
+            MAX_MATHML_ELEMENTS,
+        );
+        expect(drawn).toHaveLength(3);
+        expect(body).toContain(`</math>${Array.from({ length: 17 }, (_, i) => `f${i + 3}`).join('')}<br></p>`);
     });
 
     test('an ordered list keeps its start and its type, as the export draws them', () => {

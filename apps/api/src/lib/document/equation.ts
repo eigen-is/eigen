@@ -1,14 +1,20 @@
-import { type Equation, readEquation } from '@workspace/lib/docs/eigendoc';
+import { type Equation, readEquation, readEquationLatex } from '@workspace/lib/docs/eigendoc';
 import { parseXml, XmlError } from '../core/xml';
 
-// readEquation over Bun's parser, which throws on what the browser's reports in the document: either is no equation.
+// Bun's parser throws on what the browser's reports in the document: either is no equation.
+function parseStoredXml(mathml: string) {
+    try {
+        return parseXml(mathml);
+    } catch (error) {
+        if (error instanceof XmlError) return null;
+        throw error;
+    }
+}
+
 export function readStoredEquation(attrs: Record<string, unknown>): Equation {
-    return readEquation(attrs, (mathml) => {
-        try {
-            return parseXml(mathml);
-        } catch (error) {
-            if (error instanceof XmlError) return null;
-            throw error;
-        }
-    });
+    return readEquation(attrs, parseStoredXml);
+}
+
+export function readStoredEquationLatex(attrs: Record<string, unknown>): string | undefined {
+    return readEquationLatex(attrs, parseStoredXml);
 }

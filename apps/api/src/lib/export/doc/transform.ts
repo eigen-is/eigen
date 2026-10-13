@@ -1,12 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import {
-    DEFAULT_PAGE_SETUP,
-    type Equation,
-    PAGE_BREAK_CLASS,
-    pageStylesheet,
-    readFigureAttrs,
-} from '@workspace/lib/docs/eigendoc';
-import { escapeHtml } from '@workspace/lib/html';
+import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
@@ -24,9 +17,17 @@ import {
 import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
-import { MAX_SVG_BYTES, MAX_SVG_EQUATIONS, mathmlToSvg } from '../math-svg';
+import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
 import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
-import { equationMathml, renderDocHtml, withAbsoluteLinks } from './render';
+import {
+    type EquationDrawing,
+    equationBudget,
+    equationDrawing,
+    equationKey,
+    equationMathml,
+    renderDocHtml,
+    withAbsoluteLinks,
+} from './render';
 import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
@@ -55,7 +56,7 @@ export async function renderEigendocExport(
     const body = renderDocHtml(
         withAbsoluteLinks(json, publicOrigin),
         (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-        { synthesizeSmallCaps: pdf, ...(pdf && { printedEquations: await printedEquations(json) }) },
+        { synthesizeSmallCaps: pdf, ...(pdf && { svgEquations: await svgEquations(json) }) },
     );
     const html = exportHtmlDocument({
         title,
@@ -65,37 +66,29 @@ export async function renderEigendocExport(
     return { data: toTransferableText(html), warnings: [] };
 }
 
-// WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws, in
-// document order and each string once. Every copy counts against MAX_SVG_BYTES; from the first equation that does not
-// fit, or past MAX_SVG_EQUATIONS drawings, the rest print as text: until the package writes an equation's linear text,
-// its LaTeX stands in.
-async function printedEquations(json: JSONContent): Promise<string[]> {
-    const equations: Equation[] = [];
-    const visit = (node: JSONContent) => {
-        if (node.type === 'equation') equations.push(readStoredEquation(node.attrs ?? {}));
-        for (const child of node.content ?? []) visit(child);
-    };
-    visit(json);
-    const svgs = new Map<string, string>();
-    const draw = async (mathml: string) => {
-        const drawn = svgs.get(mathml);
-        if (drawn !== undefined || svgs.size === MAX_SVG_EQUATIONS) return drawn;
-        const svg = await mathmlToSvg(mathml);
-        svgs.set(mathml, svg);
-        return svg;
-    };
-    let bytes = 0;
-    const printed: string[] = [];
-    for (const { row, latex, display } of equations) {
-        const svg = bytes <= MAX_SVG_BYTES ? await draw(equationMathml(row, display)) : undefined;
-        bytes += svg === undefined ? Number.POSITIVE_INFINITY : Buffer.byteLength(svg);
-        printed.push(
-            svg !== undefined && bytes <= MAX_SVG_BYTES
-                ? `<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`
-                : escapeHtml(latex ?? ''),
-        );
+// WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,
+// keyed by stored string, each drawn once, in document order. Every copy spends SVG_LIMIT; MathJax stops at the first
+// equation that does not fit, or past MAX_SVG_EQUATIONS drawings, and the render prints the rest as text.
+async function svgEquations(json: JSONContent): Promise<Map<string, EquationDrawing>> {
+    const drawings = new Map<string, EquationDrawing>();
+    const fits = equationBudget(SVG_LIMIT);
+    for (const attrs of equationAttrs(json)) {
+        const key = equationKey(attrs);
+        let drawing = drawings.get(key);
+        if (drawing === undefined && drawings.size < MAX_SVG_EQUATIONS) {
+            const { row, display } = readStoredEquation(attrs);
+            const svg = await mathmlToSvg(equationMathml(row, display));
+            drawing = equationDrawing(`<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`);
+        }
+        if (drawing === undefined || !fits(drawing)) break;
+        drawings.set(key, drawing);
     }
-    return printed;
+    return drawings;
+}
+
+function* equationAttrs(node: JSONContent): Generator<Record<string, unknown>> {
+    if (node.type === 'equation') yield node.attrs ?? {};
+    for (const child of node.content ?? []) yield* equationAttrs(child);
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded

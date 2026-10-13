@@ -1,18 +1,20 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
+import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
+import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
+import { MAX_MATHML_ELEMENTS } from '../../lib/export/doc/render';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
-import { equation, seedEigendoc } from '../fixtures/golden-documents';
+import { corpusEquations, equation, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
     const doc = new Y.Doc();
@@ -300,6 +302,11 @@ describe('doc export — equations', () => {
     const MATH = `<math xmlns="${MATHML_NAMESPACE}">`;
     const x: MathRow = [{ kind: 'identifier', text: 'x' }];
     const y: MathRow = [{ kind: 'identifier', text: 'y' }];
+    const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
+    const fences = (i: number) => ({
+        mathml: writeMathml([{ kind: 'number', text: `${i}` }, ...Array.from({ length: 4899 }, () => fence)], `f${i}`),
+    });
+    const elements = (markup: string) => markup.match(/<[a-z]/g)?.length ?? 0;
 
     async function exportEquations(format: 'html' | 'pdf-html', ...attrs: Record<string, unknown>[]): Promise<string> {
         const equations = attrs.map((a) => ({ type: 'equation', attrs: a }));
@@ -400,6 +407,102 @@ describe('doc export — equations', () => {
         } finally {
             mathmlToSvg.mockRestore();
         }
+    }, 60_000);
+
+    // 4,900 empty fences: about 14,700 elements of SVG in 0.4 MB, where bytes alone would admit 25 copies. A copy past
+    // the budget is text, as WeasyPrint would draw it again.
+    test(`the PDF draws at most ${mathSvg.MAX_SVG_ELEMENTS} elements of SVG, and the rest as their LaTeX`, async () => {
+        const equations = [
+            fences(0),
+            fences(0),
+            fences(1),
+            fences(0),
+            ...Array.from({ length: 5 }, (_, i) => fences(i + 2)),
+        ];
+        const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
+        const readStoredEquation = spyOn(storedEquation, 'readStoredEquation');
+        try {
+            const html = await exportEquations('pdf-html', ...equations);
+            const drawn = html.match(/<span class="math-svg">[\s\S]*?<\/svg><\/span>/g) ?? [];
+            const texts = html.slice(
+                html.lastIndexOf('</svg></span>') + '</svg></span>'.length,
+                html.indexOf('<br></p>'),
+            );
+
+            expect(drawn.reduce((sum, svg) => sum + elements(svg), 0)).toBeLessThanOrEqual(mathSvg.MAX_SVG_ELEMENTS);
+            expect(drawn).toHaveLength(3);
+            expect(mathmlToSvg).toHaveBeenCalledTimes(2);
+            // Past the budget only the LaTeX is read, never the tree.
+            expect(readStoredEquation).toHaveBeenCalledTimes(2);
+            expect(texts).toBe(`f0${Array.from({ length: 5 }, (_, i) => `f${i + 2}`).join('')}`);
+        } finally {
+            mathmlToSvg.mockRestore();
+            readStoredEquation.mockRestore();
+        }
+    }, 60_000);
+
+    // The HTML download and the preview write MathML, which jsdom pays for by the element, every copy.
+    test(`the HTML writes at most ${MAX_MATHML_ELEMENTS} elements of MathML, and the rest as their LaTeX`, async () => {
+        const readStoredEquation = spyOn(storedEquation, 'readStoredEquation');
+        try {
+            const html = await exportEquations(
+                'html',
+                fences(0),
+                fences(0),
+                fences(1),
+                fences(2),
+                fences(0),
+                fences(3),
+            );
+            const drawn = html.match(/<math[\s\S]*?<\/math>/g) ?? [];
+
+            expect(drawn.reduce((sum, math) => sum + elements(math), 0)).toBeLessThanOrEqual(MAX_MATHML_ELEMENTS);
+            expect(drawn).toHaveLength(3);
+            expect(readStoredEquation).toHaveBeenCalledTimes(3);
+            expect(html).toContain('</math>f2f0f3<br></p>');
+        } finally {
+            readStoredEquation.mockRestore();
+        }
+    });
+
+    // The schema refuses an equation in a code block, a figure or another equation, but a Yjs update can hold one.
+    // The render skips it, and every other equation still draws as itself.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws each equation as itself around one the render skips',
+        async (format) => {
+            const digit = (d: number) => equation(writeMathml([{ kind: 'number', text: `${d}` }], `${d}`));
+            const doc = seededDoc({
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [digit(1)] },
+                    { type: 'codeBlock', content: [{ type: 'text', text: 'c' }, digit(2)] },
+                    { type: 'paragraph', content: [{ ...digit(3), content: [digit(4)] }] },
+                    {
+                        type: 'paragraph',
+                        content: [{ type: 'figure', attrs: { caption: 'c' }, content: [digit(5)] }, digit(6)],
+                    },
+                    { type: 'paragraph', content: [digit(7)] },
+                ],
+            });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const html = new TextDecoder().decode(data);
+            // MathJax names each glyph by its code point: 0x31 is 1.
+            const drawn = format === 'html' ? /<mn>(\d)<\/mn>/g : /<span class="math-svg">[\s\S]*?data-c="3(\d)"/g;
+
+            expect([...html.matchAll(drawn)].map((match) => match[1])).toEqual(['1', '3', '6', '7']);
+        },
+    );
+
+    // The 108 corpus equations, over and over: a paper of 1,000 shows every one, in both budgets.
+    test('a 1,000-equation paper draws every equation', async () => {
+        const corpus = corpusEquations();
+        const paper = Array.from({ length: 1000 }, (_, i) => {
+            const { row, display } = corpus[i % corpus.length];
+            return { mathml: writeMathml(row), display };
+        });
+
+        expect((await exportEquations('html', ...paper)).match(/<math/g)).toHaveLength(1000);
+        expect((await exportEquations('pdf-html', ...paper)).match(/class="math-svg"/g)).toHaveLength(1000);
     }, 60_000);
 
     // DOMPurify's MathML profile drops <none>, which holds an empty script's place.

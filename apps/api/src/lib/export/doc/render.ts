@@ -6,10 +6,11 @@ import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/
 import { escapeHtml } from '@workspace/lib/html';
 import { type MathRow, writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
-import { readStoredEquation } from '../../document/equation';
+import { readStoredEquation, readStoredEquationLatex } from '../../document/equation';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
+import { SVG_LIMIT } from '../math-svg';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
@@ -97,15 +98,72 @@ export function equationMathml(row: MathRow, display: boolean): string {
     return display ? math.replace('<math', '<math display="block"') : math;
 }
 
-function renderEquationNode({ node }: { node: Node }): string {
-    const { row, display } = readStoredEquation(node.attrs);
-    return equationMathml(row, display);
+// What a render's readers pay for an equation's drawing: the sanitizer's jsdom and WeasyPrint pay per element, and the
+// PDF's SVG adds bytes no stored string holds.
+type EquationCost = { elements: number; bytes: number };
+
+export type EquationDrawing = EquationCost & { html: string };
+
+export function equationDrawing(html: string): EquationDrawing {
+    return { html, elements: html.match(/<[a-z]/g)?.length ?? 0, bytes: Buffer.byteLength(html) };
 }
 
-// The PDF's equations, printed before the render (export/doc/transform.ts): the HTML of each, in document order.
-function renderPrintedEquations(printed: readonly string[]): () => string {
-    let next = 0;
-    return () => printed[next++];
+// A copy draws as the stored string and display it repeats.
+export function equationKey(attrs: Record<string, unknown>): string {
+    return `${attrs['display'] === true}${typeof attrs['mathml'] === 'string' ? attrs['mathml'] : ''}`;
+}
+
+// Every copy spends, as each is read again. Once one does not fit, none does: the costs only grow.
+export function equationBudget(limit: EquationCost): (drawing: EquationCost) => boolean {
+    const spent = { elements: 0, bytes: 0 };
+    return (drawing) => {
+        spent.elements += drawing.elements;
+        spent.bytes += drawing.bytes;
+        return spent.elements <= limit.elements && spent.bytes <= limit.bytes;
+    };
+}
+
+// The screen's MathML costs the sanitizer's jsdom 3 to 5 KB an element, in the Worker, which shares the API's address
+// space, for the HTML download and for the preview a viewer's open runs: one paragraph of 20 equations of 4,900 empty
+// fences, 294,000 elements, took the preview 1.6 GB, and 1,000 copies of a radical over 4,900 identifiers took the
+// download 16 GB. The 108 corpus equations write 11 elements each on average (the largest 122), so a 1,000-equation
+// paper writes about 10,900. Its bytes cost no more than the doc's own text.
+export const MAX_MATHML_ELEMENTS = 50_000;
+
+const MATHML_LIMIT = { elements: MAX_MATHML_ELEMENTS, bytes: Number.POSITIVE_INFINITY };
+
+function drawScreenEquation(attrs: Record<string, unknown>): EquationDrawing {
+    const { row, display } = readStoredEquation(attrs);
+    return equationDrawing(equationMathml(row, display));
+}
+
+// The render meets the equations in document order, each copy spending the budget and each distinct one drawn once,
+// so a subtree it skips, which the schema refuses but a Yjs update can hold, moves no drawing onto another equation.
+// From the first that does not fit, the rest print as text: until the package writes an equation's linear text, its
+// LaTeX stands in.
+function renderBudgetedEquations(
+    draw: (attrs: Record<string, unknown>) => EquationDrawing | undefined,
+    limit: EquationCost,
+): ({ node }: { node: Node }) => string {
+    const fits = equationBudget(limit);
+    const drawings = new Map<string, EquationDrawing | undefined>();
+    const texts = new Map<string, string>();
+    let tail = false;
+    return ({ node }) => {
+        const key = equationKey(node.attrs);
+        if (!tail) {
+            if (!drawings.has(key)) drawings.set(key, draw(node.attrs));
+            const drawing = drawings.get(key);
+            if (drawing && fits(drawing)) return drawing.html;
+            tail = true;
+        }
+        let text = texts.get(key);
+        if (text === undefined) {
+            text = escapeHtml(readStoredEquationLatex(node.attrs) ?? '');
+            texts.set(key, text);
+        }
+        return text;
+    };
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
@@ -169,9 +227,10 @@ function smaller(capitals: string): string {
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; printedEquations?: readonly string[] },
+    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; svgEquations?: ReadonlyMap<string, EquationDrawing> },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(json));
+    const svgs = options?.svgEquations;
     return renderToHTMLString({
         content,
         extensions: docExtensions(),
@@ -180,9 +239,9 @@ export function renderDocHtml(
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
-                equation: options?.printedEquations
-                    ? renderPrintedEquations(options.printedEquations)
-                    : renderEquationNode,
+                equation: svgs
+                    ? renderBudgetedEquations((attrs) => svgs.get(equationKey(attrs)), SVG_LIMIT)
+                    : renderBudgetedEquations(drawScreenEquation, MATHML_LIMIT),
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },

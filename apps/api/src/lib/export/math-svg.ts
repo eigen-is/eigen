@@ -24,10 +24,19 @@ async function loadConverter() {
     return { adaptor, document };
 }
 
-// The PDF's SVG costs by the byte, every copy: the sanitizer's jsdom holds about 75 MB per MB, in the API's own process,
-// and WeasyPrint takes about 1 s per MB. The 108 corpus equations draw 4.2 KB each on average (median 2.1 KB, the
-// largest 42 KB), so 1,000 of them fit about 4 MB; one tree at the math bounds draws up to 4.7 MB.
+// The PDF's SVG costs per element, every copy: the sanitizer's jsdom, in the Worker, which shares the API's address
+// space, and WeasyPrint, at 0.2 to 0.4 ms an element. 3 copies of 4,900 empty fences, 44,000 elements in 1.2 MB, take
+// the Worker 0.56 GB above the doc and WeasyPrint 9 s and 0.7 GB; under a byte budget alone, 18 copies took 1.9 GB and
+// 51 s. The 108 corpus equations draw 21 elements each on average (the largest 195), so a 1,000-equation paper draws
+// about 21,700, in 8 s of WeasyPrint.
+export const MAX_SVG_ELEMENTS = 50_000;
+
+// Glyph paths run about 390 bytes an element, so there bytes bind first. The corpus equations draw 4.2 KB each on
+// average (median 2.1 KB, the largest 42 KB): 4.2 MB for a 1,000-equation paper. One equation at the math bounds
+// draws up to 10.24 MB, a row of 4,991 ⨌, past the whole budget, so it prints as text.
 export const MAX_SVG_BYTES = 10_000_000;
+
+export const SVG_LIMIT = { elements: MAX_SVG_ELEMENTS, bytes: MAX_SVG_BYTES };
 
 // MathJax takes 1 to 2 ms an equation over the corpus, after 0.4 s loading itself, and up to 0.6 s for a tree at the
 // math bounds.
