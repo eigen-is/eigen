@@ -4,7 +4,7 @@ import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import type { MathNode, MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
-import { type CanonicalItem, type CanonicalObject, canonicalOmml } from './canonical-omml';
+import { canonicalOmml, NORMALISATIONS } from './canonical-omml';
 import { CORPUS, type CorpusEquation } from './corpus';
 import { generateTree } from './generate';
 import { el, parseWritten } from './parse';
@@ -17,75 +17,6 @@ const read = (content: string) => readOmml(oMath(content));
 const run = (text: string, properties = '') => `<m:r>${properties}<m:t>${text}</m:t></m:r>`;
 
 // ── C1: docx round trip ─────────────────────────────────────────────────────────────────────────────────────────
-
-function walk(row: CanonicalItem[], visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalItem[] {
-    return row.flatMap((item) => visit(typeof item === 'string' ? item : descend(item, visit)));
-}
-
-function descend(object: CanonicalObject, visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalObject {
-    const children = object.children.map((child) =>
-        'argument' in child ? { ...child, content: walk(child.content, visit) } : descend(child, visit),
-    );
-    return { ...object, children };
-}
-
-const objects = (local: string, rewrite: (object: CanonicalObject) => CanonicalItem[]) => (row: CanonicalItem[]) =>
-    walk(row, (item) => (typeof item !== 'string' && item.object === local ? rewrite(item) : [item]));
-
-const characters = (rewrite: (char: string) => string) => (row: CanonicalItem[]) =>
-    walk(row, (item) => [typeof item === 'string' ? rewrite(item) : item]);
-
-const argument = (object: CanonicalObject, local: string) =>
-    object.children.flatMap((child) => ('argument' in child && child.argument === local ? child.content : []));
-
-const SPACING_TWINS: Record<string, string> = { '˙': '\u0307', '‾': '\u0305' };
-
-function revealEmpty(object: CanonicalObject): CanonicalItem[] {
-    const properties = { ...object.properties };
-    for (const [slot, hide] of [
-        ['sub', 'subHide'],
-        ['sup', 'supHide'],
-        ['deg', 'degHide'],
-    ]) {
-        if (properties[hide] === 'off' && argument(object, slot).length === 0) properties[hide] = 'on';
-    }
-    return [{ ...object, properties }];
-}
-
-// A5's losses and A3's normalisations, each with the equations it changes (checked below, so the list stays exact).
-const NORMALISATIONS: { reason: string; indices: number[]; apply: (row: CanonicalItem[]) => CanonicalItem[] }[] = [
-    {
-        reason: 'a spacing accent character folds to its combining twin',
-        indices: [71, 87],
-        apply: objects('acc', (acc) => [
-            { ...acc, properties: { chr: SPACING_TWINS[acc.properties.chr] ?? acc.properties.chr } },
-        ]),
-    },
-    {
-        reason: 'a linear fraction reads as the row a/b',
-        indices: [3],
-        apply: objects('f', (f) =>
-            f.properties.type === 'lin' ? [...argument(f, 'num'), '/|p|roman', ...argument(f, 'den')] : [f],
-        ),
-    },
-    {
-        reason: 'double-struck and monospace keep the script and drop the weight',
-        indices: [172],
-        apply: characters((char) => char.replace(/\|b\|(double-struck|monospace)/, '|p|$1')),
-    },
-    {
-        reason: 'a space between math characters carries no style or colour',
-        indices: [41, 172],
-        apply: characters((char) =>
-            /^[ \u2003\u2004\u2009\u205F]\|(?!nor)/u.test(char) ? `${char[0]}|p|roman` : char,
-        ),
-    },
-    {
-        reason: 'an empty script or degree shows nothing, so it reads as hidden',
-        indices: [18, 69],
-        apply: (row) => walk(row, (item) => (typeof item === 'string' ? [item] : revealEmpty(item))),
-    },
-];
 
 function expectRoundTrip(equation: CorpusEquation) {
     const original = el(equation.omml);
@@ -109,6 +40,14 @@ describe('C1: OMML → tree → OMML keeps what Word shows', () => {
                 changed: normalisation.indices,
             });
         }
+    });
+
+    test('the yardstick shows a separator only between parts', () => {
+        const fence = (properties: string, parts: number) =>
+            canonicalOmml(oMath(`<m:d>${properties}${`<m:e>${run('x')}</m:e>`.repeat(parts)}</m:d>`));
+        const empty = '<m:dPr><m:sepChr m:val=""/></m:dPr>';
+        expect(fence(empty, 1)).toEqual(fence('', 1));
+        expect(fence(empty, 2)).not.toEqual(fence('', 2));
     });
 
     // The research prototype's misses that are in the fixture, so the loop above covers them; #146 and #151 are

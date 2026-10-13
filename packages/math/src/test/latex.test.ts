@@ -10,6 +10,7 @@ import { canonicalIssue } from './canonical';
 import { CORPUS } from './corpus';
 import { LATEX_FORMULAS } from './fixtures/latex-formulas';
 import { generateTree } from './generate';
+import { LOSSES } from './latex-losses';
 import { el, viaOmml } from './parse';
 
 const letter = (text: string): MathRow => [{ kind: 'identifier', text }];
@@ -71,46 +72,6 @@ const withoutLosses = (row: MathRow): MathRow =>
                 return node;
         }
     });
-
-// Word's own fence characters that LaTeX draws with its own commands.
-const FENCE_TWINS: Record<string, string> = { '\u2329': '⟨', '\u232A': '⟩', '∥': '‖' };
-
-// C3's losses in the fixture, each with the equations it changes (checked below, so the list stays exact).
-const LOSSES: { reason: string; indices: number[]; apply: (row: MathRow) => MathRow }[] = [
-    {
-        reason: 'Word’s \u2329 \u232A and ∥ fences are written \\langle, \\rangle and \\|, and read back as ⟨ ⟩ and ‖',
-        indices: [51, 52, 53],
-        apply: (row) =>
-            JSON.parse(JSON.stringify(row), (_, node) =>
-                node?.kind === 'fenced'
-                    ? {
-                          ...node,
-                          open: FENCE_TWINS[node.open] ?? node.open,
-                          close: FENCE_TWINS[node.close] ?? node.close,
-                          separator: FENCE_TWINS[node.separator] ?? node.separator,
-                      }
-                    : node,
-            ),
-    },
-    {
-        reason: 'Word’s ⟦ ⟧ fence has no \\left form both KaTeX and MathJax read: it is written as its characters',
-        indices: [49],
-        apply: (row) =>
-            JSON.parse(JSON.stringify(row), (_, value) =>
-                Array.isArray(value)
-                    ? value.flatMap((node) =>
-                          node?.kind === 'fenced' && node.open === '⟦'
-                              ? [
-                                    { kind: 'operator', text: node.open },
-                                    ...node.parts[0],
-                                    { kind: 'operator', text: node.close },
-                                ]
-                              : [node],
-                      )
-                    : value,
-            ),
-    },
-];
 
 function expected(index: number, tree: MathRow): MathRow {
     return LOSSES.reduce((row, loss) => (loss.indices.includes(index) ? loss.apply(row) : row), tree);

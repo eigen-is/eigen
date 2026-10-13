@@ -62,7 +62,7 @@ Both readers skip comments and processing instructions: a child counts only if i
 
 ## A Word equation comes back as drawn, not as built
 
-The OMML round trip keeps the object tree, every property the tree holds and every character with its style and colour. `src/test/omml.test.ts` compares that over 108 equations and lists each normalisation with the equations it changes:
+The OMML round trip keeps the object tree, every property the tree holds and every character with its style and colour. `src/test/omml.test.ts` compares that over 108 equations, and `src/test/canonical-omml.ts`, its yardstick, lists each normalisation with the equations it changes:
 
 | Word wrote | Comes back as | Fixture equations |
 |---|---|---|
