@@ -14,8 +14,10 @@ import {
     writeText,
 } from '@workspace/math';
 
-// `mathml` is what the writer wrote for the rest: the one string a consumer mounts.
-export type Equation = { row: MathRow; latex: string | undefined; mathml: string; display: boolean };
+// `mathml` is what the writer wrote for the rest: the one string a consumer mounts. `text` is what it reads as where
+// only text goes, the word count, a comment's quote, plain text and the search index: the tree's linear form, typed or
+// not.
+export type Equation = { row: MathRow; latex: string | undefined; mathml: string; text: string; display: boolean };
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -26,7 +28,7 @@ declare module '@tiptap/core' {
     }
 }
 
-type Read = Omit<Equation, 'display'>;
+type Read = Omit<Equation, 'text' | 'display'>;
 
 const EMPTY: Read = { row: [], latex: undefined, mathml: writeMathml([]) };
 
@@ -74,7 +76,8 @@ export function readEquation(
         typeof mathml === 'string' && mathml.startsWith('<math') && mathml.length <= MATH_LIMITS.mathmlLength
             ? parse(mathml)
             : null;
-    return { ...((math && readMath(math)) || EMPTY), display };
+    const read = (math && readMath(math)) || EMPTY;
+    return { ...read, text: writeText(read.row), display };
 }
 
 // The <math> a browser draws: the writer's MathML, as a block when the equation is displayed.
@@ -84,11 +87,9 @@ export function equationMath({ mathml, display }: Pick<Equation, 'mathml' | 'dis
     return math;
 }
 
-// The text of an equation for the word count, a comment's quote, plain text and the search index: its linear form,
-// typed or not. Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText
-// equal to the match's prefix would let a rule replace the equation.
-export const equationText = (attrs: Record<string, unknown>, parse?: (mathml: string) => MathXmlElement | null) =>
-    writeText(readEquation(attrs, parse).row);
+// Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText equal to the
+// match's prefix would let a rule replace the equation.
+export const equationText = (attrs: Record<string, unknown>) => readEquation(attrs).text;
 
 export const EquationNode = Node.create({
     name: 'equation',

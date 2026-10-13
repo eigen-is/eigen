@@ -47,7 +47,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
 - The paper size, orientation, and margins. A document has one page setup, so when the Word file's sections differ, the last section's is used.
 - Blank lines stay, except the ones right before a new page.
-- Equations become equations you can edit, and one that Word shows on its own line stays on its own line. See [Insert and edit equations](/support/docs/equations).
+- Equations become equations you can edit, and one that Word shows on its own line stays on its own line. A very large equation comes in as its text. See [Insert and edit equations](/support/docs/equations).
 - A Word file you downloaded from Eigen keeps its code blocks' languages.
 
 ## What doesn't come across

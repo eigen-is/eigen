@@ -15,7 +15,7 @@ import {
 } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import { DEFAULT_HIGHLIGHT } from '../../document/wordml';
-import { equationTexts, type Item } from './assemble';
+import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, onOff, w, wChild } from './package';
@@ -127,36 +127,45 @@ function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, conte
     try {
         const mathml = writeMathml(readOmml(oMath));
         reader.pkg.chargeMathml(mathml.length);
-        const node = { type: 'equation', attrs: { mathml, display } };
-        equationTexts.set(node, () => ommlText(oMath));
-        context.pieces.push({ kind: 'node', node });
+        context.pieces.push({ kind: 'node', node: { type: 'equation', attrs: { mathml, display } } });
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
         pushText(reader, ommlText(oMath), {}, context);
     }
 }
 
-// Each object and run a word of its own, so x²+1 is no one word; what shows as the package reads it: an alternative's
-// fallback, and no object whose control character is a tracked deletion. A loop, not recursion: the package refuses an
-// equation nested past its bound, which may nest as deep as the XML does.
+// Word cuts runs by style, not by word, so runs side by side are one word and each object is a word of its own:
+// x²+1 reads "x2 +1". What shows as the package reads it: an alternative's fallback, and no object whose control
+// character is a tracked deletion. A loop, not recursion: the package refuses an equation nested past its bound, which
+// may nest as deep as the XML does.
 function ommlText(oMath: XmlElement): string {
-    const words: string[] = [];
-    for (const part of xmlElements(oMath)) {
-        let word = '';
-        const stack = [part];
-        for (let element = stack.pop(); element; element = stack.pop()) {
-            if (element.ns === M_NS && element.local === 't') word += xmlText(element);
-            else if (isAlternateContent(element)) {
-                const fallback = xmlChild(element, MC_NS, 'Fallback');
-                if (fallback) stack.push(fallback);
-            } else if (element.ns === W_NS ? !SKIPPED_INLINE.has(element.local) : !isDeletedObject(element)) {
-                const children = xmlElements(element);
-                for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
+    const words = [''];
+    // null marks where an object of the row ends.
+    const stack: (XmlElement | null)[] = xmlElements(oMath).reverse();
+    let inObject = false;
+    while (stack.length > 0) {
+        const element = stack.pop();
+        if (!element) {
+            inObject = false;
+            words.push('');
+        } else if (element.ns === M_NS && element.local === 't') words[words.length - 1] += xmlText(element);
+        else if (isAlternateContent(element)) {
+            const fallback = xmlChild(element, MC_NS, 'Fallback');
+            if (fallback) stack.push(fallback);
+        } else if (element.ns === W_NS ? !SKIPPED_INLINE.has(element.local) : !isDeletedObject(element)) {
+            if (!inObject && element.ns === M_NS && element.local !== 'r') {
+                inObject = true;
+                words.push('');
+                stack.push(null);
             }
+            const children = xmlElements(element);
+            for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
         }
-        if (word) words.push(word);
     }
-    return words.join(' ');
+    return words
+        .map((word) => word.trim())
+        .filter(Boolean)
+        .join(' ');
 }
 
 // ECMA-376 §22.1.2.23: a tracked deletion of an object's control character deletes the object.

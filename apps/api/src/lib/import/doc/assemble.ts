@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { readStoredEquation } from '../../document/equation';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../document/looks';
 import { LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
 import type { ListRef } from './numbering';
@@ -64,20 +65,17 @@ export function build(raw: Item[]): JSONContent[] {
     return buildLevel(items, 0);
 }
 
-// What an equation reads as where only text goes, a caption or a code block: the reader sets it as it reads one, and
-// it is worked out only when read.
-export const equationTexts = new WeakMap<JSONContent, () => string>();
-
 // An equation is set off from the text and equations beside it by a space where none is.
 export function inlineText(nodes: JSONContent[]): string {
     let text = '';
     let spaceNext = false;
     for (const node of nodes) {
-        const equation = equationTexts.get(node);
-        const part = node.type === 'hardBreak' ? '\n' : (node.text ?? equation?.() ?? '');
+        const equation = node.type === 'equation';
+        const part =
+            node.type === 'hardBreak' ? '\n' : equation ? readStoredEquation(node.attrs ?? {}).text : (node.text ?? '');
         if (part && text && !/\s$/.test(text) && !/^\s/.test(part) && (spaceNext || equation)) text += ' ';
         text += part;
-        if (part) spaceNext = !!equation;
+        if (part) spaceNext = equation;
     }
     return text;
 }

@@ -125,11 +125,17 @@ describe('equation parseHTML', () => {
 });
 
 describe('readEquation', () => {
-    const empty = { row: [], latex: undefined, mathml: `${MATH}</math>`, display: false };
+    const empty = { row: [], latex: undefined, mathml: `${MATH}</math>`, text: '', display: false };
 
-    test('reads a stored equation to its tree, LaTeX, written MathML and display', () => {
+    test('reads a stored equation to its tree, LaTeX, written MathML, text and display', () => {
         const mathml = writeMathml(xSquared, 'x^2');
-        expect(readEquation({ mathml, display: true })).toEqual({ row: xSquared, latex: 'x^2', mathml, display: true });
+        expect(readEquation({ mathml, display: true })).toEqual({
+            row: xSquared,
+            latex: 'x^2',
+            mathml,
+            text: 'x^2',
+            display: true,
+        });
     });
 
     test('a value of the wrong type reads as an empty inline equation', () => {
@@ -176,6 +182,7 @@ describe('readEquation', () => {
             row,
             latex: 'x^2',
             mathml: writeMathml(row, 'x^2'),
+            text: 'x^2',
             display: false,
         });
         expect(readEquation({ mathml: `${MATH}${tooDeep}</math>` }).row).toEqual([]);
@@ -193,7 +200,13 @@ describe('readEquation', () => {
         const quotes = '"'.repeat(MATH_LIMITS.mathmlLength / 4);
         const mathml = `${MATH}<semantics><mi>x</mi><annotation encoding="application/x-tex">${quotes}</annotation></semantics></math>`;
         expect(mathml.length).toBeLessThan(MATH_LIMITS.mathmlLength);
-        expect(readEquation({ mathml })).toEqual({ row: x, latex: undefined, mathml: writeMathml(x), display: false });
+        expect(readEquation({ mathml })).toEqual({
+            row: x,
+            latex: undefined,
+            mathml: writeMathml(x),
+            text: 'x',
+            display: false,
+        });
     });
 
     test('takes the caller’s parser', () => {

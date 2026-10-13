@@ -20,6 +20,18 @@ test.each<[MathRow, string]>([
     [[{ kind: 'text', text: 'if ', color: '#FF0000' }, ...letter('x')], 'if x'],
     [[...letter('x'), { kind: 'space', width: 'qquad' }, ...letter('y')], 'x y'],
     [[{ kind: 'fraction', numerator: sum('a', 'b'), denominator: number('2'), line: 'bar' }], '(a+b)/2'],
+    // A space inside an object stays, so (a b)/x never reads as ab/x.
+    [
+        [
+            {
+                kind: 'fraction',
+                numerator: [...letter('a'), { kind: 'space', width: 'normal' }, ...letter('b')],
+                denominator: letter('x'),
+                line: 'bar',
+            },
+        ],
+        '(a b)/x',
+    ],
     // UnicodeMath's ¦ stacks without a bar, so a binomial never reads as n over k.
     [
         [

@@ -1,4 +1,4 @@
-import { type Equation, equationText, readEquation } from '@workspace/lib/docs/eigendoc';
+import { type Equation, readEquation } from '@workspace/lib/docs/eigendoc';
 import type { MathXmlElement } from '@workspace/math';
 import { parseXml, XmlError } from '../core/xml';
 
@@ -13,5 +13,3 @@ function parseStored(mathml: string): MathXmlElement | null {
 }
 
 export const readStoredEquation = (attrs: Record<string, unknown>): Equation => readEquation(attrs, parseStored);
-
-export const storedEquationText = (attrs: Record<string, unknown>): string => equationText(attrs, parseStored);

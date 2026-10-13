@@ -451,7 +451,7 @@ describe('math', () => {
         expect(contents(docxToPmJson(Buffer.from(docx)).json)).toEqual([[equation(SQUARE_ROW)]]);
     });
 
-    // As the import read every equation before it held math: each object and run its own word, so x²+1 is no one word.
+    // Runs side by side are one word and each object is its own, so x²+1 reads x2 +1.
     test('an equation nested past the bound is its text, a tracked deletion left out', async () => {
         const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${SQUARE}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;
         const json = await imported(
@@ -462,13 +462,21 @@ describe('math', () => {
         expect(contents(json)).toEqual([[{ type: 'text', text: 'So x2+1 x2 +1' }]]);
     });
 
-    // As the package reads it: an alternative's fallback, and no object a tracked deletion of its control deletes.
+    test("an equation's text joins neighbouring runs into one word and breaks at an object", async () => {
+        const runs = `${r('x')}${r('+1')}`;
+        const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${runs}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;
+        const json = await imported(paragraph(oMath(`${runs}${deep}${runs}`)));
+        expect(contents(json)).toEqual([[{ type: 'text', text: 'x+1 x+1 x+1' }]]);
+    });
+
+    // As the package reads it: an alternative's fallback, and no object a tracked deletion of its control deletes, so f
+    // and w are neighbouring runs.
     test("an equation's text reads an alternative's fallback and leaves out an object whose control is deleted", async () => {
         const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${r('x')}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;
         const alternative = `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="w14">${r('c')}</mc:Choice><mc:Fallback>${r('f')}</mc:Fallback></mc:AlternateContent>`;
         const deleted = `<m:sSup><m:sSupPr><m:ctrlPr><w:del w:id="1" w:author="a"><w:rPr/></w:del></m:ctrlPr></m:sSupPr><m:e>${r('z')}</m:e><m:sup>${r('3')}</m:sup></m:sSup>`;
         const json = await imported(paragraph(oMath(`${deep}${alternative}${deleted}${r('w')}`)));
-        expect(contents(json)).toEqual([[{ type: 'text', text: 'x f w' }]]);
+        expect(contents(json)).toEqual([[{ type: 'text', text: 'x fw' }]]);
     });
 
     test('an m:oMathPara holds only its own m:oMath: a deleted one or one in an alternative is none', async () => {
@@ -477,12 +485,12 @@ describe('math', () => {
     });
 
     // A caption is plain text: a block figure's Caption line, and the writer's floating one-cell table.
-    test("an equation in a figure's caption is its text there", async () => {
+    test("an equation in a figure's caption is its linear text there", async () => {
         const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
         const caption = paragraph(`${run('Figure 1: ')}${oMath(SQUARE)}`, '<w:pStyle w:val="Caption"/>');
         const float = `<w:tbl><w:tblPr><w:tblpPr w:tblpXSpec="right"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${paragraph(oMath(r('y')))}</w:tc></w:tr></w:tbl>`;
         const { json } = await importDocxBody(`${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${caption}${float}`, { styles });
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual(['Figure 1: x2 +1', 'y']);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual(['Figure 1: x^2+1', 'y']);
         expect(nodesOfType(json, 'equation')).toEqual([]);
     });
 
@@ -496,7 +504,7 @@ describe('math', () => {
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual(['Fig a b c d e']);
     });
 
-    test('an equation in a code block is its text', async () => {
+    test('an equation in a code block is its linear text', async () => {
         const consolas = '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>';
         const json = await imported(
             paragraph(
@@ -505,7 +513,7 @@ describe('math', () => {
             ),
         );
         expect(json.content?.map((block) => [block.type, block.content])).toEqual([
-            ['codeBlock', [{ type: 'text', text: 'y = x2 +1' }]],
+            ['codeBlock', [{ type: 'text', text: 'y = x^2+1' }]],
         ]);
     });
 });

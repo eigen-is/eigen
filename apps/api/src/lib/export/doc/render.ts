@@ -6,7 +6,7 @@ import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/
 import { escapeHtml } from '@workspace/lib/html';
 import { type MathRow, writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
-import { readStoredEquation, storedEquationText } from '../../document/equation';
+import { readStoredEquation } from '../../document/equation';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
@@ -157,7 +157,7 @@ function renderBudgetedEquations(
         }
         let text = texts.get(key);
         if (text === undefined) {
-            text = escapeHtml(storedEquationText(node.attrs));
+            text = escapeHtml(readStoredEquation(node.attrs).text);
             texts.set(key, text);
         }
         return text;

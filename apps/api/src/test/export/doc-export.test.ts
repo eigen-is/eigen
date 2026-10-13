@@ -475,7 +475,8 @@ describe('doc export — equations', () => {
 
             expect(drawn.reduce((sum, math) => sum + elements(math), 0)).toBeLessThanOrEqual(MAX_MATHML_ELEMENTS);
             expect(drawn).toHaveLength(12);
-            expect(readStoredEquation).toHaveBeenCalledTimes(12);
+            // Each distinct equation is read once to draw, and each past the budget once more for its text.
+            expect(readStoredEquation).toHaveBeenCalledTimes(12 + 4);
             expect(html).toContain('</math>11012x/2<br></p>');
         } finally {
             readStoredEquation.mockRestore();
