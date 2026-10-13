@@ -1,5 +1,5 @@
-import { boxCenter, type Point, rotatePoint } from '../geometry';
-import { ellipseOutline, normalizeAngle, type OutlineShape, outlineDistance } from '../outline';
+import { boxCenter, DEG_TO_RAD, type Point, rotatePoint } from '../geometry';
+import { EMPTY_OUTLINE, ellipseOutline, normalizeAngle, type OutlineShape, outlineDistance } from '../outline';
 import type { VectorPieElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, num } from './read-fields';
@@ -10,8 +10,6 @@ const DEFAULT_START_ANGLE = 270;
 const DEFAULT_SWEEP_ANGLE = 90;
 // The docking polygon's arc step in degrees: the chord sags 0.15 units at radius 1000.
 const ARC_STEP = 2;
-const DEG = Math.PI / 180;
-const EMPTY_OUTLINE: OutlineShape = { kind: 'polygon', corners: [] };
 
 export const pieKind = defineKind<VectorPieElement>({
     type: 'pie',
@@ -70,7 +68,7 @@ function sweepField(v: unknown): number {
 }
 
 function onEllipse(c: Point, rx: number, ry: number, deg: number): Point {
-    return { x: c.x + rx * Math.cos(deg * DEG), y: c.y + ry * Math.sin(deg * DEG) };
+    return { x: c.x + rx * Math.cos(deg * DEG_TO_RAD), y: c.y + ry * Math.sin(deg * DEG_TO_RAD) };
 }
 
 // `p` in the unrotated frame. In the box-normalized circle the angles are the stored ones.
@@ -79,7 +77,7 @@ function inSector(el: VectorPieElement, p: Point): boolean {
     const u = (p.x - c.x) / (el.width / 2);
     const v = (p.y - c.y) / (el.height / 2);
     if (u * u + v * v > 1) return false;
-    return el.sweepAngle >= 360 || normalizeAngle(Math.atan2(v, u) / DEG - el.startAngle) <= el.sweepAngle;
+    return el.sweepAngle >= 360 || normalizeAngle(Math.atan2(v, u) / DEG_TO_RAD - el.startAngle) <= el.sweepAngle;
 }
 
 // `from` to `to` degrees on an ellipse, both ends included, at most ARC_STEP apart.
@@ -120,8 +118,8 @@ function pieOutline(el: VectorPieElement, inflate: number): OutlineShape {
     const convex = el.sweepAngle < 180;
     const grown = inflate > 0;
     if (grown === convex) {
-        const from = Math.atan2(ne.y, ne.x) / DEG;
-        const turn = normalizeAngle(Math.atan2(ns.y, ns.x) / DEG - from);
+        const from = Math.atan2(ne.y, ne.x) / DEG_TO_RAD;
+        const turn = normalizeAngle(Math.atan2(ns.y, ns.x) / DEG_TO_RAD - from);
         const cap = arcPoints(c, inflate, inflate, from, from + (convex ? turn : turn - 360));
         return { kind: 'polygon', corners: [...cap, ...arc] };
     }
@@ -145,7 +143,7 @@ function rimAngle(d: Point, n: Point, inflate: number, a: number, b: number, nea
     const disc = B * B - 4 * A * C;
     if (disc < 0) return null;
     const s = (-B + Math.sqrt(disc)) / (2 * A);
-    const deg = Math.atan2((oy + s * d.y) / b, (ox + s * d.x) / a) / DEG;
+    const deg = Math.atan2((oy + s * d.y) / b, (ox + s * d.x) / a) / DEG_TO_RAD;
     return near + normalizeAngle(deg - near + 180) - 180;
 }
 

@@ -6,14 +6,14 @@ import { RoughGenerator } from 'roughjs/bin/generator';
 import { svgGradientStops } from '../../background/gradient';
 import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/xml';
-import type { ChartLabel } from '../../types/chart';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
-import { type Box, isClosedPath, type Point, round } from '../geometry';
+import { type Box, DEG_TO_RAD, isClosedPath, type Point, round } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
 import {
     type FillStyle,
     isLinearElement,
+    type TextLine,
     type VectorArrowElement,
     type VectorElement,
     type VectorImageElement,
@@ -39,8 +39,7 @@ export function renderRoughShape(el: RoughBoxElement): string {
 
 // The dashed box an element draws where its content can't be shown: a picture with no file, a chart that
 // doesn't read.
-export const PLACEHOLDER_COLOR = '#9ca3af';
-export const PLACEHOLDER_DASH = '6 6';
+export const PLACEHOLDER_STROKE = 'fill="none" stroke="#9ca3af" stroke-width="1" stroke-dasharray="6 6"';
 
 // An element's own group: translated to its position, then rotated about its center (SVG rotate() takes
 // degrees, as `angle` stores them). Every kind draws in its local frame inside one.
@@ -59,7 +58,7 @@ function elementTransform(box: Box): string {
 // line's top and the baseline sits the font's offset below it; a turned line turns about (x, y). Bold is
 // 600, the weight of Inter's and JetBrains Mono's bundled bold faces; Source Serif's is 700, so its width
 // table reserves slightly more than the line draws, and Excalifont has only a regular face.
-export function svgTextLine({ text, x, y, anchor, fontFamily, fontSize, bold, color, rotate }: ChartLabel): string {
+export function svgTextLine({ text, x, y, anchor, fontFamily, fontSize, bold, color, rotate }: TextLine): string {
     const baseline = y + getVerticalOffset(fontFamily, fontSize, getLineHeightPx(fontFamily, fontSize));
     const turn = rotate === 0 ? '' : ` transform="rotate(${round(rotate)} ${round(x)} ${round(y)})"`;
     const weight = bold ? ' font-weight="600"' : '';
@@ -91,8 +90,8 @@ function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
         return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
     }
     if (el.type === 'pie') {
-        const start = (el.startAngle * Math.PI) / 180;
-        const stop = ((el.startAngle + el.sweepAngle) * Math.PI) / 180;
+        const start = el.startAngle * DEG_TO_RAD;
+        const stop = (el.startAngle + el.sweepAngle) * DEG_TO_RAD;
         return gen.arc(el.width / 2, el.height / 2, el.width, el.height, start, stop, true, roughOptions(el, false));
     }
     const box = { x: 0, y: 0, width: el.width, height: el.height };

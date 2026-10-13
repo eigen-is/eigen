@@ -30,7 +30,7 @@ export type Box = { x: number; y: number; width: number; height: number; angle: 
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
-const DEG_TO_RAD = Math.PI / 180;
+export const DEG_TO_RAD = Math.PI / 180;
 
 // Canvas interaction steps shared by vector + slides, in scene/document units: arrow-key nudge
 // (Shift = large) and the duplicate/paste cascade offset. One source so the two apps' keymaps match.
@@ -430,10 +430,9 @@ function pointInShape(shape: VectorBindableElement, point: Point): boolean {
 
 // The four dock anchors of a shape in SCENE space, rotated by its angle — the registry's anchorPoints
 // (rect/ellipse: the right/bottom/left/top edge midpoints; diamond: its four tips; pie: points on the
-// slice). Excalidraw's
-// getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie. The one owner
-// of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read it, so the dots sit
-// exactly where the dock lands.
+// slice). Excalidraw's getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side
+// on a tie. The one owner of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read
+// it, so the dots sit exactly where the dock lands.
 export function shapeAnchorPoints(shape: VectorBindableElement): Point[] {
     return ELEMENT_KINDS[shape.type].anchorPoints(shape);
 }

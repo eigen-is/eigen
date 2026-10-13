@@ -103,9 +103,13 @@ export function sampleChartSpec(type: ChartType): ChartSpec {
     };
 }
 
+export function exceedsChartSpecBytes(value: string): boolean {
+    return new TextEncoder().encode(value).length > MAX_CHART_SPEC_BYTES;
+}
+
 // Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store.
 export function parseChartSpec(value: string): ChartSpec | null {
-    if (new TextEncoder().encode(value).length > MAX_CHART_SPEC_BYTES) return null;
+    if (exceedsChartSpecBytes(value)) return null;
     // One catch for malformed JSON and every field reader's invalid(), so the readers stay straight-line.
     try {
         return chartSpec(JSON.parse(value));

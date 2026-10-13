@@ -131,6 +131,20 @@ export type VectorRichTextElement = VectorElementBase &
         padding: number; // px inset between the box edge and the text; the box keeps its stored size
     };
 
+// One line of plain text in a kind's local frame, as svgTextLine draws it. y is the line's TOP: a renderer
+// adds the font's baseline offset. The line turns `rotate` degrees about (x, y).
+export type TextLine = {
+    text: string;
+    x: number;
+    y: number;
+    anchor: 'start' | 'middle' | 'end';
+    fontFamily: string;
+    fontSize: number;
+    bold: boolean;
+    color: string;
+    rotate: number;
+};
+
 // A chart: `chart` is the stored ChartSpec JSON (charts/spec.ts), inline data only on a canvas. `fill` is
 // its background and the hatch style of its bars and slices; the stroke draws its axes and gridlines.
 export type VectorChartElement = VectorElementBase &
@@ -142,9 +156,9 @@ export type VectorChartElement = VectorElementBase &
     };
 
 // What an arrow endpoint may dock to: the closed shapes, the pie slice, the chart and the two DOM boxes,
-// whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
-// (isBindable in kinds/index.ts) — this union is its type-level face, and the registry test pins the two
-// against each other so neither can grow without the other.
+// whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's
+// `bindable` capability (isBindable in kinds/index.ts) — this union is its type-level face, and the
+// registry test pins the two against each other so neither can grow without the other.
 export type VectorBindableElement =
     | VectorShapeElement
     | VectorPieElement

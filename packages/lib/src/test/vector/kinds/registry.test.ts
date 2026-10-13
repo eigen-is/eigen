@@ -12,6 +12,7 @@ import {
     isVectorElementType,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
+import { EMPTY_OUTLINE } from '../../../vector/outline';
 import { readElementFromFields } from '../../../vector/read-vector';
 import {
     BASE_ELEMENT_FIELDS,
@@ -67,7 +68,7 @@ describe('ELEMENT_KINDS', () => {
         const rect = shape({ id: 'r', type: 'rectangle' });
         expect(ELEMENT_KINDS.arrow.searchText(rect)).toBe('');
         expect(ELEMENT_KINDS.arrow.hitTest(rect, { x: 0, y: 0 }, 8)).toBe(false);
-        expect(ELEMENT_KINDS.arrow.outline(rect, 0)).toEqual({ kind: 'polyline', points: [] });
+        expect(ELEMENT_KINDS.arrow.outline(rect, 0)).toEqual(EMPTY_OUTLINE);
         // the fallback bounds are still the element's own box, so nothing disappears from a viewBox
         expect(ELEMENT_KINDS.arrow.bounds(rect)).toEqual(getElementBounds(rect));
         expect(ELEMENT_KINDS.arrow.render(rect, {})).toEqual({ svg: '' });
@@ -128,7 +129,7 @@ describe('ELEMENT_KINDS', () => {
         for (const el of bindables) {
             const kind = ELEMENT_KINDS[el.type];
             expect(isBindable(el)).toBe(true);
-            expect(kind.outline(el, 0)).not.toEqual({ kind: 'polyline', points: [] });
+            expect(kind.outline(el, 0)).not.toEqual(EMPTY_OUTLINE);
             expect(kind.anchorPoints(el)).toHaveLength(4);
             expect(kind.aimLines(el)).toHaveLength(2);
         }

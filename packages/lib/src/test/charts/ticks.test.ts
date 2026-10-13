@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { formatTickValue, nice, tickIncrement, tickStep, ticks } from '../../charts/ticks';
+import { formatTickValue, nice, tickStep, ticks } from '../../charts/ticks';
 
-// The cases d3-array's README and test suite document for ticks, tickIncrement, tickStep and nice.
+// The cases d3-array's README and test suite document for ticks, tickStep and nice.
 describe('ticks', () => {
     test("d3's documented examples", () => {
         expect(ticks(1, 9, 5)).toEqual([2, 4, 6, 8]);
@@ -11,12 +11,6 @@ describe('ticks', () => {
         expect(ticks(0, 100, 4)).toEqual([0, 20, 40, 60, 80, 100]);
         expect(ticks(1, 1, 5)).toEqual([1]);
         expect(ticks(0, 1, 0)).toEqual([]);
-    });
-
-    test('tickIncrement is negative for a step below one: its inverse', () => {
-        expect(tickIncrement(1, 9, 5)).toBe(2);
-        expect(tickIncrement(1, 9, 20)).toBe(-2);
-        expect(tickIncrement(0, 1, 10)).toBe(-10);
     });
 
     test('tickStep is the step itself', () => {

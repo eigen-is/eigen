@@ -1,4 +1,6 @@
-import { MAX_CHART_SPEC_BYTES, parseChartSpec, sampleChartSpec } from '../../charts';
+// spec, not the barrel: the barrel's layout reaches this kind through geometry, and defineKind calls
+// defaults while the module loads.
+import { exceedsChartSpecBytes, parseChartSpec, sampleChartSpec } from '../../charts/spec';
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorChartElement } from '../types';
@@ -29,13 +31,13 @@ export const chartKind = defineKind<VectorChartElement>({
         color: style.color,
     }),
     // The spec is kept as stored, never re-serialized: one that doesn't parse draws a placeholder and
-    // stays in the doc for recovery.
+    // stays in the doc for recovery. Only one past the byte limit reads as ''.
     read: (src, base) => {
         const chart = str(src.get('chart'), '');
         return {
             ...base,
             type: 'chart',
-            chart: new TextEncoder().encode(chart).length > MAX_CHART_SPEC_BYTES ? '' : chart,
+            chart: exceedsChartSpecBytes(chart) ? '' : chart,
             fill: fillField(src.get('fill')),
             fontFamily: fontFamily(src.get('fontFamily')),
             color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),

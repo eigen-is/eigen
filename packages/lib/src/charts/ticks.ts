@@ -40,7 +40,7 @@ export function ticks(start: number, stop: number, count: number): number[] {
     return Array.from({ length: i2 - i1 + 1 }, (_, i) => (inc < 0 ? (i1 + i) / -inc : (i1 + i) * inc));
 }
 
-export function tickIncrement(start: number, stop: number, count: number): number {
+function tickIncrement(start: number, stop: number, count: number): number {
     return tickSpec(start, stop, count)[2];
 }
 

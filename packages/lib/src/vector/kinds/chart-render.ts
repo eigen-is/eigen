@@ -2,26 +2,30 @@
 // labels as SVG text. Split from the kind like arrow-render.ts. The kinds are imported one by one, never
 // through the registry, which imports the chart kind.
 
-import { formatTickValue, layoutChart, layoutChartMessage, parseChartSpec } from '../../charts';
-import type { ChartLayout, ChartLayoutInput } from '../../types/chart';
+import { CHART_MESSAGES, formatTickValue, layoutChart, layoutChartMessage, parseChartSpec } from '../../charts';
+import type { ChartLayout, ChartLayoutInput, ChartShape } from '../../types/chart';
 import { parseFill } from '../fill';
 import { round } from '../geometry';
-import type { VectorChartElement, VectorElement } from '../types';
+import type { VectorChartElement } from '../types';
 import { ellipseKind } from './ellipse';
+import type { ElementKind } from './kind';
 import { lineKind } from './line';
 import { pieKind } from './pie';
 import { rectangleKind } from './rectangle';
-import { elementGroupOpen, PLACEHOLDER_COLOR, PLACEHOLDER_DASH, svgTextLine } from './render-utils';
+import { elementGroupOpen, PLACEHOLDER_STROKE, svgTextLine } from './render-utils';
 
-const UNREADABLE_MESSAGE = "This chart can't be shown";
-
-const SHAPE_KINDS = [rectangleKind, lineKind, ellipseKind, pieKind];
+const SHAPE_KINDS: Record<ChartShape['type'], ElementKind> = {
+    rectangle: rectangleKind,
+    line: lineKind,
+    ellipse: ellipseKind,
+    pie: pieKind,
+};
 
 export function renderChartSvg(el: VectorChartElement): string {
     const layout = chartLayout(el);
     if (layout) return layoutSvg(layout);
-    const outline = `<rect x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" fill="none" stroke="${PLACEHOLDER_COLOR}" stroke-width="1" stroke-dasharray="${PLACEHOLDER_DASH}"/>`;
-    return outline + layoutSvg(layoutChartMessage(chartBox(el), UNREADABLE_MESSAGE));
+    const outline = `<rect x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" ${PLACEHOLDER_STROKE}/>`;
+    return outline + layoutSvg(layoutChartMessage(chartBox(el), CHART_MESSAGES.unreadable));
 }
 
 // What the chart draws, which Convert to shapes unpacks too; null for the placeholder. A canvas has no sheet
@@ -57,8 +61,7 @@ function layoutSvg({ shapes, labels }: ChartLayout): string {
     return shapes.map(shapeSvg).join('') + labels.map(svgTextLine).join('');
 }
 
-function shapeSvg(shape: VectorElement): string {
-    const kind = SHAPE_KINDS.find((candidate) => candidate.type === shape.type);
-    const body = kind ? kind.render(shape, {}).svg : '';
+function shapeSvg(shape: ChartShape): string {
+    const body = SHAPE_KINDS[shape.type].render(shape, {}).svg;
     return body === '' ? '' : `${elementGroupOpen(shape)}${body}</g>`;
 }

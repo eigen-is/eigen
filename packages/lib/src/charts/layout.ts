@@ -8,15 +8,16 @@ import type {
     ChartLayout,
     ChartLayoutInput,
     ChartPaint,
+    ChartShape,
     ChartSpec,
     InlineChartSeries,
 } from '../types/chart';
 import { isTransparentFill, parseFill, serializeFill, TRANSPARENT_COLOR, TRANSPARENT_FILL } from '../vector/fill';
 import { getLineHeightPx } from '../vector/font-metrics';
+import { type Box, DEG_TO_RAD, type Point, pointsBounds, serializePoints } from '../vector/geometry';
 import { normalizeAngle } from '../vector/outline';
 import { measureLabel } from '../vector/text-width';
 import type {
-    VectorElement,
     VectorElementBase,
     VectorEllipseElement,
     VectorLinearElement,
@@ -26,10 +27,12 @@ import type {
 import { chartColor } from './spec';
 import { nice, tickStep, ticks } from './ticks';
 
-const MESSAGES = {
+// Every line a chart draws in place of a plot.
+export const CHART_MESSAGES = {
     noData: 'No data',
     pieNeedsPositive: 'Pie charts need positive values',
     tooSmall: 'Chart too small',
+    unreadable: "This chart can't be shown",
 };
 
 // Base text size as a share of the box's shorter side, as Google's charts scale theirs.
@@ -48,7 +51,7 @@ const GRIDLINE_OPACITY = 20;
 const LABEL_SHARE = 0.3;
 const ROTATED = -45;
 const SIN45 = Math.SQRT1_2;
-// T4-R8: no leader lines, so a thin slice goes unlabeled rather than colliding.
+// No leader lines, so a thin slice goes unlabeled rather than colliding.
 const MIN_LABELED_SLICE = 0.05;
 const PIE_EDGE_WIDTH = 1;
 // Keeps sums and spans finite whatever a cell holds; nothing plots past it anyway.
@@ -56,8 +59,6 @@ const MAX_VALUE = 1e100;
 const ELLIPSIS = '…';
 
 type Frame = { left: number; top: number; right: number; bottom: number };
-type Rect = { x: number; y: number; width: number; height: number };
-type Point = { x: number; y: number };
 type Anchor = ChartLabel['anchor'];
 
 // The per-chart constants every step reads.
@@ -84,16 +85,19 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
 
     const count = data.series.reduce((most, series) => Math.max(most, series.values.length), data.categories.length);
-    if (data.series.length === 0 || count === 0) return message(MESSAGES.noData);
+    if (data.series.length === 0 || count === 0) return message(CHART_MESSAGES.noData);
     const values = data.series.map((series) =>
-        Array.from({ length: count }, (_, i) => clampValue(series.values[i] ?? null)),
+        Array.from({ length: count }, (_, i) => {
+            const value = series.values[i] ?? null;
+            return value === null ? null : Math.min(MAX_VALUE, Math.max(-MAX_VALUE, value));
+        }),
     );
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
 
     if (spec.type === 'pie') {
         const slices = values[0];
-        if (slices.some((value) => value !== null && value < 0)) return message(MESSAGES.pieNeedsPositive);
-        if (!slices.some((value) => value !== null && value > 0)) return message(MESSAGES.noData);
+        if (slices.some((value) => value !== null && value < 0)) return message(CHART_MESSAGES.pieNeedsPositive);
+        if (!slices.some((value) => value !== null && value > 0)) return message(CHART_MESSAGES.noData);
     }
 
     let frame = placeTitle(ctx, spec.title);
@@ -108,7 +112,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
         spec.type === 'pie'
             ? layoutPie(ctx, spec, categories, values[0], frame)
             : layoutCartesian(ctx, spec, { categories, series: data.series }, values, frame, formatTick);
-    if (!plot) return message(MESSAGES.tooSmall);
+    if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }
 
@@ -137,15 +141,11 @@ function context({ id, width: w, height: h, paint }: ChartBox): Context {
 
 // Solid whatever the fill's hatch style: that style is the marks', and a hatched backdrop behind hatched
 // bars reads as noise.
-function backgroundShapes(ctx: Context): VectorElement[] {
+function backgroundShapes(ctx: Context): ChartShape[] {
     const fill = parseFill(ctx.paint.background);
     if (isTransparentFill(fill)) return [];
     const box = { x: 0, y: 0, width: ctx.width, height: ctx.height };
     return [rectangle(ctx, 'background', box, TRANSPARENT_COLOR, serializeFill({ ...fill, style: 'solid' }))];
-}
-
-function clampValue(value: number | null): number | null {
-    return value === null ? null : Math.min(MAX_VALUE, Math.max(-MAX_VALUE, value));
 }
 
 function sliceColor(spec: ChartSpec, index: number): string {
@@ -174,12 +174,12 @@ function placeLegend(
     position: ChartSpec['legend'],
     items: LegendItem[],
     frame: Frame,
-): { shapes: VectorElement[]; frame: Frame } {
+): { shapes: ChartShape[]; frame: Frame } {
     const { lineHeight: lh, gap } = ctx;
     const swatch = ctx.fontSize * 0.8;
     const indent = swatch + ctx.fontSize * 0.4;
     const spacing = ctx.fontSize;
-    const shapes: VectorElement[] = [];
+    const shapes: ChartShape[] = [];
     const place = (item: LegendItem, index: number, text: string, x: number, top: number) => {
         const y = top + (lh - swatch) / 2;
         const fill = serializeFill({ type: 'solid', color: item.color, style: ctx.paint.fillStyle });
@@ -252,7 +252,7 @@ function layoutCartesian(
     values: (number | null)[][],
     frame: Frame,
     formatTick: ChartLayoutInput['formatTick'],
-): VectorElement[] | null {
+): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const horizontal = spec.type === 'bar';
     const stacked = spec.stacked && spec.type !== 'line';
@@ -328,7 +328,7 @@ function layoutCartesian(
         return horizontal ? plot.left + t * (plot.right - plot.left) : plot.bottom - t * (plot.bottom - plot.top);
     };
     // A gridline or the baseline: across the plot at a value-axis pixel.
-    const rule = (key: string, at: number, opacity = 100): VectorLinearElement => {
+    const rule = (key: string, at: number, opacity = 100): VectorLinearElement & { type: 'line' } => {
         const ends = horizontal
             ? [
                   { x: at, y: plot.top },
@@ -342,7 +342,7 @@ function layoutCartesian(
     };
     const band = horizontal ? bandScale(count, plot.top, plot.bottom) : bandScale(count, plot.left, plot.right);
     const zero = Math.min(hi, Math.max(lo, 0));
-    const shapes: VectorElement[] = [];
+    const shapes: ChartShape[] = [];
 
     axis.ticks.forEach((t, i) => {
         const at = scale(t);
@@ -466,8 +466,8 @@ function barMarks(
     scale: (v: number) => number,
     horizontal: boolean,
     stacked: boolean,
-): VectorElement[] {
-    const shapes: VectorElement[] = [];
+): ChartShape[] {
+    const shapes: ChartShape[] = [];
     const ups: number[] = [];
     const downs: number[] = [];
     const slot = stacked ? band.width : band.width / series.length;
@@ -503,9 +503,9 @@ function lineMarks(
     values: (number | null)[][],
     band: Band,
     scale: (v: number) => number,
-): VectorElement[] {
-    const lines: VectorElement[] = [];
-    const markers: VectorElement[] = [];
+): ChartShape[] {
+    const lines: ChartShape[] = [];
+    const markers: ChartShape[] = [];
     const diameter = Math.max(8, ctx.fontSize * 0.6);
     series.forEach((s, si) => {
         const markerFill = serializeFill({ type: 'solid', color: s.color, style: 'solid' });
@@ -550,7 +550,7 @@ function layoutPie(
     categories: string[],
     values: (number | null)[],
     frame: Frame,
-): VectorElement[] | null {
+): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const total = values.reduce<number>((sum, value) => sum + (value !== null && value > 0 ? value : 0), 0);
     const full = Math.min(frame.right - frame.left, frame.bottom - frame.top) / 2;
@@ -574,7 +574,7 @@ function layoutPie(
             const percent = `${Math.round(slice.share * 100)}%`;
             const name = categories[slice.c];
             const text = fit(ctx, name === '' ? percent : `${name} ${percent}`, labelRoom, fontSize, false);
-            const mid = ((slice.start + slice.sweep / 2) * Math.PI) / 180;
+            const mid = (slice.start + slice.sweep / 2) * DEG_TO_RAD;
             const cos = Math.cos(mid);
             const sin = Math.sin(mid);
             const anchor: Anchor = cos > 0.2 ? 'start' : cos < -0.2 ? 'end' : 'middle';
@@ -679,7 +679,12 @@ function seedOf(seed: number, key: string): number {
     return ((hash >>> 0) % (2 ** 31 - 1)) + 1;
 }
 
-function base(ctx: Context, key: string, box: Rect, strokeColor: string): Omit<VectorElementBase, 'type'> {
+function base(
+    ctx: Context,
+    key: string,
+    box: Omit<Box, 'angle'>,
+    strokeColor: string,
+): Omit<VectorElementBase, 'type'> {
     return {
         id: `${ctx.id}:${key}`,
         ...box,
@@ -696,18 +701,30 @@ function base(ctx: Context, key: string, box: Rect, strokeColor: string): Omit<V
     };
 }
 
-function rectangle(ctx: Context, key: string, box: Rect, strokeColor: string, fill: string): VectorRectangleElement {
+function rectangle(
+    ctx: Context,
+    key: string,
+    box: Omit<Box, 'angle'>,
+    strokeColor: string,
+    fill: string,
+): VectorRectangleElement {
     return { ...base(ctx, key, box, strokeColor), type: 'rectangle', fill, corners: 'straight' };
 }
 
-function ellipse(ctx: Context, key: string, box: Rect, strokeColor: string, fill: string): VectorEllipseElement {
+function ellipse(
+    ctx: Context,
+    key: string,
+    box: Omit<Box, 'angle'>,
+    strokeColor: string,
+    fill: string,
+): VectorEllipseElement {
     return { ...base(ctx, key, box, strokeColor), type: 'ellipse', fill };
 }
 
 function pie(
     ctx: Context,
     key: string,
-    box: Rect,
+    box: Omit<Box, 'angle'>,
     strokeColor: string,
     fill: string,
     startAngle: number,
@@ -723,7 +740,7 @@ function pie(
     };
 }
 
-// Points relative to the element's min corner, at the points codec's two decimals.
+// Points relative to the element's min corner.
 function line(
     ctx: Context,
     key: string,
@@ -731,18 +748,14 @@ function line(
     strokeColor: string,
     roundness: VectorLinearElement['roundness'],
     opacity = 100,
-): VectorLinearElement {
-    const left = Math.min(...points.map((p) => p.x));
-    const top = Math.min(...points.map((p) => p.y));
-    const right = Math.max(...points.map((p) => p.x));
-    const bottom = Math.max(...points.map((p) => p.y));
-    const relative = points.map((p) => [Math.round((p.x - left) * 100) / 100, Math.round((p.y - top) * 100) / 100]);
+): VectorLinearElement & { type: 'line' } {
+    const { minX, minY, maxX, maxY } = pointsBounds(points);
     return {
-        ...base(ctx, key, { x: left, y: top, width: right - left, height: bottom - top }, strokeColor),
+        ...base(ctx, key, { x: minX, y: minY, width: maxX - minX, height: maxY - minY }, strokeColor),
         opacity,
         type: 'line',
         fill: serializeFill(TRANSPARENT_FILL),
-        points: JSON.stringify(relative),
+        points: serializePoints(points.map((p) => ({ x: p.x - minX, y: p.y - minY }))),
         roundness,
         pressures: '',
         simulatePressure: true,

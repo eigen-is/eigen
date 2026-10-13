@@ -72,6 +72,9 @@ export type OutlineShape =
     | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
     | { kind: 'polyline'; points: Point[] };
 
+// No edge, so nothing docks to it: a degenerate shape's outline, and a mis-dispatched element's.
+export const EMPTY_OUTLINE: OutlineShape = { kind: 'polygon', corners: [] };
+
 export function rectOutline(box: OutlineBox, radius: number, gap: number): OutlineShape {
     if (radius <= 0) return { kind: 'polygon', corners: sharpRectOffset(box, gap) };
     const r = clamp(radius, 0, roundRadius(box, 'rectangle'));
@@ -79,7 +82,7 @@ export function rectOutline(box: OutlineBox, radius: number, gap: number): Outli
 }
 
 export function diamondOutline(box: OutlineBox, radius: number, gap: number): OutlineShape {
-    if (box.width === 0 || box.height === 0) return { kind: 'polygon', corners: [] };
+    if (box.width === 0 || box.height === 0) return EMPTY_OUTLINE;
     if (radius <= 0) return { kind: 'polygon', corners: sharpDiamondOffset(box, gap) };
     const r = clamp(radius, 0, roundRadius(box, 'diamond'));
     return { kind: 'rounded', core: diamondCore(box, r), radius: r + gap };
