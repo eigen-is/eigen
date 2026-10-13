@@ -173,6 +173,9 @@ export class RowBuilder {
             if (INVISIBLE.test(char)) continue;
             const [base, variant] = fromAlphanumeric(char) ?? [char, LETTER.test(char) ? letters : others];
             this.#chars.push({ char: base, variant, color });
+            // Every two waiting characters make at least one part (two quads are one qquad): bound them as they come.
+            if (this.budget.size + this.#chars.length / 2 > MATH_LIMITS.size)
+                bound(this.budget, this.depth, MATH_LIMITS.size);
         }
     }
 

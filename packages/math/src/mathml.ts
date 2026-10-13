@@ -172,7 +172,7 @@ function readToken(row: RowBuilder, element: MathXmlElement): void {
     const mathvariant = attribute(element, 'mathvariant');
     const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
     // MathML draws a lone letter in an mi italic and anything else upright.
-    const lone = element.local === 'mi' && [...text].length === 1;
+    const lone = element.local === 'mi' && /^.$/su.test(text);
     row.chars(text, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
 }
 

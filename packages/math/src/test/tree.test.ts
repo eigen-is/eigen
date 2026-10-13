@@ -3,6 +3,7 @@ import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
 import { MATH_LIMITS, type MathRow } from '../tree';
+import type { MathXmlElement } from '../xml';
 import { el, viaOmml } from './parse';
 
 const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
@@ -23,6 +24,24 @@ describe('MATH_LIMITS', () => {
     test('characters count, so one long token is bounded too', () => {
         const long: MathRow = [{ kind: 'number', text: '1'.repeat(MATH_LIMITS.size) }];
         expect(() => viaMathml(long)).toThrow(MathError);
+    });
+
+    test('a long token is refused as its characters arrive, not after they are all held', () => {
+        const element = (ns: string, local: string, children: (string | MathXmlElement)[]): MathXmlElement => ({
+            ns,
+            local,
+            attributes: {},
+            children,
+        });
+        const omml = element(OMML_NAMESPACE, 'oMath', [
+            element(OMML_NAMESPACE, 'r', [element(OMML_NAMESPACE, 't', ['x'.repeat(20_000_000)])]),
+        ]);
+        const mathml = element(MATHML_NAMESPACE, 'math', [element(MATHML_NAMESPACE, 'mi', ['x'.repeat(30_000_000)])]);
+        for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
+            const start = performance.now();
+            expect(read).toThrow(MathError);
+            expect(performance.now() - start).toBeLessThan(200);
+        }
     });
 
     test('elements a reader walks through count as levels, so deep wrappers end in MathError', () => {
