@@ -530,6 +530,8 @@ describe('readLatex', () => {
             ],
         ],
         ['\\text{\\textasciitilde{}\\textasciicircum{}}', [{ kind: 'text', text: '~^' }]],
+        // A character's combining marks are part of it, so scripts take both.
+        ['e\u0301^2', [{ kind: 'scripts', base: [{ kind: 'accent', accent: '\u0301', body: letter('e') }], sup: two }]],
     ])('%p', (latex, tree) => {
         const read = readLatex(latex);
         expect(read).toStrictEqual(tree);
@@ -662,6 +664,12 @@ describe('writeLatex', () => {
                     sup: two,
                 },
             ],
+        ],
+        // A mark on nothing marks nothing.
+        [
+            [{ kind: 'accent', accent: '\u0311', body: x }],
+            '\\overset{\u0311}{x}',
+            [{ kind: 'limit', position: 'over', base: x, limit: [] }],
         ],
         [[{ kind: 'operator', text: '~' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],

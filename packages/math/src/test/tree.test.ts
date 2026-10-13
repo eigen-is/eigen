@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { MATHML_NAMESPACE, readMathml } from '../mathml';
+import { readLatex } from '../latex';
+import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
-import { MATH_LIMITS, type MathRow } from '../tree';
+import { MATH_LIMITS, type MathNode, type MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
-import { el, viaMathml, viaOmml } from './parse';
+import { canonicalIssue } from './canonical';
+import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
 
-function nested(levels: number): MathRow {
-    return levels === 1 ? [{ kind: 'identifier', text: 'x' }] : [{ kind: 'radical', body: nested(levels - 1) }];
+function nested(levels: number, text = 'x'): MathRow {
+    return levels === 1 ? [{ kind: 'identifier', text }] : [{ kind: 'radical', body: nested(levels - 1, text) }];
 }
 
 describe('MATH_LIMITS', () => {
@@ -63,5 +65,90 @@ describe('MATH_LIMITS', () => {
             read();
             expect(performance.now() - start).toBeLessThan(250);
         }
+    });
+});
+
+// The same characters as Word's run text, as MathML token text and as typed LaTeX.
+function readEach(text: string, mathml: string): MathRow[] {
+    return [
+        readOmml(el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:t>${text}</m:t></m:r></m:oMath>`)),
+        readMathml(el(`<math xmlns="${MATHML_NAMESPACE}">${mathml}</math>`)).row,
+        readLatex(text),
+    ];
+}
+
+describe('RowBuilder', () => {
+    test.each<[string, string, string, MathRow]>([
+        [
+            'an accent mark is an accent over its base',
+            'e\u0301',
+            '<mi>e\u0301</mi>',
+            [{ kind: 'accent', accent: '\u0301', body: letter('e') }],
+        ],
+        [
+            'accent marks nest, inside out',
+            'e\u0301\u0308',
+            '<mi>e\u0301\u0308</mi>',
+            [{ kind: 'accent', accent: '\u0308', body: [{ kind: 'accent', accent: '\u0301', body: letter('e') }] }],
+        ],
+        [
+            'another mark stays with its base',
+            'a\u0338b',
+            '<mi>a\u0338</mi><mi>b</mi>',
+            [{ kind: 'identifier', text: 'a\u0338' }, ...letter('b')],
+        ],
+        [
+            'a base and its mark compose where Unicode composes them',
+            '=\u0338',
+            '<mo>=\u0338</mo>',
+            [{ kind: 'operator', text: '≠' }],
+        ],
+        ['a mark on nothing is dropped', '\u0301x', '<mo>\u0301</mo><mi>x</mi>', letter('x')],
+        ['a variation selector is dropped', '⊕\uFE0E', '<mo>⊕\uFE0E</mo>', [{ kind: 'operator', text: '⊕' }]],
+    ])('%s', (_, text, mathml, row) => {
+        for (const read of readEach(text, mathml)) {
+            expect(read).toStrictEqual(row);
+            expect(canonicalIssue(read)).toBeUndefined();
+        }
+    });
+
+    test('a marked character is a token of its own, and every writer writes it back', () => {
+        const rows: MathRow[] = [
+            [{ kind: 'identifier', text: 'a\u0338' }],
+            [{ kind: 'identifier', text: 'a\u0338', variant: 'bold' }],
+            [
+                { kind: 'identifier', text: 'si' },
+                { kind: 'identifier', text: 'n\u0338', variant: 'normal' },
+            ],
+            [{ kind: 'operator', text: '⩽\u0338' }],
+            [
+                { kind: 'number', text: '1' },
+                { kind: 'operator', text: '2\u0338' },
+            ],
+        ];
+        for (const row of rows) {
+            expect(canonicalIssue(row)).toBeUndefined();
+            for (const via of [viaMathml, viaOmml, viaLatex]) expect(via(row)).toStrictEqual(row);
+        }
+    });
+
+    test('the accent a mark makes is a level, so at the deepest row it is an error', () => {
+        const accented: MathRow = [{ kind: 'accent', accent: '\u0301', body: letter('e') }];
+        const deepest = (levels: number): MathRow =>
+            levels === 1 ? accented : [{ kind: 'radical', body: deepest(levels - 1) }];
+        expect(readMathml(el(writeMathml(nested(MATH_LIMITS.depth - 1, 'e\u0301')))).row).toStrictEqual(
+            deepest(MATH_LIMITS.depth - 1),
+        );
+        expect(() => readMathml(el(writeMathml(nested(MATH_LIMITS.depth, 'e\u0301'))))).toThrow(MathError);
+    });
+
+    test.each<MathNode>([
+        { kind: 'identifier', text: 'e\u0301' },
+        { kind: 'operator', text: '\u0301' },
+        { kind: 'operator', text: '=\u0338' },
+        { kind: 'operator', text: '⊕\uFE0E' },
+        { kind: 'identifier', text: 'a\u0338b' },
+    ])('canonicalIssue rejects %j', (node) => {
+        expect(canonicalIssue([node])).toBeDefined();
     });
 });

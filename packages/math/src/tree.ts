@@ -1,5 +1,5 @@
 import { MathError } from './error';
-import { fromAlphanumeric, SPACES } from './notation';
+import { ACCENTS, fromAlphanumeric, SPACES } from './notation';
 import { checkedXml, replaceEdges, trimXmlSpace } from './xml';
 
 export const MATH_VARIANTS = [
@@ -86,8 +86,10 @@ export function bound(budget: MathBudget, depth: number, size: number, offset?: 
         throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, offset);
 }
 
-const INVISIBLE = /^[\u200B\u2061-\u2064]$/u;
+// Variation selectors too: an emoji presentation is no math.
+const INVISIBLE = /^(?:[\u200B\u2061-\u2064]|\uFE0E|\uFE0F)$/u;
 const LETTER = /^\p{L}$/u;
+const MARK = /^\p{M}$/u;
 export const DIGIT = /^[0-9]$/;
 const SPACE_OF_CHAR = new Map<string, MathSpace>([
     [SPACES.normal.text, 'normal'],
@@ -102,6 +104,9 @@ const SPACE_OF_CHAR = new Map<string, MathSpace>([
     ['\r', 'normal'],
 ]);
 
+// Each character with the combining marks after it: a token's letters, as a word counts them.
+export const clusters = (text: string) => text.match(/\P{M}\p{M}*/gu) ?? [];
+
 // The one character a fence, accent, brace or large operator holds; '' for none.
 export function mark(text: string): string {
     const [char = ''] = checkedXml(trimXmlSpace(text));
@@ -115,9 +120,11 @@ export function toColor(hex: string | undefined): string | undefined {
 // A #RRGGBB colour, as MathML, LaTeX and a tree hold it; anything else is no colour, so a writer never writes it.
 export const hexColor = (color: string | undefined) => (color?.startsWith('#') ? toColor(color.slice(1)) : undefined);
 
-function token(kind: MathToken['kind'], text: string, variant: MathVariant | undefined, color: string | undefined) {
+// A token without the variant it has by default: italic for one letter, upright for the rest.
+function token(kind: MathToken['kind'], text: string, variant: MathVariant, color: string | undefined): MathToken {
     const node: MathToken = { kind, text };
-    if (variant) node.variant = variant;
+    if (variant !== (kind === 'identifier' && clusters(text).length === 1 ? 'italic' : 'normal'))
+        node.variant = variant;
     if (color) node.color = color;
     return node;
 }
@@ -145,7 +152,7 @@ export function equationCells(row: MathRow): MathRow[] {
     return cells;
 }
 
-type StyledChar = { char: string; variant: MathVariant; color: string | undefined };
+type StyledChar = { char: string; marks: string; variant: MathVariant; color: string | undefined };
 
 // The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
 const TEXT_EDGE: ReadonlySet<string> = new Set(' \u00A0');
@@ -157,6 +164,8 @@ export type RowSlot = 'required' | 'optional' | 'equation';
 export class RowBuilder {
     readonly #row: MathRow = [];
     #chars: StyledChar[] = [];
+    // Characters and marks waiting in #chars.
+    #waiting = 0;
 
     constructor(
         readonly budget: MathBudget,
@@ -169,10 +178,18 @@ export class RowBuilder {
     chars(text: string, letters: MathVariant, others: MathVariant, color: string | undefined): void {
         for (const char of checkedXml(text)) {
             if (INVISIBLE.test(char)) continue;
-            const [base, variant] = fromAlphanumeric(char) ?? [char, LETTER.test(char) ? letters : others];
-            this.#chars.push({ char: base, variant, color });
-            // Every two waiting characters make at least one part (two quads are one qquad): bound them as they come.
-            if (this.budget.size + this.#chars.length / 2 > MATH_LIMITS.size)
+            const last = this.#chars.at(-1);
+            if (MARK.test(char)) {
+                // A combining mark joins the character before it; after a space or nothing it marks nothing.
+                if (!last || SPACE_OF_CHAR.has(last.char)) continue;
+                last.marks += char;
+            } else {
+                const [base, variant] = fromAlphanumeric(char) ?? [char, LETTER.test(char) ? letters : others];
+                this.#chars.push({ char: base, marks: '', variant, color });
+            }
+            // Every two waiting characters or marks make at least one part (two quads are one qquad): bound them as
+            // they come.
+            if (this.budget.size + ++this.#waiting / 2 > MATH_LIMITS.size)
                 bound(this.budget, this.depth, MATH_LIMITS.size);
         }
     }
@@ -213,15 +230,23 @@ export class RowBuilder {
     #flush(): void {
         const chars = this.#chars;
         this.#chars = [];
+        this.#waiting = 0;
         let start = 0;
         while (start < chars.length) {
-            const { char, variant, color } = chars[start];
-            const same = (index: number) => chars[index]?.variant === variant && chars[index].color === color;
+            const { char, marks, variant, color } = chars[start];
+            // A marked character is a token of its own.
+            const same = (index: number) =>
+                chars[index]?.marks === '' && chars[index].variant === variant && chars[index].color === color;
             const run = (index: number, test: RegExp) => {
                 let end = index;
                 while (same(end) && test.test(chars[end].char)) end++;
                 return end;
             };
+            if (marks !== '') {
+                this.#marked(char, marks, variant, color);
+                start++;
+                continue;
+            }
             const space = SPACE_OF_CHAR.get(char);
             let end = start + 1;
             if (space) {
@@ -243,13 +268,26 @@ export class RowBuilder {
                 .slice(start, end)
                 .map((styled) => styled.char)
                 .join('');
-            const node = DIGIT.test(char)
-                ? token('number', text, variant === 'normal' ? undefined : variant, color)
-                : LETTER.test(char)
-                  ? token('identifier', text, end - start > 1 || variant === 'italic' ? undefined : variant, color)
-                  : token('operator', text, variant === 'normal' ? undefined : variant, color);
-            this.#push(node, text.length);
+            const kind = DIGIT.test(char) ? 'number' : LETTER.test(char) ? 'identifier' : 'operator';
+            this.#push(token(kind, text, variant, color), text.length);
             start = end;
         }
+    }
+
+    // An accent mark is an accent over the character, innermost first; any other stays with it, composed by NFC.
+    #marked(char: string, marks: string, variant: MathVariant, color: string | undefined): void {
+        const accents = [...marks].filter((mark) => ACCENTS.has(mark));
+        const text = (char + [...marks].filter((mark) => !ACCENTS.has(mark)).join('')).normalize('NFC');
+        const [first] = text;
+        let node: MathNode = token(
+            DIGIT.test(text) ? 'number' : LETTER.test(first) ? 'identifier' : 'operator',
+            text,
+            variant,
+            color,
+        );
+        for (const accent of accents) node = { kind: 'accent', accent, body: [node] };
+        // Each accent adds a node over a row of its own, a level deeper.
+        if (accents.length > 0) bound(this.budget, this.depth + accents.length, 2 * accents.length + text.length);
+        this.#push(node, accents.length > 0 ? 0 : text.length);
     }
 }

@@ -24,9 +24,10 @@ Word splits a run wherever an edit happened, so `x+1` may be three runs or one. 
 
 The other rules of the form:
 
-- A space is one of six widths: U+0020, thin U+2009, medium U+205F, thick U+2004, quad U+2003 and two quads. Two em spaces pair up from the left. U+200B and U+2061 to U+2064 are dropped. A U+00A0 between math characters is a plain space; inside text it stays.
+- A space is one of six widths: U+0020, thin U+2009, medium U+205F, thick U+2004, quad U+2003 and two quads. Two em spaces pair up from the left. U+200B, U+2061 to U+2064 and the variation selectors U+FE0E and U+FE0F are dropped, since an emoji presentation is no math. A U+00A0 between math characters is a plain space; inside text it stays.
 - Neighbouring text nodes of one colour are one node. A text never starts or ends with U+00A0 and holds no tab, CR or LF: each reads as a space.
 - An accent holds a combining character; a spacing one read from any format folds to its combining twin (`src/notation.ts`). The over-line is a `line`, never an accent.
+- A combining mark belongs to the character before it, in Word's runs, MathML's tokens and typed LaTeX alike. A mark from the accent table makes an accent over that character; any other stays in its token, composed where Unicode composes it, so `=` and U+0338 read as ≠. A character with a mark is a token of its own, never part of a word or a number. A mark after a space or at the start of a row marks nothing and is dropped.
 - A fence holds one character or none, with OMML's defaults resolved. The separator is empty unless there are two parts or more.
 - A sub, sup or degree is absent or non-empty. A required slot, such as a numerator, may be an empty row.
 - A large operator without scripts takes its default limits: integrals beside, the rest under and over, as Word does.
@@ -111,7 +112,7 @@ Typed LaTeX is kept as it was typed. These losses only touch `writeLatex` output
 |---|---|
 | a skewed fraction | `\frac`: an upright fraction |
 | a brace character other than ⏞ ⏟ ⏜ ⏝, or one on its other side | `\overset` or `\underset`: a limit holding the character |
-| an accent without a command, such as the macron U+0304 or the double acute | `\overset`: a limit holding its spacing character, ¯ or ˝; `\bar` is Word's bar, U+0305. An accent outside the accent table stays combining, which KaTeX can't read |
+| an accent without a command, such as the macron U+0304 or the double acute | `\overset`: a limit holding its spacing character, ¯ or ˝; `\bar` is Word's bar, U+0305. An accent outside the accent table has no spacing character, so `\overset` holds its bare mark: it marks nothing, and reads back as an empty limit |
 | a fence or separator character no command draws, such as Word's ⟦ ⟧ | the characters as they are, not a fenced row (fixture equation 49): neither KaTeX nor MathJax takes `\llbracket` after `\left` |
 | an operator `^` or `~` | `\text{\textasciicircum{}}` or `\text{\textasciitilde{}}`: text, since math mode has no command both KaTeX and MathJax read for either |
 | Word's U+2329 and U+232A angle brackets and its ∥ | `\langle`, `\rangle` and `\|`, reading back as ⟨ ⟩ and ‖ (fixture equations 51, 52, 53) |

@@ -3,6 +3,7 @@ import { LATEX_COLORS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } f
 import { ACCENTS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
+    clusters,
     DIGIT,
     equationCells,
     hexColor,
@@ -57,9 +58,10 @@ type Piece = { chars: string; style: Style } | { text: string; color: string | u
 
 const MATH: Style = { letters: 'italic', others: 'normal', color: undefined };
 
-// Leading spaces, then a comment, a control word or space with TeX's skipped spaces, a control symbol or a character.
+// Leading spaces, then a comment, a control word or space with TeX's skipped spaces, a control symbol, or a character
+// with its combining marks; a mark after a character the parser reads as structure is a token of its own.
 const TOKEN =
-    /([ \t\r\n]*)(?:(%[^\n]*\n?[ \t]*)|\\([A-Za-z]+)[ \t\r\n]*|\\([ \t\r\n])[ \t\r\n]*|\\(.)|([^ \t\r\n]))/suy;
+    /([ \t\r\n]*)(?:(%[^\n]*\n?[ \t]*)|\\([A-Za-z]+)[ \t\r\n]*|\\([ \t\r\n])[ \t\r\n]*|\\(.)|([{}[\]^_&'~]|[^ \t\r\n]\p{M}*))/suy;
 
 const CLOSERS: ReadonlyMap<string, string> = new Map([
     ['{', '}'],
@@ -831,7 +833,7 @@ function writeChar(char: string): string {
 // The font a token needs beyond the default (italic letters, or upright in \operatorname); undefined if none.
 function fontOf(node: MathToken, upright: boolean): MathVariant | undefined {
     if (node.kind !== 'identifier') return node.variant;
-    if ([...node.text].length > 1) return upright ? undefined : 'normal';
+    if (clusters(node.text).length > 1) return upright ? undefined : 'normal';
     const variant = node.variant ?? 'italic';
     return variant === (upright ? 'normal' : 'italic') ? undefined : variant;
 }
@@ -842,7 +844,7 @@ const colored = (color: string | undefined, latex: string) => {
 };
 
 function writeToken(node: MathToken, upright: boolean): string {
-    const text = joined([...node.text].map(writeChar));
+    const text = joined(clusters(node.text).map(writeChar));
     const font = fontOf(node, upright);
     return colored(node.color, font ? `\\${FONT_NAMES.get(font)}{${text}}` : text);
 }
