@@ -3,52 +3,70 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [Unreleased]
+## [0.3.3] - 2026-10-13
 
-Small fixes across the apps, from calendar invitations to backups, and limits on WebDAV, sharing and contact labels. The update migrates each user's mail index, `mail.db`, which an older version refuses to open. To go back past this release, restore the backup the update made: `./eigen rollback` right after it, later `./eigen restore` with the `server-pre-update-` backup that `./eigen rollback --help` lists.
+Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page breaks, Title and Subtitle, small caps, word count and resizable table columns. The update migrates each user's mail index, `mail.db`, which an older version refuses to open: to go back, restore the backup the update made, with `./eigen rollback` right after it or later with `./eigen restore` and the `server-pre-update-` backup that `./eigen rollback --help` lists. Reload open documents after the update: a tab from 0.3.2 deletes the page breaks, titles and subtitles it receives.
 
 ### Added
 
+- **Docs menus** — Format and Insert are always there for writers, with Google's submenus, and Edit and Tools join them
+- **Page break** — Insert → **Page break** or ⌘Enter starts a new page in print, PDF and Word, and a Word file's page breaks come in
+- **Paragraph styles** — Title, Subtitle and Heading 5 and 6, which go to Word and come back
+- **All caps and Small caps** — under Format → Text, ⌘⇧A for all caps. PDF, Word and paste keep them
+- **Word count** — Tools → **Word count** or ⌘⇧C, for viewers too
+- **Lists and alignment** — five numbered styles and **Restart numbering** under Format → Bullets and numbering, and **Justified** in the Align menu (⌘⇧J)
+- **Tables and images** — drag a column border to resize it, or **Distribute columns**. The Image panel has a Width field, and Shift+arrows resize a selected image
+- **Page setup** — File → **Page setup…** shows the page every document uses: A4 with 2 cm margins
 - **Mail** — a message opens without the images it would load from the internet, so its sender can't tell when you read it. **Load images** shows them for that message
 - **Command palette** — ⌘K offers **Download as** in each format of the open document's File → Download menu
 - **Teams** — an access request on a team's drive reaches the team's members, by notification and email, unless **Notify members** is off on the team's Admin page
 
 ### Changed
 
-- **Notifications** — the bell keeps every unread notification, not only those among the newest 50. The new-mail notification goes read once the inbox has no unread mail, read, moved or deleted in Eigen or in a mail client
-- **Mail** — a reply marks the message it answers as answered, also when it is sent later from Drafts. Mail clients show the flag, and the mail list a reply arrow. A reply or forward quotes the message's text and links, never its images
-- **Calendar** — removing every guest from one occurrence of a series keeps the series' guests, and the event dialog says so. To leave them out of one occurrence, remove that occurrence
+- **Word export** — Eigen writes the `.docx` itself: fonts embedded, figures with their wrap and caption, lists with their start and style, task boxes, code blocks, quotes, page breaks and pasted images. Images go as PNG or JPEG, without EXIF
+- **Word import** — Eigen reads the `.docx` itself instead of through mammoth. SmartArt text and chart titles come in, East Asian and right-to-left text gets its fonts, wide tables fit the page, and a password-protected file says so. Imported images count toward the drive's storage
+- **Docs toolbar** — the icon row folds into the menus as the window narrows. Strikethrough, code, superscript, subscript, quote, line and table live in the menus
+- **Docs look** — Heading 5 and 6 draw in Google's grey at body size, Heading 6 in italics. The page stays light in dark mode, in quick look and thumbnails too
+- **Copy and paste in Docs** — a paste from another document keeps its formatting and images and drops its comments. A pasted font like Georgia becomes the bundled one
+- **Sheets import** — a workbook with more than 10,000 merged ranges, 500 sheets or about 2 million rows is refused as too large
+- **Notifications** — the bell keeps every unread notification, not only those among the newest 50. The new-mail notification goes read once the inbox has no unread mail
+- **Mail** — a reply marks the message it answers as answered, also when sent later from Drafts, and the mail list shows a reply arrow. A reply or forward quotes the message's text and links, never its images
+- **Calendar** — removing every guest from one occurrence of a series keeps the series' guests, and the event dialog says so. To leave them out, remove that occurrence
 - **Contacts** — when a contact changes elsewhere while you edit it, the form keeps your edits and offers **Reload**. A label name takes at most 100 characters
 - **Limits** — WebDAV stores at most 64 KB of properties and 32 locks per file, and a chunked WebDAV upload stops at the max upload size and at what is left of the drive. One share request adds at most 100 people
-- **Server settings** — **Max Upload** goes up to 1023 MB, and a **Trash Retention** of 0 keeps deleted files until the Trash is emptied
-- **Storage quotas** — a drive has one limit, whoever uploads into it: its owner's team overrides raise it, never the uploader's. A team's own drive keeps its own limit
-- **Admin** — the Guests page shows the Users table, with each guest's name, email and when they were last active
-- **`./eigen stop`** — waits for a running server backup, and its upload to the backup bucket, to end first
-- **Deleting a user** — also deletes the safety copies a restore left of their data, and their files in S3 buckets, the server's own bucket included. A second server restored from a backup of this one must never run on the same bucket: deleting a user or emptying a trash there deletes this server's files
-- **Hosting mail** — the Docker network's gateway is no longer trusted, so a program on the host that sent through `localhost:25` without a login gets "Relay access denied": send through 587 with a login. Ports 465 and 587 allow 20 sign-in attempts and 60 messages a minute per client IP
-- **Mail ports** — 25, 465, 587 and 993 listen on IPv4 only: IMAP and SMTP over IPv6 stop, and other mail servers fall back to the A record
-- **`./eigen update`** — makes a Full backup first, without asking, when a release migrates a database a Light backup leaves out
-- **`./eigen rollback`** — its `--help`, and its refusal when there is nothing to roll back, list the kept pre-update backups that `./eigen restore` puts back
-- **Landing page** — names the apps, vector drawings included, and says they work with any IMAP, CalDAV, CardDAV or WebDAV app
+- **Server settings** — **Max Upload** stops at 1023 MB, since a larger upload was refused anyway. A **Trash Retention** of 0 keeps deleted files until the Trash is emptied
+- **Storage quotas** — a drive has one limit, whoever uploads into it: its owner's team overrides raise it, never the uploader's
+- **Admin** — the Guests page shows each guest's name, email and when they were last active
+- **Mail ports** — 25, 465, 587 and 993 listen on IPv4 only: mail apps and other mail servers reach them over IPv4. 465 and 587 allow 20 sign-in attempts and 60 messages a minute per client IP
+- **S3** — a read retries three times on throttling or a server error before it fails
+- **Deleting a user** — also deletes the safety copies a restore left of their data, and their files in S3 buckets. A second server restored from a backup of this one must never run on the same bucket
+- **`./eigen update`** — makes a Full backup first, without asking, when a release migrates a database a Light backup leaves out. `./eigen stop` waits for a running backup and its upload
+- **`./eigen rollback`** — its `--help`, and its refusal when there is nothing to roll back, list the kept pre-update backups
+- **Docker image** — the API image is about 340 MB smaller. A source install needs WeasyPrint 68 or later for PDF export
 
 ### Fixed
 
-- **Calendar invitations** — an occurrence without a guest list of its own goes out with the series' guests. Cancelling a moved occurrence mails its moved time, and deleting one in Calendar cancels it for its guests. A cancellation lists the guests it goes to, and putting a cancelled occurrence back sends no cancellation
+- **PDF export** — bold text and headings print bold again, a centered figure stays centered, a numbered list keeps its start number and a colored link its color, and an open task under a done one is no longer struck through
+- **Docs editor** — lettered and roman lists draw again, the toolbar follows the cursor, a selected image drags again, the Image panel stays open while you use it, and **Replace image** no longer replaces another figure
+- **Safari** — a document or board no longer reconnects without end and never loads
+- **Storage** — on local storage, creating a file in a folder deleted meanwhile no longer overwrites a file of that name at the drive's root. A save into a file trashed meanwhile is refused, and of two saves of a text file from one version, the second gets a conflict
+- **Calendar invitations** — an occurrence without a guest list of its own goes out with the series' guests. Cancelling or deleting a moved occurrence cancels its moved time for its guests, and putting a cancelled occurrence back sends no cancellation
 - **Calendar editing** — someone the owner shared a calendar with for editing can edit the owner's own events, and an event a member organized on a team calendar stays editable
-- **Dialogs** — Escape in a suggestion list inside a dialog, such as contact suggestions or a chat @-mention, closes the list and leaves the dialog open
-- **Lists** — dragging a row that is not selected drags that row, not the selection, and Space and Enter after Select All act on the top selected row, as Delete does
-- **Print** — ⌘P in an app with nothing to print prints the page instead of a blank sheet
-- **Previews** — an image no longer flashes a checkerboard between its thumbnail and the full image, an `.eml` quick look keeps the message's layout, and an `.ics` with too many events is refused before it can stall the preview
-- **Mail** — a row in Sent names the recipient instead of you, and an attachment no longer fails to load right after a mail client changes its message's flags
-- **Backups** — a restore gives each mail message its own date again, so mail clients show when it arrived. An item whose name a file cannot have is left out with a warning, with what is inside it, instead of failing the backup. A file overwritten during a backup is archived as it was copied, and an older archive with such a file verifies with a warning and restores. Deleting an archive while a backup, verify or restore of the same user or team runs is refused. Verify warnings show on the backup's row in Admin, for server backups too
-- **Images** — an image in a document or sheet whose file is gone shows as missing, instead of a spinner or nothing
-- **Word documents** — an image pasted into a document comes along in its `.docx` download, and the images a `.docx` import brings count toward the drive's storage
-- **`./eigen restart`** — writes the launcher and Compose files of the running version after an update or restore stopped while writing them, and `./eigen status` points at it
-- **WebDAV** — a PROPPATCH with a refused change saves nothing
-- **CalDAV** — a calendar query for one event's UID answers that event, not the whole calendar
-- **Drive** — a guest who opens a file they cannot see is told to ask the owner instead of offered a request that fails, and a repeated access request mails the owner at most once an hour
-- **Version history** — a spreadsheet version saved in an older format is refused instead of locking every open editor, and edits recovered after an unclean shutdown get a version
-- **Small fixes** — chat pages back past messages sent in the same second, an imported vCard with your address no longer becomes your own card, a malformed stickies column or card no longer breaks the board, the Docs side panels leave the page's scrollbar visible, and with mail turned off a user's kept mail still counts toward their storage
+- **Backups** — a restore gives each mail message its own date again. An item whose name a file cannot have is left out with a warning instead of failing the backup, and a file overwritten during a backup is archived as it was copied. Verify warnings show on the backup's row in Admin
+- **Mail** — a row in Sent names the recipient instead of you, and an attachment loads right after a mail client changes its message's flags
+- **Lists** — dragging a row that is not selected drags that row, and Space and Enter after Select All act on the top selected row
+- **Previews** — an image no longer flashes a checkerboard before the full image, an `.eml` quick look keeps the message's layout, and an `.ics` with too many events is refused
+- **Images** — an image in a document or sheet whose file is gone shows as missing, and a Word import's images load on S3 without a reload
+- **Small fixes** — Escape in a suggestion list inside a dialog closes only the list, ⌘P with nothing to print prints the page, `./eigen restart` repairs the launcher after an interrupted update, a WebDAV PROPPATCH with a refused change saves nothing, a CalDAV query for one UID answers that event, a guest who opens a file they cannot see is told to ask the owner, an access request mails the owner at most once an hour, an older spreadsheet version is refused instead of locking its editors, chat pages back past messages sent in the same second, an imported vCard with your address no longer becomes your own card, a malformed stickies column no longer breaks the board, edits recovered after an unclean shutdown get a version, with mail turned off a user's kept mail still counts toward their storage, Finder can save into a full drive over WebDAV, and an HTML mail's preview line no longer shows a tracking-pixel address
+
+### Security
+
+- **Mail relay** — Postfix and OpenDKIM trusted the Docker network's gateway, which the host, Docker Desktop, rootless Docker and every IPv6 client arrive from. Such a client could send mail through port 25 without a login and get mail from your domain DKIM-signed, and the API trusted it too. A program on the host that sent through `localhost:25` now gets "Relay access denied": send through 587 with a login
+- **Team mounts** — only team admins see a team's mount settings, S3 secret included, where every member could
+- **PDF export** — the renderer opens only `data:` URIs, so a link in a document can no longer make the server fetch a URL or a local file into the PDF
+- **Exports and previews** — HTML exports carry a Content-Security-Policy, an SVG can no longer make Firefox load outside URLs, and a sheet cell's color can no longer inject CSS
+- **Chat search** — Drive's search index of a chat no longer holds the text of whispers
+- **Imports** — a small crafted `.docx` or `.xlsx` can no longer take gigabytes of memory or minutes of CPU, and a slow SVG can no longer hold a thumbnail worker
 
 ## [0.3.2] - 2026-10-05
 
