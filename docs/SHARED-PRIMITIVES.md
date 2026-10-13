@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1670 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1678 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -200,7 +200,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (11)
+## Contexts, schemas & classes (12)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -208,6 +208,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
+| `PageNumberNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `CreateUnconfirmedError` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `MathError` | `@workspace/math` | packages/math/src/error.ts |
@@ -517,7 +518,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (381)
+## Types (383)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -546,11 +547,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SpecialMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `StandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `BandRoot` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
 | `FigureAlignment` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `PageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `PageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PaperSizeName` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `TitleType` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/title.ts |
@@ -903,7 +906,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (803)
+## Utilities & constants (808)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1198,6 +1201,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isToday` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `applyPreserveCase` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/preserve-case.ts |
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
+| `BAND_EXCLUDED_NODES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
+| `BAND_ROOTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
+| `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
@@ -1206,6 +1212,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
+| `PAGE_NUMBER_TEXT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `PAGE_ROOT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pageBoxStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pagePx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1215,6 +1222,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PAPER_SIZES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PROSE_TEXTBLOCKS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `readFigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
+| `readPageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |

@@ -1099,13 +1099,16 @@ describe('document transform (docx round trip)', () => {
     }
 
     // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
+    // A page number is its field's cached 1, which the reader keeps as text.
     function words(json: JSONContent): string[] {
         const chunks: string[] = [];
         const walk = (node: JSONContent) => {
             const caption = node.attrs?.['caption'];
             if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
-            const inline = node.content?.filter((child) => child.type === 'text' || child.type === 'hardBreak') ?? [];
-            if (inline.length > 0) chunks.push(inline.map((child) => child.text ?? ' ').join(''));
+            const inline =
+                node.content?.filter((child) => ['text', 'hardBreak', 'pageNumber'].includes(child.type ?? '')) ?? [];
+            const textOf = (child: JSONContent) => (child.type === 'pageNumber' ? '1' : (child.text ?? ' '));
+            if (inline.length > 0) chunks.push(inline.map(textOf).join(''));
             for (const child of node.content ?? []) walk(child);
         };
         walk(json);
