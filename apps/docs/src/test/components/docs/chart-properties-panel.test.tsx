@@ -11,6 +11,7 @@ const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
 const { parseChartSpec } = await import('@workspace/lib/charts');
+const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../components/docs/extensions/chart');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -123,6 +124,29 @@ for (const [placeholder, read] of Object.entries(fieldTitle)) {
         expect(input?.value).toBe('Goal');
     });
 }
+
+test("a font picked in the Font row is one undo step, and the chart's labels draw in it", async () => {
+    const { undoManager, spec } = await mount();
+    expect(spec()?.fontFamily).toBe('Inter');
+    const label = [...document.querySelectorAll('span.w-14')].find((span) => span.textContent?.trim() === 'Font');
+    const trigger = label?.nextElementSibling?.querySelector('button[aria-haspopup="menu"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    });
+    const serif = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'Source Serif 4',
+    );
+    if (!serif) throw new Error('no Source Serif 4 in the Font menu');
+    await click(serif);
+    expect(spec()?.fontFamily).toBe('Source Serif 4');
+    const fonts = new Set(
+        [...document.querySelectorAll('[data-document] svg text')].map((t) => t.getAttribute('font-family')),
+    );
+    expect(fonts).toEqual(new Set([getFontFamily('Source Serif 4')]));
+
+    undoManager.undo();
+    expect(spec()?.fontFamily).toBe('Inter');
+});
 
 test("a Style toggle wraps the chart in one undo step and lights it, the spec's rows untouched", async () => {
     const { editor, undoManager, spec } = await mount();

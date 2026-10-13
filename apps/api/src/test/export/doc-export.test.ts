@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
@@ -200,14 +202,9 @@ describe('doc export — figures', () => {
 });
 
 describe('doc export — charts', () => {
-    const chartDoc = (attrs: Record<string, unknown>): JSONContent => ({
+    const chartDoc = (attrs: Record<string, unknown>, spec = sampleChartSpec('column')): JSONContent => ({
         type: 'doc',
-        content: [
-            {
-                type: 'paragraph',
-                content: [{ type: 'chart', attrs: { spec: JSON.stringify(sampleChartSpec('column')), ...attrs } }],
-            },
-        ],
+        content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec: JSON.stringify(spec), ...attrs } }] }],
     });
 
     // Inline, so WeasyPrint draws the labels in the page's own fonts; an <img> of an SVG can't reach @font-face.
@@ -227,6 +224,15 @@ describe('doc export — charts', () => {
             expect(html).not.toContain('<img');
         },
     );
+
+    test("every label draws in the spec's font", () => {
+        const fontsOf = (html: string) =>
+            new Set(Array.from(html.matchAll(/<text[^>]*font-family="([^"]*)"/g), (m) => m[1]));
+        const face = (font: string) => new Set([escapeXml(getFontFamily(font))]);
+        expect(fontsOf(renderDocHtml(chartDoc({}), () => null))).toEqual(face('Inter'));
+        const serif = { ...sampleChartSpec('column'), fontFamily: 'Source Serif 4' };
+        expect(fontsOf(renderDocHtml(chartDoc({}, serif), () => null))).toEqual(face('Source Serif 4'));
+    });
 
     test('the sanitizer keeps every shape and label of the chart', () => {
         const raw = renderDocHtml(chartDoc({ width: 480, height: 300 }), () => null);

@@ -65,7 +65,7 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 
 Drag a handle to resize the chart. Its width and height change on their own, so you can make it wider without making it taller.
 
-On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, where the **Legend** goes, each axis's **Title**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. Below them, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
+On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, where the **Legend** goes, the **Font** of all the chart's text, each axis's **Title**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. Below them, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
 
 ### Edit the numbers
 
