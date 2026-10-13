@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1650 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1674 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -516,7 +516,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (376)
+## Types (386)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -753,6 +753,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ServerArchiveManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveSidecar` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveUpload` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `CellRangeRef` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartBlanks` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSeriesStyle` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `InlineChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `LegendPosition` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `RangeChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `RangeChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -897,7 +907,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (789)
+## Utilities & constants (803)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1028,6 +1038,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CHART_PALETTE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_LABEL_LENGTH` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_CHART_SPEC_BYTES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `parseChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `sampleChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `formatChatPreview` | `@workspace/lib/chat` | packages/lib/src/core/chat/format-preview.ts |
@@ -1374,6 +1395,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_JOB_STATES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
