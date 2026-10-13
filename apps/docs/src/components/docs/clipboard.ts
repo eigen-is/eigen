@@ -72,9 +72,7 @@ function copiedClipboardItems(
     let runFrom = from;
     const pushText = (runTo: number) => {
         const text = view.state.doc
-            .textBetween(runFrom, runTo, '\n', (leaf) =>
-                leaf.type.name === 'equation' ? equationText(leaf) : (leaf.type.spec.leafText?.(leaf) ?? ''),
-            )
+            .textBetween(runFrom, runTo, '\n', (leaf) => (leaf.type.name === 'equation' ? equationText(leaf) : ''))
             .trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));
     };

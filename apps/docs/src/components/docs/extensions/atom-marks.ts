@@ -1,15 +1,17 @@
-import { combineTransactionSteps, getChangedRanges } from '@tiptap/core';
+import { combineTransactionSteps, Extension, getChangedRanges } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { EquationNode } from '@workspace/lib/docs/eigendoc';
 
-export const Equation = EquationNode.extend({
+// The inline atoms the Yjs binding persists no mark on: it keeps a mark only on text.
+export const MARKLESS_ATOMS: ReadonlySet<string> = new Set(['figure', 'equation']);
+
+export const AtomMarks = Extension.create({
+    name: 'atomMarks',
     addProseMirrorPlugins() {
-        const { name } = this;
         return [
             new Plugin({
-                key: new PluginKey('equationMarks'),
-                // A mark is the parent's to allow, so a bold or a colour over a range lands on its equations too. The Yjs
-                // binding persists a mark only on text, so one would show here until a reload and never reach a peer.
+                key: new PluginKey('atomMarks'),
+                // A mark is the parent's to allow, so a bold or a colour over a range lands on its atoms too. One would
+                // show here until a reload and never reach a peer.
                 appendTransaction(transactions, oldState, newState) {
                     if (!transactions.some((tr) => tr.docChanged)) return null;
                     const { tr } = newState;
@@ -17,7 +19,7 @@ export const Equation = EquationNode.extend({
                         combineTransactionSteps(oldState.doc, [...transactions]),
                     )) {
                         newState.doc.nodesBetween(newRange.from, newRange.to, (node, pos) => {
-                            if (node.type.name !== name) return;
+                            if (!MARKLESS_ATOMS.has(node.type.name)) return;
                             for (const mark of node.marks) tr.removeNodeMark(pos, mark);
                         });
                     }

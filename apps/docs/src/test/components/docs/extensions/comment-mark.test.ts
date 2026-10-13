@@ -5,6 +5,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
 import {
     addCommentAnchor,
     commentAnchorText,
@@ -23,7 +24,7 @@ const equation = (latex?: string, commentCardId: string | null = null) => ({
     attrs: { mathml: writeMathml(x, latex), commentCardId },
 });
 const text = (t: string, ...marks: object[]) => ({ type: 'text', text: t, ...(marks.length > 0 ? { marks } : {}) });
-const paragraph = (...content: object[]) => ({ type: 'doc', content: [{ type: 'paragraph', content }] });
+const docOf = (...content: object[]) => ({ type: 'doc', content: [{ type: 'paragraph', content }] });
 
 // Each inline node as its name or text, its card by attribute and its card by mark.
 function anchors(doc: Node): [string, string | null, string | null][] {
@@ -37,16 +38,19 @@ function anchors(doc: Node): [string, string | null, string | null][] {
 }
 
 test('a comment on an equation anchors by its attribute and quotes its LaTeX, or "Equation" without one', () => {
-    const doc = schema.nodeFromJSON(paragraph(equation('x^2', 'card-1')));
+    const doc = schema.nodeFromJSON(docOf(equation('x^2', 'card-1')));
     const node = doc.firstChild?.firstChild;
     expect(node && nodeCommentCardId(node)).toBe('card-1');
     expect(commentAnchorText(doc, 0, doc.content.size)).toBe('x^2');
-    const bare = schema.nodeFromJSON(paragraph(equation()));
+    const bare = schema.nodeFromJSON(docOf(equation()));
     expect(commentAnchorText(bare, 0, bare.content.size)).toBe('Equation');
 });
 
 test('a new card on an equation selected alone anchors as its attribute', () => {
-    const editor = new Editor({ extensions: getDocExtensions(), content: paragraph(text('a '), equation('x')) });
+    const editor = new Editor({
+        extensions: [...getDocExtensions(), AtomMarks],
+        content: docOf(text('a '), equation('x')),
+    });
     addCommentAnchor(editor, { from: 3, to: 4 }, 'card-1');
     expect(anchors(editor.state.doc)).toEqual([
         ['a ', null, null],
@@ -57,7 +61,10 @@ test('a new card on an equation selected alone anchors as its attribute', () => 
 
 // A mark on the equation would last only until reload.
 test('a new card on text and an equation marks the text alone', () => {
-    const editor = new Editor({ extensions: getDocExtensions(), content: paragraph(text('a '), equation('x')) });
+    const editor = new Editor({
+        extensions: [...getDocExtensions(), AtomMarks],
+        content: docOf(text('a '), equation('x')),
+    });
     addCommentAnchor(editor, { from: 1, to: 4 }, 'card-1');
     expect(anchors(editor.state.doc)).toEqual([
         ['a ', null, 'card-1'],
@@ -69,7 +76,7 @@ test('a new card on text and an equation marks the text alone', () => {
 test("a deleted card leaves no anchor: its text's mark, its figure's and its equation's attribute", () => {
     const editor = new Editor({
         extensions: getDocExtensions(),
-        content: paragraph(
+        content: docOf(
             text('a', { type: 'comment', attrs: { cardId: 'card-1' } }),
             { type: 'figure', attrs: { mediaName: 'a.png', commentCardId: 'card-1' } },
             equation('x', 'card-1'),
@@ -89,7 +96,7 @@ test("a deleted card leaves no anchor: its text's mark, its figure's and its equ
 test("scrolling to an equation's card selects the equation", () => {
     const editor = new Editor({
         extensions: getDocExtensions(),
-        content: paragraph(text('a '), equation('x', 'card-1')),
+        content: docOf(text('a '), equation('x', 'card-1')),
     });
     selectCommentAnchor(editor, 'card-1');
     const { selection } = editor.state;

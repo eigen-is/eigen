@@ -70,20 +70,18 @@ describe('equation renderHTML', () => {
             getDocExtensions(),
         );
         expect(html).toBe(
-            `<p>a <span contenteditable="false"><math xmlns="${MATHML_NAMESPACE}" display="block" data-comment-id="card-1"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math></span></p>`,
+            `<p>a <span><math xmlns="${MATHML_NAMESPACE}" display="block" data-comment-id="card-1"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math></span></p>`,
         );
     });
 
     test('never mounts the stored string: what the writer does not write is gone', () => {
         const forged = `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script><foreignObject><img src="a.png"/></foreignObject></math>`;
         const html = generateHTML(equationDoc({ mathml: forged }).toJSON(), getDocExtensions());
-        expect(html).toBe(`<p>a <span contenteditable="false">${MATH}<mi>x</mi></math></span></p>`);
+        expect(html).toBe(`<p>a <span>${MATH}<mi>x</mi></math></span></p>`);
     });
 
     test('an empty equation renders an empty <math> for the node view to box', () => {
-        expect(generateHTML(equationDoc({}).toJSON(), getDocExtensions())).toBe(
-            `<p>a <span contenteditable="false">${MATH}</math></span></p>`,
-        );
+        expect(generateHTML(equationDoc({}).toJSON(), getDocExtensions())).toBe(`<p>a <span>${MATH}</math></span></p>`);
     });
 });
 
