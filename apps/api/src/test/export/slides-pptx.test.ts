@@ -276,18 +276,69 @@ describe('pptx package', () => {
         expect(attr(runProps(text, 'small'), 'sz')).toBe('1800');
     });
 
-    test('an element wholly outside its frame is not written, one partly in is', () => {
+    test('an element wholly outside its frame is not written, one the canvas draws any of is', () => {
         const zip = pptx(
             sceneOf([
                 element('rectangle', { index: 'a0', x: -100, width: 200 }),
                 element('rectangle', { index: 'a1', x: 2000 }),
                 element('rectangle', { index: 'a2', x: -500, y: 2000 }),
-                // Past DrawingML's 32-bit offsets.
                 element('ellipse', { index: 'a3', x: 1_000_000, y: 1_000_000 }),
                 element('line', { index: 'a4', x: 3000, points: '[[0,0],[100,50],[0,100]]' }),
+                // A line draws its points, not its box: in the frame with every point past it, and the other way.
+                element('line', { index: 'a5', width: 10, height: 10, points: '[[5000,0],[6000,0]]' }),
+                element('line', { index: 'a6', x: 3000, width: 10, height: 10, points: '[[0,0],[-2950,0]]' }),
+                // 10 px left of the frame, its 40 px stroke reaching 10 px in.
+                element('rectangle', { index: 'a7', x: -210, strokeWidth: 40 }),
+                // A freehand stroke's ink is FREEDRAW_SIZE_FACTOR its stroke: 21 px wide, 0.6 px in.
+                element('freedraw', {
+                    index: 'a8',
+                    x: -60,
+                    width: 50,
+                    height: 0,
+                    strokeWidth: 10,
+                    points: '[[0,0],[50,0]]',
+                }),
+                // A million px wide and 1000 px in, its offset past 32 bits of EMU.
+                element('rectangle', { index: 'a9', x: -999_000, width: 1_000_000 }),
             ]),
         );
-        expect(xfrm(only(zip)).x).toBe(-100 * EMU);
+        const all = shapes(zip);
+        expect(all.map((shape) => attr(first(shape, P, 'cNvPr'), 'name')?.split(' ')[0])).toEqual([
+            'Rectangle',
+            'Line',
+            'Rectangle',
+            'Ink',
+            'Rectangle',
+        ]);
+        expect([all[0], all[1], all[2], all[4]].map((shape) => xfrm(shape).x)).toEqual([
+            -100 * EMU,
+            50 * EMU,
+            -210 * EMU,
+            -999_000 * EMU,
+        ]);
+    });
+
+    test("a coordinate past ST_Coordinate's range is written at its bound", () => {
+        const scene = sceneOf([
+            element('rectangle', { index: 'a0', corners: 'straight' }),
+            element('line', { index: 'a1', points: '[[0,0],[100,0],[0,100]]', roundness: 'sharp' }),
+        ]);
+        // Past what the reader keeps, which the writer's output stays valid without.
+        const far = {
+            ...scene,
+            elements: scene.elements.map((el) => ({
+                ...el,
+                x: -1e10,
+                width: 2e10,
+                ...(el.type === 'line' ? { points: '[[0,0],[2e10,0],[0,100]]' } : {}),
+            })),
+        };
+        const [rectangle, line] = shapes(pptx(far));
+        const MAX_COORDINATE = 27_273_042_316_900;
+        expect(xfrm(rectangle)).toMatchObject({ x: -MAX_COORDINATE, cx: MAX_COORDINATE });
+        const points = descendants(line, A, 'pt').map((pt) => Number(attr(pt, 'x')));
+        expect(Math.max(...points)).toBe(MAX_COORDINATE);
+        expect(Number(attr(first(line, A, 'path'), 'w'))).toBe(MAX_COORDINATE);
     });
 
     test('the deck title is escaped into the core properties', () => {
@@ -778,8 +829,9 @@ describe('pptx text', () => {
     });
 
     test("a paragraph's leading break keeps its line, its last one draws none", () => {
-        const shape = only(pptx(sceneOf([element('richtext', { html: '<p><br>after<br></p><p> x <br></p>' })])));
-        expect(paragraphs(shape)).toEqual(['\nafter', 'x']);
+        const html = '<p><br>after<br></p><p> x <br></p><p>foo<br> </p><p>bar<br>\n</p>';
+        const shape = only(pptx(sceneOf([element('richtext', { html })])));
+        expect(paragraphs(shape)).toEqual(['\nafter', 'x', 'foo', 'bar']);
     });
 
     test('lists by nesting level: bullets and numbers', () => {

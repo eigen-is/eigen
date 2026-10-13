@@ -14,6 +14,7 @@ import {
     diamondOutline,
     elementBounds,
     elementsInFrame,
+    FREEDRAW_SIZE_FACTOR,
     freedrawOutline,
     getFontMetrics,
     isBordered,
@@ -254,11 +255,15 @@ function slideXml(
         shapes: 1,
         ground: background?.type === 'solid' ? background.color : undefined,
     };
-    // The canvas clips a slide to its frame: an element wholly outside draws nothing, and far off it would pass
-    // DrawingML's 32-bit offsets.
+    // The canvas clips a slide to its frame: an element wholly outside draws nothing. A line draws its points, which a
+    // peer may write past its box, and a stroke reaches half its width past them (a freehand stroke's ink is wider).
     const shown = elements.filter((el) => {
-        const bounds = elementBounds(el, arrowRoute(el, deck.byId));
-        return bounds.maxX >= 0 && bounds.maxY >= 0 && bounds.minX <= frame.width && bounds.minY <= frame.height;
+        const { minX, minY, maxX, maxY } =
+            el.type === 'line' || el.type === 'freedraw'
+                ? pointsBounds(parsePoints(el.points).map((p) => linearLocalToScene(el, p)))
+                : elementBounds(el, arrowRoute(el, deck.byId));
+        const reach = ((el.type === 'freedraw' ? FREEDRAW_SIZE_FACTOR : 1) * el.strokeWidth) / 2;
+        return maxX + reach >= 0 && maxY + reach >= 0 && minX - reach <= frame.width && minY - reach <= frame.height;
     });
     const shapes = shown.map((el) => elementXml(el, slide)).join('');
     const name = frame.name ? ` name="${escapeXml(frame.name)}"` : '';
@@ -276,8 +281,11 @@ function relate(slide: Slide, type: string, target: string, external?: true): st
     return rId;
 }
 
+// ST_Coordinate's bound, which every offset, extent and path point stays within.
+const MAX_COORDINATE = 27_273_042_316_900;
+
 function emu(slide: Slide, px: number): number {
-    return Math.round(px * slide.deck.scale);
+    return Math.min(MAX_COORDINATE, Math.max(-MAX_COORDINATE, Math.round(px * slide.deck.scale)));
 }
 
 // 1000ths of a percent, DrawingML's share of a whole.
@@ -345,6 +353,7 @@ function elementXml(el: VectorElement, slide: Slide): string {
             if (adj1 === adj2 && el.sweepAngle < 180) return '';
             const geometry =
                 el.sweepAngle >= 360 || adj1 === adj2 ? presetXml('ellipse') : presetXml('pie', { adj1, adj2 });
+            // A gradient spans the whole ellipse's box here, at its angle; the canvas paints it across the slice's own.
             return spXml(
                 slide,
                 'Pie',
@@ -894,14 +903,18 @@ function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): strin
     return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHORS[box.verticalAlign]}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
 }
 
-// CSS drops a block's last break, which starts no line, and the collapsed space at the block's start and end.
+// CSS drops the collapsed space at a block's start and end, then the block's last break, which starts no line.
 function trimmed(runs: Run[]): Run[] {
-    const out = runs.filter((run) => run.text !== '');
+    const first = runs.findIndex((run) => run.text !== '\n');
+    const last = runs.findLastIndex((run) => run.text !== '\n');
+    const out = runs
+        .map((run, i) => {
+            const start = i === first ? run.text.trimStart() : run.text;
+            return { ...run, text: i === last ? start.trimEnd() : start };
+        })
+        .filter((run) => run.text !== '');
     if (out.at(-1)?.text === '\n') out.pop();
-    const last = out.length - 1;
-    if (last >= 0 && out[0].text !== '\n') out[0] = { ...out[0], text: out[0].text.trimStart() };
-    if (last >= 0 && out[last].text !== '\n') out[last] = { ...out[last], text: out[last].text.trimEnd() };
-    return out.filter((run) => run.text !== '');
+    return out;
 }
 
 function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, marks: Marks, opacity: number): string {
