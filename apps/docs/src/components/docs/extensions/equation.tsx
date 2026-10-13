@@ -1,3 +1,4 @@
+import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { EquationNode, equationMath, readEquation } from '@workspace/lib/docs/eigendoc';
@@ -16,6 +17,7 @@ export function MathMount({ math, className }: { math: Element; className?: stri
 
 type EquationOptions = {
     onOpenComment: (cardId: string) => void;
+    onEdit: () => void;
 };
 
 function EquationView({ node, selected, extension, decorations }: NodeViewProps) {
@@ -58,7 +60,18 @@ function EquationView({ node, selected, extension, decorations }: NodeViewProps)
 
 export const Equation = EquationNode.extend<EquationOptions>({
     addOptions() {
-        return { onOpenComment: () => {} };
+        return { onOpenComment: () => {}, onEdit: () => {} };
+    },
+    addKeyboardShortcuts() {
+        return {
+            // As a click on it: an arrow selects an equation without opening its panel.
+            Enter: ({ editor }) => {
+                const { selection } = editor.state;
+                if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) return false;
+                this.options.onEdit();
+                return true;
+            },
+        };
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.

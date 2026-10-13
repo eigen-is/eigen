@@ -119,6 +119,22 @@ test.each(['Alt text', 'Caption'])(
     },
 );
 
+// Focus alone starts no draft, so a peer's write shows in the field, and the blur after it writes nothing back.
+test.each([
+    ['Alt text', 'alt'],
+    ['Caption', 'caption'],
+])('a peer writing the %s of a focused, untouched field keeps theirs', async (placeholder, attribute) => {
+    const editor = await mount();
+    await act(async () => field(placeholder).focus());
+    await act(async () => {
+        editor.view.dispatch(editor.state.tr.setNodeAttribute(2, attribute, 'Theirs'));
+    });
+    expect(field(placeholder).value).toBe('Theirs');
+
+    await act(async () => field(placeholder).blur());
+    expect(editor.state.doc.nodeAt(2)?.attrs[attribute]).toBe('Theirs');
+});
+
 const widthField = () => {
     const input = document.querySelector<HTMLInputElement>('input[type="number"]');
     if (!input) throw new Error('no Width field');

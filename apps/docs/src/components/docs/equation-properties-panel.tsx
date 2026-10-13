@@ -1,3 +1,5 @@
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import type { EditorState, Transaction } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { equationMath, readEquation } from '@workspace/lib/docs/eigendoc';
 import { LATEX_COMMANDS, MathError, readLatex, writeLatex, writeMathml } from '@workspace/math';
@@ -33,14 +35,25 @@ function readDraft(latex: string): Read {
     }
 }
 
-// `\name` and a space typed after it become `\name{}{}`, a pair of braces per argument of the command.
+// `\name` and a space typed after it become `\name{}{}`, a pair of braces per argument of the command, the caret in
+// the first; a command whose arguments already follow keeps its space.
 function expandCommand(previous: string, next: string, caret: number): { text: string; caret: number } | null {
     if (next[caret - 1] !== ' ' || next.slice(0, caret - 1) + next.slice(caret) !== previous) return null;
+    if (next[caret] === '{' || next[caret] === '[') return null;
     const name = /\\([a-zA-Z]+) $/.exec(next.slice(0, caret))?.[1];
     const command = name === undefined ? undefined : LATEX_COMMANDS.get(name);
     if (!command || command.arguments === 0) return null;
     const braces = '{}'.repeat(command.arguments);
-    return { text: next.slice(0, caret - 1) + braces + next.slice(caret), caret: caret - 1 + braces.length };
+    return { text: next.slice(0, caret - 1) + braces + next.slice(caret), caret };
+}
+
+// The equation the panel shows, the last the selection holds, as getAttributes reads it.
+function shownEquation({ doc, selection }: EditorState): { node: ProseMirrorNode; pos: number } | null {
+    let shown: { node: ProseMirrorNode; pos: number } | null = null;
+    doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+        if (node.type.name === 'equation') shown = { node, pos };
+    });
+    return shown;
 }
 
 // The draft around where the reader stopped, that character marked.
@@ -71,37 +84,38 @@ type EquationPropertiesPanelProps = {
     fieldRef: RefObject<HTMLTextAreaElement | null>;
 };
 
-// The LaTeX field edits a draft that no peer sees: Enter or a blur out of the field and its menus writes it, if it
-// parses, and Escape drops it. While it has focus it shows its draft, so a transaction that moves the equation, a
-// collaborator typing above it, neither resets nor blurs it.
+// The LaTeX field edits a draft that no peer sees. A keystroke or a menu item starts it; Enter or a blur out of the
+// field and its menus writes it if it parses and differs from the LaTeX it started from, and Escape drops it. Until
+// then the field shows the equation as stored, a peer's write too. A draft stays through a transaction that moves the
+// equation, a collaborator typing above it, and through a peer's write to it, the last writer winning.
 export function EquationPropertiesPanel({ editor, fieldRef }: EquationPropertiesPanelProps) {
     // useEditor re-renders on no transaction, and a write that keeps the equation selected fires no selectionUpdate.
-    const { latex, mathml, empty, display, from } = useEditorState({
+    const { latex, mathml, empty, display } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
-            const equation = readEquation(e.getAttributes('equation'));
+            const equation = readEquation(shownEquation(e.state)?.node.attrs ?? {});
             return {
                 // An equation from Word carries no LaTeX, so the field starts from the tree's.
                 latex: equation.latex ?? writeLatex(equation.row),
                 mathml: equation.mathml,
                 empty: equation.row.length === 0,
                 display: equation.display,
-                from: e.state.selection.from,
             };
         },
     });
-    const [draft, setDraftState] = useState<string | null>(null);
+    const [draft, setDraftState] = useState<{ text: string; base: string } | null>(null);
     // The blur that follows a commit runs in the render before it, so it reads the draft here.
     const draftRef = useRef(draft);
-    const setDraft = (next: string | null) => {
+    const setDraft = (next: { text: string; base: string } | null) => {
         draftRef.current = next;
         setDraftState(next);
     };
+    const edit = (text: string) => setDraft({ text, base: draftRef.current?.base ?? latex });
     const caretRef = useRef<number | null>(null);
     // Open symbol menus hold the focus, and the draft stays until it comes back to the field.
     const menuOpenRef = useRef(false);
 
-    const text = draft ?? latex;
+    const text = draft?.text ?? latex;
     const read = useMemo(() => readDraft(text), [text]);
     // A draft that doesn't parse previews the equation as it stands.
     const shown = read.error ? { mathml, empty } : read;
@@ -117,28 +131,45 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
         caretRef.current = null;
     });
 
-    // A draft left behind on another equation is not this one's.
+    // A draft is its equation's. A peer's write to that equation makes a new node where it stood; a node the document
+    // already held is another equation, which a click or the delete of this one moved under the selection.
     useEffect(() => {
-        if (document.activeElement !== fieldRef.current) setDraft(null);
-    }, [from]);
+        let owner = shownEquation(editor.state);
+        const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+            const next = shownEquation(editor.state);
+            if (!next || next.node === owner?.node) return;
+            let held = false;
+            transaction.before.descendants((node) => {
+                held ||= node === next.node;
+                return !held;
+            });
+            if (held || next.pos !== owner?.pos) setDraft(null);
+            owner = next;
+        };
+        editor.on('transaction', onTransaction);
+        return () => {
+            editor.off('transaction', onTransaction);
+        };
+    }, [editor]);
 
-    // A draft that parses is written if it changed; one that doesn't stays, showing its error.
+    // A draft that parses is written if it changed; one that doesn't stays, showing its error, as does one whose write
+    // finds no equation.
     const commit = () => {
         const current = draftRef.current;
         if (current === null) return true;
-        const { mathml } = readDraft(current);
+        const { mathml } = readDraft(current.text);
         if (mathml === undefined) return false;
-        if (current !== latex) editor.commands.updateEquation({ mathml });
+        if (current.text !== current.base && !editor.commands.updateEquation({ mathml })) return false;
         setDraft(null);
         return true;
     };
 
-    const insertAtCaret = (insert: string) => {
+    const insertAtCaret = ({ insert, caret }: { insert: string; caret: number }) => {
         const field = fieldRef.current;
         if (!field) return;
         const { selectionStart, selectionEnd, value } = field;
-        setDraft(value.slice(0, selectionStart) + insert + value.slice(selectionEnd));
-        caretRef.current = selectionStart + insert.length;
+        edit(value.slice(0, selectionStart) + insert + value.slice(selectionEnd));
+        caretRef.current = selectionStart + caret;
     };
 
     return (
@@ -210,7 +241,7 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
                                             aria-label={item.name}
                                             title={item.insert.trim()}
                                             className="h-8 w-8 justify-center p-0"
-                                            onClick={() => insertAtCaret(item.insert)}
+                                            onClick={() => insertAtCaret(item)}
                                         >
                                             <SymbolCell preview={item.preview} />
                                         </DropdownMenuItem>
@@ -227,27 +258,19 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
                         placeholder="x^2"
                         spellCheck={false}
                         value={text}
-                        onFocus={() => {
-                            if (draftRef.current === null) setDraft(latex);
-                        }}
                         onChange={(e) => {
                             const next = e.target.value;
                             const expanded = expandCommand(text, next, e.target.selectionStart);
                             if (expanded) caretRef.current = expanded.caret;
-                            setDraft(expanded?.text ?? next);
+                            edit(expanded?.text ?? next);
                         }}
                         onKeyDown={(e) => {
                             if (e.nativeEvent.isComposing) return;
                             if (e.key === 'Escape') setDraft(null);
                             if (e.key !== 'Enter') return;
                             e.preventDefault();
-                            const pos = editor.state.selection.from;
-                            if (commit())
-                                editor
-                                    .chain()
-                                    .focus()
-                                    .setTextSelection(pos + 1)
-                                    .run();
+                            const after = editor.state.selection.to;
+                            if (commit()) editor.chain().focus().setTextSelection(after).run();
                         }}
                     />
                     {read.error && <ErrorAt text={text} error={read.error} />}

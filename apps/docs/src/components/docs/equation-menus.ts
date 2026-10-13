@@ -1,17 +1,25 @@
 // Google Docs' five equation menus, item for item in their grid order, named by Google's labels (its editor, checked
-// 2026-10-13). `preview` is the LaTeX a cell draws, `\Box` marking an empty slot; `insert` is what goes into the field.
-type EquationMenuItem = { name: string; preview: string; insert: string };
+// 2026-10-13). `preview` is the LaTeX a cell draws, `\Box` marking an empty slot; `insert` is what goes into the field,
+// and `caret` where in it the caret lands.
+type EquationMenuItem = { name: string; preview: string; insert: string; caret: number };
 
 type EquationMenu = { label: string; glyph: string; items: EquationMenuItem[] };
 
 // A trailing space, so a letter typed next never runs into the command's name.
 const symbols = (names: string): EquationMenuItem[] =>
-    names.split(' ').map((name) => ({ name, preview: `\\${name}`, insert: `\\${name} ` }));
+    names.split(' ').map((name) => {
+        const insert = `\\${name} `;
+        return { name, preview: `\\${name}`, insert, caret: insert.length };
+    });
 
+const withoutSlots = (latex: string) => latex.replace(/\\Box ?/g, '');
+
+// The caret lands in the first slot past a base, which the text before the caret already holds.
 const template = (name: string, preview: string): EquationMenuItem => ({
     name,
     preview,
-    insert: preview.replace(/\\Box ?/g, ''),
+    insert: withoutSlots(preview),
+    caret: withoutSlots(preview.slice(0, preview.indexOf('\\Box', 1))).length,
 });
 
 export const EQUATION_MENUS: readonly EquationMenu[] = [

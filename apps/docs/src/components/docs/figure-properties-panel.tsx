@@ -14,9 +14,9 @@ import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
 import { useState } from 'react';
 import { clampFigureWidth, figureMaxWidth } from './extensions/figure';
 
-// Alt, Cap or Width. Enter or a blur writes a changed value, and Escape drops it; both leave the caret in the field,
-// showing the value as written, so the blur after them finds nothing new. While it has focus it shows its draft, so
-// a transaction that moves the figure, a collaborator typing above it, neither resets nor blurs it.
+// Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
+// from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
+// nothing back. A draft stays through a transaction that moves the figure, a collaborator typing above it.
 function FigureField({
     value,
     placeholder,
@@ -28,24 +28,23 @@ function FigureField({
     type?: 'number';
     onCommit: (value: string) => void;
 }) {
-    const [draft, setDraft] = useState<string | null>(null);
-    const commit = (next: string) => next !== value && onCommit(next);
+    const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
+    const commit = (next: string) => {
+        if (draft !== null && next !== draft.base) onCommit(next);
+        setDraft(null);
+    };
     return (
         <Input
             className="h-7 text-xs"
             type={type}
-            value={draft ?? value}
+            value={draft?.text ?? value}
             placeholder={placeholder}
-            onFocus={() => setDraft(value)}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={(e) => {
-                commit(e.target.value);
-                setDraft(null);
-            }}
+            onChange={(e) => setDraft({ text: e.target.value, base: draft?.base ?? value })}
+            onBlur={(e) => commit(e.target.value)}
             onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return;
                 if (e.key === 'Enter') commit(e.currentTarget.value);
-                if (e.key === 'Enter' || e.key === 'Escape') setDraft(null);
+                if (e.key === 'Escape') setDraft(null);
             }}
         />
     );

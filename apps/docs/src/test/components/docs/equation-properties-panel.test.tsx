@@ -11,6 +11,7 @@ installHappyDom();
 const { act, createElement, createRef } = await import('react');
 const { Editor } = await import('@tiptap/react');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { NodeSelection } = await import('@tiptap/pm/state');
 const { MATHML_NAMESPACE, readLatex, writeMathml } = await import('@workspace/math');
 const { Equation } = await import('../../../components/docs/extensions/equation');
 const { EquationPropertiesPanel } = await import('../../../components/docs/equation-properties-panel');
@@ -20,8 +21,8 @@ afterEach(() => unmount());
 
 const typed = (latex: string) => writeMathml(readLatex(latex), latex);
 
-// "a" at 1, the equation at 2, "b" at 3, the equation selected.
-async function mount(attrs: object = { mathml: typed('x^2') }) {
+// "a" at 1, the equation at 2, then the `next` equation if any, then "b", the first equation selected.
+async function mount(attrs: object = { mathml: typed('x^2') }, next?: object) {
     const editor = new Editor({
         element: document.body.appendChild(document.createElement('div')),
         extensions: [...getDocExtensions({ exclude: ['equation'] }), Equation],
@@ -33,6 +34,7 @@ async function mount(attrs: object = { mathml: typed('x^2') }) {
                     content: [
                         { type: 'text', text: 'a' },
                         { type: 'equation', attrs },
+                        ...(next ? [{ type: 'equation', attrs: next }] : []),
                         { type: 'text', text: 'b' },
                     ],
                 },
@@ -67,6 +69,22 @@ const type = (value: string) =>
         input.focus();
         nativeValueSetter?.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+// A keystroke that leaves the caret at `caret`.
+const typeAt = (value: string, caret: number) =>
+    act(async () => {
+        const input = field();
+        input.focus();
+        nativeValueSetter?.call(input, value);
+        input.setSelectionRange(caret, caret);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+// A peer's transaction.
+const remote = (editor: InstanceType<typeof Editor>, edit: (tr: InstanceType<typeof Editor>['state']['tr']) => void) =>
+    act(async () => {
+        const { tr } = editor.state;
+        edit(tr);
+        editor.view.dispatch(tr);
     });
 const key = (name: string) =>
     act(async () => {
@@ -159,12 +177,22 @@ test.each([
     ['\\frac', '\\frac{}{}'],
     ['\\sqrt', '\\sqrt{}'],
     ['x+\\overline', 'x+\\overline{}'],
-])('%s and a space give %s, the caret after it', async (before, after) => {
+])('%s and a space give %s, the caret in the first braces', async (before, after) => {
     await mount({ mathml: '' });
     await type(before);
     await type(`${before} `);
     expect(field().value).toBe(after);
-    expect(field().selectionStart).toBe(after.length);
+    expect(field().selectionStart).toBe(before.length + 1);
+});
+
+test.each([
+    ['\\frac{a}{b}', '\\frac {a}{b}'],
+    ['\\sqrt[3]{x}', '\\sqrt [3]{x}'],
+])('a space after a command whose arguments follow stays a space: %s', async (before, after) => {
+    await mount({ mathml: '' });
+    await type(before);
+    await typeAt(after, after.indexOf(' ') + 1);
+    expect(field().value).toBe(after);
 });
 
 test('a space after a command with no arguments stays a space', async () => {
@@ -193,22 +221,26 @@ test('the Display toggle writes display and keeps the equation selected', async 
     expect(preview()?.getAttribute('display')).toBe('block');
 });
 
+const openMenu = (menu: string) =>
+    act(async () => {
+        document
+            .querySelector(`button[aria-label="${menu}"]`)
+            ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    });
+// Radix gives the focus back in a timeout its unmount sets, which a later timeout follows.
+async function clickItem(item: string) {
+    await act(async () => document.querySelector<HTMLElement>(`[role="menuitem"][aria-label="${item}"]`)?.click());
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
+
 test('a symbol menu inserts its command at the caret and gives the field back its focus', async () => {
     const editor = await mount();
     await type('ab');
     await act(async () => field().setSelectionRange(1, 1));
-    const trigger = document.querySelector('button[aria-label="Greek letters"]');
-    await act(async () => {
-        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
-    });
+    await openMenu('Greek letters');
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(40);
 
-    const alpha = document.querySelector<HTMLElement>('[role="menuitem"][aria-label="alpha"]');
-    await act(async () => {
-        alpha?.click();
-        // Radix hands the focus back once the menu has closed.
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+    await clickItem('alpha');
 
     expect(field().value).toBe('a\\alpha b');
     expect(document.activeElement).toBe(field());
@@ -217,6 +249,86 @@ test('a symbol menu inserts its command at the caret and gives the field back it
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
     await key('Enter');
     expect(stored(editor)?.['mathml']).toBe(typed('a\\alpha b'));
+});
+
+// Its first slot past a base, which the text before the caret already holds.
+test.each([
+    ['frac', '\\frac{', '}{}'],
+    ['rootof', '\\sqrt[', ']{}'],
+    ['subsuperscript', 'x_{', '}^{}'],
+    ['rbracelr', 'x\\left( ', '\\right)'],
+])('a template, %s, puts the caret in its first slot', async (item, before, after) => {
+    await mount({ mathml: '' });
+    await type(before.startsWith('x') ? 'x' : '');
+    await openMenu('Math operations');
+    await clickItem(item);
+    expect(field().value).toBe(before + after);
+    expect(field().selectionStart).toBe(before.length);
+});
+
+// Shift and an arrow over it, or a drag across it, select it as text, and the panel reads it the same.
+test('an equation selected as text takes the draft and the Display toggle', async () => {
+    const editor = await mount();
+    await act(async () => editor.commands.setTextSelection({ from: 2, to: 3 }));
+    await type('y');
+    await key('Enter');
+    expect(stored(editor)?.['mathml']).toBe(typed('y'));
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
+
+    await act(async () => editor.commands.setTextSelection({ from: 2, to: 3 }));
+    await act(async () =>
+        document.querySelector<HTMLButtonElement>('button[aria-label="Display on its own line"]')?.click(),
+    );
+    expect(stored(editor)?.['display']).toBe(true);
+});
+
+test('a draft whose write finds no equation stays', async () => {
+    const editor = await mount();
+    await type('y');
+    await act(async () => editor.commands.setTextSelection(1));
+    await key('Enter');
+    expect(field().value).toBe('y');
+    expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
+});
+
+// A visit is no draft: a peer's write shows, and the blur after it leaves theirs.
+test('a peer writing the equation of a focused, untouched field keeps theirs', async () => {
+    const editor = await mount();
+    await act(async () => field().focus());
+    await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
+    expect(field().value).toBe('z');
+    await act(async () => field().blur());
+    expect(stored(editor)?.['mathml']).toBe(typed('z'));
+});
+
+test("a draft typed back to where it started writes nothing over a peer's write", async () => {
+    const editor = await mount();
+    await type('y');
+    await type('x^2');
+    await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
+    await act(async () => field().blur());
+    expect(stored(editor)?.['mathml']).toBe(typed('z'));
+    expect(field().value).toBe('z');
+});
+
+// The last writer wins.
+test("a peer's write to the equation leaves the draft, and Enter writes it", async () => {
+    const editor = await mount();
+    await type('y');
+    await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
+    expect(field().value).toBe('y');
+    await key('Enter');
+    expect(stored(editor)?.['mathml']).toBe(typed('y'));
+});
+
+// The Yjs binding selects whatever node then sits where the selected one stood.
+test('a peer deleting the equation ends its draft, which never lands on the next one', async () => {
+    const editor = await mount({ mathml: typed('x^2') }, { mathml: typed('z') });
+    await type('y');
+    await remote(editor, (tr) => tr.delete(2, 3).setSelection(NodeSelection.create(tr.doc, 2)));
+    expect(field().value).toBe('z');
+    await key('Enter');
+    expect(stored(editor)?.['mathml']).toBe(typed('z'));
 });
 
 // A collaborator typing above the equation moves it, and the selection with it.

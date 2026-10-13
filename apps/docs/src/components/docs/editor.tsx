@@ -84,6 +84,7 @@ import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePageSetup } from './hooks/use-page-setup';
+import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
 import { createDocUndoManager, writePageSetup } from './page-setup';
 import { cleanPastedHTML } from './paste';
 import { TablePropertiesPanel } from './table-properties-panel';
@@ -265,6 +266,7 @@ const TiptapEditor = ({
     const cardsRef = useRef<Record<string, CommentCard>>({});
     // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
+    const editEquationRef = useRef(() => {});
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
     const resolveMediaPathRef = useRef(resolveMediaPath);
@@ -335,7 +337,7 @@ const TiptapEditor = ({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 }),
-                Equation.configure({ onOpenComment: handleCommentClick }),
+                Equation.configure({ onOpenComment: handleCommentClick, onEdit: () => editEquationRef.current() }),
                 AtomMarks,
                 TableWidthClamp,
                 SearchHighlight,
@@ -531,17 +533,14 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
-    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'equation' | 'table'>('document');
-    const lastPanelRef = useRef<'figure' | 'equation' | 'table'>('figure');
-    if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
-    const equationFieldRef = useRef<HTMLTextAreaElement>(null);
-    // A new equation's panel mounts in the render its selection causes, so its field takes focus after that render.
-    const [focusEquationField, setFocusEquationField] = useState(false);
-    useEffect(() => {
-        if (!focusEquationField) return;
-        setFocusEquationField(false);
-        equationFieldRef.current?.focus();
-    }, [focusEquationField]);
+    const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
+        editor,
+        isMobile,
+        closePanels,
+    );
+    editEquationRef.current = editEquation;
+    const lastPanelRef = useRef<Exclude<SelectionPanel, 'document'>>('figure');
+    if (selectionPanel !== 'document') lastPanelRef.current = selectionPanel;
 
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
@@ -614,20 +613,6 @@ const TiptapEditor = ({
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
 
-    useEffect(() => {
-        if (!editor) return;
-        const onUpdate = () => {
-            if (editor.isActive('figure')) setSidebarContext('figure');
-            else if (editor.isActive('equation')) setSidebarContext('equation');
-            else if (editor.isActive('table')) setSidebarContext('table');
-            else setSidebarContext('document');
-        };
-        editor.on('selectionUpdate', onUpdate);
-        return () => {
-            editor.off('selectionUpdate', onUpdate);
-        };
-    }, [editor]);
-
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
     useZombieMediaSweep({
@@ -663,7 +648,7 @@ const TiptapEditor = ({
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
+    const showSidebar = !isMobile && (panel !== null || (canWrite && selectionPanel !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -691,13 +676,6 @@ const TiptapEditor = ({
             selectCommentAnchor(editor, cardId);
         }
         setOpenCardId(cardId);
-    };
-
-    // The comments panel would hold the slot the new equation's panel needs.
-    const handleInsertEquation = () => {
-        closePanels();
-        editor.chain().focus().insertEquation().run();
-        setFocusEquationField(true);
     };
 
     const panelProps = {
@@ -768,8 +746,7 @@ const TiptapEditor = ({
                                     onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
-                                    // A phone has no right-side panels, so nothing could edit the equation there.
-                                    onInsertEquation={isMobile ? undefined : handleInsertEquation}
+                                    onInsertEquation={insertEquation}
                                 />
                             }
                         >

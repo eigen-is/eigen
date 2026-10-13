@@ -303,6 +303,50 @@ describe('equation commands', () => {
         editor.destroy();
     });
 
+    // Shift and an arrow over the equation, or a drag across it, select it as text.
+    test('updateEquation writes an equation selected as text', () => {
+        const editor = editorOf();
+        editor.commands.setTextSelection({ from: 2, to: 3 });
+        expect(editor.commands.updateEquation({ display: true })).toBe(true);
+        expect(editor.state.doc.nodeAt(2)?.attrs['display']).toBe(true);
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 2, head: 3 });
+        editor.destroy();
+    });
+
+    // As a block insert splits it: an equation is no code, and the text after the caret stays code.
+    test('insertEquation in a code block gives the equation a paragraph between its halves', () => {
+        const lowlight = {
+            highlight: () => ({ children: [] }),
+            highlightAuto: () => ({ children: [] }),
+            listLanguages: () => [],
+        };
+        const editor = new Editor({
+            extensions: getDocExtensions({ lowlight }),
+            content: {
+                type: 'doc',
+                content: [
+                    { type: 'codeBlock', content: [{ type: 'text', text: 'abc' }] },
+                    { type: 'paragraph', content: [{ type: 'text', text: 'z' }] },
+                ],
+            },
+        });
+        editor.commands.setTextSelection(2);
+        expect(editor.commands.insertEquation()).toBe(true);
+        expect(
+            editor.state.doc.children.map((block) => [
+                block.type.name,
+                block.children.map((n) => n.text ?? n.type.name),
+            ]),
+        ).toEqual([
+            ['codeBlock', ['a']],
+            ['paragraph', ['equation']],
+            ['codeBlock', ['bc']],
+            ['paragraph', ['z']],
+        ]);
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 4 });
+        editor.destroy();
+    });
+
     test('updateEquation without a selected equation writes nothing', () => {
         const editor = editorOf();
         editor.commands.setTextSelection(1);

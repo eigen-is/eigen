@@ -145,26 +145,40 @@ export const EquationNode = Node.create({
 
     addCommands() {
         return {
-            // An empty equation at the caret, selected; one selected stays, and the new one follows it.
+            // An empty equation at the caret, selected; one selected stays, and the new one follows it. In a code
+            // block, as a block insert there, the block splits at the caret and the equation takes a paragraph between.
             insertEquation:
                 () =>
                 ({ tr, dispatch, commands }: CommandProps) => {
                     if (tr.selection instanceof NodeSelection) commands.setTextSelection(tr.selection.to);
-                    if (!commands.insertContent({ type: this.name })) return false;
-                    if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, tr.selection.from - 1));
+                    const { from, to, $from } = tr.selection;
+                    const steps = tr.steps.length;
+                    const equation = { type: this.name };
+                    const content = $from.parent.type.spec.code ? { type: 'paragraph', content: [equation] } : equation;
+                    if (!commands.insertContent(content)) return false;
+                    if (dispatch) {
+                        const mapping = tr.mapping.slice(steps);
+                        tr.doc.nodesBetween(mapping.map(from, -1), mapping.map(to), (node, pos) => {
+                            if (node.type.name === this.name) tr.setSelection(NodeSelection.create(tr.doc, pos));
+                        });
+                    }
                     return true;
                 },
-            // Attribute steps move no position, so the equation stays selected and its panel open.
+            // Every equation the selection holds, as a node or as text, or the one it selects. Attribute steps move no
+            // position, so the selection stays and the panel open.
             updateEquation:
                 (attributes) =>
                 ({ tr, dispatch }: CommandProps) => {
-                    const { selection } = tr;
-                    if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) return false;
+                    const { from, to } = tr.selection;
+                    const positions: number[] = [];
+                    tr.doc.nodesBetween(from, to, (node, pos) => {
+                        if (node.type.name === this.name && pos >= from) positions.push(pos);
+                    });
                     if (dispatch) {
-                        for (const [key, value] of Object.entries(attributes))
-                            tr.setNodeAttribute(selection.from, key, value);
+                        for (const pos of positions)
+                            for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
                     }
-                    return true;
+                    return positions.length > 0;
                 },
         };
     },
