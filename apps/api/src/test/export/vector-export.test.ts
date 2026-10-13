@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { MAX_HTML_DEPTH, readVectorFromDoc } from '@workspace/lib/vector';
+import { readVectorFromDoc } from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
@@ -197,22 +197,52 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
 });
 
 describe('Eigenvector export — rich-text nesting', () => {
-    test('a list a peer nested 3,000 deep reaches the sanitizer at the reader cap', () => {
-        // jsdom walks every ancestor of each node it inserts, so this body took seconds per parse uncapped.
-        const deep = `${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`;
+    const sanitizeRead = (html: string): string => {
         const scene = buildGoldenVectorScene();
         const doc = new Y.Doc();
         seedVectorDoc(doc, {
             ...scene,
-            elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html: deep } : el)),
+            elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html } : el)),
         });
+        const text = sanitizeSceneHtml(readVectorFromDoc(doc)).elements.find((el) => el.type === 'richtext');
+        return text?.type === 'richtext' ? text.html : '';
+    };
+    const fill = (prefix: string, unit: string) =>
+        prefix + unit.repeat(Math.floor((64 * 1024 - prefix.length) / unit.length));
+    const ems = Array.from({ length: 61 }, (_, i) => `<em a=${i}>`).join('');
+    const marks = Array.from({ length: 62 }, (_, i) => `<${['em', 'strong', 'u', 's'][i % 4]} t=${i}>`).join('');
+
+    // jsdom walks every ancestor of each node it inserts, so this body took seconds per parse uncapped.
+    test('a list a peer nested 3,000 deep reaches the sanitizer flattened, every x kept', () => {
         const start = performance.now();
-        const sanitized = sanitizeSceneHtml(readVectorFromDoc(doc));
+        const html = sanitizeRead(`${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`);
         expect(performance.now() - start).toBeLessThan(1_000);
-        const text = sanitized.elements.find((el) => el.type === 'richtext');
-        const html = text?.type === 'richtext' ? text.html : '';
-        expect(html.split('<ul>').length - 1).toBe(MAX_HTML_DEPTH / 2);
-        expect(html.replace(/<[^>]*>/g, '')).toBe('x'.repeat(3_000));
+        expect(html).toBe(`<p>${'x'.repeat(3_000)}</p>`);
+    });
+
+    // Under the depth cap, but the parser closes what the body leaves open, so formatting elements stay on its
+    // active list and every later paragraph rebuilds them: 64 KiB of these held jsdom 10–17 s.
+    test.each([
+        ['a mismatched </p>', fill(`<p>${ems}</p>`, '<p>x</p>')],
+        ['a <p> in an open <p>', fill(`<p>${ems}<p>x</p>`, '<p>x</p>')],
+        ['an <li> in an open <li>', fill(`<ul><li>${ems}<li>x</li>`, '<li>x</li>')],
+        ['empty paragraphs with a <br>', fill(`<p>${marks}</p>`, '<p><br></p>')],
+    ])('%s sanitizes in linear time, its text kept', (_, body) => {
+        const start = performance.now();
+        const html = sanitizeRead(body);
+        // 8,000 flattened paragraphs parse in about 0.5 s; the drift held jsdom 8–17 s.
+        expect(performance.now() - start).toBeLessThan(2_000);
+        expect(html).not.toContain('<em');
+        expect(html.replace(/<[^>]*>/g, '')).toBe(body.replace(/<[^>]*>/g, ''));
+    });
+
+    test('hostile markup stays inert, flattened or kept', () => {
+        const flattened = sanitizeRead('<div>&lt;img src=x onerror=alert(1)&gt;<img src=x onerror=alert(2)></div>');
+        expect(flattened).toBe('<p>&lt;img src=x onerror=alert(1)&gt;</p>');
+        const kept = sanitizeRead('<p><a href="javascript:alert(1)" onclick="alert(2)">x</a></p>');
+        expect(kept).not.toContain('javascript:');
+        expect(kept).not.toContain('onclick');
+        expect(kept).toContain('x');
     });
 });
 

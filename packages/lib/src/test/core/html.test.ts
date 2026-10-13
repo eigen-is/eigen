@@ -20,6 +20,14 @@ describe('stripTagsServer', () => {
         expect(stripTagsServer('  <p>  hello   world  </p>  ')).toBe('hello world');
     });
 
+    // A `<` the tag pattern can't close must not rescan the rest of the input: 64 KiB of them took a second.
+    test('strips in linear time when no tag closes', () => {
+        const start = performance.now();
+        stripTagsServer('<'.repeat(64 * 1024));
+        expect(performance.now() - start).toBeLessThan(100);
+        expect(stripTagsServer('a < b <p>c</p>')).toBe('a < b c');
+    });
+
     test('handles empty input', () => {
         expect(stripTagsServer('')).toBe('');
     });

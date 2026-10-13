@@ -3,7 +3,7 @@
 // instead of reaching roughjs, SVG or a layout pass.
 
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
-import { LIGHT_EDITOR_TAGS } from '../../core/html';
+import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_TAGS, stripTagsServer, textToParagraphHtml } from '../../core/html';
 import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
@@ -21,21 +21,23 @@ const MAX_FONT_SIZE = 400;
 // render and export unbounded. 64 KiB per element, truncated on a UTF-8 boundary. This reader does NOT
 // sanitize the markup — the DOM allowlist needs a DOM, and this module runs in the API Worker too. The
 // mount seam does it instead: ElementLayer (every live/preview/present surface) and the paste planner
-// both run sanitizeToLightEditorHtml, so a torn tag here is a cosmetic loss, never an injection.
+// both run sanitizeToLightEditorHtml.
 const MAX_HTML_BYTES = 64 * 1024;
 
-// Rich text nested past this many elements is flattened on read. jsdom walks every ancestor of each node it
-// inserts, so the export sanitizer's parse costs depth²: 3,000 nested list levels fit in MAX_HTML_BYTES and
-// held it for 30 s. The LightEditor indents without limit; 64 holds 29 list levels around every mark and a
-// link, where Word and Google Docs stop at 9.
+// Rich text is kept as stored only when it is editor-shaped (isEditorShaped); anything else is flattened
+// to plain paragraphs. jsdom walks every ancestor of each node it inserts, so the export sanitizer's parse
+// costs depth²: 3,000 nested list levels fit in MAX_HTML_BYTES and held it for 30 s. The LightEditor
+// indents without limit; 64 holds 29 list levels around every mark and a link, where Word and Google Docs
+// stop at 9.
 export const MAX_HTML_DEPTH = 64;
 
 const EDITOR_TAGS = new Set(LIGHT_EDITOR_TAGS);
+// The editor tags whose start tag makes the parser close an open <p>.
+const CLOSES_P = new Set<string>(LIGHT_EDITOR_BLOCK_TAGS);
 
-// One token as every HTML tokenizer reads it: a comment, ending where the tokenizer ends one; a start tag with
-// plain attributes; an end tag; or text.
+// A start tag with plain attributes, an end tag, or text. No comment, doctype or bare `<` matches.
 const HTML_TOKEN =
-    /<!--(?:-?>|[\s\S]*?--!?>)|<([a-zA-Z][a-zA-Z0-9]*)(?:[\t\n\f\r ]+[a-zA-Z_:][-\w:.]*(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r "'=<>`]+))?)*[\t\n\f\r ]*\/?>|<\/([a-zA-Z][a-zA-Z0-9]*)[\t\n\f\r ]*>|[^<]+/y;
+    /<([a-z]+)(?:[\t\n\f\r ]+[a-zA-Z_:][-\w:.]*(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r "'=<>`]+))?)*[\t\n\f\r ]*\/?>|<\/([a-z]+)[\t\n\f\r ]*>|[^<]+/y;
 
 // An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
 // count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
@@ -140,47 +142,44 @@ export function fillField(v: unknown): string {
     return serializeFill(parseFill(str(v, '')));
 }
 
-// The cap lands on a code-point boundary, not a markup one: a torn tag is repaired by every consumer,
-// which parses the body as HTML before it renders or serializes it.
+// A body that isn't editor-shaped is flattened whole, one paragraph per line of its text, so no parser
+// builds more than the scan counted. The byte cap can tear a tag at the end of either; it goes.
 export function htmlField(v: unknown): string {
-    return capDepth(capBytes(cleanStr(v, ''), MAX_HTML_BYTES));
+    const html = dropTornTag(capBytes(cleanStr(v, ''), MAX_HTML_BYTES));
+    if (isEditorShaped(html)) return html;
+    const paragraphs = textToParagraphHtml(stripTagsServer(html).replace(/\n+/g, '\n'));
+    return dropTornTag(capBytes(paragraphs, MAX_HTML_BYTES));
 }
 
-// A start tag past MAX_HTML_DEPTH goes, with its end tag, and its text stays: a too-deep list is a peer's
-// mistake or an attack, and its words are still the box's content. Only the LightEditor's own tags in plain
-// syntax nest the same in every parser. Past anything else (an unclosed comment, a <table> that
-// opens a <tbody>, a raw-text <style>), every start tag counts and none closes, and one past the cap is
-// escaped to text, so no parser can nest deeper than the scan counted.
-function capDepth(html: string): string {
-    const open: { tag: string; kept: boolean }[] = [];
-    let depth = 0;
-    let out = '';
-    let at = 0;
+// Editor-shaped: markup every HTML parser builds exactly as written, closing nothing before the body does,
+// so a parse holds MAX_HTML_DEPTH elements at most and no formatting element is rebuilt later. That is
+// only LightEditor tags in plain syntax, every end tag closing the innermost open element, no block or
+// <li> inside an open <p>, <li> only directly in a list, and no <a> inside an <a>. An implied close
+// leaves the formatting elements it pops on jsdom's active list, which rebuilds them for every later
+// paragraph: 64 KiB of such bodies under the depth cap held it for 17 s.
+function isEditorShaped(html: string): boolean {
+    const open: string[] = [];
     HTML_TOKEN.lastIndex = 0;
-    for (let m = HTML_TOKEN.exec(html); m; m = HTML_TOKEN.exec(html)) {
-        const [token, startTag, endTag] = m;
-        let keep = true;
-        if (startTag) {
-            const tag = startTag.toLowerCase();
-            if (!EDITOR_TAGS.has(tag)) break;
-            if (tag !== 'br') {
-                keep = depth < MAX_HTML_DEPTH;
-                open.push({ tag, kept: keep });
-                if (keep) depth++;
-            }
-        } else if (endTag) {
-            const top = open.at(-1);
-            if (top?.tag === endTag.toLowerCase()) {
-                open.pop();
-                keep = top.kept;
-                if (keep) depth--;
-            }
+    while (HTML_TOKEN.lastIndex < html.length) {
+        const token = HTML_TOKEN.exec(html);
+        if (!token) return false;
+        const [, start, end] = token;
+        if (start) {
+            if (!EDITOR_TAGS.has(start)) return false;
+            if (CLOSES_P.has(start) && open.includes('p')) return false;
+            if (start === 'li' && open.at(-1) !== 'ul' && open.at(-1) !== 'ol') return false;
+            if (start === 'a' && open.includes('a')) return false;
+            if (start !== 'br' && open.push(start) > MAX_HTML_DEPTH) return false;
+        } else if (end && open.pop() !== end) {
+            return false;
         }
-        if (keep) out += token;
-        at = HTML_TOKEN.lastIndex;
     }
-    let count = depth;
-    return out + html.slice(at).replace(/<(?=[a-zA-Z])/g, () => (++count > MAX_HTML_DEPTH ? '&lt;' : '<'));
+    return true;
+}
+
+function dropTornTag(html: string): string {
+    const lt = html.lastIndexOf('<');
+    return lt > html.lastIndexOf('>') ? html.slice(0, lt) : html;
 }
 
 // Newlines normalize here, not at the consumers, so the line cap and the label's height math count

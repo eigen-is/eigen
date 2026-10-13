@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import * as Y from 'yjs';
+import { escapeHtml } from '../../core/html';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
@@ -298,14 +299,12 @@ describe('readVectorFromDoc', () => {
             return deepest;
         };
 
-        test.each([2_000, 3_000])('%i nested list levels read in linear time, capped, every x kept', (levels) => {
+        test.each([2_000, 3_000])('%i nested list levels read in linear time, flattened, every x kept', (levels) => {
             const html = `${'<ul><li>x'.repeat(levels)}${'</li></ul>'.repeat(levels)}`;
             const start = performance.now();
             const read = readHtml(html);
             expect(performance.now() - start).toBeLessThan(200);
-            const body = parse(read);
-            expect(depth(body)).toBe(MAX_HTML_DEPTH);
-            expect(body.textContent).toBe('x'.repeat(levels));
+            expect(read).toBe(`<p>${'x'.repeat(levels)}</p>`);
         });
 
         // 29 list levels around a paragraph with every mark and a link: exactly MAX_HTML_DEPTH elements.
@@ -320,20 +319,67 @@ describe('readVectorFromDoc', () => {
             expect(readHtml(atCap)).toBe(atCap);
         });
 
-        test('one element past the cap loses that element and keeps its text', () => {
-            const read = readHtml(`<blockquote>${atCap}</blockquote>`);
-            expect(depth(parse(read))).toBe(MAX_HTML_DEPTH);
-            expect(parse(read).textContent).toBe(parse(atCap).textContent);
+        test('a typical editor body reads byte-identical', () => {
+            const editor =
+                '<p>Plan &amp; <strong>bold</strong> <em>it</em> <u>u</u> <s>s</s><br>next</p><blockquote><p>quote</p></blockquote>' +
+                '<ol start="3" type="a"><li><p>a</p><ul><li><p>b</p></li></ul></li><li><p></p></li></ol>' +
+                '<p><a target="_blank" rel="noopener noreferrer" href="https://eigen.is">link</a> 1 &lt; 2 &gt; 0</p>';
+            expect(readHtml(editor)).toBe(editor);
         });
 
-        // Markup the scan cannot follow tag for tag counts every start tag from there on and closes none.
+        test('one element past the cap flattens the box to paragraphs, its text kept', () => {
+            const read = readHtml(`<blockquote>${atCap}</blockquote>`);
+            expect(read).toBe(
+                `${Array.from({ length: listLevels }, (_, i) => `<p>level</p><p>${i}</p>`).join('')}<p>deep</p>`,
+            );
+        });
+
+        // Bodies under the depth cap whose parse a scan would not follow tag for tag: the parser closes an open
+        // <p> or <li> or a mismatched end tag, so formatting elements stay on its active list and every later
+        // paragraph rebuilds them. 64 KiB of these cost jsdom 10–17 s.
+        const fill = (prefix: string, unit: string) =>
+            prefix + unit.repeat(Math.floor((64 * 1024 - prefix.length) / unit.length));
+        const ems = Array.from({ length: 61 }, (_, i) => `<em a=${i}>`).join('');
+        const marks = Array.from({ length: 62 }, (_, i) => `<${['em', 'strong', 'u', 's'][i % 4]} t=${i}>`).join('');
+        const drift: [string, string, string][] = [
+            ['a mismatched </p>', fill(`<p>${ems}</p>`, '<p>x</p>'), 'x'],
+            ['a <p> in an open <p>', fill(`<p>${ems}<p>x</p>`, '<p>x</p>'), 'x'],
+            ['an <li> in an open <li>', fill(`<ul><li>${ems}<li>x</li>`, '<li>x</li>'), 'x'],
+            ['empty paragraphs with a <br>', fill(`<p>${marks}</p>`, '<p><br></p>'), ''],
+        ];
+
+        test.each(drift)('%s flattens to paragraphs of its text', (_, html, line) => {
+            const read = readHtml(html);
+            expect(read).toMatch(/^(<p>[^<]*<\/p>)+$/);
+            expect(parse(read).textContent).toBe(parse(html).textContent);
+            if (line) expect(read.split('</p>').every((p) => p === '' || p === `<p>${line}`)).toBe(true);
+        });
+
+        // Anything not editor-shaped flattens whole: other tags, comments, odd syntax, stray or implied closes.
         test.each([
-            ['a close tag in a comment', '<ul><li><!--</li></ul>-->x'],
-            ['stray close tags', '<ul><li></b></i>x'],
-            ['a bare <', 'a < b<ul><li>x'],
-            ['a tag past the editor set', '<div><span>x'],
-        ])('%s cannot nest past the cap', (_, unit) => {
-            expect(depth(parse(readHtml(unit.repeat(2_000))))).toBeLessThanOrEqual(MAX_HTML_DEPTH);
+            ['a <table> that opens a <tbody> and <tr>', '<table><td>x'.repeat(2_000), 'x'.repeat(2_000)],
+            ['a comment', '<p><!-- note -->x</p>', 'x'],
+            ['stray close tags', '<ul><li></b></i>x', 'x'],
+            ['a bare <', 'a < b<ul><li>x', 'a < bx'],
+            ['a tag past the editor set', '<div><span>x</span></div>', 'x'],
+            ['an <a> in an <a>', '<p><a href="https://a">a<a href="https://b">b</a></a></p>', 'ab'],
+            ['an <li> outside a list', '<li>x</li>', 'x'],
+            ['an upper-case tag', '<P>x</P>', 'x'],
+        ])('%s flattens', (_, html, text) => {
+            expect(readHtml(html)).toBe(`<p>${escapeHtml(text)}</p>`);
+        });
+
+        test('a flattened body stays inside the byte cap, its markup inert', () => {
+            const read = readHtml(`<div>${'"&lt;img src=x onerror=alert(1)&gt;'.repeat(2_000)}</div>`);
+            expect(new TextEncoder().encode(read).length).toBeLessThanOrEqual(64 * 1024);
+            expect(read).toStartWith('<p>&quot;&lt;img src=x onerror=alert(1)&gt;');
+            expect(read).not.toContain('<img');
+            expect(readHtml(read)).toBe(read);
+        });
+
+        test('a body the byte cap tears mid-tag keeps its markup', () => {
+            const body = `<p>${'x'.repeat(64 * 1024 - 8)}</p><p><strong>y</strong></p>`;
+            expect(readHtml(body)).toBe(`<p>${'x'.repeat(64 * 1024 - 8)}</p>`);
         });
     });
 
