@@ -44,6 +44,15 @@ export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]
 
 export const PRIME = '′';
 
+// Unicode's superscript and subscript digits and signs: each reads as a script holding its NFKC character.
+export const SCRIPT_CHARS: ReadonlyMap<string, readonly ['sub' | 'sup', string]> = new Map(
+    (['sup', 'sub'] as const).flatMap((slot) =>
+        [...(slot === 'sup' ? '⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾' : '₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎')].map(
+            (char) => [char, [slot, char.normalize('NFKC')]] as const,
+        ),
+    ),
+);
+
 // The large operators by their unicode-math names, which LaTeX writes.
 const INTEGRAL_NAMES: Readonly<Record<string, string>> = {
     int: '∫',

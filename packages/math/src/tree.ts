@@ -1,5 +1,5 @@
 import { MathError } from './error';
-import { ACCENTS, fromAlphanumeric, SPACES } from './notation';
+import { ACCENTS, fromAlphanumeric, SCRIPT_CHARS, SPACES } from './notation';
 import { checkedXml, replaceEdges, trimXmlSpace } from './xml';
 
 export const MATH_VARIANTS = [
@@ -247,6 +247,10 @@ export class RowBuilder {
                 start++;
                 continue;
             }
+            if (SCRIPT_CHARS.has(char)) {
+                start = this.#scripts(chars, start);
+                continue;
+            }
             const space = SPACE_OF_CHAR.get(char);
             let end = start + 1;
             if (space) {
@@ -272,6 +276,32 @@ export class RowBuilder {
             this.#push(token(kind, text, variant, color), text.length);
             start = end;
         }
+    }
+
+    // A run of script characters (x², x₁₂) is one scripts node on the token before it, else on an empty base.
+    #scripts(chars: StyledChar[], start: number): number {
+        const rows = {
+            sub: new RowBuilder(this.budget, this.depth + 1, 'optional'),
+            sup: new RowBuilder(this.budget, this.depth + 1, 'optional'),
+        };
+        let end = start;
+        for (; end < chars.length; end++) {
+            const { char, marks, variant, color } = chars[end];
+            const script = marks === '' ? SCRIPT_CHARS.get(char) : undefined;
+            if (!script) break;
+            rows[script[0]].chars(script[1], variant, variant, color);
+        }
+        const last = this.#row.at(-1);
+        const base = last?.kind === 'identifier' || last?.kind === 'number' || last?.kind === 'operator' ? [last] : [];
+        if (base.length > 0) this.#row.pop();
+        bound(this.budget, this.depth + 1, 1);
+        const node: MathNode = { kind: 'scripts', base };
+        const sub = optional(rows.sub.done());
+        const sup = optional(rows.sup.done());
+        if (sub) node.sub = sub;
+        if (sup) node.sup = sup;
+        this.#push(node, 0);
+        return end;
     }
 
     // An accent mark is an accent over the character, innermost first; any other stays with it, composed by NFC.

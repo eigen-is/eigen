@@ -1,4 +1,4 @@
-import { ACCENTS, COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SPACES } from '../notation';
+import { ACCENTS, COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SCRIPT_CHARS, SPACES } from '../notation';
 import { MATH_ENCLOSURES, type MathNode, type MathRow, type MathToken } from '../tree';
 
 // The canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every
@@ -56,6 +56,7 @@ function tokenIssue(node: MathToken): string | undefined {
                 !isMark(first) ||
                 isLetter(first) ||
                 SPACE_TEXTS.has(first) ||
+                SCRIPT_CHARS.has(node.text) ||
                 (/[0-9]/.test(first) && !isMarked(node.text))
             )
                 return `operator ${JSON.stringify(node.text)}`;

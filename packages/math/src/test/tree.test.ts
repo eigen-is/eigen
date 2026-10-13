@@ -3,7 +3,7 @@ import { MathError } from '../error';
 import { readLatex } from '../latex';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
-import { MATH_LIMITS, type MathNode, type MathRow } from '../tree';
+import { MATH_LIMITS, type MathNode, type MathRow, RowBuilder } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
@@ -105,6 +105,44 @@ describe('RowBuilder', () => {
         ],
         ['a mark on nothing is dropped', '\u0301x', '<mo>\u0301</mo><mi>x</mi>', letter('x')],
         ['a variation selector is dropped', '⊕\uFE0E', '<mo>⊕\uFE0E</mo>', [{ kind: 'operator', text: '⊕' }]],
+        [
+            'a superscript digit is a script on the token before it',
+            'x²',
+            '<mi>x</mi><mn>²</mn>',
+            [{ kind: 'scripts', base: letter('x'), sup: [{ kind: 'number', text: '2' }] }],
+        ],
+        [
+            'a run of script characters is one script, and a sub and a sup make one node',
+            'x₁₂⁻¹',
+            '<mi>x</mi><mn>₁₂</mn><mo>⁻</mo><mn>¹</mn>',
+            [
+                {
+                    kind: 'scripts',
+                    base: letter('x'),
+                    sub: [{ kind: 'number', text: '12' }],
+                    sup: [
+                        { kind: 'operator', text: '−' },
+                        { kind: 'number', text: '1' },
+                    ],
+                },
+            ],
+        ],
+        [
+            'a script with no token before it has an empty base',
+            '⁽²⁾',
+            '<mo>⁽</mo><mn>²</mn><mo>⁾</mo>',
+            [
+                {
+                    kind: 'scripts',
+                    base: [],
+                    sup: [
+                        { kind: 'operator', text: '(' },
+                        { kind: 'number', text: '2' },
+                        { kind: 'operator', text: ')' },
+                    ],
+                },
+            ],
+        ],
     ])('%s', (_, text, mathml, row) => {
         for (const read of readEach(text, mathml)) {
             expect(read).toStrictEqual(row);
@@ -142,11 +180,50 @@ describe('RowBuilder', () => {
         expect(() => readMathml(el(writeMathml(nested(MATH_LIMITS.depth, 'e\u0301'))))).toThrow(MathError);
     });
 
+    // What a reader counts, so a node made from a character counts as the same node read from its elements.
+    test.each<[string, (row: RowBuilder) => MathNode]>([
+        [
+            'e\u0301\u0308',
+            (row) => {
+                const inner = new RowBuilder(row.budget, 3);
+                inner.chars('e', 'italic', 'normal', undefined);
+                const outer = new RowBuilder(row.budget, 2);
+                outer.node({ kind: 'accent', accent: '\u0301', body: inner.done() });
+                return { kind: 'accent', accent: '\u0308', body: outer.done() };
+            },
+        ],
+        [
+            'x₁²',
+            (row) => {
+                const base = new RowBuilder(row.budget, 2);
+                base.chars('x', 'italic', 'normal', undefined);
+                const sub = new RowBuilder(row.budget, 2, 'optional');
+                sub.chars('1', 'italic', 'normal', undefined);
+                const sup = new RowBuilder(row.budget, 2, 'optional');
+                sup.chars('2', 'italic', 'normal', undefined);
+                return { kind: 'scripts', base: base.done(), sub: sub.done(), sup: sup.done() };
+            },
+        ],
+    ])('%p counts as the node it makes', (text, build) => {
+        const counted = (fill: (row: RowBuilder) => void) => {
+            const budget = { size: 0 };
+            const row = new RowBuilder(budget, 1);
+            fill(row);
+            row.done();
+            return budget.size;
+        };
+        expect(counted((row) => row.chars(text, 'italic', 'normal', undefined))).toBe(
+            counted((row) => row.node(build(row))),
+        );
+    });
+
     test.each<MathNode>([
         { kind: 'identifier', text: 'e\u0301' },
         { kind: 'operator', text: '\u0301' },
         { kind: 'operator', text: '=\u0338' },
         { kind: 'operator', text: '⊕\uFE0E' },
+        { kind: 'operator', text: '²' },
+        { kind: 'operator', text: '₋' },
         { kind: 'identifier', text: 'a\u0338b' },
     ])('canonicalIssue rejects %j', (node) => {
         expect(canonicalIssue([node])).toBeDefined();
