@@ -156,6 +156,7 @@ class LatexReader {
     }
 
     #build(pieces: Piece[], depth: number, slot?: RowSlot): MathRow {
+        bound(this.#budget, depth, 0, this.#offset(this.#pos));
         const row = new RowBuilder(this.#budget, depth, slot);
         for (const piece of pieces) {
             if ('node' in piece) row.node(piece.node);
@@ -274,7 +275,7 @@ class LatexReader {
 
     #spliced(into: Piece[], style: Style, depth: number): void {
         this.#wrappers++;
-        bound(this.#budget, this.#wrappers, 0);
+        bound(this.#budget, this.#wrappers, 0, this.#offset(this.#pos));
         this.#argument(into, style, depth);
         this.#wrappers--;
     }
@@ -294,8 +295,11 @@ class LatexReader {
     #bracketed(style: Style, depth: number): MathRow | undefined {
         const end = this.#bracketEnd(this.#pos, 0);
         if (end === this.#pos) return undefined;
+        // One group, as writeLatex braces a degree, is the row itself, as #scripted reads a braced base.
+        const group = this.#isChar(this.#pos + 1, '{') && this.#partners[this.#pos + 1] === end - 2;
+        const inner = group ? 2 : 1;
         const pieces: Piece[] = [];
-        this.#within(this.#pos + 1, end - 1, () => this.#atoms(pieces, style, depth));
+        this.#within(this.#pos + inner, end - inner, () => this.#atoms(pieces, style, depth));
         this.#pos = end;
         return optional(this.#build(pieces, depth, 'optional'));
     }
@@ -567,7 +571,7 @@ class LatexReader {
         const rows: MathRow[][] = [];
         this.#within(this.#pos, end, () => {
             let cells: MathRow[] = [];
-            bound(this.#budget, cellDepth, 1);
+            bound(this.#budget, cellDepth, 1, this.#offset(this.#pos));
             for (;;) {
                 const pieces: Piece[] = [];
                 this.#atoms(pieces, style, cellDepth);
@@ -582,7 +586,7 @@ class LatexReader {
                 rows.push(cells);
                 cells = [];
                 if (this.#pos >= this.#end) return;
-                bound(this.#budget, cellDepth, 1);
+                bound(this.#budget, cellDepth, 1, this.#offset(this.#pos));
             }
             rows.push(cells);
         });
@@ -600,7 +604,7 @@ class LatexReader {
 
     // One atom, without its scripts, into a row at `depth`.
     #atom(into: Piece[], style: Style, depth: number): void {
-        bound(this.#budget, depth, 0);
+        bound(this.#budget, depth, 0, this.#offset(this.#pos));
         const token = this.#tokens[this.#pos];
         if (this.#isChar(this.#pos, '{')) {
             this.#spliced(into, style, depth);
@@ -879,11 +883,12 @@ function isAtom(node: MathNode, upright: boolean): boolean {
         case 'function':
         case 'brace':
             return false;
+        case 'fenced':
+            return delimiters(node) !== undefined;
         case 'text':
         case 'space':
         case 'fraction':
         case 'radical':
-        case 'fenced':
         case 'accent':
         case 'line':
         case 'enclose':
@@ -936,6 +941,14 @@ function writeDelimiter(char: string): string | undefined {
     return name === undefined ? undefined : `\\${name}`;
 }
 
+// A fenced row's \left, \right and \middle delimiters; undefined where no command draws one of its characters.
+function delimiters(node: Extract<MathNode, { kind: 'fenced' }>): [string, string, string] | undefined {
+    const open = writeDelimiter(node.open);
+    const close = writeDelimiter(node.close);
+    const separator = node.parts.length > 1 ? writeDelimiter(node.separator) : '';
+    return open === undefined || close === undefined || separator === undefined ? undefined : [open, close, separator];
+}
+
 const interleave = (parts: string[], between: string[]) =>
     parts.flatMap((part, index) => (index === 0 ? [part] : [...between, part]));
 
@@ -963,14 +976,13 @@ function writeFenced(node: Extract<MathNode, { kind: 'fenced' }>, upright: boole
         }
     }
     const parts = node.parts.map((row) => writeRow(row, upright));
-    const open = writeDelimiter(node.open);
-    const close = writeDelimiter(node.close);
-    const separator = node.parts.length > 1 ? writeDelimiter(node.separator) : '';
-    if (open === undefined || close === undefined || separator === undefined) {
-        // No command draws a fence: its characters as they are, braced so the whole stays one atom.
+    const drawn = delimiters(node);
+    if (!drawn) {
+        // Its characters as they are: no atom, so writeBase braces them as a base.
         const plain = interleave(parts, [writeChar(node.separator)]);
-        return `{${joined([writeChar(node.open), ...plain, writeChar(node.close)])}}`;
+        return joined([writeChar(node.open), ...plain, writeChar(node.close)]);
     }
+    const [open, close, separator] = drawn;
     return joined(['\\left', open, ...interleave(parts, ['\\middle', separator]), '\\right', close]);
 }
 

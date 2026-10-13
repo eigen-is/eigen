@@ -80,10 +80,12 @@ export const MATH_LIMITS = {
 } as const;
 
 // Every reader calls this as it builds: at each level it walks, and for each node, row and character it makes.
-export function bound(budget: MathBudget, depth: number, size: number): void {
+export function bound(budget: MathBudget, depth: number, size: number, offset?: number): void {
     budget.size += size;
-    if (depth > MATH_LIMITS.depth) throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`);
-    if (budget.size > MATH_LIMITS.size) throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`);
+    if (depth > MATH_LIMITS.depth)
+        throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`, offset);
+    if (budget.size > MATH_LIMITS.size)
+        throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, offset);
 }
 
 const INVISIBLE = /^[\u200B\u2061-\u2064]$/u;

@@ -624,8 +624,25 @@ describe('writeLatex', () => {
         ],
         [
             [{ kind: 'fenced', open: '⟦', close: '⟧', separator: '', parts: [x] }],
-            '{⟦x⟧}',
+            '⟦x⟧',
             [{ kind: 'operator', text: '⟦' }, ...x, { kind: 'operator', text: '⟧' }],
+        ],
+        [
+            [
+                {
+                    kind: 'scripts',
+                    base: [{ kind: 'fenced', open: '⟦', close: '⟧', separator: '', parts: [x] }],
+                    sup: two,
+                },
+            ],
+            '{⟦x⟧}^{2}',
+            [
+                {
+                    kind: 'scripts',
+                    base: [{ kind: 'operator', text: '⟦' }, ...x, { kind: 'operator', text: '⟧' }],
+                    sup: two,
+                },
+            ],
         ],
         [[{ kind: 'operator', text: '~' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
@@ -694,6 +711,27 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
             expect(viaOmml(nested(levels))).toStrictEqual(nested(levels));
             expect(thrown(() => viaLatex(nested(levels + 1)))).toBeInstanceOf(MathError);
         }
+    });
+
+    test('radical degrees and fences no command draws, nested to the bound, read back; one level more points at it', () => {
+        const sum: MathRow = [{ kind: 'operator', text: '∑', variant: 'bold', color: '#FF0000' }];
+        const bold: MathRow = [{ kind: 'identifier', text: 'x', variant: 'bold', color: '#FF0000' }];
+        const degrees = (levels: number): MathRow =>
+            levels === 0 ? sum : [{ kind: 'radical', body: x, degree: degrees(levels - 1) }];
+        const fences = (levels: number): MathRow =>
+            levels === 0
+                ? bold
+                : [{ kind: 'fenced', open: '⟦', close: '⟧', separator: '', parts: [fences(levels - 1)] }];
+        const levels = MATH_LIMITS.depth - 1;
+        for (const tree of [degrees(levels), fences(levels)]) {
+            expect(readMathml(el(writeMathml(tree))).row).toStrictEqual(tree);
+        }
+        expect(viaLatex(degrees(levels))).toStrictEqual(degrees(levels));
+        expect(viaLatex(fences(levels))).toStrictEqual(expected(49, fences(levels)));
+        expect(thrown(() => viaLatex(degrees(levels + 1)))?.offset).toBeGreaterThan(0);
+        // An empty row is the first thing at the level past the bound.
+        const empty = `${'\\sqrt{'.repeat(levels)}\\frac{}{}${'}'.repeat(levels)}`;
+        expect(thrown(() => readLatex(empty))?.offset).toBeGreaterThan(0);
     });
 
     test('deep nesting of any kind ends in a MathError, not a stack overflow', () => {
