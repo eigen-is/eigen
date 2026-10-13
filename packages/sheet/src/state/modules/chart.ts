@@ -10,33 +10,34 @@ import { getSheetIndex } from '../utils';
 
 export type ChartBox = Pick<SheetChart, 'x' | 'y' | 'width' | 'height'>;
 
-function currentCharts(ctx: Context): Record<string, SheetChart> | undefined {
+function currentSheet(ctx: Context) {
     if (ctx.allowEdit === false) return undefined;
     const index = getSheetIndex(ctx, ctx.currentSheetId);
-    return index == null ? undefined : (ctx.sheets[index].charts ??= {});
+    return index == null ? undefined : ctx.sheets[index];
 }
 
 export function insertChart(ctx: Context, id: string, box: ChartBox, spec: ChartSpec) {
-    const charts = currentCharts(ctx);
-    if (!charts) return;
+    const sheet = currentSheet(ctx);
+    if (!sheet) return;
+    const charts = (sheet.charts ??= {});
     const top = orderByFractionalIndex(Object.values(charts)).at(-1);
     charts[id] = { id, index: generateKeyBetween(top?.index, null), ...box, spec: JSON.stringify(spec) };
 }
 
 export function updateChartBox(ctx: Context, id: string, box: Partial<ChartBox>) {
-    const chart = currentCharts(ctx)?.[id];
+    const chart = currentSheet(ctx)?.charts?.[id];
     if (chart) Object.assign(chart, box);
 }
 
 export function setChartSpec(ctx: Context, id: string, spec: ChartSpec) {
-    const chart = currentCharts(ctx)?.[id];
+    const chart = currentSheet(ctx)?.charts?.[id];
     if (chart) chart.spec = JSON.stringify(spec);
 }
 
 // One step up or down the paint order. A neighbor tied on index is passed along with it, since no
 // key sorts between two equal keys.
 export function reorderChart(ctx: Context, id: string, direction: 'forward' | 'backward') {
-    const charts = currentCharts(ctx);
+    const charts = currentSheet(ctx)?.charts;
     const chart = charts?.[id];
     if (!charts || !chart) return;
     const order = orderByFractionalIndex(Object.values(charts));
@@ -55,7 +56,7 @@ export function reorderChart(ctx: Context, id: string, direction: 'forward' | 'b
 }
 
 export function deleteChart(ctx: Context, id: string) {
-    const charts = currentCharts(ctx);
+    const charts = currentSheet(ctx)?.charts;
     if (charts?.[id]) delete charts[id];
 }
 

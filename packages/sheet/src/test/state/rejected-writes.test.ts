@@ -13,11 +13,13 @@
 // convention; this is a gate.
 
 import { describe, expect, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { setCellFormat } from '../../state/api/cell';
 import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/rowcol';
 import { initSheetData } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
 import { handlePasteByClick } from '../../state/events/paste';
+import { deleteChart, reorderChart, setChartSpec, updateChartBox } from '../../state/modules/chart';
 import { clearFilter } from '../../state/modules/filter';
 import { showSelected } from '../../state/modules/rowcol';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
@@ -83,6 +85,10 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
             handleBorder(ctx, 'border-all');
         },
     ],
+    ['moving a chart that is not there', (ctx) => updateChartBox(ctx, 'gone', { x: 10 })],
+    ['setting the spec of a chart that is not there', (ctx) => setChartSpec(ctx, 'gone', sampleChartSpec('line'))],
+    ['reordering a chart that is not there', (ctx) => reorderChart(ctx, 'gone', 'forward')],
+    ['deleting a chart that is not there', (ctx) => deleteChart(ctx, 'gone')],
     ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],
     ['unhiding a column via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'column')],
     ['unhiding a selected row when nothing is hidden', (ctx) => showSelected(ctx, 'row')],
