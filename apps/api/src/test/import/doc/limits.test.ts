@@ -10,7 +10,7 @@ import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-t
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { docxToPmJson, MAX_DOCX_TEXT, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
@@ -347,6 +347,17 @@ describe('output budget', () => {
         expect(result.rssGrowth).toBeLessThan(128 * MB);
     }, 30_000);
 
+    // One w:t compresses a gigabyte into a small upload, and the update holds every character.
+    test('text past the cap in all is 413, at it imports', async () => {
+        const half = MAX_DOCX_TEXT / 2;
+        const at = measuredImport(await buildDocxWithBody(paragraph(run('a'.repeat(half))).repeat(2)));
+        expect(at.texts).toBe(2);
+        const past = measuredImport(
+            await buildDocxWithBody(`${paragraph(run('a'.repeat(half)))}${paragraph(run('a'.repeat(half + 1)))}`),
+        );
+        expect([past.status, past.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
     // The update spells a link's href out for every text node it marks.
     test('a long href weighs by its length', async () => {
         const href = `https://example.com/${'x'.repeat(16 * 1024)}`;
@@ -516,6 +527,25 @@ describe('structure', () => {
         const json = await imported(paragraph(run('Item'), ordered(10)), { styles, numbering });
         expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
     }, 5000);
+
+    // A style's numbering without a level looks through its definition's levels for every paragraph.
+    test('100,000 levels past the ninth in one definition cost 10,000 styled paragraphs nothing', async () => {
+        const levels = Array.from(
+            { length: 100_000 },
+            (_, index) => `<w:lvl w:ilvl="${index + LIST_LEVELS}"><w:numFmt w:val="decimal"/></w:lvl>`,
+        ).join('');
+        const numbering = `<w:abstractNum w:abstractNumId="1">${levels}<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>';
+        const docx = await buildDocxWithBody(paragraph(run('Item'), '<w:pStyle w:val="L"/>').repeat(10_000), {
+            numbering,
+            styles,
+        });
+        const started = performance.now();
+        const { json } = docxToPmJson(Buffer.from(docx));
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'listItem')).toHaveLength(10_000);
+    }, 60_000);
 
     test('quotes nest at most eight deep, deeper ones joining the eighth', async () => {
         const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="12" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr>`;

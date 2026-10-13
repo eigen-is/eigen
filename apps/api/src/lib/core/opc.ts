@@ -107,7 +107,8 @@ export function openPackage(bytes: Uint8Array, passwordProtected: string): Ooxml
     };
 }
 
-// A damaged optional part, its XML or its entry, costs what it adds, not the document; a cap still refuses it.
+// A damaged optional part, its XML or its entry, costs what it adds, not the document; a cap or an out-of-memory still
+// refuses the document.
 export function optional<T>(read: () => T): T | undefined {
     try {
         return read();
