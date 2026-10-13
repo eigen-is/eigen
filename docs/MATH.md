@@ -1,16 +1,16 @@
 # Math
 
-> **TLDR:** An equation is a tree of math nodes: identifiers, numbers, fractions, scripts, fences, large operators and the rest. Each format reads into that tree and is written out of it: Word's OMML and MathML. `@workspace/math` (`packages/math/`) holds the tree, one reader and one writer per format, and the bounds every reader checks. It imports nothing, so the browser, the API, a Worker and Node run it unchanged.
+> **TLDR:** An equation is a tree of math nodes: identifiers, numbers, fractions, scripts, fences, large operators and the rest. Each format reads into that tree and is written out of it: Word's OMML, MathML and LaTeX, plus a plain-text form for search. `@workspace/math` (`packages/math/`) holds the tree, one reader and one writer per format, and the bounds every reader checks. It imports nothing, so the browser, the API, a Worker and Node run it unchanged.
 
 A conversion is a reader and then a writer: `writeMathml(readOmml(oMath))` takes a Word equation to MathML. There are no converters between pairs of formats. Recognising structure, such as which large operator owns which body, happens once, in the reader that needs it. Each writer is a switch over the closed node union in `src/tree.ts`, so `tsc` proves it handles every node. The tree follows OMML's objects, because OMML is the most structured of the formats and every equation in the research corpus is OMML.
 
-The package stores nothing. A caller keeps what a writer returns. `writeMathml(row, latex)` puts the LaTeX a user typed beside the tree as an `application/x-tex` annotation, and `readMathml` hands it back.
+The package stores nothing. A caller keeps what a writer returns. `writeMathml(row, latex)` puts the LaTeX a user typed beside the tree as an `application/x-tex` annotation, and `readMathml` hands it back. So typed LaTeX never drifts: the annotation is the source, and `writeLatex` only writes LaTeX for an equation that came without it, such as one from Word.
 
 A reader never takes a string. It takes an element: `MathXmlElement`, a namespace, a local name, the attributes keyed as written and the children. The API's Bun-parsed `XmlElement` fits it as it is. In the browser `fromDom` adapts a DOM element. So the package holds no XML parser of untrusted bytes.
 
 A picture can be written as more than one tree: `12` as one number or two, `sin` as one word or three letters. The canonical tree is the one form every reader produces, so a written tree reads back equal. A normalisation is a difference a round trip makes on purpose, listed with the equations it changes. The size of a tree counts its nodes, rows and characters, and the bounds cap it.
 
-The sections cover the canonical form, the marks the MathML writer adds so its reader can find structure again, what the readers fold, what Word loses, and the bounds; their paths are in `packages/math/`. Three things surprise people: [a token's boundaries ignore Word's runs](#tokens-are-cut-by-style-not-by-runs-or-elements), [an empty script slot reads as hidden](#a-word-equation-comes-back-as-drawn-not-as-built) and [the bounds count every level a reader walks](#the-bounds-are-on-the-tree-and-the-mathml-cap-follows).
+The sections cover the canonical form, the marks the MathML writer adds so its reader can find structure again, what the readers fold, what Word loses, LaTeX, the text form and the bounds; their paths are in `packages/math/`. Four things surprise people: [a token's boundaries ignore Word's runs](#tokens-are-cut-by-style-not-by-runs-or-elements), [an empty script slot reads as hidden](#a-word-equation-comes-back-as-drawn-not-as-built), [`\sin(x)` is no function in LaTeX](#a-function-name-takes-the-next-atom-as-its-body) and [the bounds count every level a reader walks](#the-bounds-are-on-the-tree-and-the-mathml-cap-follows).
 
 ## Tokens are cut by style, not by runs or elements
 
@@ -74,6 +74,50 @@ The OMML round trip keeps the object tree, every property the tree holds and eve
 
 An empty slot in Word draws only a placeholder box while editing, so hiding it changes nothing on the page. `m:box` reads as its content, and so does `m:phant`, shown even where Word hides it. Keeping a box or a linear fraction would put Word internals into the MathML for three corpus equations that look the same without them. Dropped and not compared: per-run font size (an equation takes its paragraph's size), `w:b` and `w:i` in math, `m:lit`, `m:ctrlPr` apart from a deletion, `m:grow`, `m:mcs`, `m:mcJc` and `m:groupChr`'s `vertJc` (the writer sets `top` under a brace, as Word does). `writeOmml` writes no LaTeX, because OMML has no slot for it.
 
+## LaTeX is a small TeX subset, read through one command table
+
+LaTeX is what a user types in the equation panel. `readLatex` is a tokenizer and a recursive-descent parser of our own; `writeLatex` writes the same subset. Every command is a row in `LATEX_COMMANDS` (`src/latex-commands.ts`): a symbol with its class, a function, a large operator, an accent, a font, a space, a colour command and so on. A new command is a row, not code, and the writer is the table read backwards: where two names give one character, it writes the first. The accent, space and large-operator characters come from `src/notation.ts`, and a test checks that every large operator, variant and space there has its command. The editor reads the table for its symbol menus, and `LATEX_ARGUMENTS` for how many `{}` to insert after `\name` and a space.
+
+The parser follows TeX where a user would notice. `%` starts a comment and `~` is a space. An argument is a group or one token, so `\frac12` is ½ and `x^23` is x² then 3. A character typed as itself, such as α or ≤, reads by its Unicode class. `\displaystyle` and `\textstyle` read as nothing, because Wikipedia's annotations start with them and the document node says whether an equation is displayed. There are no macros, no `\over` and no catcodes. An unknown command or environment, a syntax error, a C0 control or a lone surrogate is a `MathError` whose `offset` points into the LaTeX, so the editor can show where. A colour is `\textcolor{#RRGGBB}{…}` or `\color{…}` with a hex value or a name from `LATEX_COLORS`, which holds the values browsers draw, since KaTeX and MathJax hand the name to CSS.
+
+## A function name takes the next atom as its body
+
+`\sin x` reads as a function of x, but `\sin(x)` reads as the name sin and then `(x)`: a function command takes the next atom as its body unless it is a lone operator or space. A large operator does the same, so `\sum_i x_i` is an n-ary over x_i. With neither scripts nor a body, `\sum` is just the operator. Word builds its functions and n-aries the same way, so this keeps the tree what Word would make. `writeLatex` always braces a body, `\sin{\left(x\right)}`, so its own output reads back unchanged.
+
+## The LaTeX writer marks what its reader needs
+
+`readLatex(writeLatex(t))` returns `t` for every canonical tree but [what LaTeX loses](#what-latex-loses). Where LaTeX alone is ambiguous, the writer marks the tree:
+
+| Node | Written as |
+|---|---|
+| a large operator alone | `{\sum}`, so it takes no body |
+| scripts on an empty base | `{}_{6}^{14}C`; prescripts are `\prescript{14}{6}{C}` (mathtools) |
+| a fraction without a line | `\binom{n}{k}` in parentheses, else `\genfrac{}{}{0pt}{}{a}{b}` |
+| a table in fences | `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix` and `Vmatrix`; a `{` before equations is `cases`; bare tables are `matrix` and `aligned` |
+| a brace with a label | `\overbrace{x}^{n}`, as Word puts a limit over a group character |
+| an upright word or letter | `\mathrm{sin}`, `\mathrm{d}` |
+| a function name the table lacks | `\operatorname{…}`, its letters written against the upright font inside |
+| n-ary limits | `\limits` or `\nolimits` only where Word's default (integrals beside, the rest under and over) differs |
+| text | `\text{…}` with `% # & ~ $ { } _ ^ \` escaped, a no-break space as `~` and a run of spaces as control spaces, since TeX reads a run as one |
+
+## What LaTeX loses
+
+Typed LaTeX is kept as it was typed. These losses only touch `writeLatex` output, such as a Word equation opened in the equation panel:
+
+| The tree holds | LaTeX writes, and reads back as |
+|---|---|
+| a skewed fraction | `\frac`: an upright fraction |
+| a brace character other than ⏞ ⏟ ⏜ ⏝, or one on its other side | `\overset` or `\underset`: a limit holding the character |
+| an accent without a command, such as the macron U+0304 or the double acute | `\overset`: a limit holding the character; `\bar` is Word's bar, U+0305 |
+| a fence or separator character no command draws | the characters as they are, not a fenced row |
+| Word's U+2329 and U+232A angle brackets and its ∥ | `\langle`, `\rangle` and `\|`, reading back as ⟨ ⟩ and ‖ (fixture equations 51, 52, 53) |
+| an n-ary over an operator outside the large-operator table | scripts on the operator, then its body |
+| an apostrophe as an operator | `'`, which reads back as a prime ′ |
+
+## The text form is Word's linear format, written only
+
+`writeText` writes an equation on one line for search, word count and plain-text copy, in a small subset of UnicodeMath, Word's linear format: `(a+b)/2`, `x^(n+1)`, `∑_(i=1)^n i`, `√(x+1)`, `sin x`. An argument of more than one node is parenthesised. Variants stay as Unicode alphanumerics, so 𝐯 and ℝ are searchable. Nothing reads it back, so it is in no round trip; `src/test/text.test.ts` pins one example per node. It is not LaTeX, because `\sin{\left(x\right)}` is noise in a chat message and doesn't match a search for `x^2`.
+
 ## The bounds are on the tree, and the MathML cap follows
 
 Every reader takes untrusted input: a docx, a paste, a string a peer stored. `MATH_LIMITS` holds two bounds that `bound()` beside it in `src/tree.ts` checks as a reader builds:
@@ -81,9 +125,11 @@ Every reader takes untrusted input: a docx, a paste, a string a peer stored. `MA
 - `depth` counts the levels a reader walks: each node's rows, and each element it reads through without making a node, such as an unknown element or a `w:ins`. Deeply nested wrappers end in a `MathError`, not in a stack overflow. `fromDom` adapts children only when a reader asks, so a deep DOM stops at the same bound.
 - `size` counts every node, row, table row and character of text, so one long token is bounded too.
 
-The corpus's 177 equations nest at most 7 deep and reach size 316; the limits give about 4× and 30× room. `mathmlLength` follows from `size`: the costliest node, an `menclose` drawing every line around an empty row, writes 61 characters per unit it counts, and the cap allows 64 per unit plus the root. `writeMathml` throws past it, so whatever a reader admits the writer can write, and the reader can read again (`src/test/tree.test.ts` proves it on the deepest and the largest admitted trees). The LaTeX annotation is not counted in `size`, so a tree near the cap with a long annotation makes `writeMathml` throw.
+The corpus's 177 equations nest at most 7 deep and reach size 316; the limits give about 4× and 30× room. `latexLength` caps typed LaTeX at four characters a unit. `mathmlLength` follows from both: the costliest node, an `menclose` drawing every line around an empty row, writes 61 characters per unit it counts, and the cap allows 64 per unit, plus the longest annotation with every character escaped to six (`&quot;`), plus the root. `writeMathml` throws past it, so whatever a reader admits the writer can write, with the LaTeX it came from, and the reader can read again (`src/test/tree.test.ts` proves it on the deepest and the largest admitted trees).
 
-A reader throws `MathError` only at a bound or on a character XML can't hold, in the LaTeX annotation too; `writeMathml` refuses LaTeX holding such a character. Unknown content never throws. Every reader and writer is linear in its input: whitespace is trimmed by an index loop, since a regex anchored at the end backtracks through every interior run.
+The LaTeX reader counts what the MathML reader counts. A base is parsed a level deeper only when scripts follow it, which it knows before it reads the base because the tokenizer pairs every brace, `\left` and `\begin` up front. So the deepest and the largest tree MathML admits read back from their LaTeX, and one more level or unit is an error in both (`src/test/latex.test.ts`). A group, font or colour reads into the row around it without a tree level, so these count against `depth` on their own, to keep the parser's stack bounded.
+
+The XML readers throw `MathError` only at a bound or on a character XML can't hold, in the LaTeX annotation too, and never on content they don't know; `writeMathml` refuses LaTeX holding such a character. The LaTeX reader also throws on syntax and on a command it doesn't know. Every reader and writer is linear in its input: whitespace is trimmed by an index loop, since a regex anchored at the end backtracks through every interior run.
 
 ## The fixture is the licensed part of the corpus
 
