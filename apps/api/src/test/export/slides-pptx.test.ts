@@ -482,6 +482,24 @@ describe('pptx shapes', () => {
         expect(srgb(first(first(closed, P, 'spPr'), A, 'solidFill')).val).toBe('00FF00');
     });
 
+    // Past what a spread into Math.max takes: about 500k arguments in a Worker, 640k on the main thread.
+    test('a looping freehand stroke of 700k points writes its fill and its ink', () => {
+        const raster = Array.from({ length: 700_000 }, (_, i) => [i % 1000, Math.floor(i / 1000)]);
+        const zip = pptx(
+            sceneOf([
+                element('freedraw', {
+                    points: JSON.stringify([...raster, [0, 0]]),
+                    width: 1000,
+                    height: 700,
+                    fill: serializeFill({ type: 'solid', color: '#00ff00', style: 'solid' }),
+                }),
+            ]),
+        );
+        // Read as text: parsing a million path points into a tree takes seconds.
+        const slide = new TextDecoder().decode(zip.read('ppt/slides/slide1.xml'));
+        expect(slide.match(/<p:sp>/g)).toHaveLength(2);
+    });
+
     test('an arrow label is a centered text box at the label anchor', () => {
         const [, label] = shapes(
             pptx(

@@ -568,8 +568,9 @@ const NO_LINE = '<a:ln><a:noFill/></a:ln>';
 // The box a path is drawn in, centered where the element turns so a turned path turns about the canvas's center, and
 // a point of the element's local frame as a point of that path.
 function pathFrame(el: Box, points: Point[], slide: Slide): { box: Box; pt: (p: Point) => string } {
-    const rx = Math.max(...points.map((p) => Math.abs(p.x - el.width / 2)));
-    const ry = Math.max(...points.map((p) => Math.abs(p.y - el.height / 2)));
+    const { minX, minY, maxX, maxY } = pointsBounds(points);
+    const rx = Math.max(maxX - el.width / 2, el.width / 2 - minX);
+    const ry = Math.max(maxY - el.height / 2, el.height / 2 - minY);
     const left = el.width / 2 - rx;
     const top = el.height / 2 - ry;
     return {
