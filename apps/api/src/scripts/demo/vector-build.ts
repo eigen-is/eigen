@@ -1,8 +1,8 @@
-// Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN
-// spec (content.ts) — the stickies-board approach without a fixture. Every element is built typed,
-// because the docking math runs on the shapes before anything is written, then goes through the
-// editor's own writer (write-vector.ts), so the doc reads back through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM
-// to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
+// Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN spec (content.ts) —
+// the stickies-board approach without a fixture. Every element is built typed, because the docking math runs on the
+// shapes before anything is written, then goes through the editor's own writer (write-vector.ts), so the doc reads back
+// through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM to measure with.
+// Deterministic ids + seeds: a reseed renders identical jitter.
 
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';

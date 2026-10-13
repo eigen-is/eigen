@@ -1,8 +1,8 @@
-// Builds the sponsor deck straight into a slides container's Y.Doc from the typed SPONSOR_DECK spec
-// (content.ts) — the site-plan approach (vector-build.ts) rather than a byte-copied fixture, because a
-// deck is a canvas document now and frozen bytes cannot survive a stored-shape change. One frame per
-// slide, pinned 1920x1080, elements positioned relative to the frame. Every frame and element goes
-// through the editor's own writer (write-vector.ts), so the doc reads back through read-vector unchanged. Deterministic ids and indices: a reseed rebuilds the same deck.
+// Builds the sponsor deck straight into a slides container's Y.Doc from the typed SPONSOR_DECK spec (content.ts) — the
+// site-plan approach (vector-build.ts) rather than a byte-copied fixture, because a deck is a canvas document now and
+// frozen bytes cannot survive a stored-shape change. One frame per slide, pinned 1920x1080, elements positioned
+// relative to the frame. Every frame and element goes through the editor's own writer (write-vector.ts), so the doc
+// reads back through read-vector unchanged. Deterministic ids and indices: a reseed rebuilds the same deck.
 
 import { basename } from 'node:path';
 import {
