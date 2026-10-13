@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
-import { IMPORT_TOO_LARGE } from '../../import/messages';
+import { DOCUMENT_TOO_LARGE, IMPORT_TOO_LARGE } from '../../import/messages';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
@@ -26,8 +26,8 @@ import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type Transf
 // orchestration.
 //
 // There is deliberately no main-thread fallback: a runner 503 and controlled
-// document errors keep their HTTP status, an import that ran out of memory is a file
-// too large, every other failure throws.
+// document errors keep their HTTP status, an import or a search extract that ran out of
+// memory is a file too large, every other failure throws.
 
 // What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
 // and the capture time is measured here. prepMs: main-thread media preparation time,
@@ -54,6 +54,10 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         if (response.error.status) throw new ApiError(response.error.status, response.error.message);
         if (response.error.code === 'out-of-memory' && request.kind === 'import') {
             throw new ApiError(413, IMPORT_TOO_LARGE[request.sourceFormat]);
+        }
+        // The search extract indexes it as nothing rather than running out again on every drain.
+        if (response.error.code === 'out-of-memory' && request.kind === 'extract-text') {
+            throw new ApiError(413, DOCUMENT_TOO_LARGE);
         }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
