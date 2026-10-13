@@ -105,6 +105,7 @@ The parser follows TeX where a user would notice. `%` starts a comment and `~` i
 | a function name the table lacks | `\operatorname{…}`, its letters written against the upright font inside |
 | n-ary limits | `\limits` or `\nolimits` only where Word's default (integrals beside, the rest under and over) differs |
 | text | `\text{…}` with `% # & ~ $ { } _ ^ \` escaped, a no-break space as `~` and a run of spaces as control spaces, since TeX reads a run as one |
+| an accent outside the accent table, such as U+0311 | `\overset{̑}{x}`, its bare mark, which reads back as the accent; MathJax draws it, KaTeX rejects it |
 | a superscript of primes alone | `x^{\prime}`: TeX raises a `'` as a superscript, so `x^{'}` would draw it twice as high |
 | a prime after scripts or a brace label | `x^{2}{}'`: TeX would put the prime on the script's base, a double superscript |
 | a table's empty last row | `\\ {}`, since a trailing `\\` starts no row |
@@ -118,7 +119,7 @@ Typed LaTeX is kept as it was typed. These losses only touch `writeLatex` output
 |---|---|
 | a skewed fraction | `\frac`: an upright fraction |
 | a brace character other than ⏞ ⏟ ⏜ ⏝, or one on its other side | `\overset` or `\underset`: a limit holding the character |
-| an accent without a command, such as the macron U+0304 or the double acute | `\overset`: a limit holding its spacing character, ¯ or ˝; `\bar` is Word's bar, U+0305. An accent outside the accent table has no spacing character, so `\overset` holds its bare mark: it marks nothing, and reads back as an empty limit |
+| an accent from the accent table without a command, such as the macron U+0304 or the double acute | `\overset`: a limit holding its spacing character, ¯ or ˝; `\bar` is Word's bar, U+0305 |
 | a fence or separator character no command draws, such as Word's ⟦ ⟧ | the characters as they are, not a fenced row (fixture equation 49): neither KaTeX nor MathJax takes `\llbracket` after `\left` |
 | an operator `^` or `~` | `\text{\textasciicircum{}}` or `\text{\textasciitilde{}}`: text, since math mode has no command both KaTeX and MathJax read for either |
 | Word's U+2329 and U+232A angle brackets and its ∥ | `\langle`, `\rangle` and `\|`, reading back as ⟨ ⟩ and ‖ (fixture equations 51, 52, 53) |

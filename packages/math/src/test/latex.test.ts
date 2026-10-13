@@ -53,8 +53,11 @@ const withoutLosses = (row: MathRow): MathRow =>
                 return BRACE_COMMANDS.has(node.char + node.position)
                     ? node
                     : { ...node, char: node.position === 'over' ? '⏞' : '⏟' };
+            // An accent outside the table is \overset of its mark; one in the table without a command is lost.
             case 'accent':
-                return ACCENT_COMMANDS.has(node.accent) ? node : { ...node, accent: '\u0302' };
+                return ACCENT_COMMANDS.has(node.accent) || !ACCENTS.has(node.accent)
+                    ? node
+                    : { ...node, accent: '\u0302' };
             case 'nary':
                 if (LARGE_OPERATORS.has(node.operator)) return node;
                 return { ...node, operator: '∑', limits: node.sub || node.sup ? node.limits : naryLimits('∑') };
@@ -181,7 +184,6 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
         const lossy: MathRow = [
             { kind: 'fraction', numerator: x, denominator: letter('y'), line: 'skewed' },
             { kind: 'brace', char: '→', position: 'over', body: x },
-            { kind: 'accent', accent: '\u0311', body: x },
             { kind: 'nary', operator: '⋆', limits: 'under', sub: letter('i'), body: x },
             { kind: 'fenced', open: '⟪', close: '⟫', separator: '', parts: [x] },
             { kind: 'fenced', open: '(', close: ')', separator: ',', parts: [x, letter('y')] },
@@ -647,6 +649,8 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '⪯\u0338' }], '\\not\\preceq'],
         [[{ kind: 'identifier', text: 'a\u0338' }], '\\not a'],
         [[{ kind: 'operator', text: '∑\u0338' }], '{\\sum}\u0338'],
+        // An accent outside the accent table is \overset of its mark, which reads back as the accent.
+        [[{ kind: 'accent', accent: '\u0311', body: x }], '\\overset{\u0311}{x}'],
         [
             [{ kind: 'table', layout: 'matrix', rows: [[x], [[{ kind: 'operator', text: '[' }, ...x]]] }],
             '\\begin{matrix}x \\\\ [x\\end{matrix}',
@@ -684,12 +688,6 @@ describe('writeLatex', () => {
                     sup: two,
                 },
             ],
-        ],
-        // A mark on nothing marks nothing.
-        [
-            [{ kind: 'accent', accent: '\u0311', body: x }],
-            '\\overset{\u0311}{x}',
-            [{ kind: 'limit', position: 'over', base: x, limit: [] }],
         ],
         [[{ kind: 'operator', text: '~' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],

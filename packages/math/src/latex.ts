@@ -8,6 +8,7 @@ import {
     defaultVariant,
     equationCells,
     hexColor,
+    MARK,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     type MathBudget,
@@ -15,6 +16,7 @@ import {
     type MathRow,
     type MathToken,
     type MathVariant,
+    mark,
     numberEnd,
     optional,
     RowBuilder,
@@ -308,6 +310,16 @@ class LatexReader {
         this.#within(this.#pos + inner, end - inner, () => this.#atoms(pieces, style, depth));
         this.#pos = end;
         return optional(this.#build(pieces, depth, 'optional'));
+    }
+
+    // A group of one combining mark alone: the mark, the group read.
+    #loneMark(): string | undefined {
+        const token = this.#tokens[this.#pos + 1];
+        if (!this.#isChar(this.#pos, '{') || this.#partners[this.#pos] !== this.#pos + 2 || token.command)
+            return undefined;
+        if (!MARK.test(token.text) || mark(token.text) === '') return undefined;
+        this.#pos += 3;
+        return token.text;
     }
 
     // A braced argument as written: a colour, an enclosure's notation, a fraction's line, an environment's name.
@@ -667,6 +679,12 @@ class LatexReader {
                 into.push({ node: { kind: 'line', position: command.position, body: this.#row(style, depth + 1) } });
                 return;
             case 'limit': {
+                // \overset of one combining mark is an accent outside the accent table, as writeLatex writes one.
+                const accent = command.position === 'over' ? this.#loneMark() : undefined;
+                if (accent) {
+                    into.push({ node: { kind: 'accent', accent, body: this.#row(style, depth + 1) } });
+                    return;
+                }
                 const limit = this.#row(style, depth + 1);
                 const base = this.#row(style, depth + 1);
                 into.push({ node: { kind: 'limit', position: command.position, base, limit } });

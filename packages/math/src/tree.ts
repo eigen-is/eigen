@@ -90,7 +90,7 @@ export function bound(budget: MathBudget, depth: number, size: number): void {
 // Variation selectors too: an emoji presentation is no math.
 const INVISIBLE = /^(?:[\u200B\u2061-\u2064]|\uFE0E|\uFE0F)$/u;
 const LETTER = /^\p{L}$/u;
-const MARK = /^\p{M}$/u;
+export const MARK = /^\p{M}$/u;
 export const DIGIT = /^[0-9]$/;
 const SPACE_OF_CHAR = new Map<string, MathSpace>([
     [SPACES.normal.text, 'normal'],
