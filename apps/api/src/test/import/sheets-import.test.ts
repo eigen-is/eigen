@@ -11,6 +11,7 @@ import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
 import { openZip, type ZipReader } from '../../lib/core/zip';
 import { getSharedDrive } from '../../lib/drive/get-drive';
+import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import { readLocationHyperlinks, xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
@@ -762,6 +763,13 @@ describe('Sheets xlsx conversion fidelity', () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
         const sheets = await parseXlsx(buffer);
         expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
+    });
+
+    test("a width counts the file's default font: 8 px a character beside Calibri, Inter's digit beside Inter", async () => {
+        const calibri = await buildXlsxBuffer([{ a1: 'A1', value: 'x' }], 'Sheet1', [], [{ col: 1, width: 8.43 }]);
+        expect((await parseXlsx(calibri))[0].config?.columnlen?.['0']).toBe(67);
+        const inter = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
+        expect((await xlsxToSheets(inter))[0].config?.columnlen).toEqual({ 0: 67 });
     });
 
     test('convert preserves font sizes in points', async () => {
