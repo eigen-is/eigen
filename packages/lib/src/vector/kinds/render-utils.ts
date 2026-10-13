@@ -23,6 +23,10 @@ import {
     type VectorShapeElement,
 } from '../types';
 
+// The SVG namespace, one spelling for every surface that writes it: the viewports scene-layers emits,
+// the documents scene-to-svg serializes, a standalone chart and the live <svg> nodes the canvas mounts.
+export const SVG_NS = 'http://www.w3.org/2000/svg';
+
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 

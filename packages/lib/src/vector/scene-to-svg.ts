@@ -11,8 +11,8 @@ import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
 import { round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
-import { elementGroupOpen } from './kinds/render-utils';
-import { RICH_TEXT_CLASS, SVG_NS } from './scene-layers';
+import { elementGroupOpen, SVG_NS } from './kinds/render-utils';
+import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 
 // The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.

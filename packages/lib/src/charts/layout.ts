@@ -3,6 +3,7 @@
 // legend on top, light gridlines, no tick marks, zero-based bars).
 
 import type {
+    ChartBox,
     ChartData,
     ChartLabel,
     ChartLayout,
@@ -33,6 +34,25 @@ export const CHART_MESSAGES = {
     pieNeedsPositive: 'Pie charts need positive values',
     tooSmall: 'Chart too small',
     unreadable: "This chart can't be shown",
+    ref: '#REF!',
+    tooManyPoints: 'Too much data for a chart',
+};
+
+// The one paint of a chart in a document or a sheet, which store none: Google's flat look in Inter on
+// the page's own background. strokeColor draws the baseline at full strength and the gridlines faint
+// (GRIDLINE_OPACITY), so a mid gray gives a clear baseline and Google's light gridlines. strokeWidth is
+// every shape's line; 2 is Google's series line width, so a line series reads at page scale, and it
+// widens a bar by only 1px a side.
+export const FLAT_CHART_PAINT: ChartPaint = {
+    fontFamily: 'Inter',
+    color: '#202124',
+    background: serializeFill(TRANSPARENT_FILL),
+    strokeColor: '#757575',
+    strokeWidth: 2,
+    strokeStyle: 'solid',
+    roughness: 0,
+    seed: 1,
+    fillStyle: 'solid',
 };
 
 // Base text size as a share of the box's shorter side, as Google's charts scale theirs.
@@ -75,9 +95,6 @@ type Context = {
 };
 
 type LegendItem = { name: string; color: string };
-
-// The box and paint every layout starts from, a message's included.
-type ChartBox = Pick<ChartLayoutInput, 'id' | 'width' | 'height' | 'paint'>;
 
 export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
     const ctx = context(box);

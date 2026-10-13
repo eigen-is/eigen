@@ -1,4 +1,4 @@
-export { CHART_MESSAGES, layoutChart, layoutChartMessage } from './layout';
+export { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, layoutChartMessage } from './layout';
 export {
     CHART_PALETTE,
     chartColor,
