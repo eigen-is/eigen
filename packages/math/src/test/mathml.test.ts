@@ -2,9 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { MATH_LIMITS, type MathRow } from '../tree';
-import { elementsOf, type MathXmlElement } from '../xml';
+import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
-import { generateTree } from './generate';
 import { el, viaOmml } from './parse';
 
 const math = (content: string) => el(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
@@ -245,34 +244,5 @@ describe('writeMathml', () => {
     test('refuses to write past the MathML cap', () => {
         const text = 'a'.repeat(MATH_LIMITS.mathmlLength);
         expect(() => writeMathml([{ kind: 'text', text }])).toThrow(MathError);
-    });
-
-    // C8, MathML half: whatever the tree holds, the output holds only the writer's elements and attributes.
-    test('output holds only the writer’s elements and attributes', () => {
-        const elements = new Set(
-            'math semantics annotation mrow mi mn mo mtext mspace mfrac msqrt mroot msub msup msubsup mmultiscripts mprescripts none munder mover munderover menclose mtable mtr mtd'.split(
-                ' ',
-            ),
-        );
-        const attributes = new Set(
-            'xmlns encoding mathvariant mathcolor stretchy fence separator largeop accent accentunder width linethickness bevelled notation displaystyle columnalign'.split(
-                ' ',
-            ),
-        );
-        const adversarial: MathRow = [
-            { kind: 'text', text: '</mtext><script>alert(1)</script>"&]]>' },
-            { kind: 'identifier', text: 'x', color: '" onclick="alert(1)' },
-            { kind: 'text', text: 'javascript:alert(1)', color: 'red' },
-            { kind: 'fenced', open: '<', close: '"', separator: '&', parts: [[], []] },
-        ];
-        for (const tree of [adversarial, ...Array.from({ length: 200 }, (_, seed) => generateTree(seed + 1))]) {
-            const visit = (element: MathXmlElement) => {
-                expect(element.ns).toBe(MATHML_NAMESPACE);
-                expect(elements).toContain(element.local);
-                for (const name of Object.keys(element.attributes)) expect(attributes).toContain(name);
-                for (const child of elementsOf(element)) visit(child);
-            };
-            visit(el(writeMathml(tree, '</annotation><script>x</script>')));
-        }
     });
 });

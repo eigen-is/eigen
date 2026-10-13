@@ -112,6 +112,9 @@ export function toColor(hex: string | undefined): string | undefined {
     return hex && /^[0-9A-Fa-f]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : undefined;
 }
 
+// A #RRGGBB colour, as MathML, LaTeX and a tree hold it; anything else is no colour, so a writer never writes it.
+export const hexColor = (color: string | undefined) => (color?.startsWith('#') ? toColor(color.slice(1)) : undefined);
+
 function token(kind: MathToken['kind'], text: string, variant: MathVariant | undefined, color: string | undefined) {
     const node: MathToken = { kind, text };
     if (variant) node.variant = variant;

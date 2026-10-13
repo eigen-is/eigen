@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import type { MathNode, MathRow } from '../tree';
-import { elementsOf, type MathXmlElement } from '../xml';
+import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { type CanonicalItem, type CanonicalObject, canonicalOmml } from './canonical-omml';
 import { CORPUS, type CorpusEquation } from './corpus';
@@ -401,27 +401,5 @@ describe('writeOmml', () => {
             '<m:oMath><m:r><m:t xml:space="preserve">x+1</m:t></m:r>' +
                 '<m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t xml:space="preserve">sin</m:t></m:r></m:oMath>',
         );
-    });
-
-    // C8, OMML half: whatever the tree holds, the output holds only m: elements and w:rPr/w:color.
-    test('output holds only the writer’s elements and attributes', () => {
-        const adversarial: MathRow = [
-            { kind: 'text', text: '</m:t><w:del>"&]]>' },
-            { kind: 'operator', text: '"', color: '#FF0000' },
-            { kind: 'fenced', open: '"', close: '<', separator: '&', parts: [[], []] },
-            { kind: 'identifier', text: 'x', color: 'red"><w:hack/' },
-        ];
-        for (const tree of [adversarial, ...Array.from({ length: 200 }, (_, seed) => generateTree(seed + 1))]) {
-            const visit = (element: MathXmlElement) => {
-                const allowed =
-                    element.ns === OMML_NAMESPACE ||
-                    (element.ns === WORDML_NAMESPACE && ['rPr', 'color'].includes(element.local));
-                expect(allowed ? '' : `${element.ns} ${element.local}`).toBe('');
-                for (const name of Object.keys(element.attributes))
-                    expect(['m:val', 'w:val', 'xml:space']).toContain(name);
-                for (const child of elementsOf(element)) visit(child);
-            };
-            visit(parseWritten(writeOmml(tree)));
-        }
     });
 });

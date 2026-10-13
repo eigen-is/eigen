@@ -5,6 +5,7 @@ import {
     bound,
     DIGIT,
     equationCells,
+    hexColor,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     type MathBudget,
@@ -16,9 +17,8 @@ import {
     optional,
     RowBuilder,
     type RowSlot,
-    toColor,
 } from './tree';
-import { NOT_XML } from './xml';
+import { checkedXml, NOT_XML } from './xml';
 
 const NO_BREAK_SPACE = '\u00A0';
 
@@ -313,7 +313,7 @@ class LatexReader {
     #color(): string {
         const at = this.#offset(this.#pos) + 1;
         const name = this.#raw();
-        const color = name.startsWith('#') ? toColor(name.slice(1)) : LATEX_COLORS.get(name);
+        const color = hexColor(name) ?? LATEX_COLORS.get(name);
         if (!color) throw new MathError(`Unknown colour ${name}`, at);
         return color;
     }
@@ -824,7 +824,10 @@ function fontOf(node: MathToken, upright: boolean): MathVariant | undefined {
     return variant === (upright ? 'normal' : 'italic') ? undefined : variant;
 }
 
-const colored = (color: string | undefined, latex: string) => (color ? `\\textcolor{${color}}{${latex}}` : latex);
+const colored = (color: string | undefined, latex: string) => {
+    const hex = hexColor(color);
+    return hex ? `\\textcolor{${hex}}{${latex}}` : latex;
+};
 
 function writeToken(node: MathToken, upright: boolean): string {
     const text = joined([...node.text].map(writeChar));
@@ -1049,5 +1052,5 @@ function writeNode(node: MathNode, upright: boolean): string {
 }
 
 export function writeLatex(row: MathRow): string {
-    return writeRow(row, false);
+    return checkedXml(writeRow(row, false));
 }

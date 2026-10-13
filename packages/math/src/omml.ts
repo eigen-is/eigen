@@ -2,6 +2,7 @@ import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
 import {
     bound,
     equationCells,
+    hexColor,
     MATH_ENCLOSURES,
     type MathBudget,
     type MathEnclosure,
@@ -14,7 +15,7 @@ import {
     type RowSlot,
     toColor,
 } from './tree';
-import { attribute, elementsOf, escapeXml, type MathXmlElement, textOf } from './xml';
+import { attribute, checkedXml, elementsOf, escapeXml, type MathXmlElement, textOf } from './xml';
 
 export const OMML_NAMESPACE = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
 export const WORDML_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -316,8 +317,10 @@ function properties(object: string, values: [string, string | undefined][]): str
     return set.length > 0 ? `<m:${object}Pr>${set.join('')}</m:${object}Pr>` : '';
 }
 
-const colored = (color: string | undefined) =>
-    color ? `<w:rPr><w:color w:val="${escapeXml(color.slice(1))}"/></w:rPr>` : '';
+const colored = (color: string | undefined) => {
+    const hex = hexColor(color);
+    return hex ? `<w:rPr><w:color w:val="${hex.slice(1)}"/></w:rPr>` : '';
+};
 
 function style(variant: MathVariant | undefined): string {
     if (!variant) return '';
@@ -447,5 +450,5 @@ function writeRow(row: MathRow): string {
 
 // The caller binds m: and w:, as the docx writer declares them once on its root.
 export function writeOmml(row: MathRow): string {
-    return `<m:oMath>${writeRow(row)}</m:oMath>`;
+    return checkedXml(`<m:oMath>${writeRow(row)}</m:oMath>`);
 }

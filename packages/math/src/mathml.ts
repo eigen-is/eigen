@@ -12,6 +12,7 @@ import {
 import {
     bound,
     equationCells,
+    hexColor,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     MATH_SPACES,
@@ -24,7 +25,6 @@ import {
     optional,
     RowBuilder,
     type RowSlot,
-    toColor,
 } from './tree';
 import {
     attribute,
@@ -63,10 +63,7 @@ function is(element: MathXmlElement | undefined, local: string): element is Math
 const isFlagged = (element: MathXmlElement | undefined, flag: string) =>
     is(element, 'mo') && attribute(element, flag) === 'true';
 
-const colorOf = (element: MathXmlElement) => {
-    const color = attribute(element, 'mathcolor');
-    return color?.startsWith('#') ? toColor(color.slice(1)) : undefined;
-};
+const colorOf = (element: MathXmlElement) => hexColor(attribute(element, 'mathcolor'));
 
 // The three mrows that mean more than their children: an n-ary (a large operator from the table with scripts, or
 // one marked largeop, then its body), a fenced row (both ends marked fence) and a function application (name,
@@ -339,7 +336,10 @@ export function readMathml(math: MathXmlElement): { row: MathRow; latex: string 
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const colorAttribute = (color: string | undefined) => (color ? ` mathcolor="${escapeXml(color)}"` : '');
+const colorAttribute = (color: string | undefined) => {
+    const hex = hexColor(color);
+    return hex ? ` mathcolor="${hex}"` : '';
+};
 
 function writeToken(node: MathToken): string {
     const tag = node.kind === 'identifier' ? 'mi' : node.kind === 'number' ? 'mn' : 'mo';
@@ -458,8 +458,8 @@ export function writeMathml(row: MathRow, latex?: string): string {
     const content =
         latex === undefined
             ? writeRow(row)
-            : `<semantics>${writeArgument(row)}<annotation encoding="${TEX}">${escapeXml(checkedXml(latex))}</annotation></semantics>`;
-    const mathml = `<math xmlns="${MATHML_NAMESPACE}">${content}</math>`;
+            : `<semantics>${writeArgument(row)}<annotation encoding="${TEX}">${escapeXml(latex)}</annotation></semantics>`;
+    const mathml = checkedXml(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
     if (mathml.length > MATH_LIMITS.mathmlLength) {
         throw new MathError(`An equation's MathML is at most ${MATH_LIMITS.mathmlLength} characters`);
     }

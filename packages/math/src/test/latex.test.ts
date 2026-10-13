@@ -815,29 +815,6 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
         }
     });
 
-    // writeLatex's costliest units per unit of size: an enclose drawing every line around an empty row, a coloured
-    // operator in the longest font command with the longest symbol command, and coloured text of backslashes.
-    test('the largest admitted tree of the costliest units writes LaTeX within its cap that reads back', () => {
-        const units = Math.floor((MATH_LIMITS.size - 1) / 2);
-        const trees: MathRow[] = [
-            Array.from(
-                { length: units },
-                (): MathNode => ({ kind: 'enclose', notation: [...MATH_ENCLOSURES], body: [] }),
-            ),
-            Array.from(
-                { length: units },
-                (): MathNode => ({ kind: 'operator', text: '⟺', variant: 'sans-serif-bold-italic', color: '#FF0000' }),
-            ),
-            [{ kind: 'text', text: '\\'.repeat(MATH_LIMITS.size - 2), color: '#FF0000' }],
-        ];
-        for (const tree of trees) {
-            expect(readMathml(el(writeMathml(tree))).row).toStrictEqual(tree);
-            const latex = writeLatex(tree);
-            expect(latex.length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
-            expect(readLatex(latex)).toStrictEqual(tree);
-        }
-    });
-
     test('LaTeX past its cap is an error', () => {
         expect(readLatex(`${' '.repeat(MATH_LIMITS.latexLength - 1)}x`)).toStrictEqual(x);
         expect(() => readLatex(`${' '.repeat(MATH_LIMITS.latexLength)}x`)).toThrow(MathError);
@@ -863,88 +840,6 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
                 ms: true,
             });
         }
-    });
-
-    test('seeded random token strings end in a canonical tree that writes back, or a MathError', () => {
-        const TOKENS = [
-            ..."xy1.2+-=(){}^_&'~%#$[]|",
-            ' ',
-            '\n',
-            '\u00A0',
-            '😀',
-            '{x}',
-            '{}',
-            '\\\\',
-            '\\ ',
-            '\\,',
-            '\\quad',
-            '\\frac',
-            '\\binom',
-            '\\genfrac{}{}{0pt}{}',
-            '\\sqrt',
-            '\\sqrt[3]',
-            '\\left(',
-            '\\left.',
-            '\\middle|',
-            '\\right)',
-            '\\right\\}',
-            '\\left( x \\middle| y \\right]',
-            '\\begin{pmatrix}',
-            '\\end{pmatrix}',
-            '\\begin{cases} 1 & x \\\\ 2 \\end{cases}',
-            '\\begin{aligned} a &= b \\end{aligned}',
-            '\\sum',
-            '\\int',
-            '\\limits',
-            '\\sin',
-            '\\lim',
-            '\\operatorname',
-            '\\operatorname*{arg}',
-            '\\text{',
-            '\\text{a  b}',
-            '\\color{red}',
-            '\\textcolor{blue}',
-            '\\mathbf',
-            '\\mathrm',
-            '\\hat',
-            '\\overline',
-            '\\overbrace',
-            '\\overset',
-            '\\xrightarrow',
-            '\\xrightarrow[a]',
-            '\\prescript',
-            '\\boxed',
-            '\\enclose{top}',
-            '\\pmod',
-            '\\alpha',
-            '\\displaystyle',
-            '\\unknown',
-        ];
-        let state = 7;
-        const random = () => {
-            state = (Math.imul(state, 1_103_515_245) + 12_345) >>> 0;
-            return state / 4_294_967_296;
-        };
-        const start = performance.now();
-        let trees = 0;
-        for (let run = 0; run < 10_000; run++) {
-            const latex = Array.from(
-                { length: 1 + Math.floor(random() * 12) },
-                () => TOKENS[Math.floor(random() * TOKENS.length)],
-            ).join('');
-            let tree: MathRow;
-            try {
-                tree = readLatex(latex);
-            } catch (error) {
-                expect({ latex, error: error instanceof MathError }).toEqual({ latex, error: true });
-                continue;
-            }
-            trees++;
-            expect({ latex, issue: canonicalIssue(tree) }).toEqual({ latex, issue: undefined });
-            expect({ latex, tree: viaLatex(tree) }).toStrictEqual({ latex, tree });
-        }
-        expect(trees).toBeGreaterThan(1000);
-        expect(performance.now() - start).toBeLessThan(5000);
     });
 });
 

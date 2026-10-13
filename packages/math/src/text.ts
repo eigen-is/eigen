@@ -1,5 +1,6 @@
 import { toAlphanumeric } from './notation';
 import type { MathNode, MathRow } from './tree';
+import { checkedXml } from './xml';
 
 // Word's linear form, a small UnicodeMath subset on one line, for search, word count and text/plain. Nothing reads
 // it back.
@@ -17,7 +18,7 @@ const ROOTS: ReadonlyMap<string, string> = new Map([
 const COMPOUND: ReadonlySet<MathNode['kind']> = new Set(['fraction', 'scripts', 'nary', 'function']);
 
 function argument(row: MathRow): string {
-    const text = writeText(row);
+    const text = rowText(row);
     return row.length > 1 || (row.length === 1 && COMPOUND.has(row[0].kind)) ? `(${text})` : text;
 }
 
@@ -44,20 +45,20 @@ function nodeText(node: MathNode): string {
             return node.pre ? `${scripts(node)} ${argument(node.base)}` : `${argument(node.base)}${scripts(node)}`;
         case 'radical': {
             if (!node.degree) return `√${argument(node.body)}`;
-            const degree = writeText(node.degree);
+            const degree = rowText(node.degree);
             const root = ROOTS.get(degree);
-            return root ? `${root}${argument(node.body)}` : `√(${degree}&${writeText(node.body)})`;
+            return root ? `${root}${argument(node.body)}` : `√(${degree}&${rowText(node.body)})`;
         }
         case 'nary': {
-            const body = writeText(node.body);
+            const body = rowText(node.body);
             return `${node.operator}${scripts(node)}${body && ` ${body}`}`;
         }
         case 'fenced':
-            return `${node.open}${node.parts.map(writeText).join(node.separator)}${node.close}`;
+            return `${node.open}${node.parts.map(rowText).join(node.separator)}${node.close}`;
         case 'function': {
             const [body] = node.body;
             const space = node.body.length === 1 && body.kind === 'fenced' ? '' : ' ';
-            return `${writeText(node.name)}${space}${writeText(node.body)}`;
+            return `${rowText(node.name)}${space}${rowText(node.body)}`;
         }
         case 'accent':
             return `${argument(node.body)}${node.accent}`;
@@ -68,9 +69,9 @@ function nodeText(node: MathNode): string {
         case 'limit':
             return `${argument(node.base)}${STACKS[node.position]}${argument(node.limit)}`;
         case 'enclose':
-            return `▭(${writeText(node.body)})`;
+            return `▭(${rowText(node.body)})`;
         case 'table': {
-            const rows = node.rows.map((cells) => cells.map(writeText).join('&')).join('@');
+            const rows = node.rows.map((cells) => cells.map(rowText).join('&')).join('@');
             return `${node.layout === 'matrix' ? '■' : '█'}(${rows})`;
         }
     }
@@ -78,7 +79,7 @@ function nodeText(node: MathNode): string {
 
 // UnicodeMath ends an operand at a space or an operator and drops the space, so a space keeps a compound node from
 // running into the next: x^2 4, never x^24.
-export function writeText(row: MathRow): string {
+function rowText(row: MathRow): string {
     return row
         .map((node, index) => {
             const next = row[index + 1];
@@ -86,4 +87,9 @@ export function writeText(row: MathRow): string {
             return runsOn ? `${nodeText(node)} ` : nodeText(node);
         })
         .join('');
+}
+
+// As every writer, it refuses a character XML can't hold rather than pass it on.
+export function writeText(row: MathRow): string {
+    return checkedXml(rowText(row));
 }
