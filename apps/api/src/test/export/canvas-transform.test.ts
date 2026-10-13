@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
-import { canvasHtmlDocument, renderEigenslidesExport } from '../../lib/export/canvas/transform';
+import { canvasHtmlDocument, renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents';
 
 // The standalone HTML document a canvas export leaves through. The screen document must fit a
@@ -59,10 +59,10 @@ function deckExportHtml(format: DocumentExportFormat, html: string): string {
         ...scene,
         elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)),
     });
-    return new TextDecoder().decode(renderEigenslidesExport(doc, format, 'Deck', []).data);
+    return new TextDecoder().decode(renderEigenslidesHtml(doc, format, 'Deck', []).data);
 }
 
-describe('renderEigenslidesExport', () => {
+describe('renderEigenslidesHtml', () => {
     test.each(['html', 'pdf-html'] as const)('drops a <style> block a rich-text box carries (%s)', (format) => {
         const html = deckExportHtml(format, '<style>*{display:none}</style><p>hi</p>');
         expect(html).not.toContain('display:none');
