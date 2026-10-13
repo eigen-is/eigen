@@ -282,7 +282,6 @@ These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/
 
 - A `sheet` link re-imports as a `cellrange` link at `'Name'!A1`, and a range link keeps only its top-left cell, because ExcelJS's internal-link pattern needs a single trailing cell ref. A bare ref gains its own sheet's quoted prefix. A webpage URL with exactly one `!` and a cell-shaped tail is misread as internal by that pattern.
 - Imported link cells keep Excel's font, while the link dialog sets blue and underline. Forcing the dialog style at import would clobber theme-styled link cells.
-- A link to another workbook that carries a sheet anchor imports as an internal link: the `location` attribute wins over the relationship target.
 
 Column widths:
 

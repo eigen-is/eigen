@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 ### Changed
 
 - **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
+- **Sheets import** — Eigen reads the `.xlsx` itself instead of through ExcelJS. Overlapping merged ranges come in as Excel repairs them, a link to another workbook keeps its sheet anchor, ISO dates read right, and Excel 2010's conditional formats and validation lists come in. A workbook with more than 10,000 merged ranges, 500 sheets or 2 million rows imports when its cells fit. A password-protected file says so
 
 ### Fixed
 

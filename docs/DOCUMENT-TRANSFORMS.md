@@ -8,7 +8,7 @@ Not obvious from the code: one child runs at a time because memory is the limit,
 
 ## `async` does not leave the event loop
 
-Awaiting a preview only suspends the caller. Yjs materialization, formula recalc, HTML rendering, sanitizing and ExcelJS or zip work still run on the request thread, and they stall every other API, WebSocket, SSE, mail and sync task. On the main thread a cold heavy-sheet preview stalled the event loop for 14.1 s. In the child the same preview's worst loop delay is 30 ms. Image and video thumbnails have their own Worker thread (`lib/shared/thumbnail-worker.ts`).
+Awaiting a preview only suspends the caller. Yjs materialization, formula recalc, HTML rendering, sanitizing, xlsx and docx reading and writing, and zip work still run on the request thread, and they stall every other API, WebSocket, SSE, mail and sync task. On the main thread a cold heavy-sheet preview stalled the event loop for 14.1 s. In the child the same preview's worst loop delay is 30 ms. Image and video thumbnails have their own Worker thread (`lib/shared/thumbnail-worker.ts`).
 
 ## Every transform takes one main-thread path
 
@@ -82,7 +82,7 @@ The snapshot flush deletes every update with `id <= lastUpdateId` in the same tr
 
 ## One child runs at a time
 
-Memory is the limit, not cores: one ExcelJS or Yjs heap exists at a time, and each child may use what the machine has. The sheet cell cap fires only after ExcelJS has loaded the workbook ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)). So concurrency 1, the one-shot lifetime, the memory limit, the zip guards and the output byte guards are all load-bearing.
+Memory is the limit, not cores: one reader's, writer's or Yjs heap exists at a time, and each child may use what the machine has. A reader builds a part's XML tree before its output caps can count what the tree holds, and a tree costs many times its text ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)). So concurrency 1, the one-shot lifetime, the memory limit, the zip guards and the output byte guards are all load-bearing.
 
 ## Admission is bounded by predicted wait
 
