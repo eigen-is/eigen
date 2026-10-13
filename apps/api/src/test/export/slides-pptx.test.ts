@@ -19,7 +19,7 @@ import { parseOoxml } from '../../lib/core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { DocxMedia } from '../../lib/export/doc/to-docx';
+import type { OfficeMedia } from '../../lib/export/office-image';
 import { sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { eigenslidesToPptx } from '../../lib/export/slides/to-pptx';
 
@@ -83,7 +83,7 @@ function sceneOf(elements: Fields[], frames: FrameSpec[] = [{ id: 'f1', index: '
     return sanitizeSceneHtml(readVectorFromDoc(deckDoc(frames, elements)));
 }
 
-function pptx(scene: VectorScene, media: DocxMedia[] = []): ZipReader {
+function pptx(scene: VectorScene, media: OfficeMedia[] = []): ZipReader {
     return openZip(eigenslidesToPptx(scene, media, 'Deck & <co>.eigenslides'));
 }
 
@@ -189,7 +189,7 @@ function srgb(element: XmlElement): { val?: string; alpha?: number } {
     return { val: attr(color, 'val'), alpha: alpha ? Number(attr(alpha, 'val')) : undefined };
 }
 
-const PNG_MEDIA: DocxMedia = {
+const PNG_MEDIA: OfficeMedia = {
     name: 'wide.png',
     contentType: 'image/png',
     data: toTransferableText('wide png'),
@@ -932,7 +932,7 @@ describe('pptx images and backgrounds', () => {
     });
 
     test('an SVG goes in beside its PNG, a picture with no media writes nothing', () => {
-        const svg: DocxMedia = {
+        const svg: OfficeMedia = {
             name: 'd.svg',
             contentType: 'image/svg+xml',
             data: toTransferableText('<svg xmlns="http://www.w3.org/2000/svg"/>'),

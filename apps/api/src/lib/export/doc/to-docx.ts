@@ -54,7 +54,6 @@ import {
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
-import type { ExportMedia } from '../../document/transform/protocol';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -72,17 +71,14 @@ import {
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
-import { figureMediaKey, RASTER_EXTENSIONS } from './docx-image';
-import { absoluteHref, type HastNode, highlightCode } from './render';
-
-// An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
-export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
+import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import { absoluteHref, figureMediaKey, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
-    media: DocxMedia[],
+    media: OfficeMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
@@ -195,7 +191,7 @@ type Package = {
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
-    media: Map<string, DocxMedia>;
+    media: Map<string, OfficeMedia>;
     images: Map<string, Image>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
