@@ -183,6 +183,14 @@ describe('readEquation', () => {
         expect(readEquation({ mathml: `${MATH}${tooDeep}</math>` }).row).toEqual([]);
     });
 
+    test("the LaTeX's tabs and line breaks are spaces in the text, as in any tree's", () => {
+        const latex = 'a\tb\nc';
+        const mathml = `${MATH}<semantics><mrow>${tooDeep}</mrow><annotation encoding="application/x-tex">${latex}</annotation></semantics></math>`;
+        const { row, latex: kept } = readEquation({ mathml });
+        expect(row).toEqual([{ kind: 'text', text: 'a b c' }]);
+        expect(kept).toBe(latex);
+    });
+
     test('an annotation the writer refuses goes, and the tree stays', () => {
         const quotes = '"'.repeat(MATH_LIMITS.mathmlLength / 4);
         const mathml = `${MATH}<semantics><mi>x</mi><annotation encoding="application/x-tex">${quotes}</annotation></semantics></math>`;

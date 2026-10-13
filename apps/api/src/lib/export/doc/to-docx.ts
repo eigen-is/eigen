@@ -592,7 +592,7 @@ function titleOf(type: TitleType, style: StyleId) {
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
-    // The in-flow pieces a figure splits a textblock into, by index in blocks.
+    // The in-flow pieces a figure or a display equation splits a textblock into, by index in blocks.
     const pieces: number[] = [];
     const flush = () => {
         const faces: RunFace[] = [];
@@ -614,6 +614,13 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
                 const index = blocks.push(block) - 1;
                 if (!('table' in block)) pieces.push(index);
             }
+            continue;
+        }
+        // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
+        if (node.type === 'equation' && node.attrs?.['display'] === true) {
+            if (inline.length > 0) flush();
+            inline.push(node);
+            flush();
             continue;
         }
         if (INLINES.has(node.type ?? '')) {
@@ -1248,7 +1255,8 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // A sibling of the runs, not a run. An empty one stays an empty math zone, as the editor draws an empty box.
+    // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
+    // math zone, as the editor draws an empty box.
     [
         'equation',
         (node) => {

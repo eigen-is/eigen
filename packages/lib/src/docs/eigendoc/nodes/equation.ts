@@ -7,6 +7,7 @@ import {
     MathError,
     type MathRow,
     type MathXmlElement,
+    mathText,
     readMathml,
     readMathmlLatex,
     writeMathml,
@@ -46,7 +47,7 @@ function readMath(math: MathXmlElement): Read | undefined {
         return annotated ? { row, latex, mathml: annotated } : { row, latex: undefined, mathml: writeMathml(row) };
     }
     if (latex === undefined || latex.length >= MATH_LIMITS.size) return undefined;
-    const text: MathRow = [{ kind: 'text', text: latex }];
+    const text: MathRow = [{ kind: 'text', text: mathText(latex) }];
     return { row: text, latex, mathml: writeMathml(text, latex) };
 }
 

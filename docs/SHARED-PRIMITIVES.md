@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1675 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1676 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -905,7 +905,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (806)
+## Utilities & constants (807)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1654,6 +1654,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
 | `MATH_LIMITS` | `@workspace/math` | packages/math/src/tree.ts |
 | `MATHML_NAMESPACE` | `@workspace/math` | packages/math/src/mathml.ts |
+| `mathText` | `@workspace/math` | packages/math/src/tree.ts |
 | `OMML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
 | `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readMathmlLatex` | `@workspace/math` | packages/math/src/mathml.ts |

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
-import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
+import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
 import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
@@ -14,6 +14,7 @@ import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
+    equation,
     GOLDEN_FRACTION,
     GOLDEN_SUM,
 } from '../fixtures/golden-documents';
@@ -2097,27 +2098,60 @@ describe('docx writer — figures', () => {
     });
 });
 
-describe('docx writer — equations', () => {
-    function equation(mathml: string, display = false): JSONContent {
-        return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
-    }
+// The package's Word equations, each stored as the import will store it.
+function corpusEquations(): { row: MathRow; display: boolean }[] {
+    const corpus: { omml: string; display: boolean }[] = JSON.parse(
+        fs.readFileSync(
+            new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
+            'utf8',
+        ),
+    );
+    return corpus.map(({ omml, display }) => {
+        const oMath = parseOoxml(omml);
+        if (!oMath) throw new Error('a corpus equation does not parse');
+        return { row: readOmml(oMath), display };
+    });
+}
 
+const corpusDoc = (equations: { row: MathRow; display: boolean }[]) =>
+    doc(...equations.map(({ row, display }) => p(equation(writeMathml(row), display))));
+
+describe('docx writer — equations', () => {
     const t = (value: string) => `<m:t xml:space="preserve">${value}</m:t>`;
     // The all-features doc's two equations as Word writes them; OMML has no slot for the typed LaTeX.
     const FRACTION_OMML = `<m:oMath><m:f><m:num><m:r><w:rPr><w:color w:val="C00000"/></w:rPr>${t('a')}</m:r><m:r>${t('+b')}</m:r></m:num><m:den><m:r>${t('2')}</m:r></m:den></m:f></m:oMath>`;
     const SUM_OMML = `<m:oMath><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r>${t('i=1')}</m:r></m:sub><m:sup><m:r>${t('n')}</m:r></m:sup><m:e><m:sSup><m:e><m:r>${t('i')}</m:r></m:e><m:sup><m:r>${t('2')}</m:r></m:sup></m:sSup></m:e></m:nary></m:oMath>`;
 
     test('an inline equation is an m:oMath beside the runs, not inside one', async () => {
-        const fraction = equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}'));
+        const fraction = equation(writeMathml(GOLDEN_FRACTION));
         expect(await paragraphsOf(doc(p(text('Half is '), fraction, text('.'))))).toEqual([
             `<w:p>${run('Half is ')}${FRACTION_OMML}${run('.')}</w:p>`,
         ]);
     });
 
-    test('a display equation is an m:oMathPara in its paragraph', async () => {
-        expect(await paragraphsOf(doc(p(text('Sum:'), equation(writeMathml(GOLDEN_SUM), true))))).toEqual([
-            `<w:p>${run('Sum:')}<m:oMathPara>${SUM_OMML}</m:oMathPara></w:p>`,
+    // As Word's own: Change to Display splits the paragraph, and LibreOffice draws one beside text inline.
+    test('a display equation is an m:oMathPara in a paragraph of its own, the text on both sides kept', async () => {
+        const sum = equation(writeMathml(GOLDEN_SUM), true);
+        expect(await paragraphsOf(doc(p(text('Sum:'), sum, text(' for every n.')), p(sum)))).toEqual([
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${run('Sum:')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><m:oMathPara>${SUM_OMML}</m:oMathPara></w:p>`,
+            `<w:p>${run(' for every n.')}</w:p>`,
+            `<w:p><m:oMathPara>${SUM_OMML}</m:oMathPara></w:p>`,
         ]);
+    });
+
+    test("a display equation in a heading leaves the pieces after it the heading's look, out of the navigator", async () => {
+        const json = doc(p(text('x')), heading(2, text('Before'), equation(writeMathml(GOLDEN_SUM), true)));
+        expect((await paragraphsOf(json)).slice(1)).toEqual([
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:after="0"/></w:pPr>${run('Before')}</w:p>`,
+            `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="0"/><w:outlineLvl w:val="9"/></w:pPr><m:oMathPara>${SUM_OMML}</m:oMathPara></w:p>`,
+        ]);
+    });
+
+    test('a display equation in a list item leaves the number on the text before it', async () => {
+        const json = doc(ol({}, li(p(text('a'), equation(writeMathml(GOLDEN_SUM), true), text('b')))));
+        const numbered = (await paragraphsOf(json)).map((paragraph) => paragraph.includes('<w:numPr>'));
+        expect(numbered).toEqual([true, false, false]);
     });
 
     // CT_OMath's content is optional, and LibreOffice opens an empty math zone, as the editor draws an empty box.
@@ -2162,18 +2196,8 @@ describe('docx writer — equations', () => {
     // C1 through the real writer: each of the package's Word equations, stored as the import will store it, is in
     // document.xml as the tree it was stored from.
     test('the 108 corpus equations come back from document.xml as the trees they were stored from', async () => {
-        const corpus: { omml: string; display: boolean }[] = JSON.parse(
-            fs.readFileSync(
-                new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
-                'utf8',
-            ),
-        );
-        const stored = corpus.map(({ omml, display }) => {
-            const oMath = parseOoxml(omml);
-            if (!oMath) throw new Error('a corpus equation does not parse');
-            return { row: readOmml(oMath), display };
-        });
-        const zip = await unzip(doc(...stored.map(({ row, display }) => p(equation(writeMathml(row), display)))));
+        const stored = corpusEquations();
+        const zip = await unzip(corpusDoc(stored));
         const document = parseOoxml(entryText(zip, 'word/document.xml') ?? '');
         const body = document && xmlChild(document, W, 'body');
         if (!body) throw new Error('no w:body');
@@ -2285,36 +2309,83 @@ const DRAWING_SEQUENCES: Record<string, string[]> = {
     'a:prstGeom': ['a:avLst'],
 };
 
+// The math's sequences (shared-math.xsd, ECMA-376 §22.1): each object writeOmml writes and its properties. An
+// argument (m:e, m:num, m:sub, …) and m:oMath hold a choice, not a sequence.
+const MATH_SEQUENCES: Record<string, string[]> = {
+    'm:oMathPara': ['m:oMathParaPr', 'm:oMath'],
+    'm:r': ['m:rPr', 'w:rPr', 'm:t'],
+    'm:rPr': ['m:lit', 'm:nor', 'm:scr', 'm:sty', 'm:brk', 'm:aln'],
+    'm:f': ['m:fPr', 'm:num', 'm:den'],
+    'm:fPr': ['m:type', 'm:ctrlPr'],
+    'm:sPre': ['m:sPrePr', 'm:sub', 'm:sup', 'm:e'],
+    'm:sSub': ['m:sSubPr', 'm:e', 'm:sub'],
+    'm:sSup': ['m:sSupPr', 'm:e', 'm:sup'],
+    'm:sSubSup': ['m:sSubSupPr', 'm:e', 'm:sub', 'm:sup'],
+    'm:rad': ['m:radPr', 'm:deg', 'm:e'],
+    'm:radPr': ['m:degHide', 'm:ctrlPr'],
+    'm:nary': ['m:naryPr', 'm:sub', 'm:sup', 'm:e'],
+    'm:naryPr': ['m:chr', 'm:limLoc', 'm:grow', 'm:subHide', 'm:supHide', 'm:ctrlPr'],
+    'm:d': ['m:dPr', 'm:e'],
+    'm:dPr': ['m:begChr', 'm:sepChr', 'm:endChr', 'm:grow', 'm:shp', 'm:ctrlPr'],
+    'm:func': ['m:funcPr', 'm:fName', 'm:e'],
+    'm:acc': ['m:accPr', 'm:e'],
+    'm:accPr': ['m:chr', 'm:ctrlPr'],
+    'm:bar': ['m:barPr', 'm:e'],
+    'm:barPr': ['m:pos', 'm:ctrlPr'],
+    'm:groupChr': ['m:groupChrPr', 'm:e'],
+    'm:groupChrPr': ['m:chr', 'm:pos', 'm:vertJc', 'm:ctrlPr'],
+    'm:limLow': ['m:limLowPr', 'm:e', 'm:lim'],
+    'm:limUpp': ['m:limUppPr', 'm:e', 'm:lim'],
+    'm:borderBox': ['m:borderBoxPr', 'm:e'],
+    'm:borderBoxPr': [
+        ...['m:hideTop', 'm:hideBot', 'm:hideLeft', 'm:hideRight', 'm:strikeH', 'm:strikeV', 'm:strikeBLTR'],
+        ...['m:strikeTLBR', 'm:ctrlPr'],
+    ],
+    'm:eqArr': ['m:eqArrPr', 'm:e'],
+    'm:m': ['m:mPr', 'm:mr'],
+    'm:mr': ['m:e'],
+};
+
+const QUALIFIED_SEQUENCES = { ...DRAWING_SEQUENCES, ...MATH_SEQUENCES };
+
 // The children a sequence may repeat in a row.
-const REPEATED = new Set(['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol', 'a:ext']);
+const REPEATED = new Set([
+    ...['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol', 'a:ext'],
+    ...['m:e', 'm:mr'],
+]);
 
 describe('docx writer — property order', () => {
+    // The all-features doc holds a fraction and a large operator; the corpus, with the over-bar it lacks, every other
+    // object writeOmml writes.
     test('every property list writes its children in the ECMA sequence', async () => {
-        const zip = await unzip(buildAllFeaturesDocJson());
+        const overBar: MathRow = [{ kind: 'line', position: 'over', body: [{ kind: 'identifier', text: 'x' }] }];
+        const equations = corpusDoc([...corpusEquations(), { row: overBar, display: false }]);
         const seen = new Set<string>();
         const outOfOrder: string[] = [];
         const paths = ['document', 'styles', 'numbering', 'settings', 'fontTable'].map((name) => `word/${name}.xml`);
-        for (const path of paths) {
-            for (const element of elementsOf(await part(zip, path))) {
-                const wml = element.ns === W;
-                const key = wml ? element.local : element.name;
-                const sequence = wml ? SEQUENCES[key] : DRAWING_SEQUENCES[key];
-                if (!sequence) continue;
-                seen.add(key);
-                const children = xmlElements(element);
-                const names = children.map((c) => (wml ? (c.ns === W ? c.local : '') : c.name));
-                const order = names.map((name) => sequence.indexOf(name));
-                const misplaced = (index: number, i: number) => {
-                    const previous = order[i - 1] ?? -1;
-                    return index < previous || (index === previous && !REPEATED.has(names[i] ?? ''));
-                };
-                if (order.some((index, i) => index < 0 || misplaced(index, i))) {
-                    outOfOrder.push(`${path} ${element.local}: ${shape(element).join(' ')}`);
+        for (const zip of [await unzip(buildAllFeaturesDocJson()), await unzip(equations)]) {
+            for (const path of paths) {
+                for (const element of elementsOf(await part(zip, path))) {
+                    const wml = element.ns === W;
+                    const key = wml ? element.local : element.name;
+                    const sequence = wml ? SEQUENCES[key] : QUALIFIED_SEQUENCES[key];
+                    if (!sequence) continue;
+                    seen.add(key);
+                    const children = xmlElements(element);
+                    const names = children.map((c) => (wml ? (c.ns === W ? c.local : '') : c.name));
+                    const order = names.map((name) => sequence.indexOf(name));
+                    const misplaced = (index: number, i: number) => {
+                        const previous = order[i - 1] ?? -1;
+                        return index < previous || (index === previous && !REPEATED.has(names[i] ?? ''));
+                    };
+                    if (order.some((index, i) => index < 0 || misplaced(index, i))) {
+                        outOfOrder.push(`${path} ${element.name}: ${shape(element).join(' ')}`);
+                    }
                 }
             }
         }
         expect(outOfOrder).toEqual([]);
-        expect([...seen].sort()).toEqual([...Object.keys(SEQUENCES), ...Object.keys(DRAWING_SEQUENCES)].sort());
+        expect([...seen].sort()).toEqual([...Object.keys(SEQUENCES), ...Object.keys(QUALIFIED_SEQUENCES)].sort());
     });
 });
 

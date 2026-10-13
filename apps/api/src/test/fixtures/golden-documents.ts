@@ -240,11 +240,11 @@ export const GOLDEN_SUM: MathRow = [
     },
 ];
 
-function equation(row: MathRow, latex: string, display: boolean): JSONContent {
-    return { type: 'equation', attrs: { mathml: writeMathml(row, latex), display, commentCardId: null } };
+export function equation(mathml: string, display = false): JSONContent {
+    return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
 }
 
-// The docx import still reads an equation as its text, so a trip through Word leaves the equations out.
+// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
 export function withoutEquations(json: JSONContent): JSONContent {
     return json.content
         ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
@@ -341,9 +341,10 @@ export function buildAllFeaturesDocJson(): JSONContent {
                 type: 'paragraph',
                 content: [
                     { type: 'text', text: 'Half the sum is ' },
-                    equation(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}', false),
+                    equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
                     { type: 'text', text: ', and the squares add up to' },
-                    equation(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}', true),
+                    equation(writeMathml(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}'), true),
+                    { type: 'text', text: 'for every n.' },
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
