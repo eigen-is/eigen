@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import {
-    CHART_PALETTE,
     chartColor,
     chartSearchText,
     exceedsInlineGridLimits,
@@ -14,6 +13,8 @@ import {
     parseChartSpec,
     sampleChartSpec,
 } from '../../charts';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
+import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
 import { CHART_TYPES, type ChartSpec, type InlineChartData, type RangeChartData } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
@@ -74,7 +75,11 @@ describe('sampleChartSpec', () => {
         const pie = sampleChartSpec('pie');
         expect(pie.legend).toBe('none');
         expect(pie.data.series).toHaveLength(1);
-        expect(pie.sliceColors).toEqual(CHART_PALETTE.slice(0, 4));
+        expect(pie.sliceColors).toEqual([0, 1, 2, 3].map(chartColor));
+    });
+
+    test("the sample draws in Google's Inter", () => {
+        for (const type of CHART_TYPES) expect(sampleChartSpec(type).fontFamily).toBe('Inter');
     });
 });
 
@@ -94,11 +99,18 @@ describe('chartSearchText', () => {
 });
 
 describe('palette', () => {
-    test('twelve series never repeat a color, and the thirteenth starts over', () => {
-        expect(CHART_PALETTE.length).toBeGreaterThanOrEqual(INLINE_GRID_MAX_SERIES);
-        expect(new Set(CHART_PALETTE).size).toBe(CHART_PALETTE.length);
-        expect(CHART_PALETTE.every(isColorToken)).toBe(true);
-        expect(chartColor(CHART_PALETTE.length)).toBe(chartColor(0));
+    const palette = EIGEN_ACCENT_COLORS_SHUFFLED.map(({ value }) => value);
+
+    test('series take the shared accent colors in the shuffled order calendars assign, so neighbors stay apart', () => {
+        expect(palette.map((_, i) => chartColor(i))).toEqual(palette);
+        expect(sampleChartSpec('column').data.series.map((s) => s.color)).toEqual(palette.slice(0, 2));
+    });
+
+    test('the grid’s series never repeat a color, and the one past the palette starts over', () => {
+        expect(palette.length).toBeGreaterThanOrEqual(INLINE_GRID_MAX_SERIES);
+        expect(new Set(palette).size).toBe(palette.length);
+        expect(palette.every(isColorToken)).toBe(true);
+        expect(chartColor(palette.length)).toBe(chartColor(0));
     });
 });
 
@@ -127,6 +139,16 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
             valueAxis,
         );
+    });
+
+    test('the font is one of the Eigen fonts, and reads Inter when missing or anything else', () => {
+        const { fontFamily, ...rest } = chart();
+        expect(parseChartSpec(JSON.stringify(rest))?.fontFamily).toBe('Inter');
+        for (const bad of ['Comic Sans', 'Inter; color: red', 7, null]) {
+            expect(parseChartSpec(stored({ fontFamily: bad }))?.fontFamily).toBe('Inter');
+        }
+        for (const font of EIGEN_FONT_NAMES)
+            expect(parseChartSpec(stored({ fontFamily: font }))?.fontFamily).toBe(font);
     });
 
     test('a non-number value in an inline series rejects the spec, since values are data', () => {

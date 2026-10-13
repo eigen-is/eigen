@@ -147,11 +147,11 @@ export type TextLine = {
 
 // A chart: `chart` is the stored ChartSpec JSON (charts/spec.ts), inline data only on a canvas. `fill` is
 // its background and the hatch style of its bars and slices; the stroke draws its axes and gridlines.
+// `color` is its labels' color; their font is the spec's.
 export type VectorChartElement = VectorElementBase &
     Fillable & {
         type: 'chart';
         chart: string;
-        fontFamily: string;
         color: string;
     };
 

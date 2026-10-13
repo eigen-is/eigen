@@ -1,9 +1,9 @@
 export { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, layoutChartMessage } from './layout';
 export {
-    CHART_PALETTE,
     chartColor,
     chartLabel,
     chartSearchText,
+    DEFAULT_CHART_FONT,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,

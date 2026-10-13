@@ -28,7 +28,8 @@ import { seedVectorDoc } from '../fixtures/golden-documents';
 const TITLE = 'Q1 <draft> & more';
 
 function chartElement(style: StyleDefaults, over: Partial<VectorChartElement> = {}): VectorChartElement {
-    const spec = sampleChartSpec('column');
+    // In the host's font, as Insert → Chart places one.
+    const spec = { ...sampleChartSpec('column'), fontFamily: style.fontFamily };
     return {
         ...baseDefaultsFor('chart', style),
         ...ELEMENT_KINDS.chart.defaults(style),

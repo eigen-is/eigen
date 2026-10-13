@@ -42,19 +42,20 @@ export type ChartSpec = {
     valueAxis: { title: string; min: number | null; max: number | null; gridlines: boolean; format: string | null };
     // pie only: one color per category, stored at creation
     sliceColors: string[];
+    // An EIGEN_FONTS name; every label draws in it.
+    fontFamily: string;
     data: InlineChartData | RangeChartData;
 };
 
 // A chart's data with its ranges resolved: inline data as stored, or the values a sheet reads from its ranges.
 export type ChartData = { categories: string[]; series: InlineChartSeries[] };
-// Why a sheet's range chart has no data. 'ref': a ref was deleted, names a missing sheet, or spans rows and
-// columns, Excel's #REF.
+// Why a sheet's range chart has no data. 'ref': every series was deleted, or a ref names a missing sheet or
+// spans rows and columns, Excel's #REF.
 export type ChartDataError = 'ref' | 'too-many-points';
 
-// What a chart paints with; a canvas chart takes it from its element.
+// What a chart paints with besides its spec's font; a canvas chart takes it from its element.
 // background is a serialized Fill (transparent draws none); strokeColor and strokeStyle draw the axes and gridlines.
 export type ChartPaint = {
-    fontFamily: string;
     color: string;
     background: string;
     strokeColor: string;

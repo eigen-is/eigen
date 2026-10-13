@@ -647,7 +647,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     const cases = [
         { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'corners'] },
         { record: pie, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'startAngle', 'sweepAngle'] },
-        { record: chart, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'chart', 'fontFamily', 'color'] },
+        { record: chart, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'chart', 'color'] },
         {
             record: richtext,
             fields: [
