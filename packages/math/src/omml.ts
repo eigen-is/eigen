@@ -61,6 +61,70 @@ const isSide = (enclosure: MathEnclosure) => BORDERS[enclosure].startsWith('hide
 
 const AMPERSAND: MathNode = { kind: 'operator', text: '&' };
 
+// Word's Symbol font, by code point less its private-use offset F000: its letters and the common math characters.
+const SYMBOL_FONT: ReadonlyMap<number, string> = new Map([
+    ...[...'ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ'].map((char, index): [number, string] => [0x41 + index, char]),
+    ...[...'αβχδεφγηιϕκλμνοπθρστυϖωξψζ'].map((char, index): [number, string] => [0x61 + index, char]),
+    ...Object.entries({
+        22: '∀',
+        24: '∃',
+        27: '∋',
+        '2D': '−',
+        40: '≅',
+        '5C': '∴',
+        '5E': '⊥',
+        '7E': '∼',
+        A2: '′',
+        A3: '≤',
+        A5: '∞',
+        AB: '↔',
+        AC: '←',
+        AD: '↑',
+        AE: '→',
+        AF: '↓',
+        B1: '±',
+        B2: '″',
+        B3: '≥',
+        B4: '×',
+        B5: '∝',
+        B6: '∂',
+        B7: '•',
+        B8: '÷',
+        B9: '≠',
+        BA: '≡',
+        BB: '≈',
+        BC: '…',
+        C0: 'ℵ',
+        C4: '⊗',
+        C5: '⊕',
+        C6: '∅',
+        C7: '∩',
+        C8: '∪',
+        C9: '⊃',
+        CA: '⊇',
+        CB: '⊄',
+        CC: '⊂',
+        CD: '⊆',
+        CE: '∈',
+        CF: '∉',
+        D0: '∠',
+        D1: '∇',
+        D5: '∏',
+        D6: '√',
+        D7: '⋅',
+        D8: '¬',
+        D9: '∧',
+        DA: '∨',
+        DB: '⇔',
+        DC: '⇐',
+        DD: '⇑',
+        DE: '⇒',
+        DF: '⇓',
+        E5: '∑',
+        F2: '∫',
+    }).map(([hex, char]): [number, string] => [Number.parseInt(hex, 16), char]),
+]);
+
 // Tracked changes: what an insertion or a move's destination holds shows, a deletion or a move's source doesn't.
 const INSERTED = new Set(['ins', 'moveTo']);
 const DELETED = new Set(['del', 'moveFrom']);
@@ -110,13 +174,21 @@ function runParts(elements: MathXmlElement[], budget: MathBudget, depth: number)
     });
 }
 
+// A w:sym's character, where it is one of the Symbol font's math characters; '' for anything else.
+function symbolOf(sym: MathXmlElement): string {
+    const code = Number.parseInt(attribute(sym, 'char') ?? '', 16);
+    const position = code >= 0xf000 ? code - 0xf000 : code;
+    return attribute(sym, 'font') === 'Symbol' ? (SYMBOL_FONT.get(position) ?? '') : '';
+}
+
 function readRun(row: RowBuilder, run: MathXmlElement, depth: number): void {
     const parts = runParts(elementsOf(run), row.budget, depth);
     const math = parts.find((part) => is(part, OMML_NAMESPACE, 'rPr'));
     const word = parts.find((part) => is(part, WORDML_NAMESPACE, 'rPr'));
     const text = parts
-        .filter((part) => is(part, OMML_NAMESPACE, 't'))
-        .map(textOf)
+        .map((part) =>
+            is(part, OMML_NAMESPACE, 't') ? textOf(part) : is(part, WORDML_NAMESPACE, 'sym') ? symbolOf(part) : '',
+        )
         .join('');
     const color = toColor(valOf(childOf(word, WORDML_NAMESPACE, 'color')));
     if (isOn(childOf(math, OMML_NAMESPACE, 'nor'))) {
@@ -292,7 +364,10 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                 layout: 'equations',
                 rows: (equations.length > 0 ? equations.map(elementsOf) : [[]]).map((equation) => {
                     bound(budget, depth + 1, 1);
-                    return equationCells(readRow(equation, budget, depth + 1, 'equation'));
+                    const row = readRow(equation, budget, depth + 1, 'equation');
+                    // Word numbers an equation with # and the number after it, which belongs to the document.
+                    const number = row.findIndex((node) => node.kind === 'operator' && node.text === '#');
+                    return equationCells(number < 0 ? row : row.slice(0, number));
                 }),
             });
             return;

@@ -140,6 +140,24 @@ describe('readOmml', () => {
         expect(read(run('a\u00A0b', normal))).toEqual([{ kind: 'text', text: 'a\u00A0b' }]);
     });
 
+    test('a w:sym in a run reads as its character where the Symbol font has a math one', () => {
+        const sym = (font: string, char: string) => `<w:sym w:font="${font}" w:char="${char}"/>`;
+        expect(
+            read(
+                `<m:r><m:t>x</m:t>${sym('Symbol', 'F0CE')}${sym('Symbol', 'f0e5')}${sym('Symbol', '61')}<m:t>A</m:t></m:r>`,
+            ),
+        ).toEqual([
+            { kind: 'identifier', text: 'x' },
+            { kind: 'operator', text: '∈' },
+            { kind: 'operator', text: '∑' },
+            { kind: 'identifier', text: 'α' },
+            { kind: 'identifier', text: 'A' },
+        ]);
+        expect(read(`<m:r>${sym('Wingdings', 'F0CE')}${sym('Symbol', 'F0F0')}${sym('Symbol', 'zz')}</m:r>`)).toEqual(
+            [],
+        );
+    });
+
     test('text comes only from m:t; tracked deletions and moves away go', () => {
         const ins = (content: string) => `<w:ins w:id="1" w:author="a">${content}</w:ins>`;
         const del = (content: string) => `<w:del w:id="2" w:author="a">${content}</w:del>`;
@@ -266,6 +284,25 @@ describe('readOmml', () => {
         expect(read(`<m:phant><m:phantPr><m:show m:val="0"/></m:phantPr><m:e>${run('z')}</m:e></m:phant>`)).toEqual([
             { kind: 'identifier', text: 'z' },
         ]);
+    });
+
+    test('Word’s equation number, # and what follows it in an equation array, is dropped', () => {
+        expect(read(`<m:eqArr><m:e>${run('x&amp;=1#')}<m:d><m:e>${run('8')}</m:e></m:d></m:e></m:eqArr>`)).toEqual([
+            {
+                kind: 'table',
+                layout: 'equations',
+                rows: [
+                    [
+                        [{ kind: 'identifier', text: 'x' }],
+                        [
+                            { kind: 'operator', text: '=' },
+                            { kind: 'number', text: '1' },
+                        ],
+                    ],
+                ],
+            },
+        ]);
+        expect(read(`${run('#')}<m:d><m:e>${run('8')}</m:e></m:d>`)).toHaveLength(2);
     });
 
     test('an equation array splits its rows at & into cells', () => {
