@@ -69,7 +69,8 @@ export function MathMount({ math, className }: { math: Element; className?: stri
 
 export type EquationOptions = {
     onOpenComment: (cardId: string) => void;
-    onEdit: () => void;
+    // None in a band, which has no Equation panel: Enter does there what it does on a figure.
+    onEdit: (() => void) | undefined;
 };
 
 function EquationView({ node, selected, extension, decorations }: NodeViewProps) {
@@ -114,15 +115,18 @@ function EquationView({ node, selected, extension, decorations }: NodeViewProps)
 
 export const Equation = EquationNode.extend<EquationOptions>({
     addOptions() {
-        return { onOpenComment: () => {}, onEdit: () => {} };
+        return { onOpenComment: () => {}, onEdit: undefined };
     },
     addKeyboardShortcuts() {
         return {
             // As a click on it: an arrow selects an equation without opening its panel.
             Enter: ({ editor }) => {
                 const { selection } = editor.state;
-                if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) return false;
-                this.options.onEdit();
+                const { onEdit } = this.options;
+                if (!onEdit || !(selection instanceof NodeSelection) || selection.node.type.name !== this.name) {
+                    return false;
+                }
+                onEdit();
                 return true;
             },
         };

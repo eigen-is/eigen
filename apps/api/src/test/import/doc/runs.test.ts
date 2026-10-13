@@ -469,6 +469,14 @@ describe('math', () => {
         expect(contents(json)).toEqual([[{ type: 'text', text: 'x+1 x+1 x+1' }]]);
     });
 
+    // Word sets a function name, a unit or the d of dx upright through the run's m:rPr.
+    test("a run's properties start no word in an equation's text", async () => {
+        const runs = `${r('x')}<m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>+1</m:t></m:r>`;
+        const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${runs}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;
+        const json = await imported(paragraph(oMath(`${runs}${deep}${runs}`)));
+        expect(contents(json)).toEqual([[{ type: 'text', text: 'x+1 x+1 x+1' }]]);
+    });
+
     // As the package reads it: an alternative's fallback, and no object a tracked deletion of its control deletes, so f
     // and w are neighbouring runs.
     test("an equation's text reads an alternative's fallback and leaves out an object whose control is deleted", async () => {

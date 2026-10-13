@@ -87,10 +87,6 @@ export function equationMath({ mathml, display }: Pick<Equation, 'mathml' | 'dis
     return math;
 }
 
-// Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText equal to the
-// match's prefix would let a rule replace the equation.
-export const equationText = (attrs: Record<string, unknown>) => readEquation(attrs).text;
-
 export const EquationNode = Node.create({
     name: 'equation',
 
@@ -140,8 +136,10 @@ export const EquationNode = Node.create({
         return ['span', math];
     },
 
+    // Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText equal to the
+    // match's prefix would let a rule replace the equation.
     renderText({ node }) {
-        return equationText(node.attrs);
+        return readEquation(node.attrs).text;
     },
 
     addCommands() {
