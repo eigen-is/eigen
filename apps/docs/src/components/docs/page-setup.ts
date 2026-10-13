@@ -20,8 +20,8 @@ export function createDocUndoManager(doc: Y.Doc): Y.UndoManager {
 // unless its stored value reads as another: the dialog showed the read, so that is what OK keeps.
 export function writePageSetup(doc: Y.Doc, undoManager: Y.UndoManager, from: PageSetup, to: PageSetup) {
     const page = doc.getMap(PAGE_ROOT);
-    const opened: Record<string, number> = pageRecord(from);
-    const read: Record<string, number> = pageRecord(readPageSetup(page.toJSON()));
+    const opened: Record<string, unknown> = pageRecord(from);
+    const read: Record<string, unknown> = pageRecord(readPageSetup(page.toJSON()));
     undoManager.stopCapturing();
     doc.transact(() => {
         for (const [key, value] of Object.entries(pageRecord(to))) {

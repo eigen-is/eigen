@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, type FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -20,8 +20,9 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
+import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { DocxMedia } from '../../lib/export/doc/to-docx';
@@ -210,6 +211,46 @@ function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSON
     return { type: 'text', text, marks };
 }
 
+// (a+b)/2 with a red a, and the sum of i² from i = 1 to n.
+export const GOLDEN_FRACTION: MathRow = [
+    {
+        kind: 'fraction',
+        numerator: [
+            { kind: 'identifier', text: 'a', color: '#C00000' },
+            { kind: 'operator', text: '+' },
+            { kind: 'identifier', text: 'b' },
+        ],
+        denominator: [{ kind: 'number', text: '2' }],
+        line: 'bar',
+    },
+];
+
+export const GOLDEN_SUM: MathRow = [
+    {
+        kind: 'nary',
+        operator: '∑',
+        limits: 'under',
+        sub: [
+            { kind: 'identifier', text: 'i' },
+            { kind: 'operator', text: '=' },
+            { kind: 'number', text: '1' },
+        ],
+        sup: [{ kind: 'identifier', text: 'n' }],
+        body: [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'i' }], sup: [{ kind: 'number', text: '2' }] }],
+    },
+];
+
+export function equation(mathml: string, display = false): JSONContent {
+    return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
+}
+
+// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
+export function withoutEquations(json: JSONContent): JSONContent {
+    return json.content
+        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
+        : json;
+}
+
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
 // to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
@@ -294,6 +335,25 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'First line\tafter a tab' },
                     { type: 'hardBreak' },
                     { type: 'text', text: 'second line' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Half the sum is ' },
+                    equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
+                    { type: 'text', text: ', and the squares add up to' },
+                    equation(writeMathml(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}'), true),
+                    { type: 'text', text: 'for every n.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Page ' },
+                    { type: 'pageNumber', attrs: { kind: 'page' } },
+                    { type: 'text', text: ' of ' },
+                    { type: 'pageNumber', attrs: { kind: 'pages' } },
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
@@ -498,7 +558,7 @@ export function buildAllFeaturesDocMedia(): DocxMedia[] {
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     const tempDoc = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+    commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: DEFAULT_PAGE_SETUP });
     tempDoc.destroy();
 }
 

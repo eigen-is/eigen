@@ -15,7 +15,7 @@ import {
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { EMU_PER_TWIP, FLOATING_WRAPS, TWIPS_PER_PX } from '../../document/wordml';
-import { COLUMN_PX, type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
+import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
@@ -71,8 +71,8 @@ function partPath(id: string | undefined, scope: Scope): string | undefined {
     return rel && !rel.external ? rel.target : undefined;
 }
 
-function widthPx(px: number): number {
-    return Math.min(COLUMN_PX, Math.max(1, Math.round(px)));
+function widthPx(px: number, columnPx: number): number {
+    return Math.min(columnPx, Math.max(1, Math.round(px)));
 }
 
 export function readDrawing(reader: Reader, drawing: XmlElement, context: RunContext): void {
@@ -97,7 +97,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
             const cx = int(ext?.attributes['cx']);
-            const width = cx ? widthPx(cx / EMU_PER_PX) : null;
+            const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
@@ -198,7 +198,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
             const name = path && mediaName(reader, path);
             if (!name) continue;
-            const width = vmlWidthPx(shape.attributes['style'] ?? '');
+            const width = vmlWidthPx(shape.attributes['style'] ?? '', reader.columnPx);
             const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;
             context.pieces.push({ kind: 'node', node: { type: 'figure', attrs: { mediaName: name, alt, width } } });
         }
@@ -236,9 +236,9 @@ const PX_PER_UNIT = new Map([
 
 const VML_WIDTH = new RegExp(`(?:^|;)\\s*width\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');
 
-function vmlWidthPx(style: string): number | null {
+function vmlWidthPx(style: string, columnPx: number): number | null {
     const match = style.match(VML_WIDTH);
     if (!match) return null;
     const px = Number(match[1]) * (PX_PER_UNIT.get((match[2] ?? 'px').toLowerCase()) ?? 1);
-    return Number.isFinite(px) && px > 0 ? widthPx(px) : null;
+    return Number.isFinite(px) && px > 0 ? widthPx(px, columnPx) : null;
 }
