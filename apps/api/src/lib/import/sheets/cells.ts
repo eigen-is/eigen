@@ -23,7 +23,7 @@ export const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 export const DAY_MS = 86_400_000;
 
 // A 1904 workbook counts its days from 1904-01-01, 1,462 days after the 1900 system's day 0.
-const DAYS_1904 = 1462;
+export const DAYS_1904 = 1462;
 
 export type GridContext = {
     looks: Look[];

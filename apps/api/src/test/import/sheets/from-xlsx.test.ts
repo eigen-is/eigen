@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
+import { readGrid } from '../../../lib/import/sheets/cells';
 import { MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets, xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';
+import { readInBatches, readPackage } from '../../../lib/import/sheets/package';
+import { readRules } from '../../../lib/import/sheets/rules';
+import { readSharedStrings } from '../../../lib/import/sheets/strings';
+import { readDxfs, readLooks, themePalette } from '../../../lib/import/sheets/styles';
 import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -236,6 +241,145 @@ describe("the own reader against ExcelJS's", () => {
                 sheets: [
                     { data: '<row r="1"><c r="A1"><v>1</v></c><c r="B1" t="inlineStr"><is><t>x</t></is></c></row>' },
                     {},
+                ],
+            }),
+        );
+    });
+});
+
+describe("the own reader's rules against ExcelJS's", () => {
+    // Until the assembly reads them: each sheet's conditional formats and validations, from its rest and grid's span.
+    function ownRules(bytes: Uint8Array): Pick<Sheet, 'conditionalFormatRules' | 'dataVerification'>[] {
+        const book = readPackage(bytes);
+        const palette = themePalette(book.theme);
+        const looks = readLooks(book.styles, palette);
+        const dxfs = readDxfs(book.styles, palette);
+        const strings = readSharedStrings(book.sharedStrings, palette);
+        const none = () => {};
+        return book.sheets.map(({ path }) => {
+            const part = book.pkg.zip.read(path);
+            if (!part) throw new Error(`no part ${path}`);
+            const { rest, children } = readInBatches(part, 'sheetData', 'row');
+            const { date1904 } = book;
+            const grid = readGrid(children, {
+                looks,
+                strings,
+                date1904,
+                palette,
+                charge: none,
+                chargeCopy: none,
+                placed: new Map(),
+            });
+            const { rows, columns } = grid;
+            return readRules(rest, { dxfs, palette, date1904, rows, columns, charge: none });
+        });
+    }
+
+    async function expectSameRules(bytes: Uint8Array): Promise<void> {
+        const theirs = (await xlsxToSheets(Buffer.from(bytes))).map(({ conditionalFormatRules, dataVerification }) => ({
+            conditionalFormatRules,
+            dataVerification,
+        }));
+        expect(ownRules(bytes)).toEqual(theirs);
+    }
+
+    // Every row holds A to D, so the span the clamp counts from is the same for both: rows and cells as written.
+    const data = Array.from(
+        { length: 10 },
+        (_, r) =>
+            `<row r="${r + 1}">${['A', 'B', 'C', 'D'].map((column, c) => `<c r="${column}${r + 1}"><v>${r * 4 + c}</v></c>`).join('')}</row>`,
+    ).join('');
+    const DXFS = `<dxfs count="4"><dxf><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf><dxf><font><b/><color theme="4" tint="0.4"/></font></dxf><dxf><fill><patternFill patternType="solid"><fgColor rgb="FF00B050"/><bgColor rgb="FF00B050"/></patternFill></fill></dxf><dxf><fill><patternFill patternType="none"><bgColor rgb="FFFF0000"/></patternFill></fill><font><color theme="1"/></font></dxf></dxfs>`;
+
+    test('conditional formats of every family, their dxfs and their order', async () => {
+        const rule = (attributes: string, inner = '') => `<cfRule ${attributes}>${inner}</cfRule>`;
+        const formula = (...texts: string[]) => texts.map((text) => `<formula>${text}</formula>`).join('');
+        const formats = [
+            `<conditionalFormatting sqref="A1:A10">${[
+                rule('type="cellIs" dxfId="0" priority="3" operator="greaterThan"', formula('10')),
+                rule('type="cellIs" dxfId="1" priority="1" operator="lessThanOrEqual"', formula('"5%"')),
+                rule('type="cellIs" dxfId="2" priority="2" operator="between"', formula('2', '"x"')),
+                rule('type="cellIs" dxfId="3" priority="4" operator="notEqual"', formula('$B$1')),
+                rule('type="cellIs" dxfId="0" priority="5" operator="notBetween"', formula('$B$1', 'C2*2')),
+            ].join('')}</conditionalFormatting>`,
+            `<conditionalFormatting sqref="B2:B4 D2:D4 A7:A8">${[
+                rule('type="expression" dxfId="1" priority="6"', formula('SUM(B2:$C$3)&gt;2')),
+                rule(
+                    'type="containsText" dxfId="0" priority="7" operator="containsText" text="ab"',
+                    formula('NOT(ISERROR(SEARCH("ab",B2)))'),
+                ),
+                rule(
+                    'type="notContainsText" dxfId="2" priority="8" operator="notContains" text="z"',
+                    formula('ISERROR(SEARCH("z",B2))'),
+                ),
+                rule(
+                    'type="beginsWith" dxfId="2" priority="9" operator="beginsWith" text="a"',
+                    formula('LEFT(B2,LEN("a"))="a"'),
+                ),
+                rule('type="timePeriod" dxfId="3" priority="10" timePeriod="today"', formula('FLOOR(B2,1)=TODAY()')),
+                rule('type="containsBlanks" dxfId="3" priority="11"', formula('LEN(TRIM(B2))=0')),
+            ].join('')}</conditionalFormatting>`,
+            `<conditionalFormatting sqref="C1:C10">${[
+                rule('type="top10" dxfId="0" priority="12" rank="3"'),
+                rule('type="top10" dxfId="0" priority="13" percent="1" bottom="1" rank="20"'),
+                rule('type="aboveAverage" dxfId="1" priority="14"'),
+                rule('type="aboveAverage" dxfId="1" priority="15" aboveAverage="0"'),
+                rule('type="duplicateValues" dxfId="2" priority="16"'),
+                rule('type="uniqueValues" dxfId="2" priority="17"'),
+                rule(
+                    'type="colorScale" priority="18"',
+                    '<colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FFF8696B"/><color theme="5" tint="-0.25"/></colorScale>',
+                ),
+                rule(
+                    'type="colorScale" priority="19"',
+                    '<colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFF8696B"/><color rgb="FFFFEB84"/><color rgb="FF63BE7B"/></colorScale>',
+                ),
+                rule(
+                    'type="dataBar" priority="20"',
+                    '<dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar>',
+                ),
+                rule(
+                    'type="iconSet" priority="21"',
+                    '<iconSet iconSet="3Arrows"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet>',
+                ),
+                rule('type="expression" dxfId="9" priority="22"', formula('C1&gt;0')),
+            ].join('')}</conditionalFormatting>`,
+        ].join('');
+        await expectSameRules(
+            xlsxFixture({
+                sheets: [{ data, after: formats }, { data }],
+                styles: `<fonts><font/></fonts><fills><fill/></fills><borders><border/></borders><cellXfs><xf/></cellXfs>${DXFS}`,
+                colors: OFFICE_COLORS,
+            }),
+        );
+    });
+
+    test('validations of every type, their messages, overlaps and the clamp', async () => {
+        const validation = (attributes: string, ...formulas: string[]) =>
+            `<dataValidation ${attributes}>${formulas.map((text, index) => `<formula${index + 1}>${text}</formula${index + 1}>`).join('')}</dataValidation>`;
+        const validations = `<dataValidations>${[
+            validation('type="list" allowBlank="1" sqref="E1:E2000"', '"Yes,No"'),
+            validation(
+                'type="list" allowBlank="1" showInputMessage="1" prompt="Pick one" showErrorMessage="1" sqref="A1:B2"',
+                '$D$1:$D$10',
+            ),
+            validation('type="list" sqref="A3"', "'Second sheet'!$A$1:$A$4"),
+            validation('type="list" sqref="A4"', 'NamedRange'),
+            validation('type="whole" sqref="B3:B5" showErrorMessage="1" errorStyle="warning"', '1', '10'),
+            validation('type="decimal" operator="greaterThan" sqref="C3"', '2.5'),
+            validation('type="textLength" operator="lessThanOrEqual" sqref="C4"', '5'),
+            validation('type="date" sqref="C5"', '45292', '45657'),
+            validation('type="date" operator="greaterThanOrEqual" sqref="C6"', '45458'),
+            validation('type="whole" operator="greaterThan" sqref="C7"', '$B$1'),
+            validation('type="custom" sqref="C8"', 'C8&gt;0'),
+            validation('type="list" sqref="A1:XFD1"', '"wide"'),
+            validation('type="list" sqref="F1:F1048576 H3"', '"tall"'),
+        ].join('')}</dataValidations>`;
+        await expectSameRules(
+            xlsxFixture({
+                sheets: [
+                    { data, after: validations },
+                    { name: 'Second sheet', data },
                 ],
             }),
         );

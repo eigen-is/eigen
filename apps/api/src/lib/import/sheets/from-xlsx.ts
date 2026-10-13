@@ -3,7 +3,6 @@ import { formatInputDate } from '@workspace/lib/date';
 import type {
     BorderSide,
     CellBorderSides,
-    ConditionalFormatConditionName,
     ConditionalFormatRule,
     DataVerificationRule,
     DefaultConditionalFormatRule,
@@ -18,7 +17,6 @@ import {
     cellWrapsText,
     DEFAULT_SHEET_COLUMN_COUNT,
     DEFAULT_SHEET_ROW_COUNT,
-    iscelldata,
     numberDisplay,
     parseA1Range,
     REFERENCE_COLUMN_COUNT,
@@ -34,6 +32,20 @@ import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../..
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { DAY_MS, dateDisplay, EXCEL_EPOCH_MS, readGrid } from './cells';
 import { NOT_AN_XLSX, readInBatches, readPackage, SPREADSHEET_TOO_LARGE, TOO_MANY_CELLS } from './package';
+import {
+    CELL_IS_CONDITION,
+    CELL_IS_FORMULA_OP,
+    cfFormulaRule,
+    DV_COL_MARGIN,
+    DV_DATE_OPERATOR,
+    DV_OPERATOR,
+    DV_ROW_MARGIN,
+    DV_TYPE,
+    extractSearchText,
+    FORMULA_BACKED_CF_TYPES,
+    listSource,
+    parseCfLiteral,
+} from './rules';
 import { readSharedStrings } from './strings';
 import {
     BORDER_STYLE_MAP,
@@ -575,31 +587,6 @@ export type XlsxCfRule = {
     } | null;
 };
 
-const CELL_IS_CONDITION: Record<string, ConditionalFormatConditionName> = {
-    greaterThan: 'greaterThan',
-    greaterThanOrEqual: 'greaterThanOrEqual',
-    lessThan: 'lessThan',
-    lessThanOrEqual: 'lessThanOrEqual',
-    equal: 'equal',
-    notEqual: 'notEqual',
-    between: 'between',
-    notBetween: 'notBetween',
-};
-
-const CELL_IS_FORMULA_OP: Record<string, string> = {
-    greaterThan: '>',
-    greaterThanOrEqual: '>=',
-    lessThan: '<',
-    lessThanOrEqual: '<=',
-    equal: '=',
-    notEqual: '<>',
-};
-
-// Text-operator and timePeriod rules read back without their own attribute payloads, but
-// Excel stores the equivalent formula inside the cfRule — evaluate those through the
-// engine's formula rule.
-const FORMULA_BACKED_CF_TYPES = new Set(['containsText', 'notContainsText', 'beginsWith', 'endsWith', 'timePeriod']);
-
 function convertConditionalFormats(worksheet: Worksheet, theme: ThemePalette): ConditionalFormatRule[] {
     const blocks = worksheet.conditionalFormattings ?? [];
 
@@ -652,7 +639,8 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
 
     const format = convertDxfFormat(rule.style, theme);
 
-    if (rule.type === 'cellIs' && rule.operator != null && rule.operator in CELL_IS_CONDITION) {
+    const comparison = CELL_IS_CONDITION.get(rule.operator ?? '');
+    if (rule.type === 'cellIs' && rule.operator != null && comparison) {
         const operands = (rule.formulae ?? []).map(String);
         if (operands.length === 0) return [];
         const literals = operands.map(parseCfLiteral);
@@ -662,7 +650,7 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
                     type: 'default',
                     cellrange: ranges,
                     format,
-                    conditionName: CELL_IS_CONDITION[rule.operator],
+                    conditionName: comparison,
                     conditionRange: [],
                     conditionValue: literals,
                 },
@@ -676,7 +664,7 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
             const within = `AND(${tl}>=${operands[0]},${tl}<=${operands[1]})`;
             return [cfFormulaRule(rule.operator === 'between' ? within : `NOT(${within})`, ranges, format)];
         }
-        return [cfFormulaRule(`${tl}${CELL_IS_FORMULA_OP[rule.operator]}${operands[0]}`, ranges, format)];
+        return [cfFormulaRule(`${tl}${CELL_IS_FORMULA_OP.get(rule.operator)}${operands[0]}`, ranges, format)];
     }
 
     if (rule.type === 'containsText' && rule.operator === 'containsText') {
@@ -695,7 +683,7 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
         }
     }
 
-    if (rule.type === 'expression' || FORMULA_BACKED_CF_TYPES.has(rule.type)) {
+    if (FORMULA_BACKED_CF_TYPES.has(rule.type)) {
         const formula = rule.formulae?.[0];
         return formula == null ? [] : [cfFormulaRule(String(formula), ranges, format)];
     }
@@ -753,22 +741,6 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
     return [];
 }
 
-// Excel anchors a CF formula's relative refs at the first range's top-left, and so does the engine.
-function cfFormulaRule(
-    formula: string,
-    ranges: SingleRange[],
-    format: DefaultConditionalFormatRule['format'],
-): DefaultConditionalFormatRule {
-    return {
-        type: 'default',
-        cellrange: ranges,
-        format,
-        conditionName: 'formula',
-        conditionRange: [],
-        conditionValue: [`=${formula}`],
-    };
-}
-
 function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): DefaultConditionalFormatRule['format'] {
     const textColor = resolveColor(style?.font?.color, theme);
     // dxf solid fills carry the visible color in bgColor (Excel-authored) or in both
@@ -779,35 +751,6 @@ function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): Defa
             ? (resolveColor(fill.fgColor, theme) ?? resolveColor(fill.bgColor, theme))
             : null;
     return { textColor, cellColor };
-}
-
-// Excel string literals arrive wrapped in double quotes with embedded quotes
-// doubled ('"say ""hi"""'). Returns the unescaped inner text, or null when the
-// operand isn't a quoted literal.
-function unquoteXlsxLiteral(txt: string): string | null {
-    if (!(txt.startsWith('"') && txt.endsWith('"') && txt.length >= 2)) return null;
-    return txt.slice(1, -1).replace(/""/g, '"');
-}
-
-// cellIs operands arrive as raw formula text: numeric literals, quoted strings, or
-// refs/functions (→ null, handled via the formula-rule fallback). Quoted percent strings
-// like "5%" come from Google Sheets exports that serialize a percent-format threshold as
-// text — coerce them to the numeric form the engine's comparisons expect.
-function parseCfLiteral(operand: string): string | null {
-    const txt = operand.trim();
-    if (/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt)) return txt;
-    const inner = unquoteXlsxLiteral(txt);
-    if (inner == null) return null;
-    const pct = inner.match(/^(-?\d+(?:\.\d+)?)%$/);
-    return pct ? String(Number(pct[1]) / 100) : inner;
-}
-
-// exceljs read-back drops the containsText rule's `text` attribute but keeps the formula
-// Excel stores in the file: NOT(ISERROR(SEARCH("<text>",<topLeftRef>))).
-function extractSearchText(formula: string | number | undefined): string | null {
-    if (formula == null) return null;
-    const match = String(formula).match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
-    return match ? match[1].replace(/""/g, '"') : null;
 }
 
 function a1ToSingleRange(ref: string): SingleRange | null {
@@ -845,45 +788,6 @@ export type XlsxDataValidation = {
     errorStyle?: string;
 };
 
-const DV_TYPE: Record<string, string> = {
-    list: 'dropdown',
-    whole: 'number_integer',
-    // Excel "decimal" accepts ANY real number, like the engine's `number` type;
-    // the engine's `number_decimal` rejects integers and would block typing 5
-    // into a "decimal between 1..10" cell.
-    decimal: 'number',
-    textLength: 'text_length',
-    date: 'date',
-};
-
-// xlsx operator → engine type2 (see DataVerificationRule in @workspace/lib/sheets).
-const DV_OPERATOR: Record<string, string> = {
-    between: 'between',
-    notBetween: 'notBetween',
-    equal: 'equal',
-    notEqual: 'notEqualTo',
-    greaterThan: 'moreThanThe',
-    lessThan: 'lessThan',
-    greaterThanOrEqual: 'greaterOrEqualTo',
-    lessThanOrEqual: 'lessThanOrEqualTo',
-};
-
-const DV_DATE_OPERATOR: Record<string, string> = {
-    ...DV_OPERATOR,
-    greaterThan: 'laterThan',
-    lessThan: 'earlierThan',
-    greaterThanOrEqual: 'noEarlierThan',
-    lessThanOrEqual: 'noLaterThan',
-};
-
-// Column-wide validations ("D2:D1048576") are common in real workbooks, and exceljs
-// pre-expands the sqref to one model entry per cell — emitting a rule object for each
-// would put a multi-hundred-MB dataVerification map into the snapshot JSON while the
-// converted grid only covers the data extent anyway. DV-only blank rows below the data
-// are a legit pattern (pre-validated entry rows), hence the generous margins.
-const DV_ROW_MARGIN = 1000;
-const DV_COL_MARGIN = 100;
-
 function convertDataValidations(worksheet: Worksheet): NonNullable<Sheet['dataVerification']> {
     const model = worksheet.dataValidations?.model ?? {};
 
@@ -909,7 +813,7 @@ function convertDataValidations(worksheet: Worksheet): NonNullable<Sheet['dataVe
 }
 
 function mapDataValidation(dv: XlsxDataValidation): DataVerificationRule | null {
-    const type = DV_TYPE[dv.type];
+    const type = DV_TYPE.get(dv.type);
     if (type == null) return null; // custom / any have no engine equivalent
 
     const rule: DataVerificationRule = {
@@ -939,7 +843,7 @@ function mapDataValidation(dv: XlsxDataValidation): DataVerificationRule | null 
     }
 
     const operator = dv.operator ?? 'between';
-    const type2 = (type === 'date' ? DV_DATE_OPERATOR : DV_OPERATOR)[operator];
+    const type2 = (type === 'date' ? DV_DATE_OPERATOR : DV_OPERATOR).get(operator);
     if (type2 == null) return null;
     rule.type2 = type2;
 
@@ -967,18 +871,6 @@ function numericOperand(raw: unknown): string | null {
 function dateOperand(raw: unknown): string | null {
     if (!(raw instanceof Date) || Number.isNaN(raw.getTime())) return null;
     return formatInputDate(raw);
-}
-
-// A quoted literal ('"Red,Green,Blue"') becomes the engine's comma-list form; anything
-// else is kept as a live range ref when valid — getDropdownList resolves refs (incl.
-// quoted cross-sheet names) natively, so source edits keep propagating. Defined names
-// are dropped program-wide; a garbage one-option dropdown is worse than no rule.
-function listSource(raw: unknown): string | null {
-    if (typeof raw !== 'string' || raw.length === 0) return null;
-    const inner = unquoteXlsxLiteral(raw);
-    if (inner != null) return inner.length > 0 ? inner : null;
-    const ref = raw.startsWith('=') ? raw.slice(1) : raw;
-    return iscelldata(ref) ? ref : null;
 }
 
 function buildMergeStructures(merges: string[]): {

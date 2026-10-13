@@ -1,12 +1,18 @@
 import { bundledFont } from '@workspace/lib/constants/fonts';
-import type { BorderSide, CellBorderSides, CellStyle, Cell as FortuneCell } from '@workspace/lib/sheets';
+import type {
+    BorderSide,
+    CellBorderSides,
+    CellStyle,
+    DefaultConditionalFormatRule,
+    Cell as FortuneCell,
+} from '@workspace/lib/sheets';
 import { BORDER_STYLES } from '@workspace/lib/sheets';
 import { is_date } from '@workspace/sheet/engine';
 import { A_NS, isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
-// formats, theme colours and tints. The colour and number-format mapping is ExcelJS's path's too.
+// formats, theme colours and tints; and the conditional formats' looks (dxf). The colour and number-format mapping is ExcelJS's path's too.
 
 export type ThemePalette = string[];
 
@@ -130,6 +136,31 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
     });
 }
 
+// What a conditional format paints: its font's colour and its fill's.
+export type DxfLook = DefaultConditionalFormatRule['format'];
+
+export function readDxfs(styleSheet: XmlElement | undefined, palette: ThemePalette): DxfLook[] {
+    const dxfs = styleSheet && xmlChild(styleSheet, SML_NS, 'dxfs');
+    return dxfs ? xmlChildren(dxfs, SML_NS, 'dxf').map((dxf) => dxfLook(dxf, palette)) : [];
+}
+
+// A dxf's solid fill names its colour in bgColor, as Excel writes it, or in both, as Google Sheets does; a pattern of
+// none is a font-only dxf, and a gradient paints nothing.
+export function dxfLook(dxf: XmlElement | undefined, palette: ThemePalette): DxfLook {
+    const font = dxf && xmlChild(dxf, SML_NS, 'font');
+    const fill = dxf && xmlChild(dxf, SML_NS, 'fill');
+    const pattern = fill && xmlChild(fill, SML_NS, 'patternFill');
+    const color = (element: XmlElement | undefined, name: string) =>
+        resolveColor(colorOf(element && xmlChild(element, SML_NS, name)), palette);
+    return {
+        textColor: color(font, 'color'),
+        cellColor:
+            pattern && xmlAttr(pattern, '', 'patternType') !== 'none'
+                ? (color(pattern, 'fgColor') ?? color(pattern, 'bgColor'))
+                : null,
+    };
+}
+
 // A run's properties read as a font, its face named by rFont.
 export function fontLook(font: XmlElement | undefined, palette: ThemePalette): CellStyle {
     const look: CellStyle = {};
@@ -197,7 +228,7 @@ function bordersOf(border: XmlElement, palette: ThemePalette): CellBorderSides |
 }
 
 // An indexed colour is none, as on ExcelJS's path.
-function colorOf(element: XmlElement | undefined): XlsxColor | undefined {
+export function colorOf(element: XmlElement | undefined): XlsxColor | undefined {
     const rgb = element && xmlAttr(element, '', 'rgb');
     if (rgb) return { argb: rgb };
     const theme = element && xmlAttr(element, '', 'theme');
