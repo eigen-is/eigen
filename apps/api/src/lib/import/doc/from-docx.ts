@@ -7,7 +7,7 @@ import { ZipError } from '../../core/zip';
 import { docSchema } from '../../document/doc-schema';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
-import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
+import { CHARS_PER_UNIT, DOCUMENT_TOO_LARGE, MAX_DOCX_WEIGHT, NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
 
 // docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
@@ -18,16 +18,8 @@ export type DocxImage = {
     contentType: string;
 };
 
-// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
-// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
-// heaviest weighs 57,688.
-export const MAX_DOCX_WEIGHT = 150_000;
-
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
-
-// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
-const CHARS_PER_UNIT = 512;
 
 // The doc as JSON, for the audit and the tests; the import encodes the doc itself, with no copy between.
 export function docxToPmJson(
@@ -121,11 +113,12 @@ function fits(block: JSONContent): boolean {
     }
 }
 
-// A block the schema refuses keeps its text as paragraphs, so a reader slip never fails the import.
+// A block the schema refuses keeps its text and equations as paragraphs, so a reader slip never fails the import.
 function asParagraphs(block: JSONContent): JSONContent[] {
     const lines: JSONContent[] = [];
     const walk = (node: JSONContent, line: JSONContent[]) => {
         if (node.type === 'text' && node.text) line.push({ type: 'text', text: node.text });
+        else if (node.type === 'equation') line.push(node);
         else if (PROSE_TEXTBLOCKS.includes(node.type ?? '') || node.type === 'codeBlock') {
             const own: JSONContent[] = [];
             for (const child of node.content ?? []) walk(child, own);

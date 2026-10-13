@@ -244,13 +244,6 @@ export function equation(mathml: string, display = false): JSONContent {
     return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
 }
 
-// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
-export function withoutEquations(json: JSONContent): JSONContent {
-    return json.content
-        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
-        : json;
-}
-
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
 // to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
