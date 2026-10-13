@@ -12,6 +12,7 @@ import {
     convertToShapes,
     cornerRadius,
     diamondOutline,
+    elementBounds,
     elementsInFrame,
     freedrawOutline,
     getFontMetrics,
@@ -252,7 +253,13 @@ function slideXml(
         shapes: 1,
         ground: background?.type === 'solid' ? background.color : undefined,
     };
-    const shapes = elements.map((el) => elementXml(el, slide)).join('');
+    // The canvas clips a slide to its frame: an element wholly outside draws nothing, and far off it would pass
+    // DrawingML's 32-bit offsets.
+    const shown = elements.filter((el) => {
+        const bounds = elementBounds(el, arrowRoute(el, deck.byId));
+        return bounds.maxX >= 0 && bounds.maxY >= 0 && bounds.minX <= frame.width && bounds.minY <= frame.height;
+    });
+    const shapes = shown.map((el) => elementXml(el, slide)).join('');
     const name = frame.name ? ` name="${escapeXml(frame.name)}"` : '';
     const xml = `<p:sld ${NAMESPACES}><p:cSld${name}>${backgroundXml(background, frame, slide)}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
     return { xml, relationships: slide.relationships };

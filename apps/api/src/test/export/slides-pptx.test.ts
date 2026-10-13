@@ -276,6 +276,20 @@ describe('pptx package', () => {
         expect(attr(runProps(text, 'small'), 'sz')).toBe('1800');
     });
 
+    test('an element wholly outside its frame is not written, one partly in is', () => {
+        const zip = pptx(
+            sceneOf([
+                element('rectangle', { index: 'a0', x: -100, width: 200 }),
+                element('rectangle', { index: 'a1', x: 2000 }),
+                element('rectangle', { index: 'a2', x: -500, y: 2000 }),
+                // Past DrawingML's 32-bit offsets.
+                element('ellipse', { index: 'a3', x: 1_000_000, y: 1_000_000 }),
+                element('line', { index: 'a4', x: 3000, points: '[[0,0],[100,50],[0,100]]' }),
+            ]),
+        );
+        expect(xfrm(only(zip)).x).toBe(-100 * EMU);
+    });
+
     test('the deck title is escaped into the core properties', () => {
         const core = part(pptx(sceneOf([])), 'docProps/core.xml');
         expect(xmlText(first(core, 'http://purl.org/dc/elements/1.1/', 'title'))).toBe('Deck & <co>');
