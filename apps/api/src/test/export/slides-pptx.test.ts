@@ -588,8 +588,8 @@ describe('pptx shapes', () => {
         expect(slide.match(/<p:sp>/g)).toHaveLength(2);
     });
 
-    test('an arrow label is a centered text box at the label anchor', () => {
-        const [, label] = shapes(
+    test("an arrow label is a centered text box at the label anchor, over the slide's color where the canvas masks", () => {
+        const [, ground, label] = shapes(
             pptx(
                 sceneOf([
                     element('arrow', {
@@ -608,6 +608,14 @@ describe('pptx shapes', () => {
         const box = xfrm(label);
         expect(box.x + box.cx / 2).toBe(300 * EMU);
         expect(box.y + box.cy / 2).toBe(50 * EMU);
+        // Google Slides wraps a box set not to, so the text's box holds an em per character: one line anywhere.
+        expect(attr(first(label, A, 'bodyPr'), 'wrap')).toBe('none');
+        expect(box.cx).toBeGreaterThanOrEqual('yes <no>'.length * 20 * EMU);
+        expect(descendants(first(label, P, 'spPr'), A, 'noFill')).not.toHaveLength(0);
+        // The mask is the label's own width and Eigen's 5 px around it, in the slide's color.
+        expect(descendants(ground, P, 'txBody')).toHaveLength(0);
+        expect(xfrm(ground)).toEqual({ ...box, x: 255 * EMU, cx: 90 * EMU });
+        expect(srgb(first(first(ground, P, 'spPr'), A, 'solidFill')).val).toBe('FFFFFF');
     });
 
     test('a chart is written as the shapes Convert to shapes makes, each with its own id', () => {
@@ -807,7 +815,7 @@ describe('pptx text', () => {
             [{ id: 'f1', index: 'a0', name: hostile }],
         );
         const zip = pptx(scene);
-        const [box, , label] = shapes(zip);
+        const [box, , , label] = shapes(zip);
         const clean = 'a < b & "c" ]]>  d';
         // HTML collapses the two spaces the dropped characters leave.
         expect(paragraphs(box)).toEqual(['a < b & "c" ]]> d']);

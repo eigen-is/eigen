@@ -235,7 +235,7 @@ type Slide = {
     // A picture or link a slide shows twice relates once.
     rIds: Map<string, string>;
     shapes: number;
-    // An arrow label's box paints the slide's solid color, where Eigen masks the shaft out under the text.
+    // An arrow label's mask paints the slide's solid color, where Eigen masks the shaft out under the text.
     ground: string | undefined;
 };
 
@@ -615,20 +615,19 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
     const label = arrowLabelBox(el, points);
     if (!label) return xml;
     const center = linearLocalToScene(el, label.center);
+    const lines = el.text.split('\n');
     // The 5 px Eigen's mask leaves around the text.
     const pad = 5;
-    const box = {
-        x: center.x - label.width / 2 - pad,
+    const boxOf = (width: number) => ({
+        x: center.x - width / 2 - pad,
         y: center.y - label.height / 2 - pad,
-        width: label.width + 2 * pad,
+        width: width + 2 * pad,
         height: label.height + 2 * pad,
         angle: el.angle,
-    };
+    });
     const text = textBodyXml(
         slide,
-        el.text
-            .split('\n')
-            .map((line) => ({ runs: [{ text: line, marks: NO_MARKS }], depth: 0, quotes: 0, spaceBefore: false })),
+        lines.map((line) => ({ runs: [{ text: line, marks: NO_MARKS }], depth: 0, quotes: 0, spaceBefore: false })),
         {
             fontFamily: el.fontFamily,
             fontSize: el.fontSize,
@@ -646,9 +645,22 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
             opacity,
         },
     );
-    const ground =
-        slide.ground === undefined ? '<a:noFill/>' : fillXml({ type: 'solid', color: slide.ground }, opacity);
-    return xml + spXml(slide, 'Label', box, presetXml('rect'), ground, NO_LINE, text);
+    // The mask paints the slide's solid color under the label; the text's own box is an em per character wide, as
+    // Google Slides wraps a box set not to.
+    const mask =
+        slide.ground === undefined
+            ? ''
+            : spXml(
+                  slide,
+                  'Mask',
+                  boxOf(label.width),
+                  presetXml('rect'),
+                  fillXml({ type: 'solid', color: slide.ground }, opacity),
+                  NO_LINE,
+              );
+    const longest = lines.reduce((most, line) => Math.max(most, [...line].length), 0);
+    const box = boxOf(Math.max(label.width, longest * el.fontSize));
+    return xml + mask + spXml(slide, 'Label', box, presetXml('rect'), '<a:noFill/>', NO_LINE, text);
 }
 
 // ── Pictures and backgrounds ─────────────────────────────────────────────────────────────────────────────────────
