@@ -121,11 +121,12 @@ function fits(block: JSONContent): boolean {
     }
 }
 
-// A block the schema refuses keeps its text as paragraphs, so a reader slip never fails the import.
+// A block the schema refuses keeps its text and equations as paragraphs, so a reader slip never fails the import.
 function asParagraphs(block: JSONContent): JSONContent[] {
     const lines: JSONContent[] = [];
     const walk = (node: JSONContent, line: JSONContent[]) => {
         if (node.type === 'text' && node.text) line.push({ type: 'text', text: node.text });
+        else if (node.type === 'equation') line.push(node);
         else if (PROSE_TEXTBLOCKS.includes(node.type ?? '') || node.type === 'codeBlock') {
             const own: JSONContent[] = [];
             for (const child of node.content ?? []) walk(child, own);

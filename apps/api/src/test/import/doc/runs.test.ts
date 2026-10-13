@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { MATH_LIMITS, type MathRow, writeMathml } from '@workspace/math';
+import { writeZip } from '../../../lib/core/zip';
 import { CODE_LOOK } from '../../../lib/document/looks';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A run's look: which marks Word's formatting becomes, and which it doesn't.
@@ -389,11 +392,86 @@ describe('symbols', () => {
 });
 
 describe('math', () => {
-    // G14: math reads as text, each object and run its own word, so x²+1 is no one word.
-    test('OMML objects and runs side by side are spaced', async () => {
-        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
-        const json = await imported(paragraph(`${run('So ')}${math}`));
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['So x2 +1']);
+    const M = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
+    const r = (text: string) => `<m:r><m:t>${text}</m:t></m:r>`;
+    const oMath = (inner: string, ns = M) => `<m:oMath xmlns:m="${ns}">${inner}</m:oMath>`;
+    const SQUARE = `<m:sSup><m:e>${r('x')}</m:e><m:sup>${r('2')}</m:sup></m:sSup>${r('+1')}`;
+    const SQUARE_ROW: MathRow = [
+        { kind: 'scripts', base: [{ kind: 'identifier', text: 'x' }], sup: [{ kind: 'number', text: '2' }] },
+        { kind: 'operator', text: '+' },
+        { kind: 'number', text: '1' },
+    ];
+    const equation = (row: MathRow, display = false) => ({
+        type: 'equation',
+        attrs: { mathml: writeMathml(row), display, commentCardId: null },
+    });
+    const id = (text: string): MathRow => [{ kind: 'identifier', text }];
+    const contents = (json: JSONContent) => json.content?.map((block) => block.content);
+
+    test('an equation in a sentence is an inline equation node between its runs', async () => {
+        const json = await imported(paragraph(`${run('So ')}${oMath(SQUARE)}${run(' holds.')}`));
+        expect(contents(json)).toEqual([
+            [{ type: 'text', text: 'So ' }, equation(SQUARE_ROW), { type: 'text', text: ' holds.' }],
+        ]);
+    });
+
+    test('each m:oMath of an m:oMathPara is a display equation, and text beside it stays in its paragraph', async () => {
+        const para = `<m:oMathPara xmlns:m="${M}"><m:oMathParaPr><m:jc m:val="left"/></m:oMathParaPr><m:oMath>${r('a')}</m:oMath><m:oMath>${r('b')}</m:oMath></m:oMathPara>`;
+        const json = await imported(`${paragraph(para)}${paragraph(`${run('Where ')}${para}${run(' holds.')}`)}`);
+        expect(contents(json)).toEqual([
+            [equation(id('a'), true), equation(id('b'), true)],
+            [
+                { type: 'text', text: 'Where ' },
+                equation(id('a'), true),
+                equation(id('b'), true),
+                { type: 'text', text: ' holds.' },
+            ],
+        ]);
+    });
+
+    test('a tracked deletion in an equation is gone, an insertion kept; a deleted equation is no node', async () => {
+        const tracked = `<m:r><w:del w:id="1" w:author="a"><m:t>y</m:t></w:del></m:r><m:r><w:ins w:id="2" w:author="a"><m:t>x</m:t></w:ins></m:r>`;
+        const json = await imported(
+            paragraph(`${oMath(tracked)}<w:del w:id="3" w:author="a">${oMath(r('z'))}</w:del>`),
+        );
+        expect(contents(json)).toEqual([[equation(id('x'))]]);
+    });
+
+    test('an equation in Strict OOXML reads as its transitional twin', async () => {
+        const strict = 'http://purl.oclc.org/ooxml';
+        const rels = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${strict}/officeDocument/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+        const body = `<w:p>${oMath(SQUARE, `${strict}/officeDocument/math`)}</w:p>`;
+        const docx = writeZip(
+            Object.entries({
+                '_rels/.rels': rels,
+                'word/document.xml': `<w:document xmlns:w="${strict}/wordprocessingml/main"><w:body>${body}</w:body></w:document>`,
+            }).map(([name, data]) => ({ name, data })),
+        );
+        expect(contents(docxToPmJson(Buffer.from(docx)).json)).toEqual([[equation(SQUARE_ROW)]]);
+    });
+
+    // As the import read every equation before it held math: each object and run its own word, so x²+1 is no one word.
+    test('an equation nested past the bound is its text, a tracked deletion left out', async () => {
+        const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${SQUARE}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;
+        const json = await imported(
+            paragraph(
+                `${run('So ')}${oMath(`${deep}<m:r><w:del w:id="1" w:author="a"><m:t>y</m:t></w:del></m:r>${SQUARE}`)}`,
+            ),
+        );
+        expect(contents(json)).toEqual([[{ type: 'text', text: 'So x2+1 x2 +1' }]]);
+    });
+
+    test('an equation in a code block is its text', async () => {
+        const consolas = '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>';
+        const json = await imported(
+            paragraph(
+                `${run('y = ', consolas)}${oMath(SQUARE)}`,
+                '<w:shd w:val="clear" w:color="auto" w:fill="F3F4F6"/>',
+            ),
+        );
+        expect(json.content?.map((block) => [block.type, block.content])).toEqual([
+            ['codeBlock', [{ type: 'text', text: 'y = x2 +1' }]],
+        ]);
     });
 });
 

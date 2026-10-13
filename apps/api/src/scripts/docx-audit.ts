@@ -111,6 +111,7 @@ const FEATURES = [
     ['alignRight', 'Right-aligned paragraphs'],
     ['alignJustify', 'Justified paragraphs'],
     ['footnotes', 'Footnote and endnote references'],
+    ['equations', 'Equations'],
 ] as const;
 
 export type Feature = (typeof FEATURES)[number][0];
@@ -994,16 +995,10 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 if (choice) inline(choice, context);
                 continue;
             }
-            if (node.ns === M_NS && node.local === 't') {
-                if (visible(context.scope)) text(xmlText(node), context, undefined);
-                continue;
-            }
-            // An equation's objects and runs are words of their own, as the reader reads math as text.
+            // An equation is no text: a word boundary, as on the imported side.
             if (node.ns === M_NS && node.local === 'oMath') {
-                for (const part of xmlElements(node)) {
-                    inline(part, context);
-                    space(context);
-                }
+                if (visible(context.scope)) add(tally, 'equations');
+                space(context);
                 continue;
             }
             if (node.ns !== W_NS) {
@@ -1290,6 +1285,7 @@ export function auditImported(json: JSONContent): Tally {
                 else figure = true;
                 continue;
             }
+            if (inline.type === 'equation') add(tally, 'equations');
             if (inline.type !== 'text') {
                 space();
                 continue;

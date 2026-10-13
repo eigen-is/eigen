@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
+import { MathError, readOmml, writeMathml } from '@workspace/math';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
@@ -25,9 +26,10 @@ import {
 } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
-// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
+// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node. text is what an
+// equation reads as where only text goes.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean }
+    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean; text?: string }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -61,8 +63,9 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
             continue;
         }
         if (element.ns === M_NS && (element.local === 'oMath' || element.local === 'oMathPara')) {
-            const text = mathText(element);
-            if (text) pushText(reader, text, {}, context);
+            const display = element.local === 'oMathPara';
+            for (const oMath of display ? descendants(element, M_NS, 'oMath') : [element])
+                pushEquation(reader, oMath, display, context);
             continue;
         }
         if (element.ns !== W_NS) {
@@ -107,13 +110,35 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
     }
 }
 
-// Math as text until the schema holds math; each object and run of an equation is a word of its own.
-function mathText(element: XmlElement): string {
-    const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
-    return equations
-        .flatMap((equation) => xmlElements(equation).map((part) => descendants(part, M_NS, 't').map(xmlText).join('')))
-        .filter(Boolean)
-        .join(' ');
+// An equation past a bound of the package is its text.
+function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, context: RunContext): void {
+    const text = ommlText(oMath);
+    try {
+        const node = { type: 'equation', attrs: { mathml: writeMathml(readOmml(oMath)), display } };
+        context.pieces.push({ kind: 'node', node, text });
+    } catch (error) {
+        if (!(error instanceof MathError)) throw error;
+        pushText(reader, text, {}, context);
+    }
+}
+
+// Each object and run a word of its own, so x²+1 is no one word. A loop, not recursion: the package refuses an
+// equation nested past its bound, which may nest as deep as the XML does.
+function ommlText(oMath: XmlElement): string {
+    const words: string[] = [];
+    for (const part of xmlElements(oMath)) {
+        let word = '';
+        const stack = [part];
+        for (let element = stack.pop(); element; element = stack.pop()) {
+            if (element.ns === M_NS && element.local === 't') word += xmlText(element);
+            else if (element.ns !== W_NS || !SKIPPED_INLINE.has(element.local)) {
+                const children = xmlElements(element);
+                for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
+            }
+        }
+        if (word) words.push(word);
+    }
+    return words.join(' ');
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {

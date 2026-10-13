@@ -105,7 +105,7 @@ An equation is an inline, atomic node like the figure (`packages/lib/src/docs/ei
 
 An equation or a figure carries no mark. A mark is its paragraph's to allow, so a bold or a colour over a range lands on the atom too, and the Yjs binding would drop it on reload. The editor's `AtomMarks` extension (`apps/docs/src/components/docs/extensions/atom-marks.ts`) takes any mark off an equation or a figure a transaction touched.
 
-The whole equation is one attribute, so two people editing one equation don't merge: the last write wins. The LaTeX rides only in the annotation, and Word's OMML has no slot for it ([MATH.md](MATH.md#a-word-equation-comes-back-as-drawn-not-as-built)), so a Word round trip keeps the equation's tree and loses what was typed.
+The whole equation is one attribute, so two people editing one equation don't merge: the last write wins. The LaTeX rides only in the annotation, and Word's OMML has no slot for it ([MATH.md](MATH.md#a-word-equation-comes-back-as-drawn-not-as-built)), so a Word round trip keeps the equation's tree and loses what was typed. The docx import reads each Word equation into this node, one in an `m:oMathPara` with `display` set ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)).
 
 ## Every reader of an equation goes through readEquation
 

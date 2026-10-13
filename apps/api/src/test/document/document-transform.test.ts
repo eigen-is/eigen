@@ -63,7 +63,6 @@ import {
     seedDocumentMedia,
     seedEigendoc,
     seedVectorDoc,
-    withoutEquations,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -1100,12 +1099,14 @@ describe('document transform (docx round trip)', () => {
     }
 
     // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
+    // A break or an equation ends a word.
     function words(json: JSONContent): string[] {
         const chunks: string[] = [];
         const walk = (node: JSONContent) => {
             const caption = node.attrs?.['caption'];
             if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
-            const inline = node.content?.filter((child) => child.type === 'text' || child.type === 'hardBreak') ?? [];
+            const inline =
+                node.content?.filter((child) => ['text', 'hardBreak', 'equation'].includes(child.type ?? '')) ?? [];
             if (inline.length > 0) chunks.push(inline.map((child) => child.text ?? ' ').join(''));
             for (const child of node.content ?? []) walk(child);
         };
@@ -1193,7 +1194,7 @@ describe('document transform (docx round trip)', () => {
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
-        const original = withoutEquations(buildAllFeaturesDocJson());
+        const original = buildAllFeaturesDocJson();
         const { json, images } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);

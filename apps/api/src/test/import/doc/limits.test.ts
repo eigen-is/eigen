@@ -978,6 +978,22 @@ describe('figures and media', () => {
         }
     });
 
+    test('an equation in a block the schema refuses stays in its line', async () => {
+        const refuses = spyOn(docSchema(), 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x</m:t></m:r></m:oMath>`;
+        try {
+            const { json, warnings } = await importDocxBody(
+                `${paragraph(`${run('So ')}${math}`)}${paragraph(run('After.'))}`,
+            );
+            expect(json.content?.[0]?.content?.map((node) => node.type)).toEqual(['text', 'equation']);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
+    });
+
     test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {
         const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
         const { json, images } = await importDocxBody(

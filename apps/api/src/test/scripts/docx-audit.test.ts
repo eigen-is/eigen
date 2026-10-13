@@ -15,7 +15,7 @@ import {
     runAudit,
     type Tally,
 } from '../../scripts/docx-audit';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
 
 // The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
@@ -65,10 +65,19 @@ describe('source side', () => {
         expect(tally.words).toEqual(['a', 'b']);
     });
 
-    test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
-        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
-        const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);
-        expect(tally.words).toEqual(['So', 'x2', '+1']);
+    test('an equation counts as one and is no text, each of an m:oMathPara, a deleted one or one in a field code none', async () => {
+        const math =
+            '<m:oMath><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:oMath>';
+        const p = (inner: string) =>
+            `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${inner}</w:p>`;
+        const sentence = p(`${run('So')}${math}${run('holds')}`);
+        const field = `<w:r><w:fldChar w:fldCharType="begin"/></w:r>${math}<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const tally = await source(
+            `${sentence}${p(`<w:del w:id="1" w:author="a">${math}</w:del>${field}`)}${p(`<m:oMathPara>${math}${math}</m:oMathPara>`)}`,
+        );
+        expect([tally.words, count(tally, 'equations')]).toEqual([['So', 'holds'], 3]);
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(sentence))).json);
+        expect([imported.words, count(imported, 'equations')]).toEqual([['So', 'holds'], 1]);
     });
 
     test("a w:t's surrounding whitespace counts only where xml:space preserves it, as Word draws it", async () => {
@@ -557,16 +566,19 @@ describe('both sides', () => {
     });
 
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
-    // size, so the photo the doc leaves at its own width has one there.
+    // size, so the photo the doc leaves at its own width has one there; the display equation is a paragraph of its own,
+    // so the text after it is one more.
     test("the writer's docx holds what its doc holds", async () => {
-        const json = withoutEquations(buildAllFeaturesDocJson());
+        const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
         const written = auditSource(docx);
         const held = auditImported(json);
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),
             imageWidths: count(held, 'images'),
+            paragraphs: count(held, 'paragraphs') + 1,
         });
+        expect(count(written, 'equations')).toBe(2);
         expect(written.words.toSorted()).toEqual(held.words.toSorted());
         expect(written.numbers.toSorted()).toEqual(held.numbers.toSorted());
         const marked = (tally: Tally) =>
