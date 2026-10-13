@@ -217,15 +217,39 @@ function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number)
     for (const element of elements) readInto(row, element, depth);
 }
 
-function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
+// What a wrapper reads as: an alternative its fallback, a tracked deletion nothing, anything else outside OMML its
+// content. An OMML element is no wrapper.
+function unwrapped(element: MathXmlElement): MathXmlElement[] | undefined {
     if (is(element, MARKUP_COMPATIBILITY_NAMESPACE, 'AlternateContent')) {
         const fallback = childOf(element, MARKUP_COMPATIBILITY_NAMESPACE, 'Fallback');
-        readThrough(row, fallback ? elementsOf(fallback) : [], depth + 1);
-        return;
+        return fallback ? elementsOf(fallback) : [];
     }
-    if (element.ns !== OMML_NAMESPACE) {
-        if (element.ns !== WORDML_NAMESPACE || !DELETED.has(element.local))
-            readThrough(row, elementsOf(element), depth + 1);
+    if (element.ns === OMML_NAMESPACE) return undefined;
+    return element.ns === WORDML_NAMESPACE && DELETED.has(element.local) ? [] : elementsOf(element);
+}
+
+// An equation's parts with their depths, its wrappers opened as readInto reads them: Word shows a run in a tracked
+// insertion as part of the equation, so its # starts the number there too.
+function* equationParts(
+    elements: MathXmlElement[],
+    budget: MathBudget,
+    depth: number,
+): Generator<[MathXmlElement, number]> {
+    for (const element of elements) {
+        const inner = unwrapped(element);
+        if (!inner) {
+            yield [element, depth];
+            continue;
+        }
+        bound(budget, depth + 1, 0);
+        yield* equationParts(inner, budget, depth + 1);
+    }
+}
+
+function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
+    const inner = unwrapped(element);
+    if (inner) {
+        readThrough(row, inner, depth + 1);
         return;
     }
     const { budget } = row;
@@ -371,9 +395,9 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                     const row = new RowBuilder(budget, depth + 1, 'equation');
                     // Word numbers an equation with # and the number after it, which belongs to the document. A # in a
                     // box is the character.
-                    for (const part of equation) {
-                        if (!is(part, OMML_NAMESPACE, 'r')) readInto(row, part, depth + 1);
-                        else if (readRun(row, part, depth + 1, true)) break;
+                    for (const [part, partDepth] of equationParts(equation, budget, depth + 1)) {
+                        if (!is(part, OMML_NAMESPACE, 'r')) readInto(row, part, partDepth);
+                        else if (readRun(row, part, partDepth, true)) break;
                     }
                     return equationCells(row.done());
                 }),
@@ -523,12 +547,12 @@ function piece(node: MathNode): Run | string {
 const writeRun = ({ properties, text }: Run) =>
     `<m:r>${properties}<m:t xml:space="preserve">${escapeXml(text)}</m:t></m:r>`;
 
-// In an equation a # would start Word's equation number: it goes in a box.
+// In an equation a #, marked or not, would start Word's equation number: it goes in a box.
 function writeRow(row: MathRow, equation = false): string {
     let xml = '';
     let pending: Run | undefined;
     for (const node of row) {
-        const numberSign = equation && node.kind === 'operator' && node.text === '#';
+        const numberSign = equation && node.kind === 'operator' && node.text.startsWith('#');
         const next = numberSign ? `<m:box>${argument('e', [node])}</m:box>` : piece(node);
         if (typeof next !== 'string' && pending?.properties === next.properties) {
             pending.text += next.text;

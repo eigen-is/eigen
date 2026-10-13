@@ -305,7 +305,40 @@ describe('readOmml', () => {
         expect(read(`${run('#')}<m:d><m:e>${run('8')}</m:e></m:d>`)).toHaveLength(2);
     });
 
-    test('a # the writer boxes in an equation stays, with the rest of its row', () => {
+    // Word shows what a tracked insertion or an alternative holds as part of the equation, its number too.
+    test.each([
+        `<w:ins>${run('#(2)')}</w:ins>`,
+        `<w:moveTo>${run('#(2)')}</w:moveTo>`,
+        `<w:ins>${run('#')}</w:ins><m:d><m:e>${run('2')}</m:e></m:d>`,
+        `<w:ins><w:ins>${run('#(2)')}</w:ins></w:ins>`,
+        `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="w14"/><mc:Fallback>${run('#(2)')}</mc:Fallback></mc:AlternateContent>`,
+        `<w:del>${run('b')}</w:del>${run('#(2)')}`,
+    ])('Word’s equation number in %s is dropped too', (number) => {
+        expect(read(`<m:eqArr><m:e>${run('a')}${number}${run('b')}</m:e></m:eqArr>`)).toEqual([
+            { kind: 'table', layout: 'equations', rows: [[[{ kind: 'identifier', text: 'a' }]]] },
+        ]);
+    });
+
+    test('a boxed # in a tracked insertion stays', () => {
+        expect(
+            read(`<m:eqArr><m:e><w:ins><m:box><m:e>${run('#')}</m:e></m:box></w:ins>${run('b')}</m:e></m:eqArr>`),
+        ).toEqual([
+            {
+                kind: 'table',
+                layout: 'equations',
+                rows: [
+                    [
+                        [
+                            { kind: 'operator', text: '#' },
+                            { kind: 'identifier', text: 'b' },
+                        ],
+                    ],
+                ],
+            },
+        ]);
+    });
+
+    test.each(['#', '#\u0338'])('a %s the writer boxes in an equation stays, with the rest of its row', (sign) => {
         const tree: MathRow = [
             {
                 kind: 'table',
@@ -315,14 +348,16 @@ describe('readOmml', () => {
                         [{ kind: 'identifier', text: 'n' }],
                         [
                             { kind: 'operator', text: '=' },
-                            { kind: 'operator', text: '#' },
+                            { kind: 'operator', text: sign },
                             { kind: 'identifier', text: 'S' },
                         ],
                     ],
                 ],
             },
         ];
-        expect(writeOmml(tree)).toContain('<m:box><m:e><m:r><m:t xml:space="preserve">#</m:t></m:r></m:e></m:box>');
+        expect(writeOmml(tree)).toContain(
+            `<m:box><m:e><m:r><m:t xml:space="preserve">${sign}</m:t></m:r></m:e></m:box>`,
+        );
         expect(readOmml(parseWritten(writeOmml(tree)))).toStrictEqual(tree);
     });
 
