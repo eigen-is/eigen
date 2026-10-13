@@ -12,6 +12,7 @@ import {
 import {
     bound,
     equationCells,
+    hexColor,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     MATH_SPACES,
@@ -23,7 +24,7 @@ import {
     mark,
     optional,
     RowBuilder,
-    toColor,
+    type RowSlot,
 } from './tree';
 import {
     attribute,
@@ -62,14 +63,9 @@ function is(element: MathXmlElement | undefined, local: string): element is Math
 const isFlagged = (element: MathXmlElement | undefined, flag: string) =>
     is(element, 'mo') && attribute(element, flag) === 'true';
 
-const colorOf = (element: MathXmlElement) => {
-    const color = attribute(element, 'mathcolor');
-    return color?.startsWith('#') ? toColor(color.slice(1)) : undefined;
-};
+const colorOf = (element: MathXmlElement) => hexColor(attribute(element, 'mathcolor'));
 
-// The three mrows that mean more than their children: an n-ary (a large operator from the table with scripts, or
-// one marked largeop, then its body), a fenced row (both ends marked fence) and a function application (name,
-// U+2061, body).
+// An n-ary (a scripted large operator, or one marked largeop), a fenced row or a function (name, U+2061, body).
 function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undefined {
     const children = elementsOf(mrow);
     const [first] = children;
@@ -85,17 +81,17 @@ function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undef
     return undefined;
 }
 
-function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number): MathRow {
-    const row = new RowBuilder(budget, depth);
+function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
+    const row = new RowBuilder(budget, depth, slot);
     for (const element of elements) readInto(row, element, depth);
     return row.done();
 }
 
 // An argument is one element; a plain mrow there is the row itself, not a level of its own. So is math, an mrow too.
-function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number): MathRow {
+function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
     if (element && (is(element, 'mrow') || is(element, 'math')) && !patternOf(element))
-        return readRow(elementsOf(element), budget, depth);
-    return readRow(element ? [element] : [], budget, depth);
+        return readRow(elementsOf(element), budget, depth, slot);
+    return readRow(element ? [element] : [], budget, depth, slot);
 }
 
 // Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
@@ -112,7 +108,8 @@ function readScripts(
 ): { sub?: MathRow; sup?: MathRow } {
     const scripts: { sub?: MathRow; sup?: MathRow } = {};
     for (const [index, slot] of slots.entries()) {
-        const script = optional(readArgument(children[index], budget, depth));
+        if (is(children[index], 'none')) continue;
+        const script = optional(readArgument(children[index], budget, depth, 'optional'));
         if (script) scripts[slot] = script;
     }
     return scripts;
@@ -173,7 +170,7 @@ function readToken(row: RowBuilder, element: MathXmlElement): void {
     const mathvariant = attribute(element, 'mathvariant');
     const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
     // MathML draws a lone letter in an mi italic and anything else upright.
-    const lone = element.local === 'mi' && [...text].length === 1;
+    const lone = element.local === 'mi' && /^.$/su.test(text);
     row.chars(text, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
 }
 
@@ -221,7 +218,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             row.node({ kind: 'radical', body: readRow(children, budget, depth + 1) });
             return;
         case 'mroot': {
-            const degree = optional(argument(1));
+            const degree = optional(readArgument(children[1], budget, depth + 1, 'optional'));
             row.node({ kind: 'radical', body: argument(0), ...(degree && { degree }) });
             return;
         }
@@ -292,7 +289,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             const tableRows = (rows.length > 0 ? rows : [[]]).map((cells) => {
                 bound(budget, depth + 1, 1);
                 const read = (cells.length > 0 ? cells.map(elementsOf) : [[]]).map((cell) =>
-                    readRow(cell, budget, depth + 1),
+                    readRow(cell, budget, depth + 1, layout === 'equations' ? 'equation' : 'required'),
                 );
                 return layout === 'equations' ? read.flatMap(equationCells) : read;
             });
@@ -337,7 +334,10 @@ export function readMathml(math: MathXmlElement): { row: MathRow; latex: string 
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const colorAttribute = (color: string | undefined) => (color ? ` mathcolor="${escapeXml(color)}"` : '');
+const colorAttribute = (color: string | undefined) => {
+    const hex = hexColor(color);
+    return hex ? ` mathcolor="${escapeXml(hex)}"` : '';
+};
 
 function writeToken(node: MathToken): string {
     const tag = node.kind === 'identifier' ? 'mi' : node.kind === 'number' ? 'mn' : 'mo';
@@ -346,7 +346,7 @@ function writeToken(node: MathToken): string {
     // Unicode has one.
     const styled = variant && [...node.text].map((char) => toAlphanumeric(char, variant));
     const alphanumeric = styled && !styled.includes(undefined) ? styled.join('') : undefined;
-    const mathvariant = variant && !alphanumeric ? ` mathvariant="${variant}"` : '';
+    const mathvariant = variant && !alphanumeric ? ` mathvariant="${escapeXml(variant)}"` : '';
     // A bare fence would stretch around a tall neighbour, as only a fenced row should.
     const stretchy = node.kind === 'operator' && FENCES.has(node.text) ? ' stretchy="false"' : '';
     return `<${tag}${mathvariant}${colorAttribute(node.color)}${stretchy}>${escapeXml(alphanumeric ?? node.text)}</${tag}>`;
@@ -388,7 +388,7 @@ function writeNode(node: MathNode): string {
             return `<mtext${colorAttribute(node.color)}>${escapeXml(text)}</mtext>`;
         }
         case 'space':
-            return `<mspace width="${SPACES[node.width].width}"/>`;
+            return `<mspace width="${escapeXml(SPACES[node.width].width)}"/>`;
         case 'fraction': {
             const line = node.line === 'none' ? ' linethickness="0"' : node.line === 'skewed' ? ' bevelled="true"' : '';
             return `<mfrac${line}>${writeArgument(node.numerator)}${writeArgument(node.denominator)}</mfrac>`;
@@ -438,7 +438,7 @@ function writeNode(node: MathNode): string {
             return `<${tag}>${writeBase(node.base)}${writeArgument(node.limit)}</${tag}>`;
         }
         case 'enclose':
-            return `<menclose notation="${node.notation.join(' ')}">${writeRow(node.body)}</menclose>`;
+            return `<menclose notation="${escapeXml(node.notation.join(' '))}">${writeRow(node.body)}</menclose>`;
         case 'table': {
             const columns = Math.max(0, ...node.rows.map((cells) => cells.length));
             // Equations align as Word's & marks do: right of the first mark, left of the next, by turns.
@@ -456,8 +456,8 @@ export function writeMathml(row: MathRow, latex?: string): string {
     const content =
         latex === undefined
             ? writeRow(row)
-            : `<semantics>${writeArgument(row)}<annotation encoding="${TEX}">${escapeXml(checkedXml(latex))}</annotation></semantics>`;
-    const mathml = `<math xmlns="${MATHML_NAMESPACE}">${content}</math>`;
+            : `<semantics>${writeArgument(row)}<annotation encoding="${TEX}">${escapeXml(latex)}</annotation></semantics>`;
+    const mathml = checkedXml(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
     if (mathml.length > MATH_LIMITS.mathmlLength) {
         throw new MathError(`An equation's MathML is at most ${MATH_LIMITS.mathmlLength} characters`);
     }

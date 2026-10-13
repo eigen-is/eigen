@@ -1,23 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
+import { MATHML_NAMESPACE, readMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
-import { MATH_ENCLOSURES, MATH_LIMITS, type MathRow } from '../tree';
-import { el, viaOmml } from './parse';
-
-const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
+import { MATH_LIMITS, type MathRow } from '../tree';
+import type { MathXmlElement } from '../xml';
+import { el, viaMathml, viaOmml } from './parse';
 
 function nested(levels: number): MathRow {
     return levels === 1 ? [{ kind: 'identifier', text: 'x' }] : [{ kind: 'radical', body: nested(levels - 1) }];
-}
-
-// The costliest unit MathML writes: an enclose drawing every line, around an empty row (a node and a row).
-function widest(units: number): MathRow {
-    return Array.from({ length: Math.floor((units - 1) / 2) }, () => ({
-        kind: 'enclose',
-        notation: [...MATH_ENCLOSURES],
-        body: [],
-    }));
 }
 
 describe('MATH_LIMITS', () => {
@@ -29,17 +19,27 @@ describe('MATH_LIMITS', () => {
         expect(() => viaOmml(nested(MATH_LIMITS.depth + 1))).toThrow(MathError);
     });
 
-    test('the largest admitted tree fits the MathML cap and round-trips; one unit more is an error', () => {
-        const largest = widest(MATH_LIMITS.size);
-        expect(writeMathml(largest).length).toBeLessThanOrEqual(MATH_LIMITS.mathmlLength);
-        expect(viaMathml(largest)).toStrictEqual(largest);
-        expect(viaOmml(largest)).toStrictEqual(largest);
-        expect(() => viaMathml(widest(MATH_LIMITS.size + 2))).toThrow(MathError);
-    });
-
     test('characters count, so one long token is bounded too', () => {
         const long: MathRow = [{ kind: 'number', text: '1'.repeat(MATH_LIMITS.size) }];
         expect(() => viaMathml(long)).toThrow(MathError);
+    });
+
+    test('a long token is refused as its characters arrive, not after they are all held', () => {
+        const element = (ns: string, local: string, children: (string | MathXmlElement)[]): MathXmlElement => ({
+            ns,
+            local,
+            attributes: {},
+            children,
+        });
+        const omml = element(OMML_NAMESPACE, 'oMath', [
+            element(OMML_NAMESPACE, 'r', [element(OMML_NAMESPACE, 't', ['x'.repeat(20_000_000)])]),
+        ]);
+        const mathml = element(MATHML_NAMESPACE, 'math', [element(MATHML_NAMESPACE, 'mi', ['x'.repeat(30_000_000)])]);
+        for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
+            const start = performance.now();
+            expect(read).toThrow(MathError);
+            expect(performance.now() - start).toBeLessThan(200);
+        }
     });
 
     test('elements a reader walks through count as levels, so deep wrappers end in MathError', () => {

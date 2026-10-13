@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1676 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1682 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -518,7 +518,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (382)
+## Types (383)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -840,6 +840,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `LatexCommand` | `@workspace/math` | packages/math/src/latex-commands.ts |
 | `MathNode` | `@workspace/math` | packages/math/src/tree.ts |
 | `MathRow` | `@workspace/math` | packages/math/src/tree.ts |
 | `MathVariant` | `@workspace/math` | packages/math/src/tree.ts |
@@ -905,7 +906,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (807)
+## Utilities & constants (812)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1652,16 +1653,21 @@ rather than inlining `queryClient.invalidateQueries`.
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
+| `LATEX_COMMANDS` | `@workspace/math` | packages/math/src/latex-commands.ts |
+| `MARKUP_COMPATIBILITY_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
 | `MATH_LIMITS` | `@workspace/math` | packages/math/src/tree.ts |
 | `MATHML_NAMESPACE` | `@workspace/math` | packages/math/src/mathml.ts |
 | `mathText` | `@workspace/math` | packages/math/src/tree.ts |
 | `OMML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `readLatex` | `@workspace/math` | packages/math/src/latex.ts |
 | `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readMathmlLatex` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readOmml` | `@workspace/math` | packages/math/src/omml.ts |
 | `WORDML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `writeLatex` | `@workspace/math` | packages/math/src/latex.ts |
 | `writeMathml` | `@workspace/math` | packages/math/src/mathml.ts |
 | `writeOmml` | `@workspace/math` | packages/math/src/omml.ts |
+| `writeText` | `@workspace/math` | packages/math/src/text.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |

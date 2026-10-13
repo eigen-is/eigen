@@ -2,10 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { MATH_LIMITS, type MathRow } from '../tree';
-import { elementsOf, type MathXmlElement } from '../xml';
+import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
-import { generateTree } from './generate';
-import { el, viaOmml } from './parse';
+import { el, letter, viaMathml, viaOmml } from './parse';
 
 const math = (content: string) => el(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
@@ -16,7 +15,7 @@ const element = (local: string, children: (string | object)[], attributes = {}):
     children,
 });
 
-describe('C4: the typed LaTeX rides along as the annotation', () => {
+describe('the typed LaTeX rides along as the annotation', () => {
     test.each(['a<b', 'x &amp; y', ']]>', '\\mathbb{R} 𝟘 😀', ' \\quad '])('%p', (latex) => {
         const written = readMathml(el(writeMathml(x, latex)));
         expect(written).toEqual({ row: x, latex });
@@ -103,7 +102,7 @@ describe('readMathml', () => {
         expect(() => readMathml(element('math', [element('mi', ['\uD800'])]))).toThrow(MathError);
     });
 
-    // A3: whatever MathML comes in, the tree is canonical, so the docx trip and the stored trip keep it.
+    // Whatever MathML comes in, the tree is canonical, so the docx trip and the stored trip keep it.
     test.each([
         '<mspace width="1em"/><mspace width="1em"/>',
         '<mspace width="1em"/><mspace width="2em"/><mtext>\u2003</mtext>',
@@ -124,7 +123,7 @@ describe('readMathml', () => {
         const { row } = readMathml(math(content));
         expect(canonicalIssue(row)).toBeUndefined();
         expect(viaOmml(row)).toStrictEqual(row);
-        expect(readMathml(el(writeMathml(row))).row).toStrictEqual(row);
+        expect(viaMathml(row)).toStrictEqual(row);
     });
 
     test('Em spaces pair whether they come as characters or as mspace', () => {
@@ -162,7 +161,6 @@ describe('readMathml', () => {
     });
 
     test('an munderover outside an n-ary reads as a limit under inside a limit over', () => {
-        const letter = (text: string): MathRow => [{ kind: 'identifier', text }];
         expect(readMathml(math('<munderover><mi>x</mi><mi>a</mi><mi>b</mi></munderover>')).row).toEqual([
             {
                 kind: 'limit',
@@ -172,6 +170,22 @@ describe('readMathml', () => {
             },
         ]);
     });
+});
+
+// Every reader counts the tree it makes, so an empty script or degree costs nothing the tree doesn't hold.
+test.each<[string, MathRow, number]>([
+    ['<msub><mi>x</mi><mrow/></msub>', x, 4],
+    ['<mroot><mi>x</mi><mrow/></mroot>', [{ kind: 'radical', body: x }], 6],
+    // An & in an equation's cell counts as the cell it starts, not as an operator.
+    [
+        '<mtable displaystyle="true"><mtr><mtd><mi>x</mi><mo>&amp;</mo></mtd></mtr></mtable>',
+        [{ kind: 'table', layout: 'equations', rows: [[x, []]] }],
+        8,
+    ],
+])('the largest tree reads with %p for every unit', (unit, read, size) => {
+    const count = Math.floor((MATH_LIMITS.size - 1) / size);
+    const row = Array.from({ length: count }, (): MathRow => [...read, { kind: 'operator', text: '+' }]).flat();
+    expect(readMathml(math(`${unit}<mo>+</mo>`.repeat(count))).row).toStrictEqual(row);
 });
 
 describe('writeMathml', () => {
@@ -217,7 +231,7 @@ describe('writeMathml', () => {
             { kind: 'brace', char: '⏟', position: 'under', body: sum },
         ] satisfies MathRow) {
             const row: MathRow = [node, ...x];
-            expect(readMathml(el(writeMathml(row))).row).toStrictEqual(row);
+            expect(viaMathml(row)).toStrictEqual(row);
             expect(readMathml(el(writeMathml(row, 'tex'))).row).toStrictEqual(row);
         }
     });
@@ -229,34 +243,5 @@ describe('writeMathml', () => {
     test('refuses to write past the MathML cap', () => {
         const text = 'a'.repeat(MATH_LIMITS.mathmlLength);
         expect(() => writeMathml([{ kind: 'text', text }])).toThrow(MathError);
-    });
-
-    // C8, MathML half: whatever the tree holds, the output holds only the writer's elements and attributes.
-    test('output holds only the writer’s elements and attributes', () => {
-        const elements = new Set(
-            'math semantics annotation mrow mi mn mo mtext mspace mfrac msqrt mroot msub msup msubsup mmultiscripts mprescripts none munder mover munderover menclose mtable mtr mtd'.split(
-                ' ',
-            ),
-        );
-        const attributes = new Set(
-            'xmlns encoding mathvariant mathcolor stretchy fence separator largeop accent accentunder width linethickness bevelled notation displaystyle columnalign'.split(
-                ' ',
-            ),
-        );
-        const adversarial: MathRow = [
-            { kind: 'text', text: '</mtext><script>alert(1)</script>"&]]>' },
-            { kind: 'identifier', text: 'x', color: '" onclick="alert(1)' },
-            { kind: 'text', text: 'javascript:alert(1)', color: 'red' },
-            { kind: 'fenced', open: '<', close: '"', separator: '&', parts: [[], []] },
-        ];
-        for (const tree of [adversarial, ...Array.from({ length: 200 }, (_, seed) => generateTree(seed + 1))]) {
-            const visit = (element: MathXmlElement) => {
-                expect(element.ns).toBe(MATHML_NAMESPACE);
-                expect(elements).toContain(element.local);
-                for (const name of Object.keys(element.attributes)) expect(attributes).toContain(name);
-                for (const child of elementsOf(element)) visit(child);
-            };
-            visit(el(writeMathml(tree, '</annotation><script>x</script>')));
-        }
     });
 });

@@ -5,10 +5,10 @@ import { canonicalIssue } from './canonical';
 // Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping,
 // characters beyond the BMP. Skewed fractions, every brace character and every fence stay in: only LaTeX loses them.
 
-type Random = () => number;
+export type Random = () => number;
 
 // mulberry32: small, seedable, good enough to spread choices.
-function seeded(seed: number): Random {
+export function seeded(seed: number): Random {
     let state = seed;
     return () => {
         state = (state + 0x6d2b79f5) | 0;
@@ -18,7 +18,7 @@ function seeded(seed: number): Random {
     };
 }
 
-const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
+export const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
 
 const LETTERS = ['x', 'y', 'Z', 'α', 'Ω', 'ж', 'ℏ', 'h', 'R'];
 const WORDS = ['sin', 'dx', 'lim', 'если'];

@@ -2,6 +2,7 @@ import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
 import {
     bound,
     equationCells,
+    hexColor,
     MATH_ENCLOSURES,
     type MathBudget,
     type MathEnclosure,
@@ -11,13 +12,14 @@ import {
     mark,
     optional,
     RowBuilder,
+    type RowSlot,
     toColor,
 } from './tree';
-import { attribute, elementsOf, escapeXml, type MathXmlElement, textOf } from './xml';
+import { attribute, checkedXml, elementsOf, escapeXml, type MathXmlElement, textOf } from './xml';
 
 export const OMML_NAMESPACE = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
 export const WORDML_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+export const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
 // ECMA-376's defaults for an absent property.
 const DEFAULT_ACCENT = '\u0302';
@@ -126,8 +128,8 @@ function readRun(row: RowBuilder, run: MathXmlElement, depth: number): void {
     row.chars(text, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
 }
 
-function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number): MathRow {
-    const row = new RowBuilder(budget, depth);
+function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
+    const row = new RowBuilder(budget, depth, slot);
     for (const element of elements) readInto(row, element, depth);
     return row.done();
 }
@@ -160,6 +162,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         return slot ? elementsOf(slot) : [];
     };
     const slot = (local: string) => readRow(content(local), budget, depth + 1);
+    const optionalSlot = (local: string) => optional(readRow(content(local), budget, depth + 1, 'optional'));
     switch (element.local) {
         case 'r':
             readRun(row, element, depth);
@@ -180,8 +183,8 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         case 'sSup':
         case 'sSubSup':
         case 'sPre': {
-            const sub = optional(slot('sub'));
-            const sup = optional(slot('sup'));
+            const sub = optionalSlot('sub');
+            const sup = optionalSlot('sup');
             if (!sub && !sup) {
                 readThrough(row, content('e'), depth + 1);
                 return;
@@ -192,14 +195,14 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             return;
         }
         case 'rad': {
-            const degree = isOn(property('degHide')) ? undefined : optional(slot('deg'));
+            const degree = isOn(property('degHide')) ? undefined : optionalSlot('deg');
             row.node({ kind: 'radical', body: slot('e'), ...(degree && { degree }) });
             return;
         }
         case 'nary': {
             const operator = mark(valOf(property('chr')) ?? '') || DEFAULT_NARY;
-            const sub = isOn(property('subHide')) ? undefined : optional(slot('sub'));
-            const sup = isOn(property('supHide')) ? undefined : optional(slot('sup'));
+            const sub = isOn(property('subHide')) ? undefined : optionalSlot('sub');
+            const sup = isOn(property('supHide')) ? undefined : optionalSlot('sup');
             // Without scripts the location shows nothing, so the operator's default stands.
             const location = sub || sup ? valOf(property('limLoc')) : undefined;
             const limits = location === 'undOvr' ? 'under' : location === 'subSup' ? 'side' : naryLimits(operator);
@@ -288,7 +291,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                 layout: 'equations',
                 rows: (equations.length > 0 ? equations.map(elementsOf) : [[]]).map((equation) => {
                     bound(budget, depth + 1, 1);
-                    return equationCells(readRow(equation, budget, depth + 1));
+                    return equationCells(readRow(equation, budget, depth + 1, 'equation'));
                 }),
             });
             return;
@@ -314,8 +317,10 @@ function properties(object: string, values: [string, string | undefined][]): str
     return set.length > 0 ? `<m:${object}Pr>${set.join('')}</m:${object}Pr>` : '';
 }
 
-const colored = (color: string | undefined) =>
-    color ? `<w:rPr><w:color w:val="${escapeXml(color.slice(1))}"/></w:rPr>` : '';
+const colored = (color: string | undefined) => {
+    const hex = hexColor(color);
+    return hex ? `<w:rPr><w:color w:val="${escapeXml(hex.slice(1))}"/></w:rPr>` : '';
+};
 
 function style(variant: MathVariant | undefined): string {
     if (!variant) return '';
@@ -443,7 +448,7 @@ function writeRow(row: MathRow): string {
     return pending ? xml + writeRun(pending) : xml;
 }
 
-// The caller binds m: and w:, as the docx writer declares them once on its root.
+// The caller binds m: and w:, once on its root.
 export function writeOmml(row: MathRow): string {
-    return `<m:oMath>${writeRow(row)}</m:oMath>`;
+    return checkedXml(`<m:oMath>${writeRow(row)}</m:oMath>`);
 }

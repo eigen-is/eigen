@@ -62,29 +62,33 @@ export type MathToken = Extract<MathNode, { kind: 'identifier' | 'number' | 'ope
 
 export type MathBudget = { size: number };
 
-// The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 30× headroom.
-const SIZE = 10_000;
+// Far above what the equations of a local corpus reach, in depth and in size.
+const SIZE = 4_000;
+// writeLatex's costliest unit, an enclose of every line around an empty row, writes 101 characters for 2 units.
+const LATEX_LENGTH = 51 * SIZE;
 
 export const MATH_LIMITS = {
     // Levels a reader walks: a node's row, or an element it reads through.
     depth: 32,
     // Every node, row, table row and character of text counts one.
     size: SIZE,
-    // The largest admitted tree's MathML: a unit writes at most 64 characters (an menclose drawing every line),
-    // plus the root.
-    mathmlLength: 64 * SIZE + 256,
+    latexLength: LATEX_LENGTH,
+    // 64 characters a unit (an menclose of every line), the annotation escaped at six a character (&quot;), the root.
+    mathmlLength: 64 * SIZE + 6 * LATEX_LENGTH + 512,
 } as const;
 
 // Every reader calls this as it builds: at each level it walks, and for each node, row and character it makes.
-export function bound(budget: MathBudget, depth: number, size: number): void {
+export function bound(budget: MathBudget, depth: number, size: number, offset?: number): void {
     budget.size += size;
-    if (depth > MATH_LIMITS.depth) throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`);
-    if (budget.size > MATH_LIMITS.size) throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`);
+    if (depth > MATH_LIMITS.depth)
+        throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`, offset);
+    if (budget.size > MATH_LIMITS.size)
+        throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, offset);
 }
 
 const INVISIBLE = /^[\u200B\u2061-\u2064]$/u;
 const LETTER = /^\p{L}$/u;
-const DIGIT = /^[0-9]$/;
+export const DIGIT = /^[0-9]$/;
 const SPACE_OF_CHAR = new Map<string, MathSpace>([
     [SPACES.normal.text, 'normal'],
     [SPACES.thin.text, 'thin'],
@@ -108,6 +112,9 @@ export function toColor(hex: string | undefined): string | undefined {
     return hex && /^[0-9A-Fa-f]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : undefined;
 }
 
+// A #RRGGBB colour, as MathML, LaTeX and a tree hold it; anything else is no colour, so a writer never writes it.
+export const hexColor = (color: string | undefined) => (color?.startsWith('#') ? toColor(color.slice(1)) : undefined);
+
 function token(kind: MathToken['kind'], text: string, variant: MathVariant | undefined, color: string | undefined) {
     const node: MathToken = { kind, text };
     if (variant) node.variant = variant;
@@ -117,6 +124,14 @@ function token(kind: MathToken['kind'], text: string, variant: MathVariant | und
 
 // A text node's text: a tab or line break is a space, as MathML would trim it at an edge.
 export const mathText = (raw: string) => checkedXml(raw).replace(/[\t\n\r]/g, ' ');
+
+// A number is digits, then a point and digits if any follow: where the one starting at `start` ends.
+export function numberEnd(start: number, digit: (index: number) => boolean, point: (index: number) => boolean): number {
+    let end = start + 1;
+    while (digit(end)) end++;
+    if (point(end) && digit(end + 1)) for (end += 2; digit(end); end++);
+    return end;
+}
 
 export const optional = (row: MathRow) => (row.length > 0 ? row : undefined);
 
@@ -135,8 +150,10 @@ type StyledChar = { char: string; variant: MathVariant; color: string | undefine
 // The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
 const TEXT_EDGE: ReadonlySet<string> = new Set(' \u00A0');
 
-// One row as a reader builds it. Characters wait until the next node, so tokens come out canonical whatever the
-// runs or elements they were spread over: a maximal number, an upright word, one styled letter at a time.
+// How a row counts: an optional slot only when it holds something, an equation's & as the cell it starts.
+export type RowSlot = 'required' | 'optional' | 'equation';
+
+// Characters wait for the next node, so tokens come out canonical however runs or elements split them.
 export class RowBuilder {
     readonly #row: MathRow = [];
     #chars: StyledChar[] = [];
@@ -144,8 +161,9 @@ export class RowBuilder {
     constructor(
         readonly budget: MathBudget,
         readonly depth: number,
+        readonly slot: RowSlot = 'required',
     ) {
-        bound(budget, depth, 1);
+        bound(budget, depth, slot === 'optional' ? 0 : 1);
     }
 
     chars(text: string, letters: MathVariant, others: MathVariant, color: string | undefined): void {
@@ -153,6 +171,9 @@ export class RowBuilder {
             if (INVISIBLE.test(char)) continue;
             const [base, variant] = fromAlphanumeric(char) ?? [char, LETTER.test(char) ? letters : others];
             this.#chars.push({ char: base, variant, color });
+            // Every two waiting characters make at least one part (two quads are one qquad): bound them as they come.
+            if (this.budget.size + this.#chars.length / 2 > MATH_LIMITS.size)
+                bound(this.budget, this.depth, MATH_LIMITS.size);
         }
     }
 
@@ -176,6 +197,7 @@ export class RowBuilder {
 
     done(): MathRow {
         this.#flush();
+        if (this.slot === 'optional' && this.#row.length > 0) bound(this.budget, this.depth, 1);
         for (const node of this.#row) {
             if (node.kind === 'text') node.text = replaceEdges(node.text, TEXT_EDGE, ' ');
         }
@@ -183,7 +205,8 @@ export class RowBuilder {
     }
 
     #push(node: MathNode, characters: number): void {
-        bound(this.budget, this.depth, 1 + characters);
+        const cell = this.slot === 'equation' && node.kind === 'operator' && node.text === '&';
+        bound(this.budget, this.depth, cell ? 1 : 1 + characters);
         this.#row.push(node);
     }
 
@@ -208,10 +231,11 @@ export class RowBuilder {
                 continue;
             }
             if (DIGIT.test(char)) {
-                end = run(end, DIGIT);
-                if (same(end) && chars[end].char === '.' && same(end + 1) && DIGIT.test(chars[end + 1].char)) {
-                    end = run(end + 1, DIGIT);
-                }
+                end = numberEnd(
+                    start,
+                    (index) => same(index) && DIGIT.test(chars[index].char),
+                    (index) => same(index) && chars[index].char === '.',
+                );
             } else if (LETTER.test(char) && variant === 'normal') {
                 end = run(end, LETTER);
             }
