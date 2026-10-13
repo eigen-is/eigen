@@ -430,6 +430,23 @@ describe('docx writer — text', () => {
         const body = await bodyOf(doc(p(text('a'), { type: 'hardBreak' }, text('b'))));
         expect(descendants(body, W, 'r').map(shape)).toEqual([['t'], ['br'], ['t']]);
     });
+
+    test("a page number is a PAGE field, a page count a NUMPAGES one, each caching 1 in its marks' run", async () => {
+        const page = (kind: unknown, ...marks: NonNullable<JSONContent['marks']>): JSONContent => ({
+            type: 'pageNumber',
+            attrs: { kind },
+            marks,
+        });
+        const bold = '<w:rPr><w:b/><w:bCs/></w:rPr>';
+        expect(
+            await paragraphsOf(doc(p(text('Page '), page('page', { type: 'bold' }), text(' of '), page('pages')))),
+        ).toEqual([
+            `<w:p>${run('Page ')}<w:fldSimple w:instr=" PAGE "><w:r>${bold}<w:t xml:space="preserve">1</w:t></w:r></w:fldSimple>${run(' of ')}<w:fldSimple w:instr=" NUMPAGES ">${run('1')}</w:fldSimple></w:p>`,
+        ]);
+        expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([
+            `<w:p><w:fldSimple w:instr=" PAGE ">${run('1')}</w:fldSimple></w:p>`,
+        ]);
+    });
 });
 
 describe('docx writer — page breaks', () => {

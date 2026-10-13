@@ -26,6 +26,7 @@ import {
     CaseUpper,
     CheckSquare,
     Code,
+    Hash,
     Heading2,
     Highlighter,
     ImageIcon,
@@ -35,6 +36,7 @@ import {
     ListOrdered,
     ListRestart,
     type LucideIcon,
+    PanelTop,
     Pilcrow,
     Quote,
     RemoveFormatting,
@@ -48,6 +50,7 @@ import {
     TypeOutline,
     Underline,
 } from 'lucide-react';
+import type { BandRequest } from './headers-footers-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
 import { PARAGRAPH_STYLES } from './paragraph-styles';
@@ -80,6 +83,7 @@ type FormatMenuProps = {
     onRestartNumbering: () => void;
     onPageSetup: () => void;
     onReplaceImage: () => void;
+    onOpenBand?: (request: BandRequest) => void;
 };
 
 export const FormatMenu = ({
@@ -92,6 +96,7 @@ export const FormatMenu = ({
     onRestartNumbering,
     onPageSetup,
     onReplaceImage,
+    onOpenBand,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
@@ -246,6 +251,16 @@ export const FormatMenu = ({
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
+        {onOpenBand && (
+            <>
+                <DropdownMenuItem onClick={() => onOpenBand({ band: 'header' })}>
+                    <PanelTop className="h-4 w-4 mr-2" /> Headers and footers
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onOpenBand({ section: 'pageNumbers' })}>
+                    <Hash className="h-4 w-4 mr-2" /> Page numbers
+                </DropdownMenuItem>
+            </>
+        )}
         <DropdownMenuItem onClick={onPageSetup}>
             <RotateCwSquare className="h-4 w-4 mr-2" /> Page orientation
         </DropdownMenuItem>

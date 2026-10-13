@@ -8,6 +8,7 @@ import {
     MIN_TABLE_COLUMN_PX,
     pageTwips,
     readFigureAttrs,
+    readPageNumberKind,
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -69,6 +70,7 @@ import {
     LIST_FORMATS,
     LIST_LEVELS,
     MAX_TABLE_COLUMNS,
+    PAGE_NUMBER_FIELDS,
     STYLE_NAMES,
     type StyleId,
     TWIPS_PER_PX,
@@ -1247,14 +1249,19 @@ const INLINES = new Map<
         'text',
         (node, linked, context, style, faces) => {
             const content = textXml(node.text ?? '');
-            if (!content) return '';
-            const props = runProps(node.marks ?? [], linked, context);
-            faces.push(useFace(context.pkg, props, style));
-            const rPr = rPrXml(props);
-            return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
+            return content && runXml(content, node, linked, context, style, faces);
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
+    // Word lays out the page and updates the field; 1 is what a reader without fields shows.
+    [
+        'pageNumber',
+        (node, linked, context, style, faces) => {
+            const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
+            const run = runXml(textXml('1'), node, linked, context, style, faces);
+            return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
+        },
+    ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
     // math zone, as the editor draws an empty box.
     [
@@ -1266,6 +1273,21 @@ const INLINES = new Map<
         },
     ],
 ]);
+
+// A run in the node's marks.
+function runXml(
+    content: string,
+    node: JSONContent,
+    linked: boolean,
+    context: Context,
+    style: StyleId | undefined,
+    faces: RunFace[],
+): string {
+    const props = runProps(node.marks ?? [], linked, context);
+    faces.push(useFace(context.pkg, props, style));
+    const rPr = rPrXml(props);
+    return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
+}
 
 // Runs that share a link share one w:hyperlink.
 function runsXml(nodes: JSONContent[], context: Context, style: StyleId | undefined, faces: RunFace[]): string {

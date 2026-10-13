@@ -18,7 +18,7 @@ You can print any document in Docs, or save it as a PDF, directly from the edito
 3. Choose **Print** from the menu.
 4. Your browser's print dialog opens. Pick your printer and settings, then click **Print**.
 
-The printout uses the document's page, as the editor shows it. A new document is A4 with 2 cm margins. To change the paper size, orientation, or margins, choose **File → Page setup…**.
+The printout uses the document's page, as the editor shows it. A new document is A4 with 2 cm margins. To change the paper size, orientation, or margins, choose **File → Page setup…**. The header and footer don't print yet.
 
 ## Save as PDF
 
