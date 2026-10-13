@@ -605,7 +605,9 @@ mtable[columnalign="left"] > mtr > mtd {
 
 /* MathML Core, which Chrome implements and names `display: block math`, lays a cell's content out as a block, which
    only the -webkit- values move (in WebKit they break the row), and draws no menclose, which WebKit and Firefox draw
-   themselves. Each notation's line is a border or a background layer of its own, so any set of them combines. */
+   themselves. Each notation's line is a border or a background layer of its own. No custom property, which the export
+   would carry to WeasyPrint, composes the layers, so each set of strikes has its rule, and the rule naming the most
+   strikes wins by specificity. */
 @supports (display: block math) {
     mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
         text-align: -webkit-right;
@@ -617,12 +619,7 @@ mtable[columnalign="left"] > mtr > mtd {
     }
 
     menclose {
-        --strike-horizontal: none;
-        --strike-vertical: none;
-        --strike-up: none;
-        --strike-down: none;
         padding: 0.1em 0.15em;
-        background-image: var(--strike-horizontal), var(--strike-vertical), var(--strike-up), var(--strike-down);
     }
 
     menclose[notation~="top"] {
@@ -642,7 +639,7 @@ mtable[columnalign="left"] > mtr > mtd {
     }
 
     menclose[notation~="horizontalstrike"] {
-        --strike-horizontal: linear-gradient(
+        background-image: linear-gradient(
             transparent calc(50% - 0.03em),
             currentColor 0 calc(50% + 0.03em),
             transparent 0
@@ -650,7 +647,7 @@ mtable[columnalign="left"] > mtr > mtd {
     }
 
     menclose[notation~="verticalstrike"] {
-        --strike-vertical: linear-gradient(
+        background-image: linear-gradient(
             to right,
             transparent calc(50% - 0.03em),
             currentColor 0 calc(50% + 0.03em),
@@ -659,7 +656,7 @@ mtable[columnalign="left"] > mtr > mtd {
     }
 
     menclose[notation~="updiagonalstrike"] {
-        --strike-up: linear-gradient(
+        background-image: linear-gradient(
             to top left,
             transparent calc(50% - 0.03em),
             currentColor 0 calc(50% + 0.03em),
@@ -668,12 +665,154 @@ mtable[columnalign="left"] > mtr > mtd {
     }
 
     menclose[notation~="downdiagonalstrike"] {
-        --strike-down: linear-gradient(
+        background-image: linear-gradient(
             to top right,
             transparent calc(50% - 0.03em),
             currentColor 0 calc(50% + 0.03em),
             transparent 0
         );
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="verticalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0);
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="updiagonalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="verticalstrike"][notation~="updiagonalstrike"] {
+        background-image:
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="verticalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="updiagonalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            ),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="verticalstrike"][notation~="updiagonalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="verticalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="updiagonalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            ),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="verticalstrike"][notation~="updiagonalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            ),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
+    }
+
+    menclose[notation~="horizontalstrike"][notation~="verticalstrike"][notation~="updiagonalstrike"][notation~="downdiagonalstrike"] {
+        background-image:
+            linear-gradient(transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(to right, transparent calc(50% - 0.03em), currentColor 0 calc(50% + 0.03em), transparent 0),
+            linear-gradient(
+                to top left,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            ),
+            linear-gradient(
+                to top right,
+                transparent calc(50% - 0.03em),
+                currentColor 0 calc(50% + 0.03em),
+                transparent 0
+            );
     }
 }
 
