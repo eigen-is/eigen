@@ -372,6 +372,8 @@ describe('readVectorFromDoc', () => {
                 'x',
             ],
             ['a trailing bare <', 'x < y', 'x < y'],
+            ['a <style> block, its rules unshown', '<style>*{display:none}</style><p>x</p>', 'x'],
+            ['a <script>, its code unshown', '<p>x</p><SCRIPT type=module>alert(1)</script >', 'x'],
         ])('%s flattens', (_, html, text) => {
             expect(readHtml(html)).toBe(`<p>${escapeHtml(text)}</p>`);
         });
