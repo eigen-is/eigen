@@ -8,6 +8,7 @@ import {
     arrowLabelBox,
     arrowRoute,
     type Box,
+    type Corners,
     convertToShapes,
     cornerRadius,
     diamondOutline,
@@ -281,8 +282,8 @@ function degrees(radians: number): number {
 }
 
 // Degrees clockwise as DrawingML's 60,000ths, within one turn.
-function angle(degrees: number): number {
-    return Math.round(normalizeAngle(degrees) * 60_000) % 21_600_000;
+function angle(value: number): number {
+    return Math.round(normalizeAngle(value) * 60_000) % 21_600_000;
 }
 
 function elementXml(el: VectorElement, slide: Slide): string {
@@ -293,7 +294,7 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 slide,
                 'Rectangle',
                 el,
-                boxGeometry(el, slide),
+                boxGeometry(el),
                 fillXml(parseFill(el.fill), opacity),
                 lineXml(slide, el, opacity),
             );
@@ -398,10 +399,10 @@ function presetXml(preset: string, guides: Record<string, number> = {}): string 
 }
 
 // roundRect's adj is the radius over the short side, so it draws the radius Eigen's corners give.
-function boxGeometry(el: Box & { corners: 'straight' | 'curved' | 'round' }, slide: Slide): string {
+function boxGeometry(el: Box & { corners: Corners }): string {
     const radius = cornerRadius(el);
     const side = Math.min(el.width, el.height);
-    if (radius <= 0 || emu(slide, side) === 0) return presetXml('rect');
+    if (radius <= 0) return presetXml('rect');
     return presetXml('roundRect', { adj: Math.min(50_000, share(radius / side)) });
 }
 
@@ -673,7 +674,7 @@ function fitOf(image: Image, width: number, height: number): { wide: boolean; cu
 function pictureXml(el: VectorImageElement, slide: Slide, opacity: number): string {
     const image = imageOf(el.mediaName, slide.deck);
     const border = isBordered(el)
-        ? spXml(slide, 'Border', el, boxGeometry(el, slide), '<a:noFill/>', lineXml(slide, el, opacity))
+        ? spXml(slide, 'Border', el, boxGeometry(el), '<a:noFill/>', lineXml(slide, el, opacity))
         : '';
     if (!image) return border;
     const fit = fitOf(image, el.width, el.height);
@@ -694,7 +695,7 @@ function pictureXml(el: VectorImageElement, slide: Slide, opacity: number): stri
                 ? `<a:srcRect l="${cut}" r="${cut}"/>`
                 : `<a:srcRect t="${cut}" b="${cut}"/>`
             : '';
-    const geometry = contain ? presetXml('rect') : boxGeometry(el, slide);
+    const geometry = contain ? presetXml('rect') : boxGeometry(el);
     const id = ++slide.shapes;
     const picture = `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${blipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, box)}${geometry}</p:spPr></p:pic>`;
     return picture + border;
@@ -806,7 +807,7 @@ function paragraphsOf(html: string): Paragraph[] {
 const ANCHORS: Record<VerticalAlign, string> = { top: 't', center: 'ctr', bottom: 'b' };
 const ALIGNS: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
 
-// canvas-text.css: a list level indents 1.5em, a quote 0.75em past its 3 px bar, and draws at 70%.
+// canvas-text.css: a list level indents 1.5em, a quote 0.75em past its 3 px bar, and draws at 70% of what holds it.
 const LIST_INDENT_EM = 1.5;
 // The marker's hang: a disc sits close to its text, a number right-aligned in the list's indent.
 const MARKER_EM = { bullet: 0.75, number: 1.5 };
@@ -840,12 +841,12 @@ function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): strin
                 : paragraph.marker === 'number'
                   ? '<a:buAutoNum type="arabicPeriod"/>'
                   : '<a:buNone/>';
-        const opacity = box.opacity * QUOTE_OPACITY ** Math.min(1, paragraph.quotes);
+        const opacity = box.opacity * QUOTE_OPACITY ** paragraph.quotes;
         const runs = paragraph.runs.map((run) => {
-            const props = runPropsXml('a:rPr', box, run.marks, opacity, slide);
+            const props = runPropsXml(slide, 'a:rPr', box, run.marks, opacity);
             return run.text === '\n' ? `<a:br>${props}</a:br>` : `<a:r>${props}<a:t>${escapeXml(run.text)}</a:t></a:r>`;
         });
-        const end = runPropsXml('a:endParaRPr', box, NO_MARKS, opacity, slide);
+        const end = runPropsXml(slide, 'a:endParaRPr', box, NO_MARKS, opacity);
         return `<a:p><a:pPr${attrs}>${lineSpacing}${spacing}${marker}</a:pPr>${runs.join('')}${end}</a:p>`;
     });
     const wrap = box.wrap ? 'square' : 'none';
@@ -860,7 +861,7 @@ function trimmed(runs: Run[]): Run[] {
     return out.filter((run) => run.text !== '');
 }
 
-function runPropsXml(tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, marks: Marks, opacity: number, slide: Slide): string {
+function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, marks: Marks, opacity: number): string {
     const size = Math.min(400_000, Math.max(100, centipoints(slide, box.fontSize)));
     const spacing = centipoints(slide, box.letterSpacing);
     const attrs = [
