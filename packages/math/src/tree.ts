@@ -64,8 +64,9 @@ export type MathBudget = { size: number };
 
 // The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 30× headroom.
 const SIZE = 10_000;
-// LaTeX takes two to five characters a unit; the longest of the 45 study formulas is 110.
-const LATEX_LENGTH = 4 * SIZE;
+// writeLatex's costliest unit is an enclose drawing every line around an empty row, 101 characters for a node and its
+// row: so the LaTeX of any admitted tree fits, and reads back.
+const LATEX_LENGTH = 51 * SIZE;
 
 export const MATH_LIMITS = {
     // Levels a reader walks: a node's row, or an element it reads through.
@@ -135,6 +136,10 @@ type StyledChar = { char: string; variant: MathVariant; color: string | undefine
 // The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
 const TEXT_EDGE: ReadonlySet<string> = new Set(' \u00A0');
 
+// What a row counts, so every reader counts the tree it makes: an optional slot only when it holds something, and an
+// equation's & as the cell it starts.
+export type RowSlot = 'required' | 'optional' | 'equation';
+
 // One row as a reader builds it. Characters wait until the next node, so tokens come out canonical whatever the
 // runs or elements they were spread over: a maximal number, an upright word, one styled letter at a time.
 export class RowBuilder {
@@ -144,8 +149,9 @@ export class RowBuilder {
     constructor(
         readonly budget: MathBudget,
         readonly depth: number,
+        readonly slot: RowSlot = 'required',
     ) {
-        bound(budget, depth, 1);
+        bound(budget, depth, slot === 'optional' ? 0 : 1);
     }
 
     chars(text: string, letters: MathVariant, others: MathVariant, color: string | undefined): void {
@@ -177,6 +183,7 @@ export class RowBuilder {
 
     done(): MathRow {
         this.#flush();
+        if (this.slot === 'optional' && this.#row.length > 0) bound(this.budget, this.depth, 1);
         for (const node of this.#row) {
             if (node.kind === 'text') node.text = replaceEdges(node.text, TEXT_EDGE, ' ');
         }
@@ -184,7 +191,8 @@ export class RowBuilder {
     }
 
     #push(node: MathNode, characters: number): void {
-        bound(this.budget, this.depth, 1 + characters);
+        const cell = this.slot === 'equation' && node.kind === 'operator' && node.text === '&';
+        bound(this.budget, this.depth, cell ? 1 : 1 + characters);
         this.#row.push(node);
     }
 

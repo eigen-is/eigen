@@ -12,10 +12,13 @@ const ROOTS: ReadonlyMap<string, string> = new Map([
     ['4', '∜'],
 ]);
 
-// An argument of more than one node is parenthesised: (a+b)/2, x^(n+1).
+// An operand UnicodeMath would split is parenthesised: more than one node, (a+b)/2, or one that has operands of its
+// own, (a/b)^2.
+const COMPOUND: ReadonlySet<MathNode['kind']> = new Set(['fraction', 'scripts', 'nary', 'function']);
+
 function argument(row: MathRow): string {
     const text = writeText(row);
-    return row.length > 1 ? `(${text})` : text;
+    return row.length > 1 || (row.length === 1 && COMPOUND.has(row[0].kind)) ? `(${text})` : text;
 }
 
 function scripts(node: { sub?: MathRow; sup?: MathRow }): string {

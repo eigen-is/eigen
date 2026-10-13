@@ -23,6 +23,21 @@ test.each<[MathRow, string]>([
     [[{ kind: 'scripts', base: letter('x'), sub: letter('i'), sup: number('2') }], 'x_i^2'],
     [[{ kind: 'scripts', base: letter('x'), sup: sum('n', 'm') }], 'x^(n+m)'],
     [[{ kind: 'scripts', base: letter('X'), sub: letter('a'), sup: letter('b'), pre: true }], '_a^b X'],
+    // A lone compound operand is parenthesised too, so a/b^2 never means (a/b)^2.
+    [
+        [
+            {
+                kind: 'scripts',
+                base: [{ kind: 'fraction', numerator: letter('a'), denominator: letter('b'), line: 'bar' }],
+                sup: number('2'),
+            },
+        ],
+        '(a/b)^2',
+    ],
+    [
+        [{ kind: 'scripts', base: [{ kind: 'scripts', base: letter('x'), sup: number('2') }], sup: number('3') }],
+        '(x^2)^3',
+    ],
     [[{ kind: 'radical', body: letter('x') }], '√x'],
     [[{ kind: 'radical', body: sum('x', 'y') }], '√(x+y)'],
     [[{ kind: 'radical', body: letter('x'), degree: number('3') }], '∛x'],

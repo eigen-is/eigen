@@ -1,12 +1,10 @@
+import { PRIME } from './notation';
 import type { MathEnclosure, MathSpace, MathVariant } from './tree';
 
-export const LATEX_SYMBOL_CLASSES = ['letter', 'operator', 'relation', 'arrow', 'delimiter', 'misc'] as const;
+const SYMBOL_CLASSES = ['letter', 'operator', 'relation', 'arrow', 'delimiter', 'misc'] as const;
 
-export type LatexSymbolClass = (typeof LATEX_SYMBOL_CLASSES)[number];
-
-// One row per command. A symbol gives a character, read by its Unicode class as an identifier or an operator.
-export type LatexCommand =
-    | { kind: 'symbol'; char: string; class: LatexSymbolClass }
+type LatexRow =
+    | { kind: 'symbol'; char: string; class: (typeof SYMBOL_CLASSES)[number] }
     | { kind: 'function'; limits: boolean }
     | { kind: 'operatorname' }
     | { kind: 'largeOperator'; operator: string }
@@ -17,8 +15,7 @@ export type LatexCommand =
     | { kind: 'limit'; position: 'over' | 'under' }
     | { kind: 'arrow'; char: string }
     | { kind: 'font'; variant: MathVariant }
-    | { kind: 'fraction' }
-    | { kind: 'binom' }
+    | { kind: 'fraction'; open: string; close: string; line: 'bar' | 'none' }
     | { kind: 'genfrac' }
     | { kind: 'radical' }
     | { kind: 'prescript' }
@@ -32,13 +29,17 @@ export type LatexCommand =
     | { kind: 'left' }
     | { kind: 'middle' }
     | { kind: 'right' }
+    | { kind: 'big' }
     | { kind: 'begin' }
     | { kind: 'end' }
     | { kind: 'noop' };
 
-// The braced arguments each kind takes, for the editor's `\name` + space; `\sqrt` and `\xrightarrow` also take an
-// optional [argument], `\operatorname` a star.
-export const LATEX_ARGUMENTS: Readonly<Record<LatexCommand['kind'], number>> = {
+// One row per command. A symbol gives a character, read by its Unicode class as an identifier or an operator.
+// `arguments` counts the braced arguments it takes, for the editor's `\name` + space; `\sqrt` and `\xrightarrow` also
+// take an optional [argument], `\operatorname` a star, and `\left`, `\middle`, `\right` and `\big` a delimiter.
+export type LatexCommand = Readonly<LatexRow & { arguments: number }>;
+
+const ARGUMENTS: Readonly<Record<LatexRow['kind'], number>> = {
     symbol: 0,
     function: 0,
     operatorname: 1,
@@ -51,7 +52,6 @@ export const LATEX_ARGUMENTS: Readonly<Record<LatexCommand['kind'], number>> = {
     arrow: 1,
     font: 1,
     fraction: 2,
-    binom: 2,
     genfrac: 6,
     radical: 1,
     prescript: 3,
@@ -65,13 +65,14 @@ export const LATEX_ARGUMENTS: Readonly<Record<LatexCommand['kind'], number>> = {
     left: 0,
     middle: 0,
     right: 0,
+    big: 0,
     begin: 1,
     end: 1,
     noop: 0,
 };
 
 // Where two names give one character, the writer uses the first.
-const SYMBOL_COMMANDS: Record<LatexSymbolClass, Record<string, string>> = {
+const SYMBOL_COMMANDS: Record<(typeof SYMBOL_CLASSES)[number], Record<string, string>> = {
     letter: {
         alpha: 'α',
         beta: 'β',
@@ -197,6 +198,8 @@ const SYMBOL_COMMANDS: Record<LatexSymbolClass, Record<string, string>> = {
         asymp: '≍',
         bowtie: '⋈',
         coloneqq: '≔',
+        lt: '<',
+        gt: '>',
     },
     arrow: {
         to: '→',
@@ -254,8 +257,6 @@ const SYMBOL_COMMANDS: Record<LatexSymbolClass, Record<string, string>> = {
         vert: '|',
         lvert: '|',
         rvert: '|',
-        llbracket: '⟦',
-        rrbracket: '⟧',
         lgroup: '⟮',
         rgroup: '⟯',
         lbrack: '[',
@@ -268,9 +269,6 @@ const SYMBOL_COMMANDS: Record<LatexSymbolClass, Record<string, string>> = {
         '#': '#',
         $: '$',
         _: '_',
-        textbackslash: '\\',
-        textasciicircum: '^',
-        textasciitilde: '~',
         infty: '∞',
         partial: '∂',
         nabla: '∇',
@@ -281,7 +279,7 @@ const SYMBOL_COMMANDS: Record<LatexSymbolClass, Record<string, string>> = {
         lnot: '¬',
         emptyset: '∅',
         varnothing: '∅',
-        prime: '′',
+        prime: PRIME,
         angle: '∠',
         triangle: '△',
         top: '⊤',
@@ -408,28 +406,28 @@ const FUNCTIONS = 'arccos arcsin arctan arg cos cosh cot coth csc deg dim exp ho
 // Functions whose scripts go under and over, as limits.
 const LIMIT_FUNCTIONS = 'det gcd inf lim max min Pr sup';
 
-export const LATEX_COMMANDS: ReadonlyMap<string, LatexCommand> = new Map<string, LatexCommand>([
-    ...LATEX_SYMBOL_CLASSES.flatMap((group) =>
-        Object.entries(SYMBOL_COMMANDS[group]).map(([name, char]): [string, LatexCommand] => [
+const FRACTION: LatexRow = { kind: 'fraction', open: '', close: '', line: 'bar' };
+const BINOM: LatexRow = { kind: 'fraction', open: '(', close: ')', line: 'none' };
+
+const ROWS: [string, LatexRow][] = [
+    ...SYMBOL_CLASSES.flatMap((group) =>
+        Object.entries(SYMBOL_COMMANDS[group]).map(([name, char]): [string, LatexRow] => [
             name,
             { kind: 'symbol', char, class: group },
         ]),
     ),
-    ...FUNCTIONS.split(' ').map((name): [string, LatexCommand] => [name, { kind: 'function', limits: false }]),
-    ...LIMIT_FUNCTIONS.split(' ').map((name): [string, LatexCommand] => [name, { kind: 'function', limits: true }]),
-    ...Object.entries(LARGE_OPERATOR_COMMANDS).map(([name, operator]): [string, LatexCommand] => [
+    ...FUNCTIONS.split(' ').map((name): [string, LatexRow] => [name, { kind: 'function', limits: false }]),
+    ...LIMIT_FUNCTIONS.split(' ').map((name): [string, LatexRow] => [name, { kind: 'function', limits: true }]),
+    ...Object.entries(LARGE_OPERATOR_COMMANDS).map(([name, operator]): [string, LatexRow] => [
         name,
         { kind: 'largeOperator', operator },
     ]),
-    ...Object.entries(ACCENT_COMMANDS).map(([name, accent]): [string, LatexCommand] => [
-        name,
-        { kind: 'accent', accent },
-    ]),
-    ...Object.entries(FONT_COMMANDS).map(([name, variant]): [string, LatexCommand] => [
-        name,
-        { kind: 'font', variant },
-    ]),
-    ...Object.entries(SPACE_COMMANDS).map(([name, width]): [string, LatexCommand] => [name, { kind: 'space', width }]),
+    ...Object.entries(ACCENT_COMMANDS).map(([name, accent]): [string, LatexRow] => [name, { kind: 'accent', accent }]),
+    ...Object.entries(FONT_COMMANDS).map(([name, variant]): [string, LatexRow] => [name, { kind: 'font', variant }]),
+    ...Object.entries(SPACE_COMMANDS).map(([name, width]): [string, LatexRow] => [name, { kind: 'space', width }]),
+    ...['big', 'Big', 'bigg', 'Bigg'].flatMap((size) =>
+        ['', 'l', 'm', 'r'].map((side): [string, LatexRow] => [size + side, { kind: 'big' }]),
+    ),
     ['operatorname', { kind: 'operatorname' }],
     ['limits', { kind: 'limits', limits: 'under' }],
     ['nolimits', { kind: 'limits', limits: 'side' }],
@@ -444,13 +442,13 @@ export const LATEX_COMMANDS: ReadonlyMap<string, LatexCommand> = new Map<string,
     ['stackrel', { kind: 'limit', position: 'over' }],
     ['xrightarrow', { kind: 'arrow', char: '→' }],
     ['xleftarrow', { kind: 'arrow', char: '←' }],
-    ['frac', { kind: 'fraction' }],
-    ['dfrac', { kind: 'fraction' }],
-    ['tfrac', { kind: 'fraction' }],
-    ['cfrac', { kind: 'fraction' }],
-    ['binom', { kind: 'binom' }],
-    ['dbinom', { kind: 'binom' }],
-    ['tbinom', { kind: 'binom' }],
+    ['frac', FRACTION],
+    ['dfrac', FRACTION],
+    ['tfrac', FRACTION],
+    ['cfrac', FRACTION],
+    ['binom', BINOM],
+    ['dbinom', BINOM],
+    ['tbinom', BINOM],
     ['genfrac', { kind: 'genfrac' }],
     ['sqrt', { kind: 'radical' }],
     ['prescript', { kind: 'prescript' }],
@@ -471,9 +469,19 @@ export const LATEX_COMMANDS: ReadonlyMap<string, LatexCommand> = new Map<string,
     // Wikipedia's annotations start with {\displaystyle; the equation's node says whether it is displayed.
     ['displaystyle', { kind: 'noop' }],
     ['textstyle', { kind: 'noop' }],
-]);
+    // A negative thin space: the tree has no negative width.
+    ['!', { kind: 'noop' }],
+];
 
-export type LatexEnvironment = { layout: 'matrix' | 'equations'; open: string; close: string };
+// Frozen, rows and lists alike: every caller shares the one table the reader and the writer read.
+export const LATEX_COMMANDS: ReadonlyMap<string, LatexCommand> = new Map(
+    ROWS.map(([name, row]): [string, LatexCommand] => {
+        for (const value of Object.values(row)) if (Array.isArray(value)) Object.freeze(value);
+        return [name, Object.freeze({ ...row, arguments: ARGUMENTS[row.kind] })];
+    }),
+);
+
+type LatexEnvironment = { layout: 'matrix' | 'equations'; open: string; close: string };
 
 export const LATEX_ENVIRONMENTS: ReadonlyMap<string, LatexEnvironment> = new Map<string, LatexEnvironment>([
     ['matrix', { layout: 'matrix', open: '', close: '' }],

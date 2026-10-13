@@ -23,6 +23,7 @@ import {
     mark,
     optional,
     RowBuilder,
+    type RowSlot,
     toColor,
 } from './tree';
 import {
@@ -85,17 +86,17 @@ function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undef
     return undefined;
 }
 
-function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number): MathRow {
-    const row = new RowBuilder(budget, depth);
+function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
+    const row = new RowBuilder(budget, depth, slot);
     for (const element of elements) readInto(row, element, depth);
     return row.done();
 }
 
 // An argument is one element; a plain mrow there is the row itself, not a level of its own. So is math, an mrow too.
-function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number): MathRow {
+function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
     if (element && (is(element, 'mrow') || is(element, 'math')) && !patternOf(element))
-        return readRow(elementsOf(element), budget, depth);
-    return readRow(element ? [element] : [], budget, depth);
+        return readRow(elementsOf(element), budget, depth, slot);
+    return readRow(element ? [element] : [], budget, depth, slot);
 }
 
 // Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
@@ -112,9 +113,8 @@ function readScripts(
 ): { sub?: MathRow; sup?: MathRow } {
     const scripts: { sub?: MathRow; sup?: MathRow } = {};
     for (const [index, slot] of slots.entries()) {
-        // An absent prescript is <none/>: no row, so the size counts what the tree holds.
         if (is(children[index], 'none')) continue;
-        const script = optional(readArgument(children[index], budget, depth));
+        const script = optional(readArgument(children[index], budget, depth, 'optional'));
         if (script) scripts[slot] = script;
     }
     return scripts;
@@ -223,7 +223,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             row.node({ kind: 'radical', body: readRow(children, budget, depth + 1) });
             return;
         case 'mroot': {
-            const degree = optional(argument(1));
+            const degree = optional(readArgument(children[1], budget, depth + 1, 'optional'));
             row.node({ kind: 'radical', body: argument(0), ...(degree && { degree }) });
             return;
         }
@@ -294,7 +294,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             const tableRows = (rows.length > 0 ? rows : [[]]).map((cells) => {
                 bound(budget, depth + 1, 1);
                 const read = (cells.length > 0 ? cells.map(elementsOf) : [[]]).map((cell) =>
-                    readRow(cell, budget, depth + 1),
+                    readRow(cell, budget, depth + 1, layout === 'equations' ? 'equation' : 'required'),
                 );
                 return layout === 'equations' ? read.flatMap(equationCells) : read;
             });

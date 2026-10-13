@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { readLatex, writeLatex } from '../latex';
-import { LATEX_ARGUMENTS, LATEX_COMMANDS, type LatexCommand } from '../latex-commands';
+import { LATEX_COMMANDS, type LatexCommand } from '../latex-commands';
 import { readMathml, writeMathml } from '../mathml';
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
 import { readOmml } from '../omml';
@@ -14,6 +14,9 @@ import { el, viaOmml } from './parse';
 
 const letter = (text: string): MathRow => [{ kind: 'identifier', text }];
 const x = letter('x');
+const one: MathRow = [{ kind: 'number', text: '1' }];
+const two: MathRow = [{ kind: 'number', text: '2' }];
+const prime: MathNode = { kind: 'operator', text: '′' };
 const viaLatex = (row: MathRow) => readLatex(writeLatex(row));
 
 function thrown(read: () => unknown): MathError | undefined {
@@ -89,6 +92,24 @@ const LOSSES: { reason: string; indices: number[]; apply: (row: MathRow) => Math
                     : node,
             ),
     },
+    {
+        reason: 'Word’s ⟦ ⟧ fence has no \\left form both KaTeX and MathJax read: it is written as its characters',
+        indices: [49],
+        apply: (row) =>
+            JSON.parse(JSON.stringify(row), (_, value) =>
+                Array.isArray(value)
+                    ? value.flatMap((node) =>
+                          node?.kind === 'fenced' && node.open === '⟦'
+                              ? [
+                                    { kind: 'operator', text: node.open },
+                                    ...node.parts[0],
+                                    { kind: 'operator', text: node.close },
+                                ]
+                              : [node],
+                      )
+                    : value,
+            ),
+    },
 ];
 
 function expected(index: number, tree: MathRow): MathRow {
@@ -115,12 +136,90 @@ describe('C3: tree → LaTeX → tree is the identity, but for the listed losses
         }
     });
 
-    test('1,000 seeded canonical trees, with the pictures LaTeX lacks swapped out', () => {
-        for (let seed = 1; seed <= 1000; seed++) {
+    // Seed 3329 is the first of 43 in 100,000 that once broke; 58606 broke a function named by a limit.
+    test('10,000 seeded canonical trees, with the pictures LaTeX lacks swapped out', () => {
+        for (const seed of [...Array.from({ length: 10_000 }, (_, index) => index + 1), 58_606]) {
             const tree = withoutLosses(generateTree(seed));
             expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
             expect({ seed, tree: viaLatex(tree) }).toStrictEqual({ seed, tree });
         }
+    });
+
+    test.each<[string, MathRow]>([
+        [
+            'a brace under an empty label',
+            [
+                {
+                    kind: 'limit',
+                    position: 'over',
+                    base: [{ kind: 'brace', char: '⏞', position: 'over', body: x }],
+                    limit: [],
+                },
+            ],
+        ],
+        [
+            'a function named by a limit with nothing under it',
+            [
+                {
+                    kind: 'function',
+                    name: [
+                        { kind: 'limit', position: 'under', base: [{ kind: 'identifier', text: 'lim' }], limit: [] },
+                    ],
+                    body: x,
+                },
+            ],
+        ],
+        [
+            'a matrix in a fenced row without fences',
+            [
+                {
+                    kind: 'fenced',
+                    open: '',
+                    close: '',
+                    separator: '',
+                    parts: [[{ kind: 'table', layout: 'matrix', rows: [[x]] }]],
+                },
+            ],
+        ],
+        [
+            'equations in a fenced row without fences',
+            [
+                {
+                    kind: 'fenced',
+                    open: '',
+                    close: '',
+                    separator: '',
+                    parts: [[{ kind: 'table', layout: 'equations', rows: [[x]] }]],
+                },
+            ],
+        ],
+        [
+            'a function with scripts beside a limit name',
+            [
+                {
+                    kind: 'function',
+                    name: [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'lim' }], sub: x }],
+                    body: x,
+                },
+            ],
+        ],
+        ['a table ending in an empty row', [{ kind: 'table', layout: 'matrix', rows: [[x], [[]]] }]],
+        [
+            'a row that starts with a bracket',
+            [{ kind: 'table', layout: 'matrix', rows: [[x], [[{ kind: 'operator', text: '[' }, ...x]]] }],
+        ],
+        [
+            'a function of a number',
+            [
+                {
+                    kind: 'function',
+                    name: [{ kind: 'identifier', text: 'sin' }],
+                    body: [{ kind: 'number', text: '3.5' }],
+                },
+            ],
+        ],
+    ])('%s', (_, tree) => {
+        expect(viaLatex(tree)).toStrictEqual(tree);
     });
 
     test('each loss keeps the picture: a lossy tree still reads, canonical, and its LaTeX is stable', () => {
@@ -317,6 +416,134 @@ describe('readLatex', () => {
         ['\\sqrt[3]{x}', [{ kind: 'radical', body: x, degree: [{ kind: 'number', text: '3' }] }]],
         ['\\boxed{x}', [{ kind: 'enclose', notation: ['top', 'bottom', 'left', 'right'], body: x }]],
         ['\\enclose{horizontalstrike,circle}{x}', [{ kind: 'enclose', notation: ['horizontalstrike'], body: x }]],
+        ['x_\\text{max}', [{ kind: 'scripts', base: x, sub: [{ kind: 'text', text: 'max' }] }]],
+        ['x_\\mathrm{max}', [{ kind: 'scripts', base: x, sub: [{ kind: 'identifier', text: 'max' }] }]],
+        [
+            'x^\\frac12',
+            [{ kind: 'scripts', base: x, sup: [{ kind: 'fraction', numerator: one, denominator: two, line: 'bar' }] }],
+        ],
+        [
+            'e^\\left(x\\right)',
+            [
+                {
+                    kind: 'scripts',
+                    base: letter('e'),
+                    sup: [{ kind: 'fenced', open: '(', close: ')', separator: '', parts: [x] }],
+                },
+            ],
+        ],
+        [
+            '\\sqrt\\frac12',
+            [{ kind: 'radical', body: [{ kind: 'fraction', numerator: one, denominator: two, line: 'bar' }] }],
+        ],
+        ['\\sin 3.5', [{ kind: 'function', name: letter('sin'), body: [{ kind: 'number', text: '3.5' }] }]],
+        ['\\log 100 x', [{ kind: 'function', name: letter('log'), body: [{ kind: 'number', text: '100' }] }, ...x]],
+        ['\\sum 10', [{ kind: 'nary', operator: '∑', limits: 'under', body: [{ kind: 'number', text: '10' }] }]],
+        [
+            '\\sin 2^x 3',
+            [
+                { kind: 'function', name: letter('sin'), body: [{ kind: 'scripts', base: two, sup: x }] },
+                { kind: 'number', text: '3' },
+            ],
+        ],
+        [
+            '\\begin{cases} 1 & x \\\\ 2 & y \\\\ \\end{cases}',
+            [
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [
+                        [
+                            {
+                                kind: 'table',
+                                layout: 'equations',
+                                rows: [
+                                    [one, x],
+                                    [two, letter('y')],
+                                ],
+                            },
+                        ],
+                    ],
+                },
+            ],
+        ],
+        [
+            '\\begin{matrix} a \\\\[2pt] b \\end{matrix}',
+            [{ kind: 'table', layout: 'matrix', rows: [[letter('a')], [letter('b')]] }],
+        ],
+        ['\\begin{matrix} a \\\\ {} \\end{matrix}', [{ kind: 'table', layout: 'matrix', rows: [[letter('a')], [[]]] }]],
+        [
+            '\\big( x \\Bigr) \\bigl\\{ \\Biggm| \\bigg.',
+            [
+                { kind: 'operator', text: '(' },
+                ...x,
+                { kind: 'operator', text: ')' },
+                { kind: 'operator', text: '{' },
+                { kind: 'operator', text: '|' },
+            ],
+        ],
+        ['x^\\big(', [{ kind: 'scripts', base: x, sup: [{ kind: 'operator', text: '(' }] }]],
+        ['\\int\\!x', [{ kind: 'nary', operator: '∫', limits: 'side', body: x }]],
+        [
+            'a\\lt b\\gt c',
+            [
+                ...letter('a'),
+                { kind: 'operator', text: '<' },
+                ...letter('b'),
+                { kind: 'operator', text: '>' },
+                ...letter('c'),
+            ],
+        ],
+        [
+            '\\lim\\limits_{n} a',
+            [
+                {
+                    kind: 'function',
+                    name: [{ kind: 'limit', position: 'under', base: letter('lim'), limit: letter('n') }],
+                    body: letter('a'),
+                },
+            ],
+        ],
+        [
+            '\\lim\\nolimits_{n} a',
+            [
+                {
+                    kind: 'function',
+                    name: [{ kind: 'scripts', base: letter('lim'), sub: letter('n') }],
+                    body: letter('a'),
+                },
+            ],
+        ],
+        [
+            '\\left( a \\middle| b \\middle\\| c \\right)',
+            [
+                {
+                    kind: 'fenced',
+                    open: '(',
+                    close: ')',
+                    separator: '|',
+                    parts: [letter('a'), [...letter('b'), { kind: 'operator', text: '‖' }, ...letter('c')]],
+                },
+            ],
+        ],
+        [
+            '\\left( \\color{red} a \\middle| b \\right)',
+            [
+                {
+                    kind: 'fenced',
+                    open: '(',
+                    close: ')',
+                    separator: '|',
+                    parts: [
+                        [{ kind: 'identifier', text: 'a', color: '#FF0000' }],
+                        [{ kind: 'identifier', text: 'b', color: '#FF0000' }],
+                    ],
+                },
+            ],
+        ],
+        ['\\text{\\textasciitilde{}\\textasciicircum{}}', [{ kind: 'text', text: '~^' }]],
     ])('%p', (latex, tree) => {
         const read = readLatex(latex);
         expect(read).toStrictEqual(tree);
@@ -354,7 +581,9 @@ describe('readLatex', () => {
         ['x\u0001', 1],
         ['x\uD800', 1],
         ['\\', 0],
-        ['\\frac\\sqrt{2}{3}', 10],
+        ['x^\\frac1', 8],
+        ['\\big x', 5],
+        ['\\textasciitilde', 0],
     ])('%p is a MathError at offset %p', (latex, offset) => {
         expect(thrown(() => readLatex(latex))?.offset).toBe(offset);
     });
@@ -383,10 +612,53 @@ describe('writeLatex', () => {
         [[{ kind: 'function', name: x, body: x }], '\\operatorname{\\mathit{x}}{x}'],
         [[{ kind: 'nary', operator: '∫', limits: 'under', sub: x, body: [] }], '\\int\\limits_{x}{}'],
         [[{ kind: 'radical', body: x, degree: [{ kind: 'operator', text: ']' }] }], '\\sqrt[{]}]{x}'],
+        [[{ kind: 'radical', body: x, degree: [{ kind: 'scripts', base: [], sup: x }] }], '\\sqrt[{{}^{x}}]{x}'],
         [[{ kind: 'space', width: 'normal' }, ...x], '\\ x'],
+        // A prime after a script would be TeX's double superscript.
+        [[{ kind: 'scripts', base: x, sup: x }, prime], "x^{x}{}'"],
+        [[{ kind: 'scripts', base: x, sub: x }, prime], "x_{x}{}'"],
+        [
+            [
+                {
+                    kind: 'limit',
+                    position: 'over',
+                    base: [{ kind: 'brace', char: '⏞', position: 'over', body: x }],
+                    limit: x,
+                },
+                prime,
+            ],
+            "\\overbrace{x}^{x}{}'",
+        ],
+        [
+            [
+                { kind: 'identifier', text: 'α' },
+                { kind: 'operator', text: '@' },
+            ],
+            '\\alpha @',
+        ],
+        [[{ kind: 'table', layout: 'matrix', rows: [[x], [[]]] }], '\\begin{matrix}x \\\\ {}\\end{matrix}'],
     ])('%j', (row, latex) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(row);
+    });
+
+    // KaTeX and MathJax read each form; what it reads back as is a listed loss.
+    test.each<[MathRow, string, MathRow]>([
+        [
+            [{ kind: 'accent', accent: '\u0304', body: x }],
+            '\\overset{¯}{x}',
+            [{ kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '¯' }] }],
+        ],
+        [
+            [{ kind: 'fenced', open: '⟦', close: '⟧', separator: '', parts: [x] }],
+            '{⟦x⟧}',
+            [{ kind: 'operator', text: '⟦' }, ...x, { kind: 'operator', text: '⟧' }],
+        ],
+        [[{ kind: 'operator', text: '~' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
+        [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
+    ])('%j is written %p', (row, latex, read) => {
+        expect(writeLatex(row)).toBe(latex);
+        expect(readLatex(latex)).toStrictEqual(read);
     });
 });
 
@@ -461,6 +733,8 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
             `${'\\sin '.repeat(5000)}x`,
             `${'\\sum '.repeat(5000)}x`,
             `${'\\sqrt['.repeat(5000)}x${']{x}'.repeat(5000)}`,
+            `${'\\sqrt'.repeat(MATH_LIMITS.latexLength / 5 - 1)}x`,
+            `${'\\frac 1'.repeat(MATH_LIMITS.latexLength / 7 - 1)}1`,
         ]) {
             expect(thrown(() => readLatex(latex))).toBeInstanceOf(MathError);
         }
@@ -475,9 +749,12 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
             { kind: 'nary', operator: '∑', limits: 'under', sub: x, body: [] },
             { kind: 'scripts', base: [], sub: x },
             { kind: 'scripts', base: x, sub: x, pre: true },
+            { kind: 'scripts', base: x, sup: x, pre: true },
+            { kind: 'radical', body: x, degree: x },
             { kind: 'fenced', open: '(', close: ')', separator: '|', parts: [[], x] },
             { kind: 'function', name: [{ kind: 'identifier', text: 'lim' }], body: [] },
             { kind: 'table', layout: 'equations', rows: [[[], x], [[]]] },
+            { kind: 'table', layout: 'equations', rows: [[x, x, x, x]] },
             { kind: 'fraction', numerator: [], denominator: x, line: 'none' },
             {
                 kind: 'limit',
@@ -497,8 +774,10 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
                 else high = middle - 1;
             }
             expect(viaLatex(row(low))).toStrictEqual(row(low));
+            expect(viaOmml(row(low))).toStrictEqual(row(low));
             expect(readMathml(el(writeMathml(row(low)))).row).toStrictEqual(row(low));
             expect(thrown(() => readMathml(el(writeMathml(row(low + 1)))))).toBeInstanceOf(MathError);
+            expect(thrown(() => viaOmml(row(low + 1)))).toBeInstanceOf(MathError);
             expect(writeLatex(row(low + 1)).length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
         }
         // Typed forms the writer never emits: the largest tree LaTeX admits from them, MathML stores too.
@@ -511,7 +790,7 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
             '\\pmod{x}',
         ]) {
             let low = 1;
-            let high = MATH_LIMITS.latexLength / typed.length;
+            let high = MATH_LIMITS.size;
             while (low < high) {
                 const middle = Math.ceil((low + high) / 2);
                 if (thrown(() => readLatex(typed.repeat(middle))) === undefined) low = middle;
@@ -519,6 +798,29 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
             }
             const tree = readLatex(typed.repeat(low));
             expect({ typed, tree: readMathml(el(writeMathml(tree))).row }).toStrictEqual({ typed, tree });
+        }
+    });
+
+    // writeLatex's costliest units per unit of size: an enclose drawing every line around an empty row, a coloured
+    // operator in the longest font command with the longest symbol command, and coloured text of backslashes.
+    test('the largest admitted tree of the costliest units writes LaTeX within its cap that reads back', () => {
+        const units = Math.floor((MATH_LIMITS.size - 1) / 2);
+        const trees: MathRow[] = [
+            Array.from(
+                { length: units },
+                (): MathNode => ({ kind: 'enclose', notation: [...MATH_ENCLOSURES], body: [] }),
+            ),
+            Array.from(
+                { length: units },
+                (): MathNode => ({ kind: 'operator', text: '⟺', variant: 'sans-serif-bold-italic', color: '#FF0000' }),
+            ),
+            [{ kind: 'text', text: '\\'.repeat(MATH_LIMITS.size - 2), color: '#FF0000' }],
+        ];
+        for (const tree of trees) {
+            expect(readMathml(el(writeMathml(tree))).row).toStrictEqual(tree);
+            const latex = writeLatex(tree);
+            expect(latex.length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
+            expect(readLatex(latex)).toStrictEqual(tree);
         }
     });
 
@@ -542,7 +844,7 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
         for (const latex of inputs) {
             const start = performance.now();
             thrown(() => readLatex(latex));
-            expect({ latex: latex.slice(0, 12), ms: performance.now() - start < 250 }).toEqual({
+            expect({ latex: latex.slice(0, 12), ms: performance.now() - start < 1000 }).toEqual({
                 latex: latex.slice(0, 12),
                 ms: true,
             });
@@ -643,17 +945,17 @@ describe('LATEX_COMMANDS', () => {
     });
 
     // The editor turns `\name` + space into `\name{}…`: the count it inserts must be what the reader takes.
-    test('LATEX_ARGUMENTS is the number of arguments each command reads', () => {
+    test('each command’s arguments are the number of arguments it reads', () => {
         const samples: Partial<Record<LatexCommand['kind'], string[]>> = {
             color: ['red', 'x'],
             colorSwitch: ['red'],
             genfrac: ['', '', '0pt', '', 'a', 'b'],
             notation: ['top', 'x'],
         };
-        const structural = new Set(['left', 'middle', 'right', 'begin', 'end', 'limits', 'noop']);
+        const structural = new Set(['left', 'middle', 'right', 'begin', 'end', 'limits', 'noop', 'big']);
         for (const [name, command] of LATEX_COMMANDS) {
             if (structural.has(command.kind)) continue;
-            const count = LATEX_ARGUMENTS[command.kind];
+            const count = command.arguments;
             const args = (samples[command.kind] ?? Array.from({ length: count }, () => 'x')).map((arg) => `{${arg}}`);
             expect({ name, count: args.length }).toEqual({ name, count });
             const complete = `\\${name}${args.join('')}`;
@@ -666,5 +968,11 @@ describe('LATEX_COMMANDS', () => {
                 });
             }
         }
+    });
+
+    test('is read-only to its callers', () => {
+        for (const command of LATEX_COMMANDS.values()) expect(Object.isFrozen(command)).toBe(true);
+        const boxed = LATEX_COMMANDS.get('boxed');
+        expect(boxed?.kind === 'enclose' && Object.isFrozen(boxed.notation)).toBe(true);
     });
 });

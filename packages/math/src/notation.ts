@@ -38,8 +38,11 @@ export const SPACES: Readonly<Record<MathSpace, { text: string; width: string }>
     qquad: { text: '\u2003\u2003', width: '2em' },
 };
 
-// Characters MathML stretches as fences, so a bare one is written unstretched.
-export const FENCES: ReadonlySet<string> = new Set('()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄〈〉');
+// Characters MathML stretches as fences, so a bare one is written unstretched. Word's angle brackets are escaped:
+// Unicode normalisation turns them into the CJK U+3008 and U+3009.
+export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄']);
+
+export const PRIME = '′';
 
 const INTEGRALS: ReadonlySet<string> = new Set('∫∬∭∮∯∰∱∲∳⨋⨌⨍⨎⨏⨐⨑⨒⨓⨔⨕⨖⨗⨘⨙⨚⨛⨜');
 

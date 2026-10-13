@@ -164,6 +164,16 @@ describe('readMathml', () => {
     });
 });
 
+// Every reader counts the tree it makes, so an empty script or degree costs nothing the tree doesn't hold.
+test.each<[string, MathRow, number]>([
+    ['<msub><mi>x</mi><mrow/></msub>', x, 4],
+    ['<mroot><mi>x</mi><mrow/></mroot>', [{ kind: 'radical', body: x }], 6],
+])('the largest tree reads with %p for every unit', (unit, read, size) => {
+    const count = Math.floor((MATH_LIMITS.size - 1) / size);
+    const row = Array.from({ length: count }, (): MathRow => [...read, { kind: 'operator', text: '+' }]).flat();
+    expect(readMathml(math(`${unit}<mo>+</mo>`.repeat(count))).row).toStrictEqual(row);
+});
+
 describe('writeMathml', () => {
     test('variants are Unicode alphanumerics where they exist, else mathvariant', () => {
         const row: MathRow = [
