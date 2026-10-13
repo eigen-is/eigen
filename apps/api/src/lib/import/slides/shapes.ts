@@ -13,13 +13,14 @@ import {
 } from '@workspace/lib/vector';
 import { drawingLines } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, ASVG_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { POINTS_PER_UNIT } from '../doc/package';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import {
     decorationsOf,
+    elementGradientAngle,
     fillIn,
     inheritedPlaceholders,
     listStyleOf,
@@ -30,8 +31,10 @@ import {
     placeholderOf,
     type SlideInheritance,
     spTreeOf,
+    styleFill,
+    styleLine,
 } from './inherit';
-import { alternative, type MediaPart, type Part, type PptxPackage } from './package';
+import { alternative, blipMedia, type MediaPart, type Part, type PptxPackage } from './package';
 import { richTextOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
@@ -84,15 +87,17 @@ const DEFAULT_LINE_EMU = 9525;
 // What a walk over one deck shares: its budget, its pictures, its losses.
 export type DeckWalk = {
     pkg: PptxPackage;
-    // The frame's px per EMU, and where the slide's origin lands in the frame.
+    // The frame's px per EMU, where the slide's origin lands in the frame, and the slide's extent there.
     scale: number;
     offset: { x: number; y: number };
+    slide: { width: number; height: number };
     // Shapes walked and elements written, each capped: a master's shapes are walked again for every slide.
     shapes: number;
     elements: number;
     // A picture part's media name, the first time a slide shows it.
     mediaName(part: MediaPart): string;
-    dropped: Map<CountedWarningCode, number>;
+    // Counts what the import leaves out or draws simpler.
+    lost: (code: CountedWarningCode) => void;
 };
 
 export type SlideShapes = { elements: NewVectorElement[]; title: string };
@@ -241,12 +246,18 @@ function readTree(walk: Walk, shapes: XmlElement[], m: Affine, depth: number, gr
         if (shape.local === 'grpSp') {
             const grpSpPr = xmlChild(shape, P_NS, 'grpSpPr');
             const xfrm = readXfrm(grpSpPr && xmlChild(grpSpPr, A_NS, 'xfrm'));
-            const fill = paintOf(fillIn(grpSpPr), walk.inheritance.theme, { group }) ?? group;
+            const size = xfrm ? place(m, xfrm).box : { width: 1, height: 1 };
+            const fill =
+                paintOf(fillIn(grpSpPr), walk.inheritance.theme, {
+                    group,
+                    angle: elementGradientAngle(size.width, size.height),
+                    lost: walk.deck.lost,
+                }) ?? group;
             readTree(walk, xmlElements(shape), xfrm ? groupTransform(m, xfrm) : m, depth + 1, fill);
             continue;
         }
         if (shape.local === 'contentPart') {
-            count(walk, DROPPED.object.code);
+            walk.deck.lost(DROPPED.object.code);
             continue;
         }
         const xfrm = chain.map(xfrmOf).find((found) => found !== undefined);
@@ -292,6 +303,7 @@ function readShape(
     const geometry = (shaped && geometryOf(shaped)) ?? 'rect';
     const body = xmlChild(shape, P_NS, 'txBody');
     const style = xmlChild(shape, P_NS, 'style');
+    const lines = linesOf(spPrs, walk, styleIn(chain));
     const text =
         body &&
         richTextOf(
@@ -305,8 +317,8 @@ function readShape(
             walk.deck.scale,
         );
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
-    const paint = { fill: fillOf(spPrs, walk, group), ...strokeOf(spPrs, walk) };
     const { box } = placed;
+    const paint = { fill: fillOf(spPrs, walk, group, styleIn(chain), box), ...strokeOf(lines, walk) };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
     // A text box is the rectangle itself; any other shape carries its text in an unpainted box on top.
     const textOnTop = () =>
@@ -342,12 +354,12 @@ function readShape(
             break;
         case 'line':
         case 'straightConnector1':
-            if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, spPrs));
+            if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, lines.lns));
             textOnTop();
             break;
         default:
             // Other presets and custGeom: the text stays, the outline is X4b's.
-            if (painted) count(walk, 'shapes-simplified');
+            if (painted) walk.deck.lost('shapes-simplified');
             textOnTop();
     }
 }
@@ -371,24 +383,55 @@ const TRANSPARENT_FILL_JSON = serializeFill({ type: 'solid', color: TRANSPARENT_
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 const NO_STROKE: Stroke = { strokeColor: TRANSPARENT_COLOR, strokeWidth: PPTX_STYLE.strokeWidth, strokeStyle: 'solid' };
 
-// The first fill the chain states, a placeholder's own before its layout's and master's; a shape stating none is
-// unfilled until X4a-3 reads its p:style.
-function fillOf(spPrs: XmlElement[], walk: Walk, group: FillPaint | undefined): string {
+// The p:style the shape paints by: a placeholder with none of its own takes its layout's or master's.
+function styleIn(chain: XmlElement[]): XmlElement | undefined {
+    return chain.map((link) => xmlChild(link, P_NS, 'style')).find((found) => found !== undefined);
+}
+
+// The first fill the chain states, a placeholder's own before its layout's and master's; else p:style's fillRef, its
+// colour the style matrix entry's phClr.
+function fillOf(
+    spPrs: XmlElement[],
+    walk: Walk,
+    group: FillPaint | undefined,
+    style: XmlElement | undefined,
+    box: Box,
+): string {
+    const { theme } = walk.inheritance;
+    const options = { group, angle: elementGradientAngle(box.width, box.height), lost: walk.deck.lost };
     const fill = spPrs.map(fillIn).find((found) => found !== undefined);
-    const paint = paintOf(fill, walk.inheritance.theme, { group });
+    const reference = style && xmlChild(style, A_NS, 'fillRef');
+    const paint = fill
+        ? paintOf(fill, theme, options)
+        : reference && paintOf(styleFill(theme, xmlAttr(reference, '', 'idx')), theme, { ...options, reference });
     return paint ? serializeFill({ ...paint, style: 'solid' }) : TRANSPARENT_FILL_JSON;
 }
 
-// The first a:ln the chain states; a line with no fill of its own is unstroked until X4a-3 reads its p:style.
-function strokeOf(spPrs: XmlElement[], walk: Walk): Stroke {
-    const ln = spPrs.map((spPr) => xmlChild(spPr, A_NS, 'ln')).find((found) => found !== undefined);
-    const paint = ln && paintOf(fillIn(ln), walk.inheritance.theme);
-    if (!ln || paint?.type !== 'solid' || paint.color === TRANSPARENT_COLOR) return NO_STROKE;
-    const width = emu(xmlAttr(ln, '', 'w')) ?? DEFAULT_LINE_EMU;
-    const dash = xmlAttr(xmlChild(ln, A_NS, 'prstDash') ?? ln, '', 'val');
+// The a:ln the chain states, nearest first, then the lnStyleLst entry p:style's lnRef names: each of width, dash, ends
+// and colour comes from the first that states it.
+type Lines = { lns: XmlElement[]; entry: XmlElement | undefined; reference: XmlElement | undefined };
+
+function linesOf(spPrs: XmlElement[], walk: Walk, style: XmlElement | undefined): Lines {
+    const reference = style && xmlChild(style, A_NS, 'lnRef');
+    const entry = reference && styleLine(walk.inheritance.theme, xmlAttr(reference, '', 'idx'));
+    const lns = spPrs.flatMap((spPr) => xmlChild(spPr, A_NS, 'ln') ?? []);
+    return { lns: entry ? [...lns, entry] : lns, entry, reference };
+}
+
+// No a:ln and no lnRef, or neither stating a colour, is no stroke. A gradient line strokes in its first colour.
+function strokeOf(lines: Lines, walk: Walk): Stroke {
+    const ln = lines.lns.find((found) => fillIn(found) !== undefined);
+    const reference = ln === lines.entry ? lines.reference : undefined;
+    const paint = ln && paintOf(fillIn(ln), walk.inheritance.theme, { reference, lost: walk.deck.lost });
+    if (paint?.type === 'gradient') walk.deck.lost('fills-simplified');
+    const color = paint?.type === 'gradient' ? paint.from : paint?.color;
+    if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
+    const width = lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined);
+    const preset = lines.lns.map((found) => xmlChild(found, A_NS, 'prstDash')).find((found) => found !== undefined);
+    const dash = preset && xmlAttr(preset, '', 'val');
     return {
-        strokeColor: paint.color,
-        strokeWidth: Math.max(0, width) * walk.deck.scale,
+        strokeColor: color,
+        strokeWidth: Math.max(0, width ?? DEFAULT_LINE_EMU) * walk.deck.scale,
         strokeStyle: !dash || dash === 'solid' ? 'solid' : dash === 'dot' || dash === 'sysDot' ? 'dotted' : 'dashed',
     };
 }
@@ -418,13 +461,12 @@ function pieAngles(
     return { startAngle: placed.mirrored ? normalizeAngle(180 - start - sweep) : start, sweepAngle: sweep };
 }
 
-function lineOf(placed: Placed, stroke: Stroke, spPrs: XmlElement[]): NewVectorElement {
+function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorElement {
     const { start, end } = placed;
     const x = Math.min(start.x, end.x);
     const y = Math.min(start.y, end.y);
-    const ln = spPrs.map((spPr) => xmlChild(spPr, A_NS, 'ln')).find((found) => found !== undefined);
     const head = (local: string) => {
-        const decoration = ln && xmlChild(ln, A_NS, local);
+        const decoration = lns.map((ln) => xmlChild(ln, A_NS, local)).find((found) => found !== undefined);
         return ARROWHEADS.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
     };
     const line = {
@@ -449,22 +491,17 @@ function lineOf(placed: Placed, stroke: Stroke, spPrs: XmlElement[]): NewVectorE
 function readPicture(walk: Walk, shape: XmlElement, chain: XmlElement[], box: Box): void {
     const blipFill = xmlChild(shape, P_NS, 'blipFill');
     const blip = blipFill && xmlChild(blipFill, A_NS, 'blip');
-    const extensions = blip && xmlChild(blip, A_NS, 'extLst');
-    const svg = (extensions ? xmlChildren(extensions, A_NS, 'ext') : [])
-        .map((ext) => xmlChild(ext, ASVG_NS, 'svgBlip'))
-        .find((found) => found !== undefined);
-    const embedded = (element: XmlElement | undefined) => element && xmlAttr(element, R_NS, 'embed');
-    const part = walk.deck.pkg.media(walk.part, embedded(svg)) ?? walk.deck.pkg.media(walk.part, embedded(blip));
+    const part = blipMedia(walk.deck.pkg, walk.part, blip);
     if (!part) {
         // A blip naming no picture is an empty placeholder's prompt, not a picture.
-        if (embedded(blip) || (blip && xmlAttr(blip, R_NS, 'link'))) placeholderBox(walk, 'picture', box);
+        if (blip && (xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link'))) placeholderBox(walk, 'picture', box);
         return;
     }
     const spPrs = chain.flatMap((link) => xmlChild(link, P_NS, 'spPr') ?? []);
     push(walk, {
         type: 'image',
         ...box,
-        ...strokeOf(spPrs, walk),
+        ...strokeOf(linesOf(spPrs, walk, styleIn(chain)), walk),
         mediaName: walk.deck.mediaName(part),
         objectFit: 'fill',
         corners: 'straight',
@@ -477,13 +514,9 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
     placeholderBox(walk, GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object', box);
 }
 
-function count(walk: Walk, code: CountedWarningCode): void {
-    walk.deck.dropped.set(code, (walk.deck.dropped.get(code) ?? 0) + 1);
-}
-
 // Q5: a loss the user can see on the slide, saying what was there.
 function placeholderBox(walk: Walk, what: Dropped, box: Box): void {
-    count(walk, DROPPED[what].code);
+    walk.deck.lost(DROPPED[what].code);
     push(walk, {
         type: 'richtext',
         ...box,

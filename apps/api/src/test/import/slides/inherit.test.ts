@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { box, buildPptx, type PptxFixture, para, scheme, solid, sp } from '../../fixtures/pptx';
+import { box, buildPptx, PIXEL_PNG, type PptxFixture, para, rel, scheme, solid, sp, THEME } from '../../fixtures/pptx';
 
 // What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the colour
 // map and the background.
@@ -158,8 +158,91 @@ describe('backgrounds', () => {
         expect(ref(1999)).toBeNull();
     });
 
-    test('a gradient background is its first stop for now', () => {
-        const gradient = `<p:bgPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="010203"/></a:gs><a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs></a:gsLst></a:gradFill></p:bgPr>`;
-        expect(background({ slides: [{ bg: gradient }] })).toEqual({ type: 'solid', color: '#010203' });
+    const gradient = (lin: string, stops = '<a:srgbClr val="010203"/>') =>
+        `<p:bgPr><a:gradFill><a:gsLst><a:gs pos="0">${stops}</a:gs><a:gs pos="100000"><a:srgbClr val="FFFFFF"><a:alpha val="50000"/></a:srgbClr></a:gs></a:gsLst>${lin}</a:gradFill></p:bgPr>`;
+
+    test("a gradient background is its two end stops at the CSS angle of DrawingML's true one", () => {
+        expect(background({ slides: [{ bg: gradient('<a:lin ang="5400000" scaled="0"/>') }] })).toEqual({
+            type: 'gradient',
+            from: '#010203',
+            to: '#ffffff80',
+            angle: 180,
+        });
+        const angle = (lin: string) => {
+            const found = background({ slides: [{ bg: gradient(lin) }] });
+            return found?.type === 'gradient' ? found.angle : Number.NaN;
+        };
+        expect(angle('<a:lin ang="0"/>')).toBeCloseTo(90, 6);
+        expect(angle('<a:lin ang="2700000" scaled="0"/>')).toBeCloseTo(135, 6);
+        // Scaled, 45° runs corner to corner of the 16:9 slide.
+        expect(angle('<a:lin ang="2700000" scaled="1"/>')).toBeCloseTo((Math.atan2(16, 9) * 180) / Math.PI + 90, 2);
+        expect(angle('<a:path path="rect"/>')).toBeCloseTo(90, 6);
+    });
+
+    test("a bgRef's gradient paints the reference's colour into phClr", () => {
+        const theme = THEME.replace(
+            '<a:bgFillStyleLst>',
+            `<a:bgFillStyleLst><a:gradFill><a:gsLst><a:gs pos="0"><a:schemeClr val="phClr"><a:lumMod val="50000"/></a:schemeClr></a:gs><a:gs pos="100000"><a:schemeClr val="phClr"/></a:gs></a:gsLst><a:lin ang="0" scaled="1"/></a:gradFill>`,
+        );
+        expect(
+            background({ theme, masters: [{ bg: '<p:bgRef idx="1001"><a:srgbClr val="808080"/></p:bgRef>' }] }),
+        ).toEqual({ type: 'gradient', from: '#404040', to: '#808080', angle: 90 });
+    });
+
+    test('a picture background covers the frame, its picture read as a slide picture is', () => {
+        const picture = (fill: string) =>
+            `<p:bgPr><a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="rId7"/>${fill}</a:blipFill><a:effectLst/></p:bgPr>`;
+        const deck = deckOf({
+            masters: [
+                { bg: picture('<a:stretch><a:fillRect/></a:stretch>'), rels: rel('rId7', 'image', '../media/bg.png') },
+            ],
+            slides: [{}, {}],
+            files: { 'ppt/media/bg.png': PIXEL_PNG },
+        });
+        expect(deck.media).toHaveLength(1);
+        expect(deck.media[0].name).toMatch(/^pptx-[0-9a-f]{8}-image-1\.png$/);
+        for (const slide of deck.slides)
+            expect(slide.background).toEqual({ type: 'image', mediaName: deck.media[0].name, fit: 'cover' });
+        expect(deck.warnings).toEqual([]);
+
+        const tiled = deckOf({
+            slides: [
+                {
+                    bg: picture('<a:tile tx="0" ty="0" sx="100000" sy="100000"/>'),
+                    rels: rel('rId7', 'image', '../media/bg.png'),
+                },
+            ],
+            files: { 'ppt/media/bg.png': PIXEL_PNG },
+        });
+        expect(tiled.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
+        expect(tiled.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+    });
+
+    test("a background picture the deck can't show is none, and counted; a bgRef's picture is named by the theme", () => {
+        const emf = deckOf({
+            slides: [
+                {
+                    bg: '<p:bgPr><a:blipFill><a:blip r:embed="rId7"/><a:stretch/></a:blipFill></p:bgPr>',
+                    rels: rel('rId7', 'image', '../media/bg.emf'),
+                },
+            ],
+            files: { 'ppt/media/bg.emf': new Uint8Array(4) },
+        });
+        expect(emf.slides[0].background).toBeNull();
+        expect(emf.media).toEqual([]);
+        expect(emf.warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+
+        const theme = THEME.replace(
+            '<a:bgFillStyleLst>',
+            '<a:bgFillStyleLst><a:blipFill><a:blip r:embed="rId9"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>',
+        );
+        const themed = deckOf({
+            theme,
+            themeRels: rel('rId9', 'image', '../media/theme.png'),
+            masters: [{ bg: '<p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef>' }],
+            slides: [{}],
+            files: { 'ppt/media/theme.png': PIXEL_PNG },
+        });
+        expect(themed.slides[0].background).toEqual({ type: 'image', mediaName: themed.media[0].name, fit: 'cover' });
     });
 });

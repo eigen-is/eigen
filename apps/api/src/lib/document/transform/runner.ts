@@ -155,6 +155,7 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'diagrams-dropped': (w) => typeof w['count'] === 'number',
     'objects-dropped': (w) => typeof w['count'] === 'number',
     'shapes-simplified': (w) => typeof w['count'] === 'number',
+    'fills-simplified': (w) => typeof w['count'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {

@@ -17,6 +17,9 @@ import {
     rel,
     solid,
     sp,
+    styleRef,
+    styleRefs,
+    THEME,
     xfrm,
 } from '../../fixtures/pptx';
 
@@ -237,6 +240,41 @@ describe('paint', () => {
         expect(JSON.parse(String(element(group)?.fill))).toMatchObject({ color: '#123456' });
     });
 
+    test('a pattern fills in its foreground colour, and says so', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: sp({
+                        xfrm: box(0, 0, 10, 10),
+                        spPr: '<a:pattFill prst="pct20"><a:fgClr><a:schemeClr val="accent3"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill>',
+                    }),
+                },
+            ],
+        });
+        expect(JSON.parse(String(deck.slides[0].elements[0].fill))).toMatchObject({ color: '#9bbb59' });
+        expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
+    });
+
+    test('a picture fill on a shape is dropped, and counted', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: sp({
+                        xfrm: box(0, 0, 10, 10),
+                        spPr: `<a:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:ln>${solid('000000')}</a:ln>`,
+                    }),
+                    rels: rel('rId2', 'image', '../media/a.png'),
+                },
+            ],
+            files: { 'ppt/media/a.png': PIXEL_PNG },
+        });
+        const [found] = deck.slides[0].elements;
+        expect(JSON.parse(String(found.fill))).toMatchObject({ color: 'transparent' });
+        expect(found.strokeColor).toBe('#000000');
+        expect(deck.media).toEqual([]);
+        expect(deck.warnings).toContainEqual({ code: 'images-unshown', count: 1 });
+    });
+
     test('dots and dashes map to the dotted and dashed strokes', () => {
         const stroke = (dash: string) =>
             element(sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:ln>${solid('000000')}<a:prstDash val="${dash}"/></a:ln>` }))
@@ -248,6 +286,147 @@ describe('paint', () => {
             'dashed',
             'dashed',
         ]);
+    });
+});
+
+describe('style references', () => {
+    const fillOf = (found: NewVectorElement | undefined) => JSON.parse(String(found?.fill)).color;
+    const shape = (style: string, spPr = '') => element(sp({ xfrm: box(0, 0, 100, 50), spPr, style }));
+
+    test("a fillRef paints its fillStyleLst entry in the reference's colour, the entry's transforms on top", () => {
+        expect(fillOf(shape(styleRefs(1, 0)))).toBe('#c0504d');
+        expect(fillOf(shape(styleRefs(2, 0)))).toBe('#e2c2c2');
+        expect(fillOf(shape(styleRefs(3, 0)))).toBe('#8e3b39');
+        const translucent = '<a:schemeClr val="accent1"><a:alpha val="50000"/></a:schemeClr>';
+        expect(fillOf(shape(styleRefs(1, 0, translucent)))).toBe('#4f81bd80');
+    });
+
+    test('fillRef 0 is no fill, 1001 and up a bgFillStyleLst entry, and past the list nothing', () => {
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(0, 0) }))).toEqual([]);
+        expect(fillOf(shape(styleRefs(1002, 0)))).toBe('#abcdef');
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(9, 0) }))).toEqual([]);
+    });
+
+    test("an lnRef strokes with its lnStyleLst entry's width and the reference's colour", () => {
+        const found = shape(styleRefs(0, 2, '<a:srgbClr val="00FF00"/>'));
+        expect(found).toMatchObject({ type: 'rectangle', strokeColor: '#00ff00', strokeStyle: 'solid' });
+        expect(found?.strokeWidth).toBeCloseTo(4, 6);
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(0, 0) }))).toEqual([]);
+    });
+
+    test('an explicit fill and a:ln win, attribute by attribute: what the a:ln leaves out comes from the style', () => {
+        const found = shape(styleRefs(1, 3), `${solid('123456')}<a:ln w="12700"><a:prstDash val="dash"/></a:ln>`);
+        expect(fillOf(found)).toBe('#123456');
+        expect(found).toMatchObject({ strokeColor: '#c0504d', strokeStyle: 'dashed' });
+        expect(found?.strokeWidth).toBeCloseTo(2, 6);
+        expect(shape(styleRefs(1, 3), '<a:ln><a:noFill/></a:ln>')?.strokeColor).toBe('transparent');
+        expect(fillOf(shape(styleRefs(1, 3), '<a:noFill/>'))).toBe('transparent');
+    });
+
+    test('a shape with neither a:ln nor p:style has no stroke, nor one whose a:ln states no colour', () => {
+        expect(element(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED }))?.strokeColor).toBe('transparent');
+        expect(element(sp({ xfrm: box(0, 0, 10, 10), spPr: `${FILLED}<a:ln w="25400"/>` }))?.strokeColor).toBe(
+            'transparent',
+        );
+    });
+
+    test("a connector draws in its lnRef's line, its ends from its own a:ln", () => {
+        const found = element(
+            cxn({
+                xfrm: box(0, 0, 100, 0),
+                ln: '<a:ln><a:tailEnd type="triangle"/></a:ln>',
+                style: styleRefs(0, 1, '<a:schemeClr val="accent1"/>'),
+            }),
+        );
+        expect(found).toMatchObject({ type: 'arrow', strokeColor: '#4f81bd', endArrowhead: 'triangle' });
+        expect(found?.strokeWidth).toBeCloseTo(1.5, 6);
+    });
+
+    test("a placeholder with no style of its own takes its layout placeholder's", () => {
+        const placeholder = (style?: string) =>
+            sp({ ph: '<p:ph type="body" idx="1"/>', xfrm: box(0, 0, 10, 10), style });
+        const [found] = deckOf({
+            layouts: [{ shapes: placeholder(styleRef('fillRef', 1, '<a:srgbClr val="FF8800"/>')) }],
+            slides: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>' }) }],
+        }).slides[0].elements;
+        expect(fillOf(found)).toBe('#ff8800');
+    });
+});
+
+describe('gradients', () => {
+    const stop = (pos: number, color: string) => `<a:gs pos="${pos}">${color}</a:gs>`;
+    const RED = '<a:srgbClr val="FF0000"/>';
+    const BLUE = '<a:srgbClr val="0000FF"/>';
+    const grad = (shade: string, stops = stop(0, RED) + stop(100000, BLUE)) =>
+        `<a:gradFill rotWithShape="1"><a:gsLst>${stops}</a:gsLst>${shade}</a:gradFill>`;
+    const fillOf = (spPr: string, width = 200, height = 100) =>
+        JSON.parse(String(element(sp({ xfrm: box(0, 0, width, height), spPr }))?.fill));
+
+    test('two stops, the ends of the ramp, through the theme, alpha kept, no colour-space correction', () => {
+        const found = fillOf(
+            grad(
+                '<a:lin ang="0" scaled="1"/>',
+                stop(0, '<a:schemeClr val="accent1"/>') +
+                    stop(40000, '<a:srgbClr val="00FF00"/>') +
+                    stop(100000, '<a:srgbClr val="0000FF"><a:alpha val="25000"/></a:srgbClr>'),
+            ),
+        );
+        expect(found).toEqual({ type: 'gradient', from: '#4f81bd', to: '#0000ff40', angle: 90, style: 'solid' });
+    });
+
+    test('the stops are taken by position, as PowerPoint sorts them; one stop is a solid fill', () => {
+        expect(fillOf(grad('<a:lin ang="0"/>', stop(100000, BLUE) + stop(0, RED)))).toMatchObject({
+            from: '#ff0000',
+            to: '#0000ff',
+        });
+        expect(fillOf(grad('', stop(50000, BLUE)))).toEqual({ type: 'solid', color: '#0000ff', style: 'solid' });
+    });
+
+    test("a scaled angle is the canvas's box-unit one, a quarter turn on from DrawingML's", () => {
+        expect(fillOf(grad('<a:lin ang="0" scaled="1"/>')).angle).toBeCloseTo(90, 6);
+        expect(fillOf(grad('<a:lin ang="5400000" scaled="1"/>')).angle).toBeCloseTo(180, 6);
+        expect(fillOf(grad('<a:lin ang="2700000" scaled="1"/>')).angle).toBeCloseTo(135, 6);
+    });
+
+    test("an unscaled angle is the true one, mapped through the box onto the canvas's box units", () => {
+        // 45° true on a 2:1 box: the box-unit line whose isolines the box maps onto the true ones.
+        const along = (Math.atan2(2, -1) * 180) / Math.PI;
+        expect(fillOf(grad('<a:lin ang="2700000" scaled="0"/>')).angle).toBeCloseTo(along, 2);
+        expect(fillOf(grad('<a:lin ang="2700000"/>')).angle).toBeCloseTo(along, 2);
+        expect(fillOf(grad('<a:lin ang="2700000"/>'), 100, 100).angle).toBeCloseTo(135, 6);
+        expect(fillOf(grad('<a:lin ang="5400000"/>')).angle).toBeCloseTo(180, 6);
+    });
+
+    test("a path gradient is the same two stops along DrawingML's default angle, and says so", () => {
+        const deck = deckOf({
+            slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: grad('<a:path path="circle"/>') }) }],
+        });
+        expect(JSON.parse(String(deck.slides[0].elements[0].fill))).toMatchObject({
+            type: 'gradient',
+            from: '#ff0000',
+            to: '#0000ff',
+            angle: 90,
+        });
+        expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
+    });
+
+    test("a style matrix gradient paints its stops in the reference's colour", () => {
+        const theme = THEME.replace(
+            '<a:fillStyleLst>',
+            `<a:fillStyleLst>${grad('<a:lin ang="0" scaled="1"/>', stop(0, '<a:schemeClr val="phClr"><a:tint val="0"/></a:schemeClr>') + stop(100000, '<a:schemeClr val="phClr"/>'))}`,
+        );
+        const found = element(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(1, 0, '<a:srgbClr val="FF0000"/>') }), {
+            theme,
+        });
+        expect(JSON.parse(String(found?.fill))).toMatchObject({ from: '#ffffff', to: '#ff0000' });
+    });
+
+    test("a gradient line strokes in its first stop's colour, and says so", () => {
+        const deck = deckOf({
+            slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:ln>${grad('<a:lin ang="0"/>')}</a:ln>` }) }],
+        });
+        expect(deck.slides[0].elements[0]?.strokeColor).toBe('#ff0000');
+        expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
     });
 });
 
