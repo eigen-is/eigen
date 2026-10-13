@@ -59,7 +59,15 @@ const field = () => document.querySelector('textarea[aria-label="LaTeX"]');
 
 test('Insert › Equation puts an equation at the caret and focuses its panel’s field', async () => {
     const editor = await mount();
+    // A browser runs a frame's callbacks after React's effects, where the test window runs them inline.
+    const frames: FrameRequestCallback[] = [];
+    const inline = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (callback) => frames.push(callback);
     await act(async () => state?.insertEquation?.());
+    globalThis.requestAnimationFrame = inline;
+    await act(async () => {
+        for (const callback of frames) callback(0);
+    });
 
     expect(closePanels).toHaveBeenCalled();
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });

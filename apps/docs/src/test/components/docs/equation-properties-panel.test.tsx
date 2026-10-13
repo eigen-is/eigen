@@ -117,6 +117,12 @@ test('a draft previews without writing the equation', async () => {
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
 });
 
+test('the preview draws an empty argument as a dotted box', async () => {
+    await mount();
+    await type('\\frac{}{}');
+    expect([...(preview()?.querySelectorAll('mfrac > mtext.equation-slot') ?? [])]).toHaveLength(2);
+});
+
 test('Enter writes the draft with its LaTeX and puts the caret after the equation', async () => {
     const editor = await mount();
     const draft = 'x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}';

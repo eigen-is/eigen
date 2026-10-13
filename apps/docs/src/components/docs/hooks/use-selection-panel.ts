@@ -55,10 +55,11 @@ export function useSelectionPanel(
         setFocusEquationField(true);
     };
 
-    // The comments panel would hold the slot the new equation's panel needs.
+    // The comments panel would hold the slot the new equation's panel needs. No editor focus: Tiptap's comes a frame
+    // after the field's.
     const insertEquation = () => {
         closePanels();
-        editor?.chain().focus().insertEquation().run();
+        editor?.commands.insertEquation();
         editEquation();
     };
 

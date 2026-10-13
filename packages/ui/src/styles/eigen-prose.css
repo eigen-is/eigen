@@ -582,6 +582,16 @@ math {
     font-family: "STIX Two Math", math;
 }
 
+/* MathML's own cell spacing, which Tailwind's reset takes away, so a matrix's columns touch. An equations table's
+   cells meet at their alignment point, as Word's do. */
+mtd {
+    padding: 0.5ex 0.4em;
+}
+
+mtable[columnalign] > mtr > mtd {
+    padding-inline: 0;
+}
+
 /* The writer aligns an equations table as Word's & marks do: right of the first, left of the next, by turns. Browsers
    leave columnalign to CSS and centre every cell. */
 mtable[columnalign] > mtr > mtd:nth-child(odd) {
@@ -677,6 +687,8 @@ mtable[columnalign] > mtr > mtd:nth-child(even) {
     justify-content: center;
     width: 100%;
     vertical-align: bottom;
+    /* Two in a row part by a paragraph's gap (p + p), or one's limits touch the next. */
+    margin-block: 0.25em;
 }
 
 /* An empty equation, in the editor and its panel. */
@@ -686,6 +698,11 @@ mtable[columnalign] > mtr > mtd:nth-child(even) {
     height: 1em;
     vertical-align: -0.15em;
     border: 1px dashed currentColor;
+    opacity: 0.5;
+}
+
+/* An empty argument's box, which only the editor and its panel draw. */
+.equation-slot {
     opacity: 0.5;
 }
 

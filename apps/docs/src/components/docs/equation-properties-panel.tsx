@@ -2,7 +2,7 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { equationMath, readEquation } from '@workspace/lib/docs/eigendoc';
-import { LATEX_COMMANDS, MathError, readLatex, writeLatex, writeMathml } from '@workspace/math';
+import { LATEX_COMMANDS, MathError, type MathRow, readLatex, writeLatex, writeMathml } from '@workspace/math';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -20,15 +20,17 @@ import { Textarea } from '@workspace/ui/components/textarea';
 import { Rows3 } from 'lucide-react';
 import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EQUATION_MENUS } from './equation-menus';
-import { MathMount } from './extensions/equation';
+import { drawnMath, MathMount } from './extensions/equation';
 
-type Read = { mathml: string; empty: boolean; error?: undefined } | { mathml?: undefined; error: MathError };
+type Read =
+    | { mathml: string; row: MathRow; error?: undefined }
+    | { mathml?: undefined; row?: undefined; error: MathError };
 
 // The MathML a draft commits as, its LaTeX the annotation, or where the reader stopped.
 function readDraft(latex: string): Read {
     try {
         const row = readLatex(latex);
-        return { mathml: writeMathml(row, latex), empty: row.length === 0 };
+        return { mathml: writeMathml(row, latex), row };
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
         return { error };
@@ -90,15 +92,14 @@ type EquationPropertiesPanelProps = {
 // equation, a collaborator typing above it, and through a peer's write to it, the last writer winning.
 export function EquationPropertiesPanel({ editor, fieldRef }: EquationPropertiesPanelProps) {
     // useEditor re-renders on no transaction, and a write that keeps the equation selected fires no selectionUpdate.
-    const { latex, mathml, empty, display } = useEditorState({
+    const { latex, stored, display } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const equation = readEquation(shownEquation(e.state)?.node.attrs ?? {});
             return {
                 // An equation from Word carries no LaTeX, so the field starts from the tree's.
                 latex: equation.latex ?? writeLatex(equation.row),
-                mathml: equation.mathml,
-                empty: equation.row.length === 0,
+                stored: equation.row,
                 display: equation.display,
             };
         },
@@ -118,11 +119,8 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
     const text = draft?.text ?? latex;
     const read = useMemo(() => readDraft(text), [text]);
     // A draft that doesn't parse previews the equation as it stands.
-    const shown = read.error ? { mathml, empty } : read;
-    const preview = useMemo(
-        () => (shown.empty ? null : equationMath({ mathml: shown.mathml, display })),
-        [shown.mathml, shown.empty, display],
-    );
+    const row = read.row ?? stored;
+    const preview = useMemo(() => (row.length === 0 ? null : drawnMath({ row, display })), [row, display]);
 
     // An edit puts the caret where it typed, after React writes the field.
     useLayoutEffect(() => {
