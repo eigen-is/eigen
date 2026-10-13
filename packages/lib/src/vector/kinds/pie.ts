@@ -61,10 +61,10 @@ export const pieKind = defineKind<VectorPieElement>({
     render: (el) => ({ svg: renderRoughShape(el) }),
 });
 
-// A sweep of 0 is the whole ellipse, as OOXML's pie draws equal angles; a negative one is malformed.
+// A slice of nothing is malformed, not empty: a chart leaves a zero value out.
 function sweepField(v: unknown): number {
     const sweep = num(v, DEFAULT_SWEEP_ANGLE);
-    return sweep > 0 ? Math.min(sweep, 360) : sweep === 0 ? 360 : DEFAULT_SWEEP_ANGLE;
+    return sweep > 0 ? Math.min(sweep, 360) : DEFAULT_SWEEP_ANGLE;
 }
 
 function onEllipse(c: Point, rx: number, ry: number, deg: number): Point {
