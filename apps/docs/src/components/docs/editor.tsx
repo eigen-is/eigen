@@ -65,7 +65,16 @@ import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
-import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
+import {
+    addCommentAnchor,
+    CommentMark,
+    commentAnchorText,
+    nodeCommentCardId,
+    removeCommentAnchors,
+    selectCommentAnchor,
+    updateCommentDecorations,
+} from './extensions/comment-mark';
+import { Equation } from './extensions/equation';
 import { Figure } from './extensions/figure';
 import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
@@ -76,14 +85,6 @@ import { usePageSetup } from './hooks/use-page-setup';
 import { createDocUndoManager, writePageSetup } from './page-setup';
 import { cleanPastedHTML } from './paste';
 import { TablePropertiesPanel } from './table-properties-panel';
-
-function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
-    const anchors: { node: Node; pos: number; end: number }[] = [];
-    doc.descendants((node, pos) => {
-        if (nodeCommentCardId(node) === cardId) anchors.push({ node, pos, end: pos + node.nodeSize });
-    });
-    return anchors;
-}
 
 function swapFigureMediaName(editor: Editor, pendingName: string, newName: string | null) {
     const positions: number[] = [];
@@ -324,7 +325,7 @@ const TiptapEditor = ({
         {
             editable: canWrite,
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'equation', 'comment', 'table'] }),
                 // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
                 // drags nothing, and a tap beside a border would start a drag that swallows the caret.
                 EditorTable.configure({ resizable: !isCoarsePointer }),
@@ -332,6 +333,7 @@ const TiptapEditor = ({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 }),
+                Equation,
                 TableWidthClamp,
                 SearchHighlight,
                 CommentMark.configure({
@@ -565,41 +567,16 @@ const TiptapEditor = ({
     };
 
     const removeCommentMarks = (cardId: string) => {
-        if (!editor) return;
-        const { tr } = editor.state;
-        const commentType = editor.state.schema.marks.comment;
-        for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
-            if (node.type.name === 'figure') tr.setNodeAttribute(pos, 'commentCardId', null);
-            else tr.removeMark(pos, end, commentType);
-        }
-        editor.view.dispatch(tr);
+        if (editor) removeCommentAnchors(editor, cardId);
     };
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) => {
-                const node = editor.state.doc.nodeAt(range.from);
-                if (node?.type.name === 'figure' && range.to === range.from + node.nodeSize) {
-                    editor.view.dispatch(editor.state.tr.setNodeAttribute(range.from, 'commentCardId', card.id));
-                    return;
-                }
-                editor
-                    .chain()
-                    .focus()
-                    .setTextSelection({ from: range.from, to: range.to })
-                    .setComment(card.id)
-                    // A figure the selection spans would keep the mark only until reload; it anchors by attribute.
-                    .command(({ tr }) => {
-                        tr.doc.nodesBetween(range.from, range.to, (n, pos) => {
-                            if (n.type.name === 'figure')
-                                tr.removeMark(pos, pos + n.nodeSize, n.type.schema.marks.comment);
-                        });
-                        return true;
-                    })
-                    .run();
-            });
+            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) =>
+                addCommentAnchor(editor, range, card.id),
+            );
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
@@ -694,21 +671,12 @@ const TiptapEditor = ({
 
     if (!editor) return null;
 
-    const handleScrollToComment = (cardId: string) => {
-        const anchors = findCommentAnchors(editor.state.doc, cardId);
-        if (anchors.length === 0) return;
-        const { node, pos } = anchors[0];
-        const chain = editor.chain().focus();
-        const selected = node.type.name === 'figure' ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
-        selected.scrollIntoView().run();
-    };
-
     // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
     // the editor, so it just opens the card.
     const openCard = (cardId: string) => {
         if (!isMobile) {
             openComments();
-            handleScrollToComment(cardId);
+            selectCommentAnchor(editor, cardId);
         }
         setOpenCardId(cardId);
     };
@@ -734,7 +702,7 @@ const TiptapEditor = ({
             if (!cardId) return;
             openComments();
             // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
-            if (!isMobile) handleScrollToComment(cardId);
+            if (!isMobile) selectCommentAnchor(editor, cardId);
             setOpenCardId(cardId);
         },
     };

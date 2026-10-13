@@ -67,7 +67,7 @@ test("a figure's caption counts, its alt text and media name do not", () => {
 });
 
 // Its LaTeX until the package writes an equation's linear text; an equation stored without one counts nothing.
-test('an equation counts its LaTeX as a word of its own', () => {
+test("an equation's LaTeX counts as words apart from the text beside it", () => {
     const equation = (latex?: string) => ({
         type: 'equation',
         attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'x' }], latex) },
