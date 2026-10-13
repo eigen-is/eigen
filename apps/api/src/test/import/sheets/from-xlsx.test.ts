@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
+import { openZip, writeZip } from '../../../lib/core/zip';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
@@ -596,6 +597,18 @@ describe("the reader's output budget", () => {
         const fits = Math.floor(MAX_GRID_SLOTS / (100 * 16_384));
         expect(xlsxToSheets(wide(fits))).toHaveLength(fits);
         expect(refused(wide(fits + 1))).toEqual({ status: 413, message: 'Spreadsheet too large' });
+    });
+
+    // Imported, a workbook of no sheets would replace a document's with none.
+    test('a workbook without a sheet it can read is no xlsx file', () => {
+        const fixture = xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><v>1</v></c></row>' }] });
+        const without = writeZip(
+            [...openZip(fixture).files()]
+                .filter(([name]) => name !== 'xl/worksheets/sheet1.xml')
+                .map(([name, read]) => ({ name, data: read() })),
+        );
+        expect(refused(without)).toEqual({ status: 400, message: 'Not a valid xlsx file' });
+        expect(refused(xlsxFixture({ sheets: [] }))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
     });
 
     test("the zip's and the XML's refusals speak of a spreadsheet", () => {

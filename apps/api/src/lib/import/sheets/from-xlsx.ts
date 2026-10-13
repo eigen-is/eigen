@@ -120,6 +120,8 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             };
             sheets.push(sheet);
         }
+        // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
+        if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
         return sheets;
     } catch (error) {
         throw importError(error, 'xlsx');
