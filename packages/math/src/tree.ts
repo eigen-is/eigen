@@ -64,15 +64,18 @@ export type MathBudget = { size: number };
 
 // The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 30× headroom.
 const SIZE = 10_000;
+// LaTeX takes two to five characters a unit; the longest of the 45 study formulas is 110.
+const LATEX_LENGTH = 4 * SIZE;
 
 export const MATH_LIMITS = {
     // Levels a reader walks: a node's row, or an element it reads through.
     depth: 32,
     // Every node, row, table row and character of text counts one.
     size: SIZE,
-    // The largest admitted tree's MathML: a unit writes at most 64 characters (an menclose drawing every line),
-    // plus the root.
-    mathmlLength: 64 * SIZE + 256,
+    latexLength: LATEX_LENGTH,
+    // The largest admitted tree's MathML: a unit writes at most 64 characters (an menclose drawing every line), plus
+    // the longest LaTeX annotation with each character escaped to at most six (&quot;), plus the root and semantics.
+    mathmlLength: 64 * SIZE + 6 * LATEX_LENGTH + 512,
 } as const;
 
 // Every reader calls this as it builds: at each level it walks, and for each node, row and character it makes.

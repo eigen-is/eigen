@@ -112,6 +112,8 @@ function readScripts(
 ): { sub?: MathRow; sup?: MathRow } {
     const scripts: { sub?: MathRow; sup?: MathRow } = {};
     for (const [index, slot] of slots.entries()) {
+        // An absent prescript is <none/>: no row, so the size counts what the tree holds.
+        if (is(children[index], 'none')) continue;
         const script = optional(readArgument(children[index], budget, depth));
         if (script) scripts[slot] = script;
     }
