@@ -91,7 +91,7 @@ describe('renderCanvasPage', () => {
         expect(html).toContain(
             '<div class="canvas-page" style="position:relative;overflow:hidden;width:120px;height:80px"',
         );
-        expect(html).toContain('<div style="position:absolute;top:10px;left:10px;width:120px;height:80px">');
+        expect(html).toContain('transform:scale(1) translate(10px,10px);transform-origin:0 0');
     });
 
     test('scale multiplies the page box but never the layer geometry', () => {
@@ -99,7 +99,7 @@ describe('renderCanvasPage', () => {
         if (!page) throw new Error('expected a page');
         const html = renderCanvasPage(page, 0.5);
         expect(html).toContain('width:60px;height:40px');
-        expect(html).toContain('top:5px;left:5px;width:120px;height:80px;transform:scale(0.5);transform-origin:0 0');
+        expect(html).toContain('transform:scale(0.5) translate(10px,10px)');
         // The layer is still authored in scene pixels — the scene wrapper is what shrinks it.
         expect(html).toContain('width:100px;height:60px;transform:translate(0px,0px)');
     });
@@ -113,7 +113,7 @@ describe('renderCanvasPage', () => {
         const scale = 960 / page.width;
         const html = renderCanvasPage(page, scale);
         expect(html).toContain('width:960px');
-        expect(html).toContain(`transform:scale(${scale});`);
+        expect(html).toContain(`transform:scale(${scale}) `);
         expect(html).not.toContain('scale(0.33)');
     });
 

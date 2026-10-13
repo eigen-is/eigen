@@ -96,15 +96,17 @@ export function sceneBackground(scene: VectorScene): BackgroundFill | null {
 // once. The resolver is only for a frame's IMAGE background — a drawing's background is a color token,
 // so those callers pass nothing.
 export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
+    // scale first, then translate: the shift is expressed in scene units and rides the scale.
     const sceneStyle = [
         'position:absolute',
-        `top:${round(-page.originY * scale)}px`,
-        `left:${round(-page.originX * scale)}px`,
+        'top:0',
+        'left:0',
         `width:${round(page.width)}px`,
         `height:${round(page.height)}px`,
         // The scale is NOT rounded: the page box above is `width * scale`, so a 2-dp scale on an
         // awkward ratio (960 / 2870) would leave a gutter between the scene and the page edge.
-        ...(scale === 1 ? [] : [`transform:scale(${scale})`, 'transform-origin:0 0']),
+        `transform:scale(${scale}) translate(${round(-page.originX)}px,${round(-page.originY)}px)`,
+        'transform-origin:0 0',
     ];
     const body = page.layers
         .map((layer) => renderLayer(layer, { top: '0', left: '0', ...layerBoxCss(layer) }))
