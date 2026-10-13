@@ -103,3 +103,19 @@ test("scrolling to an equation's card selects the equation", () => {
     expect(selection instanceof NodeSelection && selection.node.type.name).toBe('equation');
     editor.destroy();
 });
+
+// A page number holds no card attribute, so a card never anchors on one by attribute.
+test('a page number anchors no card by attribute, and a card on one selected alone sets none', () => {
+    const editor = new Editor({
+        extensions: [...getDocExtensions(), AtomMarks],
+        content: docOf(text('a '), { type: 'pageNumber', attrs: { kind: 'page' } }),
+    });
+    const node = editor.state.doc.nodeAt(3);
+    expect(node && nodeCommentCardId(node)).toBeNull();
+    expect(() => addCommentAnchor(editor, { from: 3, to: 4 }, 'card-1')).not.toThrow();
+    expect(anchors(editor.state.doc)).toEqual([
+        ['a ', null, null],
+        ['pageNumber', null, null],
+    ]);
+    editor.destroy();
+});

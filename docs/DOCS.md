@@ -169,7 +169,7 @@ The toolbar lights a button when the whole selection carries the mark or sits in
 
 ## A comment anchors on text as a mark and on a figure or an equation as an attribute
 
-A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure or an equation, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form, and `addCommentAnchor`, `removeCommentAnchors` and `selectCommentAnchor` in `extensions/comment-mark.ts` set, clear and select either. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
+A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure or an equation, because the Yjs binding keeps a mark only on text. A node anchors by attribute when its schema gives it `commentCardId`, so a page number, which has none, anchors no card. `nodeCommentCardId` reads either form, and `addCommentAnchor`, `removeCommentAnchors` and `selectCommentAnchor` in `extensions/comment-mark.ts` set, clear and select either. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
 
 ## A docs copy with an image writes its items in order, and a docs paste reads its HTML
 

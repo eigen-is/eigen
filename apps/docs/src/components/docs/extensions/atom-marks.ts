@@ -2,7 +2,7 @@ import { combineTransactionSteps, Extension, getChangedRanges } from '@tiptap/co
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
 // The inline atoms the Yjs binding persists no mark on: it keeps a mark only on text.
-export const MARKLESS_ATOMS: ReadonlySet<string> = new Set(['figure', 'equation', 'pageNumber']);
+const MARKLESS_ATOMS: ReadonlySet<string> = new Set(['figure', 'equation', 'pageNumber']);
 
 export const AtomMarks = Extension.create({
     name: 'atomMarks',

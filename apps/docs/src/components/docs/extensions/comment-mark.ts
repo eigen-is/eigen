@@ -5,7 +5,6 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
-import { MARKLESS_ATOMS } from './atom-marks';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -22,8 +21,9 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// An image or an equation holds its card as an attribute: the Yjs binding persists a mark only on text.
-const anchorsByAttribute = (node: Node): boolean => MARKLESS_ATOMS.has(node.type.name);
+// A node whose schema gives it a commentCardId, an image or an equation, holds its card there: the Yjs binding persists
+// a mark only on text.
+const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
 
 // The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
