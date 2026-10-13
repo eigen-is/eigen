@@ -38,7 +38,12 @@ import { richTextOf } from './text';
 
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;
-export const MAX_MEDIA_PARTS = 1000;
+
+// An element is a Y.Map of about twenty fields, and a string costs per character besides: the weight caps both before
+// the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 3,307 (a 2.4 MB
+// update); at the cap a text-heavy update is about 25 MB and commits in 135 ms.
+export const MAX_PPTX_WEIGHT = 50_000;
+const CHARS_PER_UNIT = 512;
 
 // How an imported element looks where the file says nothing: crisp, unframed, unfilled, never the editor's rounding.
 export const PPTX_STYLE: StyleDefaults = {
@@ -87,9 +92,11 @@ export type DeckWalk = {
     // The frame's px per EMU, and where the slide's origin lands in the frame.
     scale: number;
     offset: { x: number; y: number };
-    // Shapes walked and elements written, each capped: a master's shapes are walked again for every slide.
+    // Children walked and elements written, each capped: a master's shapes are walked again for every slide.
     shapes: number;
     elements: number;
+    // The update's weight so far, charged as each frame and element is written.
+    weight: number;
     // A picture part's media name, the first time a slide shows it.
     mediaName(part: MediaPart): string;
     dropped: Map<CountedWarningCode, number>;
@@ -216,6 +223,8 @@ type Walk = {
 
 export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, presentation: Part): SlideShapes {
     const out: SlideShapes = { elements: [], title: '' };
+    // The frame: its name, a title of at most 100 characters, weighs nothing besides.
+    weigh(deck, 1);
     const root: Affine = [deck.scale, 0, 0, deck.scale, deck.offset.x, deck.offset.y];
     for (const part of [...decorationsOf(inheritance), inheritance.slide]) {
         const tree = spTreeOf(part.root);
@@ -228,12 +237,12 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, p
 function readTree(walk: Walk, shapes: XmlElement[], m: Affine, depth: number, group: FillPaint | undefined): void {
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, PRESENTATION_TOO_LARGE);
     for (const shape of shapes) {
+        if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
         if (isAlternateContent(shape)) {
             readTree(walk, alternative(shape), m, depth + 1, group);
             continue;
         }
         if (shape.ns !== P_NS || !DRAWN.has(shape.local) || isHidden(shape)) continue;
-        if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
         const own = placeholderOf(shape);
         if (walk.copied && own) continue;
         const inherited = own ? inheritedPlaceholders(own, walk.inheritance) : [];
@@ -274,7 +283,16 @@ function xfrmOf(shape: XmlElement): Xfrm | undefined {
 
 function push(walk: Walk, element: NewVectorElement): void {
     if (++walk.deck.elements > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+    let weight = 1;
+    for (const value of Object.values(element))
+        if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+    weigh(walk.deck, weight);
     walk.out.elements.push(element);
+}
+
+function weigh(deck: DeckWalk, weight: number): void {
+    deck.weight += weight;
+    if (deck.weight > MAX_PPTX_WEIGHT) throw new ApiError(413, PRESENTATION_TOO_LARGE);
 }
 
 function readShape(

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { importError, MAX_PPTX_WEIGHT, readPptx } from '../../../lib/import/slides/from-pptx';
+import { importError, MAX_MEDIA_PARTS, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
-import { MAX_ELEMENTS, MAX_MEDIA_PARTS } from '../../../lib/import/slides/shapes';
+import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
 
 // The reader's output and the limits a hostile pptx meets before the work they bound.
@@ -73,17 +73,24 @@ describe('limits', () => {
     });
 
     test(`more than ${MAX_ELEMENTS} elements after the master's are copied is too large`, () => {
-        // The master's 39 shapes and the slide's own on each of 500 slides: 20,000.
-        const master = filled.repeat(39);
-        const slides = Array.from({ length: 500 }, () => ({ shapes: filled }));
+        // The master's 20 ellipses, each with its text on top, on each of 500 slides: 20,000.
+        const master = sp({ xfrm: box(0, 0, 1, 1), geom: 'ellipse', spPr: solid('FF0000'), text: para('x') }).repeat(
+            20,
+        );
+        const slides = Array.from({ length: 500 }, () => ({}));
         expect(refusal(buildPptx({ masters: [{ shapes: master }], slides }))).toBe('read');
-        expect(refusal(buildPptx({ masters: [{ shapes: master + filled }], slides }))).toEqual([413, TOO_LARGE]);
+        const more = Array.from({ length: 500 }, () => ({ shapes: filled }));
+        expect(refusal(buildPptx({ masters: [{ shapes: master }], slides: more }))).toEqual([413, TOO_LARGE]);
     });
 
-    test(`a master's undrawn shapes count too, as they are walked again for every slide`, () => {
-        const unpainted = sp({ xfrm: box(0, 0, 1, 1) }).repeat(41);
+    test('every child the walk visits counts, undrawn, hidden and unknown ones too, as a master is walked again for every slide', () => {
+        // Each slide walks the master's, the layout's and its own tree, each with its two property children.
+        const children = [sp({ xfrm: box(0, 0, 1, 1) }), sp({ xfrm: box(0, 0, 1, 1), hidden: true }), '<p:x/>'];
         const slides = Array.from({ length: 500 }, () => ({}));
-        expect(refusal(buildPptx({ masters: [{ shapes: unpainted }], slides }))).toEqual([413, TOO_LARGE]);
+        for (const child of children) {
+            expect(refusal(buildPptx({ masters: [{ shapes: child.repeat(34) }], slides }))).toBe('read');
+            expect(refusal(buildPptx({ masters: [{ shapes: child.repeat(35) }], slides }))).toEqual([413, TOO_LARGE]);
+        }
     });
 
     test(`more than ${MAX_MEDIA_PARTS} pictures, or more picture bytes than the upload cap, is too large`, () => {
@@ -110,12 +117,19 @@ describe('limits', () => {
         expect(refusal(pictures(3), tight)).toEqual([413, TOO_LARGE]);
     });
 
-    test(`the elements and their text are weighed against ${MAX_PPTX_WEIGHT} before an update is built`, () => {
-        // A master's text, copied onto every slide: four 60,000-character boxes weigh 472 a slide.
+    test(`the elements and their text are weighed against ${MAX_PPTX_WEIGHT} as they are written`, () => {
+        // A master's text, copied onto every slide: four 60,000-character boxes weigh 472 a slide, and its frame 1.
         const big = sp({ xfrm: box(0, 0, 1, 1), txBox: true, text: para('x'.repeat(60_000)) }).repeat(4);
         const slides = (count: number) => Array.from({ length: count }, () => ({}));
-        expect(refusal(buildPptx({ masters: [{ shapes: big }], slides: slides(100) }))).toBe('read');
-        expect(refusal(buildPptx({ masters: [{ shapes: big }], slides: slides(110) }))).toEqual([413, TOO_LARGE]);
+        expect(refusal(buildPptx({ masters: [{ shapes: big }], slides: slides(105) }))).toBe('read');
+        expect(refusal(buildPptx({ masters: [{ shapes: big }], slides: slides(106) }))).toEqual([413, TOO_LARGE]);
+        // Refused at the slide that passes the weight, before a later slide is read.
+        const broken = buildPptx({
+            masters: [{ shapes: big }],
+            slides: slides(107),
+            files: { 'ppt/slides/slide107.xml': '<p:sld' },
+        });
+        expect(refusal(broken)).toEqual([413, TOO_LARGE]);
     });
 
     test('a stack the file outgrew is too large, a slip of the reader is a file it cannot read', () => {

@@ -9,7 +9,7 @@ import type { TransformWarning } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { NOT_A_PPTX, readPackage } from './package';
-import { type DeckWalk, MAX_MEDIA_PARTS, readSlideShapes } from './shapes';
+import { type DeckWalk, readSlideShapes } from './shapes';
 
 // pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
 // process; transform.ts writes the result as a Yjs update.
@@ -27,11 +27,7 @@ export type PptxDeck = {
 
 export type PptxOptions = { width: number; height: number; maxMediaBytes: number };
 
-// An element is a Y.Map of about twenty fields, and a string costs per character besides: the weight caps both before
-// the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 3,307 (a 2.4 MB
-// update); at the cap a text-heavy update is about 25 MB and commits in 135 ms.
-export const MAX_PPTX_WEIGHT = 50_000;
-const CHARS_PER_UNIT = 512;
+export const MAX_MEDIA_PARTS = 1000;
 
 // ST_SlideSizeCoordinate's range, 1 to 56 inches; PowerPoint's 4:3 where the file states none.
 const MIN_SLIDE_EMU = 914_400;
@@ -63,6 +59,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             offset: { x: (options.width - slideSize.cx * scale) / 2, y: (options.height - slideSize.cy * scale) / 2 },
             shapes: 0,
             elements: 0,
+            weight: 0,
             dropped: new Map(),
             mediaName: (part) => {
                 const known = names.get(part.path);
@@ -85,7 +82,6 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             const { elements, title } = readSlideShapes(deck, slide, pkg.presentation);
             return [{ name: title, background: backgroundOf(slide), elements }];
         });
-        if (weightOf(slides) > MAX_PPTX_WEIGHT) throw new ApiError(413, PRESENTATION_TOO_LARGE);
 
         const read = media.flatMap(({ name, path, contentType }): PptxMedia[] => {
             const data = pkg.readMedia(path);
@@ -99,20 +95,6 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     } catch (error) {
         throw importError(error);
     }
-}
-
-// Every element and frame, and every string by its length.
-function weightOf(slides: PptxSlide[]): number {
-    let weight = 0;
-    for (const slide of slides) {
-        weight += 1 + Math.floor(slide.name.length / CHARS_PER_UNIT);
-        for (const element of slide.elements) {
-            weight += 1;
-            for (const value of Object.values(element))
-                if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
-        }
-    }
-    return weight;
 }
 
 // The zip's and the XML's messages speak of archives and markup; the user uploaded a presentation.
