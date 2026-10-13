@@ -65,10 +65,15 @@ export function sp(options: {
     text?: string;
     txBox?: boolean;
     hidden?: boolean;
+    // a:lstStyle's content.
+    lstStyle?: string;
 }): string {
     const id = ids++;
     const geometry = options.geom ? `<a:prstGeom prst="${options.geom}"><a:avLst/></a:prstGeom>` : '';
-    const body = options.text === undefined ? '' : `<p:txBody><a:bodyPr/><a:lstStyle/>${options.text}</p:txBody>`;
+    const body =
+        options.text === undefined
+            ? ''
+            : `<p:txBody><a:bodyPr/><a:lstStyle>${options.lstStyle ?? ''}</a:lstStyle>${options.text}</p:txBody>`;
     return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${options.name ?? `Shape ${id}`}"${options.hidden ? ' hidden="1"' : ''}/><p:cNvSpPr${options.txBox ? ' txBox="1"' : ''}/><p:nvPr>${options.ph ?? ''}</p:nvPr></p:nvSpPr><p:spPr>${options.xfrm ?? ''}${geometry}${options.spPr ?? ''}</p:spPr>${body}</p:sp>`;
 }
 
