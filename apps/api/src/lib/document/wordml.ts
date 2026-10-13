@@ -142,7 +142,7 @@ export const TWIPS_PER_PX = 15;
 
 export const EMU_PER_TWIP = 635;
 
-// ── Vocabulary the readers share ────────────────────────────────────────────────────────────────────────────────
+// ── Borders, fonts, drawings and links ──────────────────────────────────────────────────────────────────────────
 
 // A paragraph's border sides, as pBdr orders them.
 export const BORDER_SIDES = ['top', 'left', 'bottom', 'right'] as const;

@@ -45,7 +45,8 @@ describe('a relationship target', () => {
         expect(relOfType(external, 'image')).toBeUndefined();
     });
 
-    test('a relationship without an Id is skipped; one without a Target or Type names the source folder', () => {
+    // Today's output, not a contract: no reader uses a relationship without a Target.
+    test('a relationship without an Id is skipped; one without a Target or Type reads as the source folder', () => {
         const read = rels(`<Relationship Type="${IMAGE}" Target="media/x.png"/><Relationship Id="rId2"/>`);
         expect([...read]).toEqual([['rId2', { type: '', target: 'word', external: false }]]);
     });
