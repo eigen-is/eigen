@@ -3,7 +3,7 @@
 // through the registry, which imports the chart kind.
 
 import { formatTickValue, layoutChart, layoutChartMessage, parseChartSpec } from '../../charts';
-import type { ChartLayout, ChartPaint } from '../../types/chart';
+import type { ChartLayout, ChartLayoutInput } from '../../types/chart';
 import { parseFill } from '../fill';
 import { round } from '../geometry';
 import type { VectorChartElement, VectorElement } from '../types';
@@ -18,28 +18,37 @@ const UNREADABLE_MESSAGE = "This chart can't be shown";
 const SHAPE_KINDS = [rectangleKind, lineKind, ellipseKind, pieKind];
 
 export function renderChartSvg(el: VectorChartElement): string {
-    const box = { id: el.id, width: el.width, height: el.height, paint: chartPaint(el) };
+    const layout = chartLayout(el);
+    if (layout) return layoutSvg(layout);
+    const outline = `<rect x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" fill="none" stroke="${PLACEHOLDER_COLOR}" stroke-width="1" stroke-dasharray="${PLACEHOLDER_DASH}"/>`;
+    return outline + layoutSvg(layoutChartMessage(chartBox(el), UNREADABLE_MESSAGE));
+}
+
+// What the chart draws, which Convert to shapes unpacks too; null for the placeholder. A canvas has no sheet
+// to read range data from; a malformed spec stays stored for recovery.
+export function chartLayout(el: VectorChartElement): ChartLayout | null {
     const spec = parseChartSpec(el.chart);
-    // A canvas has no sheet to read range data from; a malformed spec stays stored for recovery.
-    if (spec === null || spec.data.source !== 'inline') {
-        const outline = `<rect x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" fill="none" stroke="${PLACEHOLDER_COLOR}" stroke-width="1" stroke-dasharray="${PLACEHOLDER_DASH}"/>`;
-        return outline + layoutSvg(layoutChartMessage(box, UNREADABLE_MESSAGE));
-    }
-    return layoutSvg(layoutChart({ ...box, spec, data: spec.data, formatTick: formatTickValue }));
+    if (spec === null || spec.data.source !== 'inline') return null;
+    return layoutChart({ ...chartBox(el), spec, data: spec.data, formatTick: formatTickValue });
 }
 
 // The fill's paint is the background and its hatch style the marks'; the stroke draws axes and gridlines.
-function chartPaint(el: VectorChartElement): ChartPaint {
+function chartBox(el: VectorChartElement): Pick<ChartLayoutInput, 'id' | 'width' | 'height' | 'paint'> {
     return {
-        fontFamily: el.fontFamily,
-        color: el.color,
-        background: el.fill,
-        strokeColor: el.strokeColor,
-        strokeWidth: el.strokeWidth,
-        strokeStyle: el.strokeStyle,
-        roughness: el.roughness,
-        seed: el.seed,
-        fillStyle: parseFill(el.fill).style,
+        id: el.id,
+        width: el.width,
+        height: el.height,
+        paint: {
+            fontFamily: el.fontFamily,
+            color: el.color,
+            background: el.fill,
+            strokeColor: el.strokeColor,
+            strokeWidth: el.strokeWidth,
+            strokeStyle: el.strokeStyle,
+            roughness: el.roughness,
+            seed: el.seed,
+            fillStyle: parseFill(el.fill).style,
+        },
     };
 }
 
