@@ -166,10 +166,13 @@ export function generateAPIs(
         removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
 
         // One op + undo step each, on the current sheet. The id is made here so the caller can
-        // select the new chart; the recipe runs later.
-        insertChart: (box: ChartBox, spec: ChartSpec) => {
+        // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
+        // a missing sheet apart, which inserts nothing and returns null.
+        insertChart: (box: ChartBox, spec: ChartSpec): string | null => {
             const id = uuidv4();
-            setContext((draftCtx) => insertChart(draftCtx, id, box, spec));
+            const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
+            if (produce(context, recipe) === context) return null;
+            setContext(recipe);
             return id;
         },
 

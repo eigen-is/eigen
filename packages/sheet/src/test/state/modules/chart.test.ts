@@ -80,7 +80,12 @@ function workbook(): Context {
 // One edit as setContextWithProduce records it: the new state, its ops and its undo entry.
 function author(base: Context, recipe: (ctx: Context) => void, options?: PatchOptions) {
     const [next, patches, inverse] = produceWithPatches(base, recipe);
-    return { next, ops: patchToOp(next, filterPatch(patches), options), inverse: filterPatch(inverse) };
+    return {
+        next,
+        ops: patchToOp(next, filterPatch(patches), options),
+        patches: filterPatch(patches),
+        inverse: filterPatch(inverse),
+    };
 }
 
 // A peer applies a batch through the Workbook's own applyOp.
@@ -170,6 +175,46 @@ describe('chart writers', () => {
     });
 });
 
+describe("the Workbook's insertChart", () => {
+    function insertThroughApi(base: Context) {
+        let next = base;
+        const setContext = (recipe: (draft: Context) => void) => {
+            next = produce(next, recipe);
+        };
+        // biome-ignore lint/suspicious/noExplicitAny: insertChart reads no settings
+        const settings = {} as any;
+        const api = generateAPIs(
+            base,
+            setContext,
+            () => {},
+            () => {},
+            settings,
+        );
+        const id = api.insertChart(BOX, sampleChartSpec('bar'));
+        return { id, next };
+    }
+
+    test('returns the id of the chart it inserted', () => {
+        const { id, next } = insertThroughApi(workbook());
+        expect(id).toBeString();
+        expect(next.sheets[0].charts![id!]).toBeDefined();
+    });
+
+    test('returns null and writes nothing for a viewer or without a current sheet', () => {
+        const viewer = produce(workbook(), (ctx: Context) => {
+            ctx.allowEdit = false;
+        });
+        const noSheet = produce(workbook(), (ctx: Context) => {
+            ctx.currentSheetId = 'gone';
+        });
+        for (const base of [viewer, noSheet]) {
+            const { id, next } = insertThroughApi(base);
+            expect(id).toBeNull();
+            expect(next).toBe(base);
+        }
+    });
+});
+
 describe('every sheet entry carries a charts map', () => {
     test('initSheetData and addSheet materialize it', () => {
         const ctx = contextFactory() as Context;
@@ -235,6 +280,67 @@ describe('charts converge over real ops', () => {
         expect(charts(undone.sheets)).toEqual(charts(base.sheets));
         expect(charts(peer.sheets)).toEqual(charts(base.sheets));
         expect(charts(joiner)).toEqual(charts(base.sheets));
+    });
+
+    // Workbook's handleUndo and handleRedo, after a peer typed 42 in T!A1 and moved t1.
+    function undoRedoAfterPeer(base: Context, peerEdit: Op[]) {
+        const del = { type: 'row', start: 3, end: 6, id: S } as const;
+        const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
+        const undone = applyPatches(receive(deleted.next, peerEdit), deleted.inverse);
+        const undoOptions = { ...inverseRowColOptions({ deleteRowColOp: del }), restoreDeletedCells: true };
+        const undoOps = patchToOp(undone, deleted.inverse, undoOptions, true);
+        const redone = applyPatches(undone, deleted.patches);
+        const redoOps = patchToOp(redone, deleted.patches, { deleteRowColOp: del });
+        const peerUndone = receive(receive(receive(base, deleted.ops), peerEdit), undoOps);
+        return {
+            undo: {
+                author: undone.sheets,
+                peer: peerUndone.sheets,
+                joiner: join(base, [deleted.ops, peerEdit, undoOps]),
+            },
+            redo: {
+                author: redone.sheets,
+                peer: receive(peerUndone, redoOps).sheets,
+                joiner: join(base, [deleted.ops, peerEdit, undoOps, redoOps]),
+            },
+        };
+    }
+
+    const peerEdit: Op[] = [
+        { op: 'replace', id: T, path: ['data', 0, 0], value: { v: 42, m: '42' } },
+        { op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 99 },
+    ];
+
+    test("undoing and redoing a row delete keeps a peer's edit on the sheet of a shifted chart", () => {
+        const base = workbook();
+        const { undo, redo } = undoRedoAfterPeer(base, peerEdit);
+        for (const { author, peer, joiner } of [undo, redo]) {
+            for (const sheets of [author, peer, joiner]) expect(sheets[1].data![0][0]).toEqual({ v: 42, m: '42' });
+            expect(charts(peer)).toEqual(charts(author));
+            expect(charts(joiner)).toEqual(charts(author));
+        }
+        expect(rangeData(undo.author, 1, 't1')).toEqual(rangeData(base.sheets, 1, 't1'));
+        expect(rangeData(redo.author, 1, 't1')?.categories).toBeNull();
+    });
+
+    test('an undone row delete brings back a shifted chart a peer deleted, on every client', () => {
+        const { undo, redo } = undoRedoAfterPeer(workbook(), [{ op: 'remove', id: T, path: ['charts', 't1'] }]);
+        for (const { author, peer, joiner } of [undo, redo]) {
+            expect(author[1].charts!.t1).toBeDefined();
+            expect(charts(peer)).toEqual(charts(author));
+            expect(charts(joiner)).toEqual(charts(author));
+        }
+    });
+
+    test('an undone row delete restores a chart on a sheet whose formula moved too, everywhere', () => {
+        const base = workbook();
+        base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
+        const { undo, redo } = undoRedoAfterPeer(base, []);
+        expect(rangeData(undo.author, 1, 't1')).toEqual(rangeData(base.sheets, 1, 't1'));
+        for (const { author, peer, joiner } of [undo, redo]) {
+            expect(charts(peer)).toEqual(charts(author));
+            expect(charts(joiner)).toEqual(charts(author));
+        }
     });
 });
 

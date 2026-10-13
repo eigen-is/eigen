@@ -1,6 +1,7 @@
 export {
     CHART_PALETTE,
     chartColor,
+    chartLabel,
     exceedsInlineGridLimits,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,

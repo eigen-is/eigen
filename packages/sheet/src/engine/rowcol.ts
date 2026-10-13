@@ -1,6 +1,14 @@
-import { parseChartSpec } from '@workspace/lib/charts';
-import { cloneSides, type MergeCell, parseCellKey, type Sheet, type SheetChart } from '@workspace/lib/sheets';
+import {
+    cloneSides,
+    type MergeCell,
+    parseCellKey,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    type Sheet,
+    type SheetChart,
+} from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
 import { functionStrChange } from './formula-shift';
@@ -315,35 +323,30 @@ function shiftChartsAcrossSheets<S extends Sheet>(
     sheetId: string,
     shift: (ref: CellRangeRef) => CellRangeRef | null,
 ): S[] {
+    const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shift(ref) : ref);
     return sheets.map((sheet) => {
         let charts: Record<string, SheetChart> | null = null;
         for (const chart of Object.values(sheet.charts ?? {})) {
-            const spec = parseChartSpec(chart.spec);
-            if (spec?.data.source !== 'range') continue;
-            let moved = false;
-            const move = (ref: CellRangeRef) => {
-                if (ref.sheetId !== sheetId) return ref;
-                const next = shift(ref);
-                if (next !== ref) moved = true;
-                return next;
-            };
-            const { categories, series } = spec.data;
-            const data = {
-                ...spec.data,
-                categories: categories && move(categories),
-                series: series.map((s) => ({
-                    ...s,
-                    // A deleted name cell leaves the series unnamed.
-                    name: typeof s.name === 'string' ? s.name : (move(s.name) ?? ''),
-                    values: s.values && move(s.values),
-                })),
-            };
-            if (!moved) continue;
+            const moved = mapChartRefs(chart, move);
+            if (moved === chart) continue;
             charts ??= { ...sheet.charts };
-            charts[chart.id] = { ...chart, spec: JSON.stringify({ ...spec, data }) };
+            charts[chart.id] = moved;
         }
         return charts ? { ...sheet, charts } : sheet;
     });
+}
+
+// An insert stops a chart ref at the grid's last row or column: parseChartSpec refuses a ref past
+// it, which would leave the chart unreadable for good.
+function clampToGrid(ref: CellRangeRef): CellRangeRef {
+    const lastRow = REFERENCE_ROW_COUNT - 1;
+    const lastColumn = REFERENCE_COLUMN_COUNT - 1;
+    if (ref.row[1] <= lastRow && ref.column[1] <= lastColumn) return ref;
+    return {
+        ...ref,
+        row: [Math.min(ref.row[0], lastRow), Math.min(ref.row[1], lastRow)],
+        column: [Math.min(ref.column[0], lastColumn), Math.min(ref.column[1], lastColumn)],
+    };
 }
 
 // config carries several index-keyed maps (rowlen, rowhidden, customHeight and
@@ -441,7 +444,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
-    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForInsert(ref, op));
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => clampToGrid(shiftRangeForInsert(ref, op)));
 }
 
 function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {

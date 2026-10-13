@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import type { Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
+import {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    type Sheet,
+    type SheetChart,
+    type SheetConfig,
+} from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
@@ -742,6 +748,20 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         const sheets = workbook({ c1: onS() });
         const [s] = applySheetsInsertRowCol(sheets, insertRows(0, 1, 'lefttop', 'T'));
         expect(s.charts!.c1).toBe(sheets[0].charts!.c1);
+    });
+
+    test('an insert stops a ref at the last row and column of the grid', () => {
+        const [rows] = applySheetsInsertRowCol(
+            workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }) }),
+            insertRows(0, 2, 'lefttop'),
+        );
+        expect(valuesRows(rows)).toEqual([2, REFERENCE_ROW_COUNT - 1]);
+        const lastColumn = REFERENCE_COLUMN_COUNT - 1;
+        const [columns] = applySheetsInsertRowCol(
+            workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, 3], [lastColumn, lastColumn]))] }) }),
+            { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 'S' },
+        );
+        expect(rangeData(columns)?.series[0].values?.column).toEqual([lastColumn, lastColumn]);
     });
 
     test('a malformed spec is kept untouched', () => {

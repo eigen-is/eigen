@@ -85,6 +85,24 @@ describe('resolveRangeChartData', () => {
         });
     });
 
+    test('a rich-text label or name reads the text of its runs', () => {
+        const rich = (...runs: string[]): Cell => ({ ct: { t: 'inlineStr', s: runs.map((v) => ({ v, bl: 1 })) } });
+        const richResolver = createArrayResolver([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                data: [[rich('Team ', 'A'), rich('Points')]],
+                calculationChain: [],
+                dynamicArrayCompute: [],
+            },
+        ]);
+        const resolved = resolveRangeChartData(
+            data(ref([0, 0], [0, 0]), series(ref([0, 0], [1, 1]), ref([0, 0], [1, 1]))),
+            richResolver,
+        );
+        expect(resolved).toMatchObject({ categories: ['Team A'], series: [{ name: 'Points' }] });
+    });
+
     test('a long label is cut to the label limit', () => {
         const long = createArrayResolver([
             {

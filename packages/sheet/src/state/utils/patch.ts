@@ -1,4 +1,3 @@
-import { parseChartSpec } from '@workspace/lib/charts';
 import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
@@ -157,11 +156,9 @@ const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['sel
 // `cell.f`). Everything else is small, and shipping an unchanged field as an
 // authoritative replace is a no-op.
 //
-// Undoing a delete ships two things the restoring insert can't re-derive. `calcChain`: the
+// Undoing a delete also ships `calcChain`, which the restoring insert can't re-derive: the
 // delete dropped the removed rows' entries from every peer's calcChain, and without the
-// authoritative copy formulas in restored rows would stop recalculating on peers. And every
-// chart on another sheet that refers to this one: the delete shrank or nulled its refs, and an
-// insert never grows a ref back. This sheet's own charts already ride the `charts` field.
+// authoritative copy formulas in restored rows would stop recalculating on peers.
 function sheetMetadataOps(ctx: Context, id: string, restoringDelete: boolean): Op[] {
     const index = getSheetIndex(ctx, id);
     if (typeof index !== 'number') return [];
@@ -171,18 +168,6 @@ function sheetMetadataOps(ctx: Context, id: string, restoringDelete: boolean): O
         if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field)) continue;
         if (field === 'calcChain' && !restoringDelete) continue;
         metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
-    }
-    if (!restoringDelete) return metaOps;
-    for (const other of ctx.sheets) {
-        if (other.id === id) continue;
-        for (const chart of Object.values(other.charts ?? {})) {
-            const spec = parseChartSpec(chart.spec);
-            if (spec?.data.source !== 'range') continue;
-            const refs = [spec.data.categories, ...spec.data.series.flatMap((s) => [s.values, s.name])];
-            if (refs.some((ref) => ref !== null && typeof ref !== 'string' && ref.sheetId === id)) {
-                metaOps.push({ op: 'replace', id: other.id, path: ['charts', chart.id], value: chart });
-            }
-        }
     }
     return metaOps;
 }
@@ -223,6 +208,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
     });
     if (options?.insertRowColOp) {
+        const wholeSheetIds = ops.filter((p) => p.path.length === 0).map((p) => p.id);
         // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
         ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
         ops.push({
@@ -238,6 +224,16 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         // ['data', r, c, 'mc'] patch can't be applied to a cell that doesn't
         // exist yet on the replay side.
         if (options?.restoreDeletedCells) {
+            // An undone delete brings back whole another sheet whose formulas it moved (writeBackSheets
+            // in rowcol.ts), charts included, and an insert never grows a shrunk or nulled chart ref
+            // back. So that sheet's charts ship one by one; a sheet whose charts alone moved already
+            // has immer's own per-chart patches.
+            for (const sheet of ctx.sheets) {
+                if (sheet.id === options.insertRowColOp.id || !wholeSheetIds.includes(sheet.id)) continue;
+                for (const chart of Object.values(sheet.charts ?? {})) {
+                    ops.push({ op: 'replace', id: sheet.id, path: ['charts', chart.id], value: chart });
+                }
+            }
             // undoing deleted row/col, find out cells to restore
             const restoreCellsOps: Op[] = [];
             const flowdata = getFlowdata(ctx);

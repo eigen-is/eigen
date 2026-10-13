@@ -62,7 +62,7 @@ test('undoing a move of a chart a peer deleted drops the entry and sends nothing
     const { sent, step, charts } = await mountWorkbook();
     let id = '';
     await step((w) => {
-        id = w.insertChart(BOX, sampleChartSpec('column'));
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
     });
     await step((w) => w.updateChartBox(id, { x: 300 }));
     await step((w) => w.applyOp(peerDeletes(id)));
@@ -79,7 +79,7 @@ test('redoing a move of a chart a peer deleted drops the entry', async () => {
     const { sent, step, charts } = await mountWorkbook();
     let id = '';
     await step((w) => {
-        id = w.insertChart(BOX, sampleChartSpec('column'));
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
     });
     await step((w) => w.updateChartBox(id, { x: 300 }));
     await step((w) => w.undo());

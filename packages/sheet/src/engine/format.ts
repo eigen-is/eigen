@@ -16,6 +16,11 @@ export function cellWrapsText(cell: Cell): boolean {
     return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'n' && cell.ct?.t !== 'd';
 }
 
+// A rich-text cell keeps its text in its runs; neither `v` nor `m` holds it.
+export function inlineStringText(ct: CellType): string {
+    return (ct.s ?? []).map((run) => run.v ?? '').join('');
+}
+
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {
     const text = String(value);
     let m = '';

@@ -6,7 +6,9 @@ import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
 
 // Each writer touches one chart of the current sheet and nothing else, field by field, so a batch
-// on a chart a peer deleted fails whole on every client and in the replay, and never resurrects it.
+// on a chart a peer deleted fails whole on every client and in the replay. What writes a whole chart
+// brings one a peer deleted back on every client, last writer wins: redoing its insert, undoing its
+// delete, and undoing or redoing a row or column op that shifted it.
 
 export type ChartBox = Pick<SheetChart, 'x' | 'y' | 'width' | 'height'>;
 

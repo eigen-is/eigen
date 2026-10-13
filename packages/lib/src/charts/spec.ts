@@ -220,12 +220,14 @@ function cellIndex(v: unknown, count: number): number {
     return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < count ? v : invalid();
 }
 
-// Truncated, not rejected: an imported file's overlong label should not cost the whole chart. Every
-// label reaches SVG <text>, so what XML cannot hold is dropped here too.
+// Every chart label, stored or read from a cell, reaches SVG <text>, so what XML cannot hold is
+// dropped. Truncated, not rejected: an imported file's overlong label should not cost the whole chart.
+export function chartLabel(value: string): string {
+    return Array.from(stripNonXmlChars(value)).slice(0, MAX_CHART_LABEL_LENGTH).join('');
+}
+
 function text(v: unknown): string {
-    return typeof v === 'string'
-        ? Array.from(stripNonXmlChars(v)).slice(0, MAX_CHART_LABEL_LENGTH).join('')
-        : invalid();
+    return typeof v === 'string' ? chartLabel(v) : invalid();
 }
 
 function finiteOrNull(v: unknown): number | null {

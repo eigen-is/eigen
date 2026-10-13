@@ -1,6 +1,7 @@
-import { MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS } from '@workspace/lib/charts';
+import { chartLabel, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
+import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, InlineChartData, RangeChartData } from '@workspace/lib/types/chart';
-import { stripNonXmlChars } from '@workspace/lib/xml';
+import { inlineStringText } from './format';
 import type { Cell, CellResolver } from './types';
 
 // What the chart layout draws, the shape inline data already has.
@@ -9,7 +10,8 @@ export type ResolvedChartData = Pick<InlineChartData, 'categories' | 'series'>;
 export type ChartDataError = 'ref' | 'too-many-points';
 
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
-// text `m`, the same strings the grid shows. Hidden rows and columns are read like any other.
+// text `m` or a rich-text cell's runs, the same strings the grid shows. Hidden rows and columns are
+// read like any other.
 export function resolveRangeChartData(
     data: RangeChartData,
     resolver: CellResolver,
@@ -59,10 +61,32 @@ function value(cell: Cell | null): number | null {
     return typeof cell?.v === 'number' && Number.isFinite(cell.v) ? cell.v : null;
 }
 
-// Bounded and XML-safe like a stored label, since both reach the same SVG text.
 function label(cell: Cell | null): string {
-    const text = cell?.m ?? cell?.v ?? '';
-    return Array.from(stripNonXmlChars(String(text)))
-        .slice(0, MAX_CHART_LABEL_LENGTH)
-        .join('');
+    if (cell?.ct?.t === 'inlineStr') return chartLabel(inlineStringText(cell.ct));
+    return chartLabel(String(cell?.m ?? cell?.v ?? ''));
+}
+
+// Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or
+// its spec is not a readable range chart. A null empties a values or categories ref, and a name ref
+// leaves the series unnamed.
+export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => CellRangeRef | null): SheetChart {
+    const spec = parseChartSpec(chart.spec);
+    if (spec?.data.source !== 'range') return chart;
+    let moved = false;
+    const move = (ref: CellRangeRef) => {
+        const next = map(ref);
+        if (next !== ref) moved = true;
+        return next;
+    };
+    const { categories, series } = spec.data;
+    const data = {
+        ...spec.data,
+        categories: categories && move(categories),
+        series: series.map((s) => ({
+            ...s,
+            name: typeof s.name === 'string' ? s.name : (move(s.name) ?? ''),
+            values: s.values && move(s.values),
+        })),
+    };
+    return moved ? { ...chart, spec: JSON.stringify({ ...spec, data }) } : chart;
 }
