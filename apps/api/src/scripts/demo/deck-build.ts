@@ -29,7 +29,8 @@ const DECK_STYLE: StyleDefaults = { ...SLIDES_STYLE_DEFAULTS, color: DECK_INK };
 type StoredFrame = Omit<VectorFrame, 'width' | 'height'>;
 
 export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
-    // Stored frame fields only: width/height are the FRAME_WIDTH/FRAME_HEIGHT constants, never persisted.
+    // Stored frame fields only: width/height come from meta.slideSize, never a frame's own keys. The demo
+    // deck writes none, so it is 16:9.
     const frames: StoredFrame[] = [];
     const ordered: VectorElement[] = [];
     const frameKeys = generateNKeysBetween(null, null, slides.length);

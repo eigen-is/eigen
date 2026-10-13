@@ -1,4 +1,5 @@
 import { parseChartSpec } from '@workspace/lib/charts';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
@@ -12,7 +13,7 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import { Table } from 'lucide-react';
 import { type RefObject, useState } from 'react';
-import { columnIndexToLabel, rowIndexToLabel } from '../../engine/a1-notation';
+import { rowIndexToLabel } from '../../engine/a1-notation';
 import {
     CHART_RANGE_REFUSALS,
     type ChartRange,

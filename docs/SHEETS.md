@@ -149,6 +149,14 @@ Once built, the map is kept current cell by cell. Local writers register what th
 
 A typed number is stored as a number in `v`, unless the cell is text-formatted. Pasted plain text goes through the same `setCellValue` parse as typing. A formula's text result stays text (`=TEXT(5,"000")` is `"005"`). Copying a General number writes 15 significant digits (`copiedNumberText`), not the 11-character display, so a paste elsewhere keeps the precision.
 
+## A copy puts the cells on text/plain as TSV
+
+A range copy writes three flavors: the HTML table with the cells' styles, the Eigen clipboard payload, and TSV on `text/plain` with tabs between cells and newlines between rows. `rangeValueToClipboard` (`state/modules/selection.ts`) builds the table and the TSV in one pass over the same cells, each cell's display text with General numbers at 15 digits. A cell holding a tab, a line break or a leading quote is quoted and its quotes doubled, as Google writes it, through `cellsToTsv` in `@workspace/lib/clipboard`; a quote inside text stays as it is, so `12" pizza` pastes as typed. The Eigen text item carries the same cells unquoted, tabs and newlines between them, because Docs reads it as text rather than as TSV. The plain text is what a paste into a text field, a chart's Edit data grid or another app without an HTML reader gets, so it has to keep the grid's shape. The plain-text paste in Sheets itself splits on tabs and newlines and doesn't unquote, so a quoted multi-line cell pasted as plain text lands split ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+
+## Enter and Tab commit an edit and move on
+
+While a cell is open, Enter commits it and moves down, and Tab commits and moves right, Shift+Tab left, as in Google Sheets. Both go through `commitEdit` (`state/events/keyboard.ts`), which writes the cell and collapses the selection to it before the move. A visible formula suggestion takes Tab first and stops it, so Tab picks the function instead of committing.
+
 ## Conditional formats evaluate headless
 
 `evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ The export paints conditional formats with the grid's evaluator](#the-export-paints-conditional-formats-with-the-grids-evaluator)). Without an evaluator, formula rules are skipped. Both callers pass the same one, `createCfFormulaEvaluator`.
@@ -187,7 +195,7 @@ A sheet whose formulas the op moved too is still written back whole, and its who
 
 `resolveRangeChartData` (`engine/chart-data.ts`) turns a range chart into the categories and series the layout draws, through a `CellResolver`, so the editor and the server read the same cells. A value is the cell's computed `v` when it is a finite number and a gap otherwise. A label or series name is the cell's display text `m`, the string the grid shows, or a rich-text cell's runs joined, since such a cell has neither `m` nor `v`. A name ref reads its first cell. A chart with no categories counts them 1, 2, … up to its longest series.
 
-A series whose values ref is null, deleted with its rows or columns, is left out and the rest draw, as Google does; it keeps its color in the spec, so an undo brings it back as it was. No series left, or a ref that names a missing sheet or spans several rows and several columns at once, is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default ([ROADMAP](ROADMAP.md)).
+A series whose values ref is null, deleted with its rows or columns, is left out and the rest draw, as Google does; it keeps its color in the spec, so an undo brings it back as it was. An automatic color resolves by the series' index in the spec before that, so the series after a deleted one keep the colors the editor shows them in. No series left, or a ref that names a missing sheet or spans several rows and several columns at once, is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default ([ROADMAP](ROADMAP.md)).
 
 `renderSheetChartSvg` (same file) is the chart the editor's overlay and the export both draw: the box, the resolved data, and value ticks through `numberDisplay` in the axis's own format or else the first value cell's, Google's "From source data", so a percent column gets percent ticks.
 
@@ -241,7 +249,7 @@ Clicking a tick box while composing `=IF(` inserts the cell's reference and noth
 
 A comment (top-right), an invalid value and a forced string (top-left) are all drawn by `drawCellIndicator` at `cellIndicatorRect`. The size is `CELL_INDICATOR_SIZE` in `packages/lib/src/constants/comment-indicator.ts`, which the canvas apps' `CommentIndicator` reads too, so a comment mark looks the same in every app. Filled and empty cells reach the same painter. A comment triangle takes its card's color, and red when the card has none.
 
-Canvas colors are hardcoded light, because the grid is paper and doesn't re-theme ([RENDERING.md](../packages/sheet/RENDERING.md#theming-the-light-pinned-surface)).
+The grid's colors are light-only CSS variables in ui's `globals.css`, read by the canvas and by the chart Edit data grid; the canvas's other colors are hardcoded light, because the grid is paper and doesn't re-theme ([RENDERING.md](../packages/sheet/RENDERING.md#theming-the-light-pinned-surface)).
 
 ## A glyph outranks the selection handles
 

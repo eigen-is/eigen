@@ -52,7 +52,7 @@ export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): Ca
     };
 }
 
-// One page per frame, in deck order. A frame IS the page — 0,0-based and a fixed size — so unlike a
+// One page per frame, in deck order. A frame IS the page — 0,0-based and the deck's size — so unlike a
 // drawing there is no content-bounds arithmetic and no origin offset; an element that overhangs is
 // clipped by the page box, exactly as the live canvas clips it.
 export function framePages(scene: VectorScene, resolveMedia: MediaResolver): CanvasPage[] {
@@ -113,7 +113,7 @@ export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?:
 // The same page in the fit box every SCREEN consumer scales it in — the HTML export document, the
 // lightbox and the drive hero. The box carries the page's composed size as custom properties so one
 // rule set (`.page-fit`, packages/ui/src/styles/globals.css, mirrored by the export document's own
-// CSS) fits a 16:9 slide and a drawing of any ratio the same way.
+// CSS) fits a slide of either size and a drawing of any ratio the same way.
 export function renderFittedPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     const width = round(page.width * scale);
     const height = round(page.height * scale);

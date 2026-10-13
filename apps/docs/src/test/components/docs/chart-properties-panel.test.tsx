@@ -68,6 +68,14 @@ const click = (target: HTMLElement) =>
     act(async () => {
         target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+// The grid opens on A1, as a sheet does, so B2 is selected before it is typed in.
+const typeInB2 = async (value: string) => {
+    const b2 = dialog()?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
+    await act(async () => {
+        b2?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    });
+    await type(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]'), value);
+};
 const type = (input: HTMLInputElement | null | undefined, value: string) =>
     act(async () => {
         if (!input) throw new Error('no field to type in');
@@ -166,7 +174,7 @@ test("a Style toggle wraps the chart in one undo step and lights it, the spec's 
 test('Edit data saves the grid as one undo step', async () => {
     const { undoManager, spec } = await mount();
     await click(button(document.body, 'Edit data'));
-    await type(dialog()?.querySelector<HTMLInputElement>('input[aria-label="Row 1, series 1"]'), '7');
+    await typeInB2('7');
     await click(button(dialog(), 'Save'));
     const saved = spec();
     expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);

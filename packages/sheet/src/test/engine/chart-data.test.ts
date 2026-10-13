@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS, sampleChartSpec } from '@workspace/lib/charts';
+import { chartColor, MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
@@ -124,6 +124,17 @@ describe('resolveRangeChartData', () => {
             categories: ['Ajax', 'PSV', ''],
             series: [{ ...STYLE, color: '#ff0000', name: 'Goals', values: [3, 1000, 7] }],
         });
+    });
+
+    // The editor shows a series' automatic color by its index in the spec, so the chart must too.
+    test('an automatic color is the palette color at the series index in the spec, a deleted one before it kept', () => {
+        const automatic = (values: CellRangeRef | null) => ({ ...series(values), color: null });
+        const resolved = resolveRangeChartData(
+            data(null, automatic(ref([1, 3], [1, 1])), automatic(null), automatic(ref([1, 3], [2, 2]))),
+            resolver,
+        );
+        if (typeof resolved === 'string') throw new Error(resolved);
+        expect(resolved.series.map((s) => s.color)).toEqual([chartColor(0), chartColor(2)]);
     });
 
     test('a ref spanning rows and columns, no series left or a ref to a missing sheet is a ref error', () => {

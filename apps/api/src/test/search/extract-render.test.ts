@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
@@ -167,7 +168,7 @@ describe('extractCollabText', () => {
 
     test('eigenvector: an empty drawing extracts to the empty string', async () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: DEFAULT_SCENE_META });
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');

@@ -1,4 +1,4 @@
-import { chartColor, MAX_CHART_POINTS, MAX_CHART_SERIES, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, MAX_CHART_POINTS, MAX_CHART_SERIES, sampleChartSpec } from '@workspace/lib/charts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
@@ -65,7 +65,7 @@ export function chartRangeData(
     const count = seriesInRows ? row[1] - top + 1 : column[1] - left + 1;
     if (top > row[1] || left > column[1] || count > MAX_CHART_SERIES) return null;
     const series: RangeChartSeries[] = Array.from({ length: count }, (_, i) => {
-        const style = styles[i] ?? { color: chartColor(i), markers: false, smooth: false };
+        const style = styles[i] ?? DEFAULT_CHART_SERIES_STYLE;
         if (seriesInRows) {
             const r = top + i;
             const values: CellRangeRef = { sheetId, row: [r, r], column: [left, column[1]] };

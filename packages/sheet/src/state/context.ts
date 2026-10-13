@@ -1,4 +1,10 @@
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    SHEET_COLUMN_HEADER_HEIGHT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_FONT_SIZE,
+    SHEET_DEFAULT_ROW_HEIGHT,
+    SHEET_ROW_HEADER_WIDTH,
+} from '@workspace/lib/sheets';
 import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
@@ -275,8 +281,8 @@ export function defaultContext(refs: RefValues): Context {
         toolbarHeight: 41,
         infobarHeight: 57,
         calculatebarHeight: 29,
-        rowHeaderWidth: 46,
-        columnHeaderHeight: 20,
+        rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
+        columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
         cellMainSrollBarSize: 12,
         tableContentSize: [0, 0],
 
@@ -342,7 +348,7 @@ export function defaultContext(refs: RefValues): Context {
         allowEdit: true,
 
         fontList: [],
-        defaultFontSize: 10,
+        defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
 
         formatPainterOn: false,
         formatPainterOnce: false,

@@ -13,16 +13,20 @@ export const CHART_TYPES = ['column', 'bar', 'line', 'pie'] as const;
 export const LEGEND_POSITIONS = ['top', 'bottom', 'left', 'right', 'none'] as const;
 // DrawingML dispBlanksAs: how a null value draws.
 export const CHART_BLANKS = ['gap', 'zero', 'span'] as const;
+// Excel's grouping: percent stacks each category's values as shares of their absolute sum.
+export const CHART_STACKINGS = ['none', 'stacked', 'percent'] as const;
 
 export type ChartType = (typeof CHART_TYPES)[number];
 export type LegendPosition = (typeof LEGEND_POSITIONS)[number];
 export type ChartBlanks = (typeof CHART_BLANKS)[number];
+export type ChartStacking = (typeof CHART_STACKINGS)[number];
 
 // Sheets only. Zero-based, inclusive, row[0] <= row[1] and column[0] <= column[1].
 export type CellRangeRef = { sheetId: string; row: [number, number]; column: [number, number] };
 
-// markers and smooth apply to line charts only.
-export type ChartSeriesStyle = { color: string; markers: boolean; smooth: boolean };
+// markers and smooth apply to line charts only. A null color is the palette's at the series' index
+// (chartColor), so a palette change reaches it and deleting a series shifts the ones after it.
+export type ChartSeriesStyle = { color: string | null; markers: boolean; smooth: boolean };
 
 export type InlineChartSeries = ChartSeriesStyle & { name: string; values: (number | null)[] };
 export type RangeChartSeries = ChartSeriesStyle & { name: string | CellRangeRef; values: CellRangeRef | null };
@@ -33,15 +37,15 @@ export type RangeChartData = { source: 'range'; categories: CellRangeRef | null;
 export type ChartSpec = {
     type: ChartType;
     // column and bar only
-    stacked: boolean;
+    stacking: ChartStacking;
     title: string;
     legend: LegendPosition;
     blanks: ChartBlanks;
     categoryAxis: { title: string };
     // format: an Excel number format; null is General, or linked to the source cells.
     valueAxis: { title: string; min: number | null; max: number | null; gridlines: boolean; format: string | null };
-    // pie only: one color per category, stored at creation
-    sliceColors: string[];
+    // pie only: one color per category, null or missing the palette's at its index, as for a series
+    sliceColors: (string | null)[];
     // An EIGEN_FONTS name; every label draws in it.
     fontFamily: string;
     data: InlineChartData | RangeChartData;

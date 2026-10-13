@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_FRAME_BACKGROUND, parseBinding, readVectorFromDoc, serializeBinding } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { sealed } from '../../../../components/properties-panel/property-gesture';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
     duplicateFrameInDoc,
     moveFrameInDoc,
     updateFramesInDoc,
+    updateMetaInDoc,
 } from '../../../../components/vector/hooks/frame-writes';
 
 function docWithFrames(n: number): { doc: Y.Doc; ids: string[] } {
@@ -37,7 +39,7 @@ function addElement(doc: Y.Doc, id: string, frameId: string, fields: Record<stri
 }
 
 describe('frame writes', () => {
-    test('frames are appended in fractional-index order at the constant 16:9 size', () => {
+    test('frames are appended in fractional-index order at the default 16:9 size', () => {
         const { doc, ids } = docWithFrames(3);
         const frames = readVectorFromDoc(doc).frames;
         expect(frames.map((f) => f.id)).toEqual(ids);
@@ -173,12 +175,24 @@ describe('frame writes', () => {
         expect(doc.getMap('frames').get(ids[0]) instanceof Y.Map).toBe(true);
     });
 
-    test('a stored width/height is ignored — the size is a constant', () => {
+    test("a stored width/height is ignored: the size is the deck's", () => {
         const { doc, ids } = docWithFrames(1);
         doc.transact(() => {
             const map = doc.getMap('frames').get(ids[0]);
             if (map instanceof Y.Map) map.set('width', 42);
         });
         expect(readVectorFromDoc(doc).frames[0].width).toBe(1920);
+    });
+
+    test('a slide size change is one undo step, and undo gives every frame its old size back', () => {
+        const { doc } = docWithFrames(2);
+        const undoManager = new Y.UndoManager(doc.getMap('meta'));
+        sealed(undoManager, () => updateMetaInDoc(doc, { slideSize: '4:3' }));
+        expect(readVectorFromDoc(doc).frames.map((f) => f.height)).toEqual([1440, 1440]);
+        expect(undoManager.undoStack).toHaveLength(1);
+
+        undoManager.undo();
+        expect(readVectorFromDoc(doc).meta.slideSize).toBe('16:9');
+        expect(readVectorFromDoc(doc).frames.map((f) => f.height)).toEqual([1080, 1080]);
     });
 });

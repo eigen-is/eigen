@@ -6,7 +6,6 @@
 // package-root export instead.
 
 export {
-    columnIndexToLabel,
     parseA1Range,
     quoteSheetName,
     rowIndexToLabel,

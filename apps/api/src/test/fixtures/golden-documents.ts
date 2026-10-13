@@ -8,10 +8,10 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_SCENE_META,
     FRAME_FIELDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     generateNKeysBetween,
+    SLIDE_SIZES,
     serializeBackgroundFill,
     serializeFill,
     solidFill,
@@ -524,8 +524,7 @@ function deckFrame(id: string, index: string, background: BackgroundFill | null)
         id,
         index,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: serializeBackgroundFill(background),
     };
 }
@@ -618,7 +617,7 @@ export function buildGoldenDeckScene(): VectorScene {
         );
     }
 
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // Rich text only — no media, so the deck renders without a seeded media/ folder. Every frame carries
@@ -655,7 +654,7 @@ export function buildHeavyDeckScene(frameCount = 60, elementsPerFrame = 6): Vect
             );
         }
     }
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // A follow-up edit in its own transaction, the way an editor session writes one, so
@@ -858,7 +857,7 @@ export function buildGoldenVectorScene(): VectorScene {
             fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];
-    return { elements, frames: [], meta: { background: 'transparent' } };
+    return { elements, frames: [], meta: DEFAULT_SCENE_META };
 }
 
 // Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
@@ -876,11 +875,12 @@ export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
         }
         for (const frame of scene.frames) {
             const yFrame = new Y.Map<unknown>();
-            // width/height are constants, never stored — FRAME_FIELDS is the allow-list.
+            // width/height come from meta.slideSize, never a frame's own keys — FRAME_FIELDS is the allow-list.
             for (const field of FRAME_FIELDS) yFrame.set(field, frameField(frame, field));
             framesMap.set(frame.id, yFrame);
         }
         metaMap.set('background', scene.meta.background);
+        metaMap.set('slideSize', scene.meta.slideSize);
     });
 }
 

@@ -69,15 +69,35 @@ export function nice(start: number, stop: number, count: number): [number, numbe
 
 // Intl caps fraction digits; a step this small has no readable labels anyway.
 const MAX_FRACTION_DIGITS = 20;
+// Chart.js's bounds for fixed labels: past six decimals a label is a row of zeros, and from 1e15 on its
+// digits are more than a double holds, so the ticks read in scientific notation.
+const MAX_FIXED_DIGITS = 6;
+const MIN_SCIENTIFIC_STEP = 1e15;
 
 // Canvas and docs ticks: as many decimals as the step has, so every tick reads alike ("0.5", "1.0").
 export function formatTickValue(value: number, step: number): string {
-    let digits = Math.max(0, -Math.floor(Math.log10(step)));
-    while (digits < MAX_FRACTION_DIGITS && !Number.isInteger(Number((step * 10 ** digits).toPrecision(12)))) digits++;
-    digits = Math.min(digits, MAX_FRACTION_DIGITS);
+    const power = Math.floor(Math.log10(step));
+    // The step's digits after its leading one: 1 for 2.5, 0 for 2.
+    let extra = 0;
+    while (extra < MAX_FRACTION_DIGITS && !Number.isInteger(Number((step * 10 ** (extra - power)).toPrecision(12))))
+        extra++;
+    const fixed = Math.max(0, extra - power);
+    if (fixed <= MAX_FIXED_DIGITS && step < MIN_SCIENTIFIC_STEP) return formatNumber(value, fixed, 'standard');
+    if (value === 0) return '0';
+    const digits = Math.floor(Math.log10(Math.abs(value))) - power + extra;
+    return formatNumber(value, Math.min(MAX_FRACTION_DIGITS, Math.max(0, digits)), 'scientific');
+}
+
+function formatNumber(value: number, digits: number, notation: 'standard' | 'scientific'): string {
     return new Intl.NumberFormat('en', {
+        notation,
         minimumFractionDigits: digits,
         maximumFractionDigits: digits,
         signDisplay: 'negative',
     }).format(value);
+}
+
+// A 100% stack's ticks, shares read as percents ("0%", "25%").
+export function formatPercentTick(value: number, step: number): string {
+    return `${formatTickValue(value * 100, step * 100)}%`;
 }

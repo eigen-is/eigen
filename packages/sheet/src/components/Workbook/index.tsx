@@ -7,6 +7,7 @@ import {
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
+import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type {
     EigenClipboardData,
     EigenClipboardImageItem,
@@ -82,7 +83,7 @@ function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboard
             width: ctx.visibledatacolumn[c2] - (c1 === 0 ? 0 : ctx.visibledatacolumn[c1 - 1]),
             height: ctx.visibledatarow[r2] - (r1 === 0 ? 0 : ctx.visibledatarow[r1 - 1]),
         },
-        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? 10 }, // 10 = the default cell size
+        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? SHEET_DEFAULT_FONT_SIZE },
     });
 }
 
@@ -600,7 +601,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // a real table, and the custom MIME lands for same-origin reads.
                 const eigenData: EigenClipboardData = {
                     version: 1,
-                    items: [buildCellRangeClipboardItem(context, pending.plainText)],
+                    items: [buildCellRangeClipboardItem(context, pending.cellText)],
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },

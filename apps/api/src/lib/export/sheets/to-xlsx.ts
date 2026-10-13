@@ -4,6 +4,7 @@ import {
     borderInfoExtent,
     type CellBorderSides,
     type ConditionalFormatRule,
+    columnIndexToLabel,
     type DataVerificationRule,
     type DefaultConditionalFormatRule,
     type Cell as FortuneCell,
@@ -15,14 +16,7 @@ import {
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { escapeXml } from '@workspace/lib/xml';
-import {
-    columnIndexToLabel,
-    iscelldata,
-    parseA1Range,
-    quoteSheetName,
-    rowIndexToLabel,
-    toA1,
-} from '@workspace/sheet/engine';
+import { iscelldata, parseA1Range, quoteSheetName, rowIndexToLabel, toA1 } from '@workspace/sheet/engine';
 import type {
     Border,
     Borders,
