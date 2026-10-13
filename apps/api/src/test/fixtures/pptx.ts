@@ -94,13 +94,20 @@ export function cxn(options: { xfrm: string; geom?: string; ln?: string; style?:
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${options.xfrm}<a:prstGeom prst="${options.geom ?? 'straightConnector1'}"><a:avLst/></a:prstGeom>${options.ln ?? ''}</p:spPr>${styleOf(options.style)}</p:cxnSp>`;
 }
 
-export function pic(options: { xfrm?: string; embed?: string; svg?: string; ph?: string; link?: string }): string {
+export function pic(options: {
+    xfrm?: string;
+    embed?: string;
+    svg?: string;
+    ph?: string;
+    link?: string;
+    geom?: string;
+}): string {
     const id = ids++;
     const svg = options.svg
         ? `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="${options.svg}"/></a:ext></a:extLst>`
         : '';
     const target = options.link ? `r:link="${options.link}"` : options.embed ? `r:embed="${options.embed}"` : '';
-    return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr/><p:nvPr>${options.ph ?? ''}</p:nvPr></p:nvPicPr><p:blipFill><a:blip ${target}>${svg}</a:blip><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${options.xfrm ?? ''}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+    return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr/><p:nvPr>${options.ph ?? ''}</p:nvPr></p:nvPicPr><p:blipFill><a:blip ${target}>${svg}</a:blip><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${options.xfrm ?? ''}<a:prstGeom prst="${options.geom ?? 'rect'}"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
 }
 
 export function grp(xfrmXml: string, children: string): string {

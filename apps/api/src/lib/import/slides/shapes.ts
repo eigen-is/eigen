@@ -294,7 +294,7 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
             const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
             const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
             placeholderBox(walk, shape, kind, placed.box);
-        } else if (shape.local === 'pic') readPicture(walk, shape, linesOf(spPrs, walk, style), placed);
+        } else if (shape.local === 'pic') readPicture(walk, shape, spPrs, linesOf(spPrs, walk, style), placed);
         else readShape(walk, { shape, own, inherited, spPrs, style, placed, group });
     }
 }
@@ -535,7 +535,13 @@ function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorEle
         : { type: 'arrow', ...line, startArrowhead, endArrowhead, elbow: false };
 }
 
-function readPicture(walk: Walk, shape: XmlElement, lines: Lines, { box, mirrored }: Placed): void {
+function readPicture(
+    walk: Walk,
+    shape: XmlElement,
+    spPrs: XmlElement[],
+    lines: Lines,
+    { box, mirrored }: Placed,
+): void {
     const blipFill = xmlChild(shape, P_NS, 'blipFill');
     const blip = blipFill && xmlChild(blipFill, A_NS, 'blip');
     const part = blipMedia(walk.deck.pkg, walk.part, blip);
@@ -553,7 +559,8 @@ function readPicture(walk: Walk, shape: XmlElement, lines: Lines, { box, mirrore
         ...strokeOf(lines, walk, walk.deck.lost),
         mediaName: walk.deck.mediaName(part),
         objectFit: 'fill',
-        corners: 'straight',
+        // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.
+        corners: spPrs.map(geometryOf).find((found) => found !== undefined) === 'roundRect' ? 'curved' : 'straight',
     });
 }
 

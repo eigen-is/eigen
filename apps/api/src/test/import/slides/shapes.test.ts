@@ -562,6 +562,19 @@ describe('pictures', () => {
         expect(new Uint8Array(deck.media[0].data)).toEqual(PIXEL_PNG);
     });
 
+    test('a picture cropped to a rounded rectangle has curved corners', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: pic({ xfrm: box(10, 20, 30, 40), embed: 'rId2', geom: 'roundRect' }),
+                    rels: rel('rId2', 'image', '../media/a.png'),
+                },
+            ],
+            files,
+        });
+        expect(deck.slides[0].elements[0]).toMatchObject({ type: 'image', corners: 'curved' });
+    });
+
     test('the svgBlip is preferred over its png fallback, which is then not read', () => {
         const deck = deckOf({
             slides: [
