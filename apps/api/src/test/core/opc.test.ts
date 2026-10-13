@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { PACKAGE_RELATIONSHIPS_NS, parseOoxml } from '../../lib/core/ooxml';
-import { relationshipsOf, relOfType, relsPathOf } from '../../lib/core/opc';
+import { ApiError } from '../../lib/core/errors';
+import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from '../../lib/core/ooxml';
+import { isEncryptedPackage, openPackage, optional, relationshipsOf, relOfType, relsPathOf } from '../../lib/core/opc';
+import { XmlError } from '../../lib/core/xml';
+import { writeZip, ZipError } from '../../lib/core/zip';
 
 const IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
@@ -66,3 +69,71 @@ describe('the relationship of a type', () => {
         expect(relOfType(read, 'numbering')).toBeUndefined();
     });
 });
+
+describe('a package', () => {
+    const CONTENT_TYPES = `<Types xmlns="${CONTENT_TYPES_NS}"><Default Extension="xml" ContentType="Application/XML"/><Override PartName="/a/b.xml" ContentType="text/b"/></Types>`;
+    const ROOT_RELS = `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument" Target="a/b.xml"/></Relationships>`;
+    const zip = (files: Record<string, string>) =>
+        writeZip(Object.entries(files).map(([name, data]) => ({ name, data })));
+    const open = (files: Record<string, string>) => openPackage(zip(files), 'Locked');
+    // An OLE compound file: its signature, then a directory entry naming a stream in UTF-16.
+    const ole = (stream: string) => {
+        const bytes = new Uint8Array(4096);
+        bytes.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+        bytes.set(Buffer.from(stream, 'utf16le'), 1024);
+        return bytes;
+    };
+    const thrown = (run: () => unknown): unknown => {
+        try {
+            run();
+        } catch (error) {
+            return error;
+        }
+        throw new Error('expected a throw');
+    };
+
+    test("an encrypted one is refused with the format's message; any other OLE file is no zip", () => {
+        expect(isEncryptedPackage(ole('EncryptedPackage'))).toBe(true);
+        expect(isEncryptedPackage(ole('Workbook'))).toBe(false);
+        const locked = thrown(() => openPackage(ole('EncryptedPackage'), 'Locked'));
+        expect(locked).toBeInstanceOf(ApiError);
+        expect(locked).toMatchObject({ status: 400, message: 'Locked' });
+        expect(thrown(() => openPackage(ole('Workbook'), 'Locked'))).toBeInstanceOf(ZipError);
+    });
+
+    test('reads a part once, and its relationships, the package\'s own under ""', () => {
+        const pkg = open({ '[Content_Types].xml': CONTENT_TYPES, '_rels/.rels': ROOT_RELS, 'a/b.xml': '<b/>' });
+        const part = relOfType(pkg.relationships(''), 'officeDocument');
+        expect(part).toBe('a/b.xml');
+        expect(pkg.part('a/b.xml')?.local).toBe('b');
+        expect(pkg.part('a/b.xml')).toBe(pkg.part('a/b.xml'));
+        expect(pkg.part('a/missing.xml')).toBeUndefined();
+        expect(pkg.relationships('a/b.xml').size).toBe(0);
+    });
+
+    test('a part that fails throws the same error to every reader, and parses no second time', () => {
+        const pkg = open({ 'a/b.xml': '<b>' });
+        const first = thrown(() => pkg.part('a/b.xml'));
+        expect(first).toBeInstanceOf(XmlError);
+        expect(thrown(() => pkg.part('a/b.xml'))).toBe(first);
+    });
+
+    test('names a content type by override, else by extension, case-insensitively', () => {
+        const pkg = open({ '[Content_Types].xml': CONTENT_TYPES });
+        expect(pkg.contentTypeOf('a/b.xml')).toBe('text/b');
+        expect(pkg.contentTypeOf('a/c.XML')).toBe('application/xml');
+        expect(pkg.contentTypeOf('a/c.png')).toBeUndefined();
+    });
+
+    test('an optional read is undefined for damaged XML or a damaged entry, and a cap still refuses', () => {
+        expect(optional(() => parseOoxml('<b>'))).toBeUndefined();
+        expect(optional(() => thrownBy(new ZipError('bad-crc')))).toBeUndefined();
+        expect(thrown(() => optional(() => thrownBy(new ZipError('too-large'))))).toBeInstanceOf(ZipError);
+        expect(thrown(() => optional(() => thrownBy(new ApiError(413, 'Too large'))))).toBeInstanceOf(ApiError);
+        expect(optional(() => 1)).toBe(1);
+    });
+});
+
+function thrownBy(error: unknown): never {
+    throw error;
+}
