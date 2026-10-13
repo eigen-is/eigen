@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
+import { chartColor, formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
 import {
     CHART_TYPES,
     type ChartData,
@@ -476,7 +476,7 @@ describe('legend', () => {
     test('top and bottom are a centered row of swatches, left and right a column', () => {
         const top = layout('column', { legend: 'top' });
         const swatches = rects(top, 'legend');
-        expect(swatches.map((swatch) => swatch.strokeColor)).toEqual(['#2a78d6', '#eb6834']);
+        expect(swatches.map((swatch) => swatch.strokeColor)).toEqual([chartColor(0), chartColor(1)]);
         expect(swatches[0].y).toBeCloseTo(swatches[1].y);
         const titleBottom = Math.max(...top.labels.filter((l) => l.bold).map((l) => labelBounds(l).bottom));
         expect(swatches[0].y).toBeGreaterThan(titleBottom);
@@ -576,10 +576,10 @@ describe('pie', () => {
         const out = layout('pie', { sliceColors: ['#000000'] });
         const pie = slices(out);
         expect(pie[0].fill).toBe(solidFill('#000000'));
-        expect(pie[1].fill).toBe(solidFill('#eb6834'));
+        expect(pie[1].fill).toBe(solidFill(chartColor(1)));
         expect(pie.every((slice) => slice.strokeColor === '#ffffff')).toBe(true);
         const bare = slices(layout('pie', {}, { paint: { background: serializeFill(TRANSPARENT_FILL) } }));
-        expect(bare[1].strokeColor).toBe('#eb6834');
+        expect(bare[1].strokeColor).toBe(chartColor(1));
     });
 
     test('labels read name and percent; slices under 5% go unlabeled', () => {

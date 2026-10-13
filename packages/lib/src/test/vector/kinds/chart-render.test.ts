@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, sampleChartSpec } from '../../../charts';
+import { CHART_MESSAGES, chartColor, FLAT_CHART_PAINT, layoutChart, sampleChartSpec } from '../../../charts';
 import { getFontFamily } from '../../../constants/fonts';
 import { escapeXml } from '../../../core/xml';
 import type { ChartData, ChartSpec } from '../../../types/chart';
@@ -117,7 +117,7 @@ describe('renderChartSpecSvg', () => {
         expect(svg).toContain(`font-family="${escapeXml(getFontFamily('Inter'))}"`);
         expect(svg).not.toContain(':background');
         // a hatched mark is drawn as stroked sketch lines; a solid one is a filled path
-        expect(svg).not.toContain('stroke="#2a78d6" stroke-width="1" fill="none"');
-        expect(svg).toContain('fill="#2a78d6"');
+        expect(svg).not.toContain(`stroke="${chartColor(0)}" stroke-width="1" fill="none"`);
+        expect(svg).toContain(`fill="${chartColor(0)}"`);
     });
 });

@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import {
-    CHART_PALETTE,
     chartColor,
     exceedsInlineGridLimits,
     fitsInlineGrid,
@@ -13,6 +12,7 @@ import {
     parseChartSpec,
     sampleChartSpec,
 } from '../../charts';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
 import { CHART_TYPES, type ChartSpec, type InlineChartData, type RangeChartData } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
@@ -73,16 +73,23 @@ describe('sampleChartSpec', () => {
         const pie = sampleChartSpec('pie');
         expect(pie.legend).toBe('none');
         expect(pie.data.series).toHaveLength(1);
-        expect(pie.sliceColors).toEqual(CHART_PALETTE.slice(0, 4));
+        expect(pie.sliceColors).toEqual([0, 1, 2, 3].map(chartColor));
     });
 });
 
 describe('palette', () => {
-    test('twelve series never repeat a color, and the thirteenth starts over', () => {
-        expect(CHART_PALETTE.length).toBeGreaterThanOrEqual(INLINE_GRID_MAX_SERIES);
-        expect(new Set(CHART_PALETTE).size).toBe(CHART_PALETTE.length);
-        expect(CHART_PALETTE.every(isColorToken)).toBe(true);
-        expect(chartColor(CHART_PALETTE.length)).toBe(chartColor(0));
+    const palette = EIGEN_ACCENT_COLORS_SHUFFLED.map(({ value }) => value);
+
+    test('series take the shared accent colors in the shuffled order calendars assign, so neighbors stay apart', () => {
+        expect(palette.map((_, i) => chartColor(i))).toEqual(palette);
+        expect(sampleChartSpec('column').data.series.map((s) => s.color)).toEqual(palette.slice(0, 2));
+    });
+
+    test('the grid’s series never repeat a color, and the one past the palette starts over', () => {
+        expect(palette.length).toBeGreaterThanOrEqual(INLINE_GRID_MAX_SERIES);
+        expect(new Set(palette).size).toBe(palette.length);
+        expect(palette.every(isColorToken)).toBe(true);
+        expect(chartColor(palette.length)).toBe(chartColor(0));
     });
 });
 

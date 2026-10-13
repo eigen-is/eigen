@@ -2,6 +2,7 @@
 // node attribute, a SheetChart), and parseChartSpec is the one reader every surface and importer runs.
 // Malformed structure or a hard limit reads as null, never a throw; a presentation field reads its default.
 
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
 import { isRecord } from '../core/guards';
 import { stripNonXmlChars } from '../core/xml';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
@@ -33,25 +34,9 @@ export const MAX_CHART_LABEL_LENGTH = 200;
 export const INLINE_GRID_MAX_SERIES = 12;
 export const INLINE_GRID_MAX_CATEGORIES = 200;
 
-// The dataviz reference palette's eight slots plus four, ordered so every neighbor, the last and the
-// first included, passes its colorblind and normal-vision separation checks on a light surface.
-export const CHART_PALETTE = [
-    '#2a78d6',
-    '#eb6834',
-    '#1baf7a',
-    '#eda100',
-    '#e87ba4',
-    '#008300',
-    '#6250d6',
-    '#e34948',
-    '#0f9bb5',
-    '#b0662a',
-    '#a24fc9',
-    '#7a9a00',
-] as const;
-
+// The accent colors in the order calendars hand them out, so a series and its neighbor are far apart in hue.
 export function chartColor(index: number): string {
-    return CHART_PALETTE[index % CHART_PALETTE.length];
+    return EIGEN_ACCENT_COLORS_SHUFFLED[index % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
 }
 
 export function fitsInlineGrid(series: number, rows: number): boolean {

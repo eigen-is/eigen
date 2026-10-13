@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, MAX_CHART_SPEC_BYTES, sampleChartSpec } from '../../../charts';
+import { chartColor, formatTickValue, layoutChart, MAX_CHART_SPEC_BYTES, sampleChartSpec } from '../../../charts';
 import type { ChartLayout, ChartSpec } from '../../../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
 import { ELEMENT_KINDS, sceneFontFamilies } from '../../../vector/kinds';
@@ -196,7 +196,7 @@ describe('chart painter', () => {
                 expect(svg).toContain(elementToSvg(mark));
             }
             // a hachure fill is drawn as stroked sketch lines in the mark's color, never a filled path
-            expect(svg).toContain('stroke="#2a78d6" stroke-width="1" fill="none"');
+            expect(svg).toContain(`stroke="${chartColor(0)}" stroke-width="1" fill="none"`);
         }
     });
 

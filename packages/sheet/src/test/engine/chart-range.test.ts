@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import {
@@ -191,6 +192,13 @@ describe('suggestChartSpec', () => {
         });
         // What is stored must read back.
         expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
+    });
+
+    test('the series take the shared accent colors in the order calendars assign them', () => {
+        const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
+        if (typeof spec === 'string') throw new Error(spec);
+        const accents = EIGEN_ACCENT_COLORS_SHUFFLED.slice(0, 3).map(({ value }) => value);
+        expect(spec.data.series.map((series) => series.color)).toEqual(accents);
     });
 
     test('one or two series titles read naturally, unnamed series leave it empty', () => {
