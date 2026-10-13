@@ -18,7 +18,7 @@ Word splits a run wherever an edit happened, so `x+1` may be three runs or one. 
 
 - A number is a maximal run of digits with at most one decimal point between digits.
 - An identifier is one letter (`\p{L}`), italic or styled, or a maximal run of upright letters (`sin`, Word's `sty=p`).
-- An operator is one character.
+- An operator is one character. The minus sign is U+2212: every reader folds an ASCII hyphen-minus outside text to it, since Chrome draws a `-` in an `mo` as a hyphen. MathML, OMML and the text form write U+2212, and LaTeX writes `-`.
 - `variant` is left out when it is the default: italic for one letter, but upright for a capital Greek letter as TeX and Word draw it, and upright for a word, a number and an operator. So an upright Γ beside other upright letters is part of a word: `\Gamma\Delta` reads as `\mathrm{\Gamma\Delta}` does. `color` is `#RRGGBB`, left out for Word's `auto`; an explicit `#000000` stays.
 - A Unicode Mathematical Alphanumeric (𝐯, ℝ, ℎ) folds to its letter and a variant.
 
@@ -75,6 +75,7 @@ The OMML round trip keeps the object tree, every property the tree holds and eve
 | a linear fraction (`m:f type=lin`) | the row `a / b` | 3 |
 | double-struck or monospace with a weight | the script without the weight | 172 |
 | a styled or coloured space | a plain space | 41, 172 |
+| a hyphen-minus as an operator | the minus sign U+2212 | 12, 43, 44, 56, 57, 60, 61, 63, 79, 80, 83, 90, 91, 156, 158, 159, 160 |
 | an empty script or degree that shows | a hidden one | 18, 69 |
 
 An empty slot in Word draws only a placeholder box while editing, so hiding it changes nothing on the page. `m:box` reads as its content, and so does `m:phant`, shown even where Word hides it. Keeping a box or a linear fraction would put Word internals into the MathML for equations that look the same without them. Dropped and not compared: Word's equation number, the `#` in a run of an `m:eqArr` equation and the `(8)` after it, which belongs to the document (the writer puts a `#` in an equation in an `m:box`, so it reads back as the character); per-run font size (an equation takes its paragraph's size), `w:b` and `w:i` in math, `m:lit`, `m:ctrlPr` apart from a deletion, `m:grow`, `m:mcs`, `m:mcJc` and `m:groupChr`'s `vertJc` (the writer sets `top` under a brace, as Word does). The writer still writes an `m:d`'s fences and an `m:m`'s column count, centred, where they are Word's defaults: Google Docs drops the fences an `m:d` leaves out and draws a matrix without `m:mcs` flat. `writeOmml` writes no LaTeX, because OMML has no slot for it.

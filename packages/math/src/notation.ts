@@ -44,6 +44,9 @@ export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]
 
 export const PRIME = '′';
 
+// The minus operator: Chrome draws an ASCII hyphen-minus in an mo as a hyphen, so every reader folds one to U+2212.
+export const MINUS = '\u2212';
+
 // Unicode's superscript and subscript digits and signs: each reads as a script holding its NFKC character.
 export const SCRIPT_CHARS: ReadonlyMap<string, readonly ['sub' | 'sup', string]> = new Map(
     (['sup', 'sub'] as const).flatMap((slot) =>

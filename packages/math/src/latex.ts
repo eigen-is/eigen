@@ -1,6 +1,6 @@
 import { MathError } from './error';
 import { LATEX_COLORS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
-import { ACCENTS, naryLimits, PRIME, SPACES } from './notation';
+import { ACCENTS, MINUS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
     clusters,
@@ -858,6 +858,7 @@ function joined(parts: readonly string[]): string {
 
 function writeChar(char: string): string {
     if (char === PRIME) return "'";
+    if (char === MINUS) return '-';
     const operator = OPERATOR_NAMES.get(char);
     // Alone, a large-operator command would take the next atom as its body.
     if (operator) return `{\\${operator}}`;

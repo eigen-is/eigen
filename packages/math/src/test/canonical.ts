@@ -61,6 +61,8 @@ function tokenIssue(node: MathToken): string | undefined {
                 isLetter(first) ||
                 SPACE_TEXTS.has(first) ||
                 SCRIPT_CHARS.has(node.text) ||
+                // The minus sign is U+2212.
+                first === '-' ||
                 (/[0-9]/.test(first) && !isMarked(node.text))
             )
                 return `operator ${JSON.stringify(node.text)}`;

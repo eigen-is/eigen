@@ -3,6 +3,7 @@ import { MathError } from '../error';
 import { readLatex, writeLatex } from '../latex';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
+import { writeText } from '../text';
 import { MATH_LIMITS, type MathNode, type MathRow, RowBuilder } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
@@ -251,6 +252,32 @@ describe('RowBuilder', () => {
         { kind: 'identifier', text: 'a\u0338b' },
     ])('canonicalIssue rejects %j', (node) => {
         expect(canonicalIssue([node])).toBeDefined();
+    });
+});
+
+// Chrome draws an ASCII hyphen in an mo as a hyphen, so the minus sign is U+2212 in every tree.
+describe('the minus sign', () => {
+    const minus: MathRow = [...letter('a'), { kind: 'operator', text: '\u2212' }, ...letter('b')];
+
+    test('an operator hyphen-minus reads as U+2212 in every reader, but text keeps it', () => {
+        for (const read of readEach('a-b', '<mi>a</mi><mo>-</mo><mi>b</mi>')) expect(read).toStrictEqual(minus);
+        const text: MathRow = [{ kind: 'text', text: 'a-b' }];
+        expect(
+            readOmml(
+                el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:rPr><m:nor/></m:rPr><m:t>a-b</m:t></m:r></m:oMath>`),
+            ),
+        ).toStrictEqual(text);
+        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mtext>a-b</mtext></math>`)).row).toStrictEqual(text);
+        expect(readLatex('\\text{a-b}')).toStrictEqual(text);
+        expect(canonicalIssue([{ kind: 'operator', text: '-' }])).toBeDefined();
+    });
+
+    test('is written U+2212 in MathML, OMML and text, and - in LaTeX', () => {
+        expect(writeMathml(minus)).toContain('<mo>\u2212</mo>');
+        expect(writeOmml(minus)).toContain('a\u2212b');
+        expect(writeText(minus)).toBe('a\u2212b');
+        expect(writeLatex(minus)).toBe('a-b');
+        for (const via of [viaMathml, viaOmml, viaLatex]) expect(via(minus)).toStrictEqual(minus);
     });
 });
 

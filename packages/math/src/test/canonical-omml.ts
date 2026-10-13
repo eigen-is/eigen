@@ -178,6 +178,11 @@ export const NORMALISATIONS: { reason: string; indices: number[]; apply: (row: C
             ),
         },
         {
+            reason: 'an operator hyphen-minus reads as the minus sign U+2212',
+            indices: [12, 43, 44, 56, 57, 60, 61, 63, 79, 80, 83, 90, 91, 156, 158, 159, 160],
+            apply: eachCharacter((char) => (/^-\|(?!nor)/.test(char) ? `\u2212${char.slice(1)}` : char)),
+        },
+        {
             reason: 'an empty script or degree shows nothing, so it reads as hidden',
             indices: [18, 69],
             apply: (row) => walk(row, (item) => (typeof item === 'string' ? [item] : revealEmpty(item))),

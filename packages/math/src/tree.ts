@@ -1,5 +1,5 @@
 import { MathError } from './error';
-import { ACCENTS, fromAlphanumeric, SCRIPT_CHARS, SPACES, UPRIGHT_LETTERS } from './notation';
+import { ACCENTS, fromAlphanumeric, MINUS, SCRIPT_CHARS, SPACES, UPRIGHT_LETTERS } from './notation';
 import { checkedXml, replaceEdges, trimXmlSpace } from './xml';
 
 export const MATH_VARIANTS = [
@@ -199,7 +199,7 @@ export class RowBuilder {
                     char,
                     LETTER.test(char) ? (letters ?? defaultVariant('identifier', char)) : others,
                 ];
-                this.#chars.push({ char: base, marks: '', variant, color });
+                this.#chars.push({ char: base === '-' ? MINUS : base, marks: '', variant, color });
             }
             // Every two waiting characters or marks make at least one part (two quads are one qquad): bound them as
             // they come.
