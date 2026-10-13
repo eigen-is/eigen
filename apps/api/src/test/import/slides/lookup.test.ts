@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
+import { A_NS, P_NS, parseOoxml } from '../../../lib/core/ooxml';
 import { type XmlElement, xmlAttr } from '../../../lib/core/xml';
 import { childOf, childrenOf, firstChildOf } from '../../../lib/import/slides/lookup';
 import { countVisits, NS } from '../../fixtures/pptx';
@@ -16,15 +16,18 @@ const parse = (xml: string) => {
 const isFill = (child: XmlElement) => child.ns === A_NS && child.local.endsWith('Fill');
 
 describe('a lookup', () => {
-    test('finds what xmlChild, xmlChildren and a find over the children find', () => {
-        const spPr = parse(
-            `<p:spPr ${NS}><a:x/><a:ln w="1"/><a:noFill/><a:ln w="2"/><a:solidFill/><p:ln w="3"/></p:spPr>`,
-        );
-        const width = (ln: XmlElement | undefined) => ln && xmlAttr(ln, '', 'w');
-        expect(width(childOf(spPr, A_NS, 'ln'))).toBe('1');
-        expect(childOf(spPr, A_NS, 'prstGeom')).toBeUndefined();
-        expect(childrenOf(spPr, A_NS, 'ln').map(width)).toEqual(['1', '2']);
-        expect(firstChildOf(spPr, isFill)?.local).toBe('noFill');
+    test('finds what xmlChild, xmlChildren and a find over the children find, in a few children or indexed many', () => {
+        for (const junk of ['', '<a:x/>'.repeat(20)]) {
+            const spPr = parse(
+                `<p:spPr ${NS}>${junk}<a:ln w="1"/><a:noFill/><a:ln w="2"/><a:solidFill/><p:ln w="3"/></p:spPr>`,
+            );
+            const width = (ln: XmlElement | undefined) => ln && xmlAttr(ln, '', 'w');
+            expect(width(childOf(spPr, A_NS, 'ln'))).toBe('1');
+            expect(width(childOf(spPr, P_NS, 'ln'))).toBe('3');
+            expect(childOf(spPr, A_NS, 'prstGeom')).toBeUndefined();
+            expect(childrenOf(spPr, A_NS, 'ln').map(width)).toEqual(['1', '2']);
+            expect(firstChildOf(spPr, isFill)?.local).toBe('noFill');
+        }
     });
 
     test("reads an element's children once, however many lookups follow", () => {
