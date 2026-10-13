@@ -250,3 +250,64 @@ describe('equation text', () => {
         });
     });
 });
+
+describe('equation commands', () => {
+    // "a" at 1, an equation of x at 2.
+    const editorOf = () =>
+        new Editor({
+            extensions: getDocExtensions(),
+            content: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'a' },
+                            { type: 'equation', attrs: { mathml: writeMathml(x, 'x') } },
+                        ],
+                    },
+                ],
+            },
+        });
+
+    test('insertEquation puts an empty equation at the caret and selects it', () => {
+        const editor = editorOf();
+        editor.commands.setTextSelection(2);
+        expect(editor.commands.insertEquation()).toBe(true);
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+        expect(editor.state.doc.nodeAt(2)?.attrs).toEqual({ mathml: '', display: false, commentCardId: null });
+        expect(editor.state.doc.nodeAt(3)?.attrs['mathml']).toBe(writeMathml(x, 'x'));
+        editor.destroy();
+    });
+
+    test('insertEquation over a selected equation keeps it and puts the new one after it', () => {
+        const editor = editorOf();
+        editor.commands.setNodeSelection(2);
+        editor.commands.insertEquation();
+        expect(editor.state.doc.nodeAt(2)?.attrs['mathml']).toBe(writeMathml(x, 'x'));
+        expect(editor.state.doc.nodeAt(3)?.attrs['mathml']).toBe('');
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 3 });
+        editor.destroy();
+    });
+
+    test('updateEquation writes the selected equation and keeps it selected', () => {
+        const editor = editorOf();
+        editor.commands.setNodeSelection(2);
+        expect(editor.commands.updateEquation({ mathml: writeMathml(xSquared, 'x^2'), display: true })).toBe(true);
+        expect(editor.state.doc.nodeAt(2)?.attrs).toEqual({
+            mathml: writeMathml(xSquared, 'x^2'),
+            display: true,
+            commentCardId: null,
+        });
+        expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+        editor.destroy();
+    });
+
+    test('updateEquation without a selected equation writes nothing', () => {
+        const editor = editorOf();
+        editor.commands.setTextSelection(1);
+        expect(editor.commands.updateEquation({ display: true })).toBe(false);
+        expect(editor.state.doc.nodeAt(2)?.attrs['display']).toBe(false);
+        editor.destroy();
+    });
+});

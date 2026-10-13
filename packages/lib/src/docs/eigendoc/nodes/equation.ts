@@ -1,4 +1,5 @@
-import { Node } from '@tiptap/core';
+import { type CommandProps, Node } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
 import {
     fromDom,
     MATH_LIMITS,
@@ -15,6 +16,15 @@ import {
 
 // `mathml` is what the writer wrote for the rest: the one string a consumer mounts.
 export type Equation = { row: MathRow; latex: string | undefined; mathml: string; display: boolean };
+
+declare module '@tiptap/core' {
+    interface Commands<ReturnType> {
+        equation: {
+            insertEquation: () => ReturnType;
+            updateEquation: (attributes: { mathml?: string; display?: boolean }) => ReturnType;
+        };
+    }
+}
 
 type Read = Omit<Equation, 'display'>;
 
@@ -67,6 +77,13 @@ export function readEquation(
     return { ...((math && readMath(math)) || EMPTY), display };
 }
 
+// The <math> a browser draws: the writer's MathML, as a block when the equation is displayed.
+export function equationMath({ mathml, display }: Pick<Equation, 'mathml' | 'display'>): Element {
+    const math = new DOMParser().parseFromString(mathml, 'application/xml').documentElement;
+    if (display) math.setAttribute('display', 'block');
+    return math;
+}
+
 // The text of an equation for the word count, a comment's quote, plain text and the search index: its linear form,
 // typed or not. Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText
 // equal to the match's prefix would let a rule replace the equation.
@@ -116,9 +133,7 @@ export const EquationNode = Node.create({
     // In a span, phrasing content like the <math>, so a pasted copy keeps its paragraph whole. Browsers honour
     // contenteditable on HTML elements only, so on a bare <math> the caret would enter its tokens.
     renderHTML({ node }) {
-        const { mathml, display } = readEquation(node.attrs);
-        const math = new DOMParser().parseFromString(mathml, 'application/xml').documentElement;
-        if (display) math.setAttribute('display', 'block');
+        const math = equationMath(readEquation(node.attrs));
         // Spelled like the comment mark's, so a cut equation keeps its card the way cut text does.
         if (node.attrs['commentCardId']) math.setAttribute('data-comment-id', node.attrs['commentCardId']);
         return ['span', math];
@@ -126,5 +141,31 @@ export const EquationNode = Node.create({
 
     renderText({ node }) {
         return equationText(node.attrs);
+    },
+
+    addCommands() {
+        return {
+            // An empty equation at the caret, selected; one selected stays, and the new one follows it.
+            insertEquation:
+                () =>
+                ({ tr, dispatch, commands }: CommandProps) => {
+                    if (tr.selection instanceof NodeSelection) commands.setTextSelection(tr.selection.to);
+                    if (!commands.insertContent({ type: this.name })) return false;
+                    if (dispatch) tr.setSelection(NodeSelection.create(tr.doc, tr.selection.from - 1));
+                    return true;
+                },
+            // Attribute steps move no position, so the equation stays selected and its panel open.
+            updateEquation:
+                (attributes) =>
+                ({ tr, dispatch }: CommandProps) => {
+                    const { selection } = tr;
+                    if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) return false;
+                    if (dispatch) {
+                        for (const [key, value] of Object.entries(attributes))
+                            tr.setNodeAttribute(selection.from, key, value);
+                    }
+                    return true;
+                },
+        };
     },
 });

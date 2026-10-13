@@ -88,24 +88,18 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
         const cardId = nodeCommentCardId(node);
         if (cardId) {
             const end = pos + node.nodeSize;
-
-            // An image's node view paints the corner mark from this spec, resolved or not, like a
+            const color = meta.colorMap.get(cardId);
+            // An image's or an equation's node view paints the corner mark from this spec, resolved or not, like a
             // commented canvas element.
-            if (node.type.name === 'figure') {
-                decorations.push(Decoration.node(pos, end, {}, { commentColor: meta.colorMap.get(cardId) }));
-            } else if (meta.resolvedIds.has(cardId)) {
-                // Resolved comments: no decoration, keep default highlight appearance.
-                // Resolved status is visible in the sidebar (checkmark icon + filter).
-            } else {
-                const color = meta.colorMap.get(cardId);
-                if (color) {
-                    decorations.push(
-                        Decoration.inline(pos, end, {
-                            class: 'comment-colored',
-                            style: `background-color:${lightenColor(color, 0.25)}`,
-                        }),
-                    );
-                }
+            if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
+            // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
+            if (node.type.name !== 'figure' && !meta.resolvedIds.has(cardId) && color) {
+                decorations.push(
+                    Decoration.inline(pos, end, {
+                        class: 'comment-colored',
+                        style: `background-color:${lightenColor(color, 0.25)}`,
+                    }),
+                );
             }
         }
     });
