@@ -6,7 +6,7 @@ import { ApiError, isOutOfMemory } from '../../core/errors';
 // Only serializable primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
 // user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
-// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX/PPTX export, the xlsx and docx imports
+// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX/PPTX export, the xlsx, docx and pptx imports
 // and the search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
@@ -105,7 +105,17 @@ export type DocImportJob = {
     // Links into this instance come back root-relative with it; the transform reads no config.
     publicOrigin: string | undefined;
 };
-export type ImportTransformJob = SheetsImportJob | DocImportJob;
+export type SlidesImportJob = {
+    kind: 'import';
+    sourceFormat: 'pptx';
+    targetType: 'eigenslides';
+    // The slide the file's slides are fitted into, letterboxed: the deck's own size on an Import slides…; none on a
+    // Convert, whose new deck takes the size the file's slide size picks.
+    frame?: { width: number; height: number };
+    // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
+    maxMediaBytes: number;
+};
+export type ImportTransformJob = SheetsImportJob | DocImportJob | SlidesImportJob;
 
 // Preview, export and search extraction read the persisted collaborative document; the
 // bytes-sourced jobs (the vCard, message and calendar previews, both imports) carry their own input instead.
@@ -116,13 +126,26 @@ export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
     | (BytesTransformJob & { data: ArrayBuffer });
 
+// The warnings that count what a read skipped or an import left out.
+export type CountedWarningCode =
+    | 'corrupt-blobs-skipped'
+    | 'blocks-flattened'
+    | 'images-unshown'
+    | 'images-dropped'
+    | 'mirrors-dropped'
+    | 'graphics-dropped'
+    | 'tables-dropped'
+    | 'charts-dropped'
+    | 'diagrams-dropped'
+    | 'objects-dropped'
+    | 'shapes-simplified'
+    | 'fills-simplified'
+    | 'text-simplified';
+
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
-    | { code: 'corrupt-blobs-skipped'; count: number }
     | { code: 'byte-guard-truncated'; bytes: number }
-    | { code: 'blocks-flattened'; count: number }
-    | { code: 'images-unshown'; count: number }
-    | { code: 'graphics-dropped'; count: number };
+    | { code: CountedWarningCode; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the
@@ -152,7 +175,7 @@ export type ExportWorkerResult = { data: ArrayBuffer };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it.
 export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
-// A ready Yjs update plus the images extracted from the docx: the main thread only
+// A ready Yjs update plus the images extracted from the docx or pptx: the main thread only
 // applies the update and writes the media through Mount.
 export type DocImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 
@@ -175,7 +198,7 @@ export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob>
         ? ExportWorkerResult
         : R extends { targetType: 'eigensheets' }
           ? SheetsImportWorkerResult
-          : R extends { targetType: 'eigendoc' }
+          : R extends { targetType: 'eigendoc' | 'eigenslides' }
             ? DocImportWorkerResult
             : never;
 
@@ -233,6 +256,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
         case 'import':
             switch (request.targetType) {
                 case 'eigendoc':
+                case 'eigenslides':
                     return (
                         r?.update instanceof ArrayBuffer && Array.isArray(r.images) && r.images.every(isTransformMedia)
                     );

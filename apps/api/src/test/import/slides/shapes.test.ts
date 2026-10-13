@@ -1,0 +1,770 @@
+import { describe, expect, test } from 'bun:test';
+import type { NewVectorElement } from '@workspace/lib/vector';
+import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { MAX_GROUP_DEPTH } from '../../../lib/import/slides/shapes';
+import {
+    box,
+    buildPptx,
+    buildPptxWithBadPictures,
+    cxn,
+    graphicFrame,
+    groupXfrm,
+    grp,
+    PIXEL_PNG,
+    type PptxFixture,
+    PX,
+    para,
+    pic,
+    rel,
+    solid,
+    sp,
+    styleRef,
+    styleRefs,
+    THEME,
+    xfrm,
+} from '../../fixtures/pptx';
+
+// A slide's shape tree as canvas elements: geometry, groups, kinds, paint, pictures and what is dropped.
+
+const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
+
+const deckOf = (fixture: PptxFixture) => readPptx(buildPptx(fixture), OPTIONS);
+const elementsOf = (shapes: string, fixture: Partial<PptxFixture> = {}): NewVectorElement[] =>
+    deckOf({ slides: [{ shapes }], ...fixture }).slides[0].elements;
+const element = (shapes: string, fixture: Partial<PptxFixture> = {}) => elementsOf(shapes, fixture)[0];
+
+const FILLED = solid('FF0000');
+
+function expectBox(found: NewVectorElement | undefined, x: number, y: number, width: number, height: number) {
+    expect(found?.x).toBeCloseTo(x, 6);
+    expect(found?.y).toBeCloseTo(y, 6);
+    expect(found?.width).toBeCloseTo(width, 6);
+    expect(found?.height).toBeCloseTo(height, 6);
+}
+
+describe('geometry', () => {
+    test("a 16:9 slide fills the frame: 6,350 EMU a px, or the deck's frame an Import gives", () => {
+        const shape = sp({ xfrm: box(100, 50, 400, 200), spPr: FILLED });
+        expectBox(element(shape), 100, 50, 400, 200);
+        const frame = { width: 960, height: 540 };
+        const imported = readPptx(buildPptx({ slides: [{ shapes: shape }] }), { ...OPTIONS, frame });
+        expectBox(imported.slides[0].elements[0], 50, 25, 200, 100);
+    });
+
+    test('a 4:3 slide is letterboxed into the frame, centred', () => {
+        const found = element(sp({ xfrm: xfrm(0, 0, 9144000, 6858000), spPr: FILLED }), {
+            sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
+        });
+        expectBox(found, 240, 0, 1440, 1080);
+    });
+
+    test('a rotation is the angle, and a flip keeps the box: flipH its turn, flipV half a turn more', () => {
+        expect(element(sp({ xfrm: box(0, 0, 100, 50, ' rot="5400000"'), spPr: FILLED }))?.angle).toBeCloseTo(90, 6);
+        const flippedH = element(sp({ xfrm: box(10, 20, 100, 50, ' rot="1800000" flipH="1"'), spPr: FILLED }));
+        expect(flippedH?.angle).toBeCloseTo(30, 6);
+        expectBox(flippedH, 10, 20, 100, 50);
+        expect(element(sp({ xfrm: box(0, 0, 100, 50, ' rot="1800000" flipV="1"'), spPr: FILLED }))?.angle).toBeCloseTo(
+            210,
+            6,
+        );
+    });
+
+    test('a group scales its children from chOff/chExt onto off/ext, and turns them about its centre', () => {
+        const child = sp({ xfrm: box(0, 0, 50, 50), spPr: FILLED });
+        const scaled = groupXfrm([100 * PX, 100 * PX, 200 * PX, 200 * PX], [0, 0, 100 * PX, 100 * PX]);
+        expectBox(element(grp(scaled, child)), 100, 100, 100, 100);
+        const turned = groupXfrm(
+            [100 * PX, 100 * PX, 200 * PX, 200 * PX],
+            [0, 0, 100 * PX, 100 * PX],
+            ' rot="5400000"',
+        );
+        const found = element(grp(turned, child));
+        expectBox(found, 200, 100, 100, 100);
+        expect(found?.angle).toBeCloseTo(90, 6);
+    });
+
+    test('a flipped group mirrors its children about its centre and negates their angles', () => {
+        const child = sp({ xfrm: box(0, 0, 100, 50, ' rot="1800000"'), spPr: FILLED });
+        const flipped = groupXfrm([0, 0, 400 * PX, 200 * PX], [0, 0, 400 * PX, 200 * PX], ' flipH="1"');
+        const found = element(grp(flipped, child));
+        expectBox(found, 300, 0, 100, 50);
+        expect(found?.angle).toBeCloseTo(330, 6);
+    });
+
+    test("a turned child in an unevenly scaled group keeps its turn, its extents scaled along the group's axes", () => {
+        const stretched = groupXfrm([0, 0, 400 * PX, 100 * PX], [0, 0, 200 * PX, 100 * PX]);
+        const child = (rot: number) => sp({ xfrm: box(0, 0, 100, 50, ` rot="${rot * 60000}"`), spPr: FILLED });
+        const turned = element(grp(stretched, child(30)));
+        expectBox(turned, 0, 0, 200, 50);
+        expect(turned?.angle).toBeCloseTo(30, 6);
+        // Turned sideways, the child's width runs along the group's y axis.
+        const sideways = element(grp(stretched, child(90)));
+        expectBox(sideways, 50, -25, 100, 100);
+        expect(sideways?.angle).toBeCloseTo(90, 6);
+    });
+
+    test("nested groups compose: an inner group's turn decides which of the outer group's scales a child takes", () => {
+        const inner = grp(
+            groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX], ' rot="5400000"'),
+            sp({ xfrm: box(0, 25, 100, 50), spPr: FILLED }),
+        );
+        const found = element(grp(groupXfrm([0, 0, 400 * PX, 200 * PX], [0, 0, 200 * PX, 200 * PX]), inner));
+        expectBox(found, 50, 0, 100, 100);
+        expect(found?.angle).toBeCloseTo(90, 6);
+    });
+
+    test('a group flipped vertically mirrors its children and turns them half round; flipped both ways it turns them', () => {
+        const child = sp({ xfrm: box(0, 0, 100, 50, ' rot="1800000"'), spPr: FILLED });
+        const flipped = (attributes: string) =>
+            element(grp(groupXfrm([0, 0, 400 * PX, 200 * PX], [0, 0, 400 * PX, 200 * PX], attributes), child));
+        const vertical = flipped(' flipV="1"');
+        expectBox(vertical, 0, 150, 100, 50);
+        expect(vertical?.angle).toBeCloseTo(150, 6);
+        const both = flipped(' flipH="1" flipV="1"');
+        expectBox(both, 300, 150, 100, 50);
+        expect(both?.angle).toBeCloseTo(210, 6);
+    });
+
+    test(`groups nest to ${MAX_GROUP_DEPTH} deep; one more is too large`, () => {
+        const nested = (depth: number) => {
+            let tree = sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED });
+            const identity = groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX]);
+            for (let i = 0; i < depth; i++) tree = grp(identity, tree);
+            return tree;
+        };
+        expect(elementsOf(nested(MAX_GROUP_DEPTH))).toHaveLength(1);
+        expect(() => elementsOf(nested(MAX_GROUP_DEPTH + 1))).toThrow('This presentation is too large to import');
+    });
+
+    test('a negative extent is none, and a coordinate past what a double holds exactly places nothing', () => {
+        expectBox(element(sp({ xfrm: xfrm(0, 0, -635000, 635000), spPr: FILLED })), 0, 0, 0, 100);
+        expect(elementsOf(sp({ xfrm: xfrm('9'.repeat(30), 0, 10, 10), spPr: FILLED }))).toEqual([]);
+    });
+
+    test('a shape wholly outside the frame is not drawn, one overhanging it is, its turn included', () => {
+        const at = (x: number, y: number, attributes = '') =>
+            sp({ xfrm: box(x, y, 100, 10, attributes), spPr: FILLED });
+        const kept = elementsOf(
+            at(-200, 0) + at(-50, 0) + at(1920, 1070) + at(2000, 0) + at(0, -11) + at(-60, 0, ' rot="5400000"'),
+        );
+        expect(kept.map((found) => [found.x, found.y])).toEqual([
+            [-50, 0],
+            [1920, 1070],
+        ]);
+    });
+
+    test("a letterboxed slide's off-slide shapes, a layout's guides, are not drawn in the bands beside it", () => {
+        // 4:3 in 16:9: the slide spans x 240 to 1680, 1080 / 6,858,000 px an EMU.
+        const line = (x: number) =>
+            cxn({ xfrm: xfrm(x, 0, 0, 6858000), geom: 'line', ln: `<a:ln>${solid('FF0000')}</a:ln>` });
+        const deck = deckOf({
+            sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
+            layouts: [{ shapes: line(-200000) + line(9300000) + line(100000) }],
+            slides: [{ shapes: sp({ xfrm: xfrm(9000000, 0, 400000, 100000), spPr: FILLED }) }],
+        });
+        expect(deck.slides[0].elements.map((found) => [found.type, Math.round(found.x ?? Number.NaN)])).toEqual([
+            ['line', 256],
+            ['rectangle', 1657],
+        ]);
+    });
+
+    test('a box a group scaled past what a double holds is not drawn', () => {
+        let tree = sp({ xfrm: xfrm(0, 0, 1, 1), spPr: FILLED, text: para('far') });
+        for (let i = 0; i < 30; i++) tree = grp(groupXfrm([0, 0, 9e15, 9e15], [0, 0, 1, 1]), tree);
+        expect(elementsOf(tree)).toEqual([]);
+    });
+
+    test('a hidden shape is not drawn, and a shape with no geometry of its own or inherited is skipped', () => {
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED, hidden: true }))).toEqual([]);
+        expect(elementsOf(sp({ spPr: FILLED }))).toEqual([]);
+    });
+});
+
+describe('kinds', () => {
+    test('a rectangle is straight-cornered, a roundRect curved, ellipse and diamond as themselves', () => {
+        const kinds = elementsOf(
+            ['rect', 'roundRect', 'ellipse', 'diamond']
+                .map((geom) => sp({ xfrm: box(0, 0, 10, 10), geom, spPr: FILLED }))
+                .join(''),
+        ).map((found) => [found.type, found.corners]);
+        expect(kinds).toEqual([
+            ['rectangle', 'straight'],
+            ['rectangle', 'curved'],
+            ['ellipse', undefined],
+            ['diamond', 'straight'],
+        ]);
+    });
+
+    test("a pie's visual angles become its box-normalized ones; equal angles are the whole ellipse", () => {
+        const pie = (adj1: number, adj2: number) =>
+            element(
+                sp({
+                    xfrm: box(0, 0, 200, 100),
+                    spPr: `<a:prstGeom prst="pie"><a:avLst><a:gd name="adj1" fmla="val ${adj1 * 60000}"/><a:gd name="adj2" fmla="val ${adj2 * 60000}"/></a:avLst></a:prstGeom>${FILLED}`,
+                }),
+            );
+        const quarter = pie(0, 90);
+        expect(quarter?.type).toBe('pie');
+        expect(quarter?.startAngle).toBeCloseTo(0, 6);
+        expect(quarter?.sweepAngle).toBeCloseTo(90, 6);
+        // 45° on a 2:1 ellipse is atan(2) in the normalized circle.
+        expect(pie(0, 45)?.sweepAngle).toBeCloseTo((Math.atan(2) * 180) / Math.PI, 6);
+        expect(pie(30, 30)?.sweepAngle).toBe(360);
+    });
+
+    test('a mirrored pie runs the other way round its box', () => {
+        const found = element(
+            sp({
+                xfrm: box(0, 0, 100, 100, ' flipH="1"'),
+                spPr: `<a:prstGeom prst="pie"><a:avLst><a:gd name="adj1" fmla="val 0"/><a:gd name="adj2" fmla="val 5400000"/></a:avLst></a:prstGeom>${FILLED}`,
+            }),
+        );
+        expect(found?.startAngle).toBeCloseTo(90, 6);
+        expect(found?.sweepAngle).toBeCloseTo(90, 6);
+    });
+
+    test('a connector is a line between its flipped ends, an arrow when a:ln has a head or a tail', () => {
+        const ln = (ends: string) => `<a:ln w="25400">${solid('0000FF')}<a:prstDash val="sysDash"/>${ends}</a:ln>`;
+        const line = element(cxn({ xfrm: box(100, 100, 200, 100, ' flipH="1"'), geom: 'line', ln: ln('') }));
+        expect(line).toMatchObject({ type: 'line', strokeColor: '#0000ff', strokeStyle: 'dashed', roundness: 'sharp' });
+        expectBox(line, 100, 100, 200, 100);
+        expect(line?.strokeWidth).toBeCloseTo(4, 6);
+        expect(JSON.parse(String(line?.points))).toEqual([
+            [200, 0],
+            [0, 100],
+        ]);
+        const arrow = element(
+            cxn({ xfrm: box(0, 0, 100, 0), ln: ln('<a:headEnd type="oval"/><a:tailEnd type="triangle"/>') }),
+        );
+        expect(arrow).toMatchObject({
+            type: 'arrow',
+            startArrowhead: 'circle',
+            endArrowhead: 'triangle',
+            elbow: false,
+        });
+    });
+
+    test('an unstroked line draws nothing', () => {
+        expect(elementsOf(cxn({ xfrm: box(0, 0, 100, 0), ln: '<a:ln><a:noFill/></a:ln>' }))).toEqual([]);
+    });
+
+    test('a text box is one rich text box with its fill and border; any other shape carries its text on top', () => {
+        const [textBox] = elementsOf(
+            sp({
+                xfrm: box(0, 0, 100, 50),
+                txBox: true,
+                spPr: `${FILLED}<a:ln w="12700">${solid('00FF00')}</a:ln>`,
+                text: para('Hello &amp; &lt;world&gt;'),
+            }),
+        );
+        expect(textBox).toMatchObject({
+            type: 'richtext',
+            html: '<p>Hello &amp; &lt;world&gt;</p>',
+            strokeColor: '#00ff00',
+            corners: 'straight',
+        });
+        expect(JSON.parse(String(textBox.fill))).toMatchObject({ type: 'solid', color: '#ff0000' });
+        const [shape, onTop] = elementsOf(
+            sp({ xfrm: box(0, 0, 100, 50), geom: 'ellipse', spPr: FILLED, text: para('In it') }),
+        );
+        expect(shape.type).toBe('ellipse');
+        expect(onTop).toMatchObject({ type: 'richtext', html: '<p>In it</p>', strokeColor: 'transparent' });
+        expect(JSON.parse(String(onTop.fill))).toMatchObject({ color: 'transparent' });
+    });
+
+    test('vertical text turns its box a further quarter turn, or three, its sides swapped about the centre', () => {
+        const turned = (vert: string, geom = 'rect', layout = '') => {
+            const shape = (bodyPr: string, text?: string) =>
+                sp({
+                    ph: '<p:ph type="body" idx="1"/>',
+                    xfrm: box(100, 100, 400, 100, ' rot="600000"'),
+                    geom,
+                    spPr: FILLED,
+                    text,
+                }).replace('<a:bodyPr/>', `<a:bodyPr${bodyPr}/>`);
+            return deckOf({
+                layouts: [{ shapes: shape(layout, '<a:p/>') }],
+                slides: [{ shapes: shape(vert, para('Up')) }],
+            });
+        };
+        const up = turned(' vert="vert270"').slides[0].elements[0];
+        expect(up).toMatchObject({ type: 'richtext', html: '<p>Up</p>' });
+        expectBox(up, 250, -50, 100, 400);
+        expect(up?.angle).toBeCloseTo(280, 6);
+        expect(turned(' vert="vert"').slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
+        expect(turned('', 'rect', ' vert="vert"').slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
+        // A shape keeps its own box, its text box on top turned.
+        const [ellipse, text] = turned(' vert="vert"', 'ellipse').slides[0].elements;
+        expectBox(ellipse, 100, 100, 400, 100);
+        expect(ellipse?.angle).toBeCloseTo(10, 6);
+        expectBox(text, 250, -50, 100, 400);
+        expect(turned(' vert="horz"').slides[0].elements[0]?.angle).toBeCloseTo(10, 6);
+        expect(turned(' vert="vert"').warnings).toEqual([]);
+        // East Asian text turns as Latin script does in it; WordArt's stacked letters lie across. Both count.
+        const eastAsian = turned(' vert="eaVert"');
+        expect(eastAsian.slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
+        expect(eastAsian.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+        const stacked = turned(' vert="wordArtVert"');
+        expect(stacked.slides[0].elements[0]?.angle).toBeCloseTo(10, 6);
+        expect(stacked.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    test('another preset or a custGeom keeps its text, drops its outline, and says so', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        sp({ xfrm: box(0, 0, 10, 10), geom: 'rightArrow', spPr: FILLED, text: para('Next') }) +
+                        sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:custGeom/>${FILLED}` }),
+                },
+            ],
+        });
+        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([['richtext', '<p>Next</p>']]);
+        expect(deck.warnings).toContainEqual({ code: 'shapes-simplified', count: 2 });
+    });
+
+    test('a shape with neither fill nor line nor text draws nothing', () => {
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>' }))).toEqual([]);
+    });
+});
+
+describe('paint', () => {
+    test('a scheme colour goes through the theme, its transforms applied, and alpha into the hex', () => {
+        const found = element(
+            sp({
+                xfrm: box(0, 0, 10, 10),
+                spPr: '<a:solidFill><a:schemeClr val="accent1"><a:alpha val="50000"/></a:schemeClr></a:solidFill>',
+            }),
+        );
+        expect(JSON.parse(String(found?.fill))).toEqual({ type: 'solid', color: '#4f81bd80', style: 'solid' });
+    });
+
+    test("grpFill shows the group's fill", () => {
+        const group = grp(
+            `${groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX])}${solid('123456')}`,
+            sp({ xfrm: box(0, 0, 10, 10), spPr: '<a:grpFill/>' }),
+        );
+        expect(JSON.parse(String(element(group)?.fill))).toMatchObject({ color: '#123456' });
+    });
+
+    test('a pattern fills in its foreground colour, and says so', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: sp({
+                        xfrm: box(0, 0, 10, 10),
+                        spPr: '<a:pattFill prst="pct20"><a:fgClr><a:schemeClr val="accent3"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill>',
+                    }),
+                },
+            ],
+        });
+        expect(JSON.parse(String(deck.slides[0].elements[0].fill))).toMatchObject({ color: '#9bbb59' });
+        expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
+    });
+
+    test('a picture fill on a shape is dropped, and counted', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: sp({
+                        xfrm: box(0, 0, 10, 10),
+                        spPr: `<a:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:ln>${solid('000000')}</a:ln>`,
+                    }),
+                    rels: rel('rId2', 'image', '../media/a.png'),
+                },
+            ],
+            files: { 'ppt/media/a.png': PIXEL_PNG },
+        });
+        const [found] = deck.slides[0].elements;
+        expect(JSON.parse(String(found.fill))).toMatchObject({ color: 'transparent' });
+        expect(found.strokeColor).toBe('#000000');
+        expect(deck.media).toEqual([]);
+        expect(deck.warnings).toContainEqual({ code: 'images-unshown', count: 1 });
+    });
+
+    test('dots and dashes map to the dotted and dashed strokes', () => {
+        const stroke = (dash: string) =>
+            element(sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:ln>${solid('000000')}<a:prstDash val="${dash}"/></a:ln>` }))
+                ?.strokeStyle;
+        expect(['solid', 'sysDot', 'dot', 'dash', 'lgDashDot'].map(stroke)).toEqual([
+            'solid',
+            'dotted',
+            'dotted',
+            'dashed',
+            'dashed',
+        ]);
+    });
+});
+
+describe('style references', () => {
+    const fillOf = (found: NewVectorElement | undefined) => JSON.parse(String(found?.fill)).color;
+    const shape = (style: string, spPr = '') => element(sp({ xfrm: box(0, 0, 100, 50), spPr, style }));
+
+    test("a fillRef paints its fillStyleLst entry in the reference's colour, the entry's transforms on top", () => {
+        expect(fillOf(shape(styleRefs(1, 0)))).toBe('#c0504d');
+        expect(fillOf(shape(styleRefs(2, 0)))).toBe('#e2c2c2');
+        expect(fillOf(shape(styleRefs(3, 0)))).toBe('#8e3b39');
+        const translucent = '<a:schemeClr val="accent1"><a:alpha val="50000"/></a:schemeClr>';
+        expect(fillOf(shape(styleRefs(1, 0, translucent)))).toBe('#4f81bd80');
+    });
+
+    test('fillRef 0 is no fill, 1001 and up a bgFillStyleLst entry, and past the list nothing', () => {
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(0, 0) }))).toEqual([]);
+        expect(fillOf(shape(styleRefs(1002, 0)))).toBe('#abcdef');
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(9, 0) }))).toEqual([]);
+    });
+
+    test("an lnRef strokes with its lnStyleLst entry's width and the reference's colour", () => {
+        const found = shape(styleRefs(0, 2, '<a:srgbClr val="00FF00"/>'));
+        expect(found).toMatchObject({ type: 'rectangle', strokeColor: '#00ff00', strokeStyle: 'solid' });
+        expect(found?.strokeWidth).toBeCloseTo(4, 6);
+        expect(elementsOf(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(0, 0) }))).toEqual([]);
+    });
+
+    test('an explicit fill and a:ln win, attribute by attribute: what the a:ln leaves out comes from the style', () => {
+        const found = shape(styleRefs(1, 3), `${solid('123456')}<a:ln w="12700"><a:prstDash val="dash"/></a:ln>`);
+        expect(fillOf(found)).toBe('#123456');
+        expect(found).toMatchObject({ strokeColor: '#c0504d', strokeStyle: 'dashed' });
+        expect(found?.strokeWidth).toBeCloseTo(2, 6);
+        expect(shape(styleRefs(1, 3), '<a:ln><a:noFill/></a:ln>')?.strokeColor).toBe('transparent');
+        expect(fillOf(shape(styleRefs(1, 3), '<a:noFill/>'))).toBe('transparent');
+    });
+
+    test('a shape with neither a:ln nor p:style has no stroke, nor one whose a:ln states no colour', () => {
+        expect(element(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED }))?.strokeColor).toBe('transparent');
+        expect(element(sp({ xfrm: box(0, 0, 10, 10), spPr: `${FILLED}<a:ln w="25400"/>` }))?.strokeColor).toBe(
+            'transparent',
+        );
+    });
+
+    test("a connector draws in its lnRef's line, its ends from its own a:ln", () => {
+        const found = element(
+            cxn({
+                xfrm: box(0, 0, 100, 0),
+                ln: '<a:ln><a:tailEnd type="triangle"/></a:ln>',
+                style: styleRefs(0, 1, '<a:schemeClr val="accent1"/>'),
+            }),
+        );
+        expect(found).toMatchObject({ type: 'arrow', strokeColor: '#4f81bd', endArrowhead: 'triangle' });
+        expect(found?.strokeWidth).toBeCloseTo(1.5, 6);
+    });
+
+    test("a placeholder with no style of its own takes its layout placeholder's, for its paint and its text", () => {
+        const style = `${styleRef('fillRef', 1, '<a:srgbClr val="FF8800"/>')}<a:fontRef idx="major"><a:srgbClr val="00AA00"/></a:fontRef>`;
+        const [found] = deckOf({
+            layouts: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>', xfrm: box(0, 0, 10, 10), style }) }],
+            slides: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>', text: para('Body') }) }],
+        }).slides[0].elements;
+        expect(fillOf(found)).toBe('#ff8800');
+        expect(found).toMatchObject({ type: 'richtext', color: '#00aa00', fontFamily: 'Source Serif 4' });
+    });
+});
+
+describe('gradients', () => {
+    const stop = (pos: number, color: string) => `<a:gs pos="${pos}">${color}</a:gs>`;
+    const RED = '<a:srgbClr val="FF0000"/>';
+    const BLUE = '<a:srgbClr val="0000FF"/>';
+    const grad = (shade: string, stops = stop(0, RED) + stop(100000, BLUE)) =>
+        `<a:gradFill rotWithShape="1"><a:gsLst>${stops}</a:gsLst>${shade}</a:gradFill>`;
+    const fillOf = (spPr: string, width = 200, height = 100) =>
+        JSON.parse(String(element(sp({ xfrm: box(0, 0, width, height), spPr }))?.fill));
+
+    test('two stops, the ends of the ramp, through the theme, alpha kept, no colour-space correction', () => {
+        const found = fillOf(
+            grad(
+                '<a:lin ang="0" scaled="1"/>',
+                stop(0, '<a:schemeClr val="accent1"/>') +
+                    stop(40000, '<a:srgbClr val="00FF00"/>') +
+                    stop(100000, '<a:srgbClr val="0000FF"><a:alpha val="25000"/></a:srgbClr>'),
+            ),
+        );
+        expect(found).toEqual({ type: 'gradient', from: '#4f81bd', to: '#0000ff40', angle: 90, style: 'solid' });
+    });
+
+    test('the stops are taken by position, as PowerPoint sorts them; one stop is a solid fill', () => {
+        expect(fillOf(grad('<a:lin ang="0"/>', stop(100000, BLUE) + stop(0, RED)))).toMatchObject({
+            from: '#ff0000',
+            to: '#0000ff',
+        });
+        expect(fillOf(grad('', stop(50000, BLUE)))).toEqual({ type: 'solid', color: '#0000ff', style: 'solid' });
+    });
+
+    test("a scaled angle is the canvas's box-unit one, a quarter turn on from DrawingML's", () => {
+        expect(fillOf(grad('<a:lin ang="0" scaled="1"/>')).angle).toBeCloseTo(90, 6);
+        expect(fillOf(grad('<a:lin ang="5400000" scaled="1"/>')).angle).toBeCloseTo(180, 6);
+        expect(fillOf(grad('<a:lin ang="2700000" scaled="1"/>')).angle).toBeCloseTo(135, 6);
+    });
+
+    test("an unscaled angle is the true one, mapped through the box onto the canvas's box units", () => {
+        // 45° true on a 2:1 box: the box-unit line whose isolines the box maps onto the true ones.
+        const along = (Math.atan2(2, -1) * 180) / Math.PI;
+        expect(fillOf(grad('<a:lin ang="2700000" scaled="0"/>')).angle).toBeCloseTo(along, 2);
+        expect(fillOf(grad('<a:lin ang="2700000"/>')).angle).toBeCloseTo(along, 2);
+        expect(fillOf(grad('<a:lin ang="2700000"/>'), 100, 100).angle).toBeCloseTo(135, 6);
+        expect(fillOf(grad('<a:lin ang="5400000"/>')).angle).toBeCloseTo(180, 6);
+    });
+
+    test("a path gradient is the same two stops along DrawingML's default angle, and says so", () => {
+        const deck = deckOf({
+            slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: grad('<a:path path="circle"/>') }) }],
+        });
+        expect(JSON.parse(String(deck.slides[0].elements[0].fill))).toMatchObject({
+            type: 'gradient',
+            from: '#ff0000',
+            to: '#0000ff',
+            angle: 90,
+        });
+        expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
+    });
+
+    test("a style matrix gradient paints its stops in the reference's colour", () => {
+        const theme = THEME.replace(
+            '<a:fillStyleLst>',
+            `<a:fillStyleLst>${grad('<a:lin ang="0" scaled="1"/>', stop(0, '<a:schemeClr val="phClr"><a:tint val="0"/></a:schemeClr>') + stop(100000, '<a:schemeClr val="phClr"/>'))}`,
+        );
+        const found = element(sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(1, 0, '<a:srgbClr val="FF0000"/>') }), {
+            theme,
+        });
+        expect(JSON.parse(String(found?.fill))).toMatchObject({ from: '#ffffff', to: '#ff0000' });
+    });
+
+    test("a gradient line strokes in its first stop's colour, and says so", () => {
+        const deck = deckOf({
+            slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:ln>${grad('<a:lin ang="0"/>')}</a:ln>` }) }],
+        });
+        expect(deck.slides[0].elements[0]?.strokeColor).toBe('#ff0000');
+        expect(deck.warnings).toContainEqual({ code: 'fills-simplified', count: 1 });
+    });
+});
+
+describe('pictures', () => {
+    const files = { 'ppt/media/a.png': PIXEL_PNG, 'ppt/media/b.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>' };
+
+    test('a picture is an image that fills its box, uncropped, its bytes read raw', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: pic({ xfrm: box(10, 20, 30, 40), embed: 'rId2' }),
+                    rels: rel('rId2', 'image', '../media/a.png'),
+                },
+            ],
+            files,
+        });
+        const [image] = deck.slides[0].elements;
+        expect(image).toMatchObject({
+            type: 'image',
+            objectFit: 'fill',
+            corners: 'straight',
+            strokeColor: 'transparent',
+        });
+        expectBox(image, 10, 20, 30, 40);
+        expect(deck.media).toHaveLength(1);
+        expect(deck.media[0].name).toBe(String(image.mediaName));
+        expect(new Uint8Array(deck.media[0].data)).toEqual(PIXEL_PNG);
+    });
+
+    test('a picture cropped to a rounded rectangle has curved corners', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: pic({ xfrm: box(10, 20, 30, 40), embed: 'rId2', geom: 'roundRect' }),
+                    rels: rel('rId2', 'image', '../media/a.png'),
+                },
+            ],
+            files,
+        });
+        expect(deck.slides[0].elements[0]).toMatchObject({ type: 'image', corners: 'curved' });
+    });
+
+    test('the svgBlip is preferred over its png fallback, which is then not read', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: pic({ xfrm: box(0, 0, 10, 10), embed: 'rId2', svg: 'rId3' }),
+                    rels: rel('rId2', 'image', '../media/a.png') + rel('rId3', 'image', '../media/b.svg'),
+                },
+            ],
+            files,
+        });
+        expect(deck.media.map((media) => media.contentType)).toEqual(['image/svg+xml']);
+        expect(String(deck.slides[0].elements[0].mediaName)).toEndWith('.svg');
+    });
+
+    test("a picture whose bytes don't read is a placeholder, counted for each shape showing it", () => {
+        const shapes = pic({ xfrm: box(0, 0, 10, 10), embed: 'rId2' }).repeat(2);
+        const deck = readPptx(
+            buildPptxWithBadPictures({ slides: [{ shapes, rels: rel('rId2', 'image', '../media/a.png') }], files }),
+            OPTIONS,
+        );
+        expect(deck.media).toEqual([]);
+        expect(deck.slides[0].elements.map((found) => [found.type, found.html, found.mediaName])).toEqual([
+            ['richtext', '<p>Picture not imported</p>', undefined],
+            ['richtext', '<p>Picture not imported</p>', undefined],
+        ]);
+        expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
+
+    test('a picture shown twice is one media file; a linked picture is a placeholder; an empty picture placeholder nothing', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        pic({ xfrm: box(0, 0, 10, 10), embed: 'rId2' }) +
+                        pic({ xfrm: box(0, 0, 10, 10), embed: 'rId2' }) +
+                        pic({ xfrm: box(0, 0, 10, 10), link: 'rId4' }) +
+                        pic({ xfrm: box(0, 0, 10, 10), ph: '<p:ph type="pic" idx="1"/>' }),
+                    rels:
+                        rel('rId2', 'image', '../media/a.png') +
+                        rel('rId4', 'image', 'https://example.com/a.png', true),
+                },
+            ],
+            files,
+        });
+        expect(deck.media).toHaveLength(1);
+        expect(deck.slides[0].elements.map((found) => found.html ?? found.mediaName)).toEqual([
+            deck.media[0].name,
+            deck.media[0].name,
+            '<p>Picture not imported</p>',
+        ]);
+        expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    });
+
+    test('a mirrored picture keeps its box and counts its lost mirror; flipped back by its group it is none', () => {
+        const mirrored = (shapes: string) =>
+            deckOf({ slides: [{ shapes, rels: rel('rId2', 'image', '../media/a.png') }], files }).warnings;
+        const flipped = pic({ xfrm: box(0, 0, 10, 10, ' flipH="1"'), embed: 'rId2' });
+        expect(mirrored(flipped + pic({ xfrm: box(0, 0, 10, 10, ' flipV="1"'), embed: 'rId2' }))).toEqual([
+            { code: 'mirrors-dropped', count: 2 },
+        ]);
+        const group = groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX], ' flipH="1"');
+        expect(mirrored(grp(group, flipped))).toEqual([]);
+    });
+});
+
+describe('dropped objects', () => {
+    test('a table, a chart, a SmartArt, an OLE object and anything else leave a box saying what was there', () => {
+        const uris = [
+            'http://schemas.openxmlformats.org/drawingml/2006/table',
+            'http://schemas.openxmlformats.org/drawingml/2006/chart',
+            'http://schemas.openxmlformats.org/drawingml/2006/diagram',
+            'http://schemas.openxmlformats.org/presentationml/2006/ole',
+            'urn:something-else',
+            'http://schemas.openxmlformats.org/drawingml/2006/table',
+        ];
+        const deck = deckOf({
+            slides: [{ shapes: uris.map((uri) => graphicFrame(uri, 0, 0, 635000, 317500)).join('') }],
+        });
+        const boxes = deck.slides[0].elements;
+        expect(boxes.map((found) => found.html)).toEqual([
+            '<p>Table not imported</p>',
+            '<p>Chart not imported</p>',
+            '<p>SmartArt not imported</p>',
+            '<p>Embedded object not imported</p>',
+            '<p>Object not imported</p>',
+            '<p>Table not imported</p>',
+        ]);
+        expect(boxes[0]).toMatchObject({
+            type: 'richtext',
+            strokeStyle: 'dashed',
+            textAlign: 'center',
+            verticalAlign: 'center',
+        });
+        expectBox(boxes[0], 0, 0, 100, 50);
+        expect(deck.warnings).toEqual(
+            expect.arrayContaining([
+                { code: 'tables-dropped', count: 2 },
+                { code: 'charts-dropped', count: 1 },
+                { code: 'diagrams-dropped', count: 1 },
+                { code: 'objects-dropped', count: 2 },
+            ]),
+        );
+    });
+
+    test("markup compatibility takes the fallback of a choice PowerPoint's reader can't read", () => {
+        const choice = (requires: string, inner: string) =>
+            `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="${requires}">${inner}</mc:Choice><mc:Fallback>${sp({ xfrm: box(0, 0, 10, 10), txBox: true, text: para('fallback') })}</mc:Fallback></mc:AlternateContent>`;
+        const choiceShape = sp({ xfrm: box(0, 0, 10, 10), txBox: true, text: para('choice') });
+        expect(elementsOf(choice('a14', choiceShape)).map((found) => found.html)).toEqual(['<p>fallback</p>']);
+        expect(elementsOf(choice('p', choiceShape)).map((found) => found.html)).toEqual(['<p>choice</p>']);
+    });
+});
+
+describe('losses', () => {
+    const PATTERN =
+        '<a:pattFill prst="pct20"><a:fgClr><a:srgbClr val="00FF00"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill>';
+
+    test("count once for the file's element they are in, however many slides show it", () => {
+        const deck = deckOf({
+            masters: [
+                {
+                    shapes:
+                        graphicFrame('http://schemas.openxmlformats.org/drawingml/2006/table', 0, 0, 635000, 317500) +
+                        sp({ xfrm: box(0, 0, 10, 10), spPr: PATTERN }),
+                    bg: '<p:bgPr><a:blipFill><a:blip r:embed="rId7"/><a:tile/></a:blipFill></p:bgPr>',
+                    rels: rel('rId7', 'image', '../media/bg.png'),
+                },
+            ],
+            slides: [{}, {}, {}],
+            files: { 'ppt/media/bg.png': PIXEL_PNG },
+        });
+        expect(deck.slides.map((slide) => slide.elements.length)).toEqual([2, 2, 2]);
+        expect(deck.warnings).toEqual([
+            { code: 'tables-dropped', count: 1 },
+            { code: 'fills-simplified', count: 2 },
+        ]);
+    });
+
+    test('count once for each shape drawn with them: a theme pattern three shapes paint with is three', () => {
+        const theme = THEME.replace('<a:fillStyleLst>', `<a:fillStyleLst>${PATTERN}`);
+        const patterned = sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(1, 0) });
+        const vertical = (ph: string) =>
+            `<p:sp><p:nvSpPr><p:cNvPr id="9" name=""/><p:cNvSpPr/><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr>${box(0, 0, 10, 10)}</p:spPr><p:txBody><a:bodyPr vert="eaVert"/>${para('x')}</p:txBody></p:sp>`;
+        const deck = deckOf({
+            theme,
+            masters: [{ shapes: vertical('<p:ph type="body"/>') }],
+            slides: [
+                { shapes: patterned + patterned + sp({ ph: '<p:ph type="body"/>', text: para('y') }) },
+                { shapes: patterned + sp({ ph: '<p:ph type="body"/>', text: para('y') }) },
+            ],
+        });
+        expect(deck.warnings).toEqual([
+            { code: 'fills-simplified', count: 3 },
+            { code: 'text-simplified', count: 2 },
+        ]);
+    });
+
+    test('a path gradient line is one simplified fill', () => {
+        const ln = `<a:ln><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill></a:ln>`;
+        const deck = deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: ln }) }] });
+        expect(deck.slides[0].elements[0]?.strokeColor).toBe('#ff0000');
+        expect(deck.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+    });
+
+    test("a dropped outline's fill is not drawn, so only the outline counts", () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:custGeom/>${PATTERN}` }) +
+                        sp({
+                            xfrm: box(0, 0, 10, 10),
+                            geom: 'line',
+                            spPr: `${PATTERN}<a:ln>${solid('000000')}</a:ln>`,
+                        }),
+                },
+            ],
+        });
+        expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+    });
+
+    test("a group's fill counts for each child that shows it", () => {
+        const group = (child: string) =>
+            grp(`${groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX])}${PATTERN}`, child);
+        const unshown = deckOf({ slides: [{ shapes: group(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED })) }] });
+        expect(unshown.warnings).toEqual([]);
+        const filled = sp({ xfrm: box(0, 0, 10, 10), spPr: '<a:grpFill/>' });
+        const shown = deckOf({ slides: [{ shapes: group(filled + filled) }] });
+        expect(JSON.parse(String(shown.slides[0].elements[0].fill))).toMatchObject({ color: '#00ff00' });
+        expect(shown.warnings).toEqual([{ code: 'fills-simplified', count: 2 }]);
+    });
+});

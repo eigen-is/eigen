@@ -21,7 +21,7 @@ const MAX_FONT_SIZE = 400;
 // sanitize the markup — the DOM allowlist needs a DOM, and this module runs in the API Worker too. The
 // mount seam does it instead: ElementLayer (every live/preview/present surface) and the paste planner
 // both run sanitizeToLightEditorHtml, so a torn tag here is a cosmetic loss, never an injection.
-const MAX_HTML_BYTES = 64 * 1024;
+export const MAX_HTML_BYTES = 64 * 1024;
 
 // An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
 // count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
