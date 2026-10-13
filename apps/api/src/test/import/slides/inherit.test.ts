@@ -229,7 +229,7 @@ describe('backgrounds', () => {
             files: { 'ppt/media/bg.png': PIXEL_PNG },
         });
         expect(deck.media).toHaveLength(1);
-        expect(deck.media[0].name).toMatch(/^pptx-[\w-]{21}-image-1\.png$/);
+        expect(deck.media[0].name).toMatch(/^pptx-[0-9a-f-]{36}-image-1\.png$/);
         for (const slide of deck.slides)
             expect(slide.background).toEqual({ type: 'image', mediaName: deck.media[0].name, fit: 'cover' });
         expect(deck.warnings).toEqual([]);
