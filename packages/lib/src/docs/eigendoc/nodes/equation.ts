@@ -1,5 +1,4 @@
 import { Node } from '@tiptap/core';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import {
     fromDom,
     MATH_LIMITS,
@@ -11,6 +10,7 @@ import {
     readMathml,
     readMathmlLatex,
     writeMathml,
+    writeText,
 } from '@workspace/math';
 
 // `mathml` is what the writer wrote for the rest: the one string a consumer mounts.
@@ -67,10 +67,11 @@ export function readEquation(
     return { ...((math && readMath(math)) || EMPTY), display };
 }
 
-// Until the package writes an equation's linear text, its LaTeX stands in. Never the node's leafText: Tiptap's input
-// rules compare their match with textBetween, so a leafText equal to the match's prefix would let a rule replace the
-// equation.
-export const equationText = (node: ProseMirrorNode) => readEquation(node.attrs).latex ?? '';
+// The text of an equation for the word count, a comment's quote, plain text and the search index: its linear form,
+// typed or not. Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText
+// equal to the match's prefix would let a rule replace the equation.
+export const equationText = (attrs: Record<string, unknown>, parse?: (mathml: string) => MathXmlElement | null) =>
+    writeText(readEquation(attrs, parse).row);
 
 export const EquationNode = Node.create({
     name: 'equation',
@@ -124,6 +125,6 @@ export const EquationNode = Node.create({
     },
 
     renderText({ node }) {
-        return equationText(node);
+        return equationText(node.attrs);
     },
 });

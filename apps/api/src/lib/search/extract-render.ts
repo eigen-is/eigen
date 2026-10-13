@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ElementKindRegistry, VectorElement } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import type { readStoredEquation } from '../document/equation';
+import type { storedEquationText } from '../document/equation';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
 
@@ -43,14 +43,13 @@ function cutToBytes(text: string, maxBytes: number): string {
     return bytes.toString('utf-8', 0, end);
 }
 
-// `readEquation` rides in from the caller's dynamic import, which keeps the doc schema out of the other extracts.
-function collectProseMirrorText(node: JSONContent, readEquation: typeof readStoredEquation, cap: number): string {
+// `equationText` rides in from the caller's dynamic import, which keeps the doc schema out of the other extracts.
+function collectProseMirrorText(node: JSONContent, equationText: typeof storedEquationText, cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
     const walk = (n: JSONContent): boolean => {
         if (typeof n.text === 'string' && !appendCapped(out, n.text, cap)) return false;
-        // Until the package writes an equation's linear text, its LaTeX stands in.
-        const latex = n.type === 'equation' && readEquation(n.attrs ?? {}).latex;
-        if (latex && !appendCapped(out, latex, cap)) return false;
+        const equation = n.type === 'equation' && equationText(n.attrs ?? {});
+        if (equation && !appendCapped(out, equation, cap)) return false;
         if (Array.isArray(n.content)) {
             for (const child of n.content) {
                 if (!walk(child)) return false;
@@ -98,11 +97,11 @@ export async function extractCollabText(
 ): Promise<{ text: string; warnings: TransformWarning[] }> {
     switch (documentType) {
         case 'eigendoc': {
-            const [{ readEigendocFromDoc }, { readStoredEquation }] = await Promise.all([
+            const [{ readEigendocFromDoc }, { storedEquationText }] = await Promise.all([
                 import('../document/doc'),
                 import('../document/equation'),
             ]);
-            const text = collectProseMirrorText(readEigendocFromDoc(doc), readStoredEquation, CONTENT_INDEX_MAX_BYTES);
+            const text = collectProseMirrorText(readEigendocFromDoc(doc), storedEquationText, CONTENT_INDEX_MAX_BYTES);
             return { text, warnings: [] };
         }
         case 'eigensheets': {

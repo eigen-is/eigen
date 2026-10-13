@@ -76,7 +76,7 @@ export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
             if (leaf.type.name === 'figure') return 'Image';
-            if (leaf.type.name === 'equation') return equationText(leaf) || 'Equation';
+            if (leaf.type.name === 'equation') return equationText(leaf.attrs) || 'Equation';
             return '';
         })
         .slice(0, 100);

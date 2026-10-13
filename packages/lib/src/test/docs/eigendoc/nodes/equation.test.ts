@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, getText, getTextSerializersFromSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
+import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readLatex, writeMathml } from '@workspace/math';
 import { Window } from 'happy-dom';
 import { JSDOM } from 'jsdom';
 import { getDocExtensions, readEquation } from '../../../../docs/eigendoc';
@@ -202,13 +202,15 @@ describe('readEquation', () => {
 });
 
 describe('equation text', () => {
-    test('the LaTeX is its plain text, else nothing', () => {
+    test('its plain text is its linear form, typed or not, and an empty equation is nothing', () => {
         const serializers = { textSerializers: getTextSerializersFromSchema(schema) };
-        expect(getText(equationDoc({ mathml: writeMathml(xSquared, 'x^2') }), serializers)).toBe('a x^2');
-        expect(getText(equationDoc({ mathml: writeMathml(xSquared) }), serializers)).toBe('a ');
+        const typed = '\\frac{x}{2}';
+        expect(getText(equationDoc({ mathml: writeMathml(readLatex(typed), typed) }), serializers)).toBe('a x/2');
+        expect(getText(equationDoc({ mathml: writeMathml(xSquared) }), serializers)).toBe('a x^2');
+        expect(getText(equationDoc({ mathml: '' }), serializers)).toBe('a ');
     });
 
-    // An input rule checks its match against textBetween, so an equation read there as its LaTeX would be replaced.
+    // An input rule checks its match against textBetween, so an equation read there as text would be replaced.
     describe('typing after an equation never replaces it', () => {
         // A paragraph of `before`, an equation of `latex`, the caret after it; then `typed`, one key at a time, as
         // ProseMirror hands each to the input rules before inserting it.

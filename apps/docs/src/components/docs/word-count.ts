@@ -10,7 +10,7 @@ const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
 // text.
 function leafText(node: Node): string {
     if (node.type.name === 'figure') return `\n${readFigureAttrs(node.attrs).caption ?? ''}\n`;
-    if (node.type.name === 'equation') return `\n${equationText(node)}\n`;
+    if (node.type.name === 'equation') return `\n${equationText(node.attrs)}\n`;
     return '\n\n';
 }
 

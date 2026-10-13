@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { writeMathml } from '@workspace/math';
+import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { countWords } from '../../../components/docs/word-count';
 
@@ -66,14 +66,11 @@ test("a figure's caption counts, its alt text and media name do not", () => {
     expect(counts(content)).toEqual({ words: 5, characters: 22, charactersExcludingSpaces: 20 });
 });
 
-// Its LaTeX until the package writes an equation's linear text; an equation stored without one counts nothing.
-test("an equation's LaTeX counts as words apart from the text beside it", () => {
-    const equation = (latex?: string) => ({
-        type: 'equation',
-        attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'x' }], latex) },
-    });
-    const content = [{ type: 'paragraph', content: [text('area'), equation('\\pi r^2'), equation(), text('m')] }];
-    expect(counts(content)).toEqual({ words: 4, characters: 12, charactersExcludingSpaces: 11 });
+// Its linear form, which spaces only where an operand ends: an empty equation counts nothing.
+test("an equation's linear form counts as words apart from the text beside it", () => {
+    const equation = (latex: string) => ({ type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } });
+    const content = [{ type: 'paragraph', content: [text('area'), equation('\\sin x'), equation(''), text('m')] }];
+    expect(counts(content)).toEqual({ words: 4, characters: 10, charactersExcludingSpaces: 9 });
 });
 
 test('a non-Latin script counts its words and characters', () => {
