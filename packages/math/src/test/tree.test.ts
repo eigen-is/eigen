@@ -1,12 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
+import { MATHML_NAMESPACE, readMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
 import { MATH_LIMITS, type MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
-import { el, viaOmml } from './parse';
-
-const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
+import { el, viaMathml, viaOmml } from './parse';
 
 function nested(levels: number): MathRow {
     return levels === 1 ? [{ kind: 'identifier', text: 'x' }] : [{ kind: 'radical', body: nested(levels - 1) }];

@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { writeText } from '../text';
 import type { MathRow } from '../tree';
+import { letter } from './parse';
 
-const letter = (text: string): MathRow => [{ kind: 'identifier', text }];
 const number = (text: string): MathRow => [{ kind: 'number', text }];
 const operator = (text: string): MathRow => [{ kind: 'operator', text }];
 const sum = (a: string, b: string): MathRow => [...letter(a), ...operator('+'), ...letter(b)];

@@ -4,7 +4,7 @@ import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../m
 import { MATH_LIMITS, type MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
-import { el, viaOmml } from './parse';
+import { el, letter, viaMathml, viaOmml } from './parse';
 
 const math = (content: string) => el(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
@@ -123,7 +123,7 @@ describe('readMathml', () => {
         const { row } = readMathml(math(content));
         expect(canonicalIssue(row)).toBeUndefined();
         expect(viaOmml(row)).toStrictEqual(row);
-        expect(readMathml(el(writeMathml(row))).row).toStrictEqual(row);
+        expect(viaMathml(row)).toStrictEqual(row);
     });
 
     test('Em spaces pair whether they come as characters or as mspace', () => {
@@ -161,7 +161,6 @@ describe('readMathml', () => {
     });
 
     test('an munderover outside an n-ary reads as a limit under inside a limit over', () => {
-        const letter = (text: string): MathRow => [{ kind: 'identifier', text }];
         expect(readMathml(math('<munderover><mi>x</mi><mi>a</mi><mi>b</mi></munderover>')).row).toEqual([
             {
                 kind: 'limit',
@@ -232,7 +231,7 @@ describe('writeMathml', () => {
             { kind: 'brace', char: '⏟', position: 'under', body: sum },
         ] satisfies MathRow) {
             const row: MathRow = [node, ...x];
-            expect(readMathml(el(writeMathml(row))).row).toStrictEqual(row);
+            expect(viaMathml(row)).toStrictEqual(row);
             expect(readMathml(el(writeMathml(row, 'tex'))).row).toStrictEqual(row);
         }
     });

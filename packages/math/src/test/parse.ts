@@ -1,5 +1,7 @@
 import { Window } from 'happy-dom';
 import { fromDom } from '../dom';
+import { readLatex, writeLatex } from '../latex';
+import { readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import type { MathRow } from '../tree';
 import { elementsOf, type MathXmlElement } from '../xml';
@@ -18,3 +20,7 @@ export const parseWritten = (omml: string) =>
     elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${omml}</root>`))[0];
 
 export const viaOmml = (row: MathRow) => readOmml(parseWritten(writeOmml(row)));
+export const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
+export const viaLatex = (row: MathRow) => readLatex(writeLatex(row));
+
+export const letter = (text: string): MathRow => [{ kind: 'identifier', text }];

@@ -11,14 +11,12 @@ import { CORPUS } from './corpus';
 import { LATEX_FORMULAS } from './fixtures/latex-formulas';
 import { generateTree } from './generate';
 import { LOSSES } from './latex-losses';
-import { el, viaOmml } from './parse';
+import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
 
-const letter = (text: string): MathRow => [{ kind: 'identifier', text }];
 const x = letter('x');
 const one: MathRow = [{ kind: 'number', text: '1' }];
 const two: MathRow = [{ kind: 'number', text: '2' }];
 const prime: MathNode = { kind: 'operator', text: '′' };
-const viaLatex = (row: MathRow) => readLatex(writeLatex(row));
 
 function thrown(read: () => unknown): MathError | undefined {
     try {
@@ -703,7 +701,7 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
         for (const chain of chains) {
             const nested = (levels: number): MathRow => (levels === 0 ? leaf : [chain(nested(levels - 1))]);
             let levels = 0;
-            while (thrown(() => readMathml(el(writeMathml(nested(levels + 1))))) === undefined) levels++;
+            while (thrown(() => viaMathml(nested(levels + 1))) === undefined) levels++;
             expect(viaLatex(nested(levels))).toStrictEqual(nested(levels));
             expect(viaOmml(nested(levels))).toStrictEqual(nested(levels));
             expect(thrown(() => viaLatex(nested(levels + 1)))).toBeInstanceOf(MathError);
@@ -721,7 +719,7 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
                 : [{ kind: 'fenced', open: '⟦', close: '⟧', separator: '', parts: [fences(levels - 1)] }];
         const levels = MATH_LIMITS.depth - 1;
         for (const tree of [degrees(levels), fences(levels)]) {
-            expect(readMathml(el(writeMathml(tree))).row).toStrictEqual(tree);
+            expect(viaMathml(tree)).toStrictEqual(tree);
         }
         expect(viaLatex(degrees(levels))).toStrictEqual(degrees(levels));
         expect(viaLatex(fences(levels))).toStrictEqual(expected(49, fences(levels)));
@@ -785,8 +783,8 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
             }
             expect(viaLatex(row(low))).toStrictEqual(row(low));
             expect(viaOmml(row(low))).toStrictEqual(row(low));
-            expect(readMathml(el(writeMathml(row(low)))).row).toStrictEqual(row(low));
-            expect(thrown(() => readMathml(el(writeMathml(row(low + 1)))))).toBeInstanceOf(MathError);
+            expect(viaMathml(row(low))).toStrictEqual(row(low));
+            expect(thrown(() => viaMathml(row(low + 1)))).toBeInstanceOf(MathError);
             expect(thrown(() => viaOmml(row(low + 1)))).toBeInstanceOf(MathError);
             expect(writeLatex(row(low + 1)).length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
         }
@@ -807,7 +805,7 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
                 else high = middle - 1;
             }
             const tree = readLatex(typed.repeat(low));
-            expect({ typed, tree: readMathml(el(writeMathml(tree))).row }).toStrictEqual({ typed, tree });
+            expect({ typed, tree: viaMathml(tree) }).toStrictEqual({ typed, tree });
         }
     });
 

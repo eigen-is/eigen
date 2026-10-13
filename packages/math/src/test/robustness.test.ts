@@ -9,13 +9,11 @@ import { MATH_ENCLOSURES, MATH_LIMITS, MATH_VARIANTS, type MathNode, type MathRo
 import { elementsOf, type MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { generateTree, pick, type Random, seeded } from './generate';
-import { el, parseWritten, viaOmml } from './parse';
+import { el, parseWritten, viaLatex, viaMathml, viaOmml } from './parse';
 
 // Over the whole package: every reader on seeded random input, the largest admitted trees through every
 // writer, and what each writer may put in its output.
 
-const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
-const viaLatex = (row: MathRow) => readLatex(writeLatex(row));
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
 
 // What a reader promises for any input: a canonical tree that every writer writes and every reader reads back (LaTeX
