@@ -119,7 +119,8 @@ function fits(block: JSONContent): boolean {
     try {
         docSchema().nodeFromJSON(block).check();
         return true;
-    } catch {
+    } catch (error) {
+        if (isOutOfMemory(error)) throw error;
         return false;
     }
 }

@@ -32,6 +32,7 @@ describe('handleApiError', () => {
 describe('isOutOfMemory', () => {
     test.each([
         [new RangeError('Out of memory'), true],
+        [new RangeError('Out of memory: string too long'), true],
         [new RangeError('Maximum call stack size exceeded.'), false],
         [new RangeError('Invalid array length'), false],
         [new Error('Out of memory'), false],
