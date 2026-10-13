@@ -4,7 +4,7 @@ import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import { NOT_AN_XLSX, TOO_MANY_CELLS } from './package';
+import { NOT_AN_XLSX, TOO_MANY_CELLS } from '../messages';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
 import { cellKey, type PlacedCell } from './worksheet';
@@ -172,7 +172,7 @@ function formulaOf(
 
 // numfmt renders a bare serial under General as a number, so a date without a date format shows as m/d/yyyy; a
 // malformed format, which a hostile workbook can carry, as yyyy-mm-dd.
-export function dateDisplay(serial: number, numFmt: string | undefined): string {
+function dateDisplay(serial: number, numFmt: string | undefined): string {
     try {
         return update(numFmt && numFmt !== 'General' ? numFmt : 'm/d/yyyy', serial);
     } catch {

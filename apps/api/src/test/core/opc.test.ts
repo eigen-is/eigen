@@ -1,7 +1,15 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from '../../lib/core/ooxml';
-import { isEncryptedPackage, openPackage, optional, relationshipsOf, relOfType, relsPathOf } from '../../lib/core/opc';
+import {
+    importError,
+    isEncryptedPackage,
+    openPackage,
+    optional,
+    relationshipsOf,
+    relOfType,
+    relsPathOf,
+} from '../../lib/core/opc';
 import { XmlError } from '../../lib/core/xml';
 import { writeZip, ZipError } from '../../lib/core/zip';
 
@@ -131,6 +139,35 @@ describe('a package', () => {
         expect(thrown(() => optional(() => thrownBy(new ZipError('too-large'))))).toBeInstanceOf(ZipError);
         expect(thrown(() => optional(() => thrownBy(new ApiError(413, 'Too large'))))).toBeInstanceOf(ApiError);
         expect(optional(() => 1)).toBe(1);
+    });
+});
+
+describe("an import's error", () => {
+    const messages = { tooLarge: 'Too large', invalid: 'Not valid' };
+
+    test("is a zip's or the XML's refusal in the format's words", () => {
+        expect(importError(new ZipError('too-large'), messages)).toMatchObject({ status: 413, message: 'Too large' });
+        expect(importError(new ZipError('bad-crc'), messages)).toMatchObject({ status: 400, message: 'Not valid' });
+        expect(importError(new XmlError('malformed'), messages)).toMatchObject({ status: 400, message: 'Not valid' });
+    });
+
+    test('is a stack the file outgrew as too large, and an out-of-memory or an ApiError as it is', () => {
+        const stack = new RangeError('Maximum call stack size exceeded.');
+        expect(importError(stack, messages)).toMatchObject({ status: 413, message: 'Too large' });
+        const outOfMemory = new RangeError('Out of memory');
+        expect(importError(outOfMemory, messages)).toBe(outOfMemory);
+        const refused = new ApiError(413, 'Spreadsheet has too many cells');
+        expect(importError(refused, messages)).toBe(refused);
+    });
+
+    test("is the reader's slip as a file it can't read, logged", () => {
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(importError(new TypeError('slip'), messages)).toMatchObject({ status: 400, message: 'Not valid' });
+            expect(warn).toHaveBeenCalledTimes(1);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });
 

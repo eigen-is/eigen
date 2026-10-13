@@ -2,14 +2,10 @@ import { ApiError } from '../../core/errors';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { IMPORT_MESSAGES, NOT_AN_XLSX } from '../messages';
 
 // The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch
 // at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
-
-export const SPREADSHEET_TOO_LARGE = 'Spreadsheet too large';
-export const TOO_MANY_CELLS = 'Spreadsheet has too many cells';
-export const NOT_AN_XLSX = 'Not a valid xlsx file';
-const PASSWORD_PROTECTED = 'This spreadsheet is password-protected. Remove the password in Excel and import it again.';
 
 export type WorkbookSheet = { name: string; path: string; hidden: boolean };
 
@@ -25,7 +21,7 @@ export type XlsxPackage = {
 };
 
 export function readPackage(bytes: Uint8Array): XlsxPackage {
-    const pkg = openPackage(bytes, PASSWORD_PROTECTED);
+    const pkg = openPackage(bytes, IMPORT_MESSAGES.xlsx.passwordProtected);
     // By relationship, else where Excel puts the part.
     const workbookPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'xl/workbook.xml';
     const workbook = pkg.part(workbookPath);
@@ -39,8 +35,8 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
         if (name === undefined || !rel || rel.external || !rel.type.endsWith('/worksheet')) return [];
         return [{ name, path: rel.target, hidden: (xmlAttr(sheet, '', 'state') ?? 'visible') !== 'visible' }];
     });
-    // One sheet per part, named and placed by the last entry naming it, as on ExcelJS's path; read per entry, a part
-    // would be inflated and parsed again for each.
+    // One sheet per part, named and placed by the last entry naming it; read per entry, a part would be inflated and
+    // parsed again for each.
     const last = new Map(entries.map((sheet, index) => [sheet.path, index]));
     const sheets = entries.filter((sheet, index) => last.get(sheet.path) === index);
     const properties = xmlChild(workbook, SML_NS, 'workbookPr');

@@ -80,8 +80,7 @@ export function readWorksheet(rest: XmlElement | undefined, context: WorksheetCo
     return worksheet;
 }
 
-// As ExcelJS reads them: by min, each column takes the first <col> that reaches it. A <col> without a width keeps the
-// default one, where ExcelJS gave it 9 characters.
+// By min, each column takes the first <col> that reaches it. A <col> without a width keeps Eigen's default width.
 function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksheet['config']): void {
     const bound = (col: XmlElement, name: string) => Number.parseInt(xmlAttr(col, '', name) ?? '', 10);
     const cols = xmlChildren(rest, SML_NS, 'cols')
@@ -110,7 +109,7 @@ function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksh
 }
 
 // A merge's cells are charged from its area before any is visited. One over a cell an earlier merge holds is dropped,
-// as Excel repairs it, where ExcelJS refused the workbook; the cells already placed tell, never a merge against another.
+// as Excel repairs it; the cells already placed tell, never a merge against another.
 function readMerges(rest: XmlElement, context: WorksheetContext, worksheet: Worksheet): void {
     const mergeCells = xmlChild(rest, SML_NS, 'mergeCells');
     const merge: NonNullable<SheetConfig['merge']> = {};
@@ -147,7 +146,7 @@ function readMerges(rest: XmlElement, context: WorksheetContext, worksheet: Work
 
 // A link lands on its ref's first cell, whether the grid holds a cell there or not, and of two on one cell the later
 // wins: Excel writes a range's new link after the stale one for its first cell alone. A location is a place in the
-// workbook; with an external relationship it is the target's fragment, which ExcelJS's path read as a place.
+// workbook; with an external relationship it is the target's fragment.
 function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: Worksheet): void {
     const hyperlinks = xmlChild(rest, SML_NS, 'hyperlinks');
     const hyperlink: NonNullable<Sheet['hyperlink']> = {};
@@ -156,7 +155,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         const location = xmlAttr(element, '', 'location');
         const rel = context.rels.get(xmlAttr(element, R_NS, 'id') ?? '');
         const target = rel?.external ? rel.target : undefined;
-        // ExcelJS writes an internal link as a location beside a relationship to `#` and the location.
+        // Eigen's xlsx export (ExcelJS) writes an internal link as a location beside a relationship to `#` and the location.
         const link = mapHyperlink(
             target !== undefined && !target.startsWith('#')
                 ? `${target}${location ? `#${location}` : ''}`
@@ -181,7 +180,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
 
 // A target is a web or mail address as written, or `#` and a place in the workbook. Scheme safety is enforced at
 // navigation and export time by resolveWebLink (@workspace/lib/sheets/web-link).
-export function mapHyperlink(target: string | undefined): { linkType: string; linkAddress: string } | null {
+function mapHyperlink(target: string | undefined): { linkType: string; linkAddress: string } | null {
     if (target == null || target.trim().length === 0) return null;
     if (!target.startsWith('#')) return { linkType: 'webpage', linkAddress: target };
     const location = target.slice(1);

@@ -326,7 +326,7 @@ describe('a data validation', () => {
     const list = (sqref: string, formula: string, attributes = '') =>
         `<dataValidation type="list" allowBlank="1" sqref="${sqref}"${attributes}><formula1>${formula}</formula1></dataValidation>`;
 
-    test('a literal list is a dropdown on every cell of its ranges, each its own rule', () => {
+    test('a literal list is a dropdown on every cell of its ranges', () => {
         const { dataVerification } = read(dv(list('B2:B3 D1', '"Red,Green,Blue"')));
         const expected = {
             type: 'dropdown',
@@ -338,7 +338,6 @@ describe('a data validation', () => {
             hintValue: '',
         };
         expect(dataVerification).toEqual({ '1_1': expected, '2_1': expected, '0_3': expected });
-        expect(dataVerification?.['1_1']).not.toBe(dataVerification?.['2_1']);
     });
 
     test('a list over a range keeps the reference; a defined name, an empty list or a custom rule is dropped', () => {

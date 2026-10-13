@@ -12,11 +12,11 @@ import { A_NS, isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
-// formats, theme colours and tints; and the conditional formats' looks (dxf). The colour and number-format mapping is ExcelJS's path's too.
+// formats, theme colours and tints; and the conditional formats' looks (dxf).
 
 export type ThemePalette = string[];
 
-// A colour as ExcelJS's path models one: an rgb, else a theme colour and its tint.
+// An rgb, else a theme colour and its tint.
 export type XlsxColor = { argb?: string; theme?: number; tint?: number };
 
 export type Look = {
@@ -32,7 +32,7 @@ export type Look = {
     border?: CellBorderSides;
 };
 
-export const HORIZONTAL_MAP = new Map<string, 0 | 1 | 2>([
+const HORIZONTAL_MAP = new Map<string, 0 | 1 | 2>([
     ['left', 1],
     ['center', 0],
     ['right', 2],
@@ -42,7 +42,7 @@ export const HORIZONTAL_MAP = new Map<string, 0 | 1 | 2>([
     ['distributed', 0],
 ]);
 
-export const VERTICAL_MAP = new Map<string, 0 | 1 | 2>([
+const VERTICAL_MAP = new Map<string, 0 | 1 | 2>([
     ['top', 1],
     ['center', 0],
     ['bottom', 2],
@@ -51,7 +51,7 @@ export const VERTICAL_MAP = new Map<string, 0 | 1 | 2>([
 ]);
 
 // xlsx style name → ordinal, derived from the shared ordinal table (the reverse of its `name`).
-export const BORDER_STYLE_MAP = new Map<string, number>(
+const BORDER_STYLE_MAP = new Map<string, number>(
     Object.entries(BORDER_STYLES).map(([ord, { name }]) => [name, Number(ord)]),
 );
 
@@ -121,7 +121,7 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
         return format;
     };
     return list('cellXfs', 'xf').map((xf, index): Look => {
-        // The workbook's default look, which Eigen draws with its own, as ExcelJS's path reads it.
+        // The workbook's default look, which Eigen draws with its own.
         if (index === 0) return NO_LOOK;
         // An id that is no number reads as NaN, which indexes nothing.
         const id = (name: string) => Number(xmlAttr(xf, '', name));
@@ -227,7 +227,7 @@ function bordersOf(border: XmlElement, palette: ThemePalette): CellBorderSides |
     return Object.keys(sides).length > 0 ? sides : undefined;
 }
 
-// An indexed colour is none, as on ExcelJS's path.
+// An indexed colour is none.
 export function colorOf(element: XmlElement | undefined): XlsxColor | undefined {
     const rgb = element && xmlAttr(element, '', 'rgb');
     if (rgb) return { argb: rgb };

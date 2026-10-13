@@ -1,31 +1,20 @@
 import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import { ApiError, isOutOfMemory } from '../../core/errors';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
 import { xlsxToSheets } from './from-xlsx';
-import { NOT_AN_XLSX } from './package';
 
 // Uploaded xlsx bytes → the lean snapshot JSON the main thread commits. Runs
 // inside the transform process (child.ts owns execution; the conversion logic
-// stays here in import/, pure over the buffer). The zip/cell guards ride along
+// stays here in import/, pure over the buffer). The reader's caps ride along
 // inside xlsxToSheets with their exact 413s, and a recalc failure comes back as a
 // warning — an import must never fail because recalc hiccuped.
-export async function importXlsxToSheetsSnapshot(
-    data: ArrayBuffer,
-): Promise<{ snapshotJson: ArrayBuffer; warnings: TransformWarning[] }> {
+export function importXlsxToSheetsSnapshot(data: ArrayBuffer): {
+    snapshotJson: ArrayBuffer;
+    warnings: TransformWarning[];
+} {
     const warnings: TransformWarning[] = [];
-    const parsed = await parseXlsxOrThrow(Buffer.from(data));
-    const { sheets, computed } = recalcImportedSheets(parsed, warnings);
+    const { sheets, computed } = recalcImportedSheets(xlsxToSheets(new Uint8Array(data)), warnings);
     return { snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })), warnings };
-}
-
-async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
-    try {
-        return await xlsxToSheets(buffer);
-    } catch (err) {
-        if (err instanceof ApiError || isOutOfMemory(err)) throw err;
-        throw new ApiError(400, NOT_AN_XLSX);
-    }
 }
 
 // Recompute formula cells through our engine once at import so the persisted

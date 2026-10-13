@@ -1,4 +1,4 @@
-import { ApiError } from './errors';
+import { ApiError, isOutOfMemory } from './errors';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from './ooxml';
 import { hasXmlName, type XmlElement, XmlError, xmlElements } from './xml';
 import { openZip, ZipError, type ZipReader } from './zip';
@@ -115,4 +115,23 @@ export function optional<T>(read: () => T): T | undefined {
         if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
         throw error;
     }
+}
+
+// The zip's and the XML's messages speak of archives and markup; the user uploaded a document or a spreadsheet, so a
+// refusal is told in the format's `messages`. An out-of-memory passes as it is: the transform process answers it for
+// every format.
+export function importError(error: unknown, messages: { tooLarge: string; invalid: string }): Error {
+    if (isOutOfMemory(error)) return error;
+    if (error instanceof ZipError)
+        return new ApiError(error.status, error.status === 413 ? messages.tooLarge : messages.invalid, {
+            cause: error,
+        });
+    if (error instanceof XmlError) return new ApiError(400, messages.invalid, { cause: error });
+    if (error instanceof ApiError) return error;
+    // A stack the file outgrew; any other RangeError is the reader's slip.
+    if (error instanceof RangeError && /call stack/i.test(error.message))
+        return new ApiError(413, messages.tooLarge, { cause: error });
+    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the transform's log.
+    console.warn('[import] the reader failed:', error instanceof Error ? (error.stack ?? error.message) : error);
+    return new ApiError(400, messages.invalid, { cause: error });
 }

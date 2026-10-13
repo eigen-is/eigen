@@ -121,9 +121,9 @@ export function readRules(
                 if (row[0] > bottom || column[0] > right) continue;
                 const cells = (bottom - row[0] + 1) * (right - column[0] + 1);
                 context.charge(cells, cells * text);
-                // A rule of its own per key: the engine edits a rule in place.
+                // One rule for every key, as the editor sets a range's: nothing edits a rule in place.
                 for (let r = row[0]; r <= bottom; r++)
-                    for (let c = column[0]; c <= right; c++) dataVerification[`${r}_${c}`] = { ...rule };
+                    for (let c = column[0]; c <= right; c++) dataVerification[`${r}_${c}`] = rule;
             }
         }
     }
@@ -151,7 +151,7 @@ function* rangesOf(sqref: string): Generator<SingleRange> {
     }
 }
 
-export const CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionName>([
+const CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionName>([
     ['greaterThan', 'greaterThan'],
     ['greaterThanOrEqual', 'greaterThanOrEqual'],
     ['lessThan', 'lessThan'],
@@ -162,7 +162,7 @@ export const CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionName>
     ['notBetween', 'notBetween'],
 ]);
 
-export const CELL_IS_FORMULA_OP = new Map([
+const CELL_IS_FORMULA_OP = new Map([
     ['greaterThan', '>'],
     ['greaterThanOrEqual', '>='],
     ['lessThan', '<'],
@@ -172,7 +172,7 @@ export const CELL_IS_FORMULA_OP = new Map([
 ]);
 
 // The rules Excel stores a formula for beside their own attributes: evaluated through the engine's formula rule.
-export const FORMULA_BACKED_CF_TYPES = new Set([
+const FORMULA_BACKED_CF_TYPES = new Set([
     'expression',
     'containsText',
     'notContainsText',
@@ -253,7 +253,7 @@ function mapCfRule(
 }
 
 // Excel anchors a CF formula's relative refs at the first range's top-left, and so does the engine.
-export function cfFormulaRule(
+function cfFormulaRule(
     formula: string,
     ranges: SingleRange[],
     format: DefaultConditionalFormatRule['format'],
@@ -290,13 +290,13 @@ export function parseCfLiteral(operand: string): string | null {
 }
 
 // A containsText rule's text, from the formula Excel stores for it: NOT(ISERROR(SEARCH("<text>",<topLeftRef>))).
-export function extractSearchText(formula: string | number | undefined): string | null {
+function extractSearchText(formula: string | number | undefined): string | null {
     if (formula == null) return null;
     const match = String(formula).match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
     return match ? match[1].replace(/""/g, '"') : null;
 }
 
-export const DV_TYPE = new Map([
+const DV_TYPE = new Map([
     ['list', 'dropdown'],
     ['whole', 'number_integer'],
     // Excel "decimal" accepts ANY real number, like the engine's `number` type;
@@ -331,8 +331,8 @@ export const DV_DATE_OPERATOR = new Map([
 // covers only the data extent: a rule per cell of the column would put a multi-hundred-MB
 // dataVerification map into the snapshot JSON. DV-only blank rows below the data are a
 // legit pattern (pre-validated entry rows), hence the generous margins.
-export const DV_ROW_MARGIN = 1000;
-export const DV_COL_MARGIN = 100;
+const DV_ROW_MARGIN = 1000;
+const DV_COL_MARGIN = 100;
 
 function mapDataValidation(
     validation: XmlElement,
@@ -369,7 +369,7 @@ function mapDataValidation(
     const type2 = (type === 'date' ? DV_DATE_OPERATOR : DV_OPERATOR).get(operator);
     if (!type2) return undefined;
     rule.type2 = type2;
-    // A literal, as ExcelJS's path read one: a whole number or length to its integer, a date serial to the YYYY-MM-DD
+    // A literal: a whole number or length to its integer, a date serial to the YYYY-MM-DD
     // the engine's validateCellData parses. A reference has no literal to validate against, so the rule goes.
     const operand = (text: string | undefined): string | null => {
         if (text === undefined) return null;

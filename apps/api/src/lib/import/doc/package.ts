@@ -3,7 +3,7 @@ import { alternativeFor, CONTENT_TYPES_NS, isOn, parseOoxml, W_NS } from '../../
 import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
 import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
-import { DOCUMENT_TOO_LARGE } from '../messages';
+import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES, NOT_A_DOCX } from '../messages';
 
 // The parts the reader parses, together (a tree's cost: core/xml.ts); the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
@@ -14,9 +14,6 @@ export const MAX_DOCX_XML_TAGS = 750_000;
 
 // A piece past a run's first is a node no tag counts, held before the output is weighed; the corpus's most is 1,055.
 export const MAX_DOCX_PIECES = 75_000;
-
-export const NOT_A_DOCX = 'Not a valid docx file';
-const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
 export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
@@ -46,7 +43,7 @@ const ENCRYPTED_PACKAGE = Buffer.from('EncryptedPackage', 'utf16le');
 export function readPackage(bytes: Uint8Array): DocxPackage {
     // Any other OLE file, a .doc say, is no zip, which openZip refuses.
     if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte) && Buffer.from(bytes).includes(ENCRYPTED_PACKAGE))
-        throw new ApiError(400, PASSWORD_PROTECTED);
+        throw new ApiError(400, IMPORT_MESSAGES.docx.passwordProtected);
     const zip = openZip(bytes);
     const budget: Budget = {
         left: MAX_DOCX_XML_BYTES,

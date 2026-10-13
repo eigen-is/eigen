@@ -2,13 +2,12 @@ import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
-import { XmlError } from '../../core/xml';
-import { ZipError } from '../../core/zip';
+import { importError } from '../../core/opc';
 import { docSchema } from '../../document/doc-schema';
 import type { TransformWarning } from '../../document/transform/protocol';
-import { DOCUMENT_TOO_LARGE } from '../messages';
+import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
-import { NOT_A_DOCX, readPackage } from './package';
+import { readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
 
 // docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
@@ -76,24 +75,8 @@ export function readDocx(
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         return { doc, images, warnings };
     } catch (error) {
-        throw importError(error);
+        throw importError(error, IMPORT_MESSAGES.docx);
     }
-}
-
-// The zip's and the XML's messages speak of archives and markup; the user uploaded a document. An out-of-memory passes as
-// it is: the transform process answers it for every format.
-export function importError(error: unknown): Error {
-    if (isOutOfMemory(error)) return error;
-    if (error instanceof ZipError)
-        return new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
-    if (error instanceof XmlError) return new ApiError(400, NOT_A_DOCX, { cause: error });
-    if (error instanceof ApiError) return error;
-    // A stack the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
-    if (error instanceof RangeError && /call stack/i.test(error.message))
-        return new ApiError(413, DOCUMENT_TOO_LARGE, { cause: error });
-    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the transform's log.
-    console.warn('[import] docx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
-    return new ApiError(400, NOT_A_DOCX, { cause: error });
 }
 
 // Every node and mark, and every table's area.

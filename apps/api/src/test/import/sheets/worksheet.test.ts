@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { REFERENCE_COLUMN_COUNT, SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import type { Relationship } from '../../../lib/core/opc';
-import { xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';
+import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { digitWidthOf, readWorksheet } from '../../../lib/import/sheets/worksheet';
 import { sheetXml, xlsxFixture } from '../../fixtures/xlsx';
 
@@ -218,7 +218,7 @@ describe('hyperlinks', () => {
 describe('in the sheet', () => {
     const SHEET_RELS = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/" TargetMode="External"/></Relationships>`;
     const own = (data: string, after: string, before = '') =>
-        xlsxToSheetsOwn(
+        xlsxToSheets(
             xlsxFixture({
                 sheets: [{ data, before, after }],
                 styles: '<fonts><font><name val="Calibri"/></font></fonts><cellXfs><xf/><xf><alignment wrapText="1"/></xf></cellXfs>',

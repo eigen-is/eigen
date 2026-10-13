@@ -4,14 +4,15 @@ import { fixTables, TableMap } from '@tiptap/pm/tables';
 import { prosemirrorToYDoc } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
+import { importError } from '../../core/opc';
 import { docSchema } from '../../document/doc-schema';
 import {
     type DocImportWorkerResult,
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
-import { DOCUMENT_TOO_LARGE } from '../messages';
-import { importError, readDocx } from './from-docx';
+import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES } from '../messages';
+import { readDocx } from './from-docx';
 
 // Runs in the transform process, so neither the reader nor the conversion to Yjs blocks the event loop. The main thread
 // commits the update and writes the images through Mount.
@@ -26,7 +27,7 @@ export function importDocxToEigendocUpdate(
         update = Y.encodeStateAsUpdate(tempDoc);
         tempDoc.destroy();
     } catch (error) {
-        throw importError(error);
+        throw importError(error, IMPORT_MESSAGES.docx);
     }
 
     return {

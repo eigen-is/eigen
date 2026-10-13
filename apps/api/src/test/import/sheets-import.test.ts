@@ -9,12 +9,12 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
-import { openZip, type ZipReader } from '../../lib/core/zip';
+import { openZip } from '../../lib/core/zip';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
-import { readLocationHyperlinks, xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { normalizeMonthMinuteTokens } from '../../lib/import/sheets/styles';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { getUserById } from '../../lib/user';
@@ -108,10 +108,6 @@ async function injectLocationHyperlinks(
         : xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`);
     zip.file(path, patched);
     return zip.generateAsync({ type: 'arraybuffer' });
-}
-
-async function reader(zip: JSZip): Promise<ZipReader> {
-    return openZip(await zip.generateAsync({ type: 'uint8array' }));
 }
 
 async function replacePart(buffer: ArrayBuffer, path: string, edit: (xml: string) => string): Promise<ArrayBuffer> {
@@ -363,6 +359,23 @@ describe('Sheets xlsx import/convert', () => {
         expect(await res.text()).toBe('Not a valid xlsx file');
     });
 
+    test('import of a password-protected workbook says so', async () => {
+        const sheetsDoc = await uploadAndConvert(await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]), 'locked.xlsx');
+        // An OLE compound file: its signature, then a directory entry naming the encrypted package's stream.
+        const locked = new Uint8Array(4096);
+        locked.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+        locked.set(Buffer.from('EncryptedPackage', 'utf16le'), 1024);
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            { method: 'POST', body: locked },
+        );
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe(
+            'This spreadsheet is password-protected. Remove the password in Excel and import it again.',
+        );
+    });
+
     test('convert of a garbage .xlsx returns 400 Not a valid xlsx file', async () => {
         const uploaded = await driveUpload<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -587,6 +600,9 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:1')?.mc).toEqual({ r: 0, c: 0 });
         expect(byCoord.get('1:0')?.mc).toEqual({ r: 0, c: 0 });
         expect(byCoord.get('1:1')?.mc).toEqual({ r: 0, c: 0 });
+        // Only the anchor keeps the value, as Excel shows it.
+        expect(byCoord.get('0:0')?.v).toBe('Merged');
+        expect(byCoord.get('1:1')?.v).toBeUndefined();
     });
 
     test('wrapped numbers and dates in a narrow column count as one line for the row height', async () => {
@@ -1041,7 +1057,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         ws.getCell('A1').value = 'visible';
         ws.getCell('E1').value = 'after';
         // Adjacent hidden columns C+D serialize as one <col min="3" max="4" hidden="1">
-        // range element; exceljs expands ranges back to per-column flags on read.
+        // range element, which the import expands to per-column flags.
         ws.getColumn(3).hidden = true;
         ws.getColumn(4).hidden = true;
         const sheets = await parseWorkbook(workbook);
@@ -1255,7 +1271,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         });
         const sheets = await parseWorkbook(workbook);
 
-        // exceljs lists stops min→max; the engine's colorGradation format is max→min.
+        // The file lists stops min→max; the engine's colorGradation format is max→min.
         expect(sheets[0].conditionalFormatRules).toEqual([
             {
                 type: 'colorGradation',
@@ -1415,24 +1431,6 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(sheets[0].dataVerification).toEqual({ '1_1': expected, '2_1': expected, '3_1': expected });
     });
 
-    test('convert clones the shared exceljs validation object per cell key', async () => {
-        // exceljs expands a sqref range to per-cell model entries that all alias ONE
-        // rule object; a shared reference would make one cell's rule edit every
-        // other cell in the range, so the converter must emit a fresh object per
-        // key. JSON snapshot round-trips would mask aliasing — assert on the
-        // converter output directly.
-        const listRule: ExcelJS.DataValidation = { type: 'list', allowBlank: true, formulae: ['"A,B"'] };
-        const buffer = await buildXlsxBuffer([
-            { a1: 'B2', value: 'A', dataValidation: listRule },
-            { a1: 'B3', value: 'B', dataValidation: listRule },
-        ]);
-        const sheets = await xlsxToSheets(Buffer.from(buffer));
-        const rules = sheets[0].dataVerification;
-        if (!rules) throw new Error('expected dataVerification rules');
-        expect(rules['1_1']).toEqual(rules['2_1']);
-        expect(rules['1_1']).not.toBe(rules['2_1']);
-    });
-
     test('convert keeps range-ref list sources verbatim for live cross-sheet resolution', async () => {
         const workbook = new ExcelJS.Workbook();
         const main = workbook.addWorksheet('Main');
@@ -1502,8 +1500,8 @@ describe('Sheets xlsx conversion fidelity', () => {
         // `number_decimal` (which rejects integers).
         expect(rules['1_0']).toMatchObject({ type: 'number', type2: 'moreThanThe', value1: '2.5', value2: '' });
         expect(rules['2_0']).toMatchObject({ type: 'text_length', type2: 'lessThanOrEqualTo', value1: '5' });
-        // exceljs hands date operands over as JS Dates (excelToDate, UTC); the engine's
-        // validateCellData parses value1/value2 through isdatetime + dayjs → YYYY-MM-DD.
+        // Date operands are serials; the engine's validateCellData parses value1/value2
+        // through isdatetime + dayjs → YYYY-MM-DD.
         expect(rules['3_0']).toMatchObject({
             type: 'date',
             type2: 'between',
@@ -1519,8 +1517,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             // Defined names are dropped program-wide; a garbage one-option dropdown is
             // worse than no rule.
             { a1: 'A2', value: 'x', dataValidation: { type: 'list', allowBlank: true, formulae: ['MyNamedRange'] } },
-            // Cell-ref operand: exceljs's parseInt coercion yields NaN — no literal to
-            // validate against.
+            // Cell-ref operand: no literal to validate against.
             { a1: 'A3', value: 7, dataValidation: { type: 'whole', operator: 'greaterThan', formulae: ['$B$1'] } },
             { a1: 'B1', value: 'Red', dataValidation: { type: 'list', allowBlank: true, formulae: ['"Red,Blue"'] } },
         ]);
@@ -1564,10 +1561,9 @@ describe('Sheets xlsx conversion fidelity', () => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Sheet1');
         for (let i = 1; i <= 5; i++) worksheet.getCell(`A${i}`).value = `row${i}`;
-        // Range-level rules round-trip through write→read as one pre-expanded model
-        // entry per cell — a column-wide rule ("C1:C1048576") would otherwise emit
-        // ~1M rule objects into the snapshot. `dataValidations` is missing from
-        // exceljs's typings, same as `conditionalFormattings`.
+        // A rule keys every cell of its range, so a column-wide rule ("C1:C1048576")
+        // would otherwise emit ~1M rule objects into the snapshot. `dataValidations`
+        // is missing from exceljs's typings.
         (
             worksheet as unknown as { dataValidations: { add: (range: string, dv: ExcelJS.DataValidation) => void } }
         ).dataValidations.add('C1:C5000', { type: 'list', allowBlank: true, formulae: ['"Yes,No"'] });
@@ -1609,10 +1605,8 @@ describe('Sheets xlsx conversion fidelity', () => {
     });
 
     test('convert maps internal #location links onto cellrange and sheet link types', async () => {
-        // exceljs round-trips a {text, hyperlink: '#…'} cell as an external rel with
-        // the verbatim #-prefixed target. Excel-AUTHORED internal links (a location
-        // attr without a rel) are dropped by exceljs's reconcile, so from-xlsx.ts
-        // re-reads them from the raw sheet XML (readLocationHyperlinks).
+        // ExcelJS, which writes these fixtures, writes a {text, hyperlink: '#…'} cell as a
+        // location beside a rel to the #-prefixed target.
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Sheet1');
         workbook.addWorksheet('Sheet2');
@@ -1697,6 +1691,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             const { sml, r, pr } = prefixes;
             const smlns = sml ? `xmlns:${sml.slice(0, -1)}` : 'xmlns';
             const prns = pr ? `xmlns:${pr.slice(0, -1)}` : 'xmlns';
+            const worksheet = `${ns.relationships}/worksheet`;
             const zip = new JSZip();
             // The decoy's `r:id` binds `r` to another namespace, so it names no relationship.
             zip.file(
@@ -1705,7 +1700,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             );
             zip.file(
                 'xl/_rels/workbook.xml.rels',
-                `<${pr}Relationships ${prns}="${PACKAGE_RELATIONSHIPS}"><${pr}Relationship Id="rId1" Target="worksheets/sheet1.xml"/><${pr}Relationship Id="rId2" Target="worksheets/sheet2.xml"/></${pr}Relationships>`,
+                `<${pr}Relationships ${prns}="${PACKAGE_RELATIONSHIPS}"><${pr}Relationship Id="rId1" Type="${worksheet}" Target="worksheets/sheet1.xml"/><${pr}Relationship Id="rId2" Type="${worksheet}" Target="worksheets/sheet2.xml"/></${pr}Relationships>`,
             );
             for (const path of ['xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml']) {
                 zip.file(
@@ -1714,57 +1709,11 @@ describe('Sheets xlsx conversion fidelity', () => {
                 );
             }
 
-            expect(readLocationHyperlinks(await reader(zip))).toEqual(
-                new Map([['Q1 – "A" & B', new Map([['B2', 'Other!A1']])]]),
-            );
+            const sheets = xlsxToSheets(await zip.generateAsync({ type: 'uint8array' }));
+            expect(sheets.map(({ name, hyperlink }) => ({ name, hyperlink }))).toEqual([
+                { name: 'Q1 – "A" & B', hyperlink: { '1_1': { linkType: 'cellrange', linkAddress: 'Other!A1' } } },
+            ]);
         }
-    });
-
-    test('location hyperlinks parse only the hyperlinks block of a sheet', async () => {
-        const workbook = new ExcelJS.Workbook();
-        workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
-        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
-            { ref: 'A1', location: 'Sheet1!B2' },
-        ]);
-        // A whole-sheet tree of these 4 MB costs ~280 MB.
-        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
-            xml.replace('</worksheet>', `<extLst><ext uri="x">${'<a/>'.repeat(1_000_000)}</ext></extLst></worksheet>`),
-        );
-        const zip = openZip(new Uint8Array(buffer));
-
-        Bun.gc(true);
-        const before = process.memoryUsage().heapUsed;
-        const links = readLocationHyperlinks(zip);
-        const grown = process.memoryUsage().heapUsed - before;
-
-        expect(links).toEqual(new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]));
-        expect(grown).toBeLessThan(64 * 1024 * 1024);
-    });
-
-    test('a malformed hyperlinks block loses its own sheet its location hyperlinks, an oversized workbook all', async () => {
-        const zip = new JSZip();
-        zip.file(
-            'xl/workbook.xml',
-            `<workbook xmlns="${TRANSITIONAL.spreadsheetml}" xmlns:r="${TRANSITIONAL.relationships}"><sheets><sheet name="Broken" sheetId="1" r:id="rId1"/><sheet name="Kept" sheetId="2" r:id="rId2"/></sheets></workbook>`,
-        );
-        zip.file(
-            'xl/_rels/workbook.xml.rels',
-            `<Relationships xmlns="${PACKAGE_RELATIONSHIPS}"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.xml"/></Relationships>`,
-        );
-        zip.file(
-            'xl/worksheets/sheet1.xml',
-            `<worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="A1" location="Kept!A1"></hyperlinks></worksheet>`,
-        );
-        zip.file(
-            'xl/worksheets/sheet2.xml',
-            `<?xml version="1.0"?><worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="B2" location="Broken!A1"/></hyperlinks><extLst/></worksheet>`,
-        );
-
-        expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map([['Kept', new Map([['B2', 'Broken!A1']])]]));
-
-        const workbook = (await zip.file('xl/workbook.xml')?.async('string')) ?? '';
-        zip.file('xl/workbook.xml', `${workbook}${'<!---->'.repeat(10_000)}`);
-        expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
     });
 
     test('location hyperlinks keep all of the 66,530 Excel allows a sheet', async () => {
@@ -1780,9 +1729,9 @@ describe('Sheets xlsx conversion fidelity', () => {
             xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`),
         );
 
-        const links = readLocationHyperlinks(openZip(new Uint8Array(buffer))).get('Sheet1');
-        expect(links?.size).toBe(66_530);
-        expect(links?.get('A66530')).toBe("'Sheet 2'!B66530");
+        const links = xlsxToSheets(new Uint8Array(buffer))[0].hyperlink ?? {};
+        expect(Object.keys(links)).toHaveLength(66_530);
+        expect(links['66529_0']).toEqual({ linkType: 'cellrange', linkAddress: "'Sheet 2'!B66530" });
     });
 
     test('a hyperlinks opener in a comment before the sheet data leaves the real block to be read', async () => {
@@ -1795,26 +1744,19 @@ describe('Sheets xlsx conversion fidelity', () => {
             xml.replace('<sheetData', '<!-- <hyperlinks> --><sheetData'),
         );
 
-        expect(readLocationHyperlinks(openZip(new Uint8Array(buffer)))).toEqual(
-            new Map([['Sheet1', new Map([['A1', 'Sheet1!B2']])]]),
-        );
+        expect(xlsxToSheets(new Uint8Array(buffer))[0].hyperlink).toEqual({
+            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet1!B2' },
+        });
     });
 
-    test('convert imports a sheet whose part Bun refuses, without its location hyperlinks', async () => {
+    // A DOCTYPE is refused in every part, where ExcelJS read the cells of a sheet that held one.
+    test('convert refuses a sheet whose part holds a DOCTYPE', async () => {
         const workbook = new ExcelJS.Workbook();
-        const ws = workbook.addWorksheet('Sheet1');
-        ws.getCell('A1').value = 'kept';
-        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
-            { ref: 'A1', location: 'Sheet1!B2' },
-        ]);
-        const buffer = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
+        workbook.addWorksheet('Sheet1').getCell('A1').value = 'kept';
+        const buffer = await replacePart(await workbookToBuffer(workbook), 'xl/worksheets/sheet1.xml', (xml) =>
             xml.replace('<worksheet', '<!DOCTYPE worksheet><worksheet'),
         );
-        const sheets = await parseXlsx(buffer);
-
-        const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('kept');
-        expect(sheets[0].hyperlink).toBeUndefined();
+        expect(() => xlsxToSheets(new Uint8Array(buffer))).toThrow('Not a valid xlsx file');
     });
 
     test('convert imports hyperlinks on rich-text cells with flattened display text', async () => {
@@ -1853,100 +1795,8 @@ describe('Sheets xlsx conversion fidelity', () => {
 });
 
 describe('xlsxToSheets resource guards', () => {
-    // The delta holds uncollected garbage: no tree measures up to ~140 MB under CI load, a dropped tree ~450 MB.
-    const treeless = 256 * 1024 * 1024;
-
-    // Bun's tree costs ~120x the markup it holds: 8 MB of `<a/>` builds a ~1 GB tree, two at once ~2 GB.
-    test('workbook, rels and theme of 8 or 16 MB of tags cost no tree', async () => {
-        for (const bytes of [8 * 1024 * 1024 - 4096, 8_000_000, 16_000_000]) {
-            const fill = '<a/>'.repeat(bytes / 4);
-            const workbook = new ExcelJS.Workbook();
-            workbook.addWorksheet('S').getCell('A1').value = 'link';
-            workbook.addWorksheet('T');
-            let buffer = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
-                { ref: 'A1', location: 'T!A1' },
-            ]);
-            buffer = await replacePart(buffer, 'xl/workbook.xml', (xml) =>
-                xml.replace('</workbook>', `<extLst><ext uri="x">${fill}</ext></extLst></workbook>`),
-            );
-            buffer = await replacePart(buffer, 'xl/theme/theme1.xml', (xml) =>
-                xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${fill}</a:ext></a:extLst></a:theme>`),
-            );
-
-            Bun.gc(true);
-            const before = process.memoryUsage().heapUsed;
-            const sheets = await xlsxToSheets(Buffer.from(buffer));
-            const grown = process.memoryUsage().heapUsed - before;
-
-            expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
-            expect(grown).toBeLessThan(treeless);
-
-            // exceljs refuses a rels part holding anything but relationships, so this one is read on its own.
-            const zip = await JSZip.loadAsync(buffer);
-            const rels = (await zip.file('xl/_rels/workbook.xml.rels')?.async('string')) ?? '';
-            zip.file('xl/_rels/workbook.xml.rels', rels.replace('</Relationships>', `${fill}</Relationships>`));
-            Bun.gc(true);
-            const relsBefore = process.memoryUsage().heapUsed;
-            expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
-            expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(treeless);
-        }
-    });
-
-    test('a hyperlinks block of 15 MB of tags costs no tree and loses only its own links', async () => {
-        const workbook = new ExcelJS.Workbook();
-        workbook.addWorksheet('S').getCell('A1').value = 'link';
-        workbook.addWorksheet('T').getCell('A1').value = 'back';
-        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
-            { ref: 'A1', location: 'T!A1' },
-        ]);
-        // Just under MAX_ELEMENTS: past it a sheet's tags are refused before the load (sheets/limits.test.ts).
-        const filled = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
-            xml.replace('</hyperlinks>', `${'<a/>'.repeat(3_900_000)}</hyperlinks>`),
-        );
-        const buffer = await replacePart(filled, 'xl/worksheets/sheet2.xml', (xml) =>
-            xml.replace('<pageMargins', '<hyperlinks><hyperlink ref="A1" location="S!A1"/></hyperlinks><pageMargins'),
-        );
-
-        Bun.gc(true);
-        const before = process.memoryUsage().heapUsed;
-        const sheets = await xlsxToSheets(Buffer.from(buffer));
-        const grown = process.memoryUsage().heapUsed - before;
-
-        expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 'T']);
-        expect(sheets[0].hyperlink).toBeUndefined();
-        expect(sheets[1].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'S!A1' } });
-        expect(grown).toBeLessThan(treeless);
-    });
-
-    // Past the length cap a part isn't parsed: a tree would cost 1x to 4x its text. Without the cap the link and the
-    // colours survive. The hyperlinks block is read straight from the zip, so exceljs never inflates the 34 MB sheet.
-    test('a hyperlinks block or theme past its length cap is not parsed and loses only its links or colors', async () => {
-        const workbook = new ExcelJS.Workbook();
-        const ws = workbook.addWorksheet('S');
-        ws.getCell('A1').value = 'kept';
-        ws.getCell('A1').font = { color: { theme: 4 } };
-        workbook.addWorksheet('T');
-        const linked = await injectLocationHyperlinks(await workbookToBuffer(workbook), [
-            { ref: 'A1', location: 'T!A1' },
-        ]);
-
-        const longBlock = await replacePart(linked, 'xl/worksheets/sheet1.xml', (xml) =>
-            xml.replace('</hyperlinks>', `${'a'.repeat(34_000_000)}</hyperlinks>`),
-        );
-        expect(readLocationHyperlinks(openZip(new Uint8Array(longBlock)))).toEqual(new Map());
-
-        const longTheme = await replacePart(linked, 'xl/theme/theme1.xml', (xml) =>
-            xml.replace('</a:theme>', `<a:extLst><a:ext uri="x">${'a'.repeat(2_000_000)}</a:ext></a:extLst></a:theme>`),
-        );
-        const sheets = await xlsxToSheets(Buffer.from(longTheme));
-        const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('kept');
-        expect(a1?.v?.fc).toBeUndefined();
-        expect(sheets[0].hyperlink).toEqual({ '0_0': { linkType: 'cellrange', linkAddress: 'T!A1' } });
-    });
-
-    // exceljs inflates the whole package and its out-of-memory can't be caught, so both refusals come before it: the
-    // declared total past the cap, with nothing inflated, and an entry inflating past the size it declares.
+    // openZip refuses both before the reader parses anything: the declared total past the cap, with nothing inflated,
+    // and an entry inflating past the size it declares.
     test.each([
         ['declaring more than the cap', buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024), 413],
         [
@@ -1954,21 +1804,18 @@ describe('xlsxToSheets resource guards', () => {
             build([{ ...deflated('xl/worksheets/sheet1.xml', '<row/>'.repeat(100_000)), size: 64 }]),
             400,
         ],
-    ])('rejects an xlsx %s', async (_name, bytes, status) => {
-        const error = await xlsxToSheets(bytes).then(
-            () => undefined,
-            (reason: unknown) => reason,
+    ])('rejects an xlsx %s', (_name, bytes, status) => {
+        expect(() => xlsxToSheets(bytes)).toThrow(
+            expect.objectContaining({
+                status,
+                message: status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file',
+            }),
         );
-        expect(error).toBeInstanceOf(ApiError);
-        expect(error).toMatchObject({
-            status,
-            message: status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file',
-        });
     });
 
     // JSZip names an entry by its Info-ZIP Unicode Path extra (0x7075), which openZip ignores: an entry openZip reads
-    // as decoy.xml is a second sheet1.xml to JSZip, and the later one wins. exceljs gets the entries openZip read.
-    test('exceljs loads the entries openZip read, not its own reading of the upload', async () => {
+    // as decoy.xml is a second sheet1.xml to JSZip, and the later one wins. The reader reads only what openZip names.
+    test('the reader reads the entries openZip names, not another reading of the upload', async () => {
         const workbook = new ExcelJS.Workbook();
         workbook.addWorksheet('S').getCell('A1').value = 1;
         const zip = openZip(new Uint8Array(await workbookToBuffer(workbook)));
@@ -1988,28 +1835,21 @@ describe('xlsxToSheets resource guards', () => {
         const jszip = await JSZip.loadAsync(bytes);
         expect(await jszip.file('xl/worksheets/sheet1.xml')?.async('string')).toContain('<v>2</v>');
 
-        const sheets = await xlsxToSheets(bytes);
+        const sheets = xlsxToSheets(bytes);
         expect((sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0)?.v?.v).toBe(1);
     });
 
     test('rejects an xlsx declaring an absurd cell count', async () => {
         // Two far-apart cells span the full Excel grid (1,048,576 × 16,384 ≈ 1.7e10 cells)
-        // from a ~6 KB file. exceljs materializes rows sparsely, but building our Sheet
-        // output would walk the declared bounding box, so reject on cell count.
+        // from a ~6 KB file; recalc would walk the grid they span.
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Huge');
         ws.getCell('A1048576').value = 'x';
         ws.getCell('XFD1').value = 'y';
-        const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
-
-        let error: unknown;
-        try {
-            await xlsxToSheets(buffer);
-        } catch (e) {
-            error = e;
-        }
-        expect(error).toBeInstanceOf(ApiError);
-        expect((error as ApiError).status).toBe(413);
+        const buffer = await workbookToBuffer(workbook);
+        expect(() => xlsxToSheets(new Uint8Array(buffer))).toThrow(
+            expect.objectContaining({ status: 413, message: 'Spreadsheet has too many cells' }),
+        );
     });
 });
 

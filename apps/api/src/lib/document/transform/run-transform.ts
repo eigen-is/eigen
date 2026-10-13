@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
-import { DOCUMENT_TOO_LARGE, IMPORT_TOO_LARGE } from '../../import/messages';
+import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES } from '../../import/messages';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
@@ -53,7 +53,7 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
     if (!response.ok) {
         if (response.error.status) throw new ApiError(response.error.status, response.error.message);
         if (response.error.code === 'out-of-memory' && request.kind === 'import') {
-            throw new ApiError(413, IMPORT_TOO_LARGE[request.sourceFormat]);
+            throw new ApiError(413, IMPORT_MESSAGES[request.sourceFormat].tooLarge);
         }
         // The search extract indexes it as nothing rather than running out again on every drain.
         if (response.error.code === 'out-of-memory' && request.kind === 'extract-text') {
