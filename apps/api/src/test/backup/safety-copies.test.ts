@@ -1,5 +1,15 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    cpSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
@@ -13,11 +23,13 @@ import { recoverInterruptedRestores } from '../../lib/backup/recovery';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
-import { getHome } from '../../lib/home/get-home';
+import { updateServerSettings } from '../../lib/config/server-settings';
+import { evictHome, getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
 import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
+import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     createHomeFaultMount,
@@ -31,11 +43,14 @@ import {
 import {
     assertJson,
     authedRequest,
+    createTestUserOnStorage,
     driveUpload,
+    eventually,
     getTestContext,
     openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
+    type TestUser,
 } from '../setup';
 
 const MOUNT_ID = 'safety-s3';
@@ -435,16 +450,89 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         expect(listed.map((item) => item.name)).toContain('before.png');
     });
 
-    test('a copy of a home whose owner is gone cannot be restored', async () => {
+    test('deleting the owner takes its safety copies, and a copy that outlived its owner cannot be restored', async () => {
         const ctx = await getTestContext();
         const [copy] = safetyCopies(userId);
-        const del = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, { method: 'DELETE' });
-        expect(del.status).toBe(200);
-        expect(existsSync(homeDir)).toBe(false);
+        const copyDir = join(TEST_DATA_DIR, 'home', copy);
+        const aside = join(TEST_DATA_DIR, `${copy}-aside`);
+        cpSync(copyDir, aside, { recursive: true });
+        try {
+            const del = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, {
+                method: 'DELETE',
+            });
+            expect(del.status).toBe(200);
+            expect(existsSync(homeDir)).toBe(false);
+            expect(existsSync(copyDir)).toBe(false);
 
-        await expect(restoreSafetyCopy(userId, copy, `safety-rollback-gone-${Date.now()}`)).rejects.toThrow(
-            'no longer exists',
+            renameSync(aside, copyDir);
+            await expect(restoreSafetyCopy(userId, copy, `safety-rollback-gone-${Date.now()}`)).rejects.toThrow(
+                'no longer exists',
+            );
+            expect(existsSync(copyDir)).toBe(true);
+        } finally {
+            rmSync(aside, { recursive: true, force: true });
+            rmSync(copyDir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('Backup safety copies of a home on the server bucket', () => {
+    const backing = join(TEST_DATA_DIR, 'safety-default-s3-backing');
+    let fake: FakeS3Server;
+    // Kept to the end: a later whole-server backup would try its home on a bucket that is gone.
+    let user: TestUser | undefined;
+    let liveKeys: string[] = [];
+
+    beforeAll(async () => {
+        await getTestContext();
+        fake = new FakeS3Server(new LocalStorage(backing));
+        await updateServerSettings({ defaults: { mount: { s3Config: await fake.start() } } });
+    });
+
+    afterAll(async () => {
+        if (user) {
+            await deleteUserCompletely(user.id, null);
+            await eventually(async () => {
+                for (const key of liveKeys) if (await fake.store.exists(key)) return undefined;
+                return true;
+            }, 'the bucket deletes of the deleted user');
+        }
+        await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
+        await fake.stop();
+        rmSync(backing, { recursive: true, force: true });
+    });
+
+    test('deleting a copy of a default drive takes the objects only it names from the server bucket', async () => {
+        user = await createTestUserOnStorage('s3', 'Safety Default S3');
+        const root = await assertJson<DrivePath>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/default/root`),
         );
-        expect(existsSync(join(TEST_DATA_DIR, 'home', copy))).toBe(true);
+        for (const name of ['kept.png', 'replaced.png']) {
+            const file = new File([TEST_PNG_BYTES], name, { type: 'image/png' });
+            await driveUpload(user.sessionToken, user.id, 'default', root.id, file);
+        }
+        await evictHome(user.id);
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        const settings = JSON.parse(readFileSync(join(homeDir, 'settings.json'), 'utf8'));
+        expect(settings.mounts.default.s3Config).toBeUndefined();
+        liveKeys = fileKeysOf(join(homeDir, 'mounts', 'default', 'metadata.db'));
+        expect(liveKeys).toHaveLength(2);
+
+        // The copy names one object the live home still points at and one only it does.
+        const copyDir = `${homeDir}${PRE_RESTORE_SUFFIX}20200101-000000`;
+        cpSync(homeDir, copyDir, { recursive: true });
+        const db = openMountMetadata(join(copyDir, 'mounts', 'default', 'metadata.db'));
+        try {
+            db.run("UPDATE paths SET file = 'copy-only.png' WHERE file = ?", [liveKeys[1]]);
+        } finally {
+            db.close();
+        }
+        await fake.store.write('copy-only.png', TEST_PNG_BYTES);
+
+        await deleteSafetyCopy(copyDir, homeDir);
+
+        expect(existsSync(copyDir)).toBe(false);
+        expect(await fake.store.exists('copy-only.png')).toBe(false);
+        for (const key of liveKeys) expect(await fake.store.exists(key)).toBe(true);
     });
 });

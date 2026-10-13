@@ -110,7 +110,7 @@ export function createDefaultMountConfig(): MountConfig {
     return { id: DEFAULT_MOUNT_ID, name: DEFAULT_MOUNT_NAME, storageType: 'local', isDefault: true };
 }
 
-export function createMountConfig(id: string, settings: MountSettings): MountConfig {
+export function createMountConfig(id: string, settings: Omit<MountSettings, 'enabled'>): MountConfig {
     return {
         id,
         name: settings.name ?? (id === DEFAULT_MOUNT_ID ? DEFAULT_MOUNT_NAME : id),

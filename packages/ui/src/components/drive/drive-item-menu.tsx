@@ -1,7 +1,13 @@
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { useMailEnabled } from '@workspace/lib/public';
-import { type DrivePath, type ExportFormat, exportFormatsFor, isOpenable } from '@workspace/lib/types';
+import {
+    type DrivePath,
+    EXPORT_FORMAT_LABELS,
+    type ExportFormat,
+    exportFormatsFor,
+    isOpenable,
+} from '@workspace/lib/types';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -26,7 +32,6 @@ import {
 } from 'lucide-react';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import type { FileActionRunner } from '../file-actions/use-file-action-runner';
-import { formatDownloadLabel } from '../layout/toolbar/file-menu';
 import { useWatchToggle } from '../layout/toolbar/watch-toggle-button';
 
 // Drive keeps its own "Copy to…" row, so the registry's save-to-drive would say the same thing twice.
@@ -121,7 +126,7 @@ export function DriveItemMenuItems({
                     <DropdownMenuSubContent>
                         {exportFormats.map((format) => (
                             <DropdownMenuItem key={format} onClick={run(() => onExport(item, format))}>
-                                {formatDownloadLabel(format)}
+                                {EXPORT_FORMAT_LABELS[format]}
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>

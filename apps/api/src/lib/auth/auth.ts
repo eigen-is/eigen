@@ -201,9 +201,19 @@ export const auth = betterAuth({
             // No session is the plugin's 401, before any lookup that would tell the owner's id apart.
             const session = await getSessionFromCtx(ctx);
             if (!session) return;
-            if ((await getOrgRole(targetId)) !== 'owner') return;
-            if (session.user.id !== targetId) {
+            if ((await getOrgRole(targetId)) === 'owner' && session.user.id !== targetId) {
                 throw new APIError('FORBIDDEN', { message: "Only the owner can change the owner's account" });
+            }
+            // remove-user drops the sessions and the password before user.delete.before can refuse, with no rollback.
+            // Admins only: anyone else gets the plugin's 403, not word of a running job.
+            if (ctx.path === '/admin/remove-user' && session.user['role'] === 'admin') {
+                const { requireHomeSlotFree } = await import('../backup/jobs');
+                try {
+                    requireHomeSlotFree(targetId);
+                } catch (error) {
+                    if (error instanceof ApiError) throw new APIError('CONFLICT', { message: error.message });
+                    throw error;
+                }
             }
         }),
     },

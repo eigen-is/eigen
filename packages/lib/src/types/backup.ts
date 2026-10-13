@@ -95,6 +95,8 @@ export type BackupVerifyRecord = {
     checkedAt?: Date;
     // Human-readable, one per failed check.
     failures: string[];
+    // What verifies but is not as it should be, one line each; absent when there is none.
+    warnings?: string[];
 };
 
 // The last upload of an archive to the backup bucket. `key` is the object's, prefix and server folder included.

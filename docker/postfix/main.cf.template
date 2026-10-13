@@ -8,9 +8,9 @@ mydomain = $MAIL_DOMAIN
 myorigin = $mydomain
 # mydestination excludes the mail domain — virtual_mailbox_domains handles it.
 mydestination = localhost
-# Loopback plus the docker bridge subnet, rendered by entrypoint.sh from EIGEN_SUBNET (kept in
-# step with the compose `eigen` network). Falls back to loopback-only when EIGEN_SUBNET is unset —
-# never the whole 172.16/12 range.
+# Loopback plus the docker bridge subnet minus its gateway (`!` excludes, first match wins), rendered
+# by entrypoint.sh from EIGEN_SUBNET (kept in step with the compose `eigen` network). Falls back to
+# loopback-only when EIGEN_SUBNET is unset — never the whole 172.16/12 range.
 mynetworks = ${MAIL_TRUST_NETWORKS}
 
 virtual_mailbox_domains = $MAIL_DOMAIN

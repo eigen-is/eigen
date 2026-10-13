@@ -64,8 +64,19 @@ const icsPayload = {
     dropped: 0,
     total: 1,
 };
+// The media folder's listing as the server holds it right now; a test edits it between fetches, or fails them.
+const folder: { listing: { id: string; name: string }[]; fetches: number; failing: boolean } = {
+    listing: [],
+    fetches: 0,
+    failing: false,
+};
 g.fetch = async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
+    if (url.includes('/folder/')) {
+        folder.fetches++;
+        if (folder.failing) return Response.json({ message: 'unavailable' }, { status: 503 });
+        return Response.json(folder.listing);
+    }
     if (url.includes('eml-preview')) return Response.json(emlPayload);
     if (url.includes('ics-preview')) return Response.json(icsPayload);
     return Response.json(payload);
@@ -136,5 +147,110 @@ describe('useIcsPreview', () => {
         expect(start).not.toBeInstanceOf(Date);
         expect(event?.title).toBe('2026-09-20');
         expect(event?.title).not.toBeInstanceOf(Date);
+    });
+});
+
+describe('useFolderLookup', () => {
+    type Lookup = ReturnType<typeof import('../../../../core/drive/hooks/reads').useFolderLookup>;
+
+    // Mounts the lookup and asks for `names` during render, as an image renderer does.
+    async function mountLookup(folderId: string | null) {
+        const { act, createElement } = await import('react');
+        const { createRoot } = await import('react-dom/client');
+        const { QueryClientProvider } = await import('@tanstack/react-query');
+        const { useFolderLookup } = await import('../../../../core/drive/hooks/reads');
+
+        const seen: { lookup: Lookup | null; names: string[] } = { lookup: null, names: [] };
+        function Harness() {
+            const lookup = useFolderLookup('owner-1', 'm1', folderId);
+            for (const name of seen.names) lookup.findByName(name);
+            seen.lookup = lookup;
+            return null;
+        }
+        const root = createRoot(document.createElement('div'));
+        // The folder query sets its own retry; no delay lets a failed fetch settle within a flush.
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
+        const render = () =>
+            act(async () => {
+                root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, null)));
+            });
+        // Lets the queued refetch run and the re-render it causes land.
+        const flush = async () => {
+            for (let i = 0; i < 10; i++) {
+                await act(async () => {
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                });
+            }
+        };
+        await render();
+        await flush();
+        return {
+            lookup: (): Lookup => {
+                if (!seen.lookup) throw new Error('lookup never rendered');
+                return seen.lookup;
+            },
+            ask: async (...names: string[]) => {
+                seen.names = names;
+                await render();
+                await flush();
+            },
+            invalidate: async () => {
+                await act(() => queryClient.invalidateQueries());
+                await flush();
+            },
+            unmount: () => act(() => root.unmount()),
+        };
+    }
+
+    test('a name still absent once its refetch settles reads missing', async () => {
+        folder.listing = [];
+        const harness = await mountLookup('media-1');
+        await harness.ask('gone.png');
+        expect(harness.lookup().isMissing('gone.png')).toBe(true);
+        await harness.unmount();
+    });
+
+    test('a name the refetch brings reads present', async () => {
+        folder.listing = [];
+        const harness = await mountLookup('media-1');
+        folder.listing = [{ id: 'p-new', name: 'new.png' }];
+        await harness.ask('new.png');
+        expect(harness.lookup().isMissing('new.png')).toBe(false);
+        expect(harness.lookup().findByName('new.png')).toMatchObject({ id: 'p-new' });
+        await harness.unmount();
+    });
+
+    test('a missing name that appears later clears', async () => {
+        folder.listing = [];
+        const harness = await mountLookup('media-1');
+        await harness.ask('late.png');
+        expect(harness.lookup().isMissing('late.png')).toBe(true);
+        folder.listing = [{ id: 'p-late', name: 'late.png' }];
+        await harness.invalidate();
+        expect(harness.lookup().isMissing('late.png')).toBe(false);
+        await harness.unmount();
+    });
+
+    test('a refetch that fails marks nothing missing', async () => {
+        folder.listing = [];
+        folder.fetches = 0;
+        const harness = await mountLookup('media-1');
+        folder.failing = true;
+        await harness.ask('unknown.png');
+        // The listing, then the refetch the unknown name asked for and its one retry.
+        expect(folder.fetches).toBe(3);
+        expect(harness.lookup().isMissing('unknown.png')).toBe(false);
+        folder.failing = false;
+        await harness.unmount();
+    });
+
+    test('while the folder id is unknown, nothing reads missing and nothing is fetched', async () => {
+        folder.listing = [];
+        folder.fetches = 0;
+        const harness = await mountLookup(null);
+        await harness.ask('any.png');
+        expect(harness.lookup().isMissing('any.png')).toBe(false);
+        expect(folder.fetches).toBe(0);
+        await harness.unmount();
     });
 });

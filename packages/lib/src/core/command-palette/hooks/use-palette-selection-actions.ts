@@ -23,6 +23,7 @@ export function usePaletteSelectionActions(actions: PaletteSelectionActions): vo
     const shapeKey = actions
         ? [
               actions.onDownload ? 'D' : '_',
+              actions.onExport ? 'P' : '_',
               actions.onRename ? 'R' : '_',
               actions.onShare ? 'S' : '_',
               actions.onEmailCollaborators ? 'E' : '_',
@@ -34,6 +35,7 @@ export function usePaletteSelectionActions(actions: PaletteSelectionActions): vo
         if (!shapeKey || !actions) return null;
         const wrapped: NonNullable<PaletteSelectionActions> = {};
         if (actions.onDownload) wrapped.onDownload = (item) => actionsRef.current?.onDownload?.(item);
+        if (actions.onExport) wrapped.onExport = (item, format) => actionsRef.current?.onExport?.(item, format);
         if (actions.onRename) wrapped.onRename = (item) => actionsRef.current?.onRename?.(item);
         if (actions.onShare) wrapped.onShare = (item) => actionsRef.current?.onShare?.(item);
         if (actions.onEmailCollaborators) {

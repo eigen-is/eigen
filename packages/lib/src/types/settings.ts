@@ -37,6 +37,8 @@ export type TeamSettings = {
         mailAndContactsMaxMB?: number;
         defaultMountMaxSizeMB?: number;
     };
+    // Missing = on: a notification relayed to the team reaches its members.
+    notifyMembers?: boolean;
 };
 
 export const SERVER_STORAGE_TYPES = ['local-id', 'local-fullnames', 's3'] as const;

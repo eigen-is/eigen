@@ -2,9 +2,11 @@ import {
     type ConvertTarget,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_TYPE_FILE,
     type DrivePath,
     isCollabType,
 } from '@workspace/lib/types/drive';
+import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import { writeEigendocUpdateToYjs } from '../document/doc';
@@ -52,18 +54,37 @@ async function requireWritePermission(drive: DriveLike, path: DrivePath, user: U
     if (!(await drive.canWrite(path.mountId, path.id, user))) throw new ApiError(403, 'No write permission');
 }
 
-async function saveDocImages(mount: Mount, docPath: DrivePath, images: TransformMedia[]): Promise<void> {
+function imagesSize(images: TransformMedia[]): number {
+    return images.reduce((sum, image) => sum + image.data.byteLength, 0);
+}
+
+// Through Drive, as an upload is: the ACL check, the drive event an open tab redraws on and the thumbnail. The images
+// count toward the quota, inflated up to the zip cap, and are charged before the first is written.
+async function saveDocImages(
+    drive: DriveLike,
+    docPath: DrivePath,
+    images: TransformMedia[],
+    user: User,
+): Promise<void> {
     if (images.length === 0) return;
-    const mediaFolder = await mount.getChildByName(docPath.id, 'media');
+    const mediaFolder = await drive.getChildByName(docPath.mountId, docPath.id, 'media');
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
-    for (const image of images) {
+    // Extracted names are deterministic (image-1.png, …), so a repeat import overwrites its files in place, credited their
+    // size: a create would rename the collision to one the update doesn't name. Names the new import doesn't produce stay.
+    const existing = await Promise.all(
+        images.map((image) => drive.getChildByName(docPath.mountId, mediaFolder.id, image.name)),
+    );
+    // Anything else under that name is neither written over nor credited, and a create would rename the image away
+    // from the name the document gives it.
+    const blocked = existing.find((path) => path && path.type !== DRIVE_TYPE_FILE);
+    if (blocked) throw new ApiError(409, `media/${blocked.name} is not a file`);
+    const credit = existing.reduce((sum, path) => sum + (path?.size ?? 0), 0);
+    await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images), credit);
+    for (const [i, image] of images.entries()) {
         const data = Buffer.from(image.data);
-        // Extracted names are deterministic (image-1.png, …), so a repeat import
-        // references the same names — overwrite them instead of 409ing after the
-        // content already committed. Names the new import doesn't produce stay.
-        const existing = await mount.getChildByName(mediaFolder.id, image.name);
-        if (existing) await mount.writeFile(existing.id, data);
-        else await mount.createFile(mediaFolder.id, image.name, image.contentType, data.byteLength, data);
+        const path = existing[i];
+        if (path) await drive.writeFileContent(docPath.mountId, path.id, data, user);
+        else await drive.createFileFromData(docPath.mountId, mediaFolder.id, image.name, image.contentType, data, user);
     }
 }
 
@@ -102,17 +123,18 @@ export async function convertToDocument(
         throw new ApiError(400, 'Only .docx files can be converted to documents');
     }
     const { update, images } = await importDocxUpdate(buffer);
+    // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
+    await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const name = sourcePath.name.replace(/\.docx$/i, '');
     const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
     const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
+    await saveDocImages(drive, newPath, images, user);
     writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-    await saveDocImages(mount, newPath, images);
     return newPath;
 }
 
 export async function importIntoDocument(
     drive: DriveLike,
-    mount: Mount,
     path: DrivePath,
     buffer: Buffer,
     user: User,
@@ -138,7 +160,7 @@ export async function importIntoDocument(
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
         await requireWritePermission(drive, path, user);
-        await saveDocImages(mount, path, images);
+        await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
         writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         return;

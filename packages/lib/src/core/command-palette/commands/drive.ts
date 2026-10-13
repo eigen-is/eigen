@@ -3,7 +3,13 @@ import { copyToClipboard } from '@workspace/lib/clipboard';
 import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { Command, CommandContext } from '@workspace/lib/types/command-palette';
-import { isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
+import {
+    EXPORT_FORMAT_LABELS,
+    EXPORT_FORMATS,
+    exportFormatsFor,
+    isOpenable,
+    stripEigenExtension,
+} from '@workspace/lib/types/drive';
 import { ArrowRight, Download, ExternalLink, Eye, Link, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { BASE_RANKS } from './base-ranks';
 
@@ -193,4 +199,26 @@ export const driveCommands: Command[] = [
             if (items && items.length > 0) ctx.selectionActions?.onDelete?.(items);
         },
     },
+    ...EXPORT_FORMATS.map<Command>((format) => ({
+        id: `drive.download-as.${format}`,
+        title: `Download as ${EXPORT_FORMAT_LABELS[format]}`,
+        keywords: ['download', 'export', format],
+        icon: Download,
+        baseRank: BASE_RANKS.DRIVE_DOWNLOAD_AS,
+        group: 'selection',
+        availability: (ctx) => {
+            const item = ctx.selection?.items[0];
+            return (
+                ctx.selection?.items.length === 1 &&
+                !!item &&
+                exportFormatsFor(item.type).includes(format) &&
+                !!ctx.selectionActions?.onExport
+            );
+        },
+        dynamicTitle: (ctx) => `Download ${selectionLabel(ctx)} as ${EXPORT_FORMAT_LABELS[format]}`,
+        run: (ctx) => {
+            const item = ctx.selection?.items[0];
+            if (item) ctx.selectionActions?.onExport?.(item, format);
+        },
+    })),
 ];

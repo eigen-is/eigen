@@ -103,8 +103,8 @@ Usage: ./eigen update [version] [--check] [--accept-breaking] [--full | --no-bac
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
 the backup ./eigen rollback goes back to: a light one, of the accounts, settings and
-databases, unless the new version lists breaking changes. ./eigen update main follows the
-main channel instead of releases.
+databases, unless the new version lists breaking changes or marks a change (full backup),
+when it is full. ./eigen update main follows the main channel instead of releases.
 
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
@@ -1147,8 +1147,8 @@ update_get() {
     fi
     pin_images "$tag"
     # Before the files of the new version, which a failure would leave with the old images, and before its
-    # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release gets a
-    # full backup, since it may convert what a light one leaves out.
+    # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release, or one
+    # marked (full backup), gets a full backup, since it may convert what a light one leaves out.
     level=full
     if [ -z "$full" ] && [ -z "$no_backup" ]; then
         levels=$(cli update-check --from "$old_version" --level </dev/null)

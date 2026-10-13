@@ -16,7 +16,8 @@
 //
 // Selection section (drive commands shown when a selection is published, ordered
 // open → destructive). Tier spacing leaves room for a future command to slot in
-// without re-numbering the chain.
+// without re-numbering the chain. DRIVE_DOWNLOAD_AS sits below DRIVE_DELETE so the
+// per-format rows don't push the empty-query list's six out; typing "download" finds them.
 export const BASE_RANKS = {
     CREATE_EIGENDOC: 12,
     NAV_APP: 10,
@@ -33,4 +34,5 @@ export const BASE_RANKS = {
     DRIVE_SHARE: 11,
     DRIVE_EMAIL_COLLABORATORS: 10,
     DRIVE_DELETE: 9,
+    DRIVE_DOWNLOAD_AS: 8,
 } as const;

@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, backup, restore, migrate, move]
 related: [self-hosting/back-up-and-restore, self-hosting/install]
 order: 100
-updated: 2026-10-01
+updated: 2026-10-12
 ---
 
 A Full backup holds the whole server, so moving is a backup on the old machine and a restore on the new one. Everyone keeps their account, mail, files, and settings, and stays signed in. Plan for some downtime: anything people change on the old server after the backup does not come along. To test a restore without moving, see [Try a restore without moving](/support/self-hosting/back-up-and-restore#try-a-restore-without-moving).
@@ -64,4 +64,4 @@ Eigen's own web server gets a new HTTPS certificate by itself once the domain po
 
 ## Drives in an S3 bucket
 
-A drive stored in an S3 bucket keeps its files in the bucket. A Full backup holds only the list of them, and the restored server reads them from the same bucket, so leave the bucket as it is and keep its credentials valid. A Full + S3 backup, made with `./eigen backup --s3`, holds those files too. Restored with `--s3-from-archive`, it uploads them into the drive's bucket again, for a bucket that was lost or damaged.
+A drive stored in an S3 bucket keeps its files in the bucket. A Full backup holds only the list of them, and the restored server reads them from the same bucket, so leave the bucket as it is and keep its credentials valid. A Full + S3 backup, made with `./eigen backup --s3`, holds those files too. Restored with `--s3-from-archive`, it uploads them into the drive's bucket again, for a bucket that was lost or damaged. The new server uses the same bucket, so never run the old one beside it: deleting a user or emptying a trash on either deletes files the other still shows, and only the bucket's versioning brings them back.

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Verify the outbound mail-relay hardening against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
-# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, and a TLS key
-# the server backup reads too.
+# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, a TLS key
+# the server backup reads too, and a port 25 that relays and DKIM-signs for the API but not for the Docker gateway.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
@@ -12,11 +12,12 @@
 # Needs:  docker, openssl, nc, curl, git. The install is fresh, so the script creates the admin
 #         alice@eigen.test through the setup wizard's API and logs in as her.
 #
-# Probes 8 and 13 set `defer_transports=smtp` and seed queue files; the scratch stack goes away afterwards.
+# Probes 8, 13 and 16 set `defer_transports` and seed queue files; the scratch stack goes away afterwards.
 #
-# No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
+# No message is ever delivered: the submission dialogs stop at RCPT TO, and the messages probes 13 and 16
+# queue stay parked by `defer_transports`.
 #
-# Runtime is about 6 minutes: probe 10 paces itself under Postfix's anvil AUTH cap and probe 8 waits
+# Runtime is about 7 minutes: probe 10 paces itself under Postfix's anvil AUTH cap and probe 8 waits
 # for the queue monitor's next interval; everything else is quick. A PROBES subset that names any
 # login probe also runs probe 1, which is what proves the credentials.
 
@@ -52,6 +53,30 @@ smtp465() {
 
 smtp25() {
     printf '%b' "$1" | nc -w 10 localhost "$PORT_SMTP" 2>/dev/null
+}
+
+# The same dialog from eigen-api, a bridge-subnet client like the API's own mailer, to postfix:25.
+smtp25_from_api() {
+    dc exec -T -e DIALOG="$1" eigen-api bun -e '
+const socket = require("node:net").connect(25, "postfix");
+let reply = "";
+socket.on("connect", () => socket.write(process.env.DIALOG.replaceAll("\\n", "\r\n")));
+socket.on("data", (chunk) => { reply += chunk; });
+socket.on("close", () => process.stdout.write(reply.replaceAll("\r", "")));
+setTimeout(() => socket.destroy(), 10000).unref();
+' 2>/dev/null || true
+}
+
+# A message from $1 to Alice's local mailbox with subject $2, for either sender above.
+local_dialog() {
+    printf '%s' "EHLO $HELO_NAME\nMAIL FROM:<$1>\nRCPT TO:<$ALICE_EMAIL>\nDATA\nFrom: $1\nTo: $ALICE_EMAIL\nSubject: $2\n\nprobe\n.\nQUIT\n"
+}
+
+# The `eigen` network's gateway as Docker reports it for the postfix container. The network's IPAM config
+# names it only when compose set one, which it does not.
+bridge_gateway() {
+    docker inspect --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' \
+        "$(dc ps -q postfix | tr -d '\r')" 2>/dev/null || true
 }
 
 auth_plain() {
@@ -207,7 +232,7 @@ fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
 # when one of these is selected: excluding it would skip every login probe and still print green.
-LOGIN_PROBES="2 3 4 5 6 10 11"
+LOGIN_PROBES="2 3 4 5 6 10 11 15"
 NEEDS_LOGIN=0
 for p in $LOGIN_PROBES; do
     if should_run "$p"; then NEEDS_LOGIN=1; fi
@@ -510,28 +535,35 @@ header "Probe 12 — mynetworks, OpenDKIM InternalHosts and the API trust range 
 # The trust range must be loopback plus the actual docker bridge subnet, not the whole
 # 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in the
 # entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
-# still carries the /12 and all three carry the subnet.
+# still carries the /12 and all three carry the subnet. Postfix and OpenDKIM also exclude the
+# subnet's gateway, which a client of a published port can arrive from (probe 16), and the
+# submission ports have no limit exceptions, whose default is $mynetworks.
 if should_run 12; then
     expect_subnet="${EIGEN_SUBNET:-172.20.0.0/24}"
+    gateway=$(bridge_gateway)
     mynetworks=$(dc exec -T postfix postconf -h mynetworks | tr -d '\r' || true)
     trusted=$(dc exec -T postfix cat /etc/opendkim/TrustedHosts | tr -d '\r' || true)
     api_trusted=$(dc exec -T eigen-api sh -c 'echo "$TRUSTED_NETWORKS"' | tr -d '\r' || true)
-    if printf '%s' "$api_trusted" | grep -q '172\.16\.0\.0/12'; then
+    exceptions=$(dc exec -T postfix postconf -P submission/inet/smtpd_client_event_limit_exceptions \
+        smtps/inet/smtpd_client_event_limit_exceptions | tr -d '\r' || true)
+    if [ -z "$gateway" ]; then
+        fail "docker inspect gave no gateway for the postfix container"
+    elif printf '%s' "$api_trusted" | grep -q '172\.16\.0\.0/12'; then
         fail "the API's TRUSTED_NETWORKS still carries the 172.16.0.0/12 range: $(oneline "$api_trusted")"
     elif ! printf '%s' "$api_trusted" | grep -qF "$expect_subnet"; then
         fail "the API's TRUSTED_NETWORKS is missing the bridge subnet $expect_subnet: $(oneline "$api_trusted")"
-    elif printf '%s' "$mynetworks" | grep -q '172\.16\.0\.0/12'; then
-        fail "mynetworks still carries the 172.16.0.0/12 range: $(oneline "$mynetworks")"
-    elif ! printf '%s' "$mynetworks" | grep -qF "$expect_subnet"; then
-        fail "mynetworks is missing the bridge subnet $expect_subnet: $(oneline "$mynetworks")"
-    elif ! printf '%s' "$mynetworks" | grep -qF '127.0.0.0/8'; then
-        fail "mynetworks dropped loopback: $(oneline "$mynetworks")"
+    elif [ "$mynetworks" != "127.0.0.0/8 !$gateway $expect_subnet" ]; then
+        fail "mynetworks is not loopback plus $expect_subnet minus the gateway $gateway: $(oneline "$mynetworks")"
     elif printf '%s' "$trusted" | grep -q '172\.16\.0\.0/12'; then
         fail "OpenDKIM InternalHosts still carries the 172.16.0.0/12 range: $(oneline "$trusted")"
-    elif ! printf '%s' "$trusted" | grep -qF "$expect_subnet"; then
+    elif ! printf '%s\n' "$trusted" | grep -qxF "$expect_subnet"; then
         fail "OpenDKIM InternalHosts is missing the bridge subnet $expect_subnet: $(oneline "$trusted")"
+    elif ! printf '%s\n' "$trusted" | grep -qxF "!$gateway"; then
+        fail "OpenDKIM InternalHosts does not exclude the gateway $gateway: $(oneline "$trusted")"
+    elif [ "$(printf '%s\n' "$exceptions" | grep -cE '^(submission|smtps)/inet/smtpd_client_event_limit_exceptions =$')" != 2 ]; then
+        fail "submission and smtps must set an empty smtpd_client_event_limit_exceptions: $(oneline "$exceptions")"
     else
-        ok "mynetworks + InternalHosts + API TRUSTED_NETWORKS scoped to loopback + $expect_subnet (no 172.16/12)"
+        ok "mynetworks + InternalHosts scoped to loopback + $expect_subnet minus $gateway, API TRUSTED_NETWORKS to loopback + $expect_subnet, no submission limit exceptions"
     fi
 else
     skip "probe 12 not selected"
@@ -596,6 +628,88 @@ if should_run 14; then
     fi
 else
     skip "probe 14 not selected"
+fi
+
+##############################################################################
+header "Probe 15 — one client IP is held to 60 messages a minute on a submission port"
+##############################################################################
+# smtpd_client_message_rate_limit=60 counts MAIL FROM per client IP per service per anvil window,
+# and answers 450 4.7.1. One AUTHed session sends MAIL FROM/RSET pairs and must see the 450 within
+# 61 of them; the exact message is not asserted, since anvil counts per window and the earlier
+# probes have already spent a few. Last of the 465 probes, so the spent window harms none.
+if should_run 15 && [ "$HAVE_LOGIN" = 1 ]; then
+    log "waiting 62s for the anvil windows to roll over..."
+    sleep 62
+    auth=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
+    dialog="EHLO $HELO_NAME\nAUTH PLAIN $auth\n"
+    for _ in $(seq 1 70); do
+        dialog="${dialog}MAIL FROM:<$ALICE_EMAIL>\nRSET\n"
+    done
+    transcript=$(smtp465 "${dialog}QUIT\n") || true
+    accepted=$(printf '%s\n' "$transcript" | grep -c '^250 2\.1\.0' || true)
+    if ! printf '%s\n' "$transcript" | grep -q '^235'; then
+        fail "AUTH itself failed (no 235): $(oneline "$transcript" | cut -c1-300)"
+    elif printf '%s\n' "$transcript" | grep -q '^450 4\.7\.1' && [ "$accepted" -le 61 ]; then
+        ok "the 450 4.7.1 came after $accepted accepted MAIL FROMs on one port"
+    else
+        fail "expected a 450 4.7.1 within 61 MAIL FROMs, $accepted were accepted: $(oneline "$transcript" | tail -c 300)"
+    fi
+else
+    skip_login_probe 15
+fi
+
+##############################################################################
+header "Probe 16 — port 25 relays and DKIM-signs for the API but not for the Docker gateway"
+##############################################################################
+# A client of a published port can reach postfix from the bridge gateway: this host, Docker Desktop and
+# rootless Docker. mynetworks excludes the gateway, so such a client meets the relay check, while eigen-api,
+# elsewhere in the subnet, still relays. The client address postfix logged for the refusal must be the
+# gateway, or the probe proved nothing. Mail from our domain that the gateway queues for a local mailbox is
+# accepted, but OpenDKIM's InternalHosts excludes the gateway too, so it stays unsigned, while the same
+# message from eigen-api is signed. defer_transports parks both in the queue, where postcat shows them.
+if should_run 16; then
+    gateway=$(bridge_gateway)
+    relay_rcpt="relay-probe-$RUN@example.com"
+    dialog="EHLO $HELO_NAME\nMAIL FROM:<$SENDER_FOREIGN>\nRCPT TO:<$relay_rcpt>\nQUIT\n"
+    from_host=$(smtp25 "$dialog") || true
+    from_api=$(smtp25_from_api "$dialog")
+    refused_from=$(dc logs --tail=200 postfix 2>&1 | grep -F "<$relay_rcpt>: Relay access denied" | tail -1 |
+        sed -n 's/.*RCPT from [^[]*\[\([^]]*\)\].*/\1/p' || true)
+    dc exec -T postfix sh -c 'postconf -e "defer_transports=smtp eigen" && postfix reload' >/dev/null 2>&1
+    forged="postmaster@$MAIL_DOMAIN"
+    host_subject="gateway-dkim-probe-$RUN"
+    api_subject="api-dkim-probe-$RUN"
+    queued_from_host=$(smtp25 "$(local_dialog "$forged" "$host_subject")") || true
+    smtp25_from_api "$(local_dialog "$forged" "$api_subject")" >/dev/null
+    host_queued=''
+    api_queued=''
+    for _ in $(seq 1 30); do
+        host_queued=$(dkim_headers "$host_subject")
+        api_queued=$(dkim_headers "$api_subject")
+        [ -n "$host_queued" ] && [ -n "$api_queued" ] && break
+        sleep 1
+    done
+    if printf '%s\n' "$from_host" | grep -q '^250 2\.1\.5'; then
+        fail "an unauthenticated client on the host relays to <$relay_rcpt>: $(oneline "$from_host")"
+    elif ! printf '%s\n' "$from_host" | grep -q 'Relay access denied'; then
+        fail "expected a relay refusal for the host's RCPT TO:<$relay_rcpt>: $(oneline "$from_host")"
+    elif [ -z "$gateway" ] || [ "$refused_from" != "$gateway" ]; then
+        fail "postfix refused the relay from '$refused_from', not the gateway '$gateway', so the gateway was not tested"
+    elif ! printf '%s\n' "$from_api" | grep -q '^250 2\.1\.5'; then
+        fail "eigen-api can no longer relay through postfix:25: $(oneline "$from_api")"
+    elif [ -z "$host_queued" ]; then
+        fail "the host's message to <$ALICE_EMAIL> never reached the queue: $(oneline "$queued_from_host")"
+    elif ! printf '%s\n' "$host_queued" | grep -q "^Received: .*\[${gateway//./\\.}\]"; then
+        fail "the host's message did not arrive from the gateway $gateway, so the gateway was not tested: $(oneline "$host_queued")"
+    elif printf '%s\n' "$host_queued" | grep -q '^DKIM-Signature:'; then
+        fail "OpenDKIM signed mail from $forged that the gateway $gateway queued: $(oneline "$host_queued")"
+    elif ! printf '%s\n' "$api_queued" | grep -q '^DKIM-Signature:'; then
+        fail "OpenDKIM did not sign eigen-api's message either, so the unsigned one proves nothing: $(oneline "$api_queued")"
+    else
+        ok "postfix refuses to relay for the gateway $gateway and relays for eigen-api; OpenDKIM signs eigen-api's mail from $forged, not the gateway's"
+    fi
+else
+    skip "probe 16 not selected"
 fi
 
 ##############################################################################

@@ -135,6 +135,24 @@ describe('export sanitize — style elements', () => {
         expect(out).not.toContain('\\');
     });
 
+    // The sheet is the style's own text nodes: an element inside an SVG <style> joins the text around it into
+    // `url(`, while its own text would read the same token as `urZl(`.
+    test.each([
+        '<svg><style>div{background:ur<a>Z</a>l(http://evil.test/a.png)}</style></svg><div>x</div>',
+        '<svg><style>div{background-image:ur<g>/**/</g>l(http://evil.test/g.png)}</style></svg><div>x</div>',
+        '<svg><a><style>div{background:ur<tspan>/**/</tspan>l(http://evil.test/t.png)}</style></a></svg><div>x</div>',
+    ])('an element inside an SVG style element neither hides a url() nor stays: %s', (html) => {
+        const out = sanitizeExportHtml(html);
+        expect(out).not.toContain('evil.test');
+        expect(out).toContain('<style></style>');
+        expect(out).toContain('<div>x</div>');
+    });
+
+    test('a name holding a function word is no fetch', () => {
+        const sheet = '<style>.cross-fade{transition:opacity 1s}.image-set{color:red}</style>';
+        expect(sanitizeExportHtml(sheet)).toBe(sheet);
+    });
+
     test('a CSS-escaped url() in a style attribute is neutralized', () => {
         const out = sanitizeExportHtml('<div style="background:\\75 rl(http://evil.test/c.png)">x</div>');
         expect(out).not.toMatch(/\burl\(\s*['"]?https?:/i);

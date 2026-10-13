@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/backup-contents]
 order: 91
-updated: 2026-10-01
+updated: 2026-10-12
 ---
 
 You can put a single user's or team's account back to the state held in a backup archive. Eigen checks the archive first, replaces the account from it, and keeps the current state beside it as a safety copy, so nothing is thrown away. Only an admin can do this.
@@ -62,4 +62,4 @@ Every restore keeps the account as it stood beforehand. These show up under a **
 
 To undo a restore, hover over the matching **The account before a restore** row and click **Restore this copy**. The account goes back to that earlier state, and the version it is in now becomes a new safety copy beside it.
 
-To free up space, click **Delete safety copy** on any row. Safety copies are never removed automatically and each one keeps a full second copy of the account on disk, so delete them once you are sure you no longer need them.
+To free up space, click **Delete safety copy** on any row. Each safety copy keeps a full second copy of the account on disk until you delete it or delete the user, so delete them once you are sure you no longer need them.

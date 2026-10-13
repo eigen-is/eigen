@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1641 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1650 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -897,7 +897,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (780)
+## Utilities & constants (789)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1250,9 +1250,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `canonicalRecipients` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `consumeRecentMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `CSS_FETCH_FUNCTIONS` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
+| `cssStatements` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
+| `FETCHING_ATTRS` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `flattenAddresses` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
+| `LINK_TAGS` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `NO_SUBJECT` | `@workspace/lib/mail` | packages/lib/src/core/mail/preview-lines.ts |
+| `restrictSheet` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
+| `sheetText` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
+| `stripRemoteContent` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
+| `stripRemoteRefs` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `CHAT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
@@ -1315,6 +1323,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EML_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `EXPORT_FORMAT_LABELS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EXPORT_FORMATS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1627,7 +1637,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
-| `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
 | `ATTENDEE_STATUS_ICON` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |

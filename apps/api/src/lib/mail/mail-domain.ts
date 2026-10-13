@@ -298,6 +298,17 @@ export class Mail {
         this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox: email.mailbox });
     }
 
+    async messageSetReplied(messageId: string): Promise<void> {
+        const email = this.store.getSummary(messageId);
+        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        await this.markReplied(messageId, email.mailbox);
+    }
+
+    private async markReplied(messageId: string, mailbox: string): Promise<void> {
+        await this.store.setFlags(messageId, { replied: true });
+        this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox });
+    }
+
     // -- Draft & Send --
 
     async messageHandleDraft(email: NewDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
@@ -646,11 +657,10 @@ export class Mail {
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
 
         // The mail is out: a reply mark that fails to stick must not fail the send, or a retry sends it twice.
-        const original = repliedToId ? this.store.getSummary(repliedToId) : undefined;
-        if (original) {
-            await this.store.setFlags(original.id, { replied: true }).then(
-                () => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: original.id, mailbox: original.mailbox }),
-                (err) => console.error('mail: marking the answered message failed', err),
+        const answered = repliedToId ? this.store.getSummary(repliedToId) : undefined;
+        if (answered) {
+            await this.markReplied(answered.id, answered.mailbox).catch((err) =>
+                console.error('mail: marking the answered message failed', err),
             );
         }
 

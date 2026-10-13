@@ -79,12 +79,20 @@ const CONTAINER_DATA_DB = 'data.db';
 const CONTAINER_COMMENTS_DB = 'comments.db';
 const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
+// Every schema a container's databases carry, which a Light backup leaves out: a release that migrates one is marked
+// (full backup) in CHANGELOG.md, which scripts/check-container-db-marker.ts holds a release tag to.
+export const CONTAINER_DB_CONFIGS = {
+    collab: COLLAB_DB_CONFIG,
+    chat: CHAT_ROOM_DB_CONFIG,
+    comments: COMMENT_INDEX_DB_CONFIG,
+};
+
 // Which schema a managed file carries: a comment index, or the container's own document database —
 // Yjs for every collab type, chat's own for a chat room. A versions/ snapshot is a copy of the
 // container's data.db, so it answers the same.
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
-    if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
-    return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
+    if (name === CONTAINER_COMMENTS_DB) return CONTAINER_DB_CONFIGS.comments;
+    return isCollabType(containerType) ? CONTAINER_DB_CONFIGS.collab : CONTAINER_DB_CONFIGS.chat;
 }
 
 // Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would

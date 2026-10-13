@@ -87,6 +87,8 @@ export const app = new Elysia({
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
             credentials: true,
             allowedHeaders: ['Content-Type', 'Authorization'],
+            // The dev client is cross-origin and names a download from this header.
+            exposeHeaders: ['Content-Disposition'],
         }),
     )
     .use(

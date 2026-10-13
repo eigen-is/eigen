@@ -69,6 +69,7 @@ import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
 import type { ExportMedia } from '../../document/transform/protocol';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
+import { figureMediaKey } from './docx-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
@@ -1054,7 +1055,8 @@ const RASTER_EXTENSIONS = new Map([
 
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
-    const { layout, alignment, caption, mediaName, width, alt } = readFigureAttrs(node.attrs ?? {});
+    const attrs = readFigureAttrs(node.attrs ?? {});
+    const { layout, alignment, caption, width, alt } = attrs;
     const side = layout === 'wrap-left' ? 'left' : layout === 'wrap-right' ? 'right' : undefined;
     const jc = side ? 'center' : (alignment ?? 'center');
     const captionRuns = caption ? textXml(caption) : '';
@@ -1074,7 +1076,8 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const image = mediaName ? imageOf(mediaName, context.pkg) : undefined;
+    const key = figureMediaKey(attrs);
+    const image = key ? imageOf(key, context.pkg) : undefined;
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);

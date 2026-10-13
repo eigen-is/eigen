@@ -1,10 +1,9 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
-import { Semaphore } from '../../utils/semaphore';
 import { getServerSettings } from '../config/server-settings';
 import { composeShareEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
-import { sendToHome } from '../home/home-relay';
+import { sendToUserHomes } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
@@ -91,12 +90,10 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
 }
 
 // Delivery is derived state (enforcement is always owner-side via SharedDrive/canReadFromAncestors),
-// so the request never waits on per-recipient home opens. The semaphore bounds concurrent opens
-// (~25–30 fds each); the per-path chain keeps successive changes to one path ordered per recipient,
-// since an out-of-order add→revoke would resurrect a stale mirror row. In-flight deliveries are lost
-// on a crash. The "Durable home-relay outbox" row of docs/ROADMAP.md closes that.
-const FAN_OUT_CONCURRENCY = 8;
-const fanOutSemaphore = new Semaphore(FAN_OUT_CONCURRENCY);
+// so the request never waits on per-recipient home opens, which the relay's delivery budget bounds. The
+// per-path chain keeps successive changes to one path ordered per recipient, since an out-of-order
+// add→revoke would resurrect a stale mirror row. In-flight deliveries are lost on a crash. The "Durable
+// home-relay outbox" row of docs/ROADMAP.md closes that.
 const pendingFanOuts = new Map<string, Promise<void>>();
 
 function queueACLFanOut(
@@ -109,17 +106,7 @@ function queueACLFanOut(
     if (ids.size === 0) return;
     const prev = pendingFanOuts.get(path.id) ?? Promise.resolve();
     const next = prev.then(() =>
-        Promise.all(
-            [...ids].map((id) =>
-                fanOutSemaphore.run(async () => {
-                    try {
-                        await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail, actorName });
-                    } catch (error) {
-                        console.error(`Failed to propagate ACL change to ${id}:`, error);
-                    }
-                }),
-            ),
-        ).then(() => undefined),
+        sendToUserHomes(ids, { type: 'drive:acl-change', path, acl: newACL, actorEmail, actorName }),
     );
     pendingFanOuts.set(path.id, next);
     next.finally(() => {

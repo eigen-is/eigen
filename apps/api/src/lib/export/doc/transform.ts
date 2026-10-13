@@ -1,4 +1,5 @@
-import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
@@ -13,8 +14,10 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
+import { encodeDocxImage, figureMediaKey } from './docx-image';
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
@@ -35,7 +38,7 @@ export async function renderEigendocExport(
     const json = readEigendocFromDoc(doc);
     if (format === 'docx') {
         const { eigendocToDocx } = await import('./to-docx');
-        const docxMedia = await withSvgFallbacks(media);
+        const docxMedia = await withSvgFallbacks([...media, ...(await pastedFigureMedia(json))]);
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
     const dataUriMap = toDataUriMap(media);
@@ -50,6 +53,39 @@ export async function renderEigendocExport(
         body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
+}
+
+// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
+// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
+async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
+    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
+    const visit = (node: JSONContent) => {
+        if (node.type === 'figure') {
+            const attrs = readFigureAttrs(node.attrs ?? {});
+            const key = figureMediaKey(attrs);
+            if (key && key === attrs.src) {
+                const split = splitDataUri(key);
+                if (split) pasted.set(key, split);
+            }
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    visit(json);
+    if (pasted.size === 0) return [];
+    const { sharpResize } = await import('../../shared/sharp-resize');
+    const media: ExportMedia[] = [];
+    for (const [src, { mediaType, base64 }] of pasted) {
+        const data = Buffer.from(base64, 'base64');
+        if (mediaType === 'image/svg+xml') {
+            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
+            continue;
+        }
+        const item = await encodeDocxImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
+        if (item) media.push(item);
+    }
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../sanitize');
+    return sanitizeExportMedia(media);
 }
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a

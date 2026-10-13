@@ -507,7 +507,7 @@ describe('Sheets xlsx import/convert', () => {
 
         const bob = await getUserById(ctx.bob.user.id);
         const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
-        const { mount, path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
+        const { path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
 
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
@@ -517,7 +517,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, mount, path, replacement, bob!);
+            await importIntoDocument(bobDrive, path, replacement, bob!);
         } catch (e) {
             error = e;
         }
@@ -540,7 +540,7 @@ describe('Sheets xlsx import/convert', () => {
 
         const bob = await getUserById(ctx.bob.user.id);
         const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
-        const { mount, path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
+        const { path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
 
         const realGet = bobDrive.getCollabDocument.bind(bobDrive);
         const getSpy = spyOn(bobDrive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
@@ -554,7 +554,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, mount, path, replacement, bob!);
+            await importIntoDocument(bobDrive, path, replacement, bob!);
         } catch (e) {
             error = e;
         } finally {

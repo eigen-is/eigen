@@ -6,7 +6,7 @@ category: Basics
 tags: [search, command-palette, navigation, getting-started]
 related: [getting-started/your-first-steps, account/light-and-dark-theme, drive/get-started]
 order: 3
-updated: 2026-09-13
+updated: 2026-10-12
 ---
 
 Eigen has one box that searches your files and email, jumps to any app, and runs quick actions. It's called the command palette, and you reach it from anywhere with a single keystroke. This page shows you how to open it and what it can do.
@@ -78,6 +78,8 @@ The palette understands a couple of things you paste in:
 ## Act on a file you've selected
 
 In Drive, select a file or folder first, then open the palette. The actions for that item appear at the top under a **Selection** heading, named after what you picked. From there you can **Share** it, **Rename** it, **Copy link** to it, **Download** it, **Move to trash**, and more, without leaving the keyboard.
+
+Inside a document, the palette acts on the document you have open. Type "download" to see a row for each format the **File → Download** menu offers, named after the document, such as **Download Budget as Microsoft Word (.docx)**.
 
 <div class="eigen-callout">
 

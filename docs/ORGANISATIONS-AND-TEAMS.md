@@ -48,6 +48,10 @@ Team routes take `:ownerId` in its `team_{teamId}` form, not the bare team id. E
 
 No team user ever logs in, so team members always reach team data through `SharedDrive`, where they count as co-owners ([ACL.md § Design Decisions](ACL.md#design-decisions)).
 
+## A notification to a team goes to its members
+
+No one signs in as a team, so a notification addressed to a team id goes to every member except the actor, and so does its email. Only an access request on a team-owned path is addressed to a team ([GUEST-ACCESS.md](GUEST-ACCESS.md#an-access-request-notifies-the-owner-and-never-reveals-the-path)). The team's `notifyMembers` setting (missing means on) turns both off, from the admin team detail page. The default team holds every new user, so a request on its drive reaches nearly everyone, and an admin who finds that too loud switches it off there.
+
 ## A team avatar is one file, and the admin page busts its cache
 
 Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by `requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`, written via `pushTeamAvatar` in `home-relay.ts`. File existence is the only source of truth: no settings pointer, no schema column. Deleting the team removes the file (`afterDeleteTeam`). Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG, with the same 24h public `Cache-Control` as user avatars.
@@ -84,8 +88,8 @@ The Users page (`GET /settings/users`) lists org members **and** orphans, non-gu
 
 `teardownUserData` (`apps/api/src/lib/user/delete-user.ts`) runs from the `databaseHooks.user.delete.before` hook in `auth.ts`, the one hook every better-auth deletion path passes through while the user row still exists:
 
-1. Evicts the cached Home (closes its databases)
-2. Deletes the home folder (`data/home/{userId}/`, or the guest home for a guest)
+1. Answers 409 while a restore, safety-copy delete or backup capture holds the home's job slot ([BACKUP.md](BACKUP.md#one-job-per-home-at-a-time-and-the-user-keeps-working)), since that work may hold the only good copy of the home and a capture reads through the live Home. Only then evicts the cached Home (closes its databases), and checks the slot again past that await
+2. Deletes the home folder (`data/home/{userId}/`, or the guest home for a guest) and the safety copies a restore left beside it ([BACKUP.md](BACKUP.md#a-safety-copy-stays-until-it-or-its-user-is-deleted)), then, in the background, every object their `s3` mounts name in a bucket (`collectHomeObjects` in `apps/api/src/lib/backup/safety-copy.ts`). The keys are read before the folders go, since nothing else records whose objects they are. A mount with no S3 config of its own is on the server's, as the live one is. The deletes go eight at a time per bucket. A delete the bucket refuses is logged and the object stays: a revoked bucket must not make a user undeletable. After ten refusals in a row the bucket's remaining objects are counted as failed without a request each
 3. Cleans the share registry: the entries the user created always, the entries addressed to the user only for a non-guest, so a guest who signs in again gets the same shares back ([GUEST-ACCESS.md](GUEST-ACCESS.md#the-share-registry-is-a-durable-record-not-a-queue))
 4. Removes the auth rows that reference the user (org and team memberships, 2FA, API keys) through `authDeleteUserReferences`. The deletion is explicit because SQLite's CASCADE does nothing with `PRAGMA foreign_keys` off, and a leftover member row 500s `listMembers` org-wide. The org and team membership deletes also remove every row whose user no longer exists
 
@@ -95,7 +99,7 @@ Every entry point funnels through better-auth's `deleteUser` (sessions and accou
 - better-auth's raw `POST /auth/admin/remove-user`: the same teardown through the hook
 - inactive-guest cleanup (system, no session): `deleteUserCompletely(id, null)` goes through `auth.$context.internalAdapter.deleteUser()`
 
-A hook error aborts the user-row deletion (fail-closed). Sessions and accounts are already gone at that point, so retrying the deletion completes it.
+A hook error aborts the user-row deletion (fail-closed). Sessions and accounts are already gone at that point, and nothing rolls them back, so a 409 from the hook would leave the user signed out with no password. `deleteUserCompletely` and `hooks.before` on `/admin/remove-user` therefore check the home's job slot before better-auth deletes anything, and the hook's check is the backstop. Retrying a deletion the hook aborted completes it.
 
 The guards hold on both routes. The Eigen route has `requireAdmin`, a 400 for your own account and a 400 for the owner. better-auth's `/admin/remove-user` rejects a non-admin (403) and self-removal (400) itself, and `hooks.before` keeps it off the owner, so the raw endpoint bypasses nothing. The frontend is `useDeleteUser(organizationId)` in `packages/lib/src/core/admin/hooks/use-members.ts`, behind a confirmation in the user's danger zone.
 

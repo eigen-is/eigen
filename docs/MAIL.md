@@ -24,7 +24,11 @@ Mail is the one domain whose truth is files, because Dovecot moves and renames t
 
 DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message), and almost nothing that parses a message wants its body. So `parseEml` returns an `IndexedEmail`, whose `html` is `null` by type, for the index, the sync and attachment reads. `parseEmlForReader` sanitizes, and only `MaildirStore.getMessage` calls it. The type guarantees that a caller that never asked for a body never gets an unsanitized one.
 
-The reader's sanitize keeps remote images, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`). So a message loads its remote images as it opens, and a tracking pixel tells its sender. Blocking them takes an opt-in toggle or an image proxy, a [ROADMAP](ROADMAP.md) row.
+## The reader holds back what a message would fetch until Load images
+
+The reader's sanitize keeps remote references, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`), so that Load images can show them. Left alone, a message would load its remote images as it opens, and a tracking pixel would tell its sender. So `MessageView` runs `stripRemoteContent` (`packages/lib/src/core/mail/remote-content.ts`) over the body in the browser, and Load images needs no second request. It removes every reference that is not a raster image the parser inlined: `src`, `srcset`, `poster`, `background`, an `href` off a link, a style or SVG attribute whose CSS fetches, and each `<style>` statement that fetches. A link keeps its `href`, because only a click follows it. The strip runs before the string reaches `ShadowContent`, because an `<img>` fetches as soon as its `src` is set, even on a detached element.
+
+When the strip removed anything, a muted line says "Remote images are hidden" beside a Load images button, which draws the body as it came. The choice covers one message, the last one loaded, and is not stored. A Reply or Forward quote (`formatEmailQuote`) carries the message's text and links, never its images, since the composer has no image node. An image part inlined as an SVG waits for the click like a remote image, since an SVG `data:` URI is a document of its own. The `.eml` preview applies the same rules on the server ([PREVIEWS.md § The `.eml` payload is where a message is made safe](PREVIEWS.md#the-eml-payload-is-where-a-message-is-made-safe)), so the strip finds nothing in the body it serves and no line shows.
 
 ## The inbox is INBOX, and only URLs lowercase it
 
@@ -70,7 +74,7 @@ The client chooses a draft's id, and that id names a file. So the domain answers
 
 `sendMail` returns `false` instead of throwing, so the loop tries every copy. If any is accepted, the draft moves to Sent and the response lists `failedRecipients`. If all fail, the route answers 500. Nothing retries, because a retry would deliver the accepted copies twice.
 
-A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered. A failure to set it is logged and the send still succeeds, for the same reason. The draft's sidecar keeps the id, and a save without one keeps the stored one, since a draft reopened from Drafts never learns it. So a reply sent later from Drafts marks its original too.
+A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered and the list row as a reply arrow (`isReplied`). A failure to set it is logged and the send still succeeds, for the same reason. The draft's sidecar keeps the id, and a save without one keeps the stored one, since a draft reopened from Drafts never learns it. So a reply sent later from Drafts marks its original too.
 
 ## A send with links splits per external recipient
 
@@ -82,11 +86,17 @@ When a mail links documents and has external recipients, internal recipients sha
 
 The app sends to `postfix:25` without authenticating. External clients submit on 587 and 465, where a login may only send as its own address (`docker/postfix/sender_login.regexp`). There are no aliases, so login and sender are one string. The empty sender `MAIL FROM:<>` is exempt, because read receipts and vacation replies must use it (RFC 3834).
 
+Port 25 relays without a login only for `mynetworks`: loopback and the `eigen` bridge subnet minus its gateway (`docker/postfix/entrypoint.sh`). Some clients of a published port reach Postfix from that gateway: the host itself, every client under Docker Desktop, and every client under rootless Docker with its default `builtin` port driver. Trusting the gateway would make Postfix an open relay for all of them. OpenDKIM's `InternalHosts` leaves it out too, or it would sign their forged mail from our domain. A program on the host submits on 587 with a login, like any other client.
+
+The entrypoint learns the gateway from the container's default route, and only when that route leaves through the subnet's interface. An override that attaches Postfix to a second network whose default route wins would otherwise exclude that network's gateway and trust ours again. Then the gateway is unknown, so Postfix trusts loopback only and warns, and outbound mail stops until the `eigen` network carries the default route. [SELF-HOSTING.md](SELF-HOSTING.md#docker-composeoverrideyml) says which networks win it.
+
 Password guessing meets three layers:
 
 - The API counts failures per address and per client IP in a 15-minute window (`protocol-rate-limit.ts`). A valid app password is checked first, so a full bucket never locks one out.
-- Postfix allows 20 AUTH attempts per client IP a minute on the submission ports, since a real client authenticates about once per message. It hangs up after 5 errors in a session. Port 25 keeps the default, where a rejected recipient should not end the session.
+- Postfix allows 20 AUTH attempts per client IP a minute on the submission ports, since a real client authenticates about once per message. It also allows 60 messages a minute per client IP on each submission port, counting MAIL FROM, and answers the 61st with a 450, so a burst is delayed and retried rather than lost, while one client IP cannot push thousands a minute. The limit counts per client IP, not per login, so a stolen login used from many addresses gets 60 a minute from each. Both limits hold for every client: the submission services empty `smtpd_client_event_limit_exceptions`, whose default `$mynetworks` would exempt the bridge, and nothing internal submits there. It hangs up after 5 errors in a session. Port 25 keeps the default, where a rejected recipient should not end the session.
 - fail2ban (`docker/fail2ban/`, opt-in) bans in the `DOCKER-USER` chain, because Docker's published ports never pass `INPUT`.
+
+The mail ports are published on IPv4 only (`0.0.0.0:25:25` in `docker-compose.yml`, and likewise 465, 587 and 993). The `eigen` network has no IPv6, so Docker's userland proxy, on by default, would forward every IPv6 client from the gateway's one address. They would share one per-IP AUTH budget, one failure bucket in the API and one set of port 25 connection slots, so one IPv6 attacker could lock every IPv6 user out of signing in, or hold port 25. Published on IPv4 only, the ports refuse an IPv6 connection, and a sending server or mail app falls back to the A record. IPv6 on the `eigen` network would bring IPv6 mail back with real client addresses ([ROADMAP.md](ROADMAP.md)). Rootless Docker keeps client addresses with the `slirp4netns` network and port driver together, or with pasta and the `implicit` port driver; with its default `builtin` driver every client shares the gateway's limits, IPv4 too.
 
 `docker/postfix/queue-monitor.sh` reports a growing queue, and the org owner gets a notification, because an email would wait in that queue. `docker/test-mail-hardening.sh` probes all of this.
 
@@ -105,6 +115,8 @@ The preview routes feed Drive's bytes-in renderers, so the quick look draws a ma
 ## Mail only arrives from the local MTA
 
 `POST /mail/deliver/:to` is unauthenticated but `requireLocalhost`, for Postfix. It appends the bytes to the INBOX and scans them for iMIP ([CALENDAR.md § Inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified)). Mail to `postmaster`, `abuse` or `noreply` (`isRoleAddress`) goes to every org admin, so DMARC reports and bounces reach a human. No account and no guest can claim those addresses.
+
+`requireLocalhost` (`lib/core/access.ts`) admits a direct caller from loopback or `TRUSTED_NETWORKS`, the `eigen` subnet compose passes, and refuses any request Caddy proxied. It leaves out the subnet's gateway, which it reads from the default route once, on first use, the way the Postfix entrypoint does at startup (`lib/core/trusted-networks.ts`). A user on the host reaches the API from that gateway, and could otherwise post mail with a forged `Authentication-Results`, ask `/internal/auth/verify` about a password for any client IP, or raise a queue alert. When a second network's default route wins, the gateway is unknown and the API stops trusting the subnet, as Postfix does: Dovecot's sign-ins are refused and Postfix defers inbound mail. Without a route table, on macOS, nothing is left out.
 
 An imported `.eml` is not an [arrival](IMAP.md#only-a-delivered-message-is-new-mail). It lands unread, and no notification shows a stranger's name for the user's own action. It never runs iMIP: the file has no DKIM verdict this server recorded, so an invitation inside it can't touch the calendar.
 

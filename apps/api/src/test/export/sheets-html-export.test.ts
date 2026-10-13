@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, ConditionalFormatRule, Sheet, SheetImage } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
     getSheetContentSize,
@@ -129,12 +130,17 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(out.html).toContain(`<col class="${width[0]}">`);
     });
 
-    test('the table style interns with real quotes around the font family', () => {
+    test('the table style interns with real quotes around the body font stack', () => {
         const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
         const table = classesFor(out, 'border-collapse:collapse');
         expect(table.length).toBe(1);
-        expect(out.css).toContain('font-family:"Inter",system-ui,sans-serif');
+        expect(out.css).toContain(`font-family:${FONT_STACK_SANS};`);
         expect(out.css).not.toContain('&quot;');
+    });
+
+    test('the inline table style carries the body font stack with entity quotes', () => {
+        const { html } = renderSheetsPreviewHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
+        expect(html).toContain(`font-family:${FONT_STACK_SANS.replaceAll('"', '&quot;')};`);
     });
 
     test('non-last sheets carry the page-break class next to .sheet', () => {

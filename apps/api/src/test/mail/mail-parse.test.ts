@@ -25,4 +25,13 @@ describe('parseEmlBytes', () => {
         expect(mail.subject).toBe('t');
         expect(mail.text).toContain('Hi');
     });
+
+    test("an html-only message's snippet holds its words, not its image or link urls", async () => {
+        const bytes = eml(
+            '<p>Hello <a href="https://example.com/track?id=1">there</a></p><img src="https://example.com/pixel.png" alt="">',
+        );
+        const mail = await parseEmlBytes('m2', 'INBOX', bytes, bytes.length);
+
+        expect(mail.textShort).toBe('Hello there');
+    });
 });

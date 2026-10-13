@@ -119,10 +119,13 @@ async function appendHome(
         // 409, as the server job waited out theirs.
         const release = await waitForHomeSlot(home.ownerId, 'server backup');
         const manifest = await pullHomeSnapshot(home.ownerId, staging, { level, onProgress }).finally(release);
-        requireVerified(await verifyFolder(folder, onProgress), member);
+        const verify = await verifyFolder(folder, onProgress);
+        requireVerified(verify, member);
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
-        warnings = manifest.warnings;
+        // The pane lists the row's warnings, and a server archive keeps no per-home sidecar for the verify's.
+        const all = [...(manifest.warnings ?? []), ...(verify.warnings ?? [])];
+        warnings = all.length > 0 ? all : undefined;
     } catch (error) {
         // A delete mid-capture throws whatever the torn-down home throws: the row says whether it is gone.
         const id = parseOwnerId(home.ownerId).id;

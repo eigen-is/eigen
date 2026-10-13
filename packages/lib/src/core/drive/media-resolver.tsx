@@ -24,6 +24,8 @@ type MediaResolverValue = {
     resolveMediaUrl: (name: string) => string | null;
     resolveMediaUrlByPath: (path: DrivePath) => string;
     resolveMediaPath: (name: string) => DrivePath | undefined;
+    // True once a name is known not to resolve, so a renderer swaps its loader for a missing look.
+    isMediaMissing: (name: string) => boolean;
     resolveChatId: (name: string) => string | null;
     mediaFolderId: string | null;
     startUpload: (file: File) => { pendingName: string; promise: Promise<DrivePath | null> };
@@ -33,6 +35,7 @@ const MediaResolverContext = createContext<MediaResolverValue>({
     resolveMediaUrl: () => null,
     resolveMediaUrlByPath,
     resolveMediaPath: () => undefined,
+    isMediaMissing: () => false,
     resolveChatId: () => null,
     mediaFolderId: null,
     startUpload: () => {
@@ -127,6 +130,9 @@ export function MediaResolverProvider({
             resolveMediaUrl,
             resolveMediaUrlByPath,
             resolveMediaPath: (name: string) => media.findByName(name),
+            // The editor routes mount this only after the document's listing loaded, so a null
+            // folder id means the document has no media folder, not that it is still unknown.
+            isMediaMissing: (name: string) => !isPendingMediaName(name) && (!mediaFolderId || media.isMissing(name)),
             resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
             mediaFolderId,
             startUpload,

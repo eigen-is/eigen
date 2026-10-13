@@ -34,6 +34,7 @@ export class FakeS3Server {
     readonly faults = new Map<string, S3Fault>();
     readonly gets = new Map<string, number>();
     readonly heads = new Map<string, number>();
+    readonly deletes = new Map<string, number>();
     // How many of a key's next HEADs and GETs answer 503 SlowDown, as Hetzner sheds load.
     readonly slowDowns = new Map<string, number>();
     // Held requests whose client closed the connection itself.
@@ -169,6 +170,7 @@ export class FakeS3Server {
         }
         if (method === 'GET') this.gets.set(key, (this.gets.get(key) ?? 0) + 1);
         if (method === 'HEAD') this.heads.set(key, (this.heads.get(key) ?? 0) + 1);
+        if (method === 'DELETE') this.deletes.set(key, (this.deletes.get(key) ?? 0) + 1);
         const slowDowns = this.slowDowns.get(key) ?? 0;
         if (slowDowns > 0 && (method === 'GET' || method === 'HEAD')) {
             this.slowDowns.set(key, slowDowns - 1);

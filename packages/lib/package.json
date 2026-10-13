@@ -9,7 +9,9 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "happy-dom": "^20.14.0"
+    "@types/jsdom": "^28.0.3",
+    "happy-dom": "^20.14.0",
+    "jsdom": "^29.1.1"
   },
   "dependencies": {
     "@apps/api": "workspace:*",
@@ -64,6 +66,7 @@
     "./home": "./src/core/home/index.ts",
     "./mail": "./src/core/mail/index.ts",
     "./mail/addresses": "./src/core/mail/addresses.ts",
+    "./mail/remote-content": "./src/core/mail/remote-content.ts",
     "./media": "./src/core/media/index.ts",
     "./notification": "./src/core/notification/index.ts",
     "./notification/tags": "./src/core/notification/tags.ts",

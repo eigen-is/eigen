@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, backup, restore, s3, cron]
 related: [self-hosting/move-to-another-server, self-hosting/update, admin/server-settings, admin/back-up-home, admin/backup-contents]
 order: 90
-updated: 2026-10-02
+updated: 2026-10-12
 ---
 
 Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops: only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
@@ -142,7 +142,7 @@ To find out whether your backups work, restore one on a second machine while you
 
 So do not leave it running. Five minutes after it starts, and every five minutes after that, it checks whether today's nightly backup is due. Once the time you set has passed today (UTC), it makes one, uploads it to the same folder as your server, and deletes the oldest nightly backups there by the same count, your server's too.
 
-**Do not sign in to the test server when a user or team keeps a drive in an S3 bucket**, not even through a hosts-file entry. The test server opens their workspace at their sign-in, or for a nightly backup. It then puts the changes that were on their way when the backup was made into that bucket, over what your server wrote since, and whatever changes in that drive changes the bucket.
+**Do not sign in to the test server when a user or team keeps a drive in an S3 bucket**, not even through a hosts-file entry. The test server opens their workspace at their sign-in, or for a nightly backup. It then puts the changes that were on their way when the backup was made into that bucket, over what your server wrote since, and whatever changes in that drive changes the bucket. Deleting a user or emptying a trash there deletes your server's files from that bucket, and only the bucket's versioning brings them back.
 
 To try a restore safely:
 

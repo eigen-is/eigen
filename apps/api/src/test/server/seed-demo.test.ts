@@ -173,6 +173,18 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(withAttachments[0].n).toBeGreaterThanOrEqual(1);
 
+            // A lead who answered an inbox thread holds the answered message flagged, as a real send leaves it.
+            const replier = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${personaByRole('programming').key}@${MAIL_DOMAIN}'`,
+            );
+            expect(replier.length).toBe(1);
+            const replied = query<{ n: number }>(
+                join(root, 'home', replier[0].id, 'eigen.mail', 'mail.db'),
+                "SELECT count(*) AS n FROM emails WHERE isReplied = 1 AND mailbox = 'INBOX'",
+            );
+            expect(replied[0].n).toBeGreaterThanOrEqual(1);
+
             // Team drive: file history populated (actors were threaded through every mutation).
             const mountsDir = join(root, 'team', teamId!, 'mounts');
             expect(existsSync(mountsDir)).toBe(true);

@@ -2,7 +2,8 @@
 // layer diffs against. Only the properties Eigen owns are extracted; the untouched AST rides along in
 // `lines` so a write can merge edits back without disturbing properties we don't understand.
 import type { Address } from '@workspace/lib/types/contact';
-import { getVersion, parseVCardLines, splitDataUri, splitValue, unescapeText } from './ast';
+import { isDataUri, splitDataUri } from '../shared/data-uri';
+import { getVersion, parseVCardLines, splitValue, unescapeText } from './ast';
 import type { ParsedCard, ParsedCardPhoto, VCardLine } from './types';
 
 function firstParam(line: VCardLine, name: string): string | null {
@@ -29,7 +30,7 @@ function decodeBase64(value: string): Uint8Array | null {
 }
 
 function parsePhoto(line: VCardLine): ParsedCardPhoto | null {
-    if (line.value.startsWith('data:')) {
+    if (isDataUri(line.value)) {
         const split = splitDataUri(line.value);
         if (!split) return null;
         const bytes = decodeBase64(split.base64);

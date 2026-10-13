@@ -7,10 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 Small fixes across the apps, from calendar invitations to backups, and limits on WebDAV, sharing and contact labels. The update migrates each user's mail index, `mail.db`, which an older version refuses to open. To go back past this release, restore the backup the update made: `./eigen rollback` right after it, later `./eigen restore` with the `server-pre-update-` backup that `./eigen rollback --help` lists.
 
+### Added
+
+- **Mail** — a message opens without the images it would load from the internet, so its sender can't tell when you read it. **Load images** shows them for that message
+- **Command palette** — ⌘K offers **Download as** in each format of the open document's File → Download menu
+- **Teams** — an access request on a team's drive reaches the team's members, by notification and email, unless **Notify members** is off on the team's Admin page
+
 ### Changed
 
 - **Notifications** — the bell keeps every unread notification, not only those among the newest 50. The new-mail notification goes read once the inbox has no unread mail, read, moved or deleted in Eigen or in a mail client
-- **Mail** — a reply marks the message it answers as answered, also when it is sent later from Drafts. Mail clients show the flag
+- **Mail** — a reply marks the message it answers as answered, also when it is sent later from Drafts. Mail clients show the flag, and the mail list a reply arrow. A reply or forward quotes the message's text and links, never its images
 - **Calendar** — removing every guest from one occurrence of a series keeps the series' guests, and the event dialog says so. To leave them out of one occurrence, remove that occurrence
 - **Contacts** — when a contact changes elsewhere while you edit it, the form keeps your edits and offers **Reload**. A label name takes at most 100 characters
 - **Limits** — WebDAV stores at most 64 KB of properties and 32 locks per file, and a chunked WebDAV upload stops at the max upload size and at what is left of the drive. One share request adds at most 100 people
@@ -18,6 +24,10 @@ Small fixes across the apps, from calendar invitations to backups, and limits on
 - **Storage quotas** — a drive has one limit, whoever uploads into it: its owner's team overrides raise it, never the uploader's. A team's own drive keeps its own limit
 - **Admin** — the Guests page shows the Users table, with each guest's name, email and when they were last active
 - **`./eigen stop`** — waits for a running server backup, and its upload to the backup bucket, to end first
+- **Deleting a user** — also deletes the safety copies a restore left of their data, and their files in S3 buckets, the server's own bucket included. A second server restored from a backup of this one must never run on the same bucket: deleting a user or emptying a trash there deletes this server's files
+- **Hosting mail** — the Docker network's gateway is no longer trusted, so a program on the host that sent through `localhost:25` without a login gets "Relay access denied": send through 587 with a login. Ports 465 and 587 allow 20 sign-in attempts and 60 messages a minute per client IP
+- **Mail ports** — 25, 465, 587 and 993 listen on IPv4 only: IMAP and SMTP over IPv6 stop, and other mail servers fall back to the A record
+- **`./eigen update`** — makes a Full backup first, without asking, when a release migrates a database a Light backup leaves out
 - **`./eigen rollback`** — its `--help`, and its refusal when there is nothing to roll back, list the kept pre-update backups that `./eigen restore` puts back
 - **Landing page** — names the apps, vector drawings included, and says they work with any IMAP, CalDAV, CardDAV or WebDAV app
 
@@ -30,7 +40,9 @@ Small fixes across the apps, from calendar invitations to backups, and limits on
 - **Print** — ⌘P in an app with nothing to print prints the page instead of a blank sheet
 - **Previews** — an image no longer flashes a checkerboard between its thumbnail and the full image, an `.eml` quick look keeps the message's layout, and an `.ics` with too many events is refused before it can stall the preview
 - **Mail** — a row in Sent names the recipient instead of you, and an attachment no longer fails to load right after a mail client changes its message's flags
-- **Backups** — a restore gives each mail message its own date again, so mail clients show when it arrived. An item whose name a file cannot have is left out with a warning, with what is inside it, instead of failing the backup. A file overwritten during a backup is archived as it was copied, and an older archive with such a file verifies with a warning and restores. Deleting an archive while a backup, verify or restore of the same user or team runs is refused
+- **Backups** — a restore gives each mail message its own date again, so mail clients show when it arrived. An item whose name a file cannot have is left out with a warning, with what is inside it, instead of failing the backup. A file overwritten during a backup is archived as it was copied, and an older archive with such a file verifies with a warning and restores. Deleting an archive while a backup, verify or restore of the same user or team runs is refused. Verify warnings show on the backup's row in Admin, for server backups too
+- **Images** — an image in a document or sheet whose file is gone shows as missing, instead of a spinner or nothing
+- **Word documents** — an image pasted into a document comes along in its `.docx` download, and the images a `.docx` import brings count toward the drive's storage
 - **`./eigen restart`** — writes the launcher and Compose files of the running version after an update or restore stopped while writing them, and `./eigen status` points at it
 - **WebDAV** — a PROPPATCH with a refused change saves nothing
 - **CalDAV** — a calendar query for one event's UID answers that event, not the whole calendar

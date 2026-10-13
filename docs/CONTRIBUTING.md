@@ -136,7 +136,7 @@ cp docker-compose.dev.yml docker-compose.override.yml
 ./eigen setup --domain localhost --yes
 ```
 
-That builds the images from the clone and starts Caddy, the API, Postfix, Dovecot, Unbound and Mailpit. Setup prints the one-time link; open it and accept the certificate warning. Eigen runs at `https://localhost`. Addresses live on `eigen.localhost`, because a sign-in address needs a dot in its domain. Mailpit, at `http://localhost:8025`, catches every mail Eigen sends. The API runs in development mode, and Postfix and Dovecot use a self-signed certificate.
+That builds the images from the clone and starts Caddy, the API, Postfix, Dovecot, Unbound and Mailpit. The build fetches from the npm registry, PyPI and Debian's mirrors. Setup prints the one-time link; open it and accept the certificate warning. Eigen runs at `https://localhost`. Addresses live on `eigen.localhost`, because a sign-in address needs a dot in its domain. Mailpit, at `http://localhost:8025`, catches every mail Eigen sends. The API runs in development mode, and Postfix and Dovecot use a self-signed certificate.
 
 From then on, run the clone as an operator would: `./eigen logs`, `./eigen status`, `./eigen restart`, `./eigen backup`. To try new commits, pull them in the clone and run `./eigen setup` again, which rebuilds; `./eigen update` refuses on a local build. Run no `docker compose up` of your own in it: that shares the launcher's project and `data/`, and every `./eigen` command that starts Eigen, like `setup` and `restart`, removes every container of a service it does not run.
 

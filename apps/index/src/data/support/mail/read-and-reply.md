@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, reply, forward]
 related: [mail/compose-and-send, mail/get-started]
 order: 20
-updated: 2026-09-14
+updated: 2026-10-12
 ---
 
 Once an email arrives, you can read it, write back to the sender, write back to everyone on the thread, or pass it along to someone new. This page covers all four.
@@ -16,6 +16,8 @@ Once an email arrives, you can read it, write back to the sender, write back to 
 Click any message in the list to open it. It opens in the reading pane next to the list, showing the sender, the date, the subject, and the full message. Any attachments appear above the message text. Click one to preview it, or right-click it for the rest of its actions. See [Save an attachment to Drive](/support/mail/save-attachments).
 
 Opening a message marks it as read.
+
+Images that a message loads from the internet are hidden when you open it, so the sender can't tell when you read it. A line above the message says **Remote images are hidden.** Click **Load images** to show them for that message. When you reply or forward, the quoted message keeps its text and links but never its images.
 
 On a narrow screen the message fills the window. Use the back arrow at the top to return to the list.
 

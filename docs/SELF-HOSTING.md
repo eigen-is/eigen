@@ -64,7 +64,7 @@ The help center at eigen.is follows the `main` channel, so it can describe a bui
 
 One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
 
-The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or `--full` asks for Full. Its name starts with `server-pre-update-`. Eigen keeps the two newest good ones and the one `rollback` needs ([BACKUP.md § Retention keeps good scheduled archives and every manual one](BACKUP.md#retention-keeps-good-scheduled-archives-and-every-manual-one)), and they never go to the backup bucket: they exist for `rollback` on this machine. A rollback from a Light backup puts the databases back over the files of today ([BACKUP.md § A Full restore swaps data/ whole, a Light one merges](BACKUP.md#a-full-restore-swaps-data-whole-a-light-one-merges)).
+The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or a change marked `(full backup)`, or `--full` asks for Full. Its name starts with `server-pre-update-`. Eigen keeps the two newest good ones and the one `rollback` needs ([BACKUP.md § Retention keeps good scheduled archives and every manual one](BACKUP.md#retention-keeps-good-scheduled-archives-and-every-manual-one)), and they never go to the backup bucket: they exist for `rollback` on this machine. A rollback from a Light backup puts the databases back over the files of today ([BACKUP.md § A Full restore swaps data/ whole, a Light one merges](BACKUP.md#a-full-restore-swaps-data-whole-a-light-one-merges)).
 
 ## backups/ is outside data/
 
@@ -82,6 +82,8 @@ Whole-server and per-home backups go to `backups/` in the install folder, mounte
 | Your web server, mail kept elsewhere | `static` | eigen-static, eigen-api | `EIGEN_STATIC_HOST:EIGEN_STATIC_PORT` |
 
 `eigen-api` publishes no port. Every other service reaches it on the Docker network as `eigen-api:8000`.
+
+The mail ports listen on IPv4 only. Eigen's Docker network has no IPv6, so every IPv6 client would arrive from the Docker gateway's one address and share its limits ([MAIL.md § Submission is held to the login's own address](MAIL.md#submission-is-held-to-the-logins-own-address)). Mail servers and mail apps fall back to the A record. Under rootless Docker, set the `slirp4netns` port driver together with the `slirp4netns` network (`DOCKERD_ROOTLESS_ROOTLESSKIT_NET=slirp4netns` and `DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns`), or pasta with the `implicit` port driver: with the default `builtin` one, Postfix and Dovecot see every client as the gateway, and all clients share one limit on sign-in attempts.
 
 ## `.env.production`
 
@@ -130,6 +132,8 @@ services:
 ```
 
 Then `./eigen restart`.
+
+Don't attach `postfix` or `eigen-api` to another network that wins the container's default route (before Docker Engine 28 it goes alphabetically, so a `backend`, `caddy` or `default` network beats `eigen`): both then fail closed, so outbound mail stops, IMAP sign-in fails and inbound mail defers; set `gw_priority` on the `eigen` network (Engine 28 or newer) or leave them unattached ([MAIL.md](MAIL.md#submission-is-held-to-the-logins-own-address)).
 
 ## Proxy snippets
 

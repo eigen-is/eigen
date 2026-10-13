@@ -42,21 +42,24 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
     const [draftCalPermission, setDraftCalPermission] = useState<CalendarAccess>('read');
+    const [draftNotifyMembers, setDraftNotifyMembers] = useState(true);
     const [draftMailMax, setDraftMailMax] = useState('');
     const [draftMountMax, setDraftMountMax] = useState('');
 
     const updateTeam = useUpdateTeam(organizationId);
 
-    const { data: calendars = [] } = useCalendars(ownerId);
-    const updateCalendar = useUpdateCalendar(ownerId);
     const { data: settings } = useTeamSettings(team.id);
+    const calendarEnabled = settings?.calendar?.enabled !== false;
+    // A team with its calendar off has no calendar list to fetch: the route answers 404.
+    const { data: calendars = [] } = useCalendars(ownerId, !!settings && calendarEnabled);
+    const updateCalendar = useUpdateCalendar(ownerId);
     const updateSettings = useUpdateTeamSettings(team.id);
     const homeDataLabel = useHomeDataLabel();
     const uploadAvatar = useUploadTeamAvatar(team.id);
     const removeAvatar = useRemoveTeamAvatar(team.id);
 
     const defaultCal = calendars.find((c) => c.isDefault);
-    const calendarEnabled = settings?.calendar?.enabled !== false;
+    const notifyMembers = settings?.notifyMembers !== false;
 
     const calendarPermission = useMemo(() => {
         if (!defaultCal?.shares) return 'read';
@@ -68,6 +71,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         setDraftName(team.name);
         setDraftCalEnabled(calendarEnabled);
         setDraftCalPermission(calendarPermission);
+        setDraftNotifyMembers(notifyMembers);
         setDraftMailMax(settings?.memberOverrides?.mailAndContactsMaxMB?.toString() ?? '');
         setDraftMountMax(settings?.memberOverrides?.defaultMountMaxSizeMB?.toString() ?? '');
         setShowSettingsForm(true);
@@ -79,6 +83,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         }
         await updateSettings.mutateAsync({
             calendar: { enabled: draftCalEnabled },
+            notifyMembers: draftNotifyMembers,
             memberOverrides: {
                 mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : undefined,
                 defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
@@ -175,6 +180,13 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
 
                     <Separator />
 
+                    <div className="flex items-center justify-between">
+                        <Label>Notify members</Label>
+                        <Switch checked={draftNotifyMembers} onCheckedChange={setDraftNotifyMembers} />
+                    </div>
+
+                    <Separator />
+
                     <SettingsSection
                         title="Quota Overrides"
                         description="Override server defaults for members of this team. Leave empty to inherit."
@@ -217,6 +229,10 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                         <span className="text-sm">
                             {calendarEnabled ? `Enabled (${calendarPermission})` : 'Disabled'}
                         </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Notify members</span>
+                        <span className="text-sm">{notifyMembers ? 'Enabled' : 'Disabled'}</span>
                     </div>
                     {(settings?.memberOverrides?.mailAndContactsMaxMB ||
                         settings?.memberOverrides?.defaultMountMaxSizeMB) && (

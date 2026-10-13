@@ -58,7 +58,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
     const transformStarted = useRef(false);
     const gestureMaxWidth = useRef(Number.POSITIVE_INFINITY);
 
-    const { resolveMediaUrl } = useMediaResolver();
+    const { resolveMediaUrl, isMediaMissing } = useMediaResolver();
 
     const setAttributes = useCallback(
         (attributes: FigureAttrs) =>
@@ -218,7 +218,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
             >
                 {showPlaceholder ? (
                     <div style={{ width: `${displayWidth || FIGURE_DEFAULT_WIDTH}px`, aspectRatio: '16 / 10' }}>
-                        <ImagePlaceholder />
+                        <ImagePlaceholder missing={isMediaMissing(mediaName)} />
                     </div>
                 ) : (
                     <img

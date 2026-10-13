@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { clientIpKey, isIpTrusted, requireLocalhost } from '../../lib/core/access';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { _setRouteTableForTests, clientIpKey, isIpTrusted, requireLocalhost } from '../../lib/core/access';
+import { parseRouteTable, readRouteTable } from '../../lib/core/trusted-networks';
 
 function mkRequest(headers: Record<string, string> = {}): Request {
     return new Request('http://localhost/internal/auth/verify', { method: 'POST', headers });
@@ -10,6 +11,8 @@ function mkServer(address: string) {
 }
 
 describe('isIpTrusted', () => {
+    beforeEach(() => _setRouteTableForTests([]));
+
     const originalEnv = process.env['TRUSTED_NETWORKS'];
 
     afterEach(() => {
@@ -78,6 +81,8 @@ describe('clientIpKey', () => {
 });
 
 describe('requireLocalhost', () => {
+    beforeEach(() => _setRouteTableForTests([]));
+
     const originalEnv = process.env['TRUSTED_NETWORKS'];
 
     afterEach(() => {
@@ -112,5 +117,27 @@ describe('requireLocalhost', () => {
 
     test('allows when there is no server (tests via app.handle())', () => {
         expect(() => requireLocalhost(mkRequest(), null)).not.toThrow();
+    });
+
+    describe('behind a Docker bridge', () => {
+        // The eigen network 172.20.0.0/24, its gateway 172.20.0.1 the default route.
+        const ROUTES = parseRouteTable(
+            [
+                'Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT',
+                'eth0\t00000000\t010014AC\t0003\t0\t0\t0\t00000000\t0\t0\t0',
+                'eth0\t000014AC\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0',
+            ].join('\n'),
+        );
+
+        afterEach(() => _setRouteTableForTests(readRouteTable()));
+
+        test('refuses the gateway, which a local user on the host arrives from', () => {
+            process.env['TRUSTED_NETWORKS'] = '127.0.0.0/8,::1,172.20.0.0/24';
+            _setRouteTableForTests(ROUTES);
+            expect(() => requireLocalhost(mkRequest(), mkServer('172.20.0.1'))).toThrow(/localhost only/);
+            expect(() => requireLocalhost(mkRequest(), mkServer('::ffff:172.20.0.1'))).toThrow(/localhost only/);
+            expect(() => requireLocalhost(mkRequest(), mkServer('172.20.0.4'))).not.toThrow();
+            expect(() => requireLocalhost(mkRequest(), mkServer('127.0.0.1'))).not.toThrow();
+        });
     });
 });

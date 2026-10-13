@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, access]
 related: [drive/share-a-file]
 order: 100
-updated: 2026-10-05
+updated: 2026-10-12
 ---
 
 When you follow a link to a file you do not have access to, Eigen shows a "You need access" screen instead of the file. From there you can send the owner a request, and they can grant you access without you needing to contact them separately.
@@ -25,6 +25,8 @@ The button changes to **Access requested**, confirming the request was sent. You
 The owner receives a notification in Eigen. Clicking it opens the Share dialog for the file, with your email address already filled in, so they can add you with a few clicks.
 
 Depending on how the server is set up, they may also receive an email about the request.
+
+A file on a team's Drive has no single owner. Every member of the team receives the notification, and the email if the server sends one, unless an admin turned off **Notify members** for the team. Then nobody is told, and the screen still says **Access requested**.
 
 Once the owner has shared the file with you, open the link again. The file will open normally.
 

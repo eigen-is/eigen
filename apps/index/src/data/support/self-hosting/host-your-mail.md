@@ -6,7 +6,7 @@ category: Mail
 tags: [self-hosting, mail, dns, dkim, spf, imap, smtp]
 related: [self-hosting/mail-relay, self-hosting/keep-your-mail, connect/mail-client, connect/calendar-client]
 order: 40
-updated: 2026-10-01
+updated: 2026-10-12
 ---
 
 When you answer yes to **Host email on this server?**, Eigen runs the mail server and holds everyone's mailbox. People read their mail in the Mail app and in any mail app on their phone or computer. This page covers what to do after the install so mail arrives and other servers trust what you send.
@@ -33,6 +33,8 @@ Add these records:
 | SRV | `_carddavs._tcp.eigen.example.com` | `0 1 443 eigen.example.com` |
 | TXT | `_caldavs._tcp.eigen.example.com` | `"path=/dav/"` |
 | TXT | `_carddavs._tcp.eigen.example.com` | `"path=/dav/"` |
+
+The mail server listens on IPv4 only, so `eigen.example.com` needs an A record. An AAAA record beside it still serves the apps, but the mail ports don't answer on IPv6: other mail servers fall back to the A record, and an uptime check of the mail ports over IPv6 reports them down.
 
 Sending through a relay? Add its SPF domain to the SPF record, like `"v=spf1 mx include:your-relay.com ~all"`.
 

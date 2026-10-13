@@ -11,10 +11,13 @@ import type { Image } from '../../state/types';
 // Floating-image resize floor (scene px === screen px; the grid is unzoomed).
 const MIN_IMAGE_SIZE = 20;
 
-function useResolvedImageUrl(mediaName: string | undefined) {
+function useResolvedImage(mediaName: string | undefined) {
     const { settings } = useContext(WorkbookContext);
     return useMemo(
-        () => (mediaName ? (settings.hooks?.resolveImageUrl?.(mediaName) ?? null) : null),
+        () => ({
+            url: mediaName ? (settings.hooks?.resolveImageUrl?.(mediaName) ?? null) : null,
+            missing: !!mediaName && !!settings.hooks?.isImageMissing?.(mediaName),
+        }),
         [mediaName, settings.hooks],
     );
 }
@@ -24,8 +27,7 @@ type ImageContextMenu = (e: React.MouseEvent, img: Image) => void;
 
 function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageContextMenu }) {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
-    const url = useResolvedImageUrl(img.mediaName);
-    const showPlaceholder = !url && img.mediaName.startsWith('pending:');
+    const { url, missing } = useResolvedImage(img.mediaName);
 
     // Live resize/rotate preview — never committed until onCommit. Move stays imperative (image.ts),
     // so it never touches this: the ObjectTransform ring is a child of the moved container below and
@@ -87,7 +89,7 @@ function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageC
                 }}
                 onContextMenu={(e) => onContextMenu(e, img)}
             >
-                {showPlaceholder && <ImagePlaceholder />}
+                {!url && <ImagePlaceholder missing={missing} />}
             </div>
             {context.allowEdit === false ? null : (
                 <ObjectTransform
@@ -122,7 +124,7 @@ function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageC
 
 function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageContextMenu }) {
     const { setContext } = useContext(WorkbookContext);
-    const url = useResolvedImageUrl(img.mediaName);
+    const { url, missing } = useResolvedImage(img.mediaName);
     const w = img.width;
     const h = img.height;
     const rotate = img.angle ? `rotate(${img.angle}deg)` : undefined;
@@ -138,26 +140,23 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
     );
 
     if (!url) {
-        if (img.mediaName.startsWith('pending:')) {
-            return (
-                <div
-                    id={img.id}
-                    className="absolute overflow-hidden pointer-events-auto"
-                    style={{
-                        width: w,
-                        height: h,
-                        left: img.x,
-                        top: img.y,
-                        transform: rotate,
-                        transformOrigin: 'center center',
-                        zIndex: 19,
-                    }}
-                >
-                    <ImagePlaceholder />
-                </div>
-            );
-        }
-        return null;
+        return (
+            <div
+                id={img.id}
+                className="absolute overflow-hidden pointer-events-auto"
+                style={{
+                    width: w,
+                    height: h,
+                    left: img.x,
+                    top: img.y,
+                    transform: rotate,
+                    transformOrigin: 'center center',
+                    zIndex: 19,
+                }}
+            >
+                <ImagePlaceholder missing={missing} />
+            </div>
+        );
     }
 
     return (
