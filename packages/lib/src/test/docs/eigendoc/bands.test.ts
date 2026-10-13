@@ -1,10 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { getSchema, type JSONContent } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
+import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { restoreYjsDoc } from '../../../core/collab/yjs-utils';
 import { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent, getDocExtensions } from '../../../docs/eigendoc';
 import { EIGEN_DOC_TYPE_INFO } from '../../../types/drive';
+import { installHappyDom } from '../../happy-dom';
+
+// An equation reads its stored MathML with DOMParser.
+installHappyDom();
 
 const schema = getSchema(getDocExtensions());
 
@@ -53,6 +58,16 @@ describe('the header and footer bands', () => {
             expect(bandHasContent(band(paragraph(), paragraph()))).toBe(false);
             expect(bandHasContent(band(paragraph({ type: 'hardBreak' }, { type: 'text', text: ' ' })))).toBe(false);
             expect(bandHasContent(band(paragraph({ type: 'text', text: '  \t ' })))).toBe(false);
+        });
+
+        // An empty equation draws as an empty box in the editor and prints as nothing.
+        test('is false for an empty equation, true for one with content', () => {
+            const equation = (mathml: string): JSONContent => ({ type: 'equation', attrs: { mathml } });
+            expect(bandHasContent(band(paragraph(equation(''))))).toBe(false);
+            expect(bandHasContent(band(paragraph(equation(writeMathml([])))))).toBe(false);
+            expect(bandHasContent(band(paragraph(equation(writeMathml([{ kind: 'identifier', text: 'x' }])))))).toBe(
+                true,
+            );
         });
 
         test('is true for text, an image or a page number', () => {
