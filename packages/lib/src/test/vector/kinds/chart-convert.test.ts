@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '../../../charts';
 import type { ChartLabel, ChartSpec } from '../../../types/chart';
 import { serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
-import { getLineHeightPx } from '../../../vector/font-metrics';
+import { getFontMetrics } from '../../../vector/font-metrics';
 import { boxCenter, type Point, rotatePoint } from '../../../vector/geometry';
-import { convertToShapes, ELEMENT_KINDS } from '../../../vector/kinds';
+import { convertToShapes, ELEMENT_KINDS, richTextCssText } from '../../../vector/kinds';
 import { chartToElements } from '../../../vector/kinds/chart-convert';
 import { chartLayout, renderChartSvg } from '../../../vector/kinds/chart-render';
 import { elementGroupOpen, svgTextLine } from '../../../vector/kinds/render-utils';
@@ -52,6 +52,19 @@ function inBox(el: VectorElement, point: Point): Point {
     const local = rotatePoint(point, boxCenter(el), -el.angle);
     return { x: local.x - el.x, y: local.y - el.y };
 }
+
+// Chrome's line layout, as measured: the font's ascent and descent rounded to whole pixels, the line height
+// floored to 1/64 px and the half-leading floored to a whole pixel. Returns the baseline below the box top.
+function chromeBaseline(box: VectorRichTextElement): number {
+    const { unitsPerEm, ascender, descender } = getFontMetrics(box.fontFamily);
+    const ascent = Math.round((ascender / unitsPerEm) * box.fontSize);
+    const descent = Math.round((-descender / unitsPerEm) * box.fontSize);
+    const lineHeight = Number(/line-height:([\d.]+)/.exec(richTextCssText(box))?.[1]) * box.fontSize;
+    return ascent + Math.floor((Math.floor(lineHeight * 64) / 64 - ascent - descent) / 2);
+}
+
+// The baseline y svgTextLine writes for a label.
+const svgBaseline = (label: ChartLabel): number => Number(/ y="([-\d.]+)"/.exec(svgTextLine(label))?.[1]);
 
 function expectClose(actual: Point, expected: Point): void {
     expect(actual.x).toBeCloseTo(expected.x, 6);
@@ -137,7 +150,7 @@ describe('chartToElements', () => {
         expect(elements.some((converted) => converted.opacity === 10)).toBe(true);
     });
 
-    test('a label box keeps the text anchor where the painter put it, turned labels and a turned chart included', () => {
+    test('a label box keeps the text anchor on the baseline the painter drew, turned labels and a turned chart included', () => {
         const el = chart({ id: 'c1', chart: CROWDED, x: 40, y: -20, angle: 30 });
         const { labels } = layoutOf(el);
         const boxes = labelsOf(chartToElements(el));
@@ -146,13 +159,42 @@ describe('chartToElements', () => {
         const shift: Record<ChartLabel['anchor'], number> = { start: 0, middle: 0.5, end: 1 };
         for (const [i, label] of labels.entries()) {
             const box = boxes[i];
-            const height = getLineHeightPx(label.fontFamily, label.fontSize);
-            // The anchor at mid-line, in the chart's local frame and then in the scene.
-            const local = rotatePoint({ x: label.x, y: label.y + height / 2 }, label, label.rotate);
+            // The anchor on the SVG baseline, in the chart's local frame and then in the scene.
+            const local = rotatePoint({ x: label.x, y: svgBaseline(label) }, label, label.rotate);
             const scene = rotatePoint({ x: el.x + local.x, y: el.y + local.y }, boxCenter(el), el.angle);
-            expectClose(inBox(box, scene), { x: shift[label.anchor] * box.width, y: height / 2 });
-            expect(box.height).toBeCloseTo(height, 9);
+            const at = inBox(box, scene);
+            expect(at.x).toBeCloseTo(shift[label.anchor] * box.width, 6);
+            expect(at.y).toBeCloseTo(chromeBaseline(box), 2);
+            expect(box.height).toBeCloseTo(box.lineHeight * box.fontSize, 9);
             expect(box.angle).toBeCloseTo((((label.rotate + 30) % 360) + 360) % 360, 9);
+        }
+    });
+
+    test('a label box draws its DOM baseline on the SVG one in every font and at every text size', () => {
+        for (const fontFamily of ['Excalifont', 'Inter', 'Source Serif 4', 'JetBrains Mono']) {
+            for (const [width, height] of [
+                [550, 380],
+                [300, 200],
+                [640, 400],
+                [900, 450],
+                [1200, 675],
+                [2000, 1500],
+            ]) {
+                for (const type of ['column', 'pie'] as const) {
+                    const el = chart({ id: 'c1', chart: specJson(type), fontFamily, width, height });
+                    const { labels } = layoutOf(el);
+                    for (const [i, box] of labelsOf(chartToElements(el)).entries()) {
+                        const baseline = svgBaseline(labels[i]) - box.y;
+                        expect([fontFamily, width, box.fontSize, chromeBaseline(box)]).toEqual([
+                            fontFamily,
+                            width,
+                            box.fontSize,
+                            expect.closeTo(baseline, 2),
+                        ]);
+                        expect(box.height).toBeGreaterThan(chromeBaseline(box));
+                    }
+                }
+            }
         }
     });
 

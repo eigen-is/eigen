@@ -4,7 +4,7 @@
 import { textToParagraphHtml } from '../../core/html';
 import type { ChartLabel } from '../../types/chart';
 import { serializeFill, TRANSPARENT_COLOR, TRANSPARENT_FILL } from '../fill';
-import { getFontMetrics, getLineHeightPx } from '../font-metrics';
+import { getFontMetrics, getLineHeightPx, getVerticalOffset } from '../font-metrics';
 import { boxCenter, rotatePoint } from '../geometry';
 import { normalizeAngle } from '../outline';
 import { measureLabel } from '../text-width';
@@ -49,12 +49,22 @@ export function chartToElements(chart: VectorChartElement): VectorElement[] {
 
 // A label turns about its anchor at the line's top, an element about its box center: the box is laid out
 // unturned from the anchor, then its center is turned about the anchor.
+// A browser lays a line out on the font's ascent and descent rounded to whole pixels and Chrome floors the
+// half-leading, so at the font's own line height a DOM baseline lands up to a pixel off the SVG one. A line
+// as tall as the two rounded has no leading to floor, so its baseline is the rounded ascent below the box top.
 function labelBox(chart: VectorChartElement, label: ChartLabel, i: number): VectorRichTextElement {
     const { fontFamily, fontSize, bold } = label;
     const width = measureLabel(label.text, fontFamily, fontSize, bold) + LABEL_SLACK_EMS * fontSize;
-    const height = getLineHeightPx(fontFamily, fontSize);
+    const { unitsPerEm, ascender, descender } = getFontMetrics(fontFamily);
+    const ascent = Math.round((ascender / unitsPerEm) * fontSize);
+    const descent = Math.round((-descender / unitsPerEm) * fontSize);
+    // Up to the two decimals richTextCssText writes, plus Chrome's 1/64 px layout unit, which it floors the
+    // line height to: a line short of the two by any amount floors its half-leading to a whole pixel.
+    const lineHeight = Math.ceil(((ascent + descent + 1 / 64) / fontSize) * 100) / 100;
+    const height = lineHeight * fontSize;
+    const baseline = label.y + getVerticalOffset(fontFamily, fontSize, getLineHeightPx(fontFamily, fontSize));
     const center = rotatePoint(
-        { x: label.x + (0.5 - ANCHOR_SHARE[label.anchor]) * width, y: label.y + height / 2 },
+        { x: label.x + (0.5 - ANCHOR_SHARE[label.anchor]) * width, y: baseline - ascent + height / 2 },
         label,
         label.rotate,
     );
@@ -84,8 +94,7 @@ function labelBox(chart: VectorChartElement, label: ChartLabel, i: number): Vect
         fontWeight: bold ? 'bold' : 'normal',
         textAlign: ANCHOR_ALIGN[label.anchor],
         color: label.color,
-        // The font's own line height, so the baseline sits where the painter's SVG text put it.
-        lineHeight: getFontMetrics(fontFamily).lineHeight,
+        lineHeight,
         padding: 0,
     };
 }
