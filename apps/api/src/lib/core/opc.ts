@@ -60,11 +60,12 @@ export type OoxmlPackage = {
 
 // One budget for the parts a package parses whole, together, [Content_Types].xml and the relationships parts too, the
 // same in every format: a parsed tree costs many times its text (core/xml.ts). The transform process's memory limit is
-// the backstop past it. The corpora's most: a docx's 12.6 MB, an xlsx's 15.2 MB, a pptx's 7.5 MB.
+// the backstop past it. The corpora's most, a package's parts together: a docx's 15.3 MB, an xlsx's 15.5 MB, a pptx's
+// 8.0 MB.
 export const MAX_PACKAGE_XML_BYTES = 32 * 1024 * 1024;
 
 // A tree costs per element too, so the parts' elements have a budget of their own: 16 MB of empty paragraphs is 2.8
-// million elements and 3.5 GB. Counted as '<' in the bytes. The corpora's most: 607,000 tags in a docx.
+// million elements and 3.5 GB. Counted as '<' in the bytes. The corpora's most: 611,000 tags in a docx.
 export const MAX_PACKAGE_XML_TAGS = 1_500_000;
 
 // The format's words for an encrypted package, which name the application that removes the password, and for one past

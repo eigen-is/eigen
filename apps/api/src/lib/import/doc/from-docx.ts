@@ -24,8 +24,9 @@ export type DocxImage = {
 // heaviest weighs 57,688.
 export const MAX_DOCX_WEIGHT = 150_000;
 
-// The update holds every character, and a client opens it in one WebSocket message of at most 128 MB: three bytes a
-// character at most. The corpus's most is 474,840.
+// The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
+// marks), and a client opens it in one WebSocket message of at most 128 MB: three bytes a character at most. The
+// corpus's most is 511,898.
 export const MAX_DOCX_TEXT = 16_000_000;
 
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
@@ -101,14 +102,17 @@ export function importError(error: unknown): Error {
     return new ApiError(400, NOT_A_DOCX, { cause: error });
 }
 
-// The weight is every node and mark, and every table's area; the text every character.
+// The weight is every node and mark, and every table's area; the text every character, string attributes' included.
 function sizeOf(nodes: JSONContent[]): { weight: number; text: number } {
     let weight = 0;
     let slots = 0;
     let text = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
-            if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+            if (typeof value === 'string') {
+                weight += Math.floor(value.length / CHARS_PER_UNIT);
+                text += value.length;
+            }
     };
     const stack = [...nodes];
     for (let node = stack.pop(); node; node = stack.pop()) {

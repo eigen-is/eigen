@@ -12,6 +12,7 @@ import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_TEXT, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { MAX_DOCX_PIECES } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
@@ -349,7 +350,8 @@ describe('XML budget', () => {
     });
 });
 
-// A run's text splits where its face or its look changes.
+// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its
+// own: about 600 bytes a piece before the output is weighed, so 4 million of them from 5.7 MB of XML took 2.5 GB.
 describe('text pieces', () => {
     test('Latin and Arabic in one face and one look are one piece', async () => {
         const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
@@ -363,11 +365,37 @@ describe('text pieces', () => {
         expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
-    // Each paragraph within the inline node cap, all of them within the output's.
-    test('alternating looks keep each, 80,000 pieces across two paragraphs', async () => {
-        const json = await imported(paragraph(run('aب'.repeat(20_000), '<w:bCs/>')).repeat(2));
-        expect(texts(json)).toHaveLength(80_000);
-        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(Array(40_000).fill('ب'));
+    const alternating = 'aب'.repeat(2_000_000);
+    const faces = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Times New Roman"/>';
+    test.each([
+        ['complex bold', paragraph(run(alternating, '<w:bCs/>'))],
+        ['a complex face of its own', paragraph(run(alternating, faces))],
+        ['a complex face of its own in a code style', paragraph(run(alternating, faces), '<w:pStyle w:val="Code"/>')],
+    ])(
+        'Latin and Arabic alternating in %s past the piece cap are 413',
+        async (_, body) => {
+            const styles = '<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/></w:style>';
+            const result = measuredImport(await buildDocxWithBody(body, { styles }));
+            expect(result.status).toBe(413);
+            expect(result.rssGrowth).toBeLessThan(256 * MB);
+        },
+        30_000,
+    );
+
+    test('a marked run split past the piece cap is 413 through the Yjs update', async () => {
+        const rich =
+            '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New" w:cs="Times New Roman"/><w:b/><w:i/><w:strike/><w:caps/><w:u w:val="single"/><w:color w:val="FF0000"/><w:highlight w:val="yellow"/><w:vertAlign w:val="superscript"/>';
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('aب'.repeat(MAX_DOCX_PIECES), rich)}</w:hyperlink>`);
+        const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com" TargetMode="External"/>`;
+        const result = measuredImport(await buildDocxWithBody(body, { rels }), 'transform');
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
+    }, 30_000);
+
+    test('alternating looks within the piece cap keep each', async () => {
+        const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
+        expect(texts(json)).toHaveLength(2000);
+        expect(marksOfType(json, 'bold').map((mark) => mark.text)).toEqual(Array(1000).fill('ب'));
     });
 });
 
@@ -409,6 +437,15 @@ describe('output budget', () => {
             await buildDocxWithBody(`${paragraph(run('a'.repeat(half)))}${paragraph(run('a'.repeat(half + 1)))}`),
         );
         expect([past.status, past.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    // The update spells a link's href out for every text node it marks, so its characters count as text too.
+    test('a long href in many links is text past the cap: 413', async () => {
+        const href = `https://example.com/${'x'.repeat(1024 * 1024)}`;
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`).repeat(70);
+        const result = measuredImport(await buildDocxWithBody(body, { rels: linkTo(href) }));
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
     // The update spells a link's href out for every text node it marks.

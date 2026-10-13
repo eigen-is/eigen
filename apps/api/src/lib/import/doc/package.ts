@@ -5,6 +5,10 @@ import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../
 import type { ZipReader } from '../../core/zip';
 import { DOCUMENT_TOO_LARGE } from '../messages';
 
+// A piece past a run's first is a node no tag counts, about 600 bytes held before the output is weighed; the corpus's
+// most is 1,055.
+export const MAX_DOCX_PIECES = 75_000;
+
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
@@ -24,10 +28,13 @@ export type DocxPackage = {
     readPart(path: string): XmlElement | undefined;
     // An image's bytes; a damaged entry is none, and costs only its picture.
     readMedia(path: string): Uint8Array | undefined;
+    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
+    chargePiece(): void;
 };
 
 export function readPackage(bytes: Uint8Array): DocxPackage {
     const pkg = openPackage(bytes, { passwordProtected: PASSWORD_PROTECTED, tooLarge: DOCUMENT_TOO_LARGE });
+    let pieces = MAX_DOCX_PIECES;
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
     const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
@@ -53,6 +60,10 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         contentTypeOf: pkg.contentTypeOf,
         readPart: (path) => optional(() => pkg.part(path)),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
+        chargePiece: () => {
+            pieces--;
+            if (pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        },
     };
 }
 
