@@ -427,12 +427,8 @@ const ROWS: [string, LatexRow][] = [
     ['!', { kind: 'noop' }],
 ];
 
-// Frozen, rows and lists alike: every caller shares the one table the reader and the writer read.
 export const LATEX_COMMANDS: ReadonlyMap<string, LatexCommand> = new Map(
-    ROWS.map(([name, row]): [string, LatexCommand] => {
-        for (const value of Object.values(row)) if (Array.isArray(value)) Object.freeze(value);
-        return [name, Object.freeze({ ...row, arguments: ARGUMENTS[row.kind] })];
-    }),
+    ROWS.map(([name, row]): [string, LatexCommand] => [name, { ...row, arguments: ARGUMENTS[row.kind] }]),
 );
 
 type LatexEnvironment = { layout: 'matrix' | 'equations'; open: string; close: string };

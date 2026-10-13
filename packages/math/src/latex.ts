@@ -1059,7 +1059,7 @@ function writeNode(node: MathNode, upright: boolean): string {
             return name ? `\\${name}{${body}}` : `\\enclose{${node.notation.join(',')}}{${body}}`;
         }
         case 'table':
-            return writeTable(node, ENVIRONMENT_NAMES.get(`${node.layout}  `) ?? '', upright);
+            return writeTable(node, ENVIRONMENT_NAMES.get(`${node.layout}  `)!, upright);
     }
 }
 

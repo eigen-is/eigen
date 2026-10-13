@@ -873,10 +873,4 @@ describe('LATEX_COMMANDS', () => {
             }
         }
     });
-
-    test('is read-only to its callers', () => {
-        for (const command of LATEX_COMMANDS.values()) expect(Object.isFrozen(command)).toBe(true);
-        const boxed = LATEX_COMMANDS.get('boxed');
-        expect(boxed?.kind === 'enclose' && Object.isFrozen(boxed.notation)).toBe(true);
-    });
 });
