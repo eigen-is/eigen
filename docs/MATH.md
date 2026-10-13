@@ -4,7 +4,7 @@
 
 A conversion is a reader and then a writer: `writeMathml(readOmml(oMath))` takes a Word equation to MathML. There are no converters between pairs of formats. Recognising structure, such as which large operator owns which body, happens once, in the reader that needs it. Each writer is a switch over the closed node union in `src/tree.ts`, so `tsc` proves it handles every node. The tree follows OMML's objects, because OMML is the most structured of the formats and every equation in the research corpus is OMML.
 
-The package stores nothing. A caller keeps what a writer returns. `writeMathml(row, latex)` puts the LaTeX a user typed beside the tree as an `application/x-tex` annotation, and `readMathml` hands it back.
+The package stores nothing. A caller keeps what a writer returns. `writeMathml(row, latex)` puts the LaTeX a user typed beside the tree as an `application/x-tex` annotation, and `readMathml` hands it back. `readMathmlLatex` reads the annotation alone, so a consumer can still show the LaTeX of an equation whose tree is past a bound.
 
 A reader never takes a string. It takes an element: `MathXmlElement`, a namespace, a local name, the attributes keyed as written and the children. The API's Bun-parsed `XmlElement` fits it as it is. In the browser `fromDom` adapts a DOM element. So the package holds no XML parser of untrusted bytes.
 
