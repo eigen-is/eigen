@@ -26,6 +26,7 @@ const NUMBERS = ['0', '42', '3.14'];
 // `&` stays out of an equations cell, where it is the cell break.
 const OPERATORS = [
     '&',
+    '#',
     '+',
     '−',
     '=',

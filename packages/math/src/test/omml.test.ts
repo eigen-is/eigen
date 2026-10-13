@@ -305,6 +305,27 @@ describe('readOmml', () => {
         expect(read(`${run('#')}<m:d><m:e>${run('8')}</m:e></m:d>`)).toHaveLength(2);
     });
 
+    test('a # the writer boxes in an equation stays, with the rest of its row', () => {
+        const tree: MathRow = [
+            {
+                kind: 'table',
+                layout: 'equations',
+                rows: [
+                    [
+                        [{ kind: 'identifier', text: 'n' }],
+                        [
+                            { kind: 'operator', text: '=' },
+                            { kind: 'operator', text: '#' },
+                            { kind: 'identifier', text: 'S' },
+                        ],
+                    ],
+                ],
+            },
+        ];
+        expect(writeOmml(tree)).toContain('<m:box><m:e><m:r><m:t xml:space="preserve">#</m:t></m:r></m:e></m:box>');
+        expect(readOmml(parseWritten(writeOmml(tree)))).toStrictEqual(tree);
+    });
+
     test('an equation array splits its rows at & into cells', () => {
         expect(read(`<m:eqArr><m:e>${run('x&amp;=1')}</m:e><m:e>${run('y')}</m:e></m:eqArr>`)).toEqual([
             {

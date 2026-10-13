@@ -181,7 +181,8 @@ function symbolOf(sym: MathXmlElement): string {
     return attribute(sym, 'font') === 'Symbol' ? (SYMBOL_FONT.get(position) ?? '') : '';
 }
 
-function readRun(row: RowBuilder, run: MathXmlElement, depth: number): void {
+// In a run of an equation's own, Word's # starts the equation's number: whether it did.
+function readRun(row: RowBuilder, run: MathXmlElement, depth: number, numbered = false): boolean {
     const parts = runParts(elementsOf(run), row.budget, depth);
     const math = parts.find((part) => is(part, OMML_NAMESPACE, 'rPr'));
     const word = parts.find((part) => is(part, WORDML_NAMESPACE, 'rPr'));
@@ -193,12 +194,15 @@ function readRun(row: RowBuilder, run: MathXmlElement, depth: number): void {
     const color = toColor(valOf(childOf(word, WORDML_NAMESPACE, 'color')));
     if (isOn(childOf(math, OMML_NAMESPACE, 'nor'))) {
         row.text(text, color);
-        return;
+        return false;
     }
     const sty = valOf(childOf(math, OMML_NAMESPACE, 'sty'));
     const scr = valOf(childOf(math, OMML_NAMESPACE, 'scr'));
+    const number = numbered ? text.indexOf('#') : -1;
+    const shown = number < 0 ? text : text.slice(0, number);
     // Without a style Word draws letters italic and the rest upright.
-    row.chars(text, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
+    row.chars(shown, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
+    return number >= 0;
 }
 
 function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
@@ -364,10 +368,14 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                 layout: 'equations',
                 rows: (equations.length > 0 ? equations.map(elementsOf) : [[]]).map((equation) => {
                     bound(budget, depth + 1, 1);
-                    const row = readRow(equation, budget, depth + 1, 'equation');
-                    // Word numbers an equation with # and the number after it, which belongs to the document.
-                    const number = row.findIndex((node) => node.kind === 'operator' && node.text === '#');
-                    return equationCells(number < 0 ? row : row.slice(0, number));
+                    const row = new RowBuilder(budget, depth + 1, 'equation');
+                    // Word numbers an equation with # and the number after it, which belongs to the document. A # in a
+                    // box is the character.
+                    for (const part of equation) {
+                        if (!is(part, OMML_NAMESPACE, 'r')) readInto(row, part, depth + 1);
+                        else if (readRun(row, part, depth + 1, true)) break;
+                    }
+                    return equationCells(row.done());
                 }),
             });
             return;
@@ -494,11 +502,12 @@ function piece(node: MathNode): Run | string {
         }
         case 'table': {
             if (node.layout === 'equations') {
-                const equations = node.rows.map((cells) =>
-                    argument(
-                        'e',
-                        cells.flatMap((cell, index) => (index > 0 ? [AMPERSAND, ...cell] : cell)),
-                    ),
+                const equations = node.rows.map(
+                    (cells) =>
+                        `<m:e>${writeRow(
+                            cells.flatMap((cell, index) => (index > 0 ? [AMPERSAND, ...cell] : cell)),
+                            true,
+                        )}</m:e>`,
                 );
                 return `<m:eqArr>${equations.join('')}</m:eqArr>`;
             }
@@ -514,11 +523,13 @@ function piece(node: MathNode): Run | string {
 const writeRun = ({ properties, text }: Run) =>
     `<m:r>${properties}<m:t xml:space="preserve">${escapeXml(text)}</m:t></m:r>`;
 
-function writeRow(row: MathRow): string {
+// In an equation a # would start Word's equation number: it goes in a box.
+function writeRow(row: MathRow, equation = false): string {
     let xml = '';
     let pending: Run | undefined;
     for (const node of row) {
-        const next = piece(node);
+        const numberSign = equation && node.kind === 'operator' && node.text === '#';
+        const next = numberSign ? `<m:box>${argument('e', [node])}</m:box>` : piece(node);
         if (typeof next !== 'string' && pending?.properties === next.properties) {
             pending.text += next.text;
             continue;
