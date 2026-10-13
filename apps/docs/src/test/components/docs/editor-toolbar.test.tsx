@@ -394,14 +394,14 @@ test('Format › Image › Replace image opens the picker the image panel opens'
 });
 
 test.each([
-    ['Headers and footers', 'header'],
-    ['Page numbers', 'header'],
-])('Format › %s opens the Headers and footers panel', async (item, band) => {
+    ['Headers and footers', { band: 'header' }],
+    ['Page numbers', { section: 'pageNumbers' }],
+])('Format › %s opens the Headers and footers panel on %p', async (item, request) => {
     onOpenBand.mockClear();
     await render(1920, true);
     await openMenu('Format');
     await clickItem(item);
-    expect(onOpenBand.mock.calls).toEqual([[{ band }]]);
+    expect(onOpenBand.mock.calls).toEqual([[request]]);
 });
 
 test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {

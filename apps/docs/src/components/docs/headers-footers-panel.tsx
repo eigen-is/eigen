@@ -3,7 +3,6 @@ import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditorState } from '@tiptap/react';
 import type { BandRoot, PageNumberKind, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { bandHasContent } from '@workspace/lib/docs/eigendoc';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -13,10 +12,8 @@ import { Label } from '@workspace/ui/components/label';
 import { AlignmentPicker, PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import { Bold, Files, Hash, ImagePlus, Italic, Underline, X } from 'lucide-react';
-import { useEffect, useEffectEvent, useId, useState } from 'react';
-import type { WebsocketProvider } from 'y-websocket';
-import type * as Y from 'yjs';
-import { useDocEditor, useDocMedia } from './doc-editor';
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
+import type { DocMedia } from './doc-editor';
 
 // Google's Insert › Page numbers pictures: a number on the right of the header or the footer, on every page or from
 // page 2.
@@ -29,8 +26,9 @@ export const PAGE_NUMBER_PRESETS = [
 
 type PageNumberPreset = (typeof PAGE_NUMBER_PRESETS)[number];
 
-// The band to focus as the panel opens, and a preset the menu picked to place first.
-export type BandRequest = { band: BandRoot; preset?: PageNumberPreset };
+// What the panel opens on: a band to put the caret in, with a preset the menu picked to place first, or the
+// page-number presets.
+export type BandRequest = { band: BandRoot; preset?: PageNumberPreset } | { section: 'pageNumbers' };
 
 const FIRST_PAGE_BAND = { header: 'headerFirst', footer: 'footerFirst' } as const;
 
@@ -40,8 +38,19 @@ const RIGHT_ALIGNED_NUMBER = {
     content: [{ type: 'pageNumber', attrs: { kind: 'page' } }],
 };
 
-// Below what the band holds, or in place of the empty paragraph a band starts with.
+// Where a band's page numbers sit, last first, so deleting one leaves the others' positions as they were.
+function pageNumberPositions(editor: Editor): number[] {
+    const positions: number[] = [];
+    editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'pageNumber' && node.attrs.kind === 'page') positions.unshift(pos);
+    });
+    return positions;
+}
+
+// Below what the band holds, or in place of the empty paragraph a band starts with; a band numbered already keeps
+// its number, so a preset picked twice places one.
 function addPageNumber(editor: Editor) {
+    if (pageNumberPositions(editor).length > 0) return;
     const end = editor.state.doc.content.size;
     editor
         .chain()
@@ -49,44 +58,35 @@ function addPageNumber(editor: Editor) {
         .run();
 }
 
+function removePageNumbers(editor: Editor) {
+    const positions = pageNumberPositions(editor);
+    if (positions.length === 0) return;
+    editor.commands.command(({ tr }) => {
+        for (const pos of positions) tr.delete(pos, pos + 1);
+        return true;
+    });
+}
+
 type HeadersFootersPanelProps = {
-    path: DrivePath;
-    yDoc: Y.Doc;
-    provider: WebsocketProvider;
+    // All four, so a preset reaches a first-page band the panel doesn't show.
+    editors: Record<BandRoot, Editor>;
+    media: DocMedia;
     setup: PageSetup;
     onSetupChange: (from: PageSetup, to: PageSetup) => void;
     request: BandRequest;
-    textColumnWidth: () => number;
     onClose: () => void;
 };
 
 export function HeadersFootersPanel({
-    path,
-    yDoc,
-    provider,
+    editors,
+    media,
     setup,
     onSetupChange,
     request,
-    textColumnWidth,
     onClose,
 }: HeadersFootersPanelProps) {
-    const media = useDocMedia(path);
-    const bandEditor = (field: BandRoot) => ({
-        path,
-        yDoc,
-        provider,
-        editable: true,
-        target: { field },
-        textColumnWidth,
-    });
-    // All four, so a preset reaches a first-page band the panel doesn't show.
-    const editors: Record<BandRoot, Editor> = {
-        header: useDocEditor(bandEditor('header')),
-        footer: useDocEditor(bandEditor('footer')),
-        headerFirst: useDocEditor(bandEditor('headerFirst')),
-        footerFirst: useDocEditor(bandEditor('footerFirst')),
-    };
-    const [focused, setFocused] = useState<BandRoot>(request.band);
+    const [focused, setFocused] = useState<BandRoot>('band' in request ? request.band : 'header');
+    const firstPresetRef = useRef<HTMLButtonElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const differentFirstPageId = useId();
     // A first page's band the panel no longer shows, as Different first page went off, hands over to the other pages'.
@@ -115,20 +115,30 @@ export function HeadersFootersPanel({
     const setDifferentFirstPage = (differentFirstPage: boolean) =>
         onSetupChange(setup, { ...setup, differentFirstPage });
 
+    // Not on the first page is Google's Show on first page off: the first page's bands lose their numbers.
     const applyPreset = ({ band, onFirstPage }: PageNumberPreset) => {
         if (!onFirstPage && !setup.differentFirstPage) setDifferentFirstPage(true);
         addPageNumber(editors[band]);
         if (onFirstPage && setup.differentFirstPage) addPageNumber(editors[FIRST_PAGE_BAND[band]]);
+        if (!onFirstPage) {
+            removePageNumbers(editors.headerFirst);
+            removePageNumbers(editors.footerFirst);
+        }
     };
 
     const insertField = (kind: PageNumberKind) =>
         editor.chain().focus().insertContent({ type: 'pageNumber', attrs: { kind } }).run();
 
     // A menu or a click on the page asks for a band: the panel places the menu's preset and puts the caret there.
-    const open = useEffectEvent(({ band, preset }: BandRequest) => {
-        if (preset) applyPreset(preset);
-        setFocused(band);
-        editors[band].commands.focus('end');
+    // Format › Page numbers asks for the presets, focused a frame later as Tiptap focuses a band.
+    const open = useEffectEvent((request: BandRequest) => {
+        if (!('band' in request)) {
+            requestAnimationFrame(() => firstPresetRef.current?.focus());
+            return;
+        }
+        if (request.preset) applyPreset(request.preset);
+        setFocused(request.band);
+        editors[request.band].commands.focus('end');
     });
     useEffect(() => open(request), [request]);
 
@@ -229,16 +239,29 @@ export function HeadersFootersPanel({
             </PropertySection>
 
             <PropertySection title="Page numbers">
-                {PAGE_NUMBER_PRESETS.map((preset) => (
-                    <Button
-                        key={preset.label}
-                        variant="outline"
-                        size="sm"
-                        className="w-full justify-start text-xs"
-                        onClick={() => applyPreset(preset)}
-                    >
-                        {preset.label}
-                    </Button>
+                {(
+                    [
+                        ['header', 'Header'],
+                        ['footer', 'Footer'],
+                    ] as const
+                ).map(([band, label]) => (
+                    <div key={band} role="group" aria-label={`${label} page numbers`} className="space-y-1">
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                        <div data-page-numbers className="grid grid-cols-2 gap-1.5">
+                            {PAGE_NUMBER_PRESETS.filter((preset) => preset.band === band).map((preset) => (
+                                <Button
+                                    key={preset.label}
+                                    ref={preset === PAGE_NUMBER_PRESETS[0] ? firstPresetRef : undefined}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs"
+                                    onClick={() => applyPreset(preset)}
+                                >
+                                    {preset.onFirstPage ? 'Every page' : 'From page 2'}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
                 ))}
             </PropertySection>
 
@@ -248,8 +271,8 @@ export function HeadersFootersPanel({
                     onOpenChange={setImagePickerOpen}
                     title="Insert image"
                     canPick={(item) => isImageMime(item.mimeType)}
-                    onPickFromDrive={(paths) => media.insertFromDrive(editor, paths)}
-                    onPickFromDevice={(files) => files[0] && media.uploadImage(editor, files[0])}
+                    onPickFromDrive={(paths) => media.insertFromDrive(() => editor, paths)}
+                    onPickFromDevice={(files) => files[0] && media.uploadImage(() => editor, files[0])}
                     accept="image/*"
                 />
             )}

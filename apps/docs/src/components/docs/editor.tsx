@@ -1,4 +1,5 @@
 import type { Node } from '@tiptap/pm/model';
+import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
@@ -38,7 +39,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
-import { useDocEditor, useDocMedia } from './doc-editor';
+import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { textColumnWidth } from './extensions/text-column';
@@ -231,7 +232,7 @@ const TiptapEditor = ({
 
     const editor = useDocEditor(
         {
-            path,
+            media,
             yDoc,
             provider,
             editable: canWrite,
@@ -259,6 +260,10 @@ const TiptapEditor = ({
         },
         [handleCommentClick],
     );
+    // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
+    const editorRef = useRef<Editor | null>(null);
+    editorRef.current = editor;
+    const bands = useBandEditors({ media, yDoc, provider, editable: canWrite, textColumnWidth: getEditorMaxWidth });
 
     // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector.
     const { canUndo, canRedo } = useEditorState({
@@ -284,18 +289,20 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
-    // The Headers and footers panel, open on a band: a writer's, on a desktop, in the slot comments take back.
+    // The Headers and footers panel, open on a band: a writer's, on a desktop, in the slot comments take back. Losing
+    // write access or the desktop closes it.
+    const bandsAllowed = canWrite && !isMobile;
     const [bandRequest, setBandRequest] = useState<BandRequest | null>(null);
-    const openBands =
-        canWrite && !isMobile
-            ? (request: BandRequest) => {
-                  closePanels();
-                  setBandRequest(request);
-              }
-            : undefined;
+    const openBands = bandsAllowed
+        ? (request: BandRequest) => {
+              closePanels();
+              setBandRequest(request);
+          }
+        : undefined;
+    const bandPanel = bandsAllowed ? bandRequest : null;
     useEffect(() => {
-        if (panel) setBandRequest(null);
-    }, [panel]);
+        if (panel || !bandsAllowed) setBandRequest(null);
+    }, [panel, bandsAllowed]);
 
     const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
@@ -414,7 +421,7 @@ const TiptapEditor = ({
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
     const showSidebar =
-        !isMobile && (panel !== null || bandRequest !== null || (canWrite && sidebarContext !== 'document'));
+        !isMobile && (panel !== null || bandPanel !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -518,10 +525,14 @@ const TiptapEditor = ({
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={
-                                        mediaFolderId ? (file) => media.uploadImage(editor, file) : undefined
+                                        mediaFolderId
+                                            ? (file) => media.uploadImage(() => editorRef.current, file)
+                                            : undefined
                                     }
                                     onImagePickFromDrive={
-                                        mediaFolderId ? (paths) => media.insertFromDrive(editor, paths) : undefined
+                                        mediaFolderId
+                                            ? (paths) => media.insertFromDrive(() => editorRef.current, paths)
+                                            : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
@@ -568,7 +579,7 @@ const TiptapEditor = ({
                                         {/* Page 1's header on top, and at the end the footer of the pages after it. */}
                                         <PageBand
                                             key={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
-                                            path={path}
+                                            media={media}
                                             yDoc={yDoc}
                                             field={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
                                             edge="top"
@@ -587,7 +598,7 @@ const TiptapEditor = ({
                                             className="row-start-2 h-full min-w-0 tiptap-wrapper"
                                         />
                                         <PageBand
-                                            path={path}
+                                            media={media}
                                             yDoc={yDoc}
                                             field="footer"
                                             edge="bottom"
@@ -603,17 +614,15 @@ const TiptapEditor = ({
                                         <div className="pointer-events-auto absolute inset-y-0 right-0">
                                             {panel ? (
                                                 <PanelColumn activePanel={panel} {...panelProps} />
-                                            ) : bandRequest ? (
+                                            ) : bandPanel ? (
                                                 <HeadersFootersPanel
-                                                    path={path}
-                                                    yDoc={yDoc}
-                                                    provider={provider}
+                                                    editors={bands}
+                                                    media={media}
                                                     setup={pageSetup}
                                                     onSetupChange={(from, to) =>
                                                         writePageSetup(yDoc, undoManager, from, to)
                                                     }
-                                                    request={bandRequest}
-                                                    textColumnWidth={getEditorMaxWidth}
+                                                    request={bandPanel}
                                                     onClose={() => setBandRequest(null)}
                                                 />
                                             ) : lastPanelRef.current === 'figure' ? (
@@ -640,8 +649,8 @@ const TiptapEditor = ({
                 onOpenChange={setReplacePickerOpen}
                 title="Replace image"
                 canPick={(item) => isImageMime(item.mimeType)}
-                onPickFromDrive={(paths) => media.replaceFromDrive(editor, paths)}
-                onPickFromDevice={(files) => files[0] && media.replaceImage(editor, files[0])}
+                onPickFromDrive={(paths) => media.replaceFromDrive(() => editorRef.current, paths)}
+                onPickFromDevice={(files) => files[0] && media.replaceImage(() => editorRef.current, files[0])}
                 accept="image/*"
             />
 

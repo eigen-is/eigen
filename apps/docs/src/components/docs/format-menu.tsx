@@ -256,7 +256,7 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={() => onOpenBand({ band: 'header' })}>
                     <PanelTop className="h-4 w-4 mr-2" /> Headers and footers
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onOpenBand({ band: 'header' })}>
+                <DropdownMenuItem onClick={() => onOpenBand({ section: 'pageNumbers' })}>
                     <Hash className="h-4 w-4 mr-2" /> Page numbers
                 </DropdownMenuItem>
             </>

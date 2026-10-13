@@ -1,7 +1,7 @@
 // One factory builds the body's editor and each band's. A band's editor binds its own root with its own undo, its schema
 // deletes the nodes a band leaves out and keeps every mark, a paste into it drops comment anchors, and an image pasted
 // into it lands in that editor.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
@@ -10,7 +10,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { Editor } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_EXCLUDED_NODES, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const { docEditorOptions } = await import('../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -76,6 +76,18 @@ test("a band's editor writes its own root and undoes only its own typing", () =>
     expect(header.commands.undo()).toBe(true);
     expect(header.getText()).toBe('');
     expect(page.getText()).toBe('Body');
+});
+
+// A mark a band's schema lacked would delete the text a peer marked with it, so a band leaves out nodes only.
+test("a band's schema has every mark of the body's and its nodes but BAND_EXCLUDED_NODES", () => {
+    const doc = new Y.Doc();
+    const page = body(doc);
+    const header = mount(doc, { field: 'header' });
+    const excluded: readonly string[] = BAND_EXCLUDED_NODES;
+    expect(Object.keys(header.schema.marks)).toEqual(Object.keys(page.schema.marks));
+    expect(Object.keys(header.schema.nodes)).toEqual(
+        Object.keys(page.schema.nodes).filter((name) => !excluded.includes(name)),
+    );
 });
 
 test("a band's editor deletes a node a band leaves out and keeps a comment's text", () => {
@@ -146,4 +158,174 @@ test('an image pasted into a band lands in that editor, under the name its re-up
     expect(pastedMediaName).toHaveBeenCalledTimes(1);
     expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-copy.png"');
     expect(doc.getXmlFragment('default').toString()).not.toContain('logo');
+});
+
+// The uploads below land through the real media resolver; the upload answers when the test lets it.
+const { renderInDocument } = await import('@workspace/ui/test/render-in-document');
+const { act, createElement, useState } = await import('react');
+const { AuthProvider } = await import('@workspace/lib/auth');
+const { DEFAULT_PAGE_SETUP } = await import('@workspace/lib/docs/eigendoc');
+const { MediaResolverProvider } = await import('@workspace/lib/drive');
+const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
+const { drivePath } = await import('@workspace/ui/test/drive-path');
+const { useBandEditors, useDocEditor, useDocMedia } = await import('../../../components/docs/doc-editor');
+const { HeadersFootersPanel } = await import('../../../components/docs/headers-footers-panel');
+
+type Media = ReturnType<typeof useDocMedia>;
+
+const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
+
+let finishUpload = (_name: string) => {};
+spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.method !== 'POST') return Response.json(null);
+            const name = await new Promise<string>((resolve) => {
+                finishUpload = resolve;
+            });
+            return Response.json([{ ...path, id: name, name, parentId: 'media', mimeType: 'image/png' }]);
+        },
+        { preconnect: fetch.preconnect },
+    ),
+);
+
+let unmount = async () => {};
+afterEach(() => unmount());
+
+function render(child: ReturnType<typeof createElement>) {
+    return renderInDocument(
+        createElement(
+            AuthProvider,
+            null,
+            createElement(MediaResolverProvider, {
+                ownerId: path.ownerId,
+                mountId: path.mountId,
+                mediaFolderId: 'media',
+                chatFolderId: null,
+                children: child,
+            }),
+        ),
+    );
+}
+
+const logo = new File(['png'], 'logo.png', { type: 'image/png' });
+
+async function settleUpload(name: string) {
+    await act(async () => {
+        finishUpload(name);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+}
+
+// A comment click's handler changes with the layout, and the body's editor is built anew with it.
+test('a body upload that settles after its editor was built anew swaps the name in the new editor', async () => {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    const rendered: { body: { editor: InstanceType<typeof Editor>; media: Media } | null } = { body: null };
+    let rebuild = () => {};
+    function Body() {
+        const [generation, setGeneration] = useState(0);
+        rebuild = () => setGeneration((n) => n + 1);
+        const media = useDocMedia(path);
+        const editor = useDocEditor(
+            {
+                media,
+                yDoc: doc,
+                provider: null,
+                editable: true,
+                target: { undoManager, cardIds: () => new Set() },
+                textColumnWidth: () => 600,
+            },
+            [generation],
+        );
+        rendered.body = { editor, media };
+        return null;
+    }
+    ({ unmount } = await render(createElement(Body)));
+    if (!rendered.body) throw new Error('no editor');
+    const { editor: first, media } = rendered.body;
+    const upload = media.uploadImage(() => rendered.body?.editor ?? null, logo);
+    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="pending:');
+
+    await act(async () => rebuild());
+    expect(rendered.body?.editor).not.toBe(first);
+    await settleUpload('logo-1.png');
+    await upload;
+    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="logo-1.png"');
+});
+
+test("a band upload that settles after the panel closed swaps the name in the band's editor", async () => {
+    const doc = new Y.Doc();
+    const rendered: { host: { header: InstanceType<typeof Editor>; media: Media; close: () => void } | null } = {
+        host: null,
+    };
+    function Host() {
+        const [open, setOpen] = useState(true);
+        const media = useDocMedia(path);
+        const editors = useBandEditors({
+            media,
+            yDoc: doc,
+            provider: null,
+            editable: true,
+            textColumnWidth: () => 600,
+        });
+        rendered.host = { header: editors.header, media, close: () => setOpen(false) };
+        return open
+            ? createElement(HeadersFootersPanel, {
+                  editors,
+                  media,
+                  setup: DEFAULT_PAGE_SETUP,
+                  onSetupChange: () => {},
+                  request: { band: 'header' },
+                  onClose: () => {},
+              })
+            : null;
+    }
+    ({ unmount } = await render(createElement(Host)));
+    if (!rendered.host) throw new Error('no editors');
+    const { header, media, close } = rendered.host;
+    const upload = media.uploadImage(() => header, logo);
+    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="pending:');
+
+    await act(async () => close());
+    // Tiptap destroys an unmounted editor a tick later.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(document.querySelector('[data-band]')).toBeNull();
+    await settleUpload('logo-1.png');
+    await upload;
+    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-1.png"');
+});
+
+// A tab closed mid-upload leaves a pending name that a writer's tab sweeps a minute after opening the doc. A viewer's
+// deletion would be dropped by the server, and a read-only band on the page shares its root with the band's editor.
+test.each([
+    ["a writer's editor sweeps", true, '<paragraph>Acme</paragraph>'],
+    ['a read-only editor leaves', false, '<paragraph>Acme<figure mediaName="pending:gone"></figure></paragraph>'],
+])('%s a pending image a closed tab left', async (_, editable, left) => {
+    const doc = new Y.Doc();
+    const figure = new Y.XmlElement('figure');
+    figure.setAttribute('mediaName', 'pending:gone');
+    const paragraph = new Y.XmlElement('paragraph');
+    // Beside text: y-tiptap writes nothing back while the doc reads as a fresh editor's single empty paragraph.
+    paragraph.insert(0, [new Y.XmlText('Acme'), figure]);
+    doc.getXmlFragment('header').insert(0, [paragraph]);
+    function Band() {
+        useDocEditor({
+            media: useDocMedia(path),
+            yDoc: doc,
+            provider: null,
+            editable,
+            target: { field: 'header' },
+            textColumnWidth: () => 600,
+        });
+        return null;
+    }
+    jest.useFakeTimers();
+    try {
+        ({ unmount } = await render(createElement(Band)));
+        await act(async () => void jest.advanceTimersByTime(61_000));
+    } finally {
+        jest.useRealTimers();
+    }
+    expect(doc.getXmlFragment('header').toString()).toBe(left);
 });

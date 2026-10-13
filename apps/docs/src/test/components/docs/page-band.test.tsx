@@ -1,6 +1,6 @@
 // A band on the page is drawn read-only, live from its root, and only with content. The header sits 1.27 cm below the
 // paper's top edge and the footer ends 1.27 cm above its bottom one, in the margin, and a band taller than its margin
-// pushes the body. A click opens the panel on it.
+// pushes the body. A click opens the panel on it, but for one on a link, which follows the link.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -9,6 +9,7 @@ installHappyDom();
 
 const Y = await import('yjs');
 const { act, createElement } = await import('react');
+const { useDocMedia } = await import('../../../components/docs/doc-editor');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
@@ -20,26 +21,25 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 async function render(doc: InstanceType<typeof Y.Doc>, props: Pick<Props, 'field' | 'edge' | 'margin' | 'onOpen'>) {
-    ({ unmount } = await renderInDocument(
-        createElement(
-            AuthProvider,
-            null,
-            createElement(PageBand, {
-                path: drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC }),
-                yDoc: doc,
-                textColumnWidth: () => 600,
-                ...props,
-            }),
-        ),
-    ));
+    function Band() {
+        return createElement(PageBand, {
+            media: useDocMedia(drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC })),
+            yDoc: doc,
+            textColumnWidth: () => 600,
+            ...props,
+        });
+    }
+    ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Band))));
     const band = document.querySelector<HTMLElement>('[data-page-band]');
     if (!band) throw new Error('no band');
     return band;
 }
 
-function write(doc: InstanceType<typeof Y.Doc>, root: string, text: string) {
+function write(doc: InstanceType<typeof Y.Doc>, root: string, text: string, href?: string) {
     const paragraph = new Y.XmlElement('paragraph');
-    paragraph.insert(0, [new Y.XmlText(text)]);
+    const run = new Y.XmlText();
+    run.insert(0, text, href ? { link: { href } } : {});
+    paragraph.insert(0, [run]);
     doc.getXmlFragment(root).insert(doc.getXmlFragment(root).length, [paragraph]);
 }
 
@@ -78,4 +78,15 @@ test('a click opens the panel on the band', async () => {
     const band = await render(doc, { field: 'footer', edge: 'bottom', margin: 20, onOpen });
     await act(async () => band.querySelector('p')?.click());
     expect(onOpen).toHaveBeenCalledTimes(1);
+});
+
+test('a click on a link follows it and leaves the panel closed', async () => {
+    const doc = new Y.Doc();
+    write(doc, 'footer', 'eigen.is', 'https://eigen.is');
+    const onOpen = mock(() => {});
+    const band = await render(doc, { field: 'footer', edge: 'bottom', margin: 20, onOpen });
+    const link = band.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('https://eigen.is');
+    await act(async () => link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
+    expect(onOpen).not.toHaveBeenCalled();
 });

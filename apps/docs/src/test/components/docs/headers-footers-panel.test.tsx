@@ -1,6 +1,7 @@
 // The Headers and footers panel edits each band in an editor of its own, shows the first page's bands only with Different
-// first page, and places Google's page-number presets: a number on the right, "not on the first page" by turning
-// Different first page on and numbering the other pages' band alone. Its toolbar acts on the band last focused.
+// first page, and places Google's page-number presets: a number on the right, once per band, "not on the first page" by
+// turning Different first page on, numbering the other pages' band and taking the number off the first page's. Its
+// toolbar acts on the band last focused.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -9,12 +10,12 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 const Y = await import('yjs');
-const { WebsocketProvider } = await import('y-websocket');
-const { act, createElement, useEffect, useState } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { DEFAULT_PAGE_SETUP, PAGE_ROOT } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
+const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
 const { HeadersFootersPanel, PAGE_NUMBER_PRESETS } = await import('../../../components/docs/headers-footers-panel');
 const { usePageSetup } = await import('../../../components/docs/hooks/use-page-setup');
 const { createDocUndoManager, writePageSetup } = await import('../../../components/docs/page-setup');
@@ -26,23 +27,22 @@ afterEach(() => unmount());
 
 const onSetupChange = mock((_from: PageSetup, _to: PageSetup) => {});
 
-// The editor's wiring: the panel reads the page map and writes it through writePageSetup.
+// The editor's wiring: the band editors live beside the panel, which reads the page map and writes it through
+// writePageSetup.
 function Host({ doc, request }: { doc: InstanceType<typeof Y.Doc>; request: Request }) {
     const setup = usePageSetup(doc);
-    const [provider] = useState(() => new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false }));
     const [undoManager] = useState(() => createDocUndoManager(doc));
-    useEffect(() => () => provider.destroy(), [provider]);
+    const media = useDocMedia(drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC }));
+    const editors = useBandEditors({ media, yDoc: doc, provider: null, editable: true, textColumnWidth: () => 600 });
     return createElement(HeadersFootersPanel, {
-        path: drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC }),
-        yDoc: doc,
-        provider,
+        editors,
+        media,
         setup,
         onSetupChange: (from, to) => {
             onSetupChange(from, to);
             writePageSetup(doc, undoManager, from, to);
         },
         request,
-        textColumnWidth: () => 600,
         onClose: () => {},
     });
 }
@@ -71,6 +71,18 @@ async function click(label: string) {
     await act(async () => target.click());
 }
 
+// A page-number preset by its band's row and its button.
+const presetButton = (band: 'Header' | 'Footer', label: 'Every page' | 'From page 2') =>
+    [...document.querySelectorAll<HTMLButtonElement>(`[aria-label="${band} page numbers"] button`)].find(
+        (b) => b.textContent === label,
+    );
+
+async function pickPreset(band: 'Header' | 'Footer', label: 'Every page' | 'From page 2') {
+    const target = presetButton(band, label);
+    if (!target) throw new Error(`no ${band} ${label} preset`);
+    await act(async () => target.click());
+}
+
 const RIGHT_NUMBER = '<paragraph textAlign="right"><pagenumber kind="page"></pagenumber></paragraph>';
 
 test('a header and a footer, and the first page’s pair above them once Different first page is on', async () => {
@@ -86,13 +98,27 @@ test('a header and a footer, and the first page’s pair above them once Differe
     expect(bandLabels()).toEqual(['First page header', 'First page footer', 'Header', 'Footer']);
 });
 
+// Google's four pictures, as two short rows the panel's width holds.
+test('the presets are a header row and a footer row of Every page and From page 2', async () => {
+    await render(new Y.Doc());
+    const rows = [...document.querySelectorAll('[aria-label$=" page numbers"]')].map((row) => [
+        row.getAttribute('aria-label'),
+        ...[...row.querySelectorAll('button')].map((b) => b.textContent),
+    ]);
+    expect(rows).toEqual([
+        ['Header page numbers', 'Every page', 'From page 2'],
+        ['Footer page numbers', 'Every page', 'From page 2'],
+    ]);
+});
+
 test.each([
-    ['In the header', 'header'],
-    ['In the footer', 'footer'],
-] as const)('%s numbers every page on the right', async (preset, root) => {
+    ['Header', 'header'],
+    ['Footer', 'footer'],
+] as const)('%s › Every page numbers every page on the right, once', async (preset, root) => {
     const doc = new Y.Doc();
     await render(doc);
-    await click(preset);
+    await pickPreset(preset, 'Every page');
+    await pickPreset(preset, 'Every page');
     expect(doc.getXmlFragment(root).toString()).toBe(RIGHT_NUMBER);
     expect(onSetupChange).not.toHaveBeenCalled();
 
@@ -101,14 +127,15 @@ test.each([
     letterhead.insert(0, [new Y.XmlText('Acme')]);
     doc.getXmlFragment(`${root}First`).insert(0, [letterhead]);
     await turnDifferentFirstPageOn(doc);
-    await click(preset);
+    await pickPreset(preset, 'Every page');
+    expect(doc.getXmlFragment(root).toString()).toBe(RIGHT_NUMBER);
     expect(doc.getXmlFragment(`${root}First`).toString()).toBe(`<paragraph>Acme</paragraph>${RIGHT_NUMBER}`);
 });
 
-test('not on the first page turns Different first page on and numbers the other pages alone', async () => {
+test('From page 2 turns Different first page on and numbers the other pages alone', async () => {
     const doc = new Y.Doc();
     await render(doc);
-    await click('In the footer, not on the first page');
+    await pickPreset('Footer', 'From page 2');
     expect(onSetupChange.mock.calls).toEqual([
         [DEFAULT_PAGE_SETUP, { ...DEFAULT_PAGE_SETUP, differentFirstPage: true }],
     ]);
@@ -116,11 +143,35 @@ test('not on the first page turns Different first page on and numbers the other 
     expect(doc.getXmlFragment('footerFirst').length).toBe(0);
 });
 
+// Google's Show on first page off: the first page shows no number, in its header or its footer.
+test('From page 2 takes the page number off the first page and keeps what else it holds', async () => {
+    const doc = new Y.Doc();
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+    await render(doc);
+    await pickPreset('Header', 'Every page');
+    await act(async () => band('headerFirst')?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    await click('Page count');
+    expect(doc.getXmlFragment('headerFirst').toString()).toContain('<pagenumber kind="page">');
+
+    await pickPreset('Footer', 'From page 2');
+    expect(onSetupChange).not.toHaveBeenCalled();
+    expect(doc.getXmlFragment('headerFirst').toString()).not.toContain('<pagenumber kind="page">');
+    expect(doc.getXmlFragment('headerFirst').toString()).toContain('<pagenumber kind="pages">');
+    expect(doc.getXmlFragment('header').toString()).toBe(RIGHT_NUMBER);
+    expect(doc.getXmlFragment('footer').toString()).toBe(RIGHT_NUMBER);
+    expect(doc.getXmlFragment('footerFirst').toString()).not.toContain('pagenumber');
+});
+
 // Insert › Page elements › Page numbers opens the panel with its preset.
 test('a request carrying a preset places it as the panel opens', async () => {
     const doc = new Y.Doc();
     await render(doc, { band: 'header', preset: PAGE_NUMBER_PRESETS[0] });
     expect(doc.getXmlFragment('header').toString()).toBe(RIGHT_NUMBER);
+});
+
+test('Format › Page numbers opens the panel on its presets', async () => {
+    await render(new Y.Doc(), { section: 'pageNumbers' });
+    expect(document.activeElement === presetButton('Header', 'Every page')).toBe(true);
 });
 
 test('the toolbar inserts into the band last focused', async () => {

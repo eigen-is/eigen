@@ -98,18 +98,21 @@ function normalizeFontFamilyMarks(editor: Editor) {
     });
 }
 
-// The image paths every docs editor shares, each acting on the editor it is given: the body's or a band's.
+// The image paths every docs editor shares. Each takes the editor it acts on as a getter, read again once an upload
+// settles: the body's editor is built anew when its handlers change, so the name swaps in whichever holds the doc then.
 export function useDocMedia(path: DrivePath) {
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
     const { mediaFolderId, startUpload, resolveMediaPath } = useMediaResolver();
 
-    const uploadImage = async (editor: Editor, file: File) => {
-        if (!mediaFolderId || !file.type.startsWith('image/')) return;
+    const uploadImage = async (editor: () => Editor | null, file: File) => {
+        const target = editor();
+        if (!mediaFolderId || !file.type.startsWith('image/') || !target) return;
         const { pendingName, promise } = startUpload(file);
-        editor.chain().focus().setFigure({ mediaName: pendingName }).run();
+        target.chain().focus().setFigure({ mediaName: pendingName }).run();
         const result = await promise;
-        if (!editor.isDestroyed) swapFigureMediaName(editor, pendingName, result?.name ?? null);
+        const settled = editor();
+        if (settled && !settled.isDestroyed) swapFigureMediaName(settled, pendingName, result?.name ?? null);
     };
 
     return {
@@ -119,33 +122,38 @@ export function useDocMedia(path: DrivePath) {
         // A vector SVG payload (or a pasted SVG document) lands as a figure through the exact image-upload path:
         // stored in media/, served as-is, rendered by <image>. Its images are name-referenced (eigen-media:);
         // materialize re-uploads each into our media/ and rewrites the svg's refs before it's stored.
-        uploadSvg: async (editor: Editor, { svg, items }: ClassifiedSvg) => {
+        uploadSvg: async (editor: () => Editor | null, { svg, items }: ClassifiedSvg) => {
             if (!mediaFolderId) return;
             await uploadImage(editor, await materializeClipboardSvg(svg, items, mediaFolderId, uploadFile.mutateAsync));
         },
-        insertFromDrive: async (editor: Editor, paths: DrivePath[]) => {
+        insertFromDrive: async (editor: () => Editor | null, paths: DrivePath[]) => {
             if (!mediaFolderId) return;
             const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
-            if (!results || editor.isDestroyed) return;
+            const settled = editor();
+            if (!results || !settled || settled.isDestroyed) return;
             for (const result of results) {
-                editor.chain().focus().setFigure({ mediaName: result.name }).run();
+                settled.chain().focus().setFigure({ mediaName: result.name }).run();
             }
         },
-        replaceImage: async (editor: Editor, file: File) => {
-            if (!mediaFolderId || !file.type.startsWith('image/')) return;
+        replaceImage: async (editor: () => Editor | null, file: File) => {
+            const target = editor();
+            if (!mediaFolderId || !file.type.startsWith('image/') || !target) return;
             const { pendingName, promise } = startUpload(file);
             // Reset width so the new image's aspect ratio is recomputed on load
-            editor.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
+            target.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
             const result = await promise;
-            if (!editor.isDestroyed) swapFigureMediaName(editor, pendingName, result?.name ?? null);
+            const settled = editor();
+            if (settled && !settled.isDestroyed) swapFigureMediaName(settled, pendingName, result?.name ?? null);
         },
-        replaceFromDrive: async (editor: Editor, paths: DrivePath[]) => {
-            if (!mediaFolderId || paths.length === 0) return;
-            const replaced = editor.getAttributes('figure').mediaName;
+        replaceFromDrive: async (editor: () => Editor | null, paths: DrivePath[]) => {
+            const target = editor();
+            if (!mediaFolderId || !target || paths.length === 0) return;
+            const replaced = target.getAttributes('figure').mediaName;
             const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            const settled = editor();
             // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
-            if (result?.[0] && !editor.isDestroyed && editor.isActive('figure', { mediaName: replaced })) {
-                editor.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
+            if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {
+                settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
             }
         },
         // The name a pasted image item is stored under: another document's file is re-uploaded into this
@@ -177,8 +185,8 @@ type DocEditorOptions = {
     yDoc: Y.Doc;
     editable: boolean;
     target: DocEditorTarget;
-    // Null for a read-only band on the page: an unfocused editor clears the caret a band's editor in the panel set
-    // in the same fragment.
+    // Null for a read-only band on the page: an unfocused editor clears the caret the band's own editor set in the same
+    // fragment.
     caret: { provider: WebsocketProvider; user: { name: string; color: string; userId: string } } | null;
     // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
     // drags nothing, and a tap beside a border would start a drag that swallows the caret.
@@ -255,8 +263,7 @@ export function docEditorOptions({
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);
                 const imageFile = files.find((f) => f.type.startsWith('image/'));
-                const target = editor();
-                if (imageFile && media().mediaFolderId && target) {
+                if (imageFile && media().mediaFolderId && editor()) {
                     event.preventDefault();
                     const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
                     if (dropPos) {
@@ -264,7 +271,7 @@ export function docEditorOptions({
                         view.dispatch(tr);
                     }
                     media()
-                        .uploadImage(target, imageFile)
+                        .uploadImage(editor, imageFile)
                         .catch(() => {});
                     return true;
                 }
@@ -278,7 +285,7 @@ export function docEditorOptions({
 
                 if (paste.svg && mediaFolderId) {
                     event.preventDefault();
-                    uploadSvg(target, paste.svg).catch(() => {});
+                    uploadSvg(editor, paste.svg).catch(() => {});
                     return true;
                 }
 
@@ -299,7 +306,7 @@ export function docEditorOptions({
                 const imageFile = paste.imageFiles[0];
                 if (imageFile && mediaFolderId) {
                     event.preventDefault();
-                    uploadImage(target, imageFile).catch(() => {});
+                    uploadImage(editor, imageFile).catch(() => {});
                     return true;
                 }
                 return false;
@@ -308,23 +315,18 @@ export function docEditorOptions({
     };
 }
 
-// The body's editor and each band's: docEditorOptions with this tab's user, its pointer and the doc's media, plus
-// the sweep of pending images a closed tab left and the font-name pass, both per editor.
-export function useDocEditor(
-    {
-        path,
-        provider,
-        ...options
-    }: Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'media' | 'editor'> & {
-        path: DrivePath;
-        // Null draws and sets no caret: a read-only band on the page.
-        provider: WebsocketProvider | null;
-    },
-    deps: DependencyList = [],
-): Editor {
+// What useDocEditor takes: docEditorOptions' less what it fills in itself, the doc's media and the provider.
+type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'media' | 'editor'> & {
+    media: DocMedia;
+    // Null draws and sets no caret: a read-only band on the page.
+    provider: WebsocketProvider | null;
+};
+
+// The body's editor and each band's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
+// images a closed tab left and the font-name pass, both in an editable editor only.
+export function useDocEditor({ media, provider, ...options }: UseDocEditorOptions, deps: DependencyList = []): Editor {
     const auth = useAuth();
     const coarsePointer = useIsCoarsePointer();
-    const media = useDocMedia(path);
     const mediaRef = useRef(media);
     mediaRef.current = media;
     const editorRef = useRef<Editor | null>(null);
@@ -343,11 +345,13 @@ export function useDocEditor(
         deps,
     );
     editorRef.current = editor;
+    const { editable } = options;
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
+    // A viewer's deletion would be dropped by the server, and a read-only band shares its root with a band's editor.
     useZombieMediaSweep({
-        ready: !!editor,
+        ready: !!editor && editable,
         scan: () => {
             const names: string[] = [];
             editor?.state.doc.descendants((node) => {
@@ -371,11 +375,21 @@ export function useDocEditor(
     // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
     // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
     // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
-    const { editable } = options;
     useEffect(() => {
         if (!editor || !editable) return;
         normalizeFontFamilyMarks(editor);
     }, [editor, editable]);
 
     return editor;
+}
+
+// The four bands' editors, kept as long as the doc is open rather than the Headers and footers panel: an upload into
+// a band settles into its editor after the panel closed, and each root is swept once per open.
+export function useBandEditors(options: Omit<UseDocEditorOptions, 'target'>): Record<BandRoot, Editor> {
+    return {
+        header: useDocEditor({ ...options, target: { field: 'header' } }),
+        footer: useDocEditor({ ...options, target: { field: 'footer' } }),
+        headerFirst: useDocEditor({ ...options, target: { field: 'headerFirst' } }),
+        footerFirst: useDocEditor({ ...options, target: { field: 'footerFirst' } }),
+    };
 }
