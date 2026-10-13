@@ -1,4 +1,5 @@
 import type { EigenFont } from '@workspace/lib/constants/fonts';
+import type { PageNumberKind } from '@workspace/lib/docs/eigendoc';
 
 // Word's vocabulary, which the docx writer writes and the docx reader recognises, one source both ways: style names,
 // list formats, units and Word's spelling of a number. The OOXML every format shares is core/ooxml.ts.
@@ -132,6 +133,9 @@ export const DEFAULT_HIGHLIGHT = 'FFFF00';
 
 // Section types that start a new page; continuous and nextColumn don't, and a missing type is nextPage.
 export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);
+
+// The field each page number kind writes, as w:instr names it.
+export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE', pages: 'NUMPAGES' };
 
 // Word's widest table. The reader and the writer cap the grid at it, so no row walks or fills a column past it.
 export const MAX_TABLE_COLUMNS = 63;

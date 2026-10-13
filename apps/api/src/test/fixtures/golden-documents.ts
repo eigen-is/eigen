@@ -296,6 +296,15 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'second line' },
                 ],
             },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Page ' },
+                    { type: 'pageNumber', attrs: { kind: 'page' }, marks: [{ type: 'bold' }] },
+                    { type: 'text', text: ' of ' },
+                    { type: 'pageNumber', attrs: { kind: 'pages' }, marks: [{ type: 'italic' }] },
+                ],
+            },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
             { type: 'paragraph' },
             { type: 'pageBreak' },
