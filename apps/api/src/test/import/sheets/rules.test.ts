@@ -4,8 +4,8 @@ import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 
-// A worksheet's conditional formats and data validations, with the mapping ExcelJS's path made, Excel 2010's
-// extensions besides, and each rule's output charged before it is built.
+// A worksheet's conditional formats and data validations, Excel 2010's extensions besides, and each rule's output
+// charged before it is built.
 
 const PALETTE = ['#FFFFFF', '#000000', '#E7E6E6', '#44546A', '#4472C4'];
 const X14 = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';

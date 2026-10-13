@@ -3,7 +3,7 @@ import { alternativeFor, CONTENT_TYPES_NS, isOn, parseOoxml, W_NS } from '../../
 import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
 import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
-import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES, NOT_A_DOCX } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 
 // The parts the reader parses, together (a tree's cost: core/xml.ts); the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
@@ -63,7 +63,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
     const parts = [documentPath, ...['styles', 'numbering', 'theme', 'fontTable'].map(located), ...notes];
     charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
     const document = readXml(zip, documentPath, budget);
-    if (!document) throw new ApiError(400, NOT_A_DOCX);
+    if (!document) throw new ApiError(400, IMPORT_MESSAGES.docx.invalid);
     // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it, but a
     // graphic's part is read once every content part is, so a cap it meets costs only the graphic.
     const optional = <T>(read: () => T, graphic = false): T | undefined => {
@@ -96,7 +96,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         readMedia: (path) => optional(() => zip.read(path)),
         chargePiece: () => {
             budget.pieces--;
-            if (budget.pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+            if (budget.pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         },
     };
 }
@@ -115,7 +115,7 @@ type Budget = {
 function charge(zip: ZipReader, paths: string[], budget: Budget): void {
     const fresh = [...new Set(paths)].filter((path) => !budget.charged.has(path));
     const declared = fresh.reduce((sum, path) => sum + (zip.entry(path)?.size ?? 0), 0);
-    if (declared > budget.left) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+    if (declared > budget.left) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
     budget.left -= declared;
     for (const path of fresh) budget.charged.add(path);
 }
@@ -130,7 +130,7 @@ function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | und
         let tags = 0;
         for (let at = bytes.indexOf(LESS_THAN); at >= 0; at = bytes.indexOf(LESS_THAN, at + 1)) tags++;
         // A part refused leaves the budget to the parts after it.
-        if (tags > budget.tags) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        if (tags > budget.tags) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         budget.tags -= tags;
         const root = parseOoxml(bytes) ?? undefined;
         budget.parsed.set(path, root);

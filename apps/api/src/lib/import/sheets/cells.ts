@@ -4,7 +4,7 @@ import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import { NOT_AN_XLSX, TOO_MANY_CELLS } from '../messages';
+import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
 import { cellKey, type PlacedCell } from './worksheet';
@@ -208,7 +208,7 @@ function columnNumber(reference: string | undefined): number | undefined {
 // 0-based. A row or cell without its reference is the one after the previous.
 function indexOf(number: number | undefined, previous: number, count: number): number {
     const index = number === undefined ? previous + 1 : number - 1;
-    if (!Number.isInteger(index) || index < 0) throw new ApiError(400, NOT_AN_XLSX);
+    if (!Number.isInteger(index) || index < 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
     if (index >= count) throw new ApiError(413, TOO_MANY_CELLS);
     return index;
 }

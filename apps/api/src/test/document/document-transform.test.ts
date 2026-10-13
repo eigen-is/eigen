@@ -44,7 +44,7 @@ import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
 import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
-import { DOCUMENT_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
+import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
@@ -594,7 +594,7 @@ const XLSX_FIXTURE: ImportFormatFixture = {
     build: buildImportFixture,
     readState: (pathId) => liveState(pathId, (doc) => doc.getMap('state').get('snapshot')),
     expectSeeded: (state) => expect(typeof state).toBe('string'),
-    tooLarge: SPREADSHEET_TOO_LARGE,
+    tooLarge: IMPORT_MESSAGES.xlsx.tooLarge,
 };
 
 const DOCX_FIXTURE: ImportFormatFixture = {
@@ -605,7 +605,7 @@ const DOCX_FIXTURE: ImportFormatFixture = {
     build: () => buildGoldenDocx(TEST_PNG_BYTES),
     readState: (pathId) => liveState(pathId, readEigendocFromDoc),
     expectSeeded: (state) => expect((state as JSONContent).content?.length).toBeGreaterThan(0),
-    tooLarge: DOCUMENT_TOO_LARGE,
+    tooLarge: IMPORT_MESSAGES.docx.tooLarge,
 };
 
 // A crashed child is the server's failure; one that ran out of memory says the file was too large for it, in the
@@ -702,7 +702,7 @@ describe('document transform (xlsx import)', () => {
         expect(response.ok && response.warnings).toEqual([]);
 
         // The same pure pipeline the Worker dispatches to, run on this thread.
-        const direct = await importXlsxToSheetsSnapshot(await buildImportFixture());
+        const direct = importXlsxToSheetsSnapshot(await buildImportFixture());
         expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
         // The stale cached SUM(B2:B3)=999 was recomputed at import.
         const sheets = decodeSheetsSnapshot(snapshotJson);
@@ -734,7 +734,7 @@ describe('document transform (xlsx import)', () => {
             },
         }));
         try {
-            const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(await buildImportFixture());
+            const { snapshotJson, warnings } = importXlsxToSheetsSnapshot(await buildImportFixture());
             expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             const sheets = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
             // Parsed values survive: the xlsx's own stale cached result, not a failure.
@@ -1471,8 +1471,8 @@ describe('document transform (docx import)', () => {
 // to the transform process, in its format's words.
 describe('document transform (input bound)', () => {
     test.each([
-        [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, SPREADSHEET_TOO_LARGE],
-        [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, DOCUMENT_TOO_LARGE],
+        [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, IMPORT_MESSAGES.xlsx.tooLarge],
+        [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, IMPORT_MESSAGES.docx.tooLarge],
     ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
         const runSpy = spyOn(documentTransformRunner, 'run');
         try {
@@ -1489,8 +1489,8 @@ describe('document transform (input bound)', () => {
     });
 
     test.each([
-        ['eigensheets', 'large.xlsx', SPREADSHEET_TOO_LARGE],
-        ['eigendoc', 'large.docx', DOCUMENT_TOO_LARGE],
+        ['eigensheets', 'large.xlsx', IMPORT_MESSAGES.xlsx.tooLarge],
+        ['eigendoc', 'large.docx', IMPORT_MESSAGES.docx.tooLarge],
     ] as const)(
         'a convert to %s of a stored file past the byte cap is 413 and never reads it',
         async (target, name, message) => {

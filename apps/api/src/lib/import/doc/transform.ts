@@ -4,14 +4,13 @@ import { fixTables, TableMap } from '@tiptap/pm/tables';
 import { prosemirrorToYDoc } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
-import { importError } from '../../core/opc';
 import { docSchema } from '../../document/doc-schema';
 import {
     type DocImportWorkerResult,
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
-import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES } from '../messages';
+import { IMPORT_MESSAGES, importError } from '../messages';
 import { readDocx } from './from-docx';
 
 // Runs in the transform process, so neither the reader nor the conversion to Yjs blocks the event loop. The main thread
@@ -27,7 +26,7 @@ export function importDocxToEigendocUpdate(
         update = Y.encodeStateAsUpdate(tempDoc);
         tempDoc.destroy();
     } catch (error) {
-        throw importError(error, IMPORT_MESSAGES.docx);
+        throw importError(error, 'docx');
     }
 
     return {
@@ -48,12 +47,12 @@ export const MAX_TABLE_REPAIRS = 10_000_000;
 // together: prosemirror-tables repairs a table the reader got wrong, and TrailingNode ends the doc in a paragraph.
 export function asOpened(doc: Node): Node {
     eachTable(doc, (table, repairs) => {
-        if (repairs * table.childCount > MAX_TABLE_REPAIRS) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        if (repairs * table.childCount > MAX_TABLE_REPAIRS) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
     });
     const repaired = fixTables(EditorState.create({ doc }))?.doc ?? doc;
     // A repair can leave another for a second pass; the reader writes tables that need none, so one that would is refused.
     eachTable(repaired, (_table, repairs) => {
-        if (repairs > 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        if (repairs > 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
     });
     const { paragraph } = docSchema().nodes;
     if (repaired.lastChild?.type === paragraph) return repaired;

@@ -63,7 +63,7 @@ describe('the workbook', () => {
     });
 
     // Read once per entry, a part named by many sheets was a 0.2 MB zip that took a minute and 6.7 GB.
-    test("a part several sheets name is one sheet, named and placed by the last of them, as on ExcelJS's path", () => {
+    test('a part several sheets name is one sheet, named and placed by the last of them', () => {
         const rel = (id: string, target: string) =>
             `<Relationship Id="${id}" Type="${R}/worksheet" Target="${target}"/>`;
         const book = readPackage(

@@ -7,7 +7,6 @@ import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
 // The reader end to end, on workbooks that each hold one family of what it reads: values, types, dates, formulas,
 // looks, borders, row heights, hidden rows, the sheets, columns, merges, views, the filter, hyperlinks and the rules.
-// Until the switch these workbooks read the same through ExcelJS's import, the differences named in the xlsx plan aside.
 
 function cellsOf(sheet: Sheet): Record<string, Cell | null | undefined> {
     return Object.fromEntries((sheet.celldata ?? []).map(({ r, c, v }) => [`${r}_${c}`, v]));

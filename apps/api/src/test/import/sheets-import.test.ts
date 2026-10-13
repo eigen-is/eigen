@@ -139,8 +139,8 @@ async function readSnapshot(ownerId: string, mountId: string, pathId: string): P
 
 // /convert and /import commit the Worker's snapshotJson verbatim, so parsing here
 // yields the same Sheet[] a route round-trip would read back — without a Worker spawn.
-async function parseXlsx(buffer: ArrayBuffer): Promise<Sheet[]> {
-    const { snapshotJson } = await importXlsxToSheetsSnapshot(buffer);
+function parseXlsx(buffer: ArrayBuffer): Sheet[] {
+    const { snapshotJson } = importXlsxToSheetsSnapshot(buffer);
     return decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
 }
 
@@ -592,7 +592,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             'Sheet1',
             ['A1:B2'],
         );
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         expect(sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
 
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
@@ -646,7 +646,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'A3', value: 3 },
             { a1: 'A4', value: { formula: 'SUM(A1:A3)', result: 6 } },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         const formulaCell = (sheets[0].celldata ?? []).find((c) => c.r === 3 && c.c === 0);
         expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
     });
@@ -777,15 +777,15 @@ describe('Sheets xlsx conversion fidelity', () => {
 
     test('convert scales column widths from character units to pixels', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
     });
 
     test("a width counts the file's default font: 8 px a character beside Calibri, Inter's digit beside Inter", async () => {
         const calibri = await buildXlsxBuffer([{ a1: 'A1', value: 'x' }], 'Sheet1', [], [{ col: 1, width: 8.43 }]);
-        expect((await parseXlsx(calibri))[0].config?.columnlen?.['0']).toBe(67);
+        expect(parseXlsx(calibri)[0].config?.columnlen?.['0']).toBe(67);
         const inter = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
-        expect((await xlsxToSheets(inter))[0].config?.columnlen).toEqual({ 0: 67 });
+        expect(xlsxToSheets(inter)[0].config?.columnlen).toEqual({ 0: 67 });
     });
 
     test('convert preserves font sizes in points', async () => {
@@ -794,7 +794,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'B1', value: 'small', fontSize: 8 },
             { a1: 'C1', value: 'default' },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.fs).toBe(24);
         expect(byCoord.get('0:1')?.fs).toBe(8);
@@ -811,7 +811,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             },
             { a1: 'B1', value: 'no border' },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         const thin = { style: 1, color: '#000000' };
         expect(sheets[0].config?.borderInfo).toEqual({ '0_0': { l: thin, r: thin, t: thin, b: thin } });
     });
@@ -822,7 +822,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'A1', value: 'down', border: { diagonal: { ...thinBorder, down: true } } },
             { a1: 'B1', value: 'up', border: { diagonal: { ...thinBorder, up: true } } },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         // Our slash is top-left → bottom-right (diagonalDown); a diagonalUp-only border has no
         // single-direction equivalent in our model and is dropped.
         expect(sheets[0].config?.borderInfo).toEqual({ '0_0': { s: { style: 1, color: '#000000' } } });
@@ -843,7 +843,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'A1', value: 'text' },
             { a1: 'B1', value: 42 },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ht).toBeUndefined();
         expect(byCoord.get('0:1')?.ht).toBe(2);
@@ -881,9 +881,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             ['dml', TRANSITIONAL.drawingml],
             ['', STRICT.drawingml],
         ]) {
-            const sheets = await parseXlsx(
-                await replacePart(buffer, 'xl/theme/theme1.xml', () => themeXml(prefix, ns)),
-            );
+            const sheets = parseXlsx(await replacePart(buffer, 'xl/theme/theme1.xml', () => themeXml(prefix, ns)));
             const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
             expect(byCoord.get('0:0')?.fc).toBe('#123456');
             expect(byCoord.get('0:1')?.fc).toBe('#101010');
@@ -904,7 +902,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             valid.replace('<a:theme', '<!DOCTYPE a:theme [<!ENTITY x "y">]><a:theme'),
             valid.replace('<a:theme', '<b:theme').replace('</a:theme>', '</b:theme>'),
         ]) {
-            const sheets = await parseXlsx(await replacePart(buffer, 'xl/theme/theme1.xml', () => broken));
+            const sheets = parseXlsx(await replacePart(buffer, 'xl/theme/theme1.xml', () => broken));
             const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
             expect(a1?.v?.v).toBe('kept');
             expect(a1?.v?.fc).toBeUndefined();
@@ -1415,7 +1413,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'B3', value: 'Green', dataValidation: listRule },
             { a1: 'B4', value: '', dataValidation: listRule },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
 
         // sqref ranges arrive pre-expanded to per-cell keys; value1 holds the literal
         // with the outer quotes stripped; type2 '' is the dialog's single-select value.
@@ -1492,7 +1490,7 @@ describe('Sheets xlsx conversion fidelity', () => {
                 },
             },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         const rules = sheets[0].dataVerification ?? {};
 
         expect(rules['0_0']).toMatchObject({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' });
@@ -1521,7 +1519,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'A3', value: 7, dataValidation: { type: 'whole', operator: 'greaterThan', formulae: ['$B$1'] } },
             { a1: 'B1', value: 'Red', dataValidation: { type: 'list', allowBlank: true, formulae: ['"Red,Blue"'] } },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         expect(Object.keys(sheets[0].dataVerification ?? {})).toEqual(['0_1']);
     });
 
@@ -1547,7 +1545,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             },
             { a1: 'A4', value: '', dataValidation: { ...list, showInputMessage: true } },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
         const rules = sheets[0].dataVerification ?? {};
 
         expect(rules['0_0']).toMatchObject({ hintShow: true, hintValue: 'Choose Yes or No', prohibitInput: false });
@@ -1648,7 +1646,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             // Range refs hang the link on the anchor cell.
             { ref: 'B7:C8', location: 'Sheet2!D4' },
         ]);
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
 
         expect(sheets[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!A1' },
@@ -1675,7 +1673,7 @@ describe('Sheets xlsx conversion fidelity', () => {
                 `<x:hyperlinks xmlns:x="${TRANSITIONAL.spreadsheetml}"><x:hyperlink ref="A1" location="&apos;Q1 &#x2013; &quot;A&quot; &amp; B&apos;!C3"/></x:hyperlinks><pageMargins`,
             ),
         );
-        const sheets = await parseXlsx(buffer);
+        const sheets = parseXlsx(buffer);
 
         expect(sheets[1].name).toBe('Q1 – "A" & B');
         expect(sheets[0].hyperlink).toEqual({

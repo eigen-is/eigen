@@ -1166,7 +1166,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(rels).toContain('TargetMode="External"');
 
         // Full importer round-trip: linkType/linkAddress and the hl backref restored.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({
             '0_0': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
             '1_0': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
@@ -1193,7 +1193,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(xml).not.toContain('<hyperlink');
         expect(xml).not.toContain('javascript:');
 
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toBeUndefined();
     });
 
@@ -1223,7 +1223,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
 
         // Closed round-trip through the importer: sheet links re-import as
         // cellrange@A1 — accepted drift recorded in the spec.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1" },
             '1_0': { linkType: 'cellrange', linkAddress: "'It''s'!A1" },
@@ -1259,7 +1259,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(xml).toContain('location="&apos;Sheet1&apos;!D4"');
         expect(xml).toContain('location="&apos;Sheet 2&apos;!A1"');
 
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
             '1_0': { linkType: 'cellrange', linkAddress: "'Sheet1'!D4" },
@@ -1306,7 +1306,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(rels).not.toContain('My Sheet');
 
         // The stripped form still round-trips through our own importer.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink?.['1_0']).toEqual({ linkType: 'cellrange', linkAddress: "'My Sheet'!A1" });
     });
 
@@ -1365,7 +1365,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
             hyperlink: 'https://example.com/docs',
         });
 
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({ '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
         const b2 = (rt[0].celldata ?? []).find((c) => c.r === 1 && c.c === 1);
         expect(b2?.v?.v).toBe('https://example.com/docs');
@@ -1418,7 +1418,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(runs[1].font).toMatchObject({ color: { argb: 'FF0000FF' } });
 
         // Importer round-trip: the concatenated text and the link both survive.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
         const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
         expect(a1?.v?.v).toBe('Eigen docs');

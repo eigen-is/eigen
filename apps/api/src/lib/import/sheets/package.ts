@@ -2,7 +2,7 @@ import { ApiError } from '../../core/errors';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { IMPORT_MESSAGES, NOT_AN_XLSX } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 
 // The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch
 // at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
@@ -25,7 +25,7 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     // By relationship, else where Excel puts the part.
     const workbookPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'xl/workbook.xml';
     const workbook = pkg.part(workbookPath);
-    if (!workbook || !hasXmlName(workbook, SML_NS, 'workbook')) throw new ApiError(400, NOT_AN_XLSX);
+    if (!workbook || !hasXmlName(workbook, SML_NS, 'workbook')) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
     const rels = pkg.relationships(workbookPath);
     const located = (type: string, path: string) => relOfType(rels, type) ?? path;
     const list = xmlChild(workbook, SML_NS, 'sheets');

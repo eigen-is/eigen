@@ -177,7 +177,6 @@ describe('hyperlinks', () => {
         expect(charged[0]).toEqual([1, 'https://example.com/page'.length]);
     });
 
-    // ExcelJS's path read the location of an external link as a place in this workbook.
     test("an external link's location is its fragment; ExcelJS's own internal links stay internal", () => {
         expect(links('<hyperlink ref="A1" r:id="rId1" location="section"/>').links).toEqual({
             '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/page#section' },
@@ -239,7 +238,7 @@ describe('in the sheet', () => {
             '0_1': { v: 2, m: '2', ht: 2, ct: { fa: 'General', t: 'n' }, mc: { r: 0, c: 1, rs: 1, cs: 2 } },
             '0_2': { mc: { r: 0, c: 1 } },
             '4_4': { hl: { r: 4, c: 4, id: 'sheet-0' } },
-            // ExcelJS's path left out the anchor of a one-column merge whose row holds no value.
+            // A one-column merge whose row holds no value keeps its anchor.
             '6_6': { mc: { r: 6, c: 6, rs: 2, cs: 1 } },
             '7_6': { mc: { r: 6, c: 6 } },
         });

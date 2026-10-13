@@ -4,7 +4,7 @@ import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
 import { fontLook, readLooks, themePalette } from '../../../lib/import/sheets/styles';
 import { OFFICE_COLORS, SML } from '../../fixtures/xlsx';
 
-// What a cell takes from its xf: one look per xf, resolved once, with the mapping ExcelJS's path made.
+// What a cell takes from its xf: one look per xf, resolved once.
 
 const PALETTE = themePalette(
     parseOoxml(

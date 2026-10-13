@@ -2,10 +2,9 @@ import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
-import { importError } from '../../core/opc';
 import { docSchema } from '../../document/doc-schema';
 import type { TransformWarning } from '../../document/transform/protocol';
-import { DOCUMENT_TOO_LARGE, IMPORT_MESSAGES } from '../messages';
+import { IMPORT_MESSAGES, importError } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
@@ -46,7 +45,7 @@ export function readDocx(
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
-        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema().nodeFromJSON({
@@ -75,7 +74,7 @@ export function readDocx(
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         return { doc, images, warnings };
     } catch (error) {
-        throw importError(error, IMPORT_MESSAGES.docx);
+        throw importError(error, 'docx');
     }
 }
 

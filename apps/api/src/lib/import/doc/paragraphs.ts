@@ -4,7 +4,7 @@ import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES } from '../../document/wordml';
-import { DOCUMENT_TOO_LARGE } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
@@ -298,7 +298,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (look.color) stripLook(half, undefined, look.color);
         const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
         if (!numbered && task) trimStart(content);
-        if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        if (content.length > MAX_INLINE_NODES) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         const visible = isShown(half);
         const isRule = half.some((piece) => piece.kind === 'hr');
         if ((split || markHidden || direct.markDeleted) && !visible && !isRule) continue;

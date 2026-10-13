@@ -92,7 +92,7 @@ describe('tallies', () => {
     });
 
     test('the imported side counts the same features in the sheets the reader makes', async () => {
-        const { counts: tally } = tallySheets(await xlsxToSheets(Buffer.from(workbook())));
+        const { counts: tally } = tallySheets(xlsxToSheets(Buffer.from(workbook())));
         expect(
             counts(tally, [
                 'sheets',

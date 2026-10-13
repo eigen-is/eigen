@@ -3,9 +3,9 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import { cellWrapsText, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import { SML_NS } from '../../core/ooxml';
-import { importError, optional } from '../../core/opc';
+import { optional } from '../../core/opc';
 import { xmlAttr, xmlChild } from '../../core/xml';
-import { IMPORT_MESSAGES, SPREADSHEET_TOO_LARGE, TOO_MANY_CELLS } from '../messages';
+import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import { readInBatches, readPackage } from './package';
 import { readRules } from './rules';
@@ -54,11 +54,11 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             emitted.cells += cells;
             emitted.text += text;
             if (emitted.cells > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
-            if (emitted.text > MAX_TEXT) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
+            if (emitted.text > MAX_TEXT) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
         };
         const chargeCopy = (chars: number) => {
             emitted.translated += chars;
-            if (emitted.translated > MAX_SHARED_FORMULA_TEXT) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
+            if (emitted.translated > MAX_SHARED_FORMULA_TEXT) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
         };
         const sheets: Sheet[] = [];
         for (const { name, path } of book.sheets) {
@@ -85,7 +85,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
             emitted.slots +=
                 Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
-            if (emitted.slots > MAX_GRID_SLOTS) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
+            if (emitted.slots > MAX_GRID_SLOTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
             const { merge = {}, columnlen = {} } = worksheet.config;
             const tallest = new Map<number, number>();
             for (const { r, c, v } of grid.celldata) {
@@ -120,7 +120,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
         }
         return sheets;
     } catch (error) {
-        throw importError(error, IMPORT_MESSAGES.xlsx);
+        throw importError(error, 'xlsx');
     }
 }
 
