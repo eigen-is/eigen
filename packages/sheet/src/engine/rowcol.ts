@@ -336,19 +336,6 @@ function shiftChartsAcrossSheets<S extends Sheet>(
     });
 }
 
-// An insert stops a chart ref at the grid's last row or column: parseChartSpec refuses a ref past
-// it, which would leave the chart unreadable for good.
-function clampToGrid(ref: CellRangeRef): CellRangeRef {
-    const lastRow = REFERENCE_ROW_COUNT - 1;
-    const lastColumn = REFERENCE_COLUMN_COUNT - 1;
-    if (ref.row[1] <= lastRow && ref.column[1] <= lastColumn) return ref;
-    return {
-        ...ref,
-        row: [Math.min(ref.row[0], lastRow), Math.min(ref.row[1], lastRow)],
-        column: [Math.min(ref.column[0], lastColumn), Math.min(ref.column[1], lastColumn)],
-    };
-}
-
 // config carries several index-keyed maps (rowlen, rowhidden, customHeight and
 // their column twins) that all shift identically when rows/columns move.
 function shiftKeyedMapForInsert(
@@ -444,7 +431,19 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
-    return shiftChartsAcrossSheets(shifted, op.id, (ref) => clampToGrid(shiftRangeForInsert(ref, op)));
+    // An insert stops a chart ref at the grid's last row or column: parseChartSpec refuses a ref past
+    // it, which would leave the chart unreadable for good.
+    const lastRow = REFERENCE_ROW_COUNT - 1;
+    const lastColumn = REFERENCE_COLUMN_COUNT - 1;
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => {
+        const moved = shiftRangeForInsert(ref, op);
+        if (moved.row[1] <= lastRow && moved.column[1] <= lastColumn) return moved;
+        return {
+            ...moved,
+            row: [Math.min(moved.row[0], lastRow), Math.min(moved.row[1], lastRow)],
+            column: [Math.min(moved.column[0], lastColumn), Math.min(moved.column[1], lastColumn)],
+        };
+    });
 }
 
 function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {

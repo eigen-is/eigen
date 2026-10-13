@@ -1,8 +1,9 @@
-export { layoutChart, layoutChartMessage } from './layout';
+export { CHART_MESSAGES, layoutChart, layoutChartMessage } from './layout';
 export {
     CHART_PALETTE,
     chartColor,
     chartLabel,
+    exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,

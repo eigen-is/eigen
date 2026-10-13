@@ -1,4 +1,12 @@
-import type { FillStyle, StrokeStyle, VectorElement } from '../vector/types';
+import type {
+    FillStyle,
+    StrokeStyle,
+    TextLine,
+    VectorEllipseElement,
+    VectorLinearElement,
+    VectorPieElement,
+    VectorRectangleElement,
+} from '../vector/types';
 
 // Google/Excel names: `column` draws vertical bars, `bar` horizontal ones.
 export const CHART_TYPES = ['column', 'bar', 'line', 'pie'] as const;
@@ -39,8 +47,11 @@ export type ChartSpec = {
 
 // A chart's data with its ranges resolved: inline data as stored, or the values a sheet reads from its ranges.
 export type ChartData = { categories: string[]; series: InlineChartSeries[] };
+// Why a sheet's range chart has no data. 'ref': a ref was deleted, names a missing sheet, or spans rows and
+// columns, Excel's #REF.
+export type ChartDataError = 'ref' | 'too-many-points';
 
-// What a chart paints with: a canvas chart takes it from its element, docs and sheets use one flat preset.
+// What a chart paints with; a canvas chart takes it from its element.
 // background is a serialized Fill (transparent draws none); strokeColor and strokeStyle draw the axes and gridlines.
 export type ChartPaint = {
     fontFamily: string;
@@ -54,19 +65,8 @@ export type ChartPaint = {
     fillStyle: FillStyle;
 };
 
-// One line of chart text. y is the line's TOP: a renderer adds the font's baseline offset, a rich-text box
-// takes it as its top. The label turns `rotate` degrees (0, -45 or -90) about (x, y).
-export type ChartLabel = {
-    text: string;
-    x: number;
-    y: number;
-    anchor: 'start' | 'middle' | 'end';
-    fontFamily: string;
-    fontSize: number;
-    bold: boolean;
-    color: string;
-    rotate: number;
-};
+// One line of chart text, turned 0, -45 or -90 degrees; Convert to shapes takes its y as a rich-text box's top.
+export type ChartLabel = TextLine;
 
 // The chart's box is width × height from (0, 0); every shape and label is in those local coordinates.
 // formatTick draws a value-axis label for a tick and the step between ticks.
@@ -80,5 +80,12 @@ export type ChartLayoutInput = {
     formatTick: (value: number, step: number) => string;
 };
 
+// The elements a chart draws with: rectangles, lines, marker ellipses and pie slices.
+export type ChartShape =
+    | VectorRectangleElement
+    | (VectorLinearElement & { type: 'line' })
+    | VectorEllipseElement
+    | VectorPieElement;
+
 // shapes are in paint order: background, gridlines, bars or slices, lines, markers, baseline, legend swatches.
-export type ChartLayout = { shapes: VectorElement[]; labels: ChartLabel[] };
+export type ChartLayout = { shapes: ChartShape[]; labels: ChartLabel[] };

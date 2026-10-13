@@ -9,7 +9,7 @@
 
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
-import type { OutlineShape } from '../outline';
+import { EMPTY_OUTLINE, type OutlineShape } from '../outline';
 import { type Corners, DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorElementBase } from '../types';
 import type { YMapLike } from './read-fields';
 
@@ -132,9 +132,6 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     searchText(el: VectorElement): string;
     toShapes(el: VectorElement): VectorElement[];
 };
-
-// The empty outline a mis-dispatched element gets: no edge, so nothing docks to it.
-const EMPTY_OUTLINE: OutlineShape = { kind: 'polyline', points: [] };
 
 // The dock anchors of anything box-shaped: the right/bottom/left/top edge midpoints, rotated by the
 // element's angle. An ellipse's are its axis extremes and a diamond's are its four tips (Excalidraw's

@@ -14,7 +14,7 @@ export {
     unquoteSheetName,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
-export { type ChartDataError, type ResolvedChartData, resolveRangeChartData } from './chart-data';
+export { resolveRangeChartData } from './chart-data';
 export type {
     CellFormatStyle,
     ComputeMap,

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1699 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1709 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -520,7 +520,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (394)
+## Types (398)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -761,11 +761,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CellRangeRef` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartBlanks` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartDataError` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartLabel` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartLayout` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartLayoutInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartPaint` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSeriesStyle` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -821,6 +823,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ElementKindRegistry` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `ElementOfType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Extent` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
+| `FaceWidths` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FixedSegment` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
@@ -840,6 +843,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `StyleDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TextLine` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorChartElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -919,7 +923,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (816)
+## Utilities & constants (822)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1050,9 +1054,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CHART_MESSAGES` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `CHART_PALETTE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartLabel` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `formatTickValue` | `@workspace/lib/charts` | packages/lib/src/charts/ticks.ts |
@@ -1508,6 +1514,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1528,6 +1535,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `elementsInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ellipseOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `EMPTY_OUTLINE` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `fitFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
@@ -1615,6 +1623,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `placeLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `PLACEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `pointInPolygon` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1672,6 +1681,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
