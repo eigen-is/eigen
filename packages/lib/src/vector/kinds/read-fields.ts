@@ -60,8 +60,8 @@ export function fontSize(v: unknown): number {
 
 // A font name reaches a CSS declaration list (rich text's style body), where a stray `;` would open a
 // declaration of the writer's choosing. Only an EIGEN_FONTS name passes; the picker writes nothing else.
-export function fontFamily(v: unknown): string {
-    return oneOf(v, EIGEN_FONT_NAMES, DEFAULT_FONT_FAMILY);
+export function fontFamily(v: unknown, fallback = DEFAULT_FONT_FAMILY): string {
+    return oneOf(v, EIGEN_FONT_NAMES, fallback);
 }
 
 // Rich-text typography bounds, shared by the document reader and the paste wire: a hostile value

@@ -18,7 +18,6 @@ import { measureLabel } from '../../vector/text-width';
 import type { VectorElement, VectorLinearElement, VectorPieElement, VectorRectangleElement } from '../../vector/types';
 
 const PAINT: ChartPaint = {
-    fontFamily: 'Inter',
     color: '#1e1e1e',
     background: solidFill('#ffffff'),
     strokeColor: '#1e1e1e',
@@ -240,6 +239,23 @@ describe('layoutChart invariants', () => {
         expect(title(large)?.fontSize).toBeGreaterThan(tick(large)?.fontSize ?? Infinity);
         expect(title(large)?.anchor).toBe('middle');
         expect(title(large)?.x).toBe(600);
+    });
+
+    test('every label draws in the spec font and reserves its room by that font', () => {
+        // Narrow in Inter, a full cell each in a monospace face.
+        const data = { categories: ['illicit', 'iii'], series: [series('S', [3, 5])] };
+        const bar = (fontFamily: string) => {
+            const out = layout('bar', { fontFamily }, { data });
+            expect(out.labels.every((label) => label.fontFamily === fontFamily)).toBe(true);
+            const names = out.labels.filter((label) => data.categories.includes(label.text));
+            const widest = Math.max(...names.map((l) => measureLabel(l.text, fontFamily, l.fontSize, l.bold)));
+            // The left column ends where the end-anchored names do: the pad plus the widest name.
+            return { end: names[0].x, pad: names[0].x - widest };
+        };
+        const inter = bar('Inter');
+        const mono = bar('JetBrains Mono');
+        expect(mono.end).toBeGreaterThan(inter.end + 1);
+        expect(mono.pad).toBeCloseTo(inter.pad, 6);
     });
 });
 
@@ -642,7 +658,7 @@ describe('unusable data', () => {
 
     test('a message alone is the background and one centered line that fits the box', () => {
         const box = { id: 'c1', width: 640, height: 400, paint: PAINT };
-        const out = layoutChartMessage(box, 'Nothing here');
+        const out = layoutChartMessage(box, 'Nothing here', 'Inter');
         expect(out.shapes.map((shape) => shape.id)).toEqual(['c1:background']);
         expect(out.labels).toEqual(
             layout('column', {}, { data: { categories: [], series: [] } }).labels.map((l) => ({
@@ -650,10 +666,12 @@ describe('unusable data', () => {
                 text: 'Nothing here',
             })),
         );
-        const narrow = layoutChartMessage({ ...box, width: 90 }, 'A message far wider than the box');
+        const narrow = layoutChartMessage({ ...box, width: 90 }, 'A message far wider than the box', 'Inter');
         expect(narrow.labels).toHaveLength(1);
         expect(narrow.labels[0].text.endsWith('…')).toBe(true);
         expect(measureLabel(narrow.labels[0].text, 'Inter', narrow.labels[0].fontSize, false)).toBeLessThanOrEqual(90);
+        const mono = layoutChartMessage(box, 'Nothing here', 'JetBrains Mono');
+        expect(mono.labels[0].fontFamily).toBe('JetBrains Mono');
     });
 
     test('a box too small draws no chart and nothing outside the box', () => {

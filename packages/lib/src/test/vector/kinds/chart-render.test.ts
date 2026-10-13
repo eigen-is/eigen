@@ -109,7 +109,16 @@ describe('renderChartSpecSvg', () => {
         expect(svgOf(sampleChartSpec('pie'))).toBe(svgOf(sampleChartSpec('pie')));
     });
 
-    test('the paint is the flat preset: Inter, solid marks, no background', () => {
+    test('the labels draw in the spec font; the placeholder, which has no spec, in Inter', () => {
+        const fontsOf = (svg: string) => new Set(Array.from(svg.matchAll(/font-family="([^"]*)"/g), (m) => m[1]));
+        const face = (font: string) => new Set([escapeXml(getFontFamily(font))]);
+        const serif: ChartSpec = { ...sampleChartSpec('column'), fontFamily: 'Source Serif 4' };
+        expect(fontsOf(svgOf(serif))).toEqual(face('Source Serif 4'));
+        expect(fontsOf(svgOf({ ...RANGE_SPEC, fontFamily: 'Excalifont' }, 'ref'))).toEqual(face('Excalifont'));
+        expect(fontsOf(svgOf(null))).toEqual(face('Inter'));
+    });
+
+    test('the paint is the flat preset: solid marks, no background', () => {
         expect(FLAT_CHART_PAINT.roughness).toBe(0);
         expect(FLAT_CHART_PAINT.fillStyle).toBe('solid');
         expect(isTransparentFill(parseFill(FLAT_CHART_PAINT.background))).toBe(true);

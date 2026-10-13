@@ -13,6 +13,7 @@ import {
     sampleChartSpec,
 } from '../../charts';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
+import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
 import { CHART_TYPES, type ChartSpec, type InlineChartData, type RangeChartData } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
@@ -75,6 +76,10 @@ describe('sampleChartSpec', () => {
         expect(pie.data.series).toHaveLength(1);
         expect(pie.sliceColors).toEqual([0, 1, 2, 3].map(chartColor));
     });
+
+    test("the sample draws in Google's Inter", () => {
+        for (const type of CHART_TYPES) expect(sampleChartSpec(type).fontFamily).toBe('Inter');
+    });
 });
 
 describe('palette', () => {
@@ -118,6 +123,16 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
             valueAxis,
         );
+    });
+
+    test('the font is one of the Eigen fonts, and reads Inter when missing or anything else', () => {
+        const { fontFamily, ...rest } = chart();
+        expect(parseChartSpec(JSON.stringify(rest))?.fontFamily).toBe('Inter');
+        for (const bad of ['Comic Sans', 'Inter; color: red', 7, null]) {
+            expect(parseChartSpec(stored({ fontFamily: bad }))?.fontFamily).toBe('Inter');
+        }
+        for (const font of EIGEN_FONT_NAMES)
+            expect(parseChartSpec(stored({ fontFamily: font }))?.fontFamily).toBe(font);
     });
 
     test('a non-number value in an inline series rejects the spec, since values are data', () => {

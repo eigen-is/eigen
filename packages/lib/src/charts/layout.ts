@@ -38,13 +38,12 @@ export const CHART_MESSAGES = {
     tooManyPoints: 'Too much data for a chart',
 };
 
-// The one paint of a chart in a document or a sheet, which store none: Google's flat look in Inter on
-// the page's own background. strokeColor draws the baseline at full strength and the gridlines faint
+// The one paint of a chart in a document or a sheet, which store none: Google's flat look on the page's
+// own background, in the spec's font. strokeColor draws the baseline at full strength and the gridlines faint
 // (GRIDLINE_OPACITY), so a mid gray gives a clear baseline and Google's light gridlines. strokeWidth is
 // every shape's line; 2 is Google's series line width, so a line series reads at page scale, and it
 // widens a bar by only 1px a side.
 export const FLAT_CHART_PAINT: ChartPaint = {
-    fontFamily: 'Inter',
     color: '#202124',
     background: serializeFill(TRANSPARENT_FILL),
     strokeColor: '#757575',
@@ -88,6 +87,7 @@ type Anchor = ChartLabel['anchor'];
 type Context = {
     id: string;
     paint: ChartPaint;
+    fontFamily: string;
     width: number;
     height: number;
     fontSize: number;
@@ -100,7 +100,7 @@ type Context = {
 type LegendItem = { name: string; color: string };
 
 export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
-    const ctx = context(box);
+    const ctx = context(box, spec.fontFamily);
     const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
 
@@ -137,22 +137,23 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
 }
 
 // The chart's background and one centered line instead of a plot, as a chart with nothing to plot draws.
-export function layoutChartMessage(box: ChartBox, text: string): ChartLayout {
-    const ctx = context(box);
+export function layoutChartMessage(box: ChartBox, text: string, fontFamily: string): ChartLayout {
+    const ctx = context(box, fontFamily);
     return { shapes: backgroundShapes(ctx), labels: messageLabel(ctx, text) };
 }
 
-function context({ id, width: w, height: h, paint }: ChartBox): Context {
+function context({ id, width: w, height: h, paint }: ChartBox, fontFamily: string): Context {
     const width = Math.max(0, w);
     const height = Math.max(0, h);
     const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
     return {
         id,
         paint,
+        fontFamily,
         width,
         height,
         fontSize,
-        lineHeight: getLineHeightPx(paint.fontFamily, fontSize),
+        lineHeight: getLineHeightPx(fontFamily, fontSize),
         pad: fontSize,
         gap: fontSize / 2,
         labels: [],
@@ -184,7 +185,7 @@ function placeTitle(ctx: Context, title: string): Frame {
     const text = fit(ctx, title, frame.right - frame.left, size, true);
     if (text === '') return frame;
     ctx.labels.push(label(ctx, text, ctx.width / 2, frame.top, 'middle', { fontSize: size, bold: true }));
-    return { ...frame, top: frame.top + getLineHeightPx(ctx.paint.fontFamily, size) + ctx.gap };
+    return { ...frame, top: frame.top + getLineHeightPx(ctx.fontFamily, size) + ctx.gap };
 }
 
 // A swatch and its name per item: top and bottom wrap centered rows, left and right a column centered on
@@ -654,7 +655,7 @@ function cap(offset: number, direction: number, limit: number): number {
 }
 
 function measure(ctx: Context, text: string, fontSize = ctx.fontSize, bold = false): number {
-    return measureLabel(text, ctx.paint.fontFamily, fontSize, bold);
+    return measureLabel(text, ctx.fontFamily, fontSize, bold);
 }
 
 // The text as is when it fits, else its longest prefix that fits with an ellipsis, else ''.
@@ -685,7 +686,7 @@ function label(
         x,
         y,
         anchor,
-        fontFamily: ctx.paint.fontFamily,
+        fontFamily: ctx.fontFamily,
         fontSize: options.fontSize ?? ctx.fontSize,
         bold: options.bold ?? false,
         color: ctx.paint.color,

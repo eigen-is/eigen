@@ -2,6 +2,7 @@ export { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, layoutChartMessage } fro
 export {
     chartColor,
     chartLabel,
+    DEFAULT_CHART_FONT,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,

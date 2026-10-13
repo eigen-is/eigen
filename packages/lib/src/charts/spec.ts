@@ -19,7 +19,7 @@ import {
     type RangeChartData,
     type RangeChartSeries,
 } from '../types/chart';
-import { bool, color, oneOf, str } from '../vector/kinds/read-fields';
+import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 
 // Hard limits: every peer lays out and paints whatever is stored, so they bound one chart's cost.
@@ -33,6 +33,9 @@ export const MAX_CHART_LABEL_LENGTH = 200;
 // 12 × 200, is past MAX_CHART_POINTS, so the grid's cells count too.
 export const INLINE_GRID_MAX_SERIES = 12;
 export const INLINE_GRID_MAX_CATEGORIES = 200;
+
+// Google's chart font, and the one a spec that names none or a font Eigen doesn't bundle reads as.
+export const DEFAULT_CHART_FONT = 'Inter';
 
 // The accent colors in the order calendars hand them out, so a series and its neighbor are far apart in hue.
 export function chartColor(index: number): string {
@@ -60,6 +63,7 @@ function defaultPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> 
         categoryAxis: { title: '' },
         valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
         sliceColors: [],
+        fontFamily: DEFAULT_CHART_FONT,
     };
 }
 
@@ -137,6 +141,7 @@ function chartSpec(v: unknown): ChartSpec {
             format: typeof format === 'string' ? text(format) : defaults.valueAxis.format,
         },
         sliceColors: slices.map((slice, i) => color(slice, chartColor(i))),
+        fontFamily: fontFamily(prop(spec, 'fontFamily'), defaults.fontFamily),
         data: chartData(prop(spec, 'data')),
     };
 }

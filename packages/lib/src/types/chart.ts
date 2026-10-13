@@ -42,6 +42,8 @@ export type ChartSpec = {
     valueAxis: { title: string; min: number | null; max: number | null; gridlines: boolean; format: string | null };
     // pie only: one color per category, stored at creation
     sliceColors: string[];
+    // An EIGEN_FONTS name; every label draws in it.
+    fontFamily: string;
     data: InlineChartData | RangeChartData;
 };
 
@@ -51,10 +53,9 @@ export type ChartData = { categories: string[]; series: InlineChartSeries[] };
 // spans rows and columns, Excel's #REF.
 export type ChartDataError = 'ref' | 'too-many-points';
 
-// What a chart paints with; a canvas chart takes it from its element.
+// What a chart paints with besides its spec's font; a canvas chart takes it from its element.
 // background is a serialized Fill (transparent draws none); strokeColor and strokeStyle draw the axes and gridlines.
 export type ChartPaint = {
-    fontFamily: string;
     color: string;
     background: string;
     strokeColor: string;

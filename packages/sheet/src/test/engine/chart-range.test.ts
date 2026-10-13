@@ -194,11 +194,12 @@ describe('suggestChartSpec', () => {
         expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
     });
 
-    test('the series take the shared accent colors in the order calendars assign them', () => {
+    test('the series take the shared accent colors in the order calendars assign them, in Inter', () => {
         const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
         if (typeof spec === 'string') throw new Error(spec);
         const accents = EIGEN_ACCENT_COLORS_SHUFFLED.slice(0, 3).map(({ value }) => value);
         expect(spec.data.series.map((series) => series.color)).toEqual(accents);
+        expect(spec.fontFamily).toBe('Inter');
     });
 
     test('one or two series titles read naturally, unnamed series leave it empty', () => {
