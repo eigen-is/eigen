@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1742 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1745 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -521,7 +521,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (405)
+## Types (406)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -773,6 +773,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecSvgInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartStacking` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -931,7 +932,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (847)
+## Utilities & constants (849)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1066,6 +1067,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartLabel` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_FONT` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `DEFAULT_CHART_SERIES_STYLE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1444,6 +1446,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `CHART_STACKINGS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
