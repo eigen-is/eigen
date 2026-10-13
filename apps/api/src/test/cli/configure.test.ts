@@ -748,7 +748,8 @@ describe('configure command', () => {
 
     test('the interactive run explains its questions and honors NO_COLOR', async () => {
         const CYAN = '\x1b[36m';
-        const cancel = { when: 'Where will Eigen be hosted', keys: '\x03' };
+        // Ctrl-C flushes the terminal's unread output, so it waits for the last text the test reads.
+        const cancel = { when: 'people open, like eigen.example.com', keys: '\x03' };
         const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, [cancel]);
         expect(plain.code).toBe(130);
         expect(plain.output.indexOf('The web address people open')).toBeGreaterThan(
@@ -762,21 +763,21 @@ describe('configure command', () => {
     });
 
     test('the interactive HTTPS choice starts on the current answer, else on Eigen handling it', async () => {
-        const toHttps = [
+        const toHttps = (hint: string) => [
             { when: 'Where will Eigen be hosted', keys: '\r' },
             { when: 'Which mail domain', keys: '\r' },
-            { when: 'How do people reach Eigen over HTTPS', keys: '\x03' },
+            { when: hint, keys: '\x03' },
         ];
         const rerun = tempDir();
         writeFileSync(join(rerun, '.env.production'), INSTALLED.replace('edge,mail', 'static,mail'));
-        const behind = await runInTerminal(rerun, [], {}, toHttps);
+        const behind = await runInTerminal(rerun, [], {}, toHttps('nginx, Apache, Caddy, a NAS'));
         expect(behind.code).toBe(130);
         expect(behind.output).toContain('nginx, Apache, Caddy, a NAS');
         expect(behind.output).not.toContain('gets its own certificate');
 
         const fresh = tempDir();
         writeFileSync(join(fresh, '.env.production'), INSTALLED);
-        const edge = await runInTerminal(fresh, [], {}, toHttps);
+        const edge = await runInTerminal(fresh, [], {}, toHttps('gets its own certificate'));
         expect(edge.code).toBe(130);
         expect(edge.output).toContain('gets its own certificate');
         expect(edge.output).not.toContain('nginx, Apache');
