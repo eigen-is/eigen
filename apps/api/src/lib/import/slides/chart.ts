@@ -1,13 +1,11 @@
 import { FLAT_CHART_PAINT } from '@workspace/lib/charts';
 import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { DrawingTheme } from '../../core/drawingml';
-import { ApiError } from '../../core/errors';
 import { C_NS, R_NS } from '../../core/ooxml';
 import { readChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { PRESENTATION_TOO_LARGE } from '../messages';
 import { cachedBy, childOf, prefixedAttrOf } from './lookup';
-import { type DeckWalk, MAX_PPTX_XML_TAGS, type Part } from './package';
+import type { DeckWalk, Part } from './package';
 
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
 // value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed.
@@ -26,10 +24,6 @@ export const CHART_PAINT = {
     roughness: FLAT_CHART_PAINT.roughness,
 } satisfies VectorElementPatch;
 
-// A chart part's elements are read again for every colour map a slide paints it with, and the reader scans an element
-// for each lookup into it: twice the parse budget's tags, so the slides' maps can't read one large part 500 times.
-export const MAX_CHART_NODES = 2 * MAX_PPTX_XML_TAGS;
-
 const read = cachedBy<DrawingTheme, FrameChart>();
 
 // The chart a:graphicData names through the relationships of the part it is in; none when the part is missing, of
@@ -41,8 +35,8 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
     return (
         root &&
         read(root, colors, () => {
-            deck.chartNodes += nodesIn(root);
-            if (deck.chartNodes > MAX_CHART_NODES) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+            // Read again for every colour map a slide paints it with, so each read is charged its elements.
+            deck.read(nodesIn(root));
             const answer = readChart(root, { theme: colors, data: 'cache' });
             return 'spec' in answer ? { chart: JSON.stringify(answer.spec) } : answer;
         })

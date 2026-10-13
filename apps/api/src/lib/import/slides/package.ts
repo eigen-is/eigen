@@ -81,8 +81,6 @@ export type DeckWalk = {
     // Children walked and elements written, each capped: a master's shapes count again for every slide.
     shapes: number;
     elements: number;
-    // Chart parts' elements read: a part's again for each colour map it is painted with.
-    chartNodes: number;
     // The update's weight so far, charged as each frame and element is written.
     weight: number;
     // A layout's or master's elements and the children walked for them, by part and colour map: read once, copied onto
