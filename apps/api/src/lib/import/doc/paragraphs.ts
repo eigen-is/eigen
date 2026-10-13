@@ -365,7 +365,7 @@ function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
         const props = mergeRun(paraRun, reader.styles.run(direct.style), direct);
         return xmlElements(run)
             .filter((child) => hasXmlName(child, W_NS, 't'))
-            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, reader.pkg.chargePiece))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true))
             .filter((face) => face.text.trim())
             .map((face) => ({ ...face, direct }));
     });

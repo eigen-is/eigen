@@ -81,13 +81,12 @@ function faceOf(fonts: Fonts | undefined, slot: (typeof FONT_SLOTS)[number]): st
 
 // A run's text in the faces Word draws it in, split where the face changes or, where the complex script draws in a
 // look of its own (its bold, italic and size), where complex script starts or ends; Latin text in one face is one
-// piece. split charges each piece past the first before it is built.
+// piece.
 export function byFace(
     text: string,
     fonts: Fonts | undefined,
     script: Script,
     complexLook: boolean,
-    split?: () => void,
 ): { text: string; font?: string; complex: boolean }[] {
     const latin = !script.complex && !SCRIPTED.test(text) && (script.hint !== 'eastAsia' || !NON_ASCII.test(text));
     if (latin && faceOf(fonts, 'ascii') === faceOf(fonts, 'hAnsi'))
@@ -102,7 +101,6 @@ export function byFace(
         const last = pieces.at(-1);
         if (!last || last.font !== font || last.complex !== complex) {
             if (last) {
-                split?.();
                 last.text = text.slice(start, end);
                 start = end;
             }

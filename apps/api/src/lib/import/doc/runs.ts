@@ -334,7 +334,7 @@ function marksOf(
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
     if (full.vanish) return [];
     if (absorbed === 'all') {
-        const faces = byFace(text, full.fonts, full, false, reader.pkg.chargePiece);
+        const faces = byFace(text, full.fonts, full, false);
         return faces.map((face) => ({ ...face, marks: [], small: false }));
     }
     const own = { ...paraRun };
@@ -354,7 +354,7 @@ function marksOf(
     };
     const complexLook =
         !!props.boldCs !== !!props.bold || !!props.italicCs !== !!props.italic || isSmall(true) !== isSmall(false);
-    const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
+    const faces = byFace(text, full.fonts, full, complexLook);
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];
