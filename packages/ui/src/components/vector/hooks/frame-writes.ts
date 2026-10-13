@@ -1,5 +1,5 @@
-// The frame-writing primitives over a canvas Y.Doc: fresh ids, the fractional index, and the
-// delete/duplicate passes that must also move the frame's ELEMENTS. Plain functions over the doc, the
+// The frame-writing primitives over a canvas Y.Doc: fresh ids, the fractional index, the
+// delete/duplicate passes that must also move the frame's ELEMENTS, and the meta keys that size them. Plain functions over the doc, the
 // way element-writes.ts is, so the hook stays the thin React surface.
 
 import {
@@ -11,6 +11,7 @@ import {
     readVectorFromDoc,
     storedFields,
     type VectorFrame,
+    type VectorMeta,
 } from '@workspace/lib/vector';
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
@@ -136,6 +137,15 @@ export function updateFramesInDoc(doc: Y.Doc, patches: { id: string; fields: Par
                 if (key === 'id' || value === undefined) continue;
                 if (FRAME_FIELDS.includes(key)) map.set(key, value);
             }
+        }
+    });
+}
+
+export function updateMetaInDoc(doc: Y.Doc, fields: Partial<VectorMeta>): void {
+    doc.transact(() => {
+        const metaMap = doc.getMap('meta');
+        for (const [key, value] of Object.entries(fields)) {
+            if (value !== undefined) metaMap.set(key, value);
         }
     });
 }

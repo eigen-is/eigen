@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import type { NewVectorElement } from '../hooks/use-canvas-doc';
 import type { KindEditDialogProps, KindPanelSectionProps } from './index';
 
-// Google's defaults: a drawing's chart, and a chart filling most of a 1920 × 1080 slide.
+// Google's defaults: a drawing's chart, and a chart filling most of a 16:9 slide (1920 × 1080).
 const NEW_CHART_SIZE = { infinite: { width: 640, height: 400 }, frame: { width: 1200, height: 675 } };
 
 // In the host's font, which the spec carries from then on.

@@ -151,7 +151,7 @@ Before layout, `sanitizeSceneHtml` filters every text box to `LIGHT_EDITOR_TAGS`
 
 ## A deck prints each frame at half scale
 
-A frame is the page: 1920 by 1080, and an overhanging element is clipped as the canvas clips it. The page renders at 0.5, 960 by 540 px, because a 1920 px `@page` is a 20-inch sheet. The HTML download wraps each page in a `.page-fit` box that scales it to the viewport, so a deck reads on a phone, with a `@media` ladder first for a browser that cannot divide `100cqw` by a length. The PDF keeps the pages unscaled, because WeasyPrint has no viewport. The `.page-fit` rules mirror `packages/ui/src/styles/globals.css`, since a standalone file cannot import it.
+A frame is the page, at the deck's slide size, and an overhanging element is clipped as the canvas clips it. Every frame is 1920 wide, so the page renders at 0.5: 960 by 540 px for 16:9 and 960 by 720 px for 4:3, which is 254 × 142.875 mm and 254 × 190.5 mm, Google's PDF sizes. A 1920 px `@page` would be a 20-inch sheet. The HTML download wraps each page in a `.page-fit` box that scales it to the viewport, so a deck reads on a phone, with a `@media` ladder first for a browser that cannot divide `100cqw` by a length. The PDF keeps the pages unscaled, because WeasyPrint has no viewport. The `.page-fit` rules mirror `packages/ui/src/styles/globals.css`, since a standalone file cannot import it.
 
 ## A drawing downloads its own SVG and prints as layers
 

@@ -33,6 +33,7 @@ import {
     duplicateFrameInDoc,
     moveFrameInDoc,
     updateFramesInDoc,
+    updateMetaInDoc,
 } from './frame-writes';
 
 // Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
@@ -350,15 +351,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     const updateMeta = useCallback(
         (fields: Partial<VectorMeta>) => {
             const doc = docRef.current;
-            if (!doc) return;
-            sealed(undoManager, () =>
-                doc.transact(() => {
-                    const metaMap = doc.getMap('meta');
-                    for (const [key, value] of Object.entries(fields)) {
-                        if (value !== undefined) metaMap.set(key, value);
-                    }
-                }),
-            );
+            if (doc) sealed(undoManager, () => updateMetaInDoc(doc, fields));
         },
         [undoManager],
     );
