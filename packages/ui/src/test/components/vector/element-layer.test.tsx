@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
@@ -156,6 +156,53 @@ describe('the layer box', () => {
     test('opacity rides on the layer, and only below full', () => {
         expect(renderToStaticMarkup(<ElementLayer el={rect({ ...box, opacity: 40 })} />)).toContain('opacity:0.4');
         expect(renderToStaticMarkup(<ElementLayer el={rect({ ...box, opacity: 100 })} />)).not.toContain('opacity');
+    });
+});
+
+describe('a move re-places the layer and keeps its body', () => {
+    // A drag hands the layer a fresh element per frame. A kind draws in its local frame, so its body
+    // never reads the position, turn or opacity: re-running its render per frame (a full chart costs
+    // hundreds of ms) would only redraw what the box already moved.
+    async function rendersFor(kind: 'rectangle' | 'arrow', frames: React.ReactNode[]): Promise<[number, string]> {
+        const render = spyOn(ELEMENT_KINDS[kind], 'render');
+        const container = document.createElement('div');
+        document.body.append(container);
+        const root = createRoot(container);
+        for (const frame of frames) await act(async () => root.render(frame));
+        const html = container.innerHTML;
+        await act(async () => root.unmount());
+        container.remove();
+        const calls = render.mock.calls.length;
+        render.mockRestore();
+        return [calls, html];
+    }
+
+    test("a move, a turn and a fade re-place the box without running the kind's render again", async () => {
+        const [calls, html] = await rendersFor('rectangle', [
+            <ElementLayer key="r" el={rect()} />,
+            <ElementLayer key="r" el={rect({ x: 30, y: 20, angle: 15, opacity: 50 })} />,
+        ]);
+        expect(calls).toBe(1);
+        expect(html).toContain('transform: translate(30px,20px) rotate(15deg)');
+        expect(html).toContain('opacity: 0.5');
+    });
+
+    test('a restyle runs the render again', async () => {
+        const [calls] = await rendersFor('rectangle', [
+            <ElementLayer key="r" el={rect()} />,
+            <ElementLayer key="r" el={rect({ fill: solidFill('#ff0000') })} />,
+        ]);
+        expect(calls).toBe(2);
+    });
+
+    test('a derived elbow arrow re-routes when it moves, because its route is local to its origin', async () => {
+        const byId = new Map([['r1', rect()]]);
+        const el = elbow();
+        const [calls] = await rendersFor('arrow', [
+            <ElementLayer key="a" el={el} byId={byId} />,
+            <ElementLayer key="a" el={{ ...el, x: el.x + 20 }} byId={byId} />,
+        ]);
+        expect(calls).toBe(2);
     });
 });
 
