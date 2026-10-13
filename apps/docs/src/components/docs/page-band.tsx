@@ -16,7 +16,6 @@ type PageBandProps = {
     edge: 'top' | 'bottom';
     // The page's margin on that edge, in mm.
     margin: number;
-    textColumnWidth: () => number;
     onOpen?: () => void;
 };
 
@@ -25,8 +24,8 @@ type PageBandProps = {
 // band taller than the room pushes the body, as Word does. A non-editable editor on the band's root, so a
 // collaborator's edit shows as it lands and an image resolves as in the body; it sets no caret, or it would clear the
 // one the band's own editor sets. A click on a link follows the link rather than opening the panel.
-export function PageBand({ media, yDoc, field, edge, margin, textColumnWidth, onOpen }: PageBandProps) {
-    const editor = useDocEditor({ media, yDoc, provider: null, editable: false, target: { field }, textColumnWidth });
+export function PageBand({ media, yDoc, field, edge, margin, onOpen }: PageBandProps) {
+    const editor = useDocEditor({ media, yDoc, provider: null, editable: false, target: { field } });
     const hasContent = useEditorState({ editor, selector: ({ editor: e }) => bandHasContent(e.state.doc) });
     const pull = `calc(${BAND_DISTANCE_MM}mm - ${margin}mm)`;
     const room = `max(0mm, ${margin}mm - ${BAND_DISTANCE_MM}mm)`;

@@ -3,10 +3,12 @@ import type { JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables } from '@tiptap/pm/tables';
 import { docSchema } from '../../../lib/document/doc-schema';
-import { COLUMN_PX } from '../../../lib/import/doc/assemble';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
+
+// No body here has a section, so Word's: A4 less its 1 in margins, a 601 px text column.
+const COLUMN_PX = 601;
 
 const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
@@ -139,7 +141,7 @@ describe('column widths', () => {
     test('a grid wider than the text column scales down to it, column by column', async () => {
         const { json } = await importDocxBody(gridded([3000, 6000, 6735], [cell('a'), cell('b'), cell('c')]));
         const widths = colwidths(json);
-        expect(widths).toEqual([[122], [245], [275]]);
+        expect(widths).toEqual([[115], [229], [257]]);
         expect(widths.flat().reduce((sum, width) => sum + width, 0)).toBe(COLUMN_PX);
     });
 

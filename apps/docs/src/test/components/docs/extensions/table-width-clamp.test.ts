@@ -23,18 +23,13 @@ const cell = (attrs: CellAttrs, text = 'x') => ({
 });
 const row = (...cells: object[]) => ({ type: 'tableRow', content: cells });
 
-// Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it.
 async function mount(rows: object[], editable = true) {
     const editor = new Editor({
         editable,
-        extensions: [...getDocExtensions(), TableWidthClamp],
+        extensions: [...getDocExtensions(), TableWidthClamp.configure({ textColumnWidth: () => COLUMN_PX })],
         content: { type: 'doc', content: [{ type: 'table', content: rows }] },
     });
-    const rendered = await renderInDocument(
-        createElement('div', { 'data-document': '', style: { padding: 0 } }, createElement(EditorContent, { editor })),
-    );
-    const page = document.querySelector('[data-document]');
-    if (page) Object.defineProperty(page, 'clientWidth', { value: COLUMN_PX });
+    const rendered = await renderInDocument(createElement(EditorContent, { editor }));
     unmount = async () => {
         await rendered.unmount();
         editor.destroy();

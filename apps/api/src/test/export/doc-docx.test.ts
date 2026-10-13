@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_PAGE_SETUP, type PageSetup } from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
 import { parseOoxml } from '../../lib/core/ooxml';
@@ -31,12 +32,22 @@ const NONCHARACTER = String.fromCharCode(0xfffe);
 const schema = docSchema();
 
 // Every doc gets the all-features media; the writer embeds only what a figure shows.
-function docx(json: JSONContent, publicOrigin?: string, media = buildAllFeaturesDocMedia()): Promise<Uint8Array> {
-    return eigendocToDocx(json, media, 'Report.eigendoc', publicOrigin);
+function docx(
+    json: JSONContent,
+    publicOrigin?: string,
+    media = buildAllFeaturesDocMedia(),
+    page: PageSetup = DEFAULT_PAGE_SETUP,
+): Promise<Uint8Array> {
+    return eigendocToDocx(json, page, media, 'Report.eigendoc', publicOrigin);
 }
 
-async function unzip(json: JSONContent, publicOrigin?: string, media?: ExportMedia[]): Promise<ZipReader> {
-    return openZip(await docx(json, publicOrigin, media));
+async function unzip(
+    json: JSONContent,
+    publicOrigin?: string,
+    media?: ExportMedia[],
+    page?: PageSetup,
+): Promise<ZipReader> {
+    return openZip(await docx(json, publicOrigin, media, page));
 }
 
 function entryText(zip: ZipReader, path: string): string | undefined {
@@ -51,8 +62,13 @@ async function part(zip: ZipReader, path: string): Promise<XmlElement> {
     return root;
 }
 
-async function bodyOf(json: JSONContent, publicOrigin?: string, media?: ExportMedia[]): Promise<XmlElement> {
-    const body = xmlChild(await part(await unzip(json, publicOrigin, media), 'word/document.xml'), W, 'body');
+async function bodyOf(
+    json: JSONContent,
+    publicOrigin?: string,
+    media?: ExportMedia[],
+    page?: PageSetup,
+): Promise<XmlElement> {
+    const body = xmlChild(await part(await unzip(json, publicOrigin, media, page), 'word/document.xml'), W, 'body');
     if (!body) throw new Error('no w:body');
     return body;
 }
@@ -1646,8 +1662,10 @@ describe('docx writer — figures', () => {
         `<w:p><w:pPr><w:spacing w:before="${before}" w:after="${after}" w:line="240" w:lineRule="auto"/>${ind}<w:jc w:val="${jc}"/></w:pPr>${runs}</w:p>`;
 
     // The width of each figure's extent, in px.
-    async function widthsOf(json: JSONContent): Promise<number[]> {
-        return descendants(await bodyOf(json), WP, 'extent').map((extent) => Number(xmlAttr(extent, '', 'cx')) / 9525);
+    async function widthsOf(json: JSONContent, page?: PageSetup): Promise<number[]> {
+        return descendants(await bodyOf(json, undefined, undefined, page), WP, 'extent').map(
+            (extent) => Number(xmlAttr(extent, '', 'cx')) / 9525,
+        );
     }
 
     async function relationshipsOf(zip: ZipReader) {
@@ -1731,6 +1749,13 @@ describe('docx writer — figures', () => {
         ['300', COLUMN_PX],
     ])('width %p shows %p px wide, inside the column', async (width, px) => {
         expect(await widthsOf(doc(p(figure({ ...CHART, width }))))).toEqual([px]);
+    });
+
+    // 5 cm margins on A4 leave 6236 twips of column, 415 whole px.
+    test("a figure wider than the doc's narrowed column writes at the column", async () => {
+        const narrow = { ...DEFAULT_PAGE_SETUP, margin: { top: 20, right: 50, bottom: 20, left: 50 } };
+        expect(await widthsOf(doc(p(figure({ ...CHART, width: 600 }))), narrow)).toEqual([415]);
+        expect(await widthsOf(doc(p(figure({ ...CHART, width: 600 }))))).toEqual([600]);
     });
 
     test('without a width a figure is its natural size, capped at the column, half of it when wrapped', async () => {

@@ -17,7 +17,7 @@ import {
 import { userColor } from '@workspace/lib/constants/colors';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
-import { BAND_EXCLUDED_NODES, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { BAND_EXCLUDED_NODES, getDocExtensions, PAGE_ROOT, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -195,7 +195,6 @@ type DocEditorOptions = {
     figure?: Partial<FigureOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
-    textColumnWidth: () => number;
     media: () => DocMedia;
     editor: () => Editor | null;
 };
@@ -210,12 +209,17 @@ export function docEditorOptions({
     coarsePointer,
     figure,
     extensions = [],
-    textColumnWidth,
     media,
     editor,
 }: DocEditorOptions): UseEditorOptions {
     const band = 'field' in target;
     const cardIds = band ? () => NO_CARDS : target.cardIds;
+    // The page map, not the page on screen: an update that changes the content and the page together reaches the
+    // editor before React draws the new page. A band prints in the body's column.
+    const textColumnWidth = () => {
+        const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
+        return width - margin.left - margin.right;
+    };
     return {
         editable,
         extensions: [
@@ -232,7 +236,7 @@ export function docEditorOptions({
             EditorTable.configure({ resizable: !coarsePointer }),
             Figure.configure(figure),
             PageNumber,
-            TableWidthClamp,
+            TableWidthClamp.configure({ textColumnWidth }),
             AtomMarks,
             ...extensions,
             Collaboration.configure(

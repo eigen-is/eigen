@@ -50,7 +50,6 @@ import {
     selectCommentAnchor,
     updateCommentDecorations,
 } from './extensions/comment-mark';
-import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { type BandRequest, HeadersFootersPanel } from './headers-footers-panel';
 import { useActiveComments } from './hooks/use-active-comments';
@@ -182,8 +181,6 @@ const TiptapEditor = ({
     const page = pagePx(pageSetup);
     // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
     const textColumnRight = page.width - page.margin.right;
-    const textColumnWidthRef = useRef(0);
-    textColumnWidthRef.current = textColumnRight - page.margin.left;
 
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
@@ -191,10 +188,6 @@ const TiptapEditor = ({
         const entry = card.chatName ? allCommentsRef.current.find((c) => c.chatName === card.chatName) : undefined;
         return { card, entry };
     };
-
-    const getEditorMaxWidth = useCallback(() => {
-        return textColumnWidth(documentRef.current) ?? textColumnWidthRef.current;
-    }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
     // Past this the panel clears the centered page outright and every value below is pinned, so the math stops there.
@@ -256,14 +249,13 @@ const TiptapEditor = ({
                     onToggleCommentPanel: toggleComments,
                 }),
             ],
-            textColumnWidth: getEditorMaxWidth,
         },
         [handleCommentClick],
     );
     // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
     const editorRef = useRef<Editor | null>(null);
     editorRef.current = editor;
-    const bands = useBandEditors({ media, yDoc, provider, editable: canWrite, textColumnWidth: getEditorMaxWidth });
+    const bands = useBandEditors({ media, yDoc, provider, editable: canWrite });
 
     // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector.
     const { canUndo, canRedo } = useEditorState({
@@ -550,7 +542,6 @@ const TiptapEditor = ({
                                             field={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
                                             edge="top"
                                             margin={pageSetup.margin.top}
-                                            textColumnWidth={getEditorMaxWidth}
                                             onOpen={
                                                 openBands &&
                                                 (() =>
@@ -569,7 +560,6 @@ const TiptapEditor = ({
                                             field="footer"
                                             edge="bottom"
                                             margin={pageSetup.margin.bottom}
-                                            textColumnWidth={getEditorMaxWidth}
                                             onOpen={openBands && (() => openBands({ band: 'footer' }))}
                                         />
                                     </div>

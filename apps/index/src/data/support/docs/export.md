@@ -41,7 +41,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Tables keep their column widths and borders, and a header row repeats on every page.
 - Code blocks keep their colors, and quotes keep the bar along their left edge.
 
-The PDF and the Word file use an A4 page with 2 cm margins, even when the document's page setup is different.
+The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**.
 
 <div class="eigen-callout">
 

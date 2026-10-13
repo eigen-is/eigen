@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
@@ -561,7 +562,13 @@ describe('both sides', () => {
     // size, so the photo the doc leaves at its own width has one there, and a page number is its field's cached 1.
     test("the writer's docx holds what its doc holds", async () => {
         const json = withoutEquations(buildAllFeaturesDocJson());
-        const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
+        const docx = await eigendocToDocx(
+            json,
+            DEFAULT_PAGE_SETUP,
+            buildAllFeaturesDocMedia(),
+            'Report.eigendoc',
+            undefined,
+        );
         const written = auditSource(docx);
         const cached = (node: JSONContent): JSONContent =>
             node.type === 'pageNumber' ? { type: 'text', text: '1' } : { ...node, content: node.content?.map(cached) };
