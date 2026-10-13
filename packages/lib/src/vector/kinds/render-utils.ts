@@ -27,6 +27,9 @@ import {
 // the documents scene-to-svg serializes, a standalone chart and the live <svg> nodes the canvas mounts.
 export const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// The most degrees of a slice's arc one cubic draws.
+const ARC_PIECE = 45;
+
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
@@ -89,14 +92,24 @@ function med(a: number[], b: number[]): number[] {
 }
 
 function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
-    // A whole slice is the ellipse: roughjs's arc would draw its two radii as a seam.
+    // A whole slice is the ellipse: a slice's path would draw its two radii as a seam.
     if (el.type === 'ellipse' || (el.type === 'pie' && el.sweepAngle >= 360)) {
         return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
     }
+    // A slice is SVG arcs, as a rounded corner is: roughjs's own arc samples 20° steps at any size and leads in
+    // from inside the rim, which facets a large slice. roughjs draws an arc as one cubic per up to 120°, which
+    // bulges 0.15% of the radius; one per ARC_PIECE bulges as little as its ellipse.
     if (el.type === 'pie') {
-        const start = el.startAngle * DEG_TO_RAD;
-        const stop = (el.startAngle + el.sweepAngle) * DEG_TO_RAD;
-        return gen.arc(el.width / 2, el.height / 2, el.width, el.height, start, stop, true, roughOptions(el, false));
+        const rx = el.width / 2;
+        const ry = el.height / 2;
+        const rim = (deg: number) =>
+            `${round(rx + rx * Math.cos(deg * DEG_TO_RAD))} ${round(ry + ry * Math.sin(deg * DEG_TO_RAD))}`;
+        const pieces = Math.ceil(el.sweepAngle / ARC_PIECE);
+        let d = `M ${round(rx)} ${round(ry)} L ${rim(el.startAngle)}`;
+        for (let i = 1; i <= pieces; i++) {
+            d += ` A ${round(rx)} ${round(ry)} 0 0 1 ${rim(el.startAngle + (el.sweepAngle * i) / pieces)}`;
+        }
+        return gen.path(`${d} Z`, roughOptions(el, true));
     }
     const box = { x: 0, y: 0, width: el.width, height: el.height };
     const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
