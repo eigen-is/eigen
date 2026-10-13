@@ -14,8 +14,8 @@ afterEach(async () => {
     cleanup = undefined;
 });
 
-// An image whose file is gone draws as missing, and must still select like any image, so it can be deleted.
-test('a missing image selects on click', async () => {
+// An image whose file is gone draws as missing, and must still select like any image, so Delete removes it.
+test('a missing image selects on click and Delete removes it', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -51,4 +51,11 @@ test('a missing image selects on click', async () => {
     if (!image) throw new Error('the missing image did not draw');
     await act(async () => image.click());
     expect(container.querySelector('#sheet-modal-dialog-activeImage')).not.toBeNull();
+
+    // The key goes where the user's focus is, so the selected image must hold it.
+    await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    });
+    expect(container.querySelector('#gone')).toBeNull();
+    expect(container.querySelector('#sheet-modal-dialog-activeImage')).toBeNull();
 });
