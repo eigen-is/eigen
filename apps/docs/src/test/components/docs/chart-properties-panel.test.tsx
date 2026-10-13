@@ -68,6 +68,29 @@ const click = (target: HTMLElement) =>
     act(async () => {
         target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+// A row's control sits beside its label span.
+const row = (label: string) => {
+    const span = [...document.querySelectorAll('span.w-14')].find((s) => s.textContent?.trim() === label);
+    const control = span?.nextElementSibling;
+    if (!(control instanceof HTMLElement)) throw new Error(`no "${label}" row`);
+    return control;
+};
+const choose = async (label: string, option: string) => {
+    const trigger = row(label).querySelector('[data-slot="select-trigger"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const list = [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
+    const item = [...(list?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])].find(
+        (el) => el.textContent?.trim() === option,
+    );
+    if (!item) throw new Error(`no "${option}" option under "${label}"`);
+    await act(async () => {
+        item.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+};
 // The grid opens on A1, as a sheet does, so B2 is selected before it is typed in.
 const typeInB2 = async (value: string) => {
     const b2 = dialog()?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
@@ -169,6 +192,26 @@ test("a Style toggle wraps the chart in one undo step and lights it, the spec's 
 
     undoManager.undo();
     expect(editor.state.doc.nodeAt(1)?.attrs.layout).toBe('block');
+});
+
+test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {
+    const { undoManager, spec } = await mount();
+    expect(row('Period 1').textContent).toBe('Automatic');
+    expect(row('Period 2').textContent).toBe('Automatic');
+
+    await click(row('Period 2').querySelector('button') ?? document.body);
+    const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
+    if (!swatch) throw new Error('the color popover has no swatch');
+    await click(swatch);
+    const picked = spec();
+    expect(picked?.data.series.map((series) => series.color)).toEqual([null, swatch.title]);
+    undoManager.undo();
+    expect(spec()?.data.series.map((series) => series.color)).toEqual([null, null]);
+
+    await choose('Stacking', '100%');
+    expect(spec()?.stacking).toBe('percent');
+    undoManager.undo();
+    expect(spec()?.stacking).toBe('none');
 });
 
 test('Edit data saves the grid as one undo step', async () => {
