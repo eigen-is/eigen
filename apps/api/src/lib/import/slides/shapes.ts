@@ -13,7 +13,7 @@ import {
 } from '@workspace/lib/vector';
 import { drawingLines } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, ASVG_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, ASVG_NS, C_NS, DGM_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { POINTS_PER_UNIT } from '../doc/package';
@@ -32,7 +32,7 @@ import {
     spTreeOf,
 } from './inherit';
 import { alternative, type MediaPart, type Part, type PptxPackage } from './package';
-import { richTextOf } from './text';
+import { EMU_PER_POINT, richTextOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
@@ -66,16 +66,15 @@ type Dropped = keyof typeof DROPPED;
 
 const GRAPHIC_KINDS = new Map<string, Dropped>([
     ['http://schemas.openxmlformats.org/drawingml/2006/table', 'table'],
-    ['http://schemas.openxmlformats.org/drawingml/2006/chart', 'chart'],
-    ['http://schemas.microsoft.com/office/drawing/2014/chartex', 'chart'],
-    ['http://schemas.openxmlformats.org/drawingml/2006/diagram', 'diagram'],
+    [C_NS, 'chart'],
+    [DGM_NS, 'diagram'],
     ['http://schemas.openxmlformats.org/presentationml/2006/ole', 'ole'],
 ]);
 
 const PLACEHOLDER_BOX = { fill: '#f1f3f4', stroke: '#9aa0a6', text: '#5f6368' };
 
 // A head or tail end of a:ln as the arrowhead that draws closest.
-const ARROWHEADS = new Map<string, Arrowhead>([
+const ARROWHEAD_BY_END = new Map<string, Arrowhead>([
     ['triangle', 'triangle'],
     ['stealth', 'triangle'],
     ['arrow', 'arrow'],
@@ -137,7 +136,8 @@ type Xfrm = {
 function emu(value: string | undefined): number | undefined {
     const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
     const points = POINTS_PER_UNIT.get(unit);
-    const result = unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * 12_700;
+    const result =
+        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
     return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
 }
 
@@ -430,7 +430,7 @@ function titleOf(body: XmlElement): string {
     return Array.from(text).slice(0, MAX_TITLE_CHARS).join('');
 }
 
-const TRANSPARENT_FILL_JSON = serializeFill({ type: 'solid', color: TRANSPARENT_COLOR, style: 'solid' });
+const TRANSPARENT_FILL_JSON = PPTX_STYLE.fill;
 
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 const NO_STROKE: Stroke = { strokeColor: TRANSPARENT_COLOR, strokeWidth: PPTX_STYLE.strokeWidth, strokeStyle: 'solid' };
@@ -486,7 +486,7 @@ function lineOf(placed: Placed, stroke: Stroke, spPrs: XmlElement[]): NewVectorE
     const ln = spPrs.map((spPr) => xmlChild(spPr, A_NS, 'ln')).find((found) => found !== undefined);
     const head = (local: string) => {
         const decoration = ln && xmlChild(ln, A_NS, local);
-        return ARROWHEADS.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
+        return ARROWHEAD_BY_END.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
     };
     const line = {
         x,

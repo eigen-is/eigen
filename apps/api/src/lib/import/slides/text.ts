@@ -41,7 +41,7 @@ export type RichTextFields = Pick<
     | 'padding'
 >;
 
-const EMU_PER_POINT = 12_700;
+export const EMU_PER_POINT = 12_700;
 // ECMA-376's default run size, 18 pt, in hundredths of a point.
 const DEFAULT_SIZE = 1800;
 

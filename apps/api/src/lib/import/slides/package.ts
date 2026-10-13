@@ -2,6 +2,7 @@ import { ApiError } from '../../core/errors';
 import { alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 
 // The parts the reader parses, together: presentation, slides, layouts, masters and themes (a tree's cost: core/xml.ts).
@@ -41,14 +42,8 @@ const PART_TYPES = {
 };
 export type PartKind = keyof typeof PART_TYPES;
 
-// Pictures are read raw, never parsed, and only these: the media a slide shows.
-const IMAGE_EXTENSION_BY_MIME = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-    ['image/gif', 'gif'],
-    ['image/svg+xml', 'svg'],
-]);
-const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
+// Pictures are read raw, never parsed, and only these of the types an import stores: the media a slide shows.
+const SLIDE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml']);
 
 export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 export type MediaPart = { path: string; contentType: string; extension: string; size: number };
@@ -152,7 +147,8 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
                 return undefined;
             const declared = pkg.contentTypeOf(rel.target);
             const contentType = declared && (MIME_ALIASES.get(declared) ?? declared);
-            const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
+            const extension =
+                contentType && SLIDE_IMAGE_TYPES.has(contentType) && IMAGE_EXTENSION_BY_MIME.get(contentType);
             const entry = pkg.zip.entry(rel.target);
             return contentType && extension && entry
                 ? { path: rel.target, contentType, extension, size: entry.size }
