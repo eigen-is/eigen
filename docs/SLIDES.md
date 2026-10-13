@@ -4,11 +4,12 @@
 
 A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document ([COLLAB.md](COLLAB.md)). Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
 
-So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Three things in it surprise people:
+So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Four things in it surprise people:
 
 - The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
 - A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
 - A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
+- An import appends under fresh ids and never rewrites what the deck holds ([§ An import appends and never rewrites the deck](#an-import-appends-and-never-rewrites-the-deck)).
 
 ## A slide is a frame, and the shell adds only the deck's words
 
@@ -18,7 +19,7 @@ The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fit
 
 ## The first writer seeds an empty deck
 
-Nothing server-side writes a container's initial Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
+Creating a deck writes no Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
 
 The reader reads only `elements`, `frames` and `meta`. A deck with no frames is empty whatever other roots it holds, so a deck stored in an older format opens as a new one and gets seeded. That follows the pre-1.0 rule of no backward compatibility for stored formats ([ROADMAP.md](ROADMAP.md)).
 
@@ -45,6 +46,14 @@ A click moves forward and a right-click back, and a clicker's arrow, Page and sp
 The background panel (`slide-background-panel.tsx`) mounts in the engine panel's no-selection slot (`emptySection`), because "this and following" is a slides idea the engine doesn't have. Editing paints the current slide. The Apply button sends that paint to this slide, this and following, or all slides (`targetFrameIds` in `apply-to.ts`). So recoloring the deck is an explicit act, never a side effect of a color drag. A stale slide id applies to nothing, never to the deck.
 
 A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover` or `contain`. `getBackgroundStyle` renders it on the canvas, the rail and in present mode, and `backgroundCss` renders it on the server, so a gradient prints the way it looks. An image is copied into the container's `media/` folder and stored by name ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)).
+
+## An import appends and never rewrites the deck
+
+The server writes an imported deck with `apps/api/src/lib/document/slides.ts`. The import arrives as a Yjs update built from an untrusted pptx, so it is first read back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)).
+
+The write appends in one transaction. Every slide and element gets a fresh id and an index after the deck's topmost, in the update's own order. Element frame ids and arrow bindings are remapped to the new ids, and an imported element starts with no comment cards. Nothing already in the deck is cleared or rewritten, because an open tab's undo stack and its comments point at those Y.Maps. The work is linear in the update's records.
+
+`writeSlidesUpdateToYjs` fills a brand-new deck, so it also writes the update's `meta`. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone.
 
 ## Export and preview render the pages the canvas draws
 

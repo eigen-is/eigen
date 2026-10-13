@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1733 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1737 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -835,6 +835,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Layer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `NewVectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `OutlineShape` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
@@ -854,6 +855,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorDiamondElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorElementPatch` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorEllipseElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -924,14 +926,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameCardProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `CanvasHandle` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
-| `NewVectorElement` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
-| `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-doc.ts |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (838)
+## Utilities & constants (842)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1611,6 +1611,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `nearestPoint` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `NEW_TEXT_BOX_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
+| `newElementId` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
+| `newFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1644,6 +1646,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `prop` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `randomSeed` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `readClipboardTypography` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `readElementFromFields` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `readElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
@@ -1697,6 +1700,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
+| `topmostIndex` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
@@ -1706,6 +1710,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `writeElementInDoc` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
+| `writeFrameInDoc` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `escapeXml` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
@@ -1763,8 +1769,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
-| `writeElementInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/element-writes.ts |
-| `writeFrameInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `isLayerAbove` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
