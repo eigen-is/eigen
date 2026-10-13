@@ -2,6 +2,7 @@
 // alone holds Import slides…, and the drawing's File menu has no import row at all.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types/drive';
+import type { CanvasHandle } from '../../../components/vector/canvas-editor';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -32,11 +33,11 @@ async function fileMenuEntries(props: Partial<Parameters<typeof CanvasToolbar>[0
         offline: false,
         storageUnavailable: false,
         undoManager: null,
-        tool: 'selection',
+        tool: 'select',
         setTool: () => {},
         toolLocked: false,
         setToolLocked: () => {},
-        canvasRef: createRef(),
+        canvasRef: createRef<CanvasHandle>(),
         onAccessDialogOpen: () => {},
         onToggleCommentPanel: () => {},
         commentPanelOpen: false,
