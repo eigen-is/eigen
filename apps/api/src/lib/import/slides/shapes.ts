@@ -86,10 +86,13 @@ const ARROWHEADS = new Map<string, Arrowhead>([
 // PowerPoint's line when a:ln states no width: 0.75 pt.
 const DEFAULT_LINE_EMU = 9525;
 
+export type Frame = { width: number; height: number };
+
 // What a walk over one deck shares: its budget, its pictures, its losses.
 export type DeckWalk = {
     pkg: PptxPackage;
-    // The frame's px per EMU, and where the slide's origin lands in the frame.
+    // The frame's size, its px per EMU, and where the slide's origin lands in it.
+    frame: Frame;
     scale: number;
     offset: { x: number; y: number };
     // Children walked and elements written, each capped: a master's shapes are walked again for every slide.
@@ -104,32 +107,19 @@ export type DeckWalk = {
 
 export type SlideShapes = { elements: NewVectorElement[]; title: string };
 
-// x' = a·x + c·y + e, y' = b·x + d·y + f: from a shape tree's coordinates, in EMU, to the frame's px.
-type Affine = [a: number, b: number, c: number, d: number, e: number, f: number];
+// x' = a·x + c·y, y' = b·x + d·y: a turn after the flips, as DrawingML applies them about a box's centre.
+type Turn = [a: number, b: number, c: number, d: number];
 
-function compose(m: Affine, n: Affine): Affine {
-    return [
-        m[0] * n[0] + m[2] * n[1],
-        m[1] * n[0] + m[3] * n[1],
-        m[0] * n[2] + m[2] * n[3],
-        m[1] * n[2] + m[3] * n[3],
-        m[0] * n[4] + m[2] * n[5] + m[4],
-        m[1] * n[4] + m[3] * n[5] + m[5],
-    ];
+function apply(m: Turn, x: number, y: number): { x: number; y: number } {
+    return { x: m[0] * x + m[2] * y, y: m[1] * x + m[3] * y };
 }
 
-function apply(m: Affine, x: number, y: number): { x: number; y: number } {
-    return { x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] };
-}
-
-const translate = (x: number, y: number): Affine => [1, 0, 0, 1, x, y];
-
-// A rotation by `rot` degrees clockwise (y down) after the flips, as DrawingML applies them about a box's centre.
-function turn(rot: number, flipH: boolean, flipV: boolean): Affine {
+// `rot` degrees clockwise (y down) after the flips.
+function turn(rot: number, flipH: boolean, flipV: boolean): Turn {
     const r = (rot * Math.PI) / 180;
     const [cos, sin] = [Math.cos(r), Math.sin(r)];
     const [h, v] = [flipH ? -1 : 1, flipV ? -1 : 1];
-    return [cos * h, sin * h, -sin * v, cos * v, 0, 0];
+    return [cos * h, sin * h, -sin * v, cos * v];
 }
 
 type Xfrm = {
@@ -175,39 +165,85 @@ function readXfrm(xfrm: XmlElement | undefined): Xfrm | undefined {
     };
 }
 
-// A group's children are laid out in its chOff/chExt space, scaled onto its off/ext, then flipped and turned with it.
-function groupTransform(m: Affine, xfrm: Xfrm): Affine {
+// A shape as DrawingML places it: its centre, extents, turn and flips.
+type Placement = { x: number; y: number; width: number; height: number; rot: number; flipH: boolean; flipV: boolean };
+
+// From a shape tree's coordinates, in EMU, to the frame's px: through each enclosing group, then the slide's scale.
+type Place = (shape: Placement) => Placement;
+
+// A group lays its children out in its chOff/chExt space, scaled onto its off/ext, then flips and turns them about its
+// centre. As PowerPoint, LibreOffice and POI draw it, a child is never skewed: its centre moves with the group, its
+// turn adds the group's (negated by one flip), and its extents scale along the group's axes, swapped for a child
+// turned sideways.
+function inGroup(outer: Place, xfrm: Xfrm): Place {
     const child = xfrm.child ?? { x: xfrm.x, y: xfrm.y, cx: xfrm.cx, cy: xfrm.cy };
     const kx = child.cx > 0 ? xfrm.cx / child.cx : 1;
     const ky = child.cy > 0 ? xfrm.cy / child.cy : 1;
     const [cx, cy] = [xfrm.x + xfrm.cx / 2, xfrm.y + xfrm.cy / 2];
-    const placed: Affine = [kx, 0, 0, ky, xfrm.x - child.x * kx, xfrm.y - child.y * ky];
-    const about = compose(translate(cx, cy), compose(turn(xfrm.rot, xfrm.flipH, xfrm.flipV), translate(-cx, -cy)));
-    return compose(m, compose(about, placed));
+    const turned = turn(xfrm.rot, xfrm.flipH, xfrm.flipV);
+    const mirrors = xfrm.flipH !== xfrm.flipV;
+    return (shape) => {
+        const centre = apply(turned, xfrm.x + (shape.x - child.x) * kx - cx, xfrm.y + (shape.y - child.y) * ky - cy);
+        const rot = normalizeAngle(shape.rot);
+        const sideways = (rot >= 45 && rot < 135) || (rot >= 225 && rot < 315);
+        return outer({
+            x: cx + centre.x,
+            y: cy + centre.y,
+            width: shape.width * (sideways ? ky : kx),
+            height: shape.height * (sideways ? kx : ky),
+            rot: (mirrors ? -shape.rot : shape.rot) + xfrm.rot,
+            flipH: shape.flipH !== xfrm.flipH,
+            flipV: shape.flipV !== xfrm.flipV,
+        });
+    };
 }
 
 type Box = { x: number; y: number; width: number; height: number; angle: number };
 
-// A leaf's box in the frame: its own turn and flips about its centre, then every group's. A skewed result (a turned
-// shape in a group scaled unevenly) keeps its axes' lengths; a mirrored one keeps its box, and a pie its mirrored arc.
-type Placed = { box: Box; mirrored: boolean; start: { x: number; y: number }; end: { x: number; y: number } };
+// A leaf's box in the frame. A mirrored one keeps its box, and a pie its mirrored arc.
+type Placed = {
+    box: Box;
+    mirrored: boolean;
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    xfrm: Xfrm;
+};
 
-function place(m: Affine, xfrm: Xfrm): Placed {
-    const local = compose(
-        m,
-        compose(translate(xfrm.x + xfrm.cx / 2, xfrm.y + xfrm.cy / 2), turn(xfrm.rot, xfrm.flipH, xfrm.flipV)),
-    );
-    const centre = apply(local, 0, 0);
-    const width = Math.hypot(local[0], local[1]) * xfrm.cx;
-    const height = Math.hypot(local[2], local[3]) * xfrm.cy;
-    // From the box's y axis: a flipH box keeps its turn and a flipV one turns half round, as PowerPoint draws its text.
-    const angle = normalizeAngle((Math.atan2(local[3], local[2]) * 180) / Math.PI - 90);
+function place(placeIn: Place, xfrm: Xfrm): Placed {
+    const { x, y, width, height, rot, flipH, flipV } = placeIn({
+        x: xfrm.x + xfrm.cx / 2,
+        y: xfrm.y + xfrm.cy / 2,
+        width: xfrm.cx,
+        height: xfrm.cy,
+        rot: xfrm.rot,
+        flipH: xfrm.flipH,
+        flipV: xfrm.flipV,
+    });
+    const corner = apply(turn(rot, flipH, flipV), width / 2, height / 2);
     return {
-        box: { x: centre.x - width / 2, y: centre.y - height / 2, width, height, angle },
-        mirrored: local[0] * local[3] - local[1] * local[2] < 0,
-        start: apply(local, -xfrm.cx / 2, -xfrm.cy / 2),
-        end: apply(local, xfrm.cx / 2, xfrm.cy / 2),
+        // A flipV box turns half round, as PowerPoint draws its text; a flipH one keeps its turn.
+        box: { x: x - width / 2, y: y - height / 2, width, height, angle: normalizeAngle(rot + (flipV ? 180 : 0)) },
+        mirrored: flipH !== flipV,
+        start: { x: x - corner.x, y: y - corner.y },
+        end: { x: x + corner.x, y: y + corner.y },
+        xfrm,
     };
+}
+
+// The canvas clips what overhangs a frame, so a box wholly outside it (a master's off-slide shape, copied onto every
+// slide) would be stored unseen; a box a group scaled past a double is none.
+function onFrame(box: Box, frame: Frame): boolean {
+    if (![box.x, box.y, box.width, box.height].every(Number.isFinite)) return false;
+    const r = (box.angle * Math.PI) / 180;
+    const [cos, sin] = [Math.abs(Math.cos(r)), Math.abs(Math.sin(r))];
+    const [halfWidth, halfHeight] = [
+        (box.width * cos + box.height * sin) / 2,
+        (box.width * sin + box.height * cos) / 2,
+    ];
+    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+    return (
+        cx + halfWidth >= 0 && cx - halfWidth <= frame.width && cy + halfHeight >= 0 && cy - halfHeight <= frame.height
+    );
 }
 
 type Walk = {
@@ -225,7 +261,13 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, p
     const out: SlideShapes = { elements: [], title: '' };
     // The frame: its name, a title of at most 100 characters, weighs nothing besides.
     weigh(deck, 1);
-    const root: Affine = [deck.scale, 0, 0, deck.scale, deck.offset.x, deck.offset.y];
+    const root: Place = (shape) => ({
+        ...shape,
+        x: shape.x * deck.scale + deck.offset.x,
+        y: shape.y * deck.scale + deck.offset.y,
+        width: shape.width * deck.scale,
+        height: shape.height * deck.scale,
+    });
     for (const part of [...decorationsOf(inheritance), inheritance.slide]) {
         const tree = spTreeOf(part.root);
         const walk: Walk = { deck, inheritance, presentation, part, copied: part !== inheritance.slide, out };
@@ -234,46 +276,47 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, p
     return out;
 }
 
-function readTree(walk: Walk, shapes: XmlElement[], m: Affine, depth: number, group: FillPaint | undefined): void {
+function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: number, group: FillPaint | undefined): void {
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, PRESENTATION_TOO_LARGE);
     for (const shape of shapes) {
         if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
         if (isAlternateContent(shape)) {
-            readTree(walk, alternative(shape), m, depth + 1, group);
+            readTree(walk, alternative(shape), placeIn, depth + 1, group);
             continue;
         }
-        if (shape.ns !== P_NS || !DRAWN.has(shape.local) || isHidden(shape)) continue;
-        const own = placeholderOf(shape);
-        if (walk.copied && own) continue;
-        const inherited = own ? inheritedPlaceholders(own, walk.inheritance) : [];
-        const chain = [shape, ...inherited.map((placeholder) => placeholder.shape)];
+        if (shape.ns !== P_NS || !DRAWN.has(shape.local)) continue;
+        const cNvPr = xmlChild(nonVisualOf(shape) ?? shape, P_NS, 'cNvPr');
+        if (cNvPr && isOn(xmlAttr(cNvPr, '', 'hidden'))) continue;
         if (shape.local === 'grpSp') {
             const grpSpPr = xmlChild(shape, P_NS, 'grpSpPr');
             const xfrm = readXfrm(grpSpPr && xmlChild(grpSpPr, A_NS, 'xfrm'));
             const fill = paintOf(fillIn(grpSpPr), walk.inheritance.theme, { group }) ?? group;
-            readTree(walk, xmlElements(shape), xfrm ? groupTransform(m, xfrm) : m, depth + 1, fill);
+            readTree(walk, xmlElements(shape), xfrm ? inGroup(placeIn, xfrm) : placeIn, depth + 1, fill);
             continue;
         }
         if (shape.local === 'contentPart') {
             count(walk, DROPPED.object.code);
             continue;
         }
+        const own = placeholderOf(shape);
+        if (walk.copied && own) continue;
+        const inherited = own ? inheritedPlaceholders(own, walk.inheritance) : [];
+        const chain = [shape, ...inherited.map((placeholder) => placeholder.shape)];
         const xfrm = chain.map(xfrmOf).find((found) => found !== undefined);
         if (!xfrm) continue;
-        const placed = place(m, xfrm);
-        if (shape.local === 'graphicFrame') readGraphicFrame(walk, shape, placed.box);
-        else if (shape.local === 'pic') readPicture(walk, shape, chain, placed.box);
-        else readShape(walk, shape, own, inherited, chain, { ...placed, xfrm }, group);
+        const placed = place(placeIn, xfrm);
+        if (!onFrame(placed.box, walk.deck.frame)) continue;
+        const spPrs = chain.flatMap((link) => xmlChild(link, P_NS, 'spPr') ?? []);
+        if (shape.local === 'graphicFrame') {
+            const graphic = xmlChild(shape, A_NS, 'graphic');
+            const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+            placeholderBox(walk, GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object', placed.box);
+        } else if (shape.local === 'pic') readPicture(walk, shape, spPrs, placed);
+        else readShape(walk, { shape, own, inherited, spPrs, placed, group });
     }
 }
 
 const DRAWN = new Set(['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame', 'contentPart']);
-
-function isHidden(shape: XmlElement): boolean {
-    const nv = nonVisualOf(shape);
-    const cNvPr = nv && xmlChild(nv, P_NS, 'cNvPr');
-    return (cNvPr && isOn(xmlAttr(cNvPr, '', 'hidden'))) ?? false;
-}
 
 // spPr's a:xfrm, or a graphic frame's own p:xfrm.
 function xfrmOf(shape: XmlElement): Xfrm | undefined {
@@ -295,17 +338,20 @@ function weigh(deck: DeckWalk, weight: number): void {
     if (deck.weight > MAX_PPTX_WEIGHT) throw new ApiError(413, PRESENTATION_TOO_LARGE);
 }
 
-function readShape(
-    walk: Walk,
-    shape: XmlElement,
-    own: Placeholder | undefined,
-    inherited: Placeholder[],
-    chain: XmlElement[],
-    placed: Placed & { xfrm: Xfrm },
-    group: FillPaint | undefined,
-): void {
+// A drawn shape and what it inherits: its placeholder, the layout's and master's it takes from, the spPr of each
+// nearest first, and where it lands.
+type Leaf = {
+    shape: XmlElement;
+    own: Placeholder | undefined;
+    inherited: Placeholder[];
+    spPrs: XmlElement[];
+    placed: Placed;
+    group: FillPaint | undefined;
+};
+
+function readShape(walk: Walk, leaf: Leaf): void {
+    const { shape, own, inherited, spPrs, placed, group } = leaf;
     const { theme } = walk.inheritance;
-    const spPrs = chain.flatMap((link) => xmlChild(link, P_NS, 'spPr') ?? []);
     const shaped = spPrs.find((spPr) => geometryOf(spPr) !== undefined);
     const geometry = (shaped && geometryOf(shaped)) ?? 'rect';
     const body = xmlChild(shape, P_NS, 'txBody');
@@ -413,10 +459,7 @@ function strokeOf(spPrs: XmlElement[], walk: Walk): Stroke {
 
 // A pie's adj1 and adj2 are angles on the ellipse as drawn in its own box; the kind's are its box-normalized circle's,
 // which a group's scale leaves alone.
-function pieAngles(
-    spPr: XmlElement | undefined,
-    placed: Placed & { xfrm: Xfrm },
-): { startAngle: number; sweepAngle: number } {
+function pieAngles(spPr: XmlElement | undefined, placed: Placed): { startAngle: number; sweepAngle: number } {
     const guides = new Map<string, number>();
     const preset = spPr && xmlChild(spPr, A_NS, 'prstGeom');
     const list = preset && xmlChild(preset, A_NS, 'avLst');
@@ -464,7 +507,7 @@ function lineOf(placed: Placed, stroke: Stroke, spPrs: XmlElement[]): NewVectorE
         : { type: 'arrow', ...line, startArrowhead, endArrowhead, elbow: false };
 }
 
-function readPicture(walk: Walk, shape: XmlElement, chain: XmlElement[], box: Box): void {
+function readPicture(walk: Walk, shape: XmlElement, spPrs: XmlElement[], { box }: Placed): void {
     const blipFill = xmlChild(shape, P_NS, 'blipFill');
     const blip = blipFill && xmlChild(blipFill, A_NS, 'blip');
     const extensions = blip && xmlChild(blip, A_NS, 'extLst');
@@ -478,7 +521,6 @@ function readPicture(walk: Walk, shape: XmlElement, chain: XmlElement[], box: Bo
         if (embedded(blip) || (blip && xmlAttr(blip, R_NS, 'link'))) placeholderBox(walk, 'picture', box);
         return;
     }
-    const spPrs = chain.flatMap((link) => xmlChild(link, P_NS, 'spPr') ?? []);
     push(walk, {
         type: 'image',
         ...box,
@@ -487,12 +529,6 @@ function readPicture(walk: Walk, shape: XmlElement, chain: XmlElement[], box: Bo
         objectFit: 'fill',
         corners: 'straight',
     });
-}
-
-function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
-    const graphic = xmlChild(shape, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    placeholderBox(walk, GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object', box);
 }
 
 function count(walk: Walk, code: CountedWarningCode): void {

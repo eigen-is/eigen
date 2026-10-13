@@ -121,12 +121,12 @@ describe('a pptx converted to a deck', () => {
         expect(scene.elements).toHaveLength(8);
     });
 
-    test('a hostile coordinate is held to the canvas range by the deck writer', () => {
+    test('a hostile extent is held to the canvas range by the deck writer', () => {
         const far = buildPptx({
             slides: [
                 {
                     shapes: sp({
-                        xfrm: `<a:xfrm><a:off x="9000000000000000" y="0"/><a:ext cx="635000" cy="635000"/></a:xfrm>`,
+                        xfrm: `<a:xfrm><a:off x="0" y="0"/><a:ext cx="9000000000000000" cy="635000"/></a:xfrm>`,
                         spPr: solid('FF0000'),
                     }),
                 },
@@ -134,7 +134,7 @@ describe('a pptx converted to a deck', () => {
         });
         const doc = new Y.Doc();
         writeSlidesUpdateToYjs(doc, new Uint8Array(importPptxToSlidesUpdate(toTransferableBuffer(far), JOB).update));
-        expect(readVectorFromDoc(doc).elements[0].x).toBe(1_000_000);
+        expect(readVectorFromDoc(doc).elements[0].width).toBe(1_000_000);
     });
 
     test('runs in the transform process, its warnings and refusals crossing the boundary', async () => {

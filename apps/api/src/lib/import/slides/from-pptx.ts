@@ -55,6 +55,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         let mediaBytes = 0;
         const deck: DeckWalk = {
             pkg,
+            frame: { width: options.width, height: options.height },
             scale,
             offset: { x: (options.width - slideSize.cx * scale) / 2, y: (options.height - slideSize.cy * scale) / 2 },
             shapes: 0,

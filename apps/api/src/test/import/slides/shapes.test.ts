@@ -83,6 +83,40 @@ describe('geometry', () => {
         expect(found?.angle).toBeCloseTo(330, 6);
     });
 
+    test("a turned child in an unevenly scaled group keeps its turn, its extents scaled along the group's axes", () => {
+        const stretched = groupXfrm([0, 0, 400 * PX, 100 * PX], [0, 0, 200 * PX, 100 * PX]);
+        const child = (rot: number) => sp({ xfrm: box(0, 0, 100, 50, ` rot="${rot * 60000}"`), spPr: FILLED });
+        const turned = element(grp(stretched, child(30)));
+        expectBox(turned, 0, 0, 200, 50);
+        expect(turned?.angle).toBeCloseTo(30, 6);
+        // Turned sideways, the child's width runs along the group's y axis.
+        const sideways = element(grp(stretched, child(90)));
+        expectBox(sideways, 50, -25, 100, 100);
+        expect(sideways?.angle).toBeCloseTo(90, 6);
+    });
+
+    test("nested groups compose: an inner group's turn decides which of the outer group's scales a child takes", () => {
+        const inner = grp(
+            groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX], ' rot="5400000"'),
+            sp({ xfrm: box(0, 25, 100, 50), spPr: FILLED }),
+        );
+        const found = element(grp(groupXfrm([0, 0, 400 * PX, 200 * PX], [0, 0, 200 * PX, 200 * PX]), inner));
+        expectBox(found, 50, 0, 100, 100);
+        expect(found?.angle).toBeCloseTo(90, 6);
+    });
+
+    test('a group flipped vertically mirrors its children and turns them half round; flipped both ways it turns them', () => {
+        const child = sp({ xfrm: box(0, 0, 100, 50, ' rot="1800000"'), spPr: FILLED });
+        const flipped = (attributes: string) =>
+            element(grp(groupXfrm([0, 0, 400 * PX, 200 * PX], [0, 0, 400 * PX, 200 * PX], attributes), child));
+        const vertical = flipped(' flipV="1"');
+        expectBox(vertical, 0, 150, 100, 50);
+        expect(vertical?.angle).toBeCloseTo(150, 6);
+        const both = flipped(' flipH="1" flipV="1"');
+        expectBox(both, 300, 150, 100, 50);
+        expect(both?.angle).toBeCloseTo(210, 6);
+    });
+
     test(`groups nest to ${MAX_GROUP_DEPTH} deep; one more is too large`, () => {
         const nested = (depth: number) => {
             let tree = sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED });
@@ -97,8 +131,24 @@ describe('geometry', () => {
     test('a negative extent is none, and a coordinate past what a double holds exactly places nothing', () => {
         expectBox(element(sp({ xfrm: xfrm(0, 0, -635000, 635000), spPr: FILLED })), 0, 0, 0, 100);
         expect(elementsOf(sp({ xfrm: xfrm('9'.repeat(30), 0, 10, 10), spPr: FILLED }))).toEqual([]);
-        const far = element(sp({ xfrm: xfrm(9_000_000_000_000_000, 0, 10, 10), spPr: FILLED }));
-        expect(Number.isFinite(far?.x)).toBe(true);
+    });
+
+    test('a shape wholly outside the frame is not drawn, one overhanging it is, its turn included', () => {
+        const at = (x: number, y: number, attributes = '') =>
+            sp({ xfrm: box(x, y, 100, 10, attributes), spPr: FILLED });
+        const kept = elementsOf(
+            at(-200, 0) + at(-50, 0) + at(1920, 1070) + at(2000, 0) + at(0, -11) + at(-60, 0, ' rot="5400000"'),
+        );
+        expect(kept.map((found) => [found.x, found.y])).toEqual([
+            [-50, 0],
+            [1920, 1070],
+        ]);
+    });
+
+    test('a box a group scaled past what a double holds is not drawn', () => {
+        let tree = sp({ xfrm: xfrm(0, 0, 1, 1), spPr: FILLED, text: para('far') });
+        for (let i = 0; i < 30; i++) tree = grp(groupXfrm([0, 0, 9e15, 9e15], [0, 0, 1, 1]), tree);
+        expect(elementsOf(tree)).toEqual([]);
     });
 
     test('a hidden shape is not drawn, and a shape with no geometry of its own or inherited is skipped', () => {
