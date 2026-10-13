@@ -1,8 +1,8 @@
 // The React half of the element registry. `packages/lib`'s ELEMENT_KINDS answers what a kind IS — its
 // fields, geometry, paint and search text; this answers how a kind is PRESENTED: the icon and label
 // every surface shows, the tool shortcut, the in-place editor a kind mounts when it is edited on the
-// canvas, and the panel rows the generic capability rows do not cover. Adding a kind = one entry here
-// and one in lib; TypeScript forces both.
+// canvas (or the dialog it opens instead), and the panel rows the generic capability rows do not cover.
+// Adding a kind = one entry here and one in lib; TypeScript forces both.
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
 import type { VectorElement, VectorElementType } from '@workspace/lib/vector';
@@ -22,6 +22,7 @@ import {
 import type { ComponentType } from 'react';
 import type { VectorElementPatch } from '../hooks/use-canvas-doc';
 import { ArrowPanelSection } from './arrow';
+import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
 import { RichTextInPlaceEditor, RichTextPanelSection } from './richtext';
 
@@ -44,6 +45,14 @@ export type KindPanelSectionProps = {
     onChangeEach: (patch: (el: VectorElement) => VectorElementPatch) => void;
 };
 
+// What a double-click opens for a kind edited in a dialog rather than in place (a chart's data).
+// `onChange` is one sealed write; `onClose` ends it, saved or not.
+export type KindEditDialogProps = {
+    element: VectorElement;
+    onChange: (fields: VectorElementPatch) => void;
+    onClose: () => void;
+};
+
 type ElementKindUi = {
     icon: LucideIcon;
     label: string;
@@ -51,6 +60,7 @@ type ElementKindUi = {
     // Letters are Excalidraw's; `digit` is the same tool on the number row.
     shortcut?: { letter: LetterKey; digit: NumberKey };
     InPlaceEditor?: ComponentType<InPlaceEditorProps>;
+    EditDialog?: ComponentType<KindEditDialogProps>;
     PanelSection?: ComponentType<KindPanelSectionProps>;
 };
 
@@ -59,7 +69,7 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     diamond: { icon: Diamond, label: 'Diamond', shortcut: { letter: 'D', digit: '3' } },
     ellipse: { icon: Circle, label: 'Ellipse', shortcut: { letter: 'O', digit: '4' } },
     pie: { icon: ChartPie, label: 'Pie' },
-    chart: { icon: ChartColumn, label: 'Chart' },
+    chart: { icon: ChartColumn, label: 'Chart', EditDialog: ChartEditDialog, PanelSection: ChartPanelSection },
     arrow: {
         icon: MoveUpRight,
         label: 'Arrow',
