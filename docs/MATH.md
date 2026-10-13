@@ -122,7 +122,7 @@ Typed LaTeX is kept as it was typed. These losses only touch `writeLatex` output
 | a brace character other than ⏞ ⏟ ⏜ ⏝, or one on its other side | `\overset` or `\underset`: a limit holding the character |
 | an accent from the accent table without a command, such as the macron U+0304 or the double acute | `\overset`: a limit holding its spacing character, ¯ or ˝; `\bar` is Word's bar, U+0305 |
 | a fence or separator character no command draws, such as Word's ⟦ ⟧ | the characters as they are, not a fenced row (fixture equation 49): neither KaTeX nor MathJax takes `\llbracket` after `\left` |
-| an operator `^` or `~`, marked or not | `\text{\textasciicircum{}}` or `\text{\textasciitilde{}}`: text without the marks, since math mode has no command both KaTeX and MathJax read for either |
+| an operator `^` or `~`, marked or not | `\text{\textasciicircum{}}` or `\text{\textasciitilde{}}`: text without the marks, since math mode has no command both KaTeX and MathJax read for either; MathJax reads these text commands only with its `textmacros` extension |
 | Word's U+2329 and U+232A angle brackets and its ∥ | `\langle`, `\rangle` and `\|`, reading back as ⟨ ⟩ and ‖ (fixture equations 51, 52, 53) |
 | an n-ary over an operator outside the large-operator table | scripts on the operator, then its body |
 | an apostrophe as an operator | `'`, which reads back as a prime ′ |
