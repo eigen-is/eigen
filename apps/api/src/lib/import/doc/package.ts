@@ -4,7 +4,7 @@ import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../..
 import { is, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
-// The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
+// The parts the reader parses, together (a tree's cost: core/xml.ts); the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
 // A tree costs per element too, so the parts' elements have a cap of their own, past a long report's. Counted as '<' in
