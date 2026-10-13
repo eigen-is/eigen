@@ -3,12 +3,14 @@ import type { Sheet } from '@workspace/lib/sheets';
 import { createDefaultSheets } from '../../engine/defaults';
 import { replaySheetsOps } from '../../engine/replay-ops';
 import { normalizeSheetConfig, SHEET_CONFIG_COLLECTIONS } from '../../engine/sheet-config';
+import type { ExtendedSheetConfig } from '../../engine/types';
 
 describe('normalizeSheetConfig', () => {
     test('materializes every config collection and the charts map', () => {
-        const sheet: Sheet = { id: 's1', name: 'Sheet1' };
+        const config: ExtendedSheetConfig = {};
+        const sheet: Sheet = { id: 's1', name: 'Sheet1', config };
         normalizeSheetConfig(sheet);
-        for (const key of SHEET_CONFIG_COLLECTIONS) expect(sheet.config?.[key]).toEqual({});
+        for (const key of SHEET_CONFIG_COLLECTIONS) expect(config[key]).toEqual({});
         expect(sheet.charts).toEqual({});
     });
 

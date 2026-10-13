@@ -6,6 +6,7 @@ import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaul
 import { FormulaEngine } from '../../engine/formula-engine';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
 import type { EditorSheetConfigExtras, SingleRange } from '../../engine/types';
+import { expectedDelete, expectedInsert, SPANS, type Span } from './range-oracle';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the
@@ -595,4 +596,58 @@ describe('applySheetsInsertRowCol — passthrough', () => {
         expect(result[0].filter).toBeDefined();
         expect(result[0].dataVerification).toBeDefined();
     });
+});
+
+const grid = () => Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => null));
+const OTHER: Span = [0, 1];
+const onAxis = (type: 'row' | 'column', span: Span) =>
+    type === 'row' ? { row: span, column: OTHER } : { row: OTHER, column: span };
+
+describe('conditional-format ranges follow the membership rule', () => {
+    const cfSheet = (type: 'row' | 'column') =>
+        makeSheet('s1', 'Sheet1', grid(), {
+            conditionalFormatRules: SPANS.map((span) => ({
+                type: 'default',
+                conditionName: 'greaterThan',
+                cellrange: [onAxis(type, span)],
+                conditionValue: [0],
+                format: { textColor: '#ff0000' },
+            })),
+        });
+
+    for (const type of ['row', 'column'] as const) {
+        test(`${type} inserts`, () => {
+            for (let index = 0; index <= 6; index += 1) {
+                for (const direction of ['lefttop', 'rightbottom'] as const) {
+                    for (const count of [1, 2]) {
+                        const [sheet] = applySheetsInsertRowCol([cfSheet(type)], {
+                            type,
+                            index,
+                            count,
+                            direction,
+                            id: 's1',
+                        });
+                        const insertAt = direction === 'lefttop' ? index : index + 1;
+                        expect(sheet.conditionalFormatRules!.map((cf) => cf.cellrange[0])).toEqual(
+                            SPANS.map((span) => onAxis(type, expectedInsert(span, insertAt, count))),
+                        );
+                    }
+                }
+            }
+        });
+
+        test(`${type} deletes drop a wholly deleted range`, () => {
+            for (let start = 0; start <= 6; start += 1) {
+                for (let end = start; end <= 6; end += 1) {
+                    const [sheet] = applySheetsDeleteRowCol([cfSheet(type)], { type, start, end, id: 's1' });
+                    const expected = SPANS.map((span) => expectedDelete(span, start, end)).filter(
+                        (span) => span !== null,
+                    );
+                    expect(sheet.conditionalFormatRules!.map((cf) => cf.cellrange[0])).toEqual(
+                        expected.map((span) => onAxis(type, span)),
+                    );
+                }
+            }
+        });
+    }
 });
