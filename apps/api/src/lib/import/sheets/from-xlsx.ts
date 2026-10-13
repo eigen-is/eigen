@@ -1076,7 +1076,7 @@ function readSheetPaths(zip: ZipReader): { name: string; path: string }[] | unde
         const rId = xmlAttr(sheet, R_NS, 'id');
         const target = rId != null ? relTargets.get(rId) : undefined;
         if (name == null || target == null) continue;
-        // Workbook-rel targets are relative to xl/ unless rooted.
+        // As exceljs resolves them (workbook-xform.js), not as OPC does, so the links land on its sheets by name.
         names.set(target.startsWith('/') ? target.slice(1) : `xl/${target}`, name);
     }
     return [...names].map(([path, name]) => ({ name, path }));

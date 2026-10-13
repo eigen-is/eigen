@@ -1,5 +1,5 @@
 // Generate docs/SHARED-PRIMITIVES.md — the canonical, auto-generated index of everything that
-// packages/ui and packages/lib publicly export, so the next author (human or LLM) can FIND a primitive
+// packages/ui, packages/lib and packages/math publicly export, so the next author (human or LLM) can FIND a primitive
 // before rebuilding it. Re-derivation is the project's main quality risk and it happens because the
 // canonical thing isn't discoverable; this is the index AGENTS.md tells you to search first.
 //
@@ -23,6 +23,7 @@ const CODE = /\.tsx?$/;
 const PACKAGES = [
     { name: '@workspace/lib', dir: 'packages/lib' },
     { name: '@workspace/ui', dir: 'packages/ui' },
+    { name: '@workspace/math', dir: 'packages/math' },
 ];
 
 type Kind = 'Component' | 'Provider' | 'Schema' | 'Hook' | 'Cache' | 'Type' | 'Util';
@@ -185,8 +186,8 @@ function render(): string {
         '# Shared Primitives',
         '',
         '> **Generated — do not edit by hand.** Run `bun run primitives` to regenerate;',
-        '> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib` +',
-        '> `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it',
+        '> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib`,',
+        '> `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it',
         "> already exists, import it; if it doesn't, add it here by exporting it from its package barrel.",
         '',
         `${primitives.length} primitives across ${KINDS.length} kinds. \`packages/sheet\` internals are excluded.`,

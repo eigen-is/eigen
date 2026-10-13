@@ -65,6 +65,9 @@ const BAND_PADDING = 0.1;
 // Ems between value ticks: vertical axes stack one-line labels, horizontal ones sit numbers side by side.
 const VERTICAL_TICK_SPACING = 4;
 const HORIZONTAL_TICK_SPACING = 6;
+// The most value ticks asked of d3 however long the axis: Google's axes stop at about 20 labels, and the
+// box comes from a peer, so its length must not set the work.
+const MAX_TICK_COUNT = 20;
 // Excalidraw's faint range; Google's gridlines are a light gray.
 const GRIDLINE_OPACITY = 20;
 // Share of the room a label column, a legend or turned category labels may take before they ellipsize or drop.
@@ -292,11 +295,13 @@ function layoutCartesian(
         const room = (frame.right - frame.left - sideReserve) * LABEL_SHARE;
         const names = data.categories.map((name, i) => (i % every === 0 ? fit(ctx, name, room, fontSize, false) : ''));
         const left = frame.left + sideReserve + Math.max(0, ...names.map((name) => measure(ctx, name))) + gap;
-        // Fewer ticks until their labels stop touching; the end labels overhang the plot by half a label.
-        let n = Math.max(2, Math.floor((frame.right - left) / (fontSize * HORIZONTAL_TICK_SPACING))) + 1;
-        let clear: boolean;
-        do {
-            n--;
+        // Fewer ticks until their labels stop touching, each try as many as the last one's widest pair has
+        // room for; the end labels overhang the plot by half a label.
+        let n = Math.min(
+            MAX_TICK_COUNT,
+            Math.max(2, Math.floor((frame.right - left) / (fontSize * HORIZONTAL_TICK_SPACING))),
+        );
+        for (;;) {
             axis = valueAxis(spec, extent, n, formatTick, ctx);
             const { lo, hi, widths } = axis;
             plot = {
@@ -306,10 +311,10 @@ function layoutCartesian(
                 bottom,
             };
             const perUnit = (plot.right - plot.left) / (hi - lo);
-            clear = axis.ticks.every(
-                (t, i) => i === 0 || (t - axis.ticks[i - 1]) * perUnit >= (widths[i] + widths[i - 1]) / 2 + gap,
-            );
-        } while (!clear && n > 2);
+            const needs = widths.map((width, i) => (i === 0 ? 0 : (width + widths[i - 1]) / 2 + gap));
+            if (n <= 2 || axis.ticks.every((t, i) => i === 0 || (t - axis.ticks[i - 1]) * perUnit >= needs[i])) break;
+            n = Math.max(2, Math.min(n - 1, Math.floor((plot.right - plot.left) / Math.max(...needs))));
+        }
         categoryLabels = names.flatMap((name, i) =>
             name === '' ? [] : [label(ctx, name, plot.left - gap, band.center(i) - lh / 2, 'end')],
         );
@@ -319,7 +324,7 @@ function layoutCartesian(
         axis = valueAxis(
             spec,
             extent,
-            Math.max(2, Math.floor(estimate / (fontSize * VERTICAL_TICK_SPACING))),
+            Math.min(MAX_TICK_COUNT, Math.max(2, Math.floor(estimate / (fontSize * VERTICAL_TICK_SPACING)))),
             formatTick,
             ctx,
         );

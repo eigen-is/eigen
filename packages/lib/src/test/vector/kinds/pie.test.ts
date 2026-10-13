@@ -246,12 +246,47 @@ describe('pie anchors', () => {
     });
 });
 
+// How far the drawn rim strays from the circle of radius r about (c, c): every stroked cubic that starts and
+// ends on the rim, sampled.
+function rimError(svg: string, c: number, r: number): number {
+    const onRim = (x: number, y: number) => Math.abs(Math.hypot(x - c, y - c) - r) < 0.5;
+    let error = 0;
+    for (const [, d] of svg.matchAll(/<path d="([^"]+)" stroke="(?!none)/g)) {
+        let from = [0, 0];
+        for (const [, op, args] of d.matchAll(/([MLC])([^MLC]+)/g)) {
+            const v = args.trim().split(/\s+/).map(Number);
+            if (op === 'C' && onRim(from[0], from[1]) && onRim(v[4], v[5])) {
+                for (let t = 0; t <= 1; t += 0.01) {
+                    const u = 1 - t;
+                    const x = u ** 3 * from[0] + 3 * u * u * t * v[0] + 3 * u * t * t * v[2] + t ** 3 * v[4];
+                    const y = u ** 3 * from[1] + 3 * u * u * t * v[1] + 3 * u * t * t * v[3] + t ** 3 * v[5];
+                    error = Math.max(error, Math.abs(Math.hypot(x - c, y - c) - r));
+                }
+            }
+            from = op === 'C' ? [v[4], v[5]] : v;
+        }
+    }
+    return error;
+}
+
 describe('pie render', () => {
     const svgOf = (el: VectorPieElement): string => {
         const out = ELEMENT_KINDS.pie.render(el, {});
         if ('html' in out) throw new Error('a pie must render svg');
         return out.svg;
     };
+
+    test('a large flat slice draws its rim as smoothly as the ellipse', () => {
+        const big = { x: 0, y: 0, width: 2400, height: 2400, roughness: 0 };
+        // A whole slice is the ellipse's drawable (pinned below), so this is the ellipse's rim.
+        const circle = svgOf(slice(0, 360, big));
+        for (const sweep of [30, 90, 119, 179, 300]) {
+            const svg = svgOf(slice(10, sweep, big));
+            expect(svg).toContain(' C');
+            expect([sweep, rimError(svg, 1200, 1200)]).toEqual([sweep, expect.closeTo(0, 1)]);
+            expect(rimError(svg, 1200, 1200)).toBeLessThanOrEqual(rimError(circle, 1200, 1200));
+        }
+    });
 
     test('a slice draws a closed arc: both radii run from the apex to the arc ends', () => {
         const svg = svgOf(slice(0, 30, { roughness: 0 }));

@@ -183,6 +183,44 @@ describe('notes', () => {
     });
 });
 
+describe('markup compatibility', () => {
+    const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    const alternate = (choices: [string, string][], fallback?: string) =>
+        `<mc:AlternateContent xmlns:mc="${MC}">${choices.map(([requires, inner]) => `<mc:Choice Requires="${requires}">${inner}</mc:Choice>`).join('')}${fallback === undefined ? '' : `<mc:Fallback>${fallback}</mc:Fallback>`}</mc:AlternateContent>`;
+
+    test('a Choice whose prefixes the reader understands is read, its Fallback not', async () => {
+        expect(await blocks(paragraph(alternate([['w14', run('choice')]], run('fallback'))))).toEqual(['choice']);
+    });
+
+    test('a Choice that needs an unknown prefix falls to the next Choice, then to the Fallback', async () => {
+        expect(await blocks(paragraph(alternate([['foo', run('foo')]], run('fallback'))))).toEqual(['fallback']);
+        const choices: [string, string][] = [
+            ['foo', run('foo')],
+            ['wps', run('shape')],
+        ];
+        expect(await blocks(paragraph(alternate(choices, run('fallback'))))).toEqual(['shape']);
+    });
+
+    test('a Choice needing several prefixes is read only when it understands every one', async () => {
+        expect(await blocks(paragraph(alternate([['wps  w14', run('both')]], run('fallback'))))).toEqual(['both']);
+        expect(await blocks(paragraph(alternate([['w14 foo', run('one')]], run('fallback'))))).toEqual(['fallback']);
+    });
+
+    test('without a Fallback, an unread Choice reads as nothing', async () => {
+        expect(await blocks(paragraph(`${run('before ')}${alternate([['foo', run('foo')]])}${run('after')}`))).toEqual([
+            'before after',
+        ]);
+    });
+
+    test('inside a run and between blocks it reads the same', async () => {
+        const inRun = `<w:r>${alternate([['foo', '<w:t>foo</w:t>']], '<w:t>run</w:t>')}</w:r>`;
+        expect(await blocks(paragraph(inRun))).toEqual(['run']);
+        expect(await blocks(alternate([['w14', paragraph(run('block'))]], paragraph(run('fallback'))))).toEqual([
+            'block',
+        ]);
+    });
+});
+
 describe('tracked changes and hidden text', () => {
     test('an insertion counts, a deletion and hidden text do not', async () => {
         const body = paragraph(
