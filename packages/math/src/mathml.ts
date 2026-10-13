@@ -314,17 +314,27 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
     }
 }
 
-export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
-    const budget = { size: 0 };
+// A semantics carries the equation's LaTeX only when it is the whole equation.
+function semanticsOf(math: MathXmlElement): MathXmlElement | undefined {
     const elements = elementsOf(math);
-    const [semantics] = elements;
-    if (elements.length !== 1 || !is(semantics, 'semantics'))
-        return { row: readArgument(math, budget, 1), latex: undefined };
-    const [presentation, ...annotations] = elementsOf(semantics);
-    const tex = annotations.find(
-        (annotation) => is(annotation, 'annotation') && attribute(annotation, 'encoding') === TEX,
-    );
-    return { row: readArgument(presentation, budget, 1), latex: tex && checkedXml(textOf(tex)) };
+    return elements.length === 1 && is(elements[0], 'semantics') ? elements[0] : undefined;
+}
+
+// Apart from the tree, so an equation whose tree is past a bound can still show its LaTeX.
+export function readMathmlLatex(math: MathXmlElement): string | undefined {
+    const semantics = semanticsOf(math);
+    const tex =
+        semantics &&
+        elementsOf(semantics)
+            .slice(1)
+            .find((annotation) => is(annotation, 'annotation') && attribute(annotation, 'encoding') === TEX);
+    return tex && checkedXml(textOf(tex));
+}
+
+export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
+    const semantics = semanticsOf(math);
+    const row = readArgument(semantics ? elementsOf(semantics)[0] : math, { size: 0 }, 1);
+    return { row, latex: readMathmlLatex(math) };
 }
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────

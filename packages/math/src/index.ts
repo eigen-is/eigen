@@ -3,7 +3,7 @@ export { MathError } from './error';
 export { readLatex, writeLatex } from './latex';
 export type { LatexCommand } from './latex-commands';
 export { LATEX_COMMANDS } from './latex-commands';
-export { MATHML_NAMESPACE, readMathml, writeMathml } from './mathml';
+export { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from './mathml';
 export { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from './omml';
 export { writeText } from './text';
 export type { MathNode, MathRow, MathVariant } from './tree';
