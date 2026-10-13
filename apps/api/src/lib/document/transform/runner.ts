@@ -1,23 +1,27 @@
+import { availableParallelism } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import type { Subprocess } from 'bun';
 import { ApiError } from '../../core/errors';
 import {
+    type ChildAck,
+    type ChildResponseEnvelope,
     type DocumentTransformRequest,
     type DocumentTransformResponse,
+    inputBytesOf,
     resultBytes,
     resultMatchesRequest,
     type TransformError,
     type TransformWarning,
-    transferListOf,
-    type WorkerResponseEnvelope,
 } from './protocol';
 
-// Process-wide runner for document-transform Workers. Owns admission and Worker
-// lifecycle only — document logic lives in worker.ts and the format modules it
+// Process-wide runner for document-transform child processes. Owns admission and the
+// child's lifecycle only — document logic lives in child.ts and the format modules it
 // dynamically imports. Deliberately a "runner", not a scheduler: lib/scheduler/
 // owns periodic jobs; the closest sibling shape is ContentReindexQueue.
 //
-// Policy (docs/DOCUMENT-TRANSFORMS.md § A Worker serves one job, then dies): one active Worker so a
+// Policy (docs/DOCUMENT-TRANSFORMS.md § A child serves one job, then dies): one active child so a
 // single ExcelJS/Yjs heap exists at a time, a bounded queue with two priorities, one-shot
-// Workers terminated after every outcome, and NEVER a main-thread fallback — an
+// children killed after every outcome, and NEVER a main-thread fallback — an
 // overloaded or failing runner must not reintroduce the event-loop freeze it
 // exists to remove.
 
@@ -37,11 +41,11 @@ export const TRANSFORM_LIMITS: Record<
     export: { deadlineMs: 120_000, admissionCostMs: 30_000 },
     import: { deadlineMs: 120_000, admissionCostMs: 30_000 },
     // Search reindexing: nobody waits on it, but a stuck job must not hold the single
-    // active Worker away from user-facing work. It reuses the preview cost.
+    // active child away from user-facing work. It reuses the preview cost.
     'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
 };
 
-const MAX_ACTIVE_WORKERS = 1;
+const MAX_ACTIVE_CHILDREN = 1;
 const MAX_QUEUED_JOBS = 16;
 // Background extracts hold no connection and are drop-safe (the contentDirty bit
 // re-queues them), so they may hold only part of the queue: many mounts draining at
@@ -51,11 +55,28 @@ const MAX_QUEUED_BACKGROUND = 8;
 // bounded by predicted wait (summed admission costs), not queue length alone.
 const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
+// A killed child stuck in the kernel can't exit, and must not hold the shutdown.
+const KILL_WAIT_MS = 1_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
 const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
+// Linux alone takes the limits: macOS refuses setrlimit for the data segment. $1 is the data segment in KiB (dash's
+// unit), $2 the CPU seconds, the rest the command. The kernel kills the child before the API when the host runs out
+// first; a refused data limit runs the child unbounded with a warning, never an outage; the CPU limit bounds an orphan
+// that spins, soft only, so it ends by SIGXCPU, a crash, where a hard one's SIGKILL would read as out of memory; an
+// abort, an expected death here, writes no core.
+const LIMITED_COMMAND =
+    'echo 1000 > /proc/self/oom_score_adj; ulimit -d "$1" 2>/dev/null || echo "[transform] memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
+// GC and JIT threads spend CPU on every core beside the job's own, so the CPU limit is the deadline on each, plus slack.
+const CPU_SLACK_SECONDS = 60;
+// JSC reserves 512 MB for JIT code inside the data limit; 64 MB hands about 0.33 GB back to the heap, no slowdown measured.
+const JIT_RESERVATION_BYTES = '67108864';
+// A heap allocation JSC can't satisfy aborts the child, faults it or traps it (x86-64's crash), and the kernel's OOM
+// killer sends SIGKILL.
+const OUT_OF_MEMORY_SIGNALS = new Set<NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGTRAP', 'SIGKILL']);
+
 // captureMs / prepMs: main-thread source-capture and media-preparation time measured
-// by the caller — logged per job because a fast Worker time with slow main-thread
+// by the caller — logged per job because a fast transform with slow main-thread
 // preparation is not a successful offload.
 export type RunOptions = {
     priority: TransformPriority;
@@ -78,13 +99,44 @@ type Job = {
     resolve: (response: DocumentTransformResponse) => void;
 };
 
-type ActiveJob = { settle: (response: DocumentTransformResponse) => void; admissionCostMs: number };
+// Why the runner killed a child itself.
+type RunnerKill = 'timeout' | 'canceled' | 'shutdown';
+type ChildOutcome = RunnerKill | 'out-of-memory' | 'crashed';
+
+type ActiveJob = {
+    kill: (reason: RunnerKill) => void;
+    settle: (response: DocumentTransformResponse) => void;
+    admissionCostMs: number;
+};
+
+const OUTCOME_MESSAGES: Record<ChildOutcome, string> = {
+    timeout: 'Document transform timed out',
+    canceled: 'Request was canceled',
+    shutdown: 'Server is shutting down',
+    'out-of-memory': 'Document transform ran out of memory',
+    crashed: 'Document transform failed',
+};
 
 function errorResponse(code: TransformError['code'], message: string): DocumentTransformResponse {
     return { ok: false, error: { code, message } };
 }
 
-const timedOut = (): DocumentTransformResponse => errorResponse('timeout', 'Document transform timed out');
+function failed(outcome: ChildOutcome): DocumentTransformResponse {
+    return errorResponse(outcome, OUTCOME_MESSAGES[outcome]);
+}
+
+// How a child that ended without a reply ended. A death after it took the job is the job's memory; one before it, or
+// by any other signal or exit, is a crash: a broken install is not a file too large.
+function childOutcome(signal: NodeJS.Signals | null, killedBy: RunnerKill | undefined, acked: boolean): ChildOutcome {
+    if (killedBy) return killedBy;
+    if (acked && signal && OUT_OF_MEMORY_SIGNALS.has(signal)) return 'out-of-memory';
+    return 'crashed';
+}
+
+function withLimits(command: string[], memoryLimitKiB: number, cpuSeconds: number): string[] {
+    if (process.platform !== 'linux') return command;
+    return ['sh', '-c', LIMITED_COMMAND, 'sh', String(memoryLimitKiB), String(cpuSeconds), ...command];
+}
 
 // Each arm of the closed warning union carries exactly one payload field; settle()
 // renders them after the job left `active`, so an unknown code or a missing payload
@@ -160,20 +212,23 @@ function formatWarning(warning: TransformWarning): string {
 }
 
 export class DocumentTransformRunner {
-    private readonly workerUrl: string;
+    private readonly entry: string;
     // Production always runs the constants above; only the runner suite dials these down.
     private readonly maxQueued = MAX_QUEUED_JOBS;
     private readonly maxQueuedBackground = MAX_QUEUED_BACKGROUND;
     private readonly maxPredictedWaitMs = MAX_PREDICTED_WAIT_MS;
     private readonly closeGraceMs = CLOSE_GRACE_MS;
+    // The machine's memory, the cgroup's where there is one, which Bun's constrainedMemory() answers both: a child
+    // never claims more than there is (DOCUMENT-TRANSFORMS.md § A child runs under the machine's memory).
+    private readonly memoryLimitKiB = Math.floor(process.constrainedMemory() / 1024);
     private foreground: Job[] = [];
     private background: Job[] = [];
     private active = new Map<number, ActiveJob>();
     private nextJobId = 1;
     private closing = false;
 
-    constructor(opts: { workerUrl?: string } = {}) {
-        this.workerUrl = opts.workerUrl ?? new URL('./worker', import.meta.url).href;
+    constructor(opts: { entry?: string } = {}) {
+        this.entry = opts.entry ?? fileURLToPath(new URL('./child', import.meta.url));
     }
 
     // Throws ApiError(503) synchronously when the job cannot be admitted. Callable
@@ -210,12 +265,12 @@ export class DocumentTransformRunner {
 
         return new Promise((resolve) => {
             if (opts.signal?.aborted) {
-                resolve(errorResponse('canceled', 'Request was canceled'));
+                resolve(failed('canceled'));
                 return;
             }
-            // The caller's prep spent the whole deadline: a Worker spawned now would only be killed.
+            // The caller's prep spent the whole deadline: a child spawned now would only be killed.
             if (opts.deadlineMs <= 0) {
-                resolve(timedOut());
+                resolve(failed('timeout'));
                 return;
             }
             const job: Job = {
@@ -236,19 +291,20 @@ export class DocumentTransformRunner {
         });
     }
 
-    // Server shutdown: stop admission, reject queued work, give active Workers a
-    // short grace period, then terminate them.
+    // Server shutdown: stop admission, reject queued work, give active children a
+    // short grace period, then kill them and wait a moment for their ends.
     async close(): Promise<void> {
         this.closing = true;
         const queued = [...this.foreground, ...this.background];
         this.foreground = [];
         this.background = [];
-        for (const job of queued) job.resolve(errorResponse('shutdown', 'Server is shutting down'));
+        for (const job of queued) job.resolve(failed('shutdown'));
         const deadline = Date.now() + this.closeGraceMs;
         while (this.active.size > 0 && Date.now() < deadline) await Bun.sleep(10);
-        for (const active of [...this.active.values()]) {
-            active.settle(errorResponse('shutdown', 'Server is shutting down'));
-        }
+        for (const active of this.active.values()) active.kill('shutdown');
+        const killed = Date.now() + KILL_WAIT_MS;
+        while (this.active.size > 0 && Date.now() < killed) await Bun.sleep(10);
+        for (const active of [...this.active.values()]) active.settle(failed('shutdown'));
     }
 
     private cancel(job: Job): void {
@@ -256,14 +312,14 @@ export class DocumentTransformRunner {
         const index = queue.indexOf(job);
         if (index >= 0) {
             queue.splice(index, 1);
-            job.resolve(errorResponse('canceled', 'Request was canceled'));
+            job.resolve(failed('canceled'));
             return;
         }
-        this.active.get(job.id)?.settle(errorResponse('canceled', 'Request was canceled'));
+        this.active.get(job.id)?.kill('canceled');
     }
 
     private startNext(): void {
-        while (this.active.size < MAX_ACTIVE_WORKERS && !this.closing) {
+        while (this.active.size < MAX_ACTIVE_CHILDREN && !this.closing) {
             const job = this.foreground.shift() ?? this.background.shift();
             if (!job) return;
             this.runJob(job);
@@ -273,25 +329,29 @@ export class DocumentTransformRunner {
     private runJob(job: Job): void {
         const queueWaitMs = Date.now() - job.enqueuedAt;
         const queueDepth = this.foreground.length + this.background.length;
-        const transferList = transferListOf(job.request);
-        // Summed before postMessage — the transfer detaches these buffers.
-        const inputBytes = transferList.reduce((sum, buffer) => sum + buffer.byteLength, 0);
+        const inputBytes = inputBytesOf(job.request);
         const startedAt = Date.now();
-        let worker: Worker | undefined;
+        let child: Subprocess | undefined;
+        let acked = false;
+        let killedBy: RunnerKill | undefined;
+        let exited = false;
+        let disconnected = false;
         let transformMs: number | undefined;
+        let peakRssBytes: number | undefined;
 
         const settle = (response: DocumentTransformResponse) => {
             if (!this.active.has(job.id)) return;
             this.active.delete(job.id);
             clearTimeout(timer);
-            worker?.terminate();
+            child?.kill('SIGKILL');
             const totalMs = Date.now() - startedAt;
             const outcome = response.ok ? 'success' : response.error.code;
             const outputBytes = response.ok ? resultBytes(response.result) : 0;
             const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
-            // The Worker stamps transform-only time, so the rest of the job is spawn,
+            const signal = exited ? child?.signalCode : null;
+            // The child stamps transform-only time, so the rest of the job is spawn,
             // module evaluation and messaging — the one-shot cost worth watching. Clamped:
-            // totalMs is whole-ms while the Worker's stamp is fractional, and -1 is taken.
+            // totalMs is whole-ms while the child's stamp is fractional, and -1 is taken.
             const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
@@ -299,40 +359,78 @@ export class DocumentTransformRunner {
                     `queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
                     `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${job.prepMs?.toFixed(0) ?? -1} ` +
                     `inputBytes=${inputBytes} startupMs=${startupMs} ` +
-                    `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes}` +
+                    `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes} ` +
+                    `peakRssBytes=${peakRssBytes ?? -1}` +
+                    (signal ? ` signal=${signal}` : '') +
                     (warnings ? ` warnings=${warnings.map(formatWarning).join(',')}` : ''),
             );
             job.resolve(response);
             this.startNext();
         };
-        this.active.set(job.id, { settle, admissionCostMs: job.admissionCostMs });
+        // Bun delivers every message before the channel closes, which can come after the exit, and the ack decides
+        // the outcome: so a child's end is read once both happened.
+        const ended = () => {
+            if (exited && disconnected) settle(failed(childOutcome(child?.signalCode ?? null, killedBy, acked)));
+        };
+        const kill = (reason: RunnerKill) => {
+            killedBy = reason;
+            child?.kill('SIGKILL');
+        };
+        this.active.set(job.id, { kill, settle, admissionCostMs: job.admissionCostMs });
 
-        const timer = setTimeout(() => settle(timedOut()), job.deadlineMs);
-        // Spawning and posting can throw synchronously (a failed spawn under resource
-        // exhaustion, a DataCloneError on a detached transfer buffer). Unhandled, that
-        // holds the only Worker slot until the deadline and escapes into run()'s
-        // executor — rejecting a promise that is documented to always resolve.
+        const timer = setTimeout(() => kill('timeout'), job.deadlineMs);
+        // Spawning and sending can throw synchronously (a failed spawn under resource
+        // exhaustion, a DataCloneError on a detached buffer). Unhandled, that holds the
+        // only slot until the deadline and escapes into run()'s executor — rejecting a
+        // promise that is documented to always resolve.
         try {
-            worker = new Worker(this.workerUrl);
-            worker.onmessage = (event: MessageEvent) => {
-                const envelope = event.data as Partial<WorkerResponseEnvelope> | null;
-                const response = envelope?.response;
-                if (!isValidResponse(response, job.request)) {
-                    settle(errorResponse('invalid-response', 'Worker returned a malformed response'));
-                    return;
-                }
-                transformMs = typeof envelope?.transformMs === 'number' ? envelope.transformMs : undefined;
-                settle(response);
-            };
-            worker.onerror = (event) => {
-                console.error(`[transform] job=${job.id} worker error:`, event.message || event);
-                settle(errorResponse('crashed', 'Document transform failed'));
-            };
-            worker.addEventListener('close', () => settle(errorResponse('crashed', 'Document transform failed')));
-            worker.postMessage({ jobId: job.id, request: job.request }, transferList);
+            child = Bun.spawn(
+                withLimits(
+                    [process.execPath, this.entry],
+                    this.memoryLimitKiB,
+                    Math.ceil(job.deadlineMs / 1000) * availableParallelism() + CPU_SLACK_SECONDS,
+                ),
+                {
+                    // What the transform graph reads: the data root and mode the eml preview's mail imports resolve
+                    // at load, and the temp dir. The time zone is the parent's, which bun test sets without TZ.
+                    env: {
+                        PATH: process.env['PATH'],
+                        TMPDIR: process.env['TMPDIR'],
+                        NODE_ENV: process.env['NODE_ENV'],
+                        EIGEN_DATA_ROOT: process.env['EIGEN_DATA_ROOT'],
+                        TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                        BUN_JSC_jitMemoryReservationSize: JIT_RESERVATION_BYTES,
+                    },
+                    stdio: ['ignore', 'inherit', 'inherit'],
+                    serialization: 'advanced',
+                    ipc: (message: Partial<ChildAck & ChildResponseEnvelope> | null) => {
+                        if (message?.ack === true) {
+                            acked = true;
+                            return;
+                        }
+                        const response = message?.response;
+                        if (!isValidResponse(response, job.request)) {
+                            settle(errorResponse('invalid-response', 'The transform returned a malformed response'));
+                            return;
+                        }
+                        transformMs = typeof message?.transformMs === 'number' ? message.transformMs : undefined;
+                        peakRssBytes = typeof message?.peakRssBytes === 'number' ? message.peakRssBytes : undefined;
+                        settle(response);
+                    },
+                    onExit: () => {
+                        exited = true;
+                        ended();
+                    },
+                    onDisconnect: () => {
+                        disconnected = true;
+                        ended();
+                    },
+                },
+            );
+            child.send({ jobId: job.id, request: job.request });
         } catch (err) {
-            console.error(`[transform] job=${job.id} worker start failed:`, err);
-            settle(errorResponse('crashed', 'Document transform failed'));
+            console.error(`[transform] job=${job.id} child start failed:`, err);
+            settle(failed('crashed'));
         }
     }
 }

@@ -1140,6 +1140,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BROWSER_IMAGE_MIMES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `bundledFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `bundledFontOfCategory` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `bundledFontOfStack` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `CALENDAR_NAME_MAX_LENGTH` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `canonicalMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1338,6 +1339,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BORDER_STYLES` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `borderInfoExtent` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `borderSidesToCss` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `cellFontName` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `cloneSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
@@ -1349,6 +1351,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_COL_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `SHEET_DEFAULT_DIGIT_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
+| `SHEET_DEFAULT_FONT` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
+| `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |

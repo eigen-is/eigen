@@ -1,9 +1,9 @@
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
-import { ApiError } from './errors';
+import { ApiError, isOutOfMemory } from './errors';
 
 // What OOXML packages use: stored and deflated entries, ZIP64, one disk. The directory's sizes are capped
 // when the archive opens and every inflate stops at its entry's declared size, so a lying entry can't grow
-// past it. Inflating is synchronous: callers run in a transform Worker.
+// past it. Inflating is synchronous: callers run in the transform process.
 
 // The bytes an archive may declare in total, for docx and xlsx: room for a dense sheet at the importer's cell cap.
 export const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
@@ -110,6 +110,7 @@ function inflate(raw: Uint8Array, size: number): Uint8Array {
         if (error instanceof RangeError && 'code' in error && error.code === 'ERR_BUFFER_TOO_LARGE') {
             throw new ZipError('bad-size');
         }
+        if (isOutOfMemory(error)) throw error;
         throw new ZipError('corrupt', { cause: error });
     }
 }

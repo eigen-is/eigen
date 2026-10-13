@@ -1,4 +1,4 @@
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
@@ -340,7 +340,7 @@ export function defaultContext(refs: RefValues): Context {
         allowEdit: true,
 
         fontList: [],
-        defaultFontSize: 10,
+        defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
 
         formatPainterOn: false,
         formatPainterOnce: false,

@@ -1,4 +1,5 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
+import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -183,7 +184,7 @@ export const defaultSettings: Required<Settings> = {
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
     rowHeaderWidth: 46,
     columnHeaderHeight: 20,
-    defaultFontSize: 10,
+    defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
     sheetTabContextMenu: [
         'delete',
         'copy',

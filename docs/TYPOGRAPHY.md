@@ -29,12 +29,12 @@ One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--f
 
 `EIGEN_FONTS` holds each font's name, CSS stack, category and weights. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
 
-- A sheet cell's `ff` may be an index into the list rather than a name. `packages/sheet/src/state/modules/fonts.ts` derives `FONT_ARRAY` and `FONT_INDEX_BY_NAME` (lowercased name to index) from `EIGEN_FONTS`, and a paste into a sheet stores such an index. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
-- `EIGEN_FONTS[0]` is the fallback font in docs and sheets. There is no separate default-font constant for them. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.
+- A sheet cell's `ff` may be an index into the list rather than a name: the editor's default cell stores `0`. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
+- `EIGEN_FONTS[0]` is the default font in docs and sheets: `DOCUMENT_FONT` names it for docs, `SHEET_DEFAULT_FONT` (`packages/lib/src/sheets/fonts.ts`) for sheets. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.
 
 ## Docs and the canvas store a font name, never a CSS stack
 
-The name expands to CSS only where it renders. A sheet cell is looser: it stores a name or an index.
+The name expands to CSS only where it renders. A sheet cell is looser ([§ A sheet cell's font has one decoder](#a-sheet-cells-font-has-one-decoder)).
 
 - The canvas reader accepts only a name from `EIGEN_FONT_NAMES` and falls back to its default (`fontFamily` in `packages/lib/src/vector/kinds/read-fields.ts`). The name ends up in a CSS declaration list, where a stray `;` would open a declaration of the writer's choosing.
 - The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
@@ -42,9 +42,19 @@ The name expands to CSS only where it renders. A sheet cell is looser: it stores
 
 ## Foreign fonts map onto the bundled ones
 
-Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. One map sends a foreign font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category: `bundledFont` in `packages/lib/src/constants/fonts.ts`, over the map that module keeps. Three readers share it: the xlsx import, which sets the font as a cell's `ff` and leaves `ff` unset for a font the map doesn't know; a paste in docs (`cleanPastedHTML` in `apps/docs/src/components/docs/paste.ts`), which maps the first family of a pasted stack the map knows, as Google Docs writes `Georgia,serif`, Word `"Times New Roman",serif` and a docs copy a bundled font's own stack; and the docx reader (`apps/api/src/lib/import/doc/docx-fonts.ts`).
+Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. One map sends a foreign font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category: `bundledFont` in `packages/lib/src/constants/fonts.ts`, over the map that module keeps. Four readers share it: the xlsx import, which sets the font as a cell's `ff`; the docx reader (`apps/api/src/lib/import/doc/docx-fonts.ts`); and the pastes in docs (`cleanPastedHTML` in `apps/docs/src/components/docs/paste.ts`) and sheets (`packages/sheet/src/state/events/paste.ts`). A paste reads a CSS stack, so it maps the first family of the stack the map knows (`bundledFontOfStack`), as Google Docs writes `Georgia,serif`, Word `"Times New Roman",serif` and a copy from Eigen a bundled font's own stack. A font the map doesn't know gives a sheet cell no `ff`, so it draws in the sheet default.
 
 A doc's text draws in the document font, `DOCUMENT_FONT` (Inter), without a mark. So a paste or a docx import gives a font that maps to Inter no mark, and every other bundled font its `textStyle` mark: a Word file set in Calibri imports with no font marks, one set in Times New Roman with Source Serif 4 on every run. A run in a foreign monospace font, Courier New in a sentence, gets the JetBrains Mono mark and stays prose. Only a code style or the editor's code look on a light grey makes a run inline code, because a grey chip on every Courier run would invent code the author never marked.
+
+## A sheet cell's font has one decoder
+
+A cell's `ff` is an index into `EIGEN_FONTS` or a font name, and a rich-text run edited in the cell stores its lowercased CSS stack. `cellFontName` (`packages/lib/src/sheets/fonts.ts`) turns any of them into a name: the editor's canvas and toolbar, the HTML export and the xlsx writer all call it, so a cell can't draw in one font and export in another. A numeric string is a name, not an index. A cell with no `ff` draws in `SHEET_DEFAULT_FONT`, Inter, at `SHEET_DEFAULT_FONT_SIZE`, 10 pt.
+
+## The xlsx export makes Inter the workbook's default font
+
+ExcelJS writes Calibri as the workbook's default font, the first font of `styles.xml`, which a cell with no font of its own draws in. So `to-xlsx.ts` rewrites that font to the sheet default, and the file opens in the font Eigen drew. Every font the writer writes names its face and size, and a bundled face its `<family>` number (1 serif, 2 sans, 3 mono, 4 script), so a reader without Inter substitutes a face of the same kind.
+
+The default font is also the unit of a column width: an xlsx width counts the file's own default font's widest digit (ECMA-376 Part 1 § 18.3.1.13). `SHEET_DEFAULT_DIGIT_WIDTH` derives Inter's from `FONT_METRICS` at 10 pt, 9 px. The writer converts through it, and so does the importer for a file whose default font is Inter, so an export's widths survive the round trip to the pixel. Any other file imports at 8 px a character, near Calibri's 7 px digit plus padding, so an Excel column keeps the width it has in Excel.
 
 ## The docx reader picks a font per script and falls back on the font table
 
@@ -63,7 +73,7 @@ The registry drives the pickers and the sheet lists. The other places keep their
 1. The woff2 files, the static TrueType faces the docx embeds and the font's `OFL.txt` in `packages/ui/src/assets/fonts/<font-name>/`.
 2. Its `@font-face` rules in `fonts.css`.
 3. The entry in `EIGEN_FONTS`, appended at the end.
-4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's.
+4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's. The widest digit there sizes a sheet's xlsx column unit.
 5. `FONT_FILES` and `DOCX_FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback; the docx embeds the static faces, keyed by the font's name ([EXPORT.md](EXPORT.md#the-docx-embeds-the-faces-a-doc-uses-its-600s-in-the-bold-slot)). `apps/api/src/test/export/fonts.test.ts` fails when `FONT_FILES` and `fonts.css` disagree, when `DOCX_FONT_FILES` misses a font, or when a face names another family, and pins the count of faces, so a new face updates the test too.
 6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
 
@@ -73,3 +83,4 @@ A `--font-*` token in `globals.css` is needed only when the font fills a new cat
 
 - [EXPORT.md](EXPORT.md): how exports embed the fonts
 - [SHEETS.md](SHEETS.md): the sheet engine that stores `ff`
+- [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-only): the xlsx writer

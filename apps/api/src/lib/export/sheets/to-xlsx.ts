@@ -1,15 +1,21 @@
+import { EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
 import {
     BORDER_STYLES,
     type BorderSide,
     borderInfoExtent,
     type CellBorderSides,
+    type CellStyle,
     type ConditionalFormatRule,
+    cellFontName,
     type DataVerificationRule,
     type DefaultConditionalFormatRule,
     type Cell as FortuneCell,
     type InlineStringSegment,
     mergedBorderSides,
     parseCellKey,
+    SHEET_DEFAULT_DIGIT_WIDTH,
+    SHEET_DEFAULT_FONT,
+    SHEET_DEFAULT_FONT_SIZE,
     type Sheet,
     type SingleRange,
 } from '@workspace/lib/sheets';
@@ -37,7 +43,6 @@ import { relsPathOf } from '../../core/opc';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
-import { resolveFontFamily } from './fonts';
 
 // Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module
@@ -48,6 +53,16 @@ const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 const DAY_MS = 86_400_000;
 // Excel's default row height; the importer treats it as "no explicit height".
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
+
+// A font's category as styles.xml's <family> numbers it (ECMA-376 Part 1 § 18.8.18).
+const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
+    serif: 1,
+    'sans-serif': 2,
+    monospace: 3,
+    'hand-drawn': 4,
+};
+
+const DEFAULT_FONT_XML = `<font><color theme="1"/><family val="${FONT_FAMILY_NUMBER[SHEET_DEFAULT_FONT.category]}"/><sz val="${SHEET_DEFAULT_FONT_SIZE}"/><name val="${escapeXml(SHEET_DEFAULT_FONT.name)}"/></font>`;
 
 // The cell's hex colors and the rgb(…) strings of the editor's CSS pipeline (state/modules/inline-string.ts) alike;
 // undefined for one Office can't hold, which the caller drops.
@@ -69,7 +84,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         if (config.columnlen) {
             for (const [col, px] of Object.entries(config.columnlen)) {
-                worksheet.getColumn(Number(col) + 1).width = px / 8;
+                worksheet.getColumn(Number(col) + 1).width = px / SHEET_DEFAULT_DIGIT_WIDTH;
             }
         }
 
@@ -212,9 +227,12 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     }
 
     const arrayBuffer = await workbook.xlsx.writeBuffer();
-    return rewriteInternalHyperlinks(Buffer.from(arrayBuffer), internalLinkLabels);
+    return rewritePackage(Buffer.from(arrayBuffer), internalLinkLabels);
 }
 
+// exceljs writes Calibri, its theme's body font, as styles fonts[0], the font of a cell without
+// one of its own and the unit of every column width; the sheet default takes its place.
+//
 // exceljs rels EVERY hyperlink (worksheet-xform prepare), so location-form internal
 // links come out with a redundant TargetMode="External" rel and an r:id on the
 // element. Per ECMA-376 the r:id wins over location, so Excel/Google chase the rel
@@ -222,19 +240,20 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 // and Google author internal links location-only, with the link label in the
 // display attribute; rewrite our elements to that exact form — strip the junk
 // rel, inject display.
-function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Map<string, string>>): Buffer {
-    // Every internal link has a label, so a workbook without one is never reopened, nor held to openZip's caps.
-    if (labelsBySheet.size === 0) return buffer;
+function rewritePackage(buffer: Buffer, labelsBySheet: Map<number, Map<string, string>>): Buffer {
     let zip: ZipReader;
     try {
         zip = openZip(buffer);
     } catch (error) {
-        // One past the upload caps is exported as exceljs writes it, its internal links with their redundant rels.
+        // One past the upload caps is exported as exceljs writes it: Calibri its default font, its internal links
+        // with their redundant rels.
         if (error instanceof ZipError) return buffer;
         throw error;
     }
     const text = (path: string) => new TextDecoder().decode(zip.read(path));
-    const rewritten = new Map<string, string>();
+    const rewritten = new Map([
+        ['xl/styles.xml', text('xl/styles.xml').replace(/(<fonts\b[^>]*>)<font>.*?<\/font>/s, `$1${DEFAULT_FONT_XML}`)],
+    ]);
     for (const path of zip.names()) {
         const sheetFile = path.match(/^xl\/worksheets\/sheet(\d+)\.xml$/);
         if (!sheetFile) continue;
@@ -264,7 +283,6 @@ function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Ma
             rewritten.set(relsPath, rels);
         }
     }
-    if (rewritten.size === 0) return buffer;
     const files: ZipWriteEntry[] = [];
     for (const [name, read] of zip.files()) files.push({ name, data: rewritten.get(name) ?? read() });
     return Buffer.from(writeZip(files));
@@ -295,19 +313,28 @@ function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
     if (v.ct?.fa) cell.numFmt = v.ct.fa;
 }
 
+// Whole, so no reader fills a gap from its own default; the family lets a reader without the face
+// substitute one of its category.
+function fontOf(style: CellStyle): Partial<Font> {
+    const name = cellFontName(style.ff) ?? SHEET_DEFAULT_FONT.name;
+    const category = EIGEN_FONTS.find((font) => font.name === name)?.category;
+    const argb = style.fc ? argbOf(style.fc) : undefined;
+    return {
+        ...(style.bl === 1 && { bold: true }),
+        ...(style.it === 1 && { italic: true }),
+        ...(style.un === 1 && { underline: true as const }),
+        ...(style.cl === 1 && { strike: true }),
+        size: style.fs ?? SHEET_DEFAULT_FONT_SIZE,
+        name,
+        ...(category && { family: FONT_FAMILY_NUMBER[category] }),
+        ...(argb && { color: { argb } }),
+    };
+}
+
 function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
-    const fontName = resolveFontFamily(v.ff);
     const fc = v.fc ? argbOf(v.fc) : undefined;
-    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1 || typeof v.fs === 'number' || fc || fontName) {
-        cell.font = {
-            ...(v.bl === 1 && { bold: true }),
-            ...(v.it === 1 && { italic: true }),
-            ...(v.un === 1 && { underline: true as const }),
-            ...(v.cl === 1 && { strike: true }),
-            ...(typeof v.fs === 'number' && { size: v.fs }),
-            ...(fontName && { name: fontName }),
-            ...(fc && { color: { argb: fc } }),
-        };
+    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1 || typeof v.fs === 'number' || fc || cellFontName(v.ff)) {
+        cell.font = fontOf(v);
     }
 
     const bg = v.bg ? argbOf(v.bg) : undefined;
@@ -348,18 +375,7 @@ function inlineSegmentsToRichText(segments: InlineStringSegment[] | undefined): 
     const runs: RichText[] = [];
     for (const seg of segments) {
         if (!seg.v) continue;
-        const fontName = resolveFontFamily(seg.ff);
-        const argb = seg.fc ? argbOf(seg.fc) : undefined;
-        const font: Partial<Font> = {
-            ...(seg.bl === 1 && { bold: true }),
-            ...(seg.it === 1 && { italic: true }),
-            ...(seg.un === 1 && { underline: true as const }),
-            ...(seg.cl === 1 && { strike: true }),
-            ...(typeof seg.fs === 'number' && { size: seg.fs }),
-            ...(fontName && { name: fontName }),
-            ...(argb && { color: { argb } }),
-        };
-        runs.push(Object.keys(font).length > 0 ? { text: seg.v, font } : { text: seg.v });
+        runs.push({ text: seg.v, font: fontOf(seg) });
     }
     return runs.length > 0 ? runs : null;
 }

@@ -120,9 +120,9 @@ The dependency graph has two limits:
 
 The editor's dependent recompute runs inside the recipe that emits the op, so recomputed `v` and `m` persist as ordinary ops. A doc edited in a browser is already fresh when the server reads it.
 
-So `readSheetsFromDoc` recomputes only on the export read. Preview and the search extract pass `{ recalc: false }` and serve the replayed values, and a formula cell with no value stays blank. A legacy never-computed workbook costs an unbounded recalc (about 39 s measured), past the 30 s Worker deadline of a preview, so every preview of such a doc would fail. An export recomputes under its 120 s deadline, because a deliverable with blank formula cells is wrong output.
+So `readSheetsFromDoc` recomputes only on the export read. Preview and the search extract pass `{ recalc: false }` and serve the replayed values, and a formula cell with no value stays blank. A legacy never-computed workbook costs an unbounded recalc (about 39 s measured), past the 30 s transform deadline of a preview, so every preview of such a doc would fail. An export recomputes under its 120 s deadline, because a deliverable with blank formula cells is wrong output.
 
-Even on export, `recalcSheets` runs only when `sheetsNeedRecalc` finds a sheet with formula cells and an empty `calcChain`. The decoder leaves the chain empty unless the envelope says `computed: true`, which every editor flush writes ([the codec](#the-snapshot-is-interned-and-written-only-through-the-codec)). The xlsx importer runs `recalcSheets` once in its Worker and writes `computed: true`, or `false` when its recalc failed, so that export recomputes. Any recalc failure falls back to the replayed values: an export never fails because recalc did.
+Even on export, `recalcSheets` runs only when `sheetsNeedRecalc` finds a sheet with formula cells and an empty `calcChain`. The decoder leaves the chain empty unless the envelope says `computed: true`, which every editor flush writes ([the codec](#the-snapshot-is-interned-and-written-only-through-the-codec)). The xlsx importer runs `recalcSheets` once in its transform and writes `computed: true`, or `false` when its recalc failed, so that export recomputes. Any recalc failure falls back to the replayed values: an export never fails because recalc did.
 
 ## Recalc keeps what it can't improve
 
@@ -243,7 +243,7 @@ On mobile the comments pane takes the whole width, so `editor.tsx` hides the wor
 
 ## The full export styles cells by class
 
-The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. The Worker, the route and the xlsx writer are in [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-only).
+The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. The transform, the route and the xlsx writer are in [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-only).
 
 `renderSheetsHtml` interns every style it emits (cell, row height, column width, data bar, rotation, image) into a workbook-global registry of classes and returns `{ html, css }`. The document builders put the rules in a body `<style>` element, which goes through `sanitizeExportHtml` with the markup.
 
@@ -283,6 +283,10 @@ These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/
 - A `sheet` link re-imports as a `cellrange` link at `'Name'!A1`, and a range link keeps only its top-left cell, because ExcelJS's internal-link pattern needs a single trailing cell ref. A bare ref gains its own sheet's quoted prefix. A webpage URL with exactly one `!` and a cell-shaped tail is misread as internal by that pattern.
 - Imported link cells keep Excel's font, while the link dialog sets blue and underline. Forcing the dialog style at import would clobber theme-styled link cells.
 - A link to another workbook that carries a sheet anchor imports as an internal link: the `location` attribute wins over the relationship target.
+
+Column widths:
+
+- A width counts the file's default font's digits ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)). Only a file whose default font is Inter, an Eigen export, converts through Inter's 9 px digit; any other imports at 8 px a character, so an Excel column 8.43 characters wide is 67 px where Excel draws 64.
 
 Rules and comments:
 

@@ -1,4 +1,5 @@
 import { useMediaQuery } from '@workspace/lib/media';
+import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { ColorPickerButton } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
@@ -13,7 +14,6 @@ import {
     handleTextBackground,
     handleTextColor,
     handleTextSize,
-    resolveFontName,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 import { FontSizeStepper } from './font-size-stepper';
@@ -39,7 +39,7 @@ export function FormatToolbar() {
     const textColor = cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
     const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
-    const fontName = resolveFontName(cell?.ff);
+    const fontName = cellFontName(cell?.ff) ?? SHEET_DEFAULT_FONT.name;
     const fontSize = Number(cell?.fs) || settings.defaultFontSize;
     const bold = Number(cell?.bl) === 1;
     const italic = Number(cell?.it) === 1;

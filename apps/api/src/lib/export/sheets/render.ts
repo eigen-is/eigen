@@ -6,6 +6,7 @@ import {
     type CellBorderSides,
     type CellWithRowAndCol,
     type ConditionalFormatRule,
+    cellFontName,
     type MergeCell,
     mergedBorderSides,
     SHEET_DEFAULT_COL_WIDTH,
@@ -34,7 +35,6 @@ import type { HtmlExportMode } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
-import { resolveFontFamily } from './fonts';
 
 // Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
 // the fixed-size PDF document. Runs inside the transform Worker (worker.ts owns
@@ -534,7 +534,7 @@ function buildCellStyle(
     const rotated = isNumericRotation(v);
 
     if (v) {
-        const family = resolveFontFamily(v.ff);
+        const family = cellFontName(v.ff);
         // The name itself is escaped for its context too: entity-encoded in an attribute,
         // but in stylesheet text entities stay literal, so escapeHtml there would render
         // a font called "Bell MT & Co" as "Bell MT &amp; Co". Dropping the quote

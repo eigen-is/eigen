@@ -1,6 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
+import { DOCUMENT_TOO_LARGE, IMPORT_TOO_LARGE } from '../../import/messages';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
@@ -21,15 +22,16 @@ import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type Transf
 // warnings, map failures — plus, for document-sourced jobs, the capture of the
 // compressed Yjs blobs. A caller adds only its job fields and what it does with
 // the result, so a new operation (doc/slides preview, HTML/PDF/DOCX export, DOCX
-// import) is a thin wrapper plus a pure converter in the Worker — no new
+// import) is a thin wrapper plus a pure converter in the transform process — no new
 // orchestration.
 //
 // There is deliberately no main-thread fallback: a runner 503 and controlled
-// document errors keep their HTTP status, every other failure throws.
+// document errors keep their HTTP status, an import or a search extract that ran out of
+// memory is a file too large, every other failure throws.
 
 // What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
 // and the capture time is measured here. prepMs: main-thread media preparation time,
-// measured by the caller's wrapper — logged with the job so a fast Worker behind slow
+// measured by the caller's wrapper — logged with the job so a fast transform behind slow
 // preparation stays visible.
 type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionCostMs' | 'captureMs'> & {
     priority?: TransformPriority;
@@ -50,6 +52,13 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
     });
     if (!response.ok) {
         if (response.error.status) throw new ApiError(response.error.status, response.error.message);
+        if (response.error.code === 'out-of-memory' && request.kind === 'import') {
+            throw new ApiError(413, IMPORT_TOO_LARGE[request.sourceFormat]);
+        }
+        // The search extract indexes it as nothing rather than running out again on every drain.
+        if (response.error.code === 'out-of-memory' && request.kind === 'extract-text') {
+            throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
         throw new Error(`${what} transform failed (${response.error.code}): ${response.error.message}`);
@@ -83,7 +92,7 @@ async function runDocumentTransform<R extends DocumentTransformRequest>(
     });
 }
 
-// Only recalc-failed needs a line here: the Worker already logs every skipped blob
+// Only recalc-failed needs a line here: the child already logs every skipped blob
 // and the runner logs each warning code with the job. The two fallbacks differ —
 // a read serves replayed values, an import persists the parsed ones.
 function surfaceWarning(warning: TransformWarning, kind: DocumentTransformRequest['kind']): void {
@@ -96,7 +105,7 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 }
 
 // Text results (preview bodies, indexable content) and binary results (exports). The
-// job kind decides which the Worker returns and which limits it runs under. The runner
+// job kind decides which the child returns and which limits it runs under. The runner
 // validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
 // these narrow instead of re-checking.
 export async function runTransformToText(
@@ -152,8 +161,7 @@ export async function runFileTransformToText(
     });
 }
 
-// The same job with the bytes already in hand — a mail part has no Mount to read them from. The buffer
-// is transferred to the Worker, so the caller must own it.
+// The same job with the bytes already in hand — a mail part has no Mount to read them from.
 export async function runBytesTransformToText(
     job: BytesPreviewJob,
     data: ArrayBuffer,
