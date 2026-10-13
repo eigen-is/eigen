@@ -326,10 +326,11 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 const theta = (stored * Math.PI) / 180;
                 return angle(degrees(Math.atan2(el.height * Math.sin(theta), el.width * Math.cos(theta))));
             };
+            const [adj1, adj2] = [visual(el.startAngle), visual(el.startAngle + el.sweepAngle)];
+            // A pie whose angles meet draws the whole disc: a slice that thin draws nothing, one that full the disc.
+            if (adj1 === adj2 && el.sweepAngle < 180) return '';
             const geometry =
-                el.sweepAngle >= 360
-                    ? presetXml('ellipse')
-                    : presetXml('pie', { adj1: visual(el.startAngle), adj2: visual(el.startAngle + el.sweepAngle) });
+                el.sweepAngle >= 360 || adj1 === adj2 ? presetXml('ellipse') : presetXml('pie', { adj1, adj2 });
             return spXml(slide, 'Pie', el, geometry, fillXml(parseFill(el.fill), opacity), lineXml(slide, el, opacity));
         }
         case 'image':

@@ -341,6 +341,29 @@ describe('pptx shapes', () => {
         expect(geometry(whole)).toBe('ellipse');
     });
 
+    test('a slice too thin to tell its angles apart writes nothing, one too full to an ellipse', () => {
+        // DrawingML's pie draws a whole disc when its two angles meet.
+        const thin = pptx(sceneOf([element('pie', { startAngle: 30, sweepAngle: 1e-7 })]));
+        expect(shapes(thin)).toHaveLength(0);
+        const full = only(pptx(sceneOf([element('pie', { startAngle: 30, sweepAngle: 360 - 1e-7 })])));
+        expect(geometry(full)).toBe('ellipse');
+
+        const spec = sampleChartSpec('pie');
+        const series = spec.data.series.map((s) => ({ ...s, values: [1.4e9, 3, 65, 80] }));
+        const chart = element('chart', {
+            width: 640,
+            height: 400,
+            chart: JSON.stringify({ ...spec, data: { ...spec.data, series } }),
+        });
+        const scene = sceneOf([chart]);
+        const all = shapes(pptx(scene));
+        // The 3's slice is the one under a 60,000th of a degree.
+        expect(all).toHaveLength(convertToShapes(scene.elements[0]).length - 1);
+        const pies = all.filter((shape) => geometry(shape) === 'pie');
+        expect(pies).toHaveLength(3);
+        for (const pie of pies) expect(guides(pie)['adj1']).not.toBe(guides(pie)['adj2']);
+    });
+
     test('a fill, a #rrggbbaa stroke, opacity and dashes', () => {
         const shape = only(
             pptx(
