@@ -588,17 +588,18 @@ mtd {
     padding: 0.5ex 0.4em;
 }
 
-mtable[columnalign] > mtr > mtd {
+mtable[displaystyle="true"] > mtr > mtd {
     padding-inline: 0;
 }
 
-/* The writer aligns an equations table as Word's & marks do: right of the first, left of the next, by turns. Browsers
-   leave columnalign to CSS and centre every cell. */
-mtable[columnalign] > mtr > mtd:nth-child(odd) {
+/* The writer aligns an equations table as Word's & marks do: right of the first, left of the next, by turns, and a
+   cases table's columns left. Browsers leave columnalign to CSS and centre every cell. */
+mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
     text-align: right;
 }
 
-mtable[columnalign] > mtr > mtd:nth-child(even) {
+mtable[displaystyle="true"] > mtr > mtd:nth-child(even),
+mtable[columnalign="left"] > mtr > mtd {
     text-align: left;
 }
 
@@ -606,11 +607,12 @@ mtable[columnalign] > mtr > mtd:nth-child(even) {
    only the -webkit- values move (in WebKit they break the row), and draws no menclose, which WebKit and Firefox draw
    themselves. Each notation's line is a border or a background layer of its own, so any set of them combines. */
 @supports (display: block math) {
-    mtable[columnalign] > mtr > mtd:nth-child(odd) {
+    mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
         text-align: -webkit-right;
     }
 
-    mtable[columnalign] > mtr > mtd:nth-child(even) {
+    mtable[displaystyle="true"] > mtr > mtd:nth-child(even),
+    mtable[columnalign="left"] > mtr > mtd {
         text-align: -webkit-left;
     }
 
