@@ -30,3 +30,4 @@ export * from './snap';
 export { type FaceWidths, measureLabel, TEXT_WIDTH_RANGES } from './text-width';
 export * from './types';
 export * from './viewport';
+export * from './write-vector';

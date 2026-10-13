@@ -9,6 +9,7 @@ import {
     VECTOR_STYLE_DEFAULTS,
     type VectorChartElement,
     type VectorElement,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { installHappyDom } from '../../../happy-dom';
@@ -18,7 +19,6 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { holdCapture, sealed } = await import('../../../../components/vector/hooks/use-canvas-doc');
-const { writeElementInDoc } = await import('../../../../components/vector/hooks/element-writes');
 const { PropertyGestureContext } = await import('../../../../components/properties-panel');
 const { ChartEditDialog, ChartPanelSection, newChartElement } = await import(
     '../../../../components/vector/kinds/chart'

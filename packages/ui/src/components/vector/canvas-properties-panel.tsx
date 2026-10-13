@@ -22,6 +22,7 @@ import {
     type FillStyle,
     isLinearElement,
     isTransparentFill,
+    type NewVectorElement,
     parseFill,
     resizeLinear,
     STROKE_WIDTH_OPTIONS,
@@ -30,6 +31,7 @@ import {
     TRANSPARENT_FILL,
     type VectorArrowElement,
     type VectorElement,
+    type VectorElementPatch,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
 import {
@@ -53,7 +55,7 @@ import {
 import { type ReactNode, useCallback } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
-import { holdCapture, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
+import { holdCapture, sealed } from './hooks/use-canvas-doc';
 import { ELEMENT_KIND_UI } from './kinds';
 
 // Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,

@@ -12,7 +12,7 @@ Drawing is the same on screen and on the server. Each element becomes one layer:
 
 Two more terms come back often. A host is the app that mounts `CanvasEditor` and decides how new elements look: the Vector app or the Slides app. Frame mode is how Slides mounts the canvas: it shows the active frame only, fitted to the screen.
 
-The sections cover the stored fields, the reader, kinds, layers, arrows that stay attached to shapes (bindings), elbow arrows, the viewport, frame mode, undo, text editing, Escape and touch. Three things in them surprise people:
+The sections cover the stored fields, the reader, the writer, kinds, layers, arrows that stay attached to shapes (bindings), elbow arrows, the viewport, frame mode, undo, text editing, Escape and touch. Three things in them surprise people:
 
 - The reader's repairs live only in the scene it returns. A repaired field is stored only when a later write sets that same field ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 - One discrete op, such as a delete or a panel change, is one undo step ([§ One discrete op is one undo step](#one-discrete-op-is-one-undo-step)).
@@ -35,6 +35,10 @@ A rich-text box's `html` is one scalar, so two people typing in one box resolve 
 `readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene. Nothing writes it back: `updateElements` writes only the fields it is given, so a repaired field is stored only when a later write sets that same field. It can't sanitize rich-text `html`, which needs a DOM, so the layers that render it do ([§ One layer per element](#one-layer-per-element-on-the-canvas-and-on-the-server)).
 
 A pasted clipboard record goes through the same `readElementFromFields`, so a forged clipboard is exactly as safe as a hostile peer write.
+
+## One writer stores what the reader reads
+
+`write-vector.ts` is the one writer of the stored shape. `writeElementInDoc` lays the kind's defaults under the host's style table, then the caller's fields, and stores them through the `ELEMENT_FIELDS` allow-list. `writeFrameInDoc` does the same through `FRAME_FIELDS`. The editor, the deck seeder, the demo seeder and the server's deck writer all write through it, so a seeded or imported page cannot drift from one a user drew. Each takes an optional id and seed: the seeders pass fixed ones so two peers converge on one record and a reseed writes the same bytes. Both join a caller's live transaction, so the caller's origin and its one-update guarantee hold. Like the reader it needs only yjs, so the API runs it.
 
 ## A kind is one registry entry
 

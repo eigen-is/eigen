@@ -9,10 +9,10 @@ import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
-    cleanStr,
     color,
     coord,
     isYMapLike,
+    labelText,
     num,
     oneOf,
     roughness,
@@ -70,7 +70,7 @@ function readFrames(framesMap: Y.Map<unknown>): VectorFrame[] {
         frames.push({
             id,
             index: str(value.get('index'), ''),
-            name: cleanStr(value.get('name'), ''),
+            name: labelText(value.get('name')),
             width: FRAME_WIDTH,
             height: FRAME_HEIGHT,
             background: serializeBackgroundFill(parseBackgroundFill(str(value.get('background'), ''))),
