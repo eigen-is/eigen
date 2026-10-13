@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
+import { chartColor, formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
 import {
     CHART_TYPES,
     type ChartData,
@@ -18,7 +18,6 @@ import { measureLabel } from '../../vector/text-width';
 import type { VectorElement, VectorLinearElement, VectorPieElement, VectorRectangleElement } from '../../vector/types';
 
 const PAINT: ChartPaint = {
-    fontFamily: 'Inter',
     color: '#1e1e1e',
     background: solidFill('#ffffff'),
     strokeColor: '#1e1e1e',
@@ -240,6 +239,23 @@ describe('layoutChart invariants', () => {
         expect(title(large)?.fontSize).toBeGreaterThan(tick(large)?.fontSize ?? Infinity);
         expect(title(large)?.anchor).toBe('middle');
         expect(title(large)?.x).toBe(600);
+    });
+
+    test('every label draws in the spec font and reserves its room by that font', () => {
+        // Narrow in Inter, a full cell each in a monospace face.
+        const data = { categories: ['illicit', 'iii'], series: [series('S', [3, 5])] };
+        const bar = (fontFamily: string) => {
+            const out = layout('bar', { fontFamily }, { data });
+            expect(out.labels.every((label) => label.fontFamily === fontFamily)).toBe(true);
+            const names = out.labels.filter((label) => data.categories.includes(label.text));
+            const widest = Math.max(...names.map((l) => measureLabel(l.text, fontFamily, l.fontSize, l.bold)));
+            // The left column ends where the end-anchored names do: the pad plus the widest name.
+            return { end: names[0].x, pad: names[0].x - widest };
+        };
+        const inter = bar('Inter');
+        const mono = bar('JetBrains Mono');
+        expect(mono.end).toBeGreaterThan(inter.end + 1);
+        expect(mono.pad).toBeCloseTo(inter.pad, 6);
     });
 });
 
@@ -476,7 +492,7 @@ describe('legend', () => {
     test('top and bottom are a centered row of swatches, left and right a column', () => {
         const top = layout('column', { legend: 'top' });
         const swatches = rects(top, 'legend');
-        expect(swatches.map((swatch) => swatch.strokeColor)).toEqual(['#2a78d6', '#eb6834']);
+        expect(swatches.map((swatch) => swatch.strokeColor)).toEqual([chartColor(0), chartColor(1)]);
         expect(swatches[0].y).toBeCloseTo(swatches[1].y);
         const titleBottom = Math.max(...top.labels.filter((l) => l.bold).map((l) => labelBounds(l).bottom));
         expect(swatches[0].y).toBeGreaterThan(titleBottom);
@@ -576,10 +592,10 @@ describe('pie', () => {
         const out = layout('pie', { sliceColors: ['#000000'] });
         const pie = slices(out);
         expect(pie[0].fill).toBe(solidFill('#000000'));
-        expect(pie[1].fill).toBe(solidFill('#eb6834'));
+        expect(pie[1].fill).toBe(solidFill(chartColor(1)));
         expect(pie.every((slice) => slice.strokeColor === '#ffffff')).toBe(true);
         const bare = slices(layout('pie', {}, { paint: { background: serializeFill(TRANSPARENT_FILL) } }));
-        expect(bare[1].strokeColor).toBe('#eb6834');
+        expect(bare[1].strokeColor).toBe(chartColor(1));
     });
 
     test('labels read name and percent; slices under 5% go unlabeled', () => {
@@ -642,7 +658,7 @@ describe('unusable data', () => {
 
     test('a message alone is the background and one centered line that fits the box', () => {
         const box = { id: 'c1', width: 640, height: 400, paint: PAINT };
-        const out = layoutChartMessage(box, 'Nothing here');
+        const out = layoutChartMessage(box, 'Nothing here', 'Inter');
         expect(out.shapes.map((shape) => shape.id)).toEqual(['c1:background']);
         expect(out.labels).toEqual(
             layout('column', {}, { data: { categories: [], series: [] } }).labels.map((l) => ({
@@ -650,10 +666,12 @@ describe('unusable data', () => {
                 text: 'Nothing here',
             })),
         );
-        const narrow = layoutChartMessage({ ...box, width: 90 }, 'A message far wider than the box');
+        const narrow = layoutChartMessage({ ...box, width: 90 }, 'A message far wider than the box', 'Inter');
         expect(narrow.labels).toHaveLength(1);
         expect(narrow.labels[0].text.endsWith('…')).toBe(true);
         expect(measureLabel(narrow.labels[0].text, 'Inter', narrow.labels[0].fontSize, false)).toBeLessThanOrEqual(90);
+        const mono = layoutChartMessage(box, 'Nothing here', 'JetBrains Mono');
+        expect(mono.labels[0].fontFamily).toBe('JetBrains Mono');
     });
 
     test('a box too small draws no chart and nothing outside the box', () => {

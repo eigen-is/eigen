@@ -39,7 +39,6 @@ function chart(id: string, type: ChartType = 'column'): VectorChartElement {
         index: 'a0',
         chart: JSON.stringify(sampleChartSpec(type)),
         fill: '{"type":"solid","color":"#ffffff","style":"solid"}',
-        fontFamily: 'sans',
         color: '#1e1e1e',
     };
 }
@@ -84,7 +83,7 @@ describe('newChartElement', () => {
         const doc = new Y.Doc();
         const undoManager = new Y.UndoManager(doc.getMap('elements'));
         sealed(undoManager, () =>
-            writeElementInDoc(doc, newChartElement(type, { x: 960, y: 540 }, viewport), 'a0', style),
+            writeElementInDoc(doc, newChartElement(type, { x: 960, y: 540 }, viewport, style), 'a0', style),
         );
         return { doc, undoManager, inserted: readVectorFromDoc(doc).elements };
     };
@@ -94,8 +93,10 @@ describe('newChartElement', () => {
         expect(inserted).toHaveLength(1);
         const [el] = inserted;
         expect(el).toMatchObject({ type: 'chart', x: 640, y: 340, width: 640, height: 400 });
-        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual(sampleChartSpec('bar'));
-        expect(el.type === 'chart' && el.fontFamily).toBe(VECTOR_STYLE_DEFAULTS.fontFamily);
+        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual({
+            ...sampleChartSpec('bar'),
+            fontFamily: 'Excalifont',
+        });
         expect(el.roughness).toBe(VECTOR_STYLE_DEFAULTS.roughness);
         expect(undoManager.undoStack).toHaveLength(1);
         undoManager.undo();
@@ -106,8 +107,10 @@ describe('newChartElement', () => {
         const { inserted } = insert('pie', 'frame', SLIDES_STYLE_DEFAULTS);
         const [el] = inserted;
         expect(el).toMatchObject({ type: 'chart', x: 360, y: 202.5, width: 1200, height: 675 });
-        expect(el.type === 'chart' && parseChartSpec(el.chart)?.type).toBe('pie');
-        expect(el.type === 'chart' && el.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
+        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual({
+            ...sampleChartSpec('pie'),
+            fontFamily: 'Inter',
+        });
         expect(el.roughness).toBe(SLIDES_STYLE_DEFAULTS.roughness);
     });
 });
@@ -204,6 +207,40 @@ describe('ChartEditDialog', () => {
         expect(writes).toEqual([]);
         expect(closed()).toBe(1);
     });
+});
+
+test('a font picked in the panel is one write of the spec and one undo step', async () => {
+    const doc = new Y.Doc();
+    const element = doc.getMap<string>('element');
+    const undoManager = new Y.UndoManager(element);
+    const el = chart('c1');
+    const panel = createElement(ChartPanelSection, {
+        elements: [el],
+        scene: new Map([[el.id, el]]),
+        onChange: (fields: Record<string, unknown>) =>
+            sealed(undoManager, () => {
+                if (typeof fields.chart === 'string') element.set('chart', fields.chart);
+            }),
+        onChangeEach: () => {},
+        onReplace: () => {},
+    });
+    const container = await render(
+        createElement(PropertyGestureContext.Provider, { value: () => holdCapture(undoManager) }, panel),
+    );
+    const trigger = [...container.querySelectorAll('span.w-14')]
+        .find((span) => span.textContent?.trim() === 'Font')
+        ?.nextElementSibling?.querySelector('button[aria-haspopup="menu"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    });
+    const serif = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'Source Serif 4',
+    );
+    await click(serif);
+    expect(parseChartSpec(element.get('chart') ?? '')?.fontFamily).toBe('Source Serif 4');
+    expect(undoManager.undoStack).toHaveLength(1);
+    undoManager.undo();
+    expect(element.get('chart')).toBeUndefined();
 });
 
 test('a typed chart title through the panel is one undo step', async () => {

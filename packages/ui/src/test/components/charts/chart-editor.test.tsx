@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { chartColor, sampleChartSpec } from '@workspace/lib/charts';
+import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
 import type { ChartSpec, ChartType } from '@workspace/lib/types/chart';
 import { installHappyDom } from '../../happy-dom';
 
@@ -110,12 +111,21 @@ async function mount(
         });
         return texts;
     };
+    // The Font row is the canvas text box's picker, a dropdown menu of the Eigen fonts.
+    const fonts = async () => {
+        await act(async () => {
+            row('Font')
+                .querySelector('button[aria-haspopup="menu"]')
+                ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        });
+        return [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
+    };
     const last = () => {
         const change = changes.at(-1);
         if (!change) throw new Error('the editor wrote nothing');
         return change;
     };
-    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options };
+    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options, fonts };
 }
 
 const sample = (type: ChartType) => sampleChartSpec(type);
@@ -145,6 +155,16 @@ describe('ChartEditor', () => {
         expect((await mount(sample('bar'))).rowLabels()).toContain('Stacking');
         expect((await mount(sample('line'))).rowLabels()).not.toContain('Stacking');
         expect((await mount(sample('pie'))).rowLabels()).not.toContain('Stacking');
+    });
+
+    test("the Font row shows the spec's font, offers the Eigen fonts and writes the one picked, once", async () => {
+        const editor = await mount({ ...sample('line'), fontFamily: 'Excalifont' });
+        expect(editor.row('Font').textContent).toBe('Excalifont');
+        const items = await editor.fonts();
+        expect(items.map((item) => item.textContent)).toEqual([...EIGEN_FONT_NAMES]);
+        const mono = items.find((item) => item.textContent === 'JetBrains Mono');
+        await act(async () => mono?.click());
+        expect(editor.changes).toEqual([{ ...sample('line'), fontFamily: 'JetBrains Mono' }]);
     });
 
     test('the chart title writes the title', async () => {
