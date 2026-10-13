@@ -5,7 +5,7 @@ import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
 import { XmlError, xmlAttr, xmlChild } from '../../core/xml';
 import { ZipError } from '../../core/zip';
-import type { TransformWarning } from '../../document/transform/protocol';
+import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { NOT_A_PPTX, readPackage } from './package';
@@ -57,15 +57,17 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const media: { name: string; path: string; contentType: string }[] = [];
         const names = new Map<string, string>();
         let mediaBytes = 0;
+        const dropped = new Map<CountedWarningCode, number>();
         const deck: DeckWalk = {
             pkg,
             frame,
             scale,
             offset: { x: (frame.width - slideSize.cx * scale) / 2, y: (frame.height - slideSize.cy * scale) / 2 },
+            slide: { width: slideSize.cx * scale, height: slideSize.cy * scale },
             shapes: 0,
             elements: 0,
             weight: 0,
-            dropped: new Map(),
+            lost: (code) => dropped.set(code, (dropped.get(code) ?? 0) + 1),
             mediaName: (part) => {
                 const known = names.get(part.path);
                 if (known) return known;
@@ -85,7 +87,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             if (!part) return [];
             const slide = inheritance(part);
             const { elements, title } = readSlideShapes(deck, slide, pkg.presentation);
-            return [{ name: title, background: backgroundOf(slide), elements }];
+            return [{ name: title, background: backgroundOf(slide, deck), elements }];
         });
 
         const read = media.flatMap(({ name, path, contentType }): PptxMedia[] => {
@@ -95,7 +97,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
                 ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
                 : [];
         });
-        const warnings: TransformWarning[] = [...deck.dropped].map(([code, count]) => ({ code, count }));
+        const warnings: TransformWarning[] = [...dropped].map(([code, count]) => ({ code, count }));
         return { slides, media: read, warnings, slideSize };
     } catch (error) {
         throw importError(error);

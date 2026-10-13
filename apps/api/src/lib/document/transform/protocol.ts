@@ -137,7 +137,8 @@ export type CountedWarningCode =
     | 'charts-dropped'
     | 'diagrams-dropped'
     | 'objects-dropped'
-    | 'shapes-simplified';
+    | 'shapes-simplified'
+    | 'fills-simplified';
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }

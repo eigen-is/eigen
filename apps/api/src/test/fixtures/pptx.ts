@@ -32,6 +32,8 @@ export type PptxFixture = {
     layouts?: LayoutFixture[];
     masters?: MasterFixture[];
     theme?: string;
+    // Relationships of the theme part, which name a style matrix's pictures.
+    themeRels?: string;
     sldSz?: string;
     presentation?: string;
     mainType?: string;
@@ -56,6 +58,8 @@ export const para = (text: string, attributes = '', inner = '') => `<a:p>${run(t
 
 let ids = 1;
 
+const styleOf = (style: string | undefined) => (style === undefined ? '' : `<p:style>${style}</p:style>`);
+
 export function sp(options: {
     name?: string;
     ph?: string;
@@ -67,6 +71,8 @@ export function sp(options: {
     hidden?: boolean;
     // a:lstStyle's content.
     lstStyle?: string;
+    // p:style's content.
+    style?: string;
 }): string {
     const id = ids++;
     const geometry = options.geom ? `<a:prstGeom prst="${options.geom}"><a:avLst/></a:prstGeom>` : '';
@@ -74,12 +80,18 @@ export function sp(options: {
         options.text === undefined
             ? ''
             : `<p:txBody><a:bodyPr/><a:lstStyle>${options.lstStyle ?? ''}</a:lstStyle>${options.text}</p:txBody>`;
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${options.name ?? `Shape ${id}`}"${options.hidden ? ' hidden="1"' : ''}/><p:cNvSpPr${options.txBox ? ' txBox="1"' : ''}/><p:nvPr>${options.ph ?? ''}</p:nvPr></p:nvSpPr><p:spPr>${options.xfrm ?? ''}${geometry}${options.spPr ?? ''}</p:spPr>${body}</p:sp>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${options.name ?? `Shape ${id}`}"${options.hidden ? ' hidden="1"' : ''}/><p:cNvSpPr${options.txBox ? ' txBox="1"' : ''}/><p:nvPr>${options.ph ?? ''}</p:nvPr></p:nvSpPr><p:spPr>${options.xfrm ?? ''}${geometry}${options.spPr ?? ''}</p:spPr>${styleOf(options.style)}${body}</p:sp>`;
 }
 
-export function cxn(options: { xfrm: string; geom?: string; ln?: string }): string {
+// p:style's references, each with its colour; its fontRef names the minor font.
+export const styleRef = (kind: 'lnRef' | 'fillRef', idx: number, color = '<a:schemeClr val="accent2"/>') =>
+    `<a:${kind} idx="${idx}">${color}</a:${kind}>`;
+export const styleRefs = (fill: number, ln: number, color?: string) =>
+    `${styleRef('lnRef', ln, color)}${styleRef('fillRef', fill, color)}<a:effectRef idx="0"><a:scrgbClr r="0" g="0" b="0"/></a:effectRef><a:fontRef idx="minor"/>`;
+
+export function cxn(options: { xfrm: string; geom?: string; ln?: string; style?: string }): string {
     const id = ids++;
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${options.xfrm}<a:prstGeom prst="${options.geom ?? 'straightConnector1'}"><a:avLst/></a:prstGeom>${options.ln ?? ''}</p:spPr></p:cxnSp>`;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${options.xfrm}<a:prstGeom prst="${options.geom ?? 'straightConnector1'}"><a:avLst/></a:prstGeom>${options.ln ?? ''}</p:spPr>${styleOf(options.style)}</p:cxnSp>`;
 }
 
 export function pic(options: { xfrm?: string; embed?: string; svg?: string; ph?: string; link?: string }): string {
@@ -155,6 +167,7 @@ export function pptxParts(fixture: PptxFixture): Record<string, string | Uint8Ar
 
     override('ppt/theme/theme1.xml', 'application/vnd.openxmlformats-officedocument.theme+xml');
     parts['ppt/theme/theme1.xml'] = fixture.theme ?? THEME;
+    if (fixture.themeRels) parts['ppt/theme/_rels/theme1.xml.rels'] = rels(fixture.themeRels);
     for (const [i, master] of masters.entries()) {
         const path = `ppt/slideMasters/slideMaster${i + 1}.xml`;
         override(path, `${PML}.slideMaster+xml`);

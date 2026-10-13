@@ -1,5 +1,5 @@
 import { ApiError } from '../../core/errors';
-import { alternativeFor, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
@@ -159,6 +159,15 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
 }
 
 const LESS_THAN = 0x3c;
+
+// The picture an a:blip shows: its svgBlip extension's, else its own.
+export function blipMedia(pkg: PptxPackage, from: Part, blip: XmlElement | undefined): MediaPart | undefined {
+    const extensions = blip && xmlChild(blip, A_NS, 'extLst');
+    const svg = (extensions ? xmlChildren(extensions, A_NS, 'ext') : [])
+        .map((ext) => xmlChild(ext, ASVG_NS, 'svgBlip'))
+        .find((found) => found !== undefined);
+    return pkg.media(from, svg && xmlAttr(svg, R_NS, 'embed')) ?? pkg.media(from, blip && xmlAttr(blip, R_NS, 'embed'));
+}
 
 // Requires names prefixes, not namespaces: PowerPoint's spellings of the namespaces this reader reads. Not a14, whose
 // choice holds an equation the fallback draws as a picture, nor p14, whose ink the fallback draws too.
