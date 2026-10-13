@@ -28,8 +28,7 @@ import {
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import Range from 'exceljs/lib/doc/range';
 import { ApiError } from '../../core/errors';
-import { A_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
-import { relationshipsOf, relsPathOf } from '../../core/opc';
+import { A_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 
@@ -1055,21 +1054,26 @@ export function readLocationHyperlinks(zip: ZipReader): Map<string, Map<string, 
 
 // Each sheet's name and part path, as plain values: the workbook and rels trees are gone before any sheet is read.
 function readSheetPaths(zip: ZipReader): { name: string; path: string }[] | undefined {
-    const workbookPath = 'xl/workbook.xml';
-    const workbook = readPart(zip, workbookPath);
-    const rels = readPart(zip, relsPathOf(workbookPath));
+    const workbook = readPart(zip, 'xl/workbook.xml');
+    const rels = readPart(zip, 'xl/_rels/workbook.xml.rels');
     const sheets = workbook?.ns === SML_NS ? xmlChild(workbook, SML_NS, 'sheets') : undefined;
     if (!sheets || !rels) return undefined;
 
-    const relationships = relationshipsOf(rels, workbookPath);
+    const relTargets = new Map<string, string>();
+    for (const rel of xmlChildren(rels, PACKAGE_RELATIONSHIPS_NS, 'Relationship')) {
+        const id = xmlAttr(rel, '', 'Id');
+        const target = xmlAttr(rel, '', 'Target');
+        if (id != null && target != null) relTargets.set(id, target);
+    }
     // exceljs reads each part once and names it by the last sheet naming it.
     const names = new Map<string, string>();
     for (const sheet of xmlChildren(sheets, SML_NS, 'sheet')) {
         const name = xmlAttr(sheet, '', 'name');
         const rId = xmlAttr(sheet, R_NS, 'id');
-        const rel = rId != null ? relationships.get(rId) : undefined;
-        if (name == null || !rel || rel.external) continue;
-        names.set(rel.target, name);
+        const target = rId != null ? relTargets.get(rId) : undefined;
+        if (name == null || target == null) continue;
+        // As exceljs resolves them (workbook-xform.js), not as OPC does, so the links land on its sheets by name.
+        names.set(target.startsWith('/') ? target.slice(1) : `xl/${target}`, name);
     }
     return [...names].map(([path, name]) => ({ name, path }));
 }

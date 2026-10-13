@@ -1758,29 +1758,6 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
     });
 
-    test("a sheet's relationship target resolves against the workbook's folder, '..' too; an External one is no sheet", async () => {
-        const zip = new JSZip();
-        zip.file(
-            'xl/workbook.xml',
-            `<workbook xmlns="${TRANSITIONAL.spreadsheetml}" xmlns:r="${TRANSITIONAL.relationships}"><sheets><sheet name="Up" sheetId="1" r:id="rId1"/><sheet name="Outside" sheetId="2" r:id="rId2"/></sheets></workbook>`,
-        );
-        zip.file(
-            'xl/_rels/workbook.xml.rels',
-            `<Relationships xmlns="${PACKAGE_RELATIONSHIPS}"><Relationship Id="rId1" Target="../xl/worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet2.xml" TargetMode="External"/></Relationships>`,
-        );
-        for (const [path, location] of [
-            ['xl/worksheets/sheet1.xml', 'Outside!A1'],
-            ['xl/worksheets/sheet2.xml', 'Up!A1'],
-        ]) {
-            zip.file(
-                path,
-                `<worksheet xmlns="${TRANSITIONAL.spreadsheetml}"><sheetData/><hyperlinks><hyperlink ref="A1" location="${location}"/></hyperlinks></worksheet>`,
-            );
-        }
-
-        expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map([['Up', new Map([['A1', 'Outside!A1']])]]));
-    });
-
     test('location hyperlinks keep all of the 66,530 Excel allows a sheet', async () => {
         const workbook = new ExcelJS.Workbook();
         workbook.addWorksheet('Sheet1').getCell('A1').value = 'link';
