@@ -564,9 +564,7 @@ describe('both sides', () => {
         const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
         const written = auditSource(docx);
         const cached = (node: JSONContent): JSONContent =>
-            node.type === 'pageNumber'
-                ? { type: 'text', text: '1', marks: node.marks }
-                : { ...node, content: node.content?.map(cached) };
+            node.type === 'pageNumber' ? { type: 'text', text: '1' } : { ...node, content: node.content?.map(cached) };
         const held = auditImported(cached(json));
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),

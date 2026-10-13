@@ -1253,12 +1253,13 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // Word lays out the page and updates the field; 1 is what a reader without fields shows.
+    // Word lays out the page and updates the field; 1 is what a reader without fields shows. The run takes no marks:
+    // the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
         (node, linked, context, style, faces) => {
             const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
-            const run = runXml(textXml('1'), node, linked, context, style, faces);
+            const run = runXml(textXml('1'), {}, linked, context, style, faces);
             return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
         },
     ],

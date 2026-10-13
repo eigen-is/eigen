@@ -57,3 +57,12 @@ test('a figure inserted with a mark loses the mark', () => {
     expect(markedNodes(editor)).toEqual(['text']);
     editor.destroy();
 });
+
+test('bold over a range containing a page number marks the text, and one inserted with a mark loses it', () => {
+    const pageNumber = { type: 'pageNumber', attrs: { kind: 'page' } };
+    const editor = editorWith([{ type: 'text', text: 'a ' }, pageNumber, { type: 'text', text: ' b' }]);
+    editor.chain().selectAll().setBold().run();
+    editor.commands.insertContentAt(3, { ...pageNumber, marks: [{ type: 'italic' }] });
+    expect(markedNodes(editor)).toEqual(['text', 'text']);
+    editor.destroy();
+});

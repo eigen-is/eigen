@@ -351,9 +351,9 @@ export function buildAllFeaturesDocJson(): JSONContent {
                 type: 'paragraph',
                 content: [
                     { type: 'text', text: 'Page ' },
-                    { type: 'pageNumber', attrs: { kind: 'page' }, marks: [{ type: 'bold' }] },
+                    { type: 'pageNumber', attrs: { kind: 'page' } },
                     { type: 'text', text: ' of ' },
-                    { type: 'pageNumber', attrs: { kind: 'pages' }, marks: [{ type: 'italic' }] },
+                    { type: 'pageNumber', attrs: { kind: 'pages' } },
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
