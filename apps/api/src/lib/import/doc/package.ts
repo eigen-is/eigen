@@ -1,5 +1,6 @@
 import { ApiError } from '../../core/errors';
-import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, W_NS } from '../../core/ooxml';
+import { CONTENT_TYPES_NS, isOn, MC_NS, parseOoxml, W_NS } from '../../core/ooxml';
+import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
 import { is, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
@@ -17,9 +18,7 @@ export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
-type DocxRelationship = { type: string; target: string; external: boolean };
-
-export type Part = { path: string; root: XmlElement; rels: Map<string, DocxRelationship> };
+export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
 export type DocxPackage = {
     zip: ZipReader;
@@ -165,41 +164,8 @@ export function contentTypeOf(pkg: DocxPackage, path: string): string | undefine
     return pkg.contentTypes.overrides.get(path) ?? pkg.contentTypes.defaults.get(extension);
 }
 
-function relsPathOf(partPath: string): string {
-    const slash = partPath.lastIndexOf('/');
-    return `${partPath.slice(0, slash + 1)}_rels/${partPath.slice(slash + 1)}.rels`;
-}
-
-function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, DocxRelationship> {
-    const root = readXml(zip, relsPathOf(partPath), budget);
-    const rels = new Map<string, DocxRelationship>();
-    for (const rel of root ? xmlElements(root) : []) {
-        const id = rel.attributes['Id'];
-        if (!is(rel, PACKAGE_RELATIONSHIPS_NS, 'Relationship') || !id) continue;
-        const target = rel.attributes['Target'] ?? '';
-        const external = rel.attributes['TargetMode'] === 'External';
-        rels.set(id, {
-            type: rel.attributes['Type'] ?? '',
-            target: external ? target : resolvePath(partPath, target),
-            external,
-        });
-    }
-    return rels;
-}
-
-function relOfType(rels: Map<string, DocxRelationship>, type: string): string | undefined {
-    for (const rel of rels.values()) if (rel.type.endsWith(`/${type}`) && !rel.external) return rel.target;
-    return undefined;
-}
-
-function resolvePath(base: string, target: string): string {
-    if (target.startsWith('/')) return target.slice(1);
-    const parts = base.split('/').slice(0, -1);
-    for (const segment of target.split('/')) {
-        if (segment === '..') parts.pop();
-        else if (segment !== '.' && segment !== '') parts.push(segment);
-    }
-    return parts.join('/');
+function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, Relationship> {
+    return relationshipsOf(readXml(zip, relsPathOf(partPath), budget), partPath);
 }
 
 // mc:Choice prefixes whose content this reader understands; any other Choice falls back.
