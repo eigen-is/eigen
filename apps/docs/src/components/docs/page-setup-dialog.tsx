@@ -1,5 +1,13 @@
 import type { PageMargin, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { MIN_TEXT_MM, matchPaperSize, PAPER_SIZES, pageRecord, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    cmText,
+    MIN_TEXT_MM,
+    matchPaperSize,
+    PAPER_SIZES,
+    pageRecord,
+    readCm,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
@@ -26,12 +34,11 @@ const MARGIN_FIELDS: { side: keyof PageMargin; label: string }[] = [
 
 const CUSTOM = 'Custom';
 
-const cm = (mm: number) => mm / 10;
-// Rounded to 0.01 cm, as Google shows 0.75 in as 1.91 cm.
-const cmText = (mm: number) => String(Math.round(mm * 10) / 100);
+// Margins to 0.01 cm, as Google shows 0.75 in as 1.91 cm.
+const marginText = (mm: number) => cmText(mm, 2);
 // Portrait first, as Google lists every paper.
 const paperLabel = (name: string, width: number, height: number) =>
-    `${name} (${cm(Math.min(width, height)).toFixed(1)} cm × ${cm(Math.max(width, height)).toFixed(1)} cm)`;
+    `${name} (${(Math.min(width, height) / 10).toFixed(1)} cm × ${(Math.max(width, height) / 10).toFixed(1)} cm)`;
 
 // Google Docs' Pages tab without Apply to, Page colour and Set as default: a doc has one page, and no pageless form.
 export function PageSetupDialog({ open, onOpenChange, setup, canWrite, onSetupChange }: PageSetupDialogProps) {
@@ -64,19 +71,16 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone }: PageSetupFormProps
     const [initial] = useState(setup);
     const [paper, setPaper] = useState({ width: initial.width, height: initial.height });
     const [text, setText] = useState({
-        top: cmText(initial.margin.top),
-        right: cmText(initial.margin.right),
-        bottom: cmText(initial.margin.bottom),
-        left: cmText(initial.margin.left),
+        top: marginText(initial.margin.top),
+        right: marginText(initial.margin.right),
+        bottom: marginText(initial.margin.bottom),
+        left: marginText(initial.margin.left),
     });
 
     const landscape = paper.width > paper.height;
     // An untouched field keeps the stored size, not its rounding.
-    const margin = (side: keyof PageMargin) => {
-        if (text[side] === cmText(initial.margin[side])) return initial.margin[side];
-        // To 0.01 mm, or a typed 1.91 cm is stored as 19.099999999999998 mm.
-        return text[side].trim() === '' ? Number.NaN : Math.round(Number(text[side]) * 1000) / 100;
-    };
+    const margin = (side: keyof PageMargin) =>
+        text[side] === marginText(initial.margin[side]) ? initial.margin[side] : readCm(text[side]);
     const candidate: PageSetup = {
         ...initial,
         ...paper,
@@ -170,7 +174,7 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone }: PageSetupFormProps
                     ))}
                     {!valid && (
                         <FieldError>
-                            Margins must be 0 cm or more and leave at least {cm(MIN_TEXT_MM)} cm for the text.
+                            Margins must be 0 cm or more and leave at least {cmText(MIN_TEXT_MM, 1)} cm for the text.
                         </FieldError>
                     )}
                 </FieldSet>
