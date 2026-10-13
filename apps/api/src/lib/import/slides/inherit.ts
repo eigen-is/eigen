@@ -252,18 +252,22 @@ function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOption
     if (!lin && xmlChild(fill, A_NS, 'path')) options.lost('fills-simplified', fill);
     const ang = Number((lin && xmlAttr(lin, '', 'ang')) ?? 0) / 60_000;
     const scaled = (lin && isOn(xmlAttr(lin, '', 'scaled'))) ?? false;
-    const angle = (options.angle ?? QUARTER_TURN)(Number.isFinite(ang) ? ang : 0, scaled);
+    const angle = (options.angle ?? quarterTurn)(Number.isFinite(ang) ? ang : 0, scaled);
     return { type: 'gradient', from, to, angle: normalizeAngle(Math.round(angle * 1000) / 1000) };
 }
 
-const QUARTER_TURN: GradientAngle = (degrees) => degrees + 90;
+// DrawingML's angle runs from left-to-right, the canvas's and CSS's from bottom-to-top.
+function quarterTurn(degrees: number): number {
+    return degrees + 90;
+}
+
 const RADIANS = Math.PI / 180;
 
 // An element's gradient, which the canvas lays along its box's units (objectBoundingBox): a scaled angle is already in
 // them, a true one is the box-unit angle whose isolines the box stretches onto the true ones.
 export function elementGradientAngle(width: number, height: number): GradientAngle {
     return (degrees, scaled) => {
-        if (scaled) return degrees + 90;
+        if (scaled) return quarterTurn(degrees);
         const r = degrees * RADIANS;
         return Math.atan2(width * Math.cos(r), -height * Math.sin(r)) / RADIANS;
     };
@@ -272,9 +276,9 @@ export function elementGradientAngle(width: number, height: number): GradientAng
 // A background's gradient, which CSS draws at a true angle: a scaled one turns with the slide's proportions.
 export function backgroundGradientAngle(width: number, height: number): GradientAngle {
     return (degrees, scaled) => {
-        if (!scaled) return degrees + 90;
+        if (!scaled) return quarterTurn(degrees);
         const r = degrees * RADIANS;
-        return Math.atan2(width * Math.sin(r), height * Math.cos(r)) / RADIANS + 90;
+        return quarterTurn(Math.atan2(width * Math.sin(r), height * Math.cos(r)) / RADIANS);
     };
 }
 
