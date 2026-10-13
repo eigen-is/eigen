@@ -9,6 +9,7 @@ export * from './local-filesystem';
 export * from './mailer';
 export * from './managed-database';
 export * from './ooxml';
+export * from './opc';
 export * from './path-utils';
 export * from './stream';
 export * from './transfer';

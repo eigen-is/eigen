@@ -6,17 +6,15 @@ import {
     DGM_NS,
     DSP_NS,
     EMU_PER_PX,
-    EMU_PER_TWIP,
-    FLOATING_WRAPS,
     O_NS,
     PIC_NS,
     R_NS,
-    TWIPS_PER_PX,
     V_NS,
     W_NS,
     WP_NS,
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import { EMU_PER_TWIP, FLOATING_WRAPS, TWIPS_PER_PX } from '../../document/wordml';
 import { COLUMN_PX, type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
