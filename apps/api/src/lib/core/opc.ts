@@ -60,12 +60,12 @@ export type OoxmlPackage = {
 
 // One budget for the parts a package parses whole, together, [Content_Types].xml and the relationships parts too, the
 // same in every format: a parsed tree costs many times its text (core/xml.ts). The transform process's memory limit is
-// the backstop past it. The largest document.xml met is 12.6 MB.
-export const MAX_PACKAGE_XML_BYTES = 16 * 1024 * 1024;
+// the backstop past it. The corpora's most: a docx's 12.6 MB, an xlsx's 15.2 MB, a pptx's 7.5 MB.
+export const MAX_PACKAGE_XML_BYTES = 32 * 1024 * 1024;
 
-// A tree costs per element too, so the parts' elements have a budget of their own, past a long report's: 16 MB of empty
-// paragraphs is 2.8 million elements and 3.5 GB. Counted as '<' in the bytes.
-export const MAX_PACKAGE_XML_TAGS = 750_000;
+// A tree costs per element too, so the parts' elements have a budget of their own: 16 MB of empty paragraphs is 2.8
+// million elements and 3.5 GB. Counted as '<' in the bytes. The corpora's most: 607,000 tags in a docx.
+export const MAX_PACKAGE_XML_TAGS = 1_500_000;
 
 // The format's words for an encrypted package, which name the application that removes the password, and for one past
 // the budget.
@@ -83,7 +83,7 @@ export function isEncryptedPackage(bytes: Uint8Array): boolean {
 }
 
 // Each part is charged against the budget before it parses, its declared size before it inflates (a read inflates no
-// further, core/zip), its tags before the parse; a part refused leaves the budget to the parts after it.
+// further, core/zip), its tags before the parse. A part past the budget refuses the whole package.
 export function openPackage(bytes: Uint8Array, messages: PackageMessages): OoxmlPackage {
     if (isEncryptedPackage(bytes)) throw new ApiError(400, messages.passwordProtected);
     const zip = openZip(bytes);
@@ -136,15 +136,13 @@ function tagsIn(data: Uint8Array): number {
     return tags;
 }
 
-// A damaged optional part, its XML or its entry, costs what it adds, not the document; a cap or an out-of-memory still
-// refuses the document. `pastBudget` drops a part the budget refuses too, for a part read once every part the document
-// needs is, such as a graphic's: it costs only itself.
-export function optional<T>(read: () => T, pastBudget = false): T | undefined {
+// A damaged optional part, its XML or its entry, costs what it adds, not the document; the budget or an out-of-memory
+// still refuses the document.
+export function optional<T>(read: () => T): T | undefined {
     try {
         return read();
     } catch (error) {
         if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
-        if (pastBudget && error instanceof ApiError && error.status === 413) return undefined;
         throw error;
     }
 }

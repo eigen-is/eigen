@@ -20,8 +20,7 @@ export type DocxPackage = {
     footnotes?: Part;
     endnotes?: Part;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
-    // A part a drawing names, read when met; a damaged one is no part, and so is one past the budget: every part the
-    // document needs is read before it, so it costs only its graphic.
+    // A part a drawing names, read when met; a damaged one is no part.
     readPart(path: string): XmlElement | undefined;
     // An image's bytes; a damaged entry is none, and costs only its picture.
     readMedia(path: string): Uint8Array | undefined;
@@ -52,7 +51,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypeOf: pkg.contentTypeOf,
-        readPart: (path) => optional(() => pkg.part(path), true),
+        readPart: (path) => optional(() => pkg.part(path)),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
     };
 }

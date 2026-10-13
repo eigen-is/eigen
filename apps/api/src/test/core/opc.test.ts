@@ -150,11 +150,6 @@ describe('a package', () => {
         expect(thrown(() => optional(() => thrownBy(new ApiError(413, 'Too large'))))).toBeInstanceOf(ApiError);
         expect(optional(() => 1)).toBe(1);
     });
-
-    test('an optional read past the budget is undefined on request', () => {
-        expect(optional(() => thrownBy(new ApiError(413, 'Too large')), true)).toBeUndefined();
-        expect(thrown(() => optional(() => thrownBy(new ApiError(400, 'Bad')), true))).toBeInstanceOf(ApiError);
-    });
 });
 
 describe("a package's parse budget", () => {
@@ -175,15 +170,14 @@ describe("a package's parse budget", () => {
         return undefined;
     };
 
-    test('a part past the bytes left is 413 before it inflates, and leaves the budget to the parts after it', () => {
+    test('a part past the bytes left is 413 before it inflates', () => {
         const reads = spyOn(ZipReader.prototype, 'read');
         spies.push(reads);
         const half = MAX_PACKAGE_XML_BYTES / 2;
-        const opened = pkg({ 'a.xml': comment(half), 'b.xml': comment(half), 'c.xml': '<c/>' });
+        const opened = pkg({ 'a.xml': comment(half), 'b.xml': comment(half) });
         expect(opened.part('a.xml')?.local).toBe('a');
         expect(refusal(() => opened.part('b.xml'))).toEqual([413, 'Too large']);
         expect(reads.mock.calls.map(([name]) => name)).not.toContain('b.xml');
-        expect(opened.part('c.xml')?.local).toBe('c');
     });
 
     test('the parts past the tags left are 413 before they parse', () => {

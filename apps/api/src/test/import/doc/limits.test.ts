@@ -284,37 +284,32 @@ describe('XML budget', () => {
         expect(texts(json)).toEqual(['Body', '[1]']);
     });
 
-    // A graphic's part is read once every part the document needs is, so the budget it meets costs the graphic only.
-    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
-        const { json, warnings } = await importDocxBody(
-            `${paragraph(run('Body'))}${paragraph(smartArt)}`,
-            smartArtData(padding(MAX_PACKAGE_XML_BYTES)),
+    // A graphic's part is charged as every other part is: past the budget it refuses the document.
+    test('a SmartArt part past the byte budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(
+                `${paragraph(run('Body'))}${paragraph(smartArt)}`,
+                smartArtData(padding(MAX_PACKAGE_XML_BYTES)),
+            ),
         );
-        expect(texts(json)).toEqual(['Body']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
-    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
+    test('a chart past the tag budget is 413', async () => {
         const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
         const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_PACKAGE_XML_TAGS / 4);
         const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
-        const smartArtPart = smartArtData(
-            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
-        );
-        const { json, warnings } = await importDocxBody(
-            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
-            {
-                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+        const error = await rejection(() =>
+            importDocxBody(`${paragraph(run('Body'))}${paragraph(chart)}`, {
+                rels: '<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>',
                 media: {
-                    ...smartArtPart.media,
                     'word/charts/chart1.xml': new TextEncoder().encode(
                         `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
                     ),
                 },
-            },
+            }),
         );
-        expect(texts(json)).toEqual(['Body', 'Kept']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
     // As a corrupt file is, rather than as a server error.
@@ -1070,10 +1065,11 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         expect(result.cpuMs).toBeLessThan(10_000);
     }, 120_000);
 
-    // Word's spelling marks and language tags: elements up to the tag budget, few of them the document's.
-    test('paragraphs of 17 tags each just under the tag budget import within 1 GB of peak RSS', async () => {
+    // Word's spelling marks and language tags: 17 elements a paragraph, few of them the document's.
+    test('paragraphs of 17 tags each just under the budgets import within 1 GB of peak RSS', async () => {
         const lang = '<w:rPr><w:lang w:val="en-US"/></w:rPr>';
-        const count = Math.floor((0.98 * MAX_PACKAGE_XML_TAGS) / 17);
+        // A paragraph and its text weigh two.
+        const count = Math.floor(0.98 * Math.min(MAX_PACKAGE_XML_TAGS / 17, MAX_DOCX_WEIGHT / 2));
         const body = paragraph(
             `<w:proofErr w:type="spellStart"/>${run('Word', '<w:lang w:val="en-US"/>')}<w:proofErr w:type="spellEnd"/>`,
             `<w:spacing w:after="0"/>${lang}`,
