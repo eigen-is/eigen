@@ -37,7 +37,7 @@ When an image is selected, the properties panel shows an **Image** section. Use 
 1. Open the **Insert** menu and choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
 2. The chart appears on the slide with sample data, and stays selected.
 
-With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, and where the **Legend** goes. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title**. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty, and **Gridlines**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice.
+With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, where the **Legend** goes, and the **Font** of all the chart's text. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title**. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty, and **Gridlines**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice.
 
 ### Edit the numbers
 
