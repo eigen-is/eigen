@@ -2,6 +2,7 @@ import { gradientStops } from '@workspace/lib/background';
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import {
+    ARROW_LABEL_PAD,
     type Arrowhead,
     arrowCurveBeziers,
     arrowheadGeometry,
@@ -44,6 +45,7 @@ import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
 import {
     A_NS,
+    AHYP_NS,
     ASVG_NS,
     CONTENT_TYPES_NS,
     CORE_PROPERTIES_NS,
@@ -52,9 +54,10 @@ import {
     PACKAGE_RELATIONSHIPS_NS,
     R_NS,
 } from '../../core/ooxml';
+import { uriReference } from '../../core/opc';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
-import { uriReference } from '../doc/to-docx';
+import { canvasTextValue } from '../../document/prose-css';
 import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { isElement } from '../sanitize';
 
@@ -631,13 +634,11 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
     if (!label) return xml;
     const center = linearLocalToScene(el, label.center);
     const lines = el.text.split('\n');
-    // The 5 px Eigen's mask leaves around the text.
-    const pad = 5;
     const boxOf = (width: number) => ({
-        x: center.x - width / 2 - pad,
-        y: center.y - label.height / 2 - pad,
-        width: width + 2 * pad,
-        height: label.height + 2 * pad,
+        x: center.x - width / 2 - ARROW_LABEL_PAD,
+        y: center.y - label.height / 2 - ARROW_LABEL_PAD,
+        width: width + 2 * ARROW_LABEL_PAD,
+        height: label.height + 2 * ARROW_LABEL_PAD,
         angle: el.angle,
     });
     const text = textBodyXml(
@@ -652,7 +653,7 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
             verticalAlign: 'center',
             letterSpacing: 0,
             lineHeight: getFontMetrics(el.fontFamily).lineHeight,
-            inset: pad,
+            inset: ARROW_LABEL_PAD,
             wrap: false,
             opacity,
         },
@@ -851,17 +852,28 @@ function paragraphsOf(html: string): Paragraph[] {
 const ANCHORS: Record<VerticalAlign, string> = { top: 't', center: 'ctr', bottom: 'b' };
 const ALIGNS: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
 
-// canvas-text.css: a list level indents 1.5em, a quote 0.75em past its 3 px bar, and draws at 70% of what holds it.
-const LIST_INDENT_EM = 1.5;
+// A length canvas-text.css states in the unit the writer reads it in; a shorthand's first value.
+function canvasTextLength(selector: string, property: string, unit: 'em' | 'px'): number {
+    const [length = ''] = canvasTextValue(selector, property).split(/\s+/);
+    if (!length.endsWith(unit)) throw new Error(`canvas-text.css ${property} on ${selector} is not in ${unit}`);
+    return Number(length.slice(0, -unit.length));
+}
+
+// canvas-text.css: a list level's indent, a quote's indent past its bar, and the opacity a quote draws at.
+const LIST_INDENT_EM = canvasTextLength('.eigen-canvas-text ul', 'padding-left', 'em');
 // The marker's hang: a disc sits close to its text, a number right-aligned in the list's indent.
 const MARKER_EM = { bullet: 0.75, number: 1.5 };
-const QUOTE_INDENT_EM = 0.75;
-const QUOTE_BAR_PX = 3;
-const QUOTE_OPACITY = 0.7;
-const PARAGRAPH_GAP_EM = 0.5;
+const QUOTE_INDENT_EM = canvasTextLength('.eigen-canvas-text blockquote', 'padding-left', 'em');
+const QUOTE_BAR_PX = canvasTextLength('.eigen-canvas-text blockquote', 'border-left', 'px');
+const QUOTE_OPACITY = Number(canvasTextValue('.eigen-canvas-text blockquote', 'opacity'));
+const PARAGRAPH_GAP_EM = canvasTextLength('.eigen-canvas-text p + p', 'margin-top', 'em');
 // The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's, which a tall line or a deep nesting passes.
 const MAX_SPACING = 158_400;
 const MAX_MARGIN = 51_206_400;
+// ST_TextIndentLevelType's deepest level, and ST_TextFontSize's range.
+const MAX_LEVEL = 8;
+const MIN_FONT_SIZE = 100;
+const MAX_FONT_SIZE = 400_000;
 
 function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
     const em = (n: number) => emu(slide, n * box.fontSize);
@@ -875,7 +887,7 @@ function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): strin
             em(paragraph.depth * LIST_INDENT_EM) + paragraph.quotes * (em(QUOTE_INDENT_EM) + emu(slide, QUOTE_BAR_PX)),
         );
         const indent = paragraph.marker ? -em(MARKER_EM[paragraph.marker]) : 0;
-        const level = Math.min(8, Math.max(0, paragraph.depth - 1));
+        const level = Math.min(MAX_LEVEL, Math.max(0, paragraph.depth - 1));
         const attrs = [
             margin ? ` marL="${margin}"` : '',
             indent ? ` indent="${indent}"` : '',
@@ -918,7 +930,7 @@ function trimmed(runs: Run[]): Run[] {
 }
 
 function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, marks: Marks, opacity: number): string {
-    const size = Math.min(400_000, Math.max(100, centipoints(slide, box.fontSize)));
+    const size = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, centipoints(slide, box.fontSize)));
     const spacing = centipoints(slide, box.letterSpacing);
     const attrs = [
         ` sz="${size}"`,
@@ -935,7 +947,7 @@ function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, 
     // A link draws in the run's color, as canvas-text.css draws it: PowerPoint's own extension for that.
     const link =
         marks.href && tag === 'a:rPr'
-            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
+            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="${AHYP_NS}" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
             : '';
     return `<${tag}${attrs} dirty="0">${fill}${fonts}${link}</${tag}>`;
 }

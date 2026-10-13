@@ -1,6 +1,6 @@
 // Materialize a vector container's Y.Doc into a plain VectorScene — the one reader for every canvas
-// document (a drawing and a deck alike). Worker-safe (yjs only). Every field is a scalar or string, so
-// primitive reads suffice even when the server hydrates values via Y.applyUpdate.
+// document (a drawing and a deck alike). React-free, so the API's transform process runs it. Every field
+// is a scalar or string, so primitive reads suffice even when the server hydrates values via Y.applyUpdate.
 // Per-kind field validation lives in the registry (kinds/); this module owns the scene-level passes.
 
 import type * as Y from 'yjs';

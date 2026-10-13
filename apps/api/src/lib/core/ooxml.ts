@@ -19,6 +19,7 @@ export const P_NS = 'http://schemas.openxmlformats.org/presentationml/2006/main'
 export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 export const MC_NS = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
+export const AHYP_NS = 'http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor';
 export const V_NS = 'urn:schemas-microsoft-com:vml';
 export const O_NS = 'urn:schemas-microsoft-com:office:office';
 export const W10_NS = 'urn:schemas-microsoft-com:office:word';

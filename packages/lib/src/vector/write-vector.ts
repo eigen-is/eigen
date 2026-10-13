@@ -1,7 +1,7 @@
 // The one writer of the stored canvas shape — the counterpart of read-vector.ts. Fresh ids, the seed
 // rule, the element and frame records and the live topmost index, over a plain Y.Doc: the editor's
-// add path, the deck seeder, the demo seeder and the server's slide import all write through here.
-// Worker-safe (yjs and nanoid only).
+// add path, the deck seeder, the demo seeder and the server's deck writer all write through here.
+// React-free, so the API's transform process runs it too.
 
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
@@ -33,10 +33,6 @@ export function kindDefaults<T extends VectorElementType>(type: T, style: StyleD
     return { ...baseDefaultsFor(type, style), ...ELEMENT_KINDS[type].defaults(style) };
 }
 
-function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
-    return { x: 0, y: 0, width: 0, height: 0, angle: 0, ...kindDefaults(type, style) };
-}
-
 // One element into the doc's `elements` map at the given fractional index, under the kind's defaults
 // and the host's style table. Honors a caller-supplied seed so a drag-create preview and its committed
 // element share the same roughjs jitter (no visual pop on release). A caller-supplied `id` is the
@@ -51,7 +47,19 @@ export function writeElementInDoc(
     id: string = newElementId(),
 ): string {
     const seed = partial.seed ?? randomSeed();
-    const record = { ...elementDefaults(partial.type, style), ...partial, id, type: partial.type, seed, index };
+    const record = {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        angle: 0,
+        ...kindDefaults(partial.type, style),
+        ...partial,
+        id,
+        type: partial.type,
+        seed,
+        index,
+    };
     const element = new Y.Map<unknown>();
     for (const [field, value] of storedFields(record, ELEMENT_FIELDS)) element.set(field, value);
     doc.transact(() => doc.getMap('elements').set(id, element));

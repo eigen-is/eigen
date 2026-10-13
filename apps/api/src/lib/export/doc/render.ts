@@ -7,18 +7,11 @@ import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
-import { splitDataUri } from '../../shared/data-uri';
 import { hasSmallCaps } from '../fonts';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
 type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
-
-// The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src. A media name holds no `/`, so the two never meet.
-export function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
-    return mediaName ?? (src && splitDataUri(src) ? src : null);
-}
 
 function renderCodeBlockNode(node: {
     attrs: { language?: string | null };

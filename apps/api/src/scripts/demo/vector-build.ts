@@ -7,7 +7,6 @@
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import {
-    type Box,
     baseDefaultsFor,
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
@@ -171,14 +170,18 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
 }
 
 function buildImage(im: SitePlanImage, i: number): VectorImageElement {
-    return imageElement(`el-image-${i}`, SITE_PLAN_STYLE, {
+    return {
+        ...kindDefaults('image', SITE_PLAN_STYLE),
+        id: `el-image-${i}`,
+        index: '',
+        type: 'image',
         x: im.x,
         y: im.y,
         width: im.width,
         height: im.height,
         angle: 0,
         mediaName: basename(im.file),
-    });
+    };
 }
 
 function buildArrow(
@@ -215,7 +218,15 @@ function buildArrow(
         fontFamily: FONT,
         labelWidth: label ? measureExcalifont(label, fontSize).width : 0,
     };
-    settleEndpoints(arrow, byId);
+    // Settle a bound arrow's endpoints exactly where the editor would leave them at rest.
+    const patch = followBindings(arrow, byId);
+    if (!patch) return arrow;
+    arrow.x = patch.x;
+    arrow.y = patch.y;
+    arrow.width = patch.width;
+    arrow.height = patch.height;
+    arrow.points = patch.points;
+    arrow.fixedSegments = patch.fixedSegments;
     return arrow;
 }
 
@@ -284,56 +295,30 @@ type RichTextSpec = Pick<
     'x' | 'y' | 'width' | 'height' | 'angle' | 'fontSize' | 'color' | 'textAlign' | 'verticalAlign'
 >;
 
-// Both text builders go through one place: the box the seeder measured plus the typography the drawing
-// is authored in, over the shared rich-text factory.
+// Both text builders go through one place: the kind's defaults under the drawing's style table, the box
+// the seeder measured and the typography the drawing is authored in. Typed rather than partial, because
+// sceneBounds measures it before the write.
 function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
-    return richTextElement(id, SITE_PLAN_STYLE, {
+    return {
+        ...kindDefaults('richtext', SITE_PLAN_STYLE),
+        id,
+        index: '',
+        type: 'richtext',
         ...box,
         html: textToParagraphHtml(text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
-    });
+    };
 }
 
-// The base every element shares, under the KIND's own overrides — the same table the apps create with,
-// so a seeded image or text box arrives unframed rather than wearing the shared 2px ink border.
+// The base a seeded shape, line or arrow shares, from the same table the apps create with; the builder
+// adds the kind's own fields.
 function baseElement(
     type: VectorElementType,
     id: string,
     style: StyleDefaults,
 ): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
     return { ...baseDefaultsFor(type, style), id, index: '' };
-}
-
-// What a builder supplies on top of the kind's defaults: its box, plus whatever it overrides. `id` and
-// `type` are the factory's own, so a caller cannot make an element the registry would not recognize.
-type ElementFields<T extends VectorElement> = Omit<Partial<T>, 'id' | 'type'> & Box;
-
-// Typed rather than partial, because sceneBounds measures them before the write: shared base, the
-// kind's defaults under the drawing's style table, then the caller's box and overrides.
-function richTextElement(
-    id: string,
-    style: StyleDefaults,
-    fields: ElementFields<VectorRichTextElement>,
-): VectorRichTextElement {
-    return { ...kindDefaults('richtext', style), id, index: '', type: 'richtext', ...fields };
-}
-
-function imageElement(id: string, style: StyleDefaults, fields: ElementFields<VectorImageElement>): VectorImageElement {
-    return { ...kindDefaults('image', style), id, index: '', type: 'image', ...fields };
-}
-
-// Settle a bound arrow's endpoints exactly where the editor would leave them at rest, keeping the
-// patch only when it moved anything.
-function settleEndpoints(arrow: VectorArrowElement, byId: Map<string, VectorElement>): void {
-    const patch = followBindings(arrow, byId);
-    if (!patch) return;
-    arrow.x = patch.x;
-    arrow.y = patch.y;
-    arrow.width = patch.width;
-    arrow.height = patch.height;
-    arrow.points = patch.points;
-    arrow.fixedSegments = patch.fixedSegments;
 }
 
 // mulberry32 — a tiny deterministic PRNG, one draw per element (matches randomSeed's range).

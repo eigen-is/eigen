@@ -5,6 +5,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_PAGE_SETUP,
+    type FigureAttrs,
     MIN_TABLE_COLUMN_PX,
     pageTwips,
     readFigureAttrs,
@@ -27,6 +28,7 @@ import {
     W14_NS,
     WP_NS,
 } from '../../core/ooxml';
+import { uriReference } from '../../core/opc';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import {
@@ -54,6 +56,7 @@ import {
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
+import { type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -70,9 +73,10 @@ import {
     TWIPS_PER_PX,
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
+import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
-import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
-import { absoluteHref, figureMediaKey, type HastNode, highlightCode } from './render';
+import { encodeOfficeImage, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
@@ -137,6 +141,45 @@ export async function eigendocToDocx(
         ...fonts.files.map(([name, data]) => ({ name, data })),
         ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
     ]);
+}
+
+// The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
+// under that src. A media name holds no `/`, so the two never meet.
+function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
+    return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
+// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
+export async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
+    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
+    const visit = (node: JSONContent) => {
+        if (node.type === 'figure') {
+            const attrs = readFigureAttrs(node.attrs ?? {});
+            const key = figureMediaKey(attrs);
+            if (key && key === attrs.src) {
+                const split = splitDataUri(key);
+                if (split) pasted.set(key, split);
+            }
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    visit(json);
+    if (pasted.size === 0) return [];
+    const { sharpResize } = await import('../../shared/sharp-resize');
+    const media: ExportMedia[] = [];
+    for (const [src, { mediaType, base64 }] of pasted) {
+        const data = Buffer.from(base64, 'base64');
+        if (mediaType === 'image/svg+xml') {
+            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
+            continue;
+        }
+        const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
+        if (item) media.push(item);
+    }
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../sanitize');
+    return sanitizeExportMedia(media);
 }
 
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
@@ -1348,12 +1391,6 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     const target = uriReference(absoluteHref(kept, publicOrigin));
     const title = attrs?.['title'];
     return { target, tooltip: typeof title === 'string' && title ? title : undefined };
-}
-
-// A relationship target percent-encodes what a URI reference can't hold; `%` stays, so an encoded href encodes no
-// further.
-export function uriReference(href: string): string {
-    return href.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) => encodeURIComponent(character));
 }
 
 // ── Styles, every value from eigen-prose.css ────────────────────────────────────────────────────────────────────
