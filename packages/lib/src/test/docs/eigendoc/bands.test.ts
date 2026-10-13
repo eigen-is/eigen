@@ -46,6 +46,8 @@ describe('the header and footer bands', () => {
         expect(Object.keys(band.marks)).toEqual(Object.keys(schema.marks));
         expect(band.nodes['figure']).toBeDefined();
         expect(band.nodes['pageNumber']).toBeDefined();
+        // Word allows its math in a header and a footer.
+        expect(band.nodes['equation']).toBeDefined();
     });
 
     describe('bandHasContent', () => {
