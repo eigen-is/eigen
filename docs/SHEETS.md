@@ -241,7 +241,7 @@ Clicking a tick box while composing `=IF(` inserts the cell's reference and noth
 
 A comment (top-right), an invalid value and a forced string (top-left) are all drawn by `drawCellIndicator` at `cellIndicatorRect`. The size is `CELL_INDICATOR_SIZE` in `packages/lib/src/constants/comment-indicator.ts`, which the canvas apps' `CommentIndicator` reads too, so a comment mark looks the same in every app. Filled and empty cells reach the same painter. A comment triangle takes its card's color, and red when the card has none.
 
-Canvas colors are hardcoded light, because the grid is paper and doesn't re-theme ([RENDERING.md](../packages/sheet/RENDERING.md#theming-the-light-pinned-surface)).
+The grid's colors are light-only CSS variables in ui's `globals.css`, read by the canvas and by the chart Edit data grid; the canvas's other colors are hardcoded light, because the grid is paper and doesn't re-theme ([RENDERING.md](../packages/sheet/RENDERING.md#theming-the-light-pinned-surface)).
 
 ## A glyph outranks the selection handles
 

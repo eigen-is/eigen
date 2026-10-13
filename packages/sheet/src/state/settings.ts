@@ -1,5 +1,6 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { SheetChart } from '@workspace/lib/sheets';
+import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_DEFAULT_FONT_SIZE, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -195,9 +196,9 @@ export const defaultSettings: Required<Settings> = {
     devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
     allowEdit: true, // whether to allow editing in the frontend
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
-    rowHeaderWidth: 46,
-    columnHeaderHeight: 20,
-    defaultFontSize: 10,
+    rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
+    columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
+    defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
     sheetTabContextMenu: [
         'delete',
         'copy',
