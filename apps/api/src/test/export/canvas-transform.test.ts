@@ -38,10 +38,13 @@ describe('canvasHtmlDocument', () => {
         );
     });
 
-    test('the PDF document has no fit box, and its sheet is the composed page', () => {
+    // htmlToPdf's zoom scales the page onto the sheet: WeasyPrint drops a translucent layer whose parent
+    // is scaled wherever the scale moves it.
+    test('the PDF document has no fit box, and its sheet is the page at 1:1', () => {
         const html = deckHtml('pdf');
         expect(html).not.toContain('page-fit');
-        expect(html).toContain('@page { size: 960px 540px; margin: 0; }');
+        expect(html).not.toContain('transform:scale');
+        expect(html).toContain('@page { size: 1920px 1080px; margin: 0; }');
     });
 
     test('a PDF page sized from far-out artwork is capped at the PDF page limit', () => {
@@ -76,14 +79,15 @@ describe('renderEigenslidesExport', () => {
         expect(deckExportHtml('html', link)).toContain(link);
     });
 
-    // 960 px at 96 dpi is 254 mm, so a 16:9 sheet is 254 x 142.875 mm and a 4:3 one 254 x 190.5 mm,
-    // Google's PDF sizes. Every page of the download takes the deck's shape too.
+    // The PDF document's sheet is the slide at 1:1, which htmlToPdf zooms to 960 px wide: 254 mm at 96 dpi,
+    // so a 16:9 sheet is 254 x 142.875 mm and a 4:3 one 254 x 190.5 mm, Google's PDF sizes (canvas-pdf.test.ts
+    // measures them). Every page of the download takes the deck's shape too.
     test.each([
         ['16:9', 540],
         ['4:3', 720],
     ] as const)('a %s deck prints on its own sheet, and the download pages follow', (slideSize, height) => {
         expect(deckExportHtml('pdf-html', '<p>hi</p>', slideSize)).toContain(
-            `@page { size: 960px ${height}px; margin: 0; }`,
+            `@page { size: 1920px ${height * 2}px; margin: 0; }`,
         );
         const screen = deckExportHtml('html', '<p>hi</p>', slideSize);
         const pages = screen.match(/<div class="page-fit" style="[^"]*">/g) ?? [];

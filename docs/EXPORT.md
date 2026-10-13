@@ -151,7 +151,7 @@ Before layout, `sanitizeSceneHtml` filters every text box to `LIGHT_EDITOR_TAGS`
 
 ## A deck prints each frame at half scale
 
-A frame is the page, at the deck's slide size, and an overhanging element is clipped as the canvas clips it. Every frame is 1920 wide, so the page renders at 0.5: 960 by 540 px for 16:9 and 960 by 720 px for 4:3, which is 254 × 142.875 mm and 254 × 190.5 mm, Google's PDF sizes. A 1920 px `@page` would be a 20-inch sheet. The HTML download wraps each page in a `.page-fit` box that scales it to the viewport, so a deck reads on a phone, with a `@media` ladder first for a browser that cannot divide `100cqw` by a length. The PDF keeps the pages unscaled, because WeasyPrint has no viewport. The `.page-fit` rules mirror `packages/ui/src/styles/globals.css`, since a standalone file cannot import it.
+A frame is the page, at the deck's slide size, and an overhanging element is clipped as the canvas clips it. Every frame is 1920 wide, so the page prints at 0.5: 960 by 540 px for 16:9 and 960 by 720 px for 4:3, which is 254 × 142.875 mm and 254 × 190.5 mm, Google's PDF sizes. The PDF document lays each slide out at 1:1 on a 1920 px `@page`, and `htmlToPdf` hands WeasyPrint a zoom of 0.5 (`DECK_SCALE`) that prints it at 960. The HTML download wraps each page in a `.page-fit` box that scales it to the viewport, so a deck reads on a phone, with a `@media` ladder first for a browser that cannot divide `100cqw` by a length. The PDF has no fit box, because WeasyPrint has no viewport. The `.page-fit` rules mirror `packages/ui/src/styles/globals.css`, since a standalone file cannot import it.
 
 ## A drawing downloads its own SVG and prints as layers
 
@@ -162,6 +162,8 @@ The `pdf` arm is a single compositor page sized to the content plus 10 px on eac
 ## WeasyPrint dictates how a layer references its paint
 
 A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. WeasyPrint resolves `url(#id)` only within the same `<svg>`.
+
+No transform sits above a PDF layer: a page's origin is the scene's `top` and `left`, never a `translate`, and a deck scales through WeasyPrint's zoom, never a CSS `scale`. WeasyPrint 68 lays a page out ignoring transforms and cuts every line whose layout box passes the `@page` height, and it clips a translucent element to the page as its parent's transform maps it, so under a scale of 0.5 a slide's lower half would lose a text box's later lines and every element with opacity below 100% (`canvas-pdf.test.ts`). A layer still sits at its `translate`, so a text box that starts above a slide loses the lines more than a slide's height into it.
 
 An arrow's shaft is hidden under its label by a `<mask>`, because WeasyPrint ignores `clip-rule="evenodd"`. WeasyPrint applies a mask after drawing a node's children, so the reference goes on each shaft `<path>`, never a wrapping `<g>`. See `labelMask` and `maskShaft` in `packages/lib/src/vector/kinds/arrow-render.ts`.
 

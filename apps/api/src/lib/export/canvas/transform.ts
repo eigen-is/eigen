@@ -1,4 +1,4 @@
-import { FRAME_WIDTH, type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
+import { type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
@@ -16,17 +16,12 @@ import {
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
+import { type CanvasPage, DECK_SCALE, framePages, renderCanvasPage, renderFittedPage } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
 // copy per document type. Runs inside the transform Worker (worker.ts owns execution; the main-thread
 // orchestration lives in export-document.ts): no Mount, no preview cache.
-//
-// A page is 254mm (960px at 96dpi) wide: 254 x 142.875mm for 16:9, 254 x 190.5mm for 4:3. Every frame
-// is 1920 wide, so a deck prints at scale 0.5 — a @page of 1920px would be a 20-inch sheet.
-const DECK_PAGE_WIDTH = 960;
-const DECK_SCALE = DECK_PAGE_WIDTH / FRAME_WIDTH;
 
 export function canvasHtmlDocument(opts: {
     title: string;
@@ -39,15 +34,20 @@ export function canvasHtmlDocument(opts: {
     // The screen document wraps each fixed-size page in the shared fit box, so a downloaded deck reads
     // on a phone; the layers inside stay in scene pixels because that is what packages/lib authors.
     // The PDF document has no viewport to be responsive to — WeasyPrint gives each page a sheet — so
-    // its pages stay unscaled and unwrapped.
+    // its pages stay unwrapped, laid out at 1:1: htmlToPdf's zoom scales them onto the sheet, because
+    // WeasyPrint cuts a line laid out past the @page height and drops a translucent layer its
+    // parent's scale moves, whatever the scale makes of either.
+    const pageScale = mode === 'pdf' ? 1 : scale;
     const rendered = pages.map((page) =>
-        mode === 'pdf' ? renderCanvasPage(page, scale, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
+        mode === 'pdf'
+            ? renderCanvasPage(page, pageScale, resolveMedia)
+            : renderFittedPage(page, pageScale, resolveMedia),
     );
     // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
     // is rounded exactly as renderCanvasPage rounds the page box — a sheet a fraction narrower than
     // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
-    const width = round(pages[0].width * scale);
-    const height = round(pages[0].height * scale);
+    const width = round(pages[0].width * pageScale);
+    const height = round(pages[0].height * pageScale);
     // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
     // compositor emits ordinary HTML, never a foreignObject.
     const body = rendered.join('');

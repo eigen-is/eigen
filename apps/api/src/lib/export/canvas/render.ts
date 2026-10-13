@@ -3,6 +3,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import {
     DEFAULT_PADDING,
+    FRAME_WIDTH,
     isTransparentColor,
     type Layer,
     layerBoxCss,
@@ -24,6 +25,10 @@ import {
 // `clip-path="url(#…)"`, into the <defs> of the same fragment. That is load-bearing on the PDF path:
 // WeasyPrint resolves `url(#id)` only within one <svg>, so each layer's references stay inside the one
 // viewport layerInnerHtml gives it.
+
+// A deck page is 254mm (960px at 96dpi) wide: 254 x 142.875mm for 16:9, 254 x 190.5mm for 4:3. Every
+// frame is 1920 wide, so a deck prints at 0.5 — a 1920px sheet would be 20 inches.
+export const DECK_SCALE = 960 / FRAME_WIDTH;
 
 // A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.
@@ -94,17 +99,18 @@ export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?:
         `height:${round(page.height * scale)}px`,
         ...backgroundCss(page.background, resolveMedia),
     ];
-    // scale first, then translate: the shift is expressed in scene units and rides the scale.
+    // The origin is an offset, not a translate, and a scale of 1 is no transform, so a PDF page leaves
+    // its layers no transformed parent: WeasyPrint clips a translucent layer to the page as mapped by
+    // its parent's transform, and drops it wherever that leaves it.
     const sceneStyle = [
         'position:absolute',
-        'top:0',
-        'left:0',
+        `top:${round(-page.originY * scale)}px`,
+        `left:${round(-page.originX * scale)}px`,
         `width:${round(page.width)}px`,
         `height:${round(page.height)}px`,
         // The scale is NOT rounded: the page box above is `width * scale`, so a 2-dp scale on an
         // awkward ratio (960 / 2870) would leave a gutter between the scene and the page edge.
-        `transform:scale(${scale}) translate(${round(-page.originX)}px,${round(-page.originY)}px)`,
-        'transform-origin:0 0',
+        ...(scale === 1 ? [] : [`transform:scale(${scale})`, 'transform-origin:0 0']),
     ];
     const body = page.layers.map(renderLayer).join('');
     return `<div class="canvas-page" style="${style(pageStyle)}"><div style="${style(sceneStyle)}">${body}</div></div>`;
