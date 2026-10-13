@@ -46,6 +46,7 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
@@ -73,7 +74,7 @@ import {
     selectionShapes,
 } from './hooks/selection-ops';
 import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
-import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
+import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';

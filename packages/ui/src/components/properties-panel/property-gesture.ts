@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import type * as Y from 'yjs';
 
 // Opens one undo step and returns its release. Every control in the panel writes on every change — a
 // slider per drag frame, a number field per keystroke — so the control opens a gesture on its first
@@ -32,4 +33,43 @@ export function useHeldGesture(): { hold: () => void; end: () => void } {
     useEffect(() => end, [end]);
 
     return { hold, end };
+}
+
+// One discrete op = one undo step. Y.UndoManager merges everything inside a 500ms capture window, so a
+// discrete op seals on BOTH sides: nothing that happened just before it (a nudge) and nothing that
+// follows joins its step. The canvas' element ops, the panel's writes and the frame ops all go through
+// this — a gesture that deliberately coalesces (a nudge, a keystroke) simply doesn't call it.
+export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
+    // A gesture is holding the window open (holdCapture), and it owns the step: sealing a write inside
+    // it would split one typed number into a step per digit.
+    if (undoManager?.captureTimeout === Number.POSITIVE_INFINITY) return op();
+    undoManager?.stopCapturing();
+    const result = op();
+    undoManager?.stopCapturing();
+    return result;
+}
+
+// The continuous counterpart of `sealed`: one GESTURE = one undo step, however long it lasts. A
+// slider drag writes live so the canvas updates under the pointer, and merely leaving those writes
+// unsealed is not enough — Y.UndoManager only merges changes that land within `captureTimeout` of
+// each other, so a slow drag, or a pause to look at the result, silently splits into several steps.
+// Hold the window open for the gesture instead, and seal at both ends. Returns the release, which is
+// idempotent: a gesture can end more than once (Radix commits AND the pointer-up fires, or an unmount
+// cleanup follows a commit), and a second restore would write back the Infinity the first one left.
+export function holdCapture(undoManager: Y.UndoManager | null): () => void {
+    if (!undoManager) return () => {};
+    const previous = undoManager.captureTimeout;
+    // A hold is already open, so this one is a no-op: capturing Infinity as the timeout to restore would
+    // make the inner release leave the window open forever, and sealing here would split the outer
+    // gesture's step in two. The outer hold stays in charge.
+    if (previous === Number.POSITIVE_INFINITY) return () => {};
+    undoManager.stopCapturing();
+    undoManager.captureTimeout = Number.POSITIVE_INFINITY;
+    let released = false;
+    return () => {
+        if (released) return;
+        released = true;
+        undoManager.captureTimeout = previous;
+        undoManager.stopCapturing();
+    };
 }
