@@ -166,10 +166,10 @@ export const EditorToolbar = ({
         setLinkDialogOpen(false);
     };
 
-    // A menu item's editor command refocuses the editor a frame later; keep it there rather than let
-    // Radix restore focus to the menu trigger, which would swallow the next keystrokes.
+    // A menu item's editor command refocuses the editor a frame later, or the Headers and footers panel a band's; keep
+    // it there rather than let Radix restore focus to the menu trigger, which would swallow the next keystrokes.
     const keepEditorFocus = (e: Event) => {
-        if (editor.isFocused) e.preventDefault();
+        if (editor.isFocused || document.activeElement?.closest('[data-band]')) e.preventDefault();
     };
 
     // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's

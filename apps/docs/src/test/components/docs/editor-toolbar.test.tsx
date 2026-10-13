@@ -490,6 +490,21 @@ test.each([
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
+// The panel puts the caret in the band a frame after the pick, as Tiptap does in the body.
+test('a pick that opens a band leaves focus in the band', async () => {
+    const band = document.body.appendChild(document.createElement('div'));
+    band.setAttribute('data-band', 'header');
+    const caret = band.appendChild(document.createElement('div'));
+    caret.tabIndex = 0;
+    onOpenBand.mockImplementationOnce(() => requestAnimationFrame(() => caret.focus()));
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await pickInBrowserFrames(() => clickItem('Header'));
+    expect(document.activeElement === caret).toBe(true);
+    band.remove();
+});
+
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
 
 const listItem = (text: string) => ({
