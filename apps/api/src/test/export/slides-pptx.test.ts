@@ -653,6 +653,17 @@ describe('pptx text', () => {
         expect(attr(first(numbered, A, 'buAutoNum'), 'type')).toBe('arabicPeriod');
     });
 
+    test('a tall line and a deep list stop at the schema ceilings', () => {
+        const nested = `${'<ul><li><p>deep</p>'.repeat(20)}${'</li></ul>'.repeat(20)}`;
+        const shape = only(pptx(sceneOf([element('richtext', { html: nested, fontSize: 400, lineHeight: 10 })])));
+        // 10 × 400 px is 2000 pt, past ST_TextSpacingPoint's 1584 pt.
+        expect(attr(first(first(shape, A, 'lnSpc'), A, 'spcPts'), 'val')).toBe('158400');
+        // Twenty levels of 1.5em at 400 px, past ST_TextMargin's 51,206,400 EMU.
+        const margins = descendants(shape, A, 'pPr').map((pPr) => Number(attr(pPr, 'marL')));
+        expect(margins.at(-1)).toBe(51_206_400);
+        expect(Math.max(...margins)).toBe(51_206_400);
+    });
+
     test('a quote indents past its bar and draws at 70%', () => {
         const shape = only(
             pptx(sceneOf([element('richtext', { html: '<blockquote><p>quoted</p></blockquote><p>after</p>' })])),

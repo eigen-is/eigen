@@ -816,15 +816,21 @@ const QUOTE_INDENT_EM = 0.75;
 const QUOTE_BAR_PX = 3;
 const QUOTE_OPACITY = 0.7;
 const PARAGRAPH_GAP_EM = 0.5;
+// The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's, which a tall line or a deep nesting passes.
+const MAX_SPACING = 158_400;
+const MAX_MARGIN = 51_206_400;
 
 function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
     const em = (n: number) => emu(slide, n * box.fontSize);
     const inset = emu(slide, box.inset);
     // An exact pitch, CSS's: what a consumer takes as a single line varies (LibreOffice draws 1.2em for every face).
-    const lineSpacing = `<a:lnSpc><a:spcPts val="${centipoints(slide, box.lineHeight * box.fontSize)}"/></a:lnSpc>`;
+    const pitch = Math.min(MAX_SPACING, centipoints(slide, box.lineHeight * box.fontSize));
+    const lineSpacing = `<a:lnSpc><a:spcPts val="${pitch}"/></a:lnSpc>`;
     const body = paragraphs.map((paragraph) => {
-        const margin =
-            em(paragraph.depth * LIST_INDENT_EM) + paragraph.quotes * (em(QUOTE_INDENT_EM) + emu(slide, QUOTE_BAR_PX));
+        const margin = Math.min(
+            MAX_MARGIN,
+            em(paragraph.depth * LIST_INDENT_EM) + paragraph.quotes * (em(QUOTE_INDENT_EM) + emu(slide, QUOTE_BAR_PX)),
+        );
         const indent = paragraph.marker ? -em(MARKER_EM[paragraph.marker]) : 0;
         const level = Math.min(8, Math.max(0, paragraph.depth - 1));
         const attrs = [
