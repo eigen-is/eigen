@@ -54,7 +54,7 @@ import {
 import { writeZip } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
 import { RASTER_EXTENSIONS } from '../doc/docx-image';
-import type { DocxMedia } from '../doc/to-docx';
+import { type DocxMedia, uriReference } from '../doc/to-docx';
 import { isElement } from '../sanitize';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
@@ -902,7 +902,7 @@ function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, 
     // A link draws in the run's color, as canvas-text.css draws it: PowerPoint's own extension for that.
     const link =
         marks.href && tag === 'a:rPr'
-            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', marks.href, true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
+            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
             : '';
     return `<${tag}${attrs} dirty="0">${fill}${fonts}${link}</${tag}>`;
 }

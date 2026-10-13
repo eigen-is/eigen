@@ -670,7 +670,7 @@ describe('pptx text', () => {
         const rId = String(xmlAttr(first(link, A, 'hlinkClick'), R, 'id'));
         expect(relationships(zip, 'ppt/slides/slide1.xml').get(rId)).toEqual({
             type: `${R}/hyperlink`,
-            target: 'https://example.com/?a=1&b="2"',
+            target: 'https://example.com/?a=1&b=%222%22',
             mode: 'External',
         });
         // canvas-text.css's `p + p` margin, 0.5em of 48 px: 12 pt.
@@ -681,6 +681,37 @@ describe('pptx text', () => {
         // The empty paragraph keeps its size, so its line has a height.
         const empty = descendants(shape, A, 'p')[2];
         expect(attr(first(empty, A, 'endParaRPr'), 'sz')).toBe('2400');
+    });
+
+    test('a link target percent-encodes what a URI cannot hold', () => {
+        const zip = pptx(
+            sceneOf([
+                element('richtext', {
+                    html: '<p><a href="https://a.b/x yé?q=50%">web</a> <a href="mailto:jé@x.nl?subject=hi there">mail</a></p>',
+                }),
+            ]),
+        );
+        const shape = only(zip);
+        const rels = relationships(zip, 'ppt/slides/slide1.xml');
+        const target = (text: string) =>
+            rels.get(String(xmlAttr(first(runProps(shape, text), A, 'hlinkClick'), R, 'id')));
+        expect(target('web')?.target).toBe('https://a.b/x%20y%C3%A9?q=50%');
+        expect(target('mail')?.target).toBe('mailto:j%C3%A9@x.nl?subject=hi%20there');
+    });
+
+    test('a script or file link a peer writes never reaches a relationship', () => {
+        const zip = pptx(
+            sceneOf([
+                element('richtext', {
+                    html: '<p><a href="javascript:alert(1)">js</a> <a href=" JaVaScRiPt:alert(1)">mixed</a> <a href="file:///etc/passwd">file</a></p>',
+                }),
+            ]),
+        );
+        expect(paragraphs(only(zip))).toEqual(['js mixed file']);
+        expect(descendants(only(zip), A, 'hlinkClick')).toHaveLength(0);
+        expect([...relationships(zip, 'ppt/slides/slide1.xml').values()].map((rel) => rel.type)).toEqual([
+            `${R}/slideLayout`,
+        ]);
     });
 
     test('lists by nesting level: bullets and numbers', () => {
