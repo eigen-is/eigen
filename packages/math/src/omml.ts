@@ -1,4 +1,4 @@
-import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
+import { COMBINING_ACCENTS, MINUS, naryLimits, SPACES } from './notation';
 import {
     bound,
     casesOf,
@@ -24,6 +24,8 @@ export const WORDML_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessin
 export const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
 // ECMA-376's defaults for an absent property.
+// Unicode's hyphen: Word draws it as one, where a hyphen-minus in a math run is the minus operator.
+const HYPHEN = '\u2010';
 const DEFAULT_ACCENT = '\u0302';
 const DEFAULT_BRACE = '⏟';
 const DEFAULT_NARY = '∫';
@@ -202,7 +204,9 @@ function readRun(row: RowBuilder, run: MathXmlElement, depth: number, numbered =
     const number = numbered ? text.indexOf('#') : -1;
     const shown = number < 0 ? text : text.slice(0, number);
     // Without a style Word draws letters italic and the rest upright.
-    row.chars(shown, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
+    // Word draws a hyphen-minus in a math run as the minus operator, in an upright run too; its U+2010 is a hyphen.
+    const chars = shown.replaceAll('-', MINUS).replaceAll(HYPHEN, '-');
+    row.chars(chars, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
     return number >= 0;
 }
 
@@ -449,7 +453,8 @@ function piece(node: MathNode): Run | string {
             const upright = node.kind === 'identifier' && defaultVariant(node.kind, node.text) === 'normal';
             return {
                 properties: style(node.variant ?? (upright ? 'normal' : undefined)) + colored(node.color),
-                text: node.text,
+                // A hyphen in a word is U+2010, which Word draws as a hyphen where its '-' is a minus.
+                text: node.kind === 'identifier' ? node.text.replaceAll('-', HYPHEN) : node.text,
             };
         }
         case 'text':

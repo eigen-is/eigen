@@ -286,13 +286,20 @@ describe('the minus sign', () => {
         const upright = (text: string): MathNode => ({ kind: 'identifier', text, variant: 'normal' });
         expect(readLatex('\\operatorname{arg-max}')).toStrictEqual(word);
         expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>arg-max</mi></math>`)).row).toStrictEqual(word);
-        expect(
+        // In OMML a hyphen-minus is the minus, upright or not; the writer's U+2010 is the hyphen of a word.
+        const ommlRun = (text: string) =>
             readOmml(
                 el(
-                    `<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>arg-max</m:t></m:r></m:oMath>`,
+                    `<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>${text}</m:t></m:r></m:oMath>`,
                 ),
-            ),
-        ).toStrictEqual(word);
+            );
+        expect(ommlRun('arg\u2010max')).toStrictEqual(word);
+        expect(ommlRun('pre-image')).toStrictEqual([
+            { kind: 'identifier', text: 'pre' },
+            { kind: 'operator', text: '\u2212' },
+            { kind: 'identifier', text: 'image' },
+        ]);
+        expect(writeOmml(word)).toContain('arg\u2010max');
         for (const via of [viaMathml, viaOmml, viaLatex]) expect(via(word)).toStrictEqual(word);
         expect(writeMathml(word)).toContain('<mi>arg-max</mi>');
         expect(writeText(word)).toBe('arg-max');
