@@ -13,8 +13,8 @@ import {
     ZipError,
     type ZipErrorCode,
 } from '../../lib/core';
+import { peakRss } from '../../lib/core/peak-rss';
 import { build, deflated, deflatedZeros, type RawPart, stored } from '../fixtures/raw-zip';
-import { peakRss } from '../rss-test-helpers';
 
 const GiB = 2 ** 30;
 const MiB = 2 ** 20;
@@ -481,7 +481,7 @@ describe('a bomb stays within its peak RSS', () => {
             env: {
                 ...process.env,
                 ZIP_MODULE: Bun.resolveSync('../../lib/core/zip', import.meta.dir),
-                PEAK_RSS: Bun.resolveSync('../rss-test-helpers', import.meta.dir),
+                PEAK_RSS: Bun.resolveSync('../../lib/core/peak-rss', import.meta.dir),
                 ZIP_PATH: path,
             },
         });
