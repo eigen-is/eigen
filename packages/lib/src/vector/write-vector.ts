@@ -1,7 +1,7 @@
 // The one writer of the stored canvas shape — the counterpart of read-vector.ts. Fresh ids, the seed
 // rule, the element and frame records and the live topmost index, over a plain Y.Doc: the editor's
 // add path, the deck seeder, the demo seeder and the server's slide import all write through here.
-// Worker-safe (yjs and nanoid only).
+// React-free, so the API's transform process runs it too.
 
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
