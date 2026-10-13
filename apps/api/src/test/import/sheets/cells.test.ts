@@ -14,6 +14,7 @@ const [DATE, CUSTOM_DATE, BOLD_FILLED, LEFT, BORDERED, PERCENT_FILLED] = [1, 2, 
 
 function read(data: string, options: { strings?: string[]; date1904?: boolean; before?: string } = {}) {
     const charged: number[] = [];
+    const copied: number[] = [];
     const sst = new TextEncoder().encode(
         `<sst xmlns="${SML}">${(options.strings ?? []).map((si) => `<si>${si}</si>`).join('')}</sst>`,
     );
@@ -23,13 +24,14 @@ function read(data: string, options: { strings?: string[]; date1904?: boolean; b
         date1904: options.date1904 ?? false,
         palette: PALETTE,
         charge: (text) => charged.push(text),
+        chargeCopy: (chars) => copied.push(chars),
     });
     const cell = (ref: string) => {
         const c = ref.charCodeAt(0) - 65;
         const r = Number(ref.slice(1)) - 1;
         return grid.celldata.find((entry) => entry.r === r && entry.c === c)?.v;
     };
-    return { grid, cell, charged };
+    return { grid, cell, charged, copied };
 }
 
 function thrown(run: () => unknown): unknown {
@@ -199,11 +201,13 @@ describe('the grid', () => {
     });
 
     test('charges every copy of a shared formula with its own text', () => {
-        const { charged, cell } = read(
+        const { charged, copied, cell } = read(
             '<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1+1</f></c></row><row r="2"><c r="A2"><f t="shared" si="0"/></c></row><row r="3"><c r="A3"><f t="shared" si="0"/></c></row>',
         );
         expect(cell('A3')?.f).toBe('=B3+1');
         expect(charged).toEqual([5, 5, 5]);
+        // The translation is weighed before it runs.
+        expect(copied).toEqual([4, 4]);
     });
 
     test("keeps the worksheet's other elements for the parts read beside the grid", () => {

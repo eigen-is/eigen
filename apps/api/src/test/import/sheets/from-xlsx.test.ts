@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_TEXT, xlsxToSheets, xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';
+import { MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets, xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';
 import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -169,6 +169,16 @@ describe("the own reader's output budget", () => {
             message: 'Spreadsheet has too many cells',
         });
     });
+
+    // Each copy is translated before it is weighed, at about 3M characters a second: under MAX_TEXT alone a 0.14 MB
+    // zip translated for 100 s.
+    test("a shared formula's copies are translated within a budget of their own", () => {
+        const anchor = Array.from({ length: 1_000 }, (_, index) => `A${index + 1}`).join('+');
+        const copies = Math.ceil(MAX_SHARED_FORMULA_TEXT / anchor.length) + 1;
+        let data = `<row r="1"><c r="B1"><f t="shared" ref="B1:B${copies + 1}" si="0">${anchor}</f></c></row>`;
+        for (let r = 2; r <= copies + 1; r++) data += `<row r="${r}"><c r="B${r}"><f t="shared" si="0"/></c></row>`;
+        expect(refused(xlsxFixture({ sheets: [{ data }] }))).toEqual({ status: 413, message: 'Spreadsheet too large' });
+    }, 30_000);
 
     test('every sheet counts the default grid recalc gives it, an empty one too', () => {
         const empty = (count: number) => xlsxFixture({ sheets: Array.from({ length: count }, () => ({})) });

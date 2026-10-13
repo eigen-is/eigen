@@ -32,6 +32,8 @@ export type GridContext = {
     // Called for each cell the grid emits, a value or a border, with the characters it writes, and for each row's height
     // and hidden flag; throws past the budget.
     charge(text: number): void;
+    // Called before a shared formula's copy is translated, with the characters to translate; throws past the budget.
+    chargeCopy(chars: number): void;
 };
 
 export type Grid = {
@@ -69,7 +71,12 @@ export function readGrid(part: Uint8Array, context: GridContext): Grid {
         for (const element of xmlChildren(row, SML_NS, 'c')) {
             c = indexOf(columnNumber(xmlAttr(element, '', 'r')), c, REFERENCE_COLUMN_COUNT);
             const look = context.looks[Number(xmlAttr(element, '', 's'))] ?? NO_LOOK;
-            const cell = readCell(element, look, context, formulaOf(xmlChild(element, SML_NS, 'f'), r, c, shared));
+            const cell = readCell(
+                element,
+                look,
+                context,
+                formulaOf(xmlChild(element, SML_NS, 'f'), r, c, shared, context),
+            );
             const empty =
                 cell.v === undefined && cell.f === undefined && cell.bg === undefined && cell.fc === undefined;
             if (empty && !look.border) continue;
@@ -138,6 +145,7 @@ function formulaOf(
     r: number,
     c: number,
     shared: Map<string, { text: string; r: number; c: number }>,
+    context: GridContext,
 ): string | undefined {
     if (!f) return undefined;
     const type = xmlAttr(f, '', 't');
@@ -150,7 +158,9 @@ function formulaOf(
         return text;
     }
     const anchor = shared.get(si);
-    return anchor?.text ? functionCopy(anchor.text, r - anchor.r, c - anchor.c) : undefined;
+    if (!anchor?.text) return undefined;
+    context.chargeCopy(anchor.text.length);
+    return functionCopy(anchor.text, r - anchor.r, c - anchor.c);
 }
 
 // numfmt renders a bare serial under General as a number, so a date without a date format shows as m/d/yyyy; a
