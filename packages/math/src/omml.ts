@@ -452,10 +452,11 @@ function piece(node: MathNode): Run | string {
             return `<m:nary>${pr}${argument('sub', node.sub ?? [])}${argument('sup', node.sup ?? [])}${argument('e', node.body)}</m:nary>`;
         }
         case 'fenced': {
+            // Written even where they are the defaults, since Google Docs drops the fences an m:d leaves out.
             const pr = properties('d', [
-                ['begChr', node.open === '(' ? undefined : node.open],
-                ['sepChr', node.parts.length < 2 || node.separator === '|' ? undefined : node.separator],
-                ['endChr', node.close === ')' ? undefined : node.close],
+                ['begChr', node.open],
+                ['sepChr', node.parts.length < 2 ? undefined : node.separator],
+                ['endChr', node.close],
             ]);
             return `<m:d>${pr}${node.parts.map((part) => argument('e', part)).join('')}</m:d>`;
         }
@@ -491,7 +492,7 @@ function piece(node: MathNode): Run | string {
             );
             return `<m:borderBox>${pr}${argument('e', node.body)}</m:borderBox>`;
         }
-        case 'table':
+        case 'table': {
             if (node.layout === 'equations') {
                 const equations = node.rows.map((cells) =>
                     argument(
@@ -501,7 +502,12 @@ function piece(node: MathNode): Run | string {
                 );
                 return `<m:eqArr>${equations.join('')}</m:eqArr>`;
             }
-            return `<m:m>${node.rows.map((cells) => `<m:mr>${cells.map((cell) => argument('e', cell)).join('')}</m:mr>`).join('')}</m:m>`;
+            // Google Docs draws an m:m without its column count flat. ST_Integer255 caps the count; columns past it
+            // keep the default, centred.
+            const columns = Math.min(Math.max(...node.rows.map((cells) => cells.length)), 255);
+            const pr = `<m:mPr><m:mcs><m:mc><m:mcPr>${val('count', String(columns))}${val('mcJc', 'center')}</m:mcPr></m:mc></m:mcs></m:mPr>`;
+            return `<m:m>${pr}${node.rows.map((cells) => `<m:mr>${cells.map((cell) => argument('e', cell)).join('')}</m:mr>`).join('')}</m:m>`;
+        }
     }
 }
 

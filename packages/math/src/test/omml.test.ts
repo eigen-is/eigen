@@ -377,4 +377,32 @@ describe('writeOmml', () => {
                 '<m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t xml:space="preserve">sin</m:t></m:r></m:oMath>',
         );
     });
+
+    // Google Docs drops the fences of an m:d without them and draws an m:m without m:mcs flat.
+    test('writes fences and a matrix’s columns explicitly, defaults too', () => {
+        const x: MathNode = { kind: 'identifier', text: 'x' };
+        const e = '<m:e><m:r><m:t xml:space="preserve">x</m:t></m:r></m:e>';
+        const fenced = (separator: string, ...parts: MathRow[]): MathNode => ({
+            kind: 'fenced',
+            open: '(',
+            close: ')',
+            separator,
+            parts,
+        });
+        expect(writeOmml([fenced('', [x])])).toBe(
+            `<m:oMath><m:d><m:dPr><m:begChr m:val="("/><m:endChr m:val=")"/></m:dPr>${e}</m:d></m:oMath>`,
+        );
+        expect(writeOmml([fenced('|', [x], [x])])).toBe(
+            '<m:oMath><m:d><m:dPr><m:begChr m:val="("/><m:sepChr m:val="|"/><m:endChr m:val=")"/></m:dPr>' +
+                `${e}${e}</m:d></m:oMath>`,
+        );
+        expect(writeOmml([{ kind: 'table', layout: 'matrix', rows: [[[x], [x]], [[x]]] }])).toBe(
+            '<m:oMath><m:m><m:mPr><m:mcs><m:mc><m:mcPr><m:count m:val="2"/><m:mcJc m:val="center"/></m:mcPr></m:mc>' +
+                `</m:mcs></m:mPr><m:mr>${e}${e}</m:mr><m:mr>${e}</m:mr></m:m></m:oMath>`,
+        );
+        // ST_Integer255
+        expect(writeOmml([{ kind: 'table', layout: 'matrix', rows: [Array(300).fill([x])] }])).toContain(
+            '<m:count m:val="255"/>',
+        );
+    });
 });
