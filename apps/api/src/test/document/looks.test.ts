@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
-import { codeBlockStyle, headingStyleName, STYLE_NAMES, W_NS } from '../../lib/core/ooxml';
+import { W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
 import {
@@ -18,6 +18,7 @@ import {
     TASK_DONE_LOOK,
     TITLE_LOOKS,
 } from '../../lib/document/looks';
+import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/document/wordml';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 

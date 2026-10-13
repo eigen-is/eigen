@@ -210,6 +210,10 @@ export function xmlChild(element: XmlElement, ns: string, local: string): XmlEle
     );
 }
 
+export function hasXmlName(element: XmlElement, ns: string, local: string): boolean {
+    return element.ns === ns && element.local === local;
+}
+
 // As written: trimming is the caller's call.
 export function xmlText(element: XmlElement): string {
     return element.children.filter((child) => typeof child === 'string').join('');
