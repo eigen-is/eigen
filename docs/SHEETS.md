@@ -262,9 +262,9 @@ These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/
 - Imported link cells keep Excel's font, while the link dialog sets blue and underline. Forcing the dialog style at import would clobber theme-styled link cells.
 - A link to another workbook that carries a sheet anchor imports as an internal link: the `location` attribute wins over the relationship target.
 
-Fonts and sizes:
+Column widths:
 
-- A column width counts the default font's digits ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)), and Eigen reads every file's widths in Inter's, 9 px a digit. An Excel column 8.43 characters wide imports at 76 px where Excel draws 64 in Calibri: the same number of digits fit, since Inter's are wider.
+- A width counts the file's default font's digits ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)). Only a file whose default font is Inter, an Eigen export, converts through Inter's 9 px digit; any other imports at 8 px a character, so an Excel column 8.43 characters wide is 67 px where Excel draws 64.
 
 Rules and comments:
 

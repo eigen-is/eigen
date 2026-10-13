@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Changed
 
-- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid. Imported Excel columns are as wide as the same digits need in Inter
+- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
 
 ### Fixed
 
