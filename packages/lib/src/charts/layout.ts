@@ -42,7 +42,7 @@ export const CHART_MESSAGES = {
 // own background, in the spec's font. strokeColor draws the baseline at full strength and the gridlines faint
 // (GRIDLINE_OPACITY), so a mid gray gives a clear baseline and Google's light gridlines. strokeWidth is
 // every shape's line; 2 is Google's series line width, so a line series reads at page scale, and it
-// widens a bar by only 1px a side.
+// lengthens a bar by only 1px an end.
 export const FLAT_CHART_PAINT: ChartPaint = {
     color: '#202124',
     background: serializeFill(TRANSPARENT_FILL),
@@ -78,6 +78,9 @@ const MIN_LABELED_SLICE = 0.05;
 const PIE_EDGE_WIDTH = 1;
 // Keeps sums and spans finite whatever a cell holds; nothing plots past it anyway.
 const MAX_VALUE = 1e100;
+// d3 ticks a step under one by its inverse, which overflows near the smallest double, so a span under
+// this lays out as a zero span.
+const MIN_SPAN = 1e-300;
 const ELLIPSIS = '…';
 
 type Frame = { left: number; top: number; right: number; bottom: number };
@@ -112,6 +115,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
             return value === null ? null : Math.min(MAX_VALUE, Math.max(-MAX_VALUE, value));
         }),
     );
+    if (values.every((row) => row.every((value) => value === null))) return message(CHART_MESSAGES.noData);
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
 
     if (spec.type === 'pie') {
@@ -189,7 +193,8 @@ function placeTitle(ctx: Context, title: string): Frame {
 }
 
 // A swatch and its name per item: top and bottom wrap centered rows, left and right a column centered on
-// the room left. Rows or items past the room are dropped rather than squeezing the plot away.
+// the room left. Items past the room are dropped rather than squeezing the plot away, and a "+N" after
+// the last one kept counts them.
 function placeLegend(
     ctx: Context,
     position: ChartSpec['legend'],
@@ -227,16 +232,29 @@ function placeLegend(
         });
         const maxRows = Math.max(1, Math.floor(((frame.bottom - frame.top) * LABEL_SHARE) / lh));
         const kept = rows.slice(0, maxRows);
+        const widthsOf = (row: number[], tail: string) => [
+            ...row.map((i) => indent + measure(ctx, fitted[i])),
+            ...(tail === '' ? [] : [measure(ctx, tail)]),
+        ];
+        const lineWidth = (widths: number[]) =>
+            widths.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, widths.length - 1);
+        const last = kept[kept.length - 1];
+        const shown = () => kept.reduce((sum, row) => sum + row.length, 0);
+        let more = kept.length < rows.length ? `+${items.length - shown()}` : '';
+        while (more !== '' && last.length > 0 && lineWidth(widthsOf(last, more)) > room) {
+            last.pop();
+            more = `+${items.length - shown()}`;
+        }
         const top = position === 'top' ? frame.top : frame.bottom - kept.length * lh;
         kept.forEach((row, r) => {
-            const widths = row.map((i) => indent + measure(ctx, fitted[i]));
-            let x =
-                (frame.left + frame.right) / 2 -
-                (widths.reduce((sum, width) => sum + width, 0) + spacing * (row.length - 1)) / 2;
+            const tail = row === last ? more : '';
+            const widths = widthsOf(row, tail);
+            let x = (frame.left + frame.right) / 2 - lineWidth(widths) / 2;
             row.forEach((i, k) => {
                 place(items[i], i, fitted[i], x, top + r * lh);
                 x += widths[k] + spacing;
             });
+            if (tail !== '') ctx.labels.push(label(ctx, tail, x, top + r * lh, 'start'));
         });
         const used = kept.length * lh + gap;
         return {
@@ -247,14 +265,16 @@ function placeLegend(
 
     const room = (frame.right - frame.left) * LABEL_SHARE - indent;
     const fitted = items.map((item) => fit(ctx, item.name, room, ctx.fontSize, false));
-    const columnWidth = indent + Math.max(...fitted.map((text) => measure(ctx, text)));
     const fits = Math.max(0, Math.floor((frame.bottom - frame.top) / lh));
-    const kept = items.slice(0, fits);
-    const top = (frame.top + frame.bottom - kept.length * lh) / 2;
+    const kept = items.length > fits ? items.slice(0, fits - 1) : items;
+    const more = kept.length < items.length && fits > 0 ? `+${items.length - kept.length}` : '';
+    const columnWidth = indent + Math.max(measure(ctx, more), ...fitted.map((text) => measure(ctx, text)));
+    const top = (frame.top + frame.bottom - (kept.length + (more === '' ? 0 : 1)) * lh) / 2;
     const x = position === 'left' ? frame.left : frame.right - columnWidth;
     kept.forEach((item, i) => {
         place(item, i, fitted[i], x, top + i * lh);
     });
+    if (more !== '') ctx.labels.push(label(ctx, more, x + indent, top + kept.length * lh, 'start'));
     const used = columnWidth + 2 * gap;
     return {
         shapes,
@@ -277,7 +297,7 @@ function layoutCartesian(
     const { lineHeight: lh, gap, fontSize } = ctx;
     const horizontal = spec.type === 'bar';
     const stacked = spec.stacked && spec.type !== 'line';
-    const extent = valueExtent(values, stacked, spec.blanks === 'zero');
+    const extent = valueExtent(values, stacked, spec.blanks === 'zero', spec.type !== 'line');
     const [sideTitle, bottomTitle] = horizontal
         ? [spec.categoryAxis.title, spec.valueAxis.title]
         : [spec.valueAxis.title, spec.categoryAxis.title];
@@ -388,11 +408,16 @@ function layoutCartesian(
     return shapes;
 }
 
-// The data's range, zero included (bars grow from it; Google's line charts start there too). Stacks
-// sum positives and negatives apart.
-function valueExtent(values: (number | null)[][], stacked: boolean, zeroBlanks: boolean): [number, number] {
-    let lo = 0;
-    let hi = 0;
+// The data's range, zero included for bars, which grow from it; a line's axis fits its data, as Excel's
+// and Google's do, unless the line is flat. Stacks sum positives and negatives apart.
+function valueExtent(
+    values: (number | null)[][],
+    stacked: boolean,
+    zeroBlanks: boolean,
+    zeroBased: boolean,
+): [number, number] {
+    let lo = zeroBased ? 0 : Number.POSITIVE_INFINITY;
+    let hi = zeroBased ? 0 : Number.NEGATIVE_INFINITY;
     const categories = values[0].length;
     for (let c = 0; c < categories; c++) {
         let up = 0;
@@ -408,13 +433,21 @@ function valueExtent(values: (number | null)[][], stacked: boolean, zeroBlanks: 
                 lo = Math.min(lo, value);
             }
         }
-        hi = Math.max(hi, up);
-        lo = Math.min(lo, down);
+        if (stacked) {
+            hi = Math.max(hi, up);
+            lo = Math.min(lo, down);
+        }
     }
-    return lo === hi ? [0, 1] : [lo, hi];
+    if (!(hi - lo >= MIN_SPAN)) {
+        lo = Math.min(lo, 0);
+        hi = Math.max(hi, 0);
+    }
+    return hi - lo >= MIN_SPAN ? [lo, hi] : [0, 1];
 }
 
-// Nice ends unless min or max pins one; ticks from d3 over the final domain.
+// Nice ends unless min or max pins one; ticks from d3 over the final domain. d3 takes the count as a
+// hint and can hand back half as many again, so a count that overshoots MAX_TICK_COUNT asks again for
+// fewer, which steps up to the next nice step.
 function valueAxis(
     spec: ChartSpec,
     [low, high]: [number, number],
@@ -422,19 +455,24 @@ function valueAxis(
     formatTick: ChartLayoutInput['formatTick'],
     ctx: Context,
 ): ValueAxis {
-    let [lo, hi] = nice(low, high, count);
     const { min, max } = spec.valueAxis;
-    if (min !== null) lo = min;
-    if (max !== null) hi = max;
-    if (lo >= hi) {
-        const span = high - low;
-        if (min !== null) hi = lo + span;
-        else lo = hi - span;
+    for (let n = count; ; n--) {
+        let [lo, hi] = nice(low, high, n);
+        if (min !== null) lo = min;
+        if (max !== null) hi = max;
+        if (lo >= hi) {
+            const span = high - low;
+            if (min !== null) hi = lo + span;
+            else lo = hi - span;
+        }
+        // Pins too close to tick, or past a double's precision at their size, give way to the data's domain.
+        if (!(hi - lo >= MIN_SPAN)) [lo, hi] = nice(low, high, n);
+        const values = ticks(lo, hi, n);
+        if (values.length > MAX_TICK_COUNT && n > 1) continue;
+        const step = tickStep(lo, hi, n);
+        const texts = values.map((value) => formatTick(value, step));
+        return { lo, hi, ticks: values, texts, widths: texts.map((text) => measure(ctx, text)) };
     }
-    const values = ticks(lo, hi, count);
-    const step = tickStep(lo, hi, count);
-    const texts = values.map((value) => formatTick(value, step));
-    return { lo, hi, ticks: values, texts, widths: texts.map((text) => measure(ctx, text)) };
 }
 
 type Band = { step: number; width: number; start: (i: number) => number; center: (i: number) => number };
@@ -494,6 +532,9 @@ function barMarks(
     const ups: number[] = [];
     const downs: number[] = [];
     const slot = stacked ? band.width : band.width / series.length;
+    // An outline straddles its bar's edges, so a bar narrows by its outline to keep its slot, and side by
+    // side bars meet outline to outline; a slot thinner than two outlines thins the outline.
+    const stroke = Math.min(ctx.paint.strokeWidth, slot / 2);
     series.forEach((s, si) => {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });
         values[si].forEach((stored, c) => {
@@ -507,11 +548,11 @@ function barMarks(
             }
             const a = scale(from);
             const b = scale(from + value);
-            const offset = band.start(c) + (stacked ? 0 : si * slot);
+            const offset = band.start(c) + (stacked ? 0 : si * slot) + stroke / 2;
             const box = horizontal
-                ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot }
-                : { x: offset, y: Math.min(a, b), width: slot, height: Math.abs(b - a) };
-            shapes.push(rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill));
+                ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot - stroke }
+                : { x: offset, y: Math.min(a, b), width: slot - stroke, height: Math.abs(b - a) };
+            shapes.push({ ...rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill), strokeWidth: stroke });
         });
     });
     return shapes;
