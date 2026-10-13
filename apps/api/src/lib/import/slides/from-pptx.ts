@@ -59,7 +59,6 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const losses = new Map<CountedWarningCode, Set<XmlElement>>();
         const deck: DeckWalk = {
             pkg,
-            frame,
             scale,
             offset: { x: (frame.width - slideSize.cx * scale) / 2, y: (frame.height - slideSize.cy * scale) / 2 },
             slide: { width: slideSize.cx * scale, height: slideSize.cy * scale },

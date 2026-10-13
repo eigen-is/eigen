@@ -33,7 +33,7 @@ import {
     styleFill,
     styleLine,
 } from './inherit';
-import { alternative, blipMedia, type DeckWalk, type Frame, type Lost, type Part } from './package';
+import { alternative, blipMedia, type DeckWalk, type Lost, type Part } from './package';
 import { emu, richTextOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
@@ -204,9 +204,9 @@ function place(placeIn: Place, xfrm: Xfrm): Placed {
     };
 }
 
-// The canvas clips what overhangs a frame, so a box wholly outside it (a master's off-slide shape, copied onto every
-// slide) would be stored unseen; a box a group scaled past a double is none.
-function onFrame(box: Box, frame: Frame): boolean {
+// A box wholly off the slide (a master's guide or note, copied onto every slide) would be stored unseen past the frame,
+// which the canvas clips, or drawn in the bands beside a letterboxed slide; a box a group scaled past a double is none.
+function onSlide(box: Box, deck: DeckWalk): boolean {
     if (![box.x, box.y, box.width, box.height].every(Number.isFinite)) return false;
     const r = (box.angle * Math.PI) / 180;
     const [cos, sin] = [Math.abs(Math.cos(r)), Math.abs(Math.sin(r))];
@@ -214,9 +214,12 @@ function onFrame(box: Box, frame: Frame): boolean {
         (box.width * cos + box.height * sin) / 2,
         (box.width * sin + box.height * cos) / 2,
     ];
-    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+    const [cx, cy] = [box.x + box.width / 2 - deck.offset.x, box.y + box.height / 2 - deck.offset.y];
     return (
-        cx + halfWidth >= 0 && cx - halfWidth <= frame.width && cy + halfHeight >= 0 && cy - halfHeight <= frame.height
+        cx + halfWidth >= 0 &&
+        cx - halfWidth <= deck.slide.width &&
+        cy + halfHeight >= 0 &&
+        cy - halfHeight <= deck.slide.height
     );
 }
 
@@ -283,7 +286,7 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         const xfrm = chain.map(xfrmOf).find((found) => found !== undefined);
         if (!xfrm) continue;
         const placed = place(placeIn, xfrm);
-        if (!onFrame(placed.box, walk.deck.frame)) continue;
+        if (!onSlide(placed.box, walk.deck)) continue;
         const spPrs = chain.flatMap((link) => xmlChild(link, P_NS, 'spPr') ?? []);
         const style = styleIn(chain);
         if (shape.local === 'graphicFrame') {

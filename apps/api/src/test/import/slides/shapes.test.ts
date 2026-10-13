@@ -152,6 +152,21 @@ describe('geometry', () => {
         ]);
     });
 
+    test("a letterboxed slide's off-slide shapes, a layout's guides, are not drawn in the bands beside it", () => {
+        // 4:3 in 16:9: the slide spans x 240 to 1680, 1080 / 6,858,000 px an EMU.
+        const line = (x: number) =>
+            cxn({ xfrm: xfrm(x, 0, 0, 6858000), geom: 'line', ln: `<a:ln>${solid('FF0000')}</a:ln>` });
+        const deck = deckOf({
+            sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
+            layouts: [{ shapes: line(-200000) + line(9300000) + line(100000) }],
+            slides: [{ shapes: sp({ xfrm: xfrm(9000000, 0, 400000, 100000), spPr: FILLED }) }],
+        });
+        expect(deck.slides[0].elements.map((found) => [found.type, Math.round(found.x ?? Number.NaN)])).toEqual([
+            ['line', 256],
+            ['rectangle', 1657],
+        ]);
+    });
+
     test('a box a group scaled past what a double holds is not drawn', () => {
         let tree = sp({ xfrm: xfrm(0, 0, 1, 1), spPr: FILLED, text: para('far') });
         for (let i = 0; i < 30; i++) tree = grp(groupXfrm([0, 0, 9e15, 9e15], [0, 0, 1, 1]), tree);

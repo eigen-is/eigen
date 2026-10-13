@@ -66,8 +66,7 @@ export type Frame = { width: number; height: number };
 // What a walk over one deck shares: its budget, its pictures, its losses.
 export type DeckWalk = {
     pkg: PptxPackage;
-    // The frame's size, its px per EMU, where the slide's origin lands in it, and the slide's extent there.
-    frame: Frame;
+    // The frame's px per EMU, where the slide's origin lands in the frame, and the slide's extent there.
     scale: number;
     offset: { x: number; y: number };
     slide: Frame;
