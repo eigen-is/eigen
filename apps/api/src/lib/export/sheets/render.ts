@@ -12,9 +12,9 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
     type Sheet,
     type SheetConfig,
-    type SheetImage,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { orderByFractionalIndex } from '@workspace/lib/vector';
 import {
     booleanDisplay,
     type CellFormatStyle,
@@ -26,6 +26,7 @@ import {
     type DataBar,
     evaluateConditionalFormat,
     FormulaEngine,
+    renderSheetChartSvg,
     withCfRanges,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
@@ -245,11 +246,11 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
     let width = blank ? 0 : colSpan(config, minCol, maxCol);
     let height = blank ? 0 : rowSpan(config, minRow, maxRow);
-    // The overlay draws at the stored grid coordinate, so an image parked past the used range
-    // is still on the page — measured in the table's space, like the overlay positions it.
-    for (const img of sheet.images ?? []) {
-        width = Math.max(width, cssLength(img.x, 0) + cssLength(img.width, 0) - offset.left);
-        height = Math.max(height, cssLength(img.y, 0) + cssLength(img.height, 0) - offset.top);
+    // The overlay draws at the stored grid coordinate, so an image or chart parked past the used
+    // range is still on the page — measured in the table's space, like the overlay positions it.
+    for (const item of floatingObjects(sheet)) {
+        width = Math.max(width, cssLength(item.x, 0) + cssLength(item.width, 0) - offset.left);
+        height = Math.max(height, cssLength(item.y, 0) + cssLength(item.height, 0) - offset.top);
     }
     return { width, height };
 }
@@ -270,24 +271,23 @@ function renderSheet(
     // The preview clips the overlay to its budget window, not to the table: an image parked
     // outside it would stretch the fragment and collapse the thumbnail scaled by it.
     const overlayFor = (minRow: number, minCol: number): string =>
-        sheet.images?.length
-            ? renderFloatingImages(
-                  sheet.images,
-                  mediaUrls,
-                  gridOffset(config, minRow, minCol),
-                  styles,
-                  budget
-                      ? {
-                            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
-                            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
-                        }
-                      : undefined,
-              )
-            : '';
+        renderFloatingObjects(
+            sheet,
+            mediaUrls,
+            resolver,
+            gridOffset(config, minRow, minCol),
+            styles,
+            budget
+                ? {
+                      width: colSpan(config, minCol, minCol + budget.maxCols - 1),
+                      height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
+                  }
+                : undefined,
+        );
 
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     if (maxRow < 0 || maxCol < 0) {
-        // An image pasted onto an otherwise blank sheet is all there is to render, clipped to the
+        // An image or chart on an otherwise blank sheet is all there is to render, clipped to the
         // same budget window as the grid path below.
         return { html: `<div class="sheet">${overlayBox('', overlayFor(0, 0), 0, styles)}</div>`, truncated: false };
     }
@@ -476,37 +476,51 @@ function gridOffset(config: SheetConfig, minRow: number, minCol: number): { left
     return { left: colSpan(config, 0, minCol - 1), top: rowSpan(config, 0, minRow - 1) };
 }
 
-// An image whose name resolves to nothing renders nothing: a `pending:` name from an
-// upload that never settled, or a media file deleted under the reference.
-function renderFloatingImages(
-    images: SheetImage[],
+type FloatingBox = { x: number; y: number; width: number; height: number };
+
+// Images, then charts in their paint order: the editor's ImgBoxs and ChartBoxs stack the same way.
+function floatingObjects(sheet: Sheet): FloatingBox[] {
+    return [...(sheet.images ?? []), ...Object.values(sheet.charts ?? {})];
+}
+
+// Images and charts at their stored boxes. An image whose name resolves to nothing renders nothing:
+// a `pending:` name from an upload that never settled, or a media file deleted under the reference.
+// A chart draws as the painter's inline SVG, its ranges read from the materialized sheets.
+function renderFloatingObjects(
+    sheet: Sheet,
     mediaUrls: MediaUrls,
+    resolver: CellResolver,
     offset: { left: number; top: number },
     styles?: StyleRegistry,
     box?: { width: number; height: number },
 ): string {
+    // Geometry is schemaless at the Yjs boundary, like every other stored dimension here.
+    const place = (item: FloatingBox, extra = '') => {
+        const left = cssLength(item.x, 0) - offset.left;
+        const top = cssLength(item.y, 0) - offset.top;
+        const width = cssLength(item.width, 0);
+        const height = cssLength(item.height, 0);
+        if (box && (left >= box.width || top >= box.height || left + width <= 0 || top + height <= 0)) return null;
+        const decl = `position:absolute;left:${left}px;top:${top}px;width:${width}px;height:${height}px${extra}`;
+        return { attr: styleAttr(styles, decl), width, height };
+    };
     const parts: string[] = [];
-    for (const img of images) {
+    for (const img of sheet.images ?? []) {
         const src = mediaUrls.get(img.mediaName);
         if (src === undefined) continue;
-        // Geometry is schemaless at the Yjs boundary, like every other stored dimension here.
-        const left = cssLength(img.x, 0) - offset.left;
-        const top = cssLength(img.y, 0) - offset.top;
-        const w = cssLength(img.width, 0);
-        const h = cssLength(img.height, 0);
-        if (box && (left >= box.width || top >= box.height || left + w <= 0 || top + h <= 0)) continue;
         const angle = cssLength(img.angle, 0);
-        const decl =
-            `position:absolute;left:${left}px;top:${top}px;` +
-            `width:${w}px;height:${h}px` +
-            (angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
-        parts.push(`<img ${styleAttr(styles, decl)} src="${escapeHtml(src)}" alt="">`);
+        const placed = place(img, angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
+        if (placed) parts.push(`<img ${placed.attr} src="${escapeHtml(src)}" alt="">`);
+    }
+    for (const chart of orderByFractionalIndex(Object.values(sheet.charts ?? {}))) {
+        const placed = place(chart);
+        if (placed) parts.push(`<div ${placed.attr}>${renderSheetChartSvg({ ...chart, ...placed }, resolver)}</div>`);
     }
     return parts.join('');
 }
 
-// The grid's positioning context. With no images the table is emitted bare, so a workbook
-// without them renders exactly the markup it always did.
+// The grid's positioning context. With no images or charts the table is emitted bare, so a
+// workbook without them renders exactly the markup it always did.
 function overlayBox(table: string, overlay: string, width: number, styles?: StyleRegistry): string {
     if (!overlay) return table;
     return `<div ${styleAttr(styles, `position:relative;width:${width}px`)}>${table}${overlay}</div>`;
@@ -690,21 +704,22 @@ function getGridBounds(
     return { minRow, minCol, maxRow, maxCol };
 }
 
-// Images are stored in grid pixels from A1 while the overlay positions them against the window's
-// first cell, so one anchored above or left of the used range would take a negative offset and
-// fall off the page: the window drops to the track the earliest image starts in.
+// Images and charts are stored in grid pixels from A1 while the overlay positions them against the
+// window's first cell, so one anchored above or left of the used range would take a negative offset
+// and fall off the page: the window drops to the track the earliest one starts in.
 function getRenderBounds(
     sheet: Sheet,
     config: SheetConfig,
 ): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
     const bounds = getGridBounds(sheet, config.borderInfo ?? {});
-    if (!sheet.images?.length || bounds.maxRow < 0) return bounds;
+    const floating = floatingObjects(sheet);
+    if (floating.length === 0 || bounds.maxRow < 0) return bounds;
 
     let x = Number.MAX_SAFE_INTEGER;
     let y = Number.MAX_SAFE_INTEGER;
-    for (const img of sheet.images) {
-        x = Math.min(x, cssLength(img.x, 0));
-        y = Math.min(y, cssLength(img.y, 0));
+    for (const item of floating) {
+        x = Math.min(x, cssLength(item.x, 0));
+        y = Math.min(y, cssLength(item.y, 0));
     }
 
     let minCol = 0;
