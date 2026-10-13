@@ -2,13 +2,13 @@
 
 > **TLDR:** A chart is one stored description, a `ChartSpec`: its type, titles, legend, axes, colors and data. One pure layout turns it into ordinary canvas elements plus lines of text, and one painter draws those as plain SVG, so a chart looks the same live, in a preview and in every export. The spec, its reader and the layout are `packages/lib/src/charts/` with the types in `packages/lib/src/types/chart.ts`; the canvas kind and its painter are `packages/lib/src/vector/kinds/chart.ts` and `chart-render.ts`.
 
-A chart is a column, bar, line or pie chart, in Google's and Excel's names: a column chart has vertical bars, a bar chart horizontal ones. Its `ChartSpec` holds the presentation (title, legend position, axis titles, value-axis min and max, gridlines, stacking, colors) and the data: categories along one axis and one or more series of values. The spec is stored as a JSON string wherever a chart lives. The one place it lives is the `chart` field of a canvas element of kind `chart`, in Vector and Slides ([CANVAS.md](CANVAS.md)). No menu or panel creates or edits one: a chart reaches a canvas through the stored document.
+A chart is a column, bar, line or pie chart, in Google's and Excel's names: a column chart has vertical bars, a bar chart horizontal ones. Its `ChartSpec` holds the presentation (title, legend position, axis titles, value-axis min and max, gridlines, stacking, colors) and the data: categories along one axis and one or more series of values. The spec is stored as a JSON string wherever a chart lives. The one place it lives is the `chart` field of a canvas element of kind `chart`, in Vector and Slides ([CANVAS.md](CANVAS.md)). No menu or panel creates or edits one: a chart reaches a canvas through the stored document. The object menu can only turn one into plain shapes.
 
 The data is inline or a range. Inline data is the numbers themselves, inside the spec. Range data names cells of a sheet (a `CellRangeRef`: sheet id, first and last row, first and last column), which only a sheet can resolve. A canvas has no sheet, so it draws only inline data.
 
 The layout, `layoutChart`, takes the spec, the resolved data, a box and a paint, and returns shapes and labels in the box's own coordinates. The shapes are real canvas elements: rectangles for bars and legend swatches, lines for gridlines, baselines and line series, ellipses for markers and the pie kind for slices. The labels are lines of text with a position, font, size, weight, color and turn. The painter, `renderChartSvg`, draws the shapes through their own kinds and the labels as SVG `<text>`.
 
-The sections cover the spec and its reader, how a canvas stores a chart, the layout, the painter, the paint, the text widths and the limits. Three things in them surprise people:
+The sections cover the spec and its reader, how a canvas stores a chart, the layout, the painter, the paint, converting a chart to shapes, the text widths and the limits. Three things in them surprise people:
 
 - A canvas keeps a chart's spec exactly as stored, even one that doesn't parse ([§ A canvas keeps the spec as stored](#a-canvas-keeps-the-spec-as-stored-and-draws-a-placeholder-for-one-it-cant-draw)).
 - A chart's labels are SVG text, never rich text, because WeasyPrint ignores `foreignObject` ([§ The painter draws each shape with its own kind](#the-painter-draws-each-shape-with-its-own-kind-and-the-labels-as-svg-text)).
@@ -69,6 +69,14 @@ A canvas chart takes its `ChartPaint` from its element, so it follows its host's
 | `roughness`, `seed` | Every shape |
 
 Series and slice colors are in the spec, stored when the chart is made. A pie draws its slice edges in the background's color when it has a solid one, so slices read as separate.
+
+## Convert to shapes unpacks the painter's own layout
+
+Convert to shapes, a row in the canvas object menu for a selection of one chart that draws, replaces the chart with what it draws. `chartToElements` (`vector/kinds/chart-convert.ts`) reads the same layout the painter draws (`chartLayout` in `chart-render.ts`), so each converted shape is the element that drew it: same kind, fields and seed, so no jitter or hatch rerolls. Each shape's center turns about the chart's center, the chart's angle is added to its own, and its opacity is multiplied by the chart's. Each label becomes a rich-text box in the label's font, sized by `measureLabel` plus half an em of slack, since its kerning-free width can run short and a wrapped label would take two lines, one line high at the font's own line height so the baseline lands where the SVG text put it, and aligned by its anchor. A turned label turns about its anchor but an element turns about its center, so the box's center is turned instead. A chart that draws its placeholder converts to nothing, and the row is hidden. The kind answers through `toShapes`, read by `convertToShapes`, so the menu never asks for a chart by type.
+
+`replaceElementInDoc` (`packages/ui/src/components/vector/hooks/element-writes.ts`) deletes the chart and writes the shapes in one transaction, at keys between the chart's index and the next one above it, so they keep the chart's place in the stacking order. The menu runs it as one sealed undo step, so one ⌘Z brings the chart back, and selects the shapes, since the canvas has no groups to put them in. An arrow bound to the chart keeps its endpoints and loses its binding, as on a delete. The action is one way and has no ⌘K entry, because the palette has no canvas element actions.
+
+The converted labels are rich text, each its own layer. The live canvas, a preview and the PDF mount a rich-text layer as HTML, so they draw the labels, but the SVG download wraps rich text in `foreignObject`, which some SVG viewers don't draw. That is every rich-text box's limitation, not the chart's.
 
 ## Text widths come from a committed table generated from the bundled fonts
 
