@@ -300,6 +300,7 @@ function readShape(
                 inherited: inherited.flatMap((placeholder) => xmlChild(placeholder.shape, P_NS, 'txBody') ?? []),
                 listStyle: listStyleOf(own, walk.inheritance, walk.presentation),
                 style,
+                rels: walk.part.rels,
             },
             theme,
             walk.deck.scale,
