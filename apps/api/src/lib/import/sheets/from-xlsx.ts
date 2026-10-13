@@ -12,12 +12,7 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import {
-    SHEET_DEFAULT_COL_WIDTH,
-    SHEET_DEFAULT_DIGIT_WIDTH,
-    SHEET_DEFAULT_FONT,
-    SHEET_DEFAULT_ROW_HEIGHT,
-} from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     cellWrapsText,
@@ -27,16 +22,16 @@ import {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     toA1,
-    unquoteSheetName,
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import Range from 'exceljs/lib/doc/range';
 import { ApiError } from '../../core/errors';
 import { PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
+import { optional } from '../../core/opc';
 import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { DAY_MS, dateDisplay, EXCEL_EPOCH_MS, readGrid } from './cells';
-import { NOT_AN_XLSX, readPackage, SPREADSHEET_TOO_LARGE, TOO_MANY_CELLS } from './package';
+import { NOT_AN_XLSX, readInBatches, readPackage, SPREADSHEET_TOO_LARGE, TOO_MANY_CELLS } from './package';
 import { readSharedStrings } from './strings';
 import {
     BORDER_STYLE_MAP,
@@ -48,6 +43,7 @@ import {
     themePalette,
     VERTICAL_MAP,
 } from './styles';
+import { digitWidthOf, mapHyperlink, readWorksheet } from './worksheet';
 
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
 
@@ -55,10 +51,6 @@ const DEFAULT_ROW_HEIGHT_PT = 15.75;
 // the cells the parts hold count before exceljs loads (tallySheet), the grid they span after. The byte cap catches a bomb
 // of few cells.
 export const MAX_CELLS = 4_000_000;
-
-// The pixels of a column width unit in a file whose default font isn't Eigen's: Calibri 11's 7 px digit plus padding,
-// near enough. A width counts the file's own default font, so only Eigen's exports convert through Inter's digit.
-const OFFICE_DIGIT_WIDTH = 8;
 
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const checked = repackXlsx(buffer);
@@ -72,8 +64,7 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     // One after the other, so their trees are never alive together.
     const theme = themePalette(readPart(zip, 'xl/theme/theme1.xml') ?? undefined);
     const locationLinks = readLocationHyperlinks(zip);
-    const digitWidth =
-        readDefaultFontName(zip) === SHEET_DEFAULT_FONT.name ? SHEET_DEFAULT_DIGIT_WIDTH : OFFICE_DIGIT_WIDTH;
+    const digitWidth = digitWidthOf(readDefaultFontName(zip));
 
     const emitted = { text: 0 };
     const sheets: Sheet[] = [];
@@ -83,18 +74,23 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     return sheets;
 }
 
-// The reader of our own, beside ExcelJS's until the import switches to it: every worksheet's grid, charged against the
-// output budget as it is read. The cells count what they emit, a value or a border, and the grids the span recalc
-// materialises; the text counts every value, display and formula, each shared string and shared formula once per copy.
+// The reader of our own, beside ExcelJS's until the import switches to it: every worksheet's grid and what lies past
+// it, charged against the output budget as it is read. The cells count what they emit, a value, a border, a merged or
+// linked cell or a column's width, and the grids the span recalc materialises; the text counts every value, display,
+// formula and link, each shared string and shared formula once per copy.
 export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
     try {
         const book = readPackage(bytes);
         const palette = themePalette(book.theme);
         const looks = readLooks(book.styles, palette);
         const strings = readSharedStrings(book.sharedStrings, palette);
+        const fonts = book.styles && xmlChild(book.styles, SML_NS, 'fonts');
+        const font = fonts && xmlChild(fonts, SML_NS, 'font');
+        const fontName = font && xmlChild(font, SML_NS, 'name');
+        const digitWidth = digitWidthOf(fontName && xmlAttr(fontName, '', 'val'));
         const emitted = { cells: 0, text: 0, span: 0 };
-        const charge = (text: number) => {
-            emitted.cells += 1;
+        const charge = (cells: number, text: number) => {
+            emitted.cells += cells;
             emitted.text += text;
             if (emitted.cells > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
             if (emitted.text > MAX_TEXT) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
@@ -103,25 +99,46 @@ export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
         for (const { name, path } of book.sheets) {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
-            const grid = readGrid(part, { looks, strings, date1904: book.date1904, palette, charge });
+            const id = `sheet-${sheets.length}`;
+            // The rest is parsed before the rows, so the merges and links are placed when the grid reads its cells.
+            const { rest, children } = readInBatches(part, 'sheetData', 'row');
+            // A damaged rels part costs the external links, not the workbook.
+            const rels = optional(() => book.pkg.relationships(path)) ?? new Map();
+            const worksheet = readWorksheet(rest, { id, digitWidth, rels, charge });
+            const grid = readGrid(children, {
+                looks,
+                strings,
+                date1904: book.date1904,
+                palette,
+                charge,
+                placed: worksheet.placed,
+            });
             emitted.span += grid.rows * grid.columns;
             if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
-            // The columns, merges, views, filter, links, conditional formats and validations are read from grid.rest
-            // when they move over; until then a height is estimated at the default column width.
+            const { merge = {}, columnlen = {} } = worksheet.config;
             const tallest = new Map<number, number>();
             for (const { r, c, v } of grid.celldata) {
-                const height = estimateCellHeight(v, c, r, {}, {});
+                const height = estimateCellHeight(v, c, r, merge, columnlen);
                 if (height > Math.max(SHEET_DEFAULT_ROW_HEIGHT, tallest.get(r) ?? 0)) tallest.set(r, height);
             }
             const rowlen: NonNullable<SheetConfig['rowlen']> = {};
             for (const [r, height] of tallest) rowlen[r] = Math.round(height);
             for (const [r, points] of grid.heights)
                 if (points !== DEFAULT_ROW_HEIGHT_PT) rowlen[r] = Math.round(points * (4 / 3));
-            const config: SheetConfig = {};
+            const config: SheetConfig = { ...worksheet.config };
             if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
             if (Object.keys(grid.rowhidden).length > 0) config.rowhidden = grid.rowhidden;
             if (Object.keys(grid.borderInfo).length > 0) config.borderInfo = grid.borderInfo;
-            sheets.push({ name, id: `sheet-${sheets.length}`, order: sheets.length, celldata: grid.celldata, config });
+            const sheet: Sheet = {
+                name,
+                id,
+                order: sheets.length,
+                celldata: grid.celldata,
+                config,
+                ...worksheet.sheet,
+            };
+            // Conditional formats and validations: read from `rest` here.
+            sheets.push(sheet);
         }
         return sheets;
     } catch (error) {
@@ -1042,33 +1059,6 @@ function isEmptyCell(cell: FortuneCell): boolean {
         cell.fc === undefined &&
         cell.hl === undefined
     );
-}
-
-// exceljs surfaces a cell's hyperlink target as a string: web/mailto targets
-// verbatim, internal locations with a leading '#' (the rel-based form).
-// Location-form entries never reach the cell through exceljs (see
-// readLocationHyperlinks) and arrive here re-prefixed with '#' so both internal
-// forms share this one mapping. External targets import verbatim; scheme safety
-// is enforced at navigation/export time by resolveWebLink
-// (@workspace/lib/sheets/web-link).
-function mapHyperlink(target: string | undefined): { linkType: string; linkAddress: string } | null {
-    if (target == null || target.trim().length === 0) return null;
-    if (!target.startsWith('#')) return { linkType: 'webpage', linkAddress: target };
-    const location = target.slice(1);
-    if (location.length === 0) return null;
-    // Quoted sheet name ('My Sheet', 'It''s') with an optional !ref tail. Sheet
-    // names may legally contain '!', so don't split the quoted form on it.
-    const quoted = location.match(/^('(?:[^']|'')*')(!.+)?$/);
-    if (quoted) {
-        // goToLink's sheet branch matches sheet names by exact equality → strip
-        // the quotes; cellrange keeps the quoted form (getcellrange parses it).
-        return quoted[2]
-            ? { linkType: 'cellrange', linkAddress: location }
-            : { linkType: 'sheet', linkAddress: unquoteSheetName(quoted[1]) };
-    }
-    return location.includes('!')
-        ? { linkType: 'cellrange', linkAddress: location }
-        : { linkType: 'sheet', linkAddress: location };
 }
 
 // exceljs drops location-form hyperlinks on read: the worksheet parse keeps the
