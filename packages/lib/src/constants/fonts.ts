@@ -21,6 +21,9 @@ export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
 // A doc's text draws at it without a size mark: eigen-prose.css's body, in pt.
 export const DOCUMENT_FONT_SIZE = 11;
 
+// Small's: eigen-prose.css's small, in pt.
+export const SMALL_FONT_SIZE = 9;
+
 // Google Docs' and Sheets' font sizes, in pt, both of which step by 1.
 export const MIN_FONT_SIZE = 1;
 export const MAX_FONT_SIZE = 400;

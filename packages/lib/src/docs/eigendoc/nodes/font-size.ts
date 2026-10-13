@@ -2,7 +2,7 @@ import { Extension } from '@tiptap/core';
 import type { Mark, Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { DOCUMENT_FONT_SIZE, nextFontSize, readFontSize } from '../../../constants/fonts';
+import { DOCUMENT_FONT_SIZE, nextFontSize, readFontSize, SMALL_FONT_SIZE } from '../../../constants/fonts';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -15,9 +15,6 @@ declare module '@tiptap/core' {
 
 // pt and px are a size; em, rem, % and keywords are relative to what the source drew around them.
 const ABSOLUTE_SIZE = /^(\d*\.?\d+)(pt|px)$/;
-
-// eigen-prose.css's 0.75rem.
-const SMALL_SIZE = 9;
 
 // The size text draws at in pt: its mark's, Small's, or its block's, which a heading or a title sets on the page. A
 // block's is read once per type and level, and only from a mounted view.
@@ -38,7 +35,7 @@ function sizeReader(view: EditorView | undefined) {
     return (marks: readonly Mark[], block: Node, pos: number | undefined): number => {
         const size = readFontSize(marks.find((mark) => mark.type.name === 'textStyle')?.attrs['fontSize']);
         if (size !== undefined) return size;
-        return marks.some((mark) => mark.type.name === 'small') ? SMALL_SIZE : blockSize(block, pos);
+        return marks.some((mark) => mark.type.name === 'small') ? SMALL_FONT_SIZE : blockSize(block, pos);
     };
 }
 
