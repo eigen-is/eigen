@@ -4,11 +4,7 @@ import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { isBordered, renderRoughShape, svgId } from './render-utils';
-
-// The dashed gray box a picture with no resolvable file draws in its place.
-const MISSING_MEDIA_COLOR = '#9ca3af';
-const MISSING_MEDIA_DASH = '6 6';
+import { isBordered, PLACEHOLDER_STROKE, renderRoughShape, svgId } from './render-utils';
 
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
@@ -55,10 +51,7 @@ export const imageKind = defineKind<VectorImageElement>({
             // Media that is deleted, still uploading or on another mount: draw the box so the element
             // stays visible, selectable and findable. An image with no media name at all is the empty
             // element `paintsNothing` rings instead.
-            const placeholder =
-                el.mediaName === ''
-                    ? ''
-                    : `<path d="${d}" fill="none" stroke="${MISSING_MEDIA_COLOR}" stroke-width="1" stroke-dasharray="${MISSING_MEDIA_DASH}"/>`;
+            const placeholder = el.mediaName === '' ? '' : `<path d="${d}" ${PLACEHOLDER_STROKE}/>`;
             return { svg: `${placeholder}${border}` };
         }
         const fit = el.objectFit === 'fill' ? 'none' : el.objectFit === 'cover' ? 'xMidYMid slice' : 'xMidYMid meet';

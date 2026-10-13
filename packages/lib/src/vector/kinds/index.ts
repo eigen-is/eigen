@@ -12,12 +12,14 @@ import {
     type VectorElementType,
 } from '../types';
 import { arrowKind } from './arrow';
+import { chartKind } from './chart';
 import { diamondKind } from './diamond';
 import { ellipseKind } from './ellipse';
 import { freedrawKind } from './freedraw';
 import { imageKind } from './image';
 import type { Capabilities, ElementKind, StyleDefaults } from './kind';
 import { lineKind } from './line';
+import { pieKind } from './pie';
 import { fontFamily } from './read-fields';
 import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
@@ -35,6 +37,8 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     rectangle: rectangleKind,
     diamond: diamondKind,
     ellipse: ellipseKind,
+    pie: pieKind,
+    chart: chartKind,
     image: imageKind,
     richtext: richTextKind,
     freedraw: freedrawKind,
@@ -55,6 +59,12 @@ export function capabilitiesOf(el: VectorElement): Capabilities {
 // is. A kind answers for itself (kind.ts), so nothing switches on `type` out here.
 export function paintsNothing(el: VectorElement): boolean {
     return ELEMENT_KINDS[el.type].paintsNothing(el);
+}
+
+// What Convert to shapes writes in the element's place; [] for anything with nothing to unpack, which is
+// every element but a chart that draws.
+export function convertToShapes(el: VectorElement): VectorElement[] {
+    return ELEMENT_KINDS[el.type].toShapes(el);
 }
 
 // Bindable targets for an arrow endpoint, read off the registry through the one capability accessor. A
@@ -83,19 +93,6 @@ export function baseDefaultsFor(
     return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...ELEMENT_KINDS[type].baseDefaults };
 }
 
-// Toolbar order (Excalidraw's), the order ELEMENT_FIELDS walks the kinds in. Every type appears
-// exactly once — the registry test pins that through ELEMENT_FIELDS.
-const TOOL_ORDER: VectorElementType[] = [
-    'rectangle',
-    'diamond',
-    'ellipse',
-    'arrow',
-    'line',
-    'freedraw',
-    'richtext',
-    'image',
-];
-
 // The kinds a tool can create, in toolbar order — VECTOR_TOOLS derives from this instead of hand-listing
 // tools next to icons. The literal tuple is what gives `CreationToolType` a narrow union, so a UI table
 // keyed by it is exhaustive-checked; the registry test pins the tuple against the capabilities so the two
@@ -119,7 +116,8 @@ export function sceneFontFamilies(elements: VectorElement[]): Set<string> {
 }
 
 // The stored-key whitelist every writer iterates and the reader materializes: the base fields plus every
-// kind's own, in declaration order, de-duplicated. A new kind extends it by existing.
+// kind's own, in registry order, de-duplicated. Walking the registry, not a hand list, is what stores a
+// new kind's fields the day it joins ELEMENT_KINDS.
 export const ELEMENT_FIELDS: readonly string[] = buildElementFields();
 
 // A record's stored fields, in allow-list order, with undefined values dropped: exactly what a writer
@@ -138,8 +136,8 @@ export function storedFields(source: object, fields: readonly string[]): [string
 function buildElementFields(): string[] {
     const out: string[] = [...BASE_ELEMENT_FIELDS];
     const seen = new Set<string>(out);
-    for (const type of TOOL_ORDER) {
-        for (const field of ELEMENT_KINDS[type].fields) {
+    for (const kind of Object.values(ELEMENT_KINDS)) {
+        for (const field of kind.fields) {
             if (seen.has(field)) continue;
             seen.add(field);
             out.push(field);

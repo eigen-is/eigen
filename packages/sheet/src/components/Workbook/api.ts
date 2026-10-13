@@ -1,19 +1,24 @@
+import type { ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { applyPatches, produce } from 'immer';
+import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
 import {
     addSheet,
     api,
+    type ChartBox,
     type Context,
     collectMatches,
     createFilterOptions,
+    deleteChart,
     deleteRowCol,
     deleteSheet,
     getFlowdata,
     getSheetIndex,
     type Image,
+    insertChart,
     insertImage,
     insertRowCol,
     leaveCurrentSheet,
@@ -24,6 +29,7 @@ import {
     registerSheetFormulas,
     removeActiveImage,
     removeImageByMediaName,
+    reorderChart,
     replaceAllMatches,
     replaceImageMediaName,
     replaceSearchMatch,
@@ -31,7 +37,9 @@ import {
     type SearchHighlight,
     type SearchResult,
     type Settings,
+    setChartSpec,
     setSearchHighlights,
+    updateChartBox,
     updateImage,
 } from '../../state';
 
@@ -156,6 +164,27 @@ export function generateAPIs(
             setContext((draftCtx) => updateImage(draftCtx, id, fields)),
 
         removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
+
+        // One op + undo step each, on the current sheet. The id is made here so the caller can
+        // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
+        // a missing sheet apart, which inserts nothing and returns null.
+        insertChart: (box: ChartBox, spec: ChartSpec): string | null => {
+            const id = uuidv4();
+            const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
+            if (produce(context, recipe) === context) return null;
+            setContext(recipe);
+            return id;
+        },
+
+        updateChartBox: (id: string, box: Partial<ChartBox>) =>
+            setContext((draftCtx) => updateChartBox(draftCtx, id, box)),
+
+        setChartSpec: (id: string, spec: ChartSpec) => setContext((draftCtx) => setChartSpec(draftCtx, id, spec)),
+
+        reorderChart: (id: string, direction: 'forward' | 'backward') =>
+            setContext((draftCtx) => reorderChart(draftCtx, id, direction)),
+
+        deleteChart: (id: string) => setContext((draftCtx) => deleteChart(draftCtx, id)),
 
         undo: handleUndo,
         redo: handleRedo,

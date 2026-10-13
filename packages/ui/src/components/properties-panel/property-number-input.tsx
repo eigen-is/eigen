@@ -12,6 +12,8 @@ type PropertyNumberInputProps = {
     placeholder?: string;
     disabled?: boolean;
     className?: string;
+    // Makes an emptied field a value of its own (a chart axis's Auto); without it, empty writes nothing.
+    onClear?: () => void;
 };
 
 // The panel's number field. It writes on EVERY change — a keystroke, a spinner click, an arrow-key
@@ -26,6 +28,7 @@ export function PropertyNumberInput({
     placeholder,
     disabled,
     className,
+    onClear,
 }: PropertyNumberInputProps) {
     const [localValue, setLocalValue] = useState(() => String(value ?? ''));
     const [focused, setFocused] = useState(false);
@@ -45,7 +48,10 @@ export function PropertyNumberInput({
             onChange={(e) => {
                 const raw = e.target.value;
                 setLocalValue(raw);
-                if (raw !== '' && raw !== '-') {
+                if (raw === '' && onClear) {
+                    hold();
+                    onClear();
+                } else if (raw !== '' && raw !== '-') {
                     const v = Number(raw);
                     // Clamped BEFORE it is written: the input's own min/max only drive the spinner and
                     // validity styling, so typing 0 into a width would otherwise reach the document. An

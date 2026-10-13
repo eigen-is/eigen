@@ -24,8 +24,9 @@ const cell = (attrs: CellAttrs, text = 'x') => ({
 const row = (...cells: object[]) => ({ type: 'tableRow', content: cells });
 
 // Mounted on a page whose text column is COLUMN_PX wide, as the editor mounts it.
-async function mount(rows: object[]) {
+async function mount(rows: object[], editable = true) {
     const editor = new Editor({
+        editable,
         extensions: [...getDocExtensions(), TableWidthClamp],
         content: { type: 'doc', content: [{ type: 'table', content: rows }] },
     });
@@ -58,4 +59,14 @@ test('a change that takes the table past the text column scales every column bac
     const { state, view } = editor;
     view.dispatch(state.tr.setNodeMarkup(first, null, { ...state.doc.nodeAt(first)?.attrs, colwidth: [400] }));
     expect(widths(editor)).toEqual([[300], [150], [150]]);
+});
+
+test("a viewer's tab leaves a table past the column as it is", async () => {
+    const editor = await mount(
+        [row(cell({ colwidth: [200] }), cell({ colwidth: [200] }), cell({ colwidth: [200] }))],
+        false,
+    );
+    const { state, view } = editor;
+    view.dispatch(state.tr.setNodeMarkup(first, null, { ...state.doc.nodeAt(first)?.attrs, colwidth: [400] }));
+    expect(widths(editor)).toEqual([[400], [200], [200]]);
 });
