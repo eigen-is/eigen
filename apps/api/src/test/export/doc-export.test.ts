@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
@@ -31,8 +32,8 @@ async function docxDocumentXml(doc: Y.Doc): Promise<string> {
     return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
-async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
-    const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', [], undefined);
+async function exportStyle(format: 'html' | 'pdf-html', doc = seededDoc()): Promise<string> {
+    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
     return new TextDecoder().decode(data).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
 }
 
@@ -55,6 +56,34 @@ describe('doc export — the page', () => {
         expect(pgSz).toContain('w:h="16838"');
         const pgMar = xml.match(/<w:pgMar\b[^>]*>/)?.[0];
         for (const side of ['top', 'right', 'bottom', 'left']) expect(pgMar).toContain(`w:${side}="1134"`);
+    });
+
+    // Letter landscape with 1 cm margins.
+    function letterDoc(): Y.Doc {
+        const doc = seededDoc();
+        const page = { width: 279.4, height: 215.9, margin: { top: 10, right: 10, bottom: 10, left: 10 } };
+        const map = doc.getMap(PAGE_ROOT);
+        for (const [key, value] of Object.entries(pageRecord({ ...page, differentFirstPage: false })))
+            map.set(key, value);
+        return doc;
+    }
+
+    test.each(['html', 'pdf-html'] as const)('%s draws and prints the page the doc stores', async (format) => {
+        const css = await exportStyle(format, letterDoc());
+
+        expect(css).toContain('@page { size: 279.4mm 215.9mm; margin: 10mm 10mm 10mm 10mm; }');
+        const pageRule = css.match(/\.page \{([^}]*)\}/)?.[1];
+        expect(pageRule).toContain('width: 279.4mm;');
+        expect(pageRule).toContain('padding: 10mm 10mm 10mm 10mm;');
+    });
+
+    test('docx is the page the doc stores, landscape when wider than tall', async () => {
+        const xml = await docxDocumentXml(letterDoc());
+
+        expect(xml.match(/<w:pgSz\b[^>]*>/)?.[0]).toBe('<w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/>');
+        expect(xml.match(/<w:pgMar\b[^>]*>/)?.[0]).toBe(
+            '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567" w:header="567" w:footer="567" w:gutter="0"/>',
+        );
     });
 
     test('docx opens on the first paragraph, not an empty one', async () => {

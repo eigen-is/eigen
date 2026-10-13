@@ -1,6 +1,6 @@
 import type * as Y from 'yjs';
-import { readEigendocFromDoc } from '../document/doc';
-import type { TransformWarning } from '../document/transform/protocol';
+import { readEigendocFromDoc, readEigendocPage } from '../document/doc';
+import type { PreviewResult, TransformWarning } from '../document/transform/protocol';
 import { renderDocHtml } from '../export/doc/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
@@ -17,11 +17,11 @@ const PREVIEW_MAX_BLOCKS = 20;
 // The body renders as live DOM in the drive hero and the preview pane, so it goes through the shared
 // ref restriction: a figure keeps its collaborator-written `src` when it carries no mediaName, and
 // that would beacon every viewer. Only the prepared media URLs pass — the same allowance the export
-// path gets, where every resource is a data: URI.
+// path gets, where every resource is a data: URI. The page rides beside the body, for the page box it is drawn on.
 export function renderEigendocPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
-): { body: string; warnings: TransformWarning[] } {
+): PreviewResult & { warnings: TransformWarning[] } {
     const json = readEigendocFromDoc(doc);
 
     // Cap the preview at the first N top-level blocks — a glance, not the full doc.
@@ -37,5 +37,5 @@ export function renderEigendocPreviewBody(
     const sanitized = sanitizeExportHtml(html, { allowedRefs: new Set(mediaUrls.values()) });
     const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
 
-    return { body: applyPreviewByteGuard(body, warnings), warnings };
+    return { body: applyPreviewByteGuard(body, warnings), page: readEigendocPage(doc), warnings };
 }

@@ -9,7 +9,7 @@ import {
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
-import { writeEigendocUpdateToYjs } from '../document/doc';
+import { commitEigendocImport } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
 import {
     type DocImportWorkerResult,
@@ -122,14 +122,14 @@ export async function convertToDocument(
     if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
         throw new ApiError(400, 'Only .docx files can be converted to documents');
     }
-    const { update, images } = await importDocxUpdate(buffer);
+    const { update, page, images } = await importDocxUpdate(buffer);
     // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const name = sourcePath.name.replace(/\.docx$/i, '');
     const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
     const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
     await saveDocImages(drive, newPath, images, user);
-    writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+    commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page });
     return newPath;
 }
 
@@ -154,7 +154,7 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
-        const { update, images } = await importDocxUpdate(buffer, signal);
+        const { update, page, images } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
         // and the abort check come before the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
@@ -162,7 +162,7 @@ export async function importIntoDocument(
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
-        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+        commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page });
         return;
     }
 

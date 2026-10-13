@@ -98,6 +98,7 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'blocks-flattened': (w) => typeof w['count'] === 'number',
     'images-unshown': (w) => typeof w['count'] === 'number',
     'graphics-dropped': (w) => typeof w['count'] === 'number',
+    'section-pages-dropped': (w) => typeof w['count'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {

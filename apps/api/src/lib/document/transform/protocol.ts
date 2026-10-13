@@ -1,3 +1,4 @@
+import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 
@@ -121,7 +122,8 @@ export type TransformWarning =
     | { code: 'byte-guard-truncated'; bytes: number }
     | { code: 'blocks-flattened'; count: number }
     | { code: 'images-unshown'; count: number }
-    | { code: 'graphics-dropped'; count: number };
+    | { code: 'graphics-dropped'; count: number }
+    | { code: 'section-pages-dropped'; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never structured-clone ApiError/Error instances across the boundary.
@@ -131,7 +133,8 @@ export type TransformError = {
     message: string;
 };
 
-export type PreviewResult = { body: string };
+// A doc's preview carries its page, which quick look and the hero draw it on.
+export type PreviewResult = { body: string; page?: PageSetup };
 // Body text for the content index, already capped by the extractor — a small clone
 // like a preview body.
 export type ExtractTextResult = { text: string };
@@ -141,9 +144,9 @@ export type ExportWorkerResult = { data: ArrayBuffer };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it.
 export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
-// A ready Yjs update plus the images extracted from the docx: the main thread only
-// applies the update and writes the media through Mount.
-export type DocImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
+// A ready Yjs update plus the images extracted from the docx and its page: the main thread
+// only commits the update and the page and writes the media through Mount.
+export type DocImportWorkerResult = { update: ArrayBuffer; page: PageSetup; images: TransformMedia[] };
 
 export type TransformResult =
     | PreviewResult
@@ -216,7 +219,15 @@ function isTransformMedia(value: unknown): boolean {
 // instead of a silent fallthrough.
 export function resultMatchesRequest(request: DocumentTransformRequest, result: unknown): boolean {
     const r = result as
-        | { body?: unknown; text?: unknown; data?: unknown; snapshotJson?: unknown; update?: unknown; images?: unknown }
+        | {
+              body?: unknown;
+              text?: unknown;
+              data?: unknown;
+              snapshotJson?: unknown;
+              update?: unknown;
+              page?: unknown;
+              images?: unknown;
+          }
         | undefined;
     switch (request.kind) {
         case 'preview':
@@ -229,7 +240,11 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
             switch (request.targetType) {
                 case 'eigendoc':
                     return (
-                        r?.update instanceof ArrayBuffer && Array.isArray(r.images) && r.images.every(isTransformMedia)
+                        r?.update instanceof ArrayBuffer &&
+                        typeof r.page === 'object' &&
+                        r.page !== null &&
+                        Array.isArray(r.images) &&
+                        r.images.every(isTransformMedia)
                     );
                 case 'eigensheets':
                     return r?.snapshotJson instanceof ArrayBuffer;

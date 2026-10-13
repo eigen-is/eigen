@@ -25,7 +25,6 @@ async function render(doc: InstanceType<typeof Y.Doc>, props: Pick<Props, 'field
         return createElement(PageBand, {
             media: useDocMedia(drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC })),
             yDoc: doc,
-            textColumnWidth: () => 600,
             ...props,
         });
     }
