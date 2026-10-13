@@ -1,13 +1,13 @@
 // The chart's UI entry: the shared chart editor as the panel's Chart section, the Edit data dialog a
-// double-click opens, and the element Insert → Chart places. Every edit is one write of the `chart`
-// field, the next spec serialized whole.
+// double-click opens, Convert to shapes, and the element Insert → Chart places. Every edit is one write
+// of the `chart` field, the next spec serialized whole.
 
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec, ChartType } from '@workspace/lib/types/chart';
-import type { Point, VectorElement } from '@workspace/lib/vector';
+import { convertToShapes, type Point, type VectorElement } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
-import { Table } from 'lucide-react';
+import { Shapes, Table } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { NewVectorElement } from '../hooks/use-canvas-doc';
 import type { KindEditDialogProps, KindPanelSectionProps } from './index';
@@ -30,9 +30,10 @@ export function newChartElement(type: ChartType, center: Point, viewport: 'infin
 const specOf = (el: VectorElement | undefined) => (el?.type === 'chart' ? parseChartSpec(el.chart) : null);
 
 // One chart only: a spec doesn't merge across charts the way a color does.
-export function ChartPanelSection({ elements, onChange }: KindPanelSectionProps) {
+export function ChartPanelSection({ elements, onChange, onReplace }: KindPanelSectionProps) {
     const [dataOpen, setDataOpen] = useState(false);
-    const spec = elements.length === 1 ? specOf(elements[0]) : null;
+    const [el] = elements;
+    const spec = elements.length === 1 ? specOf(el) : null;
     if (!spec) return null;
     const write = (next: ChartSpec) => onChange({ chart: JSON.stringify(next) });
     const { data } = spec;
@@ -49,6 +50,18 @@ export function ChartPanelSection({ elements, onChange }: KindPanelSectionProps)
                         onOpenChange={setDataOpen}
                         onSave={write}
                     />
+                    {/* Laid out on the click, not on every render of the panel. */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                            const shapes = convertToShapes(el);
+                            if (shapes.length) onReplace(shapes);
+                        }}
+                    >
+                        <Shapes /> Convert to shapes
+                    </Button>
                 </>
             )}
         </ChartEditor>

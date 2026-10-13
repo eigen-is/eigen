@@ -139,6 +139,7 @@ export function VectorEditor({
                         toolLocked={toolLocked}
                         setToolLocked={setToolLocked}
                         onInsertImage={insertImage}
+                        canvasRef={canvasRef}
                         onAccessDialogOpen={onAccessDialogOpen}
                         createLabel="New vector"
                         createIcon={Diamond}
@@ -155,6 +156,8 @@ export function VectorEditor({
                         elements={doc.elements}
                         selectedElements={selectedElements}
                         updateElements={doc.updateElements}
+                        replaceElement={doc.replaceElement}
+                        setSelectedIds={setSelectedIds}
                         undoManager={doc.undoManager}
                         aspectLocked={aspectLocked}
                         onAspectLockChange={setAspectLocked}

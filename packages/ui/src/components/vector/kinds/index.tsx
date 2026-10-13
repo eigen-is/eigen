@@ -20,7 +20,7 @@ import {
     Type,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
-import type { VectorElementPatch } from '../hooks/use-canvas-doc';
+import type { NewVectorElement, VectorElementPatch } from '../hooks/use-canvas-doc';
 import { ArrowPanelSection } from './arrow';
 import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
@@ -37,12 +37,14 @@ export type InPlaceEditorProps = {
 // Rows for a homogeneous selection of this kind. `onChange` applies ONE patch to every selected element
 // and `onChangeEach` a patch computed per element (a label's measured width, an arrow's re-docked
 // route), each in one sealed transact (the panel owns the sealing). `scene` resolves an element the
-// selection does not hold — an arrow's bound shape.
+// selection does not hold — an arrow's bound shape. `onReplace` swaps a sole selected element for new ones
+// and selects them, one undo step (a chart's Convert to shapes).
 export type KindPanelSectionProps = {
     elements: VectorElement[];
     scene: Map<string, VectorElement>;
     onChange: (fields: VectorElementPatch) => void;
     onChangeEach: (patch: (el: VectorElement) => VectorElementPatch) => void;
+    onReplace: (elements: NewVectorElement[]) => void;
 };
 
 // What a double-click opens for a kind edited in a dialog rather than in place (a chart's data).

@@ -115,22 +115,32 @@ describe('newChartElement', () => {
 describe('ChartPanelSection', () => {
     const section = async (elements: VectorElement[], beginGesture?: () => () => void) => {
         const writes: Record<string, unknown>[] = [];
+        const replaced: unknown[][] = [];
         const panel = createElement(ChartPanelSection, {
             elements,
             scene: new Map(elements.map((el) => [el.id, el])),
             onChange: (fields: Record<string, unknown>) => writes.push(fields),
             onChangeEach: () => {},
+            onReplace: (shapes: unknown[]) => replaced.push(shapes),
         });
         const container = await render(
             beginGesture ? createElement(PropertyGestureContext.Provider, { value: beginGesture }, panel) : panel,
         );
-        return { container, writes };
+        return { container, writes, replaced };
     };
 
     test('one selected chart shows its editor with Edit data', async () => {
         const { container } = await section([chart('c1')]);
         expect([...container.querySelectorAll('h4')].map((h) => h.textContent)).toContain('Chart');
         expect(buttonIn(container, 'Edit data')).toBeDefined();
+    });
+
+    test("Convert to shapes replaces the chart with its layout's shapes", async () => {
+        const { container, replaced, writes } = await section([chart('c1')]);
+        await click(buttonIn(container, 'Convert to shapes'));
+        expect(replaced).toHaveLength(1);
+        expect(replaced[0].length).toBeGreaterThan(10);
+        expect(writes).toEqual([]);
     });
 
     test('two charts, or one whose spec does not parse, show no chart rows', async () => {
@@ -209,6 +219,7 @@ test('a typed chart title through the panel is one undo step', async () => {
                 if (typeof fields.chart === 'string') element.set('chart', fields.chart);
             }),
         onChangeEach: () => {},
+        onReplace: () => {},
     });
     const container = await render(
         createElement(PropertyGestureContext.Provider, { value: () => holdCapture(undoManager) }, panel),

@@ -52,8 +52,8 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import { type ReactNode, useCallback } from 'react';
 import type * as Y from 'yjs';
-import { applyZOrder } from './hooks/selection-ops';
-import { holdCapture, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
+import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
+import { holdCapture, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { ELEMENT_KIND_UI } from './kinds';
 
 // Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
@@ -99,6 +99,9 @@ type CanvasPropertiesPanelProps = {
     elements: VectorElement[];
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
+    // A kind section's Convert to shapes: the doc's replace, and the selection the new elements take.
+    replaceElement: (id: string, partials: NewVectorElement[]) => string[];
+    setSelectedIds: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
     // Panel title with nothing selected; defaults to the canvas.
     emptyTitle?: string;
@@ -116,6 +119,8 @@ export function CanvasPropertiesPanel({
     elements,
     selectedElements,
     updateElements,
+    replaceElement,
+    setSelectedIds,
     undoManager,
     emptyTitle,
     emptySection,
@@ -173,6 +178,11 @@ export function CanvasPropertiesPanel({
     const applyToEach = (patch: (el: VectorElement) => VectorElementPatch) => {
         if (!selectedElements.length) return;
         sealed(undoManager, () => updateElements(selectedElements.map((el) => ({ id: el.id, fields: patch(el) }))));
+    };
+
+    const applyReplace = (partials: NewVectorElement[]) => {
+        if (selectedElements.length !== 1) return;
+        convertElementToShapes(selectedElements[0].id, partials, replaceElement, setSelectedIds, undoManager);
     };
 
     // Numeric transform writes. A width/height change routes linear elements through resizeLinearTo so
@@ -284,6 +294,7 @@ export function CanvasPropertiesPanel({
                         scene={sceneById}
                         onChange={applyToAll}
                         onChangeEach={applyToEach}
+                        onReplace={applyReplace}
                     />
                 )}
 
