@@ -130,6 +130,41 @@
           }
         }
       }
+    },
+    {
+      // math is a leaf below lib that the browser, Bun, Workers and Node run unchanged: it imports no package and no runtime API.
+      "includes": ["packages/math/**", "!packages/math/src/test/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "react": { "message": "math is a leaf: no React (see ARCHITECTURE.md § Dependency direction)." },
+                  "react-dom": { "message": "math is a leaf: no React (see ARCHITECTURE.md § Dependency direction)." },
+                  "bun": { "message": "math is a leaf: no Bun API (see ARCHITECTURE.md § Dependency direction)." }
+                },
+                "patterns": [
+                  {
+                    "group": ["@workspace/*", "@workspace/**", "bun:*", "node:*"],
+                    "message": "math is a leaf: it imports no workspace package and no Bun or Node API (see ARCHITECTURE.md § Dependency direction)."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the suffix ban.
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "javascript": {
