@@ -7,6 +7,7 @@
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
 import type { VectorElement, VectorElementType } from '@workspace/lib/vector';
 import {
+    ChartColumn,
     ChartPie,
     Circle,
     Diamond,
@@ -58,6 +59,7 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     diamond: { icon: Diamond, label: 'Diamond', shortcut: { letter: 'D', digit: '3' } },
     ellipse: { icon: Circle, label: 'Ellipse', shortcut: { letter: 'O', digit: '4' } },
     pie: { icon: ChartPie, label: 'Pie' },
+    chart: { icon: ChartColumn, label: 'Chart' },
     arrow: {
         icon: MoveUpRight,
         label: 'Arrow',

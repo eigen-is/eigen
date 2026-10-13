@@ -6,6 +6,7 @@ import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import {
     DEFAULT_ELEMENT_PROPS,
     type VectorArrowElement,
+    type VectorChartElement,
     type VectorElement,
     type VectorEllipseElement,
     type VectorImageElement,
@@ -61,6 +62,17 @@ export function ellipse(over: Partial<VectorEllipseElement> & Pick<VectorEllipse
 
 export function pie(over: Partial<VectorPieElement> & Pick<VectorPieElement, 'id'>): VectorPieElement {
     return { ...BASE, ...ELEMENT_KINDS.pie.defaults(VECTOR_STYLE_DEFAULTS), type: 'pie', ...over };
+}
+
+export function chart(over: Partial<VectorChartElement> & Pick<VectorChartElement, 'id'>): VectorChartElement {
+    return {
+        ...BASE,
+        width: 640,
+        height: 400,
+        ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+        type: 'chart',
+        ...over,
+    };
 }
 
 export function image(over: Partial<VectorImageElement> & Pick<VectorImageElement, 'id'>): VectorImageElement {

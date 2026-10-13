@@ -1,0 +1,236 @@
+import { describe, expect, test } from 'bun:test';
+import { formatTickValue, layoutChart, MAX_CHART_SPEC_BYTES, sampleChartSpec } from '../../../charts';
+import type { ChartLayout, ChartSpec } from '../../../types/chart';
+import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
+import { ELEMENT_KINDS, sceneFontFamilies } from '../../../vector/kinds';
+import { svgTextLine } from '../../../vector/kinds/render-utils';
+import { readElementFromFields } from '../../../vector/read-vector';
+import { elementToSvg } from '../../../vector/scene-to-svg';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, type VectorChartElement } from '../../../vector/types';
+import { chart } from '../element-factories';
+
+const specJson = (over: Partial<ChartSpec> = {}, type: ChartSpec['type'] = 'column'): string =>
+    JSON.stringify({ ...sampleChartSpec(type), ...over });
+
+const RANGE_SPEC = specJson({
+    data: {
+        source: 'range',
+        categories: { sheetId: 's1', row: [1, 4], column: [0, 0] },
+        series: [
+            {
+                name: 'Sales',
+                values: { sheetId: 's1', row: [1, 4], column: [1, 1] },
+                color: '#2a78d6',
+                markers: false,
+                smooth: false,
+            },
+        ],
+    },
+});
+
+function svgOf(el: VectorChartElement): string {
+    return ELEMENT_KINDS.chart.render(el, {}).svg;
+}
+
+function readChart(record: Record<string, unknown>): VectorChartElement {
+    const el = readElementFromFields(
+        new Map(Object.entries({ id: 'c1', type: 'chart', width: 640, height: 400, ...record })),
+    );
+    if (el?.type !== 'chart') throw new Error('expected a chart');
+    return el;
+}
+
+// The layout the painter should draw, its paint read off the element by hand rather than by the kind.
+function layoutOf(el: VectorChartElement, spec: ChartSpec): ChartLayout {
+    if (spec.data.source !== 'inline') throw new Error('expected inline data');
+    const fill = parseFill(el.fill);
+    return layoutChart({
+        id: el.id,
+        spec,
+        data: spec.data,
+        width: el.width,
+        height: el.height,
+        paint: {
+            fontFamily: el.fontFamily,
+            color: el.color,
+            background: el.fill,
+            strokeColor: el.strokeColor,
+            strokeWidth: el.strokeWidth,
+            strokeStyle: el.strokeStyle,
+            roughness: el.roughness,
+            seed: el.seed,
+            fillStyle: fill.style,
+        },
+        formatTick: formatTickValue,
+    });
+}
+
+const textCount = (svg: string): number => svg.split('<text ').length - 1;
+
+describe('chart read', () => {
+    test('a malformed spec stays stored as it is and draws the placeholder', () => {
+        const broken = '{"type":"column","data":';
+        const el = readChart({ chart: broken });
+        expect(el.chart).toBe(broken);
+        const svg = svgOf(el);
+        expect(svg).toContain('stroke-dasharray');
+        expect(svg).toContain('This chart can&apos;t be shown');
+        expect(textCount(svg)).toBe(1);
+    });
+
+    test('a valid spec is kept byte for byte, unknown fields and key order included', () => {
+        const stored = `{"future":1,${specJson().slice(1)}`;
+        expect(readChart({ chart: stored }).chart).toBe(stored);
+    });
+
+    test('a spec over the byte limit reads as empty', () => {
+        const padded = specJson() + ' '.repeat(MAX_CHART_SPEC_BYTES);
+        expect(readChart({ chart: padded }).chart).toBe('');
+        expect(readChart({ chart: 42 }).chart).toBe('');
+    });
+
+    test('font, color and background go through the shared field readers', () => {
+        const el = readChart({ chart: specJson(), fontFamily: 'Comic; color:red', color: 'url(#x)', fill: 'nope' });
+        expect(el.fontFamily).toBe(DEFAULT_FONT_FAMILY);
+        expect(el.color).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
+        expect(el.fill).toBe(serializeFill(TRANSPARENT_FILL));
+    });
+
+    test('a new chart is the column sample in the host font, color and fill', () => {
+        const el = chart({ id: 'c1' });
+        expect(el.chart).toBe(JSON.stringify(sampleChartSpec('column')));
+        expect(el.fontFamily).toBe('Excalifont');
+        expect(parseFill(el.fill).style).toBe('cross-hatch');
+    });
+});
+
+describe('chart placeholder', () => {
+    test('range data draws the placeholder, since a canvas has no sheet to read', () => {
+        const svg = svgOf(chart({ id: 'c1', chart: RANGE_SPEC }));
+        expect(svg).toContain('This chart can&apos;t be shown');
+        expect(textCount(svg)).toBe(1);
+        expect(svg).not.toContain('Sales');
+    });
+
+    test('the message fits the box or is left out', () => {
+        const narrow = svgOf(chart({ id: 'c1', chart: '', width: 90, height: 60 }));
+        expect(narrow).toContain('…');
+        const tiny = svgOf(chart({ id: 'c1', chart: '', width: 4, height: 4 }));
+        expect(textCount(tiny)).toBe(0);
+        expect(tiny).toContain('stroke-dasharray');
+    });
+});
+
+describe('chart painter', () => {
+    test('each shape draws exactly as the same element would on the canvas', () => {
+        const el = chart({ id: 'c1' });
+        const out = layoutOf(el, sampleChartSpec('column'));
+        const svg = svgOf(el);
+        expect(out.shapes.filter((shape) => shape.type === 'rectangle').length).toBeGreaterThan(4);
+        for (const shape of out.shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
+    });
+
+    test('the labels are SVG text, one per layout label', () => {
+        const el = chart({
+            id: 'c1',
+            chart: specJson({ valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' } }),
+        });
+        const spec = {
+            ...sampleChartSpec('column'),
+            valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
+        };
+        const { labels } = layoutOf(el, spec);
+        const svg = svgOf(el);
+        expect(textCount(svg)).toBe(labels.length);
+        for (const label of labels) expect([label.text, svg.includes(svgTextLine(label))]).toEqual([label.text, true]);
+        expect(svg).not.toContain('foreignObject');
+    });
+
+    test('a label line sits on its baseline, bold at 600, turned about its top', () => {
+        const line = svgTextLine({
+            text: 'Title',
+            x: 100,
+            y: 10,
+            anchor: 'end',
+            fontFamily: 'Inter',
+            fontSize: 20,
+            bold: true,
+            color: '#123456',
+            rotate: -90,
+        });
+        expect(line).toBe(
+            `<text x="100" y="29.38" transform="rotate(-90 100 10)" font-family="&apos;Inter&apos;, sans-serif" font-size="20px" font-weight="600" fill="#123456" text-anchor="end" style="white-space: pre;">Title</text>`,
+        );
+    });
+
+    test('label text is escaped', () => {
+        const svg = svgOf(chart({ id: 'c1', chart: specJson({ title: 'A < B & "C"' }) }));
+        expect(svg).toContain('A &lt; B &amp; &quot;C&quot;');
+        expect(svg).not.toContain('A < B');
+    });
+
+    test('the same element draws the same SVG', () => {
+        const el = chart({ id: 'c1' });
+        expect(svgOf({ ...el })).toBe(svgOf(el));
+    });
+
+    test('the chart opacity rides its layer; the gridlines keep their own', () => {
+        const el = chart({ id: 'c1', opacity: 40 });
+        const svg = svgOf(el);
+        expect(svg).toContain('opacity="0.2"');
+        expect(svg).not.toContain('opacity="0.4"');
+        expect(elementToSvg(el).split('opacity="0.4"')).toHaveLength(2);
+    });
+
+    test('the fill style hatches the bars and the slices', () => {
+        const hatched = serializeFill({ ...TRANSPARENT_FILL, style: 'hachure' });
+        for (const type of ['column', 'pie'] as const) {
+            const el = chart({ id: 'c1', fill: hatched, chart: specJson({}, type) });
+            const marks = layoutOf(el, sampleChartSpec(type)).shapes.filter(
+                (shape) => shape.id.includes(':bar:') || shape.id.includes(':slice:'),
+            );
+            expect(marks.length).toBeGreaterThan(3);
+            const svg = svgOf(el);
+            for (const mark of marks) {
+                expect('fill' in mark && parseFill(mark.fill).style).toBe('hachure');
+                expect(svg).toContain(elementToSvg(mark));
+            }
+            // a hachure fill is drawn as stroked sketch lines in the mark's color, never a filled path
+            expect(svg).toContain('stroke="#2a78d6" stroke-width="1" fill="none"');
+        }
+    });
+
+    test('a gradient background keeps an id of its own', () => {
+        const fill = serializeFill({ type: 'gradient', from: '#ffffff', to: '#dbe7ff', angle: 90, style: 'solid' });
+        expect(svgOf(chart({ id: 'c1', fill }))).toContain('id="fill-c1_3a_background"');
+    });
+});
+
+describe('chart text', () => {
+    test('searchText is the title, axis titles, series names and categories', () => {
+        const el = chart({
+            id: 'c1',
+            chart: specJson({
+                categoryAxis: { title: 'Teams' },
+                valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
+            }),
+        });
+        expect(ELEMENT_KINDS.chart.searchText(el).split('\n')).toEqual([
+            'Points scored',
+            'Teams',
+            'Points',
+            'Period 1',
+            'Period 2',
+            'Team 1',
+            'Team 2',
+            'Team 3',
+            'Team 4',
+        ]);
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: 'nope' }))).toBe('');
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe('Points scored\nSales');
+    });
+
+    test('the SVG download embeds the chart font', () => {
+        expect(sceneFontFamilies([chart({ id: 'c1', fontFamily: 'Inter' })])).toEqual(new Set(['Inter']));
+    });
+});

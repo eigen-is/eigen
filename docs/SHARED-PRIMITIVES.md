@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1686 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1688 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -516,7 +516,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (392)
+## Types (393)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -837,6 +837,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorChartElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorDiamondElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -913,7 +914,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (809)
+## Utilities & constants (810)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1051,6 +1052,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `layoutChartMessage` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `MAX_CHART_LABEL_LENGTH` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |

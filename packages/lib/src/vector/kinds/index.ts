@@ -12,6 +12,7 @@ import {
     type VectorElementType,
 } from '../types';
 import { arrowKind } from './arrow';
+import { chartKind } from './chart';
 import { diamondKind } from './diamond';
 import { ellipseKind } from './ellipse';
 import { freedrawKind } from './freedraw';
@@ -37,6 +38,7 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     diamond: diamondKind,
     ellipse: ellipseKind,
     pie: pieKind,
+    chart: chartKind,
     image: imageKind,
     richtext: richTextKind,
     freedraw: freedrawKind,
