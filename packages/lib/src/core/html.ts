@@ -38,7 +38,8 @@ export function stripTagsServer(html: string): string {
     const text = html
         .replace(/<\/(p|div|li|h[1-6]|blockquote|tr)>/gi, '\n\n')
         .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<[^>]+>/g, '');
+        // `[^<>]`, not `[^>]`: a `<` no `>` follows would rescan the rest of the input from every `<`.
+        .replace(/<[^<>]+>/g, '');
     // `&nbsp;` is not one of escapeHtml's five, so it stays here; the rest decode through
     // the shared inverse, which decodes `&amp;` LAST. Doing it first, as this used to,
     // turned an escaped `&amp;lt;` into a `<` the source never contained.
