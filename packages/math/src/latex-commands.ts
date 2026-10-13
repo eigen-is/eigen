@@ -30,6 +30,7 @@ type LatexRow =
     | { kind: 'middle' }
     | { kind: 'right' }
     | { kind: 'big' }
+    | { kind: 'not' }
     | { kind: 'begin' }
     | { kind: 'end' }
     | { kind: 'noop' };
@@ -64,6 +65,7 @@ const ARGUMENTS: Readonly<Record<LatexRow['kind'], number>> = {
     middle: 0,
     right: 0,
     big: 0,
+    not: 0,
     begin: 1,
     end: 1,
     noop: 0,
@@ -380,6 +382,7 @@ const ROWS: [string, LatexRow][] = [
     ...['big', 'Big', 'bigg', 'Bigg'].flatMap((size) =>
         ['', 'l', 'm', 'r'].map((side): [string, LatexRow] => [size + side, { kind: 'big' }]),
     ),
+    ['not', { kind: 'not' }],
     ['operatorname', { kind: 'operatorname' }],
     ['limits', { kind: 'limits', limits: 'under' }],
     ['nolimits', { kind: 'limits', limits: 'side' }],

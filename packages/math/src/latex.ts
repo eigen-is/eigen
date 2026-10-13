@@ -22,6 +22,8 @@ import {
 import { checkedXml, NOT_XML } from './xml';
 
 const NO_BREAK_SPACE = '\u00A0';
+// The slash \not puts through a symbol.
+const NOT = '\u0338';
 
 // The fence characters a \left, \middle or \right takes as they are; the rest are commands.
 const DELIMITER_CHARS: ReadonlySet<string> = new Set('()[]|/');
@@ -232,6 +234,7 @@ class LatexReader {
             case 'begin':
                 return this.#argumentEnd(this.#partners[index] + 1, nesting);
             case 'big':
+            case 'not':
                 return end + 1;
             case 'radical':
             case 'arrow':
@@ -746,6 +749,15 @@ class LatexReader {
             case 'big':
                 into.push({ chars: this.#delimiter(), style });
                 return;
+            case 'not': {
+                // NFC composes the slashed symbol where Unicode has it, such as ≠.
+                const at = this.#offset(this.#pos);
+                const next = this.#pos < this.#end ? this.#tokens[this.#pos++] : undefined;
+                const char = next && !/^[{}^_&]$/.test(next.text) ? charOf(next) : '';
+                if (char.trim() === '') throw new MathError('\\not takes a symbol', at);
+                into.push({ chars: char + NOT, style });
+                return;
+            }
             case 'limits':
             case 'colorSwitch':
             case 'middle':
@@ -826,8 +838,20 @@ function writeChar(char: string): string {
     if (operator) return `{\\${operator}}`;
     const name = SPECIAL.has(char) || char > '~' ? SYMBOL_NAMES.get(char) : undefined;
     if (name !== undefined) return `\\${name}`;
+    const negated = negation(char);
+    if (negated !== undefined) return negated;
+    // A character and its marks, such as a slash no symbol command draws.
+    if ([...char].length > 1) return joined([...char].map(writeChar));
     // Math mode has no command KaTeX and MathJax both read for these: text draws them.
     return char === '^' || char === '~' ? `\\text{${TEXT_ESCAPES[char]}}` : char;
+}
+
+// A slashed symbol without a command of its own, such as ≢, is \not before the symbol, as TeX draws it.
+function negation(char: string): string | undefined {
+    const [base, slash, ...rest] = char.normalize('NFD');
+    if (slash !== NOT || rest.length > 0) return undefined;
+    const symbol = writeChar(base);
+    return /^(?:\\[A-Za-z]+|[^\\{}^_&'~])$/u.test(symbol) ? joined(['\\not', symbol]) : undefined;
 }
 
 // The font a token needs beyond the default (italic letters, or upright in \operatorname); undefined if none.

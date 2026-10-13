@@ -530,6 +530,13 @@ describe('readLatex', () => {
             ],
         ],
         ['\\text{\\textasciitilde{}\\textasciicircum{}}', [{ kind: 'text', text: '~^' }]],
+        // \not slashes the next symbol, composed where Unicode has the character.
+        ['\\not=', [{ kind: 'operator', text: '≠' }]],
+        ['a\\not\\in b', [...letter('a'), { kind: 'operator', text: '∉' }, ...letter('b')]],
+        ['\\not\\equiv', [{ kind: 'operator', text: '≢' }]],
+        ['\\not\\subset', [{ kind: 'operator', text: '⊄' }]],
+        ['\\not\\preceq', [{ kind: 'operator', text: '⪯\u0338' }]],
+        ['\\not a^2', [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'a\u0338' }], sup: two }]],
         // A character's combining marks are part of it, so scripts take both.
         ['e\u0301^2', [{ kind: 'scripts', base: [{ kind: 'accent', accent: '\u0301', body: letter('e') }], sup: two }]],
     ])('%p', (latex, tree) => {
@@ -573,6 +580,9 @@ describe('readLatex', () => {
         ['\\big x', 5],
         ['\\textasciitilde', 0],
         ['\\begin{matrix}a\\\\[b]\\end{matrix}', 17],
+        ['\\not\\frac12', 4],
+        ['\\not{=}', 4],
+        ['x^\\not', 6],
         ['\\begin{matrix}a\\\\[{2pt}]b\\end{matrix}', 17],
     ])('%p is a MathError at offset %p', (latex, offset) => {
         expect(thrown(() => readLatex(latex))?.offset).toBe(offset);
@@ -627,6 +637,13 @@ describe('writeLatex', () => {
             '\\alpha @',
         ],
         [[{ kind: 'table', layout: 'matrix', rows: [[x], [[]]] }], '\\begin{matrix}x \\\\ {}\\end{matrix}'],
+        [[{ kind: 'operator', text: '≠' }], '\\ne'],
+        [[{ kind: 'operator', text: '∉' }], '\\notin'],
+        [[{ kind: 'operator', text: '≢' }], '\\not\\equiv'],
+        [[{ kind: 'operator', text: '≮' }], '\\not<'],
+        [[{ kind: 'operator', text: '⪯\u0338' }], '\\not\\preceq'],
+        [[{ kind: 'identifier', text: 'a\u0338' }], '\\not a'],
+        [[{ kind: 'operator', text: '∑\u0338' }], '{\\sum}\u0338'],
         [
             [{ kind: 'table', layout: 'matrix', rows: [[x], [[{ kind: 'operator', text: '[' }, ...x]]] }],
             '\\begin{matrix}x \\\\ [x\\end{matrix}',
@@ -886,7 +903,7 @@ describe('LATEX_COMMANDS', () => {
             genfrac: ['', '', '0pt', '', 'a', 'b'],
             notation: ['top', 'x'],
         };
-        const structural = new Set(['left', 'middle', 'right', 'begin', 'end', 'limits', 'noop', 'big']);
+        const structural = new Set(['left', 'middle', 'right', 'begin', 'end', 'limits', 'noop', 'big', 'not']);
         for (const [name, command] of LATEX_COMMANDS) {
             if (structural.has(command.kind)) continue;
             const count = command.arguments;
