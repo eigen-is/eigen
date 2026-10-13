@@ -473,7 +473,7 @@ describe('output budget', () => {
 
     // A space in m:t writes 26 characters of MathML: these 22 KB zipped built 400M characters, 1.07 GB, before the weigh.
     test('MathML past the budget is 413 once the budget and one equation are written', async () => {
-        const space = `<m:oMath><m:r><m:t xml:space="preserve">a${' '.repeat(4000)}a</m:t></m:r></m:oMath>`;
+        const space = `<m:oMath><m:r><m:t xml:space="preserve">a${' '.repeat(3990)}a</m:t></m:r></m:oMath>`;
         const docx = await buildDocxWithBody(`<w:p xmlns:m="${M_NS}">${space.repeat(3870)}</w:p>`);
         const writes = spyOn(math, 'writeMathml');
         try {
