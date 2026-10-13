@@ -24,9 +24,13 @@ async function loadConverter() {
     return { adaptor, document };
 }
 
-// WeasyPrint takes 10 to 20 ms to draw an equation's SVG and MathJax 1 to 2 ms to make one, after 0.4 s loading itself
-// (measured over the 108 corpus equations), so 1,000 add about 20 s to a PDF, inside WeasyPrint's 60 s. A PDF draws the
-// rest as text. A tree at the math bounds takes MathJax 0.6 s; the transform deadline ends a document of those.
+// The PDF's SVG costs by the byte, every copy: the sanitizer's jsdom holds about 75 MB per MB, in the API's own process,
+// and WeasyPrint takes about 1 s per MB. The 108 corpus equations draw 4.2 KB each on average (median 2.1 KB, the
+// largest 42 KB), so 1,000 of them fit about 4 MB; one tree at the math bounds draws up to 4.7 MB.
+export const MAX_SVG_BYTES = 10_000_000;
+
+// MathJax takes 1 to 2 ms an equation over the corpus, after 0.4 s loading itself, and up to 0.6 s for a tree at the
+// math bounds.
 export const MAX_SVG_EQUATIONS = 1000;
 
 // The <math>'s own display="block" makes it a display equation. The promise API waits for the font ranges it loads.

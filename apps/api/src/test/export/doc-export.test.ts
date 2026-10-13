@@ -12,7 +12,7 @@ import * as mathSvg from '../../lib/export/math-svg';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
-import { seedEigendoc } from '../fixtures/golden-documents';
+import { equation, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
     const doc = new Y.Doc();
@@ -336,24 +336,71 @@ describe('doc export — equations', () => {
         expect(html).not.toMatch(/<math|x-tex/);
     });
 
-    // A repeat of a drawn equation counts again, as WeasyPrint draws each, and MathJax draws each string once.
-    test(`past ${mathSvg.MAX_SVG_EQUATIONS} equations the PDF writes the rest as their LaTeX`, async () => {
-        const drawn = Array.from({ length: mathSvg.MAX_SVG_EQUATIONS }, () => ({ mathml: writeMathml(x, 'x') }));
+    // MathJax draws each string once. Past its last drawing a repeat of a drawn one is text too, so the text is a tail.
+    test(`past ${mathSvg.MAX_SVG_EQUATIONS} drawings the PDF writes the rest as their LaTeX`, async () => {
+        const numbers = Array.from({ length: mathSvg.MAX_SVG_EQUATIONS }, (_, i) => ({
+            mathml: writeMathml([{ kind: 'number', text: String(i) }], String(i)),
+        }));
         const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
         try {
             const html = await exportEquations(
                 'pdf-html',
-                ...drawn,
-                { mathml: writeMathml(x, 'x') },
+                numbers[0],
+                ...numbers,
                 { mathml: writeMathml(y, 'y') },
+                numbers[0],
             );
-            expect(html.match(/class="math-svg"/g)).toHaveLength(mathSvg.MAX_SVG_EQUATIONS);
-            expect(html).toContain('</svg></span>xy<br></p>');
-            expect(mathmlToSvg).toHaveBeenCalledTimes(1);
+            expect(html.match(/class="math-svg"/g)).toHaveLength(mathSvg.MAX_SVG_EQUATIONS + 1);
+            expect(html).toContain('</svg></span>y0<br></p>');
+            expect(mathmlToSvg).toHaveBeenCalledTimes(mathSvg.MAX_SVG_EQUATIONS);
         } finally {
             mathmlToSvg.mockRestore();
         }
-    });
+    }, 60_000);
+
+    // A radical over 4,900 identifiers: 49 KB of MathML, about 4 MB of SVG. Each copy counts, as the sanitizer and
+    // WeasyPrint read each, and MathJax stops at the one that does not fit.
+    test(`the PDF draws at most ${mathSvg.MAX_SVG_BYTES} bytes of SVG, and the rest as their LaTeX`, async () => {
+        const wide = (i: number) => ({
+            mathml: writeMathml(
+                [
+                    {
+                        kind: 'radical',
+                        body: Array.from({ length: 4900 }, (_, j) => ({ kind: 'identifier', text: j ? 'x' : `${i}` })),
+                    },
+                ],
+                `r${i}`,
+            ),
+        });
+        const equations = [wide(0), wide(0), ...Array.from({ length: 18 }, (_, i) => wide(i + 1))];
+        const draw = mathSvg.mathmlToSvg;
+        const built: number[] = [];
+        const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg').mockImplementation(async (mathml) => {
+            const svg = await draw(mathml);
+            built.push(Buffer.byteLength(svg));
+            return svg;
+        });
+        try {
+            const html = await exportEquations('pdf-html', ...equations);
+            const drawn = html.match(/<span class="math-svg">[\s\S]*?<\/svg><\/span>/g) ?? [];
+            const texts = html.slice(
+                html.lastIndexOf('</svg></span>') + '</svg></span>'.length,
+                html.indexOf('<br></p>'),
+            );
+
+            expect(drawn.reduce((bytes, svg) => bytes + Buffer.byteLength(svg), 0)).toBeLessThanOrEqual(
+                mathSvg.MAX_SVG_BYTES,
+            );
+            expect(built.slice(0, -1).reduce((sum, bytes) => sum + bytes, 0)).toBeLessThanOrEqual(
+                mathSvg.MAX_SVG_BYTES,
+            );
+            expect(drawn).toHaveLength(2);
+            expect(mathmlToSvg).toHaveBeenCalledTimes(2);
+            expect(texts).toBe(Array.from({ length: 18 }, (_, i) => `r${i + 1}`).join(''));
+        } finally {
+            mathmlToSvg.mockRestore();
+        }
+    }, 60_000);
 
     // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
     test('a prescript keeps its empty slot', async () => {
@@ -778,8 +825,10 @@ const weasyPrint = await isWeasyPrintAvailable();
 const launcher = Bun.which('weasyprint');
 const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
 
-// The text of every list marker WeasyPrint lays out for the page the PDF is written from.
-const MARKER_SCRIPT = `
+// What `line` prints of each box WeasyPrint lays out for the pages the PDF is written from, `tag` its element's name.
+async function laidOut(html: string, line: string): Promise<string[]> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    const script = `
 import sys, weasyprint
 def walk(box):
     yield box
@@ -787,13 +836,10 @@ def walk(box):
         yield from walk(child)
 for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     for box in walk(page._page_box):
-        if 'marker' in str(getattr(box, 'element_tag', '')) and hasattr(box, 'text'):
-            print(box.text.strip())
+        tag = str(getattr(box, 'element_tag', '')).split('}')[-1]
+        ${line}
 `;
-
-async function markers(html: string): Promise<string[]> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
-    const proc = Bun.spawn([python, '-I', '-c', MARKER_SCRIPT], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
+    const proc = Bun.spawn([python, '-I', '-c', script], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
     proc.stdin.write(html);
     await proc.stdin.end();
     return (await new Response(proc.stdout).text()).trim().split('\n');
@@ -810,6 +856,34 @@ async function markers(html: string): Promise<string[]> {
             orderedList({ start: 2, type: 'a' }, listItem('d'), listItem('e')),
             orderedList({ type: 'I' }, listItem('f')),
         );
-        expect(await markers(html)).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+        const markers = await laidOut(html, "if 'marker' in tag and hasattr(box, 'text'): print(box.text.strip())");
+        expect(markers).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+    }, 60_000);
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — equations (WeasyPrint)', () => {
+    // MathJax breaks no equation into lines, so one wider than the column scales down to it.
+    test('an equation wider than the column fits it, in its own proportions', async () => {
+        const terms = (count: number): MathRow =>
+            Array.from({ length: count }, (_, i) =>
+                i % 2 ? { kind: 'operator', text: '+' } : { kind: 'identifier', text: 'x' },
+            );
+        const html = await pdfHtml({
+            type: 'paragraph',
+            content: [
+                equation(writeMathml(terms(121)), true),
+                { type: 'text', text: 'and ' },
+                equation(writeMathml(terms(81))),
+            ],
+        });
+        const boxes = await laidOut(html, "if tag in ('article', 'svg'): print(tag, box.width, box.height)");
+        const [column, ...svgs] = boxes.map((box) => box.split(' ').slice(1).map(Number));
+        const drawn = [...html.matchAll(/<svg [^>]*width="([\d.]+)ex" height="([\d.]+)ex"/g)];
+
+        expect(svgs).toHaveLength(2);
+        svgs.forEach(([width, height], i) => {
+            expect(width).toBeCloseTo(column[0], 1);
+            expect(width / height).toBeCloseTo(Number(drawn[i][1]) / Number(drawn[i][2]), 0);
+        });
     }, 60_000);
 });

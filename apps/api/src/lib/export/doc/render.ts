@@ -10,7 +10,6 @@ import { readStoredEquation } from '../../document/equation';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
-import { MAX_SVG_EQUATIONS } from '../math-svg';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
@@ -91,8 +90,8 @@ function renderFigureNode(
     return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${img}${cap}</span>`;
 }
 
-// Without the annotation, which no screen draws and the sanitizer would keep as text. The PDF finds the SVG MathJax drew
-// of an equation by this string.
+// Without the annotation, which no screen draws and the sanitizer would keep as text. The PDF has MathJax draw this
+// string.
 export function equationMathml(row: MathRow, display: boolean): string {
     const math = writeMathml(row);
     return display ? math.replace('<math', '<math display="block"') : math;
@@ -103,17 +102,10 @@ function renderEquationNode({ node }: { node: Node }): string {
     return equationMathml(row, display);
 }
 
-// The PDF draws its first MAX_SVG_EQUATIONS equations as the SVGs MathJax drew of them, and the rest as text: until the
-// package writes an equation's linear text, its LaTeX stands in.
-function renderEquationSvgs(mathSvgs: ReadonlyMap<string, string>): ({ node }: { node: Node }) => string {
-    let drawn = 0;
-    return ({ node }) => {
-        const { row, latex, display } = readStoredEquation(node.attrs);
-        const svg = drawn < MAX_SVG_EQUATIONS ? mathSvgs.get(equationMathml(row, display)) : undefined;
-        if (svg === undefined) return escapeHtml(latex ?? '');
-        drawn++;
-        return `<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`;
-    };
+// The PDF's equations, printed before the render (export/doc/transform.ts): the HTML of each, in document order.
+function renderPrintedEquations(printed: readonly string[]): () => string {
+    let next = 0;
+    return () => printed[next++];
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
@@ -177,7 +169,7 @@ function smaller(capitals: string): string {
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; mathSvgs?: ReadonlyMap<string, string> },
+    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; printedEquations?: readonly string[] },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(json));
     return renderToHTMLString({
@@ -188,7 +180,9 @@ export function renderDocHtml(
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
-                equation: options?.mathSvgs ? renderEquationSvgs(options.mathSvgs) : renderEquationNode,
+                equation: options?.printedEquations
+                    ? renderPrintedEquations(options.printedEquations)
+                    : renderEquationNode,
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },

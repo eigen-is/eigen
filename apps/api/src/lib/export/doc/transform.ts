@@ -1,5 +1,12 @@
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    type Equation,
+    PAGE_BREAK_CLASS,
+    pageStylesheet,
+    readFigureAttrs,
+} from '@workspace/lib/docs/eigendoc';
+import { escapeHtml } from '@workspace/lib/html';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
@@ -17,7 +24,7 @@ import {
 import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
-import { MAX_SVG_EQUATIONS, mathmlToSvg } from '../math-svg';
+import { MAX_SVG_BYTES, MAX_SVG_EQUATIONS, mathmlToSvg } from '../math-svg';
 import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
 import { equationMathml, renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
@@ -48,7 +55,7 @@ export async function renderEigendocExport(
     const body = renderDocHtml(
         withAbsoluteLinks(json, publicOrigin),
         (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-        { synthesizeSmallCaps: pdf, ...(pdf && { mathSvgs: await equationSvgs(json) }) },
+        { synthesizeSmallCaps: pdf, ...(pdf && { printedEquations: await printedEquations(json) }) },
     );
     const html = exportHtmlDocument({
         title,
@@ -58,22 +65,37 @@ export async function renderEigendocExport(
     return { data: toTransferableText(html), warnings: [] };
 }
 
-// WeasyPrint draws no MathML, so the PDF draws its first MAX_SVG_EQUATIONS equations as SVG, keyed by the MathML the
-// screen draws. One drawing per distinct string, one at a time.
-async function equationSvgs(json: JSONContent): Promise<Map<string, string>> {
-    const mathml = new Set<string>();
-    let count = 0;
+// WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws, in
+// document order and each string once. Every copy counts against MAX_SVG_BYTES; from the first equation that does not
+// fit, or past MAX_SVG_EQUATIONS drawings, the rest print as text: until the package writes an equation's linear text,
+// its LaTeX stands in.
+async function printedEquations(json: JSONContent): Promise<string[]> {
+    const equations: Equation[] = [];
     const visit = (node: JSONContent) => {
-        if (node.type === 'equation' && count++ < MAX_SVG_EQUATIONS) {
-            const { row, display } = readStoredEquation(node.attrs ?? {});
-            mathml.add(equationMathml(row, display));
-        }
+        if (node.type === 'equation') equations.push(readStoredEquation(node.attrs ?? {}));
         for (const child of node.content ?? []) visit(child);
     };
     visit(json);
     const svgs = new Map<string, string>();
-    for (const math of mathml) svgs.set(math, await mathmlToSvg(math));
-    return svgs;
+    const draw = async (mathml: string) => {
+        const drawn = svgs.get(mathml);
+        if (drawn !== undefined || svgs.size === MAX_SVG_EQUATIONS) return drawn;
+        const svg = await mathmlToSvg(mathml);
+        svgs.set(mathml, svg);
+        return svg;
+    };
+    let bytes = 0;
+    const printed: string[] = [];
+    for (const { row, latex, display } of equations) {
+        const svg = bytes <= MAX_SVG_BYTES ? await draw(equationMathml(row, display)) : undefined;
+        bytes += svg === undefined ? Number.POSITIVE_INFINITY : Buffer.byteLength(svg);
+        printed.push(
+            svg !== undefined && bytes <= MAX_SVG_BYTES
+                ? `<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`
+                : escapeHtml(latex ?? ''),
+        );
+    }
+    return printed;
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
@@ -176,9 +198,10 @@ table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-bre
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
-/* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline; a displayed one is centred, and the
-   trailing <br> that holds a paragraph's last line would add an empty one under it */
-.math-svg > svg { display: inline; max-width: none; }
+/* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline, and breaks no line, so one wider
+   than the column scales down to it; a displayed one is centred, and the trailing <br> that holds a paragraph's last
+   line would add an empty one under it */
+.math-svg > svg { display: inline; max-width: 100%; }
 .math-svg[data-display] { display: block; text-align: center; }
 .math-svg[data-display] + br { display: none; }
 
