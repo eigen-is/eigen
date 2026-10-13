@@ -108,9 +108,18 @@ function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
     };
 }
 
-// CSS px at 96 dpi.
+// CSS px at 96 dpi, unrounded: Docs stores a figure's width in them.
+export const mmToPx = (mm: number) => (mm / 25.4) * 96;
+export const pxToMm = (px: number) => (px / 96) * 25.4;
+
+// A length as Docs' fields show it, in cm to `decimals` places, without trailing zeros.
+export const cmText = (mm: number, decimals: number) => String(Math.round(mm * 10 ** (decimals - 1)) / 10 ** decimals);
+
+// A cm field's text in mm, to 0.01 mm, or a typed 1.91 cm reads as 19.099999999999998 mm. NaN for no number.
+export const readCm = (text: string) => (text.trim() === '' ? Number.NaN : Math.round(Number(text) * 1000) / 100);
+
 export function pagePx(setup: PageSetup): PageSetup {
-    return convert(setup, (mm) => (mm * 96) / 25.4);
+    return convert(setup, mmToPx);
 }
 
 // Word's twentieths of a point.
