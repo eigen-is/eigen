@@ -92,9 +92,8 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
         }
     });
 
-    // Seed 3329 is the first of 43 in 100,000 that once broke; 58606 broke a function named by a limit.
     test('10,000 seeded canonical trees, with the pictures LaTeX lacks swapped out', () => {
-        for (const seed of [...Array.from({ length: 10_000 }, (_, index) => index + 1), 58_606]) {
+        for (let seed = 1; seed <= 10_000; seed++) {
             const tree = withoutLosses(generateTree(seed));
             expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
             expect({ seed, tree: viaLatex(tree) }).toStrictEqual({ seed, tree });

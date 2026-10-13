@@ -11,6 +11,7 @@ import {
 } from './notation';
 import {
     bound,
+    clusters,
     defaultVariant,
     equationCells,
     hexColor,
@@ -73,8 +74,11 @@ function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undef
     const scripted = first?.ns === MATHML_NAMESPACE && SCRIPT_SLOTS.has(first.local);
     const operator = scripted ? elementsOf(first)[0] : first;
     if (is(operator, 'mo')) {
-        const char = mark(textOf(operator));
-        if (char && (isFlagged(operator, 'largeop') || (scripted && LARGE_OPERATORS.has(char)))) return 'nary';
+        // One character: a mark after it makes a symbol of its own, such as ∑̸.
+        const text = trimXmlSpace(textOf(operator));
+        const char = mark(text);
+        if (char && char === text && (isFlagged(operator, 'largeop') || (scripted && LARGE_OPERATORS.has(char))))
+            return 'nary';
     }
     if (children.length >= 2 && isFlagged(first, 'fence') && isFlagged(children.at(-1), 'fence')) return 'fenced';
     if (children.length === 3 && is(children[1], 'mo') && trimXmlSpace(textOf(children[1])) === FUNCTION_APPLICATION)
@@ -171,7 +175,7 @@ function readToken(row: RowBuilder, element: MathXmlElement): void {
     const mathvariant = attribute(element, 'mathvariant');
     const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
     // MathML draws a lone letter in an mi italic and anything else upright.
-    const lone = element.local === 'mi' && /^\P{M}\p{M}*$/u.test(text);
+    const lone = element.local === 'mi' && clusters(text).length === 1;
     row.chars(text, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
 }
 
@@ -345,7 +349,7 @@ function writeToken(node: MathToken): string {
     // MathML draws a lone letter italic, so an upright one says so.
     const upright =
         node.kind === 'identifier' &&
-        /^\P{M}\p{M}*$/u.test(node.text) &&
+        clusters(node.text).length === 1 &&
         defaultVariant(node.kind, node.text) === 'normal';
     const variant = node.variant ?? (upright ? 'normal' : undefined);
     // Chrome draws Unicode's alphanumerics but honours only mathvariant="normal": a variant is a character where

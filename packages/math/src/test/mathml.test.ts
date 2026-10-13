@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../mathml';
-import { MATH_LIMITS, type MathRow } from '../tree';
+import { MATH_LIMITS, type MathNode, type MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { el, letter, viaMathml, viaOmml } from './parse';
@@ -124,6 +124,15 @@ describe('readMathml', () => {
         expect(canonicalIssue(row)).toBeUndefined();
         expect(viaOmml(row)).toStrictEqual(row);
         expect(viaMathml(row)).toStrictEqual(row);
+    });
+
+    // A mark after a large operator makes a symbol of its own, so a scripted ∑̸ is no n-ary.
+    test.each<MathNode>([
+        { kind: 'limit', position: 'under', base: [{ kind: 'operator', text: '∑̸' }], limit: letter('x') },
+        { kind: 'scripts', base: [{ kind: 'operator', text: '∑̸' }], sup: letter('x') },
+        { kind: 'accent', accent: '̂', body: [{ kind: 'operator', text: '∑̸' }] },
+    ])('a marked large operator in a base survives: %j', (node) => {
+        expect(viaMathml([node])).toStrictEqual([node]);
     });
 
     test('Em spaces pair whether they come as characters or as mspace', () => {

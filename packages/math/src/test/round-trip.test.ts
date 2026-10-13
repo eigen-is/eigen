@@ -17,8 +17,8 @@ describe('tree → MathML → tree is the identity', () => {
         });
     }
 
-    test('1,000 seeded canonical trees', () => {
-        for (let seed = 1; seed <= 1000; seed++) {
+    test('5,000 seeded canonical trees', () => {
+        for (let seed = 1; seed <= 5000; seed++) {
             const tree = generateTree(seed);
             expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
             expect({ seed, tree: viaMathml(tree) }).toStrictEqual({ seed, tree });

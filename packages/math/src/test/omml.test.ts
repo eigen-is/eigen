@@ -64,8 +64,8 @@ describe('OMML → tree → OMML keeps what Word shows', () => {
         }
     });
 
-    test('seeded canonical trees survive OMML unchanged', () => {
-        for (let seed = 1; seed <= 1000; seed++) {
+    test('5,000 seeded canonical trees survive OMML unchanged', () => {
+        for (let seed = 1; seed <= 5000; seed++) {
             const tree = generateTree(seed);
             expect({ seed, tree: readOmml(parseWritten(writeOmml(tree))) }).toStrictEqual({ seed, tree });
         }
