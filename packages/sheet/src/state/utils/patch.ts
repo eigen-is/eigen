@@ -172,6 +172,24 @@ function sheetMetadataOps(ctx: Context, id: string, restoringDelete: boolean): O
     return metaOps;
 }
 
+// A row or column op writes back whole another sheet whose formulas it moved (writeBackSheets in
+// rowcol.ts), charts included, and that replace stays off the wire. A receiver's engine shift can
+// still differ from it: an insert never grows a shrunk or nulled ref back, a clamped ref doesn't
+// shrink back to its old end, and a redo or undo reverts a peer's later chart edit on the author
+// only. So that sheet's charts ship one by one, last writer wins; a sheet whose charts alone moved
+// already has immer's own per-chart patches.
+function wholeSheetChartOps(ctx: Context, ops: Op[], editedId: string): Op[] {
+    const wholeSheetIds = ops.filter((p) => p.path.length === 0 && p.id !== editedId).map((p) => p.id);
+    const chartOps: Op[] = [];
+    for (const sheet of ctx.sheets) {
+        if (!wholeSheetIds.includes(sheet.id)) continue;
+        for (const chart of Object.values(sheet.charts ?? {})) {
+            chartOps.push({ op: 'replace', id: sheet.id, path: ['charts', chart.id], value: chart });
+        }
+    }
+    return chartOps;
+}
+
 // Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
 // (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway.
 export function filterPatch(patches: Patch[]) {
@@ -208,7 +226,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
     });
     if (options?.insertRowColOp) {
-        const wholeSheetIds = ops.filter((p) => p.path.length === 0).map((p) => p.id);
+        const chartOps = wholeSheetChartOps(ctx, ops, options.insertRowColOp.id);
         // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
         ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
         ops.push({
@@ -217,23 +235,13 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             path: [],
             value: options.insertRowColOp,
         });
-        ops = [...ops, ...sheetMetadataOps(ctx, options.insertRowColOp.id, !!options.restoreDeletedCells)];
+        ops = [...ops, ...sheetMetadataOps(ctx, options.insertRowColOp.id, !!options.restoreDeletedCells), ...chartOps];
 
         // The cell-content ops below must precede the merge mc ops at the end of
         // this branch: the engine fills inserted rows with nulls, and a
         // ['data', r, c, 'mc'] patch can't be applied to a cell that doesn't
         // exist yet on the replay side.
         if (options?.restoreDeletedCells) {
-            // An undone delete brings back whole another sheet whose formulas it moved (writeBackSheets
-            // in rowcol.ts), charts included, and an insert never grows a shrunk or nulled chart ref
-            // back. So that sheet's charts ship one by one; a sheet whose charts alone moved already
-            // has immer's own per-chart patches.
-            for (const sheet of ctx.sheets) {
-                if (sheet.id === options.insertRowColOp.id || !wholeSheetIds.includes(sheet.id)) continue;
-                for (const chart of Object.values(sheet.charts ?? {})) {
-                    ops.push({ op: 'replace', id: sheet.id, path: ['charts', chart.id], value: chart });
-                }
-            }
             // undoing deleted row/col, find out cells to restore
             const restoreCellsOps: Op[] = [];
             const flowdata = getFlowdata(ctx);
@@ -268,6 +276,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
         ops = [...ops, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
     } else if (options?.deleteRowColOp) {
+        const chartOps = wholeSheetChartOps(ctx, ops, options.deleteRowColOp.id);
         // Drop the whole-sheet replace ops (path []) — see sheetMetadataOps.
         ops = ops.filter((p) => p.path.length > 0 && p.path[0] !== 'data');
         ops.push({
@@ -276,7 +285,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             path: [],
             value: options.deleteRowColOp,
         });
-        ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false)];
+        ops = [...ops, ...sheetMetadataOps(ctx, options.deleteRowColOp.id, false), ...chartOps];
         ops = [...ops, ...addtionalMergeOps(ops, options.deleteRowColOp.id)];
     } else if (options?.addSheetOp) {
         const [addSheetOps, otherOps] = partition(ops, (op) => op.path.length === 0 && op.op === 'add');

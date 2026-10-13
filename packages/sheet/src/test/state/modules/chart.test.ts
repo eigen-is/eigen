@@ -342,6 +342,39 @@ describe('charts converge over real ops', () => {
             expect(charts(joiner)).toEqual(charts(author));
         }
     });
+
+    test('redoing a row delete after a peer moved a chart on a sheet whose formula moved too ends identical', () => {
+        const base = workbook();
+        base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
+        const del = { type: 'row', start: 3, end: 6, id: S } as const;
+        const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
+        const undone = applyPatches(deleted.next, deleted.inverse);
+        const undoOptions = { ...inverseRowColOptions({ deleteRowColOp: del }), restoreDeletedCells: true };
+        const undoOps = patchToOp(undone, deleted.inverse, undoOptions, true);
+        const peerMove: Op[] = [{ op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 99 }];
+        const redone = applyPatches(receive(undone, peerMove), deleted.patches);
+        const redoOps = patchToOp(redone, deleted.patches, { deleteRowColOp: del });
+        const peer = receive(receive(receive(receive(base, deleted.ops), undoOps), peerMove), redoOps);
+        const joiner = join(base, [deleted.ops, undoOps, peerMove, redoOps]);
+        expect(charts(peer.sheets)).toEqual(charts(redone.sheets));
+        expect(charts(joiner)).toEqual(charts(redone.sheets));
+    });
+
+    test('undoing a row insert restores a ref an insert stopped at the last row, on a sheet whose formula moved too', () => {
+        const base = workbook();
+        base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
+        base.sheets[1].charts!.t1 = chart('t1', rangeSpec(ref(S, [0, 1048575])));
+        const op = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
+        const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(rangeData(insert.next.sheets, 1, 't1')?.series[0].values?.row).toEqual([2, 1048575]);
+        const undone = applyPatches(insert.next, insert.inverse);
+        const undoOps = patchToOp(undone, insert.inverse, inverseRowColOptions({ insertRowColOp: op }), true);
+        const peer = receive(receive(base, insert.ops), undoOps);
+        const joiner = join(base, [insert.ops, undoOps]);
+        expect(charts(undone.sheets)).toEqual(charts(base.sheets));
+        expect(charts(peer.sheets)).toEqual(charts(base.sheets));
+        expect(charts(joiner)).toEqual(charts(base.sheets));
+    });
 });
 
 describe('an undo entry on a chart a peer deleted', () => {
