@@ -1,11 +1,11 @@
 # Shared Primitives
 
 > **Generated — do not edit by hand.** Run `bun run primitives` to regenerate;
-> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib` +
-> `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
+> `bun run primitives --check` is the CI gate. Source: the `exports` maps of `packages/lib`,
+> `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1656 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1670 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -200,7 +200,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (10)
+## Contexts, schemas & classes (11)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -210,6 +210,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `CreateUnconfirmedError` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `MathError` | `@workspace/math` | packages/math/src/error.ts |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
@@ -516,7 +517,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (377)
+## Types (381)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -837,6 +838,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `MathNode` | `@workspace/math` | packages/math/src/tree.ts |
+| `MathRow` | `@workspace/math` | packages/math/src/tree.ts |
+| `MathVariant` | `@workspace/math` | packages/math/src/tree.ts |
+| `MathXmlElement` | `@workspace/math` | packages/math/src/xml.ts |
 | `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
 | `AvatarEditorProps` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
@@ -898,7 +903,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (794)
+## Utilities & constants (803)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1642,6 +1647,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `escapeXml` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
+| `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
+| `MATH_LIMITS` | `@workspace/math` | packages/math/src/tree.ts |
+| `MATHML_NAMESPACE` | `@workspace/math` | packages/math/src/mathml.ts |
+| `OMML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |
+| `readOmml` | `@workspace/math` | packages/math/src/omml.ts |
+| `WORDML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `writeMathml` | `@workspace/math` | packages/math/src/mathml.ts |
+| `writeOmml` | `@workspace/math` | packages/math/src/omml.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
