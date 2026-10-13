@@ -417,8 +417,8 @@
 
     /* The fit box a server-composed canvas page is scaled in. renderFittedPage
        (apps/api/src/lib/export/canvas/render.ts) emits the wrapper and its size as
-       custom properties, so a 16:9 slide and a drawing of any ratio fit the same
-       way; the standalone HTML export mirrors these rules in its own <style>. */
+       custom properties, so a slide of either size and a drawing of any ratio fit
+       the same way; the standalone HTML export mirrors these rules in its own <style>. */
     .page-fit {
         container-type: inline-size;
         width: 100%;
@@ -454,6 +454,14 @@
        inside them. */
     .drive-preview-hero .page-fit:not(:first-child) {
         display: none;
+    }
+    /* The hero is 16:9 and scales its body as if 960px wide, so it is 540px
+       tall in the body's space (CANVAS_PREVIEW_WIDTH/HEIGHT). A taller page, a
+       4:3 slide, narrows to fit that height, centered, instead of losing its
+       bottom to the clip. */
+    .drive-preview-hero .page-fit {
+        max-width: min(var(--page-w), calc(540px * var(--page-ar)));
+        margin-inline: auto;
     }
     .drive-preview-hero .eigen-prose {
         padding: 1rem;
