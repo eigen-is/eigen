@@ -216,6 +216,18 @@ describe('backgrounds', () => {
         });
         expect(tiled.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
         expect(tiled.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+
+        const recoloured = deckOf({
+            slides: [
+                {
+                    bg: '<p:bgPr><a:blipFill><a:blip r:embed="rId7"><a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone></a:blip><a:stretch/></a:blipFill></p:bgPr>',
+                    rels: rel('rId7', 'image', '../media/bg.png'),
+                },
+            ],
+            files: { 'ppt/media/bg.png': PIXEL_PNG },
+        });
+        expect(recoloured.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
+        expect(recoloured.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
     });
 
     test("a background picture the deck can't show is none, and counted; a bgRef's picture is named by the theme", () => {

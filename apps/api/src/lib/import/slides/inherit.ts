@@ -297,14 +297,16 @@ export function backgroundOf(inheritance: SlideInheritance, deck: DeckWalk): Bac
     return null;
 }
 
-// A picture covers the frame, stretched or tiled: a tile is drawn as one picture, a loss counted.
+// A picture covers the frame, stretched or tiled. A tile is drawn as one picture, and a recolouring (a theme's duotone,
+// a washout's lum) as the picture itself: each a loss counted.
 function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk): BackgroundFill | null {
     const blip = xmlChild(blipFill, A_NS, 'blip');
     const media = blipMedia(deck.pkg, owner, blip);
-    if (!media) {
+    if (!blip || !media) {
         if (blip) deck.lost('images-unshown');
         return null;
     }
-    if (xmlChild(blipFill, A_NS, 'tile')) deck.lost('fills-simplified');
+    const effects = xmlElements(blip).some((child) => child.ns === A_NS && child.local !== 'extLst');
+    if (effects || xmlChild(blipFill, A_NS, 'tile')) deck.lost('fills-simplified');
     return { type: 'image', mediaName: deck.mediaName(media), fit: 'cover' };
 }
