@@ -54,10 +54,10 @@ import {
     PACKAGE_RELATIONSHIPS_NS,
     R_NS,
 } from '../../core/ooxml';
+import { uriReference } from '../../core/opc';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
 import { canvasTextValue } from '../../document/prose-css';
-import { uriReference } from '../doc/to-docx';
 import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { isElement } from '../sanitize';
 

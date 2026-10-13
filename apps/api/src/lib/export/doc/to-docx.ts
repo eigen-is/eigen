@@ -28,6 +28,7 @@ import {
     W14_NS,
     WP_NS,
 } from '../../core/ooxml';
+import { uriReference } from '../../core/opc';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import {
@@ -1390,12 +1391,6 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     const target = uriReference(absoluteHref(kept, publicOrigin));
     const title = attrs?.['title'];
     return { target, tooltip: typeof title === 'string' && title ? title : undefined };
-}
-
-// A relationship target percent-encodes what a URI reference can't hold; `%` stays, so an encoded href encodes no
-// further.
-export function uriReference(href: string): string {
-    return href.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) => encodeURIComponent(character));
 }
 
 // ── Styles, every value from eigen-prose.css ────────────────────────────────────────────────────────────────────
