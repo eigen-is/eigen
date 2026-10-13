@@ -774,6 +774,32 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: "'\u0338" }], '\\not\\prime', [{ kind: 'operator', text: '′\u0338' }]],
         [
+            [{ kind: 'fenced', open: '\u0302', close: ')', separator: '\u0302', parts: [x, x] }],
+            '\\left.x\\middle.x\\right)',
+            [{ kind: 'fenced', open: '', close: ')', separator: '', parts: [x, x] }],
+        ],
+        [
+            [
+                {
+                    kind: 'fenced',
+                    open: '(',
+                    close: ')',
+                    separator: '',
+                    parts: [[{ kind: 'fenced', open: '\u0302', close: ')', separator: ',', parts: [x, x] }]],
+                },
+            ],
+            '\\left(x,x)\\right)',
+            [
+                {
+                    kind: 'fenced',
+                    open: '(',
+                    close: ')',
+                    separator: '',
+                    parts: [[...x, { kind: 'operator', text: ',' }, ...x, { kind: 'operator', text: ')' }]],
+                },
+            ],
+        ],
+        [
             [{ kind: 'accent', accent: '∘', body: x }],
             '\\overset{\\circ}{x}',
             [{ kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '∘' }] }],

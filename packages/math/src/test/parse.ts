@@ -15,6 +15,14 @@ export function el(xml: string): MathXmlElement {
     return fromDom(document.documentElement);
 }
 
+// The paste route: an HTML DOM, which may leave math in the XHTML namespace, with a prefix in its name.
+export function htmlMath(html: string): MathXmlElement {
+    const elements = new window.DOMParser().parseFromString(html, 'text/html').body.querySelectorAll('*');
+    const math = Array.from(elements).find((element) => /^(?:\w+:)?math$/.test(element.localName));
+    if (!math) throw new Error(`No math in ${html}`);
+    return fromDom(math);
+}
+
 // The writer leaves m: and w: to the caller, which binds them on its root.
 export const parseWritten = (omml: string) =>
     elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${omml}</root>`))[0];

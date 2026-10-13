@@ -444,22 +444,3 @@ export const LATEX_ENVIRONMENTS: ReadonlyMap<string, LatexEnvironment> = new Map
     ['cases', { layout: 'matrix', ...CASES }],
     ['aligned', { layout: 'equations', open: '', close: '' }],
 ]);
-
-// Named colours as browsers draw them: KaTeX and MathJax hand the name to CSS.
-export const LATEX_COLORS: ReadonlyMap<string, string> = new Map([
-    ['black', '#000000'],
-    ['blue', '#0000FF'],
-    ['brown', '#A52A2A'],
-    ['cyan', '#00FFFF'],
-    ['gray', '#808080'],
-    ['green', '#008000'],
-    ['magenta', '#FF00FF'],
-    ['orange', '#FFA500'],
-    ['pink', '#FFC0CB'],
-    ['purple', '#800080'],
-    ['red', '#FF0000'],
-    ['teal', '#008080'],
-    ['violet', '#EE82EE'],
-    ['white', '#FFFFFF'],
-    ['yellow', '#FFFF00'],
-]);

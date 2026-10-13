@@ -215,14 +215,23 @@ const OMML: Grammar = {
 const MATHML_ROW = [
     ...['mi', 'mi', 'mn', 'mo', 'mo', 'mo', 'mtext', 'mspace', 'mrow', 'mrow', 'mfrac', 'msqrt', 'mroot', 'msub'],
     ...['msup', 'msubsup', 'mmultiscripts', 'mprescripts', 'none', 'munder', 'mover', 'munderover', 'menclose'],
-    ...['mtable', 'semantics', 'mstyle', 'mfenced', 'mphantom', 'math', 'x:unknown'],
+    ...['mtable', 'semantics', 'mstyle', 'mfenced', 'mphantom', 'math', 'maction', 'mpadded', 'ms', 'x:unknown'],
 ];
 const FLAG = ['true', 'false', ''];
 const MATHML_ATTRIBUTES: [string, readonly string[]][] = [
     ['mathvariant', [...MATH_VARIANTS, 'bogus']],
-    ['mathcolor', ['#FF0000', '#ff00aa', 'red', '#F00', 'javascript:alert(1)', '#\u0000']],
-    ['width', [...Object.values(SPACES).map((space) => space.width), '-1em']],
-    ['linethickness', ['0', '0px', '1']],
+    [
+        'mathcolor',
+        ['#FF0000', '#ff00aa', 'red', 'RED', '#F00', '#f0a', 'constructor', 'javascript:alert(1)', '#\u0000'],
+    ],
+    ['width', [...Object.values(SPACES).map((space) => space.width), '0.167em', '0.1667em', '-1em', 'em', '1e999em']],
+    ['linethickness', ['0', '0px', '0em', '0pt', '1']],
+    ['selection', ['1', '2', '0', '-1', '1e309', 'NaN']],
+    ...['open', 'close', 'separators'].map((name): [string, readonly string[]] => [
+        name,
+        ['(', ']', ',;', '', ' ', '\u0302', '\u2061', '<&'],
+    ]),
+    ['data-mjx-texclass', ['OPEN', 'CLOSE', 'INNER', 'ORD']],
     ['notation', [...MATH_ENCLOSURES, 'box', 'top  left', 'bogus']],
     ['encoding', ['application/x-tex', 'text/plain']],
     ...['stretchy', 'fence', 'separator', 'largeop', 'accent', 'accentunder', 'bevelled', 'displaystyle'].map(
@@ -238,15 +247,15 @@ const MATHML: Grammar = {
         ...Object.fromEntries(
             [
                 ...['math', 'mrow', 'mstyle', 'mfenced', 'mphantom', 'msqrt', 'menclose', 'mtd', 'mfrac', 'mroot'],
-                ...['msub', 'msup', 'msubsup', 'mmultiscripts', 'munder', 'mover', 'munderover', 'x:unknown'],
-                'annotation-xml',
+                ...['msub', 'msup', 'msubsup', 'mmultiscripts', 'munder', 'mover', 'munderover', 'maction', 'mpadded'],
+                ...['x:unknown', 'annotation-xml'],
             ].map((name) => [name, MATHML_ROW]),
         ),
         mtable: ['mtr', 'mtr', 'x:unknown'],
         mtr: ['mtd', 'mtd'],
         semantics: [...MATHML_ROW, 'annotation', 'annotation', 'annotation-xml'],
     },
-    textual: new Set(['mi', 'mn', 'mo', 'mtext', 'annotation']),
+    textual: new Set(['mi', 'mn', 'mo', 'mtext', 'ms', 'annotation']),
     attributes: (local, random) => {
         const attributes: Record<string, string> = {};
         for (let count = Math.floor(random() * 3); count > 0; count--) {
@@ -260,10 +269,25 @@ const MATHML: Grammar = {
     written: (row) => el(writeMathml(row)),
 };
 
+// The paste route: an HTML DOM puts math in the XHTML namespace or in none, and may keep a prefix in the local name.
+const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+const HTML_NAMES = [
+    (local: string) => ({ ns: XHTML_NAMESPACE, local }),
+    (local: string) => ({ ns: '', local }),
+    (local: string) => ({ ns: XHTML_NAMESPACE, local: `mml:${local}` }),
+];
+
+function pasted(element: MathXmlElement, index = 0): MathXmlElement {
+    const children = element.children.map((child, at) => (isElement(child) ? pasted(child, index + at) : child));
+    const name = element.ns === MATHML_NAMESPACE ? HTML_NAMES[index % HTML_NAMES.length](element.local) : element;
+    return { ...element, ...name, children };
+}
+
 describe('every reader ends in a tree or a MathError, within its time budget', () => {
     test.each<[string, Grammar, (root: MathXmlElement) => MathRow]>([
         ['readOmml', OMML, readOmml],
         ['readMathml', MATHML, (root) => readMathml(root).row],
+        ['readMathml through an HTML DOM', MATHML, (root) => readMathml(pasted(root)).row],
     ])('%s on 1,500 seeded element trees, one in five a damaged writer output', (name, grammar, read) => {
         const start = performance.now();
         let trees = 0;

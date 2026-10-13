@@ -1,6 +1,6 @@
 import { MathError } from './error';
-import { LATEX_COLORS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
-import { ACCENTS, MINUS, naryLimits, PRIME, SPACES } from './notation';
+import { LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
+import { ACCENTS, COLOR_NAMES, MINUS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
     clusters,
@@ -345,7 +345,7 @@ class LatexReader {
     #color(): string {
         const at = this.#offset(this.#pos) + 1;
         const name = this.#raw();
-        const color = hexColor(name) ?? LATEX_COLORS.get(name);
+        const color = hexColor(name) ?? COLOR_NAMES.get(name);
         if (!color) throw new MathError(`Unknown colour ${name}`, at);
         return color;
     }
@@ -1056,7 +1056,16 @@ function writeTable(node: Extract<MathNode, { kind: 'table' }>, environment: str
     return `\\begin{${environment}}${rows.join(' \\\\ ')}\\end{${environment}}`;
 }
 
-function writeFenced(node: Extract<MathNode, { kind: 'fenced' }>, upright: boolean): string {
+// A lone combining mark is no fence: written as itself, it would join the character after it.
+const fenceOf = (char: string) => (MARK.test(char) ? '' : char);
+
+function writeFenced(fenced: Extract<MathNode, { kind: 'fenced' }>, upright: boolean): string {
+    const node = {
+        ...fenced,
+        open: fenceOf(fenced.open),
+        close: fenceOf(fenced.close),
+        separator: fenceOf(fenced.separator),
+    };
     const [part] = node.parts;
     const [only] = part;
     // A table or fraction in fences, as pmatrix and \binom draw them; without fences it is a fenced row of its own.
