@@ -771,8 +771,14 @@ class LatexReader {
             case 'not': {
                 // NFC composes the slashed symbol where Unicode has it, such as ≠.
                 const at = this.#offset(this.#pos);
+                const operator = this.#commandAt(this.#pos);
                 const next = this.#pos < this.#end ? this.#tokens[this.#pos++] : undefined;
-                const char = next && !/^[{}^_&]$/.test(next.text) ? charOf(next) : '';
+                const char =
+                    operator?.kind === 'largeOperator'
+                        ? operator.operator
+                        : next && (next.command || !/^[{}^_&]$/.test(next.text))
+                          ? charOf(next)
+                          : '';
                 if (char.trim() === '') throw new MathError('\\not takes a symbol', at);
                 into.push({ chars: char + NOT, style });
                 return;
@@ -859,18 +865,23 @@ function writeChar(char: string): string {
     if (name !== undefined) return `\\${name}`;
     const negated = negation(char);
     if (negated !== undefined) return negated;
-    // A character and its marks, such as a slash no symbol command draws.
-    if ([...char].length > 1) return joined([...char].map(writeChar));
-    // Math mode has no command KaTeX and MathJax both read for these: text draws them.
-    return char === '^' || char === '~' ? `\\text{${TEXT_ESCAPES[char]}}` : char;
+    const [base] = char;
+    // Math mode has no command KaTeX and MathJax both read for these: text draws them, without their marks.
+    if (base === '^' || base === '~') return `\\text{${TEXT_ESCAPES[base]}}`;
+    // A character and the marks no command draws.
+    return [...char].length > 1 ? joined([...char].map(writeChar)) : char;
 }
 
 // A slashed symbol without a command of its own, such as ≢, is \not before the symbol, as TeX draws it.
 function negation(char: string): string | undefined {
-    const [base, slash, ...rest] = char.normalize('NFD');
-    if (slash !== NOT || rest.length > 0) return undefined;
-    const symbol = writeChar(base);
-    return /^(?:\\[A-Za-z]+|[^\\{}^_&'~])$/u.test(symbol) ? joined(['\\not', symbol]) : undefined;
+    const decomposed = char.normalize('NFD');
+    const slash = decomposed.lastIndexOf(NOT);
+    if (slash < 0) return undefined;
+    const base = (decomposed.slice(0, slash) + decomposed.slice(slash + 1)).normalize('NFC');
+    // \not takes one symbol: a large operator or a prime by its command, not as writeChar sets it apart.
+    const name = base === PRIME ? 'prime' : OPERATOR_NAMES.get(base);
+    const symbol = name ? `\\${name}` : writeChar(base);
+    return /^(?:\\[A-Za-z]+|\\[^A-Za-z]|[^\\{}^_&'~]\p{M}*)$/u.test(symbol) ? joined(['\\not', symbol]) : undefined;
 }
 
 // The font a token needs beyond the default (math's, or upright in \operatorname); undefined if none.

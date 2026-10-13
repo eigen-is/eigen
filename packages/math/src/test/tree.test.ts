@@ -40,7 +40,7 @@ describe('MATH_LIMITS', () => {
         for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
             const start = performance.now();
             expect(read).toThrow(MathError);
-            expect(performance.now() - start).toBeLessThan(1_000);
+            expect(performance.now() - start).toBeLessThan(500);
         }
     });
 

@@ -95,11 +95,17 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
         }
     });
 
+    // KaTeX rejects a raw U+0338, so every slash is \not.
     test('10,000 seeded canonical trees, with the pictures LaTeX lacks swapped out', () => {
         for (let seed = 1; seed <= 10_000; seed++) {
             const tree = withoutLosses(generateTree(seed));
             expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
-            expect({ seed, tree: viaLatex(tree) }).toStrictEqual({ seed, tree });
+            const latex = writeLatex(tree);
+            expect({ seed, tree: readLatex(latex), slash: latex.includes('\u0338') }).toStrictEqual({
+                seed,
+                tree,
+                slash: false,
+            });
         }
     });
 
@@ -648,7 +654,10 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '≮' }], '\\not<'],
         [[{ kind: 'operator', text: '⪯\u0338' }], '\\not\\preceq'],
         [[{ kind: 'identifier', text: 'a\u0338' }], '\\not a'],
-        [[{ kind: 'operator', text: '∑\u0338' }], '{\\sum}\u0338'],
+        [[{ kind: 'operator', text: '∑\u0338' }], '\\not\\sum'],
+        [[{ kind: 'operator', text: '≠\u0338' }], '\\not\\ne'],
+        [[{ kind: 'operator', text: '{\u0338' }], '\\not\\{'],
+        [[{ kind: 'operator', text: '′\u0338' }], '\\not\\prime'],
         // An accent outside the accent table is \overset of its mark, which reads back as the accent.
         [[{ kind: 'accent', accent: '\u0311', body: x }], '\\overset{\u0311}{x}'],
         [
@@ -691,6 +700,8 @@ describe('writeLatex', () => {
         ],
         [[{ kind: 'operator', text: '~' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
+        [[{ kind: 'operator', text: '^\u0338' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
+        [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
     ])('%j is written %p', (row, latex, read) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(read);
