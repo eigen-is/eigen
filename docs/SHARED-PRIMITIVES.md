@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1693 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1699 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (172)
+## Components (176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -82,6 +82,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
+| `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
 | `ChatCreateWizard` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-create-wizard.tsx |
 | `ChatMessageInput` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `ChatMessageList` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-list.tsx |
@@ -163,8 +165,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MergedSelect` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
 | `MergedSlider` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-slider.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `PropertyRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertySection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `PropertyTextInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-text-input.tsx |
 | `PropertyToggle` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-toggle.tsx |
 | `TransformSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/transform-section.tsx |
 | `ZOrderButtons` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
@@ -915,7 +919,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (814)
+## Utilities & constants (816)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1050,6 +1054,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartLabel` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `formatTickValue` | `@workspace/lib/charts` | packages/lib/src/charts/ticks.ts |
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1684,6 +1689,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
 | `ATTENDEE_STATUS_ICON` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
 | `ATTENDEE_STATUS_LABEL` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
+| `CHART_TYPE_OPTIONS` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-types.ts |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |

@@ -1,14 +1,14 @@
 ---
 title: "Insert text and images"
-description: "Add text boxes and images to a slide, edit the content, and adjust position, size, and appearance."
+description: "Add text boxes, images, and charts to a slide, edit the content, and adjust position, size, and appearance."
 type: how-to
-tags: [slides, text, images, objects, canvas]
+tags: [slides, text, images, charts, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-09-29
+updated: 2026-10-13
 ---
 
-You build slides by placing text boxes and images on the canvas. Both work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
+You build slides by placing text boxes, images, and charts on the canvas. They work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
 
 You need editor access to add or change content. If you can only view the presentation, the controls below are not available.
 
@@ -31,6 +31,24 @@ While you are editing, a small formatting toolbar floats above the text for basi
 You can also drag an image file from your desktop straight onto the canvas. A **Drop images to add** overlay appears, and Slides adds the image to the slide you are on.
 
 When an image is selected, the properties panel shows an **Image** section. Use the **Fit** dropdown to choose how the picture fills its box: **Fit** (the whole image is visible), **Fill** (fills the box, cropping if needed), or **Stretch** (stretches to fill the box exactly).
+
+## Add a chart
+
+1. Open the **Insert** menu and choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
+2. The chart appears on the slide with sample data, and stays selected.
+
+With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, and where the **Legend** goes. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title**. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty, and **Gridlines**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice.
+
+### Edit the numbers
+
+1. Double-click the chart, or click **Edit data** in the properties panel.
+2. The **Edit data** dialog shows the data as a grid: categories down the first column, series across the top row. Type in any cell. A cell left empty leaves a gap in the chart.
+3. Use **Add row** and **Add column** to grow the grid, or the **×** beside a row or series name to remove it.
+4. Click **Save** to update the chart, or **Cancel** to leave it as it was.
+
+You can paste cells copied from a spreadsheet into the grid. They fill it from the cell you paste into, and the grid grows to fit. A chart holds up to 12 series, 200 rows, and 2,000 values. A chart with more data than that, for example from an imported file, opens its data read-only.
+
+**Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**Cmd+Z** on a Mac, **Ctrl+Z** on Windows) right after brings the chart back. See [Arrange and align](/support/slides/arrange-and-align).
 
 ## Add shapes and arrows
 

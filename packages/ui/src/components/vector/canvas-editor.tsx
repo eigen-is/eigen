@@ -6,6 +6,7 @@ import {
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
+import type { ChartType } from '@workspace/lib/types/chart';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -80,6 +81,7 @@ import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
 import { useViewport } from './hooks/use-viewport';
 import { ELEMENT_KIND_UI } from './kinds';
+import { newChartElement } from './kinds/chart';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
@@ -129,6 +131,7 @@ type Gesture = { pointerId: number } & (
 export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
+    insertChart: (type: ChartType) => void;
     centerOn: (el: VectorElement) => void;
 };
 
@@ -298,6 +301,8 @@ export function CanvasEditor({
     // the two never coexist and each owns a different commit contract: a label commits once on close,
     // a rich-text box writes on every change.
     const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
+    // The element whose kind's EditDialog a double-click opened (a chart's Edit data).
+    const [editDialogId, setEditDialogId] = useState<string | null>(null);
     // The object context menu (right-click) — the singleton surface; item is the right-clicked
     // element id, its ops act on the selection below.
     const objectContextMenu = useContextMenu<string>();
@@ -852,12 +857,22 @@ export function CanvasEditor({
         ],
     );
 
+    // Insert → Chart: Google's sample at the viewport center, selected, one undo step.
+    const insertChart = useCallback(
+        (type: ChartType) => {
+            const id = sealed(undoManager, () => addElement(newChartElement(type, viewportCenterScene(), viewport)));
+            if (id) setSelectedIds([id]);
+        },
+        [undoManager, addElement, viewportCenterScene, viewport, setSelectedIds],
+    );
+
     // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
     useEffect(() => {
         if (!canvasRef) return;
         canvasRef.current = {
             insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
             insertDrivePaths,
+            insertChart,
             centerOn: (el) => {
                 const box = elementBox(el);
                 centerOn(box.x + box.width / 2, box.y + box.height / 2);
@@ -866,7 +881,7 @@ export function CanvasEditor({
         return () => {
             canvasRef.current = null;
         };
-    }, [canvasRef, insertImageFiles, viewportCenterScene, insertDrivePaths, centerOn]);
+    }, [canvasRef, insertImageFiles, viewportCenterScene, insertDrivePaths, insertChart, centerOn]);
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
@@ -934,10 +949,11 @@ export function CanvasEditor({
     }, imagesEnabled);
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
-    // any kind with an in-place editor opens that instead, inside its own layer; empty canvas starts a
-    // new box there (Excalidraw's openNewText — rich text is the only text kind, so nothing to choose),
-    // placed like the text tool's own click: the starting box with its corner on the point.
+    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay; a
+    // kind with an edit dialog opens that (a chart's data); any kind with an in-place editor opens that
+    // instead, inside its own layer; empty canvas starts a new box there (Excalidraw's openNewText — rich
+    // text is the only text kind, so nothing to choose), placed like the text tool's own click: the
+    // starting box with its corner on the point.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
@@ -945,6 +961,7 @@ export function CanvasEditor({
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') return openEditArrowLabel(hitEl);
+        if (hitEl && ELEMENT_KIND_UI[hitEl.type].EditDialog) return setEditDialogId(hitEl.id);
         if (hitEl && !ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) return;
         const id = hitEl
             ? hitEl.id
@@ -996,6 +1013,8 @@ export function CanvasEditor({
         () => (menuItemId ? selectionShapes(selectedIds, committedById) : []),
         [menuItemId, selectedIds, committedById],
     );
+    const editDialogElement = editDialogId ? committedById.get(editDialogId) : undefined;
+    const EditDialog = editDialogElement ? ELEMENT_KIND_UI[editDialogElement.type].EditDialog : undefined;
     const onMenuConvertToShapes = () =>
         convertElementToShapes(selectedIds[0], menuShapes, replaceElement, setSelectedIds, undoManager);
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
@@ -1660,6 +1679,25 @@ export function CanvasEditor({
                 onConvertToShapes={menuShapes.length > 0 ? onMenuConvertToShapes : undefined}
                 onComment={onAddComment && menuItemId ? () => onAddComment(menuItemId) : undefined}
             />
+            {editDialogElement && EditDialog && (
+                // Portaled to the body, but React bubbles its events up this tree, and the canvas' own
+                // pointer, double-click and paste handlers must not act on a click or paste in the dialog.
+                <div
+                    className="contents"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onPointerMove={(e) => e.stopPropagation()}
+                    onPointerUp={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => e.stopPropagation()}
+                    onPaste={(e) => e.stopPropagation()}
+                >
+                    <EditDialog
+                        element={editDialogElement}
+                        onChange={(fields) => sealed(undoManager, () => updateElement(editDialogElement.id, fields))}
+                        onClose={() => setEditDialogId(null)}
+                    />
+                </div>
+            )}
         </div>
     );
 }

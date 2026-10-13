@@ -28,7 +28,8 @@ export const MAX_CHART_SERIES = 32;
 export const MAX_CHART_POINTS = 2000;
 export const MAX_CHART_LABEL_LENGTH = 200;
 
-// What the Edit data grid edits; an imported chart over these opens its data read-only.
+// What the Edit data grid edits; an imported chart over these opens its data read-only. A full grid,
+// 12 × 200, is past MAX_CHART_POINTS, so the grid's cells count too.
 export const INLINE_GRID_MAX_SERIES = 12;
 export const INLINE_GRID_MAX_CATEGORIES = 200;
 
@@ -53,9 +54,14 @@ export function chartColor(index: number): string {
     return CHART_PALETTE[index % CHART_PALETTE.length];
 }
 
+export function fitsInlineGrid(series: number, rows: number): boolean {
+    return series <= INLINE_GRID_MAX_SERIES && rows <= INLINE_GRID_MAX_CATEGORIES && series * rows <= MAX_CHART_POINTS;
+}
+
+// The grid pads every series to the longest, so a ragged chart counts as its full grid.
 export function exceedsInlineGridLimits(data: InlineChartData): boolean {
     const rows = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
-    return data.series.length > INLINE_GRID_MAX_SERIES || rows > INLINE_GRID_MAX_CATEGORIES;
+    return !fitsInlineGrid(data.series.length, rows);
 }
 
 // What Insert → Chart starts from and what a missing or invalid presentation field reads as, so a field

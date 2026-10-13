@@ -3,6 +3,7 @@ import {
     CHART_PALETTE,
     chartColor,
     exceedsInlineGridLimits,
+    fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
@@ -270,13 +271,32 @@ describe('parseChartSpec', () => {
 
 describe('exceedsInlineGridLimits', () => {
     test('the grid edits up to its series and category limits; a longer series counts as rows', () => {
-        expect(exceedsInlineGridLimits(inlineData(INLINE_GRID_MAX_SERIES, INLINE_GRID_MAX_CATEGORIES))).toBe(false);
+        expect(exceedsInlineGridLimits(inlineData(INLINE_GRID_MAX_SERIES, 1))).toBe(false);
+        expect(exceedsInlineGridLimits(inlineData(1, INLINE_GRID_MAX_CATEGORIES))).toBe(false);
         expect(exceedsInlineGridLimits(inlineData(INLINE_GRID_MAX_SERIES + 1, 1))).toBe(true);
         expect(exceedsInlineGridLimits(inlineData(1, INLINE_GRID_MAX_CATEGORIES + 1))).toBe(true);
         const ragged: InlineChartData = {
             source: 'inline',
             categories: [],
             series: [{ ...style, name: 'S', values: Array(INLINE_GRID_MAX_CATEGORIES + 1).fill(1) }],
+        };
+        expect(exceedsInlineGridLimits(ragged)).toBe(true);
+    });
+
+    test('a full grid of 12 series by 200 rows is past the points limit, so its cells count too', () => {
+        expect(INLINE_GRID_MAX_SERIES * INLINE_GRID_MAX_CATEGORIES).toBeGreaterThan(MAX_CHART_POINTS);
+        expect(exceedsInlineGridLimits(inlineData(INLINE_GRID_MAX_SERIES, INLINE_GRID_MAX_CATEGORIES))).toBe(true);
+        expect(exceedsInlineGridLimits(inlineData(10, MAX_CHART_POINTS / 10))).toBe(false);
+        expect(fitsInlineGrid(10, MAX_CHART_POINTS / 10)).toBe(true);
+        expect(fitsInlineGrid(11, MAX_CHART_POINTS / 10)).toBe(false);
+        // A ragged chart's grid pads every series to the longest, so the grid's cells are what count.
+        const ragged: InlineChartData = {
+            source: 'inline',
+            categories: [],
+            series: [
+                { ...style, name: 'Long', values: Array(INLINE_GRID_MAX_CATEGORIES).fill(1) },
+                ...Array.from({ length: INLINE_GRID_MAX_SERIES - 1 }, () => ({ ...style, name: 'Short', values: [1] })),
+            ],
         };
         expect(exceedsInlineGridLimits(ragged)).toBe(true);
     });
