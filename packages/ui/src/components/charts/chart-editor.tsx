@@ -33,13 +33,15 @@ const STACKING_OPTIONS: { value: 'none' | 'stacked'; label: string }[] = [
 type ChartEditorProps = {
     spec: ChartSpec;
     onChange: (spec: ChartSpec) => void;
-    // A sheet's resolved categories, which name a range chart's pie slices.
+    // A sheet's resolved categories, which name a range chart's pie slices, and its series names, one per
+    // series in the spec.
     categories?: string[];
+    seriesNames?: string[];
     // The host's actions on the chart (the canvas's Edit data), at the end of the Chart section.
     children?: ReactNode;
 };
 
-export function ChartEditor({ spec, onChange, categories, children }: ChartEditorProps) {
+export function ChartEditor({ spec, onChange, categories, seriesNames, children }: ChartEditorProps) {
     const { type, data, valueAxis, categoryAxis } = spec;
     const pie = type === 'pie';
     // A bar chart lies on its side, so its value axis is the horizontal one.
@@ -187,14 +189,21 @@ export function ChartEditor({ spec, onChange, categories, children }: ChartEdito
                 </PropertySection>
             ) : (
                 <PropertySection title="Series">
-                    {data.series.map((series, i) => (
-                        <ColorRow
-                            key={i}
-                            label={(typeof series.name === 'string' && series.name) || `Series ${i + 1}`}
-                            value={series.color}
-                            onChange={(color) => setSeriesColor(i, color)}
-                        />
-                    ))}
+                    {/* A range series whose values were deleted draws nothing, so it has no row. */}
+                    {data.series.map((series, i) =>
+                        series.values === null ? null : (
+                            <ColorRow
+                                key={i}
+                                label={
+                                    seriesNames?.[i] ||
+                                    (typeof series.name === 'string' && series.name) ||
+                                    `Series ${i + 1}`
+                                }
+                                value={series.color}
+                                onChange={(color) => setSeriesColor(i, color)}
+                            />
+                        ),
+                    )}
                 </PropertySection>
             )}
         </>

@@ -17,7 +17,7 @@ import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } 
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
-import { resolveRangeChartData } from '../../engine/chart-data';
+import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
@@ -388,13 +388,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const chartEditor = useMemo((): ChartEditorState | null => {
             if (!editingChart) return null;
             const data = parseChartSpec(editingChart.spec)?.data;
-            const resolved =
-                data?.source === 'range' ? resolveRangeChartData(data, createContextResolver(context)) : data;
+            const resolver = createContextResolver(context);
+            const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
             return {
                 chart: editingChart,
                 sheetId: context.currentSheetId,
                 sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
                 categories: typeof resolved === 'object' ? resolved.categories : [],
+                seriesNames: data?.source === 'range' ? data.series.map((s) => seriesName(s.name, resolver)) : [],
             };
         }, [editingChart, context.currentSheetId, context.sheets]);
         useEffect(() => {

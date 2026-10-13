@@ -148,6 +148,12 @@ test('Setup shows the chart’s block and how it reads', async () => {
     expect(toggle('Use column A as labels')?.getAttribute('aria-checked')).toBe('true');
 });
 
+test('a series row is named by its name cell, as the chart’s legend is', async () => {
+    const { container } = await mount(rangeChart());
+    const labels = [...container.querySelectorAll('span.w-14')].map((span) => span.textContent?.trim());
+    expect(labels.at(-1)).toBe('Points');
+});
+
 test('a range typed on another sheet points the refs at that sheet by id, the series keeping its color', async () => {
     const { spec, type } = await mount(rangeChart());
     await type('input[aria-label="Data range"]', 'Two!A1:B3', 'Enter');

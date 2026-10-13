@@ -131,9 +131,10 @@ function ChartBox({ chart }: { chart: SheetChart }) {
             data-active={active || undefined}
             tabIndex={-1}
             // pointer-events-auto: the pane-region wrapper is pointer-events none. touch-none only while
-            // selected, so a finger on an unselected chart still pans the grid.
+            // selected, so a finger on an unselected chart still pans the grid. select-none: a double-click
+            // opens the editor and would otherwise select the drawing's text.
             className={cn(
-                'group absolute pointer-events-auto bg-background outline-none',
+                'group absolute pointer-events-auto bg-background outline-none select-none',
                 canEdit && 'cursor-move',
                 active && canEdit && 'touch-none',
             )}

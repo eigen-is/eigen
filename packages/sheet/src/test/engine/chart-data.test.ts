@@ -118,7 +118,15 @@ describe('resolveRangeChartData', () => {
         expect(resolved).toMatchObject({ categories: ['x'.repeat(MAX_CHART_LABEL_LENGTH)] });
     });
 
-    test('a ref spanning rows and columns, a null ref or a ref to a missing sheet is a ref error', () => {
+    test('a series whose values were deleted is left out, and the rest keep their own colors', () => {
+        const red = { ...series(ref([1, 3], [2, 2]), ref([0, 0], [2, 2])), color: '#ff0000' };
+        expect(resolveRangeChartData(data(ref([1, 3], [0, 0]), series(null), red), resolver)).toEqual({
+            categories: ['Ajax', 'PSV', ''],
+            series: [{ ...STYLE, color: '#ff0000', name: 'Goals', values: [3, 1000, 7] }],
+        });
+    });
+
+    test('a ref spanning rows and columns, no series left or a ref to a missing sheet is a ref error', () => {
         expect(resolveRangeChartData(data(null, series(ref([1, 2], [1, 2]))), resolver)).toBe('ref');
         expect(resolveRangeChartData(data(ref([1, 2], [0, 1]), series(ref([1, 2], [1, 1]))), resolver)).toBe('ref');
         expect(resolveRangeChartData(data(null, series(null)), resolver)).toBe('ref');

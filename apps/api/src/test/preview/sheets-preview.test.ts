@@ -328,6 +328,38 @@ describe('eigensheets preview (charts)', () => {
         expect(svg).not.toContain('>80<');
         doc.destroy();
     });
+
+    // The truncated notice follows the overlay's box in the flow, so the box reaches the lowest chart, cut at
+    // the budget window, whose edge clips a chart that crosses it.
+    const chartBelow = (y: number): Sheet => ({
+        id: 'below',
+        name: 'Below',
+        celldata: [{ r: 0, c: 0, v: { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } } }],
+        config: {},
+        charts: {
+            c1: {
+                id: 'c1',
+                index: 'a0',
+                x: 0,
+                y,
+                width: 400,
+                height: 300,
+                spec: JSON.stringify(sampleChartSpec('column')),
+            },
+        },
+    });
+
+    test('the overlay box is as tall as the chart below the table, so the truncated notice starts under it', () => {
+        const { html, truncated } = renderSheetsPreviewHtml([chartBelow(40), chartBelow(40)], NO_MEDIA);
+        expect(truncated).toBe(true);
+        expect(html).toContain('position:relative;width:400px;min-height:340px;overflow:hidden');
+    });
+
+    test('a chart crossing the budget window is clipped at its edge', () => {
+        const bottom = PREVIEW_SHEET_BUDGET.maxRows * SHEET_DEFAULT_ROW_HEIGHT;
+        const { html } = renderSheetsPreviewHtml([chartBelow(bottom - 100)], NO_MEDIA);
+        expect(html).toContain(`min-height:${bottom}px;overflow:hidden`);
+    });
 });
 
 describe('eigensheets preview (heavy fixture)', () => {

@@ -47,8 +47,8 @@ export type ChartSpec = {
 
 // A chart's data with its ranges resolved: inline data as stored, or the values a sheet reads from its ranges.
 export type ChartData = { categories: string[]; series: InlineChartSeries[] };
-// Why a sheet's range chart has no data. 'ref': a ref was deleted, names a missing sheet, or spans rows and
-// columns, Excel's #REF.
+// Why a sheet's range chart has no data. 'ref': every series was deleted, or a ref names a missing sheet or
+// spans rows and columns, Excel's #REF.
 export type ChartDataError = 'ref' | 'too-many-points';
 
 // What a chart paints with; a canvas chart takes it from its element.

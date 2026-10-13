@@ -244,10 +244,19 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     const blank = maxRow < 0 || maxCol < 0;
     const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
-    let width = blank ? 0 : colSpan(config, minCol, maxCol);
-    let height = blank ? 0 : rowSpan(config, minRow, maxRow);
     // The overlay draws at the stored grid coordinate, so an image or chart parked past the used
-    // range is still on the page — measured in the table's space, like the overlay positions it.
+    // range is still on the page.
+    const extent = floatingExtent(sheet, offset);
+    return {
+        width: Math.max(blank ? 0 : colSpan(config, minCol, maxCol), extent.width),
+        height: Math.max(blank ? 0 : rowSpan(config, minRow, maxRow), extent.height),
+    };
+}
+
+// The far corner of a sheet's images and charts, in the table's space, like the overlay positions them.
+function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { width: number; height: number } {
+    let width = 0;
+    let height = 0;
     for (const item of floatingObjects(sheet)) {
         width = Math.max(width, cssLength(item.x, 0) + cssLength(item.width, 0) - offset.left);
         height = Math.max(height, cssLength(item.y, 0) + cssLength(item.height, 0) - offset.top);
@@ -268,28 +277,31 @@ function renderSheet(
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // The preview clips the overlay to its budget window, not to the table: an image parked
-    // outside it would stretch the fragment and collapse the thumbnail scaled by it.
-    const overlayFor = (minRow: number, minCol: number): string =>
-        renderFloatingObjects(
-            sheet,
-            mediaUrls,
-            resolver,
-            gridOffset(config, minRow, minCol),
-            styles,
-            budget
-                ? {
-                      width: colSpan(config, minCol, minCol + budget.maxCols - 1),
-                      height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
-                  }
-                : undefined,
-        );
+    // The table in the overlay's positioning context, which reaches the farthest image or chart, so
+    // what follows in the flow (the next sheet, the preview's truncated notice) starts below them. The
+    // preview clips the overlay to its budget window, not to the table: an image parked outside it would
+    // stretch the fragment and collapse the thumbnail scaled by it. With no images or charts the table is
+    // emitted bare, so a workbook without them renders exactly the markup it always did.
+    const withOverlay = (table: string, tableWidth: number, minRow: number, minCol: number): string => {
+        const offset = gridOffset(config, minRow, minCol);
+        const clip = budget && {
+            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
+            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
+        };
+        const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
+        if (!overlay) return table;
+        const extent = floatingExtent(sheet, offset);
+        const width = Math.max(tableWidth, clip ? Math.min(extent.width, clip.width) : extent.width);
+        const height = clip ? Math.min(extent.height, clip.height) : extent.height;
+        const box = `position:relative;width:${width}px;min-height:${height}px${clip ? ';overflow:hidden' : ''}`;
+        return `<div ${styleAttr(styles, box)}>${table}${overlay}</div>`;
+    };
 
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     if (maxRow < 0 || maxCol < 0) {
         // An image or chart on an otherwise blank sheet is all there is to render, clipped to the
         // same budget window as the grid path below.
-        return { html: `<div class="sheet">${overlayBox('', overlayFor(0, 0), 0, styles)}</div>`, truncated: false };
+        return { html: `<div class="sheet">${withOverlay('', 0, 0, 0)}</div>`, truncated: false };
     }
 
     // The render window comes first: everything below is bounded by what is actually
@@ -424,7 +436,7 @@ function renderSheet(
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
     const html = `<div class="${divClass}"${pageBreak}>
-${overlayBox(table, overlayFor(minRow, minCol), tableWidth, styles)}
+${withOverlay(table, tableWidth, minRow, minCol)}
 </div>`;
     return { html, truncated };
 }
@@ -522,13 +534,6 @@ function renderFloatingObjects(
             );
     }
     return parts.join('');
-}
-
-// The grid's positioning context. With no images or charts the table is emitted bare, so a
-// workbook without them renders exactly the markup it always did.
-function overlayBox(table: string, overlay: string, width: number, styles?: StyleRegistry): string {
-    if (!overlay) return table;
-    return `<div ${styleAttr(styles, `position:relative;width:${width}px`)}>${table}${overlay}</div>`;
 }
 
 // Cell, border and rule colors are schemaless strings a collaborator sets, so only one the color parser reads reaches the

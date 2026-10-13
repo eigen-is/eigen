@@ -933,7 +933,8 @@ describe('Sheets HTML export — floating images', () => {
             [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 120, y: 40, width: 200, height: 150 }])],
             MEDIA,
         );
-        const [wrapper] = classesFor(out, 'position:relative;width:');
+        // The box reaches the image's far corner, so the next sheet starts below it.
+        const [wrapper] = classesFor(out, 'position:relative;width:320px;min-height:190px');
         expect(useCount(out, wrapper)).toBe(1);
         const [image] = classesFor(out, 'left:120px;top:40px;width:200px;height:150px');
         expect(image).toBeDefined();

@@ -44,7 +44,12 @@ export function ChartEditorPanel({ editor, workbook }: ChartEditorPanelProps) {
                 {data.source === 'range' && (
                     <SetupSection editor={editor} spec={spec} data={data} workbook={workbook} onChange={write} />
                 )}
-                <ChartEditor spec={spec} onChange={write} categories={editor.categories}>
+                <ChartEditor
+                    spec={spec}
+                    onChange={write}
+                    categories={editor.categories}
+                    seriesNames={editor.seriesNames}
+                >
                     {data.source === 'inline' && (
                         <>
                             <Button variant="outline" size="sm" className="w-full" onClick={() => setDataOpen(true)}>

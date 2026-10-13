@@ -132,6 +132,8 @@ test('a range chart draws as SVG at its box, labelled from its cells', async () 
     expect(el?.style.width).toBe('400px');
     const svg = el?.querySelector('svg')?.outerHTML ?? '';
     for (const label of ['>Scores<', '>Ajax<', '>PSV<', '>Points<']) expect(svg).toContain(label);
+    // A double-click opens the editor, so it must not select the drawing's text.
+    expect(el?.classList.contains('select-none')).toBe(true);
 });
 
 test('a source cell edit redraws the chart; an edit on another sheet or a selection does not', async () => {

@@ -23,12 +23,13 @@ export type CommentInfo = {
 };
 
 // The chart whose editor sidebar is open, on the current sheet; every sheet's name, for its data range; and
-// the categories its range resolves to, which name a pie's slices.
+// the categories and series names its range resolves to, which name a pie's slices and the series rows.
 export type ChartEditorState = {
     chart: SheetChart;
     sheetId: string;
     sheets: { id: string; name: string }[];
     categories: string[];
+    seriesNames: string[];
 };
 
 export type Hooks = {
