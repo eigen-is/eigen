@@ -4,7 +4,7 @@ import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
-import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, readEquation } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -90,7 +90,7 @@ export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
             if (leaf.type.name === 'figure') return 'Image';
-            if (leaf.type.name === 'equation') return equationText(leaf.attrs) || 'Equation';
+            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
             return leaf.type.spec.leafText?.(leaf) ?? '';
         })
         .slice(0, 100);

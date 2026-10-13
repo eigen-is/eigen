@@ -149,6 +149,8 @@ function ommlText(oMath: XmlElement): string {
             inObject = false;
             words.push('');
         } else if (element.ns === M_NS && element.local === 't') words[words.length - 1] += xmlText(element);
+        // Properties (a run's m:rPr, an m:argPr, an object's) hold no text and start no word.
+        else if (element.ns === M_NS && element.local.endsWith('Pr')) continue;
         else if (isAlternateContent(element)) {
             const fallback = xmlChild(element, MC_NS, 'Fallback');
             if (fallback) stack.push(fallback);

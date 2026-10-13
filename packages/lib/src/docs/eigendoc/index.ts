@@ -5,7 +5,7 @@ export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export type { Equation } from './nodes/equation';
-export { EquationNode, equationMath, equationText, readEquation, unwrapRenderedMath } from './nodes/equation';
+export { EquationNode, equationMath, readEquation, unwrapRenderedMath } from './nodes/equation';
 export type { FigureAlignment, FigureAttrs, FigureLayout } from './nodes/figure';
 export { FigureNode, readFigureAttrs, setFigureAttributes } from './nodes/figure';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';

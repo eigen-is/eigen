@@ -97,8 +97,10 @@ describe('doc export — the page', () => {
 });
 
 describe('doc export — the stylesheet', () => {
-    test('no CSS variable survives into the export', async () => {
-        expect(await exportStyle('pdf-html')).not.toContain('var(');
+    // The app's tokens (--font-sans and the like) are not in the export; a property the stylesheet declares itself is.
+    test.each(['html', 'pdf-html'] as const)('%s declares every CSS variable it reads', async (format) => {
+        const css = await exportStyle(format);
+        for (const [, name] of css.matchAll(/var\((--[\w-]+)/g)) expect(css).toContain(`${name}:`);
     });
 
     test('headings print at medium and bold at 600', async () => {
