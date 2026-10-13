@@ -442,6 +442,24 @@ describe('readLatex', () => {
             [{ kind: 'table', layout: 'matrix', rows: [[letter('a')], [letter('b')]] }],
         ],
         ['\\begin{matrix} a \\\\ {} \\end{matrix}', [{ kind: 'table', layout: 'matrix', rows: [[letter('a')], [[]]] }]],
+        // A gap's [ follows \\ directly, as amsmath reads it; after a space it starts the next row.
+        [
+            '\\begin{matrix}a\\\\ [b]\\end{matrix}',
+            [
+                {
+                    kind: 'table',
+                    layout: 'matrix',
+                    rows: [
+                        [letter('a')],
+                        [[{ kind: 'operator', text: '[' }, ...letter('b'), { kind: 'operator', text: ']' }]],
+                    ],
+                },
+            ],
+        ],
+        [
+            '\\begin{aligned}a\\\\*b\\\\*[1.5ex]c\\end{aligned}',
+            [{ kind: 'table', layout: 'equations', rows: [[letter('a')], [letter('b')], [letter('c')]] }],
+        ],
         [
             '\\big( x \\Bigr) \\bigl\\{ \\Biggm| \\bigg.',
             [
@@ -552,6 +570,8 @@ describe('readLatex', () => {
         ['x^\\frac1', 8],
         ['\\big x', 5],
         ['\\textasciitilde', 0],
+        ['\\begin{matrix}a\\\\[b]\\end{matrix}', 17],
+        ['\\begin{matrix}a\\\\[{2pt}]b\\end{matrix}', 17],
     ])('%p is a MathError at offset %p', (latex, offset) => {
         expect(thrown(() => readLatex(latex))?.offset).toBe(offset);
     });
@@ -605,6 +625,10 @@ describe('writeLatex', () => {
             '\\alpha @',
         ],
         [[{ kind: 'table', layout: 'matrix', rows: [[x], [[]]] }], '\\begin{matrix}x \\\\ {}\\end{matrix}'],
+        [
+            [{ kind: 'table', layout: 'matrix', rows: [[x], [[{ kind: 'operator', text: '[' }, ...x]]] }],
+            '\\begin{matrix}x \\\\ [x\\end{matrix}',
+        ],
     ])('%j', (row, latex) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(row);

@@ -126,6 +126,9 @@ function delimiterOf(token: Token): string | undefined {
     return command?.kind === 'symbol' && command.class === 'delimiter' ? command.char : undefined;
 }
 
+// The units KaTeX and MathJax share.
+const DIMENSION = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|mm|cm|in|pc|px|em|ex|mu)\s*$/;
+
 // What a function name or large operator never takes as its body: a lone operator or space.
 const LONE = /^[^\p{L}0-9]+$/u;
 
@@ -554,6 +557,14 @@ class LatexReader {
         return { kind: 'fenced', open, close, separator: parts.length > 1 ? (separator ?? '') : '', parts };
     }
 
+    // A row gap: the tree keeps none, but it must be a dimension KaTeX and MathJax both read.
+    #gap(): void {
+        const open = this.#pos;
+        this.#pos = this.#bracketEnd(open, 0);
+        const gap = this.#latex.slice(this.#tokens[open].at + 1, this.#tokens[this.#pos - 1].at);
+        if (!DIMENSION.test(gap)) throw new MathError('A row gap is a dimension, such as 2pt', this.#tokens[open].at);
+    }
+
     #environment(style: Style, depth: number): MathNode {
         const begin = this.#pos - 1;
         const end = this.#partners[begin];
@@ -577,8 +588,10 @@ class LatexReader {
                 const token = this.#tokens[this.#pos++];
                 if (token.command && token.text === 'middle') throw this.#unexpected(this.#pos - 1);
                 if (!token.command) continue;
-                // \\[2pt] sets a gap; a \\ after the last row starts none, as KaTeX and MathJax read it.
-                this.#pos = this.#bracketEnd(this.#pos, 0);
+                // \\* and \\[2pt] only space the rows, and only a * or [ right after the \\, as amsmath reads it.
+                if (this.#isChar(this.#pos, '*') && !this.#tokens[this.#pos].space) this.#pos++;
+                if (this.#isChar(this.#pos, '[') && !this.#tokens[this.#pos].space) this.#gap();
+                // A \\ after the last row starts none, as KaTeX and MathJax read it.
                 rows.push(cells);
                 cells = [];
                 if (this.#pos >= this.#end) return;
@@ -950,8 +963,8 @@ const interleave = (parts: string[], between: string[]) =>
 function writeTable(node: Extract<MathNode, { kind: 'table' }>, environment: string, upright: boolean): string {
     const rows = node.rows.map((cells, index) => {
         const row = cells.map((cell) => writeRow(cell, upright)).join(' & ');
-        // After \\ a [ reads as a gap, and nothing at the end as no row.
-        return index > 0 && (row === '' || row.startsWith('[')) ? `{}${row}` : row;
+        // Nothing after the last \\ reads as no row.
+        return index > 0 && row === '' ? '{}' : row;
     });
     return `\\begin{${environment}}${rows.join(' \\\\ ')}\\end{${environment}}`;
 }
