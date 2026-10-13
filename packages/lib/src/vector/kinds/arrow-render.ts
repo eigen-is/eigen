@@ -4,13 +4,11 @@
 
 import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
-import { getFontFamily } from '../../constants/fonts';
-import { escapeXml } from '../../core/xml';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
-import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
+import { getLineHeightPx } from '../font-metrics';
 import { arrowheadGeometry, distance, type Point, round } from '../geometry';
 import type { Arrowhead, VectorArrowElement } from '../types';
-import { baseRoughOptions, drawableToSvg } from './render-utils';
+import { baseRoughOptions, drawableToSvg, svgTextLine } from './render-utils';
 
 // The label rect in the arrow's local frame, as arrowLabelBox returns it.
 type LabelBox = { center: Point; width: number; height: number };
@@ -147,21 +145,26 @@ export function maskShaft(shaftPaths: string, id: string): string {
     return shaftPaths.replaceAll('<path ', `<path mask="url(#${id})" `);
 }
 
-// The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
-// with text-anchor="middle" and color = strokeColor. Height/position come from arrowLabelBox.
+// The label text, centered on the label rect in the arrow's local frame, color = strokeColor.
+// Height/position come from arrowLabelBox.
 export function renderArrowLabel(el: VectorArrowElement, label: LabelBox): string {
     const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
-    const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);
-    const fontFamily = escapeXml(getFontFamily(el.fontFamily));
-    const fill = escapeXml(el.strokeColor);
-    const lines = el.text.replace(/\r\n?/g, '\n').split('\n');
     const top = label.center.y - label.height / 2;
-    const cx = round(label.center.x);
-
-    let out = '';
-    for (let i = 0; i < lines.length; i++) {
-        const y = round(top + i * lineHeightPx + verticalOffset);
-        out += `<text x="${cx}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="middle" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
-    }
-    return out;
+    return el.text
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((text, i) =>
+            svgTextLine({
+                text,
+                x: label.center.x,
+                y: top + i * lineHeightPx,
+                anchor: 'middle',
+                fontFamily: el.fontFamily,
+                fontSize: el.fontSize,
+                bold: false,
+                color: el.strokeColor,
+                rotate: 0,
+            }),
+        )
+        .join('');
 }

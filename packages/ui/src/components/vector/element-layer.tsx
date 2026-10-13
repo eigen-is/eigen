@@ -1,19 +1,22 @@
 // One scene element as its own memoized, absolutely positioned layer: a div carrying the element's
 // box (a transform to its origin + rotate about the box center, which is CSS's default
 // transform-origin) holding the kind's body as layerInnerHtml writes it. The SAME lib render path
-// previews, embeds, export and the print compositor use — elementLayer is the one definition of where
-// an element goes and what it draws.
+// previews, embeds, export and the print compositor use — elementLayer's two halves, layerContent and
+// placeLayer, are the one definition of what an element draws and where it goes.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import {
     arrowRoute,
     boundShape,
     ELEMENT_FIELDS,
-    elementLayer,
     type Layer,
     layerBoxCss,
+    layerContent,
     layerInnerHtml,
     type MediaResolver,
+    placeLayer,
+    type RenderOutput,
+    type VectorArrowElement,
     type VectorElement,
 } from '@workspace/lib/vector';
 import { memo, useRef } from 'react';
@@ -32,19 +35,34 @@ type ElementLayerProps = {
     onFitHeight?: FitHeight;
 };
 
-// Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
-// a Yjs tick materializes fresh objects through readVectorFromDoc, so those need the field compare —
-// every ELEMENT_FIELDS value is a scalar/string, so it is exact. Only changed elements re-run the
-// kind's render — rough path generation is the expensive part.
-function sameElement(a: VectorElement, b: VectorElement): boolean {
+// Every field but the four only the layer's box reads: a kind draws in its local frame, so a move, a
+// turn or a fade re-places the body without redrawing it.
+const BODY_FIELDS = ELEMENT_FIELDS.filter(
+    (field) => field !== 'x' && field !== 'y' && field !== 'angle' && field !== 'opacity',
+);
+
+// Pan/zoom re-renders without touching elements, so identity settles those in one compare; a drag and
+// a Yjs tick hand over fresh objects, so those need the field compare — every ELEMENT_FIELDS value is a
+// scalar/string, so it is exact.
+function sameFields(a: VectorElement, b: VectorElement, fields: readonly string[]): boolean {
     if (a === b) return true;
     // Widened, not copied: this runs per element per frame, so a spread here would allocate twice a frame.
     const ra: Record<string, unknown> = a;
     const rb: Record<string, unknown> = b;
-    for (const field of ELEMENT_FIELDS) {
+    for (const field of fields) {
         if (ra[field] !== rb[field]) return false;
     }
     return true;
+}
+
+function sameElement(a: VectorElement, b: VectorElement): boolean {
+    return sameFields(a, b, ELEMENT_FIELDS);
+}
+
+// A derived elbow route is routed in scene space around its bound shapes and then made local to the
+// arrow's origin, so it is the one body that moves with the element's own x and y.
+function derivesRoute(el: VectorElement): el is VectorArrowElement {
+    return el.type === 'arrow' && el.elbow && el.fixedSegments === '';
 }
 
 // A derived elbow arrow is the one layer whose output reads the scene map, and it reads it ONLY for the
@@ -55,7 +73,7 @@ function sameRouteContext(
     prev?: Map<string, VectorElement>,
     next?: Map<string, VectorElement>,
 ): boolean {
-    if (el.type !== 'arrow' || !el.elbow || el.fixedSegments !== '') return true;
+    if (!derivesRoute(el)) return true;
     // Without a map an elbow arrow draws its stored endpoints instead, which is a different polyline.
     if (!prev || !next) return false;
     for (const binding of [el.startBinding, el.endBinding]) {
@@ -84,6 +102,40 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     return sameRouteContext(next.el, prev.byId, next.byId);
 }
 
+type BodyCache = {
+    el: VectorElement;
+    resolveMedia?: MediaResolver;
+    byId?: Map<string, VectorElement>;
+    content: RenderOutput | null;
+};
+
+// The kind's body, redrawn only when what it reads changed: a move re-renders the layer for its box, and
+// this hands back the body it drew before — rough path generation, and a whole chart, are the expensive
+// part. Written during render like FrameView's scale: the same inputs always give the same body.
+function useLayerBody(
+    el: VectorElement,
+    resolveMedia?: MediaResolver,
+    byId?: Map<string, VectorElement>,
+): RenderOutput | null {
+    const cache = useRef<BodyCache | null>(null);
+    const prev = cache.current;
+    if (
+        prev &&
+        prev.resolveMedia === resolveMedia &&
+        sameFields(prev.el, el, derivesRoute(el) ? ELEMENT_FIELDS : BODY_FIELDS) &&
+        (prev.byId === byId || sameRouteContext(el, prev.byId, byId))
+    ) {
+        return prev.content;
+    }
+    const content = layerContent(el, { resolveMedia, route: arrowRoute(el, byId) });
+    // THE mount seam for stored rich text, so this is where it is sanitized: `html` reaches us
+    // verbatim from a hostile peer's Y.Doc write or a forged clipboard record. Same allowlist the
+    // in-place editor's paste runs, so legitimate LightEditor markup passes through unchanged.
+    const safe = content && 'html' in content ? { ...content, html: sanitizeToLightEditorHtml(content.html) } : content;
+    cache.current = { el, resolveMedia, byId, content: safe };
+    return safe;
+}
+
 // The box as CSS: lib's layerBoxCss with left/top pinned at zero, because the origin rides in the
 // transform (see layerBoxCss for why). No will-change: promoting 500 layers to their own composited
 // surface costs more memory than it buys.
@@ -103,10 +155,9 @@ export const ElementLayer = memo(function ElementLayer({
     // Hosting the in-place editor IS the user typing in this box, which is what makes its growth
     // part of their edit rather than bookkeeping.
     useRichTextAutoFit(hostRef, el, onFitHeight, !!children);
-    const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
-    if (!layer) return null;
-    const { content } = layer;
-    const style = layerStyle(layer);
+    const content = useLayerBody(el, resolveMedia, byId);
+    if (!content) return null;
+    const style = layerStyle(placeLayer(el, content));
     if (children) {
         // display:contents, so the backdrop's absolute viewport resolves against the layer box and the
         // editor stays the layer's last element child, which is the node the auto-fit measures.
@@ -122,17 +173,13 @@ export const ElementLayer = memo(function ElementLayer({
             </div>
         );
     }
-    // THE mount seam for stored rich text, so this is where it is sanitized: `html` reaches us
-    // verbatim from a hostile peer's Y.Doc write or a forged clipboard record. Same allowlist the
-    // in-place editor's paste runs, so legitimate LightEditor markup passes through unchanged.
-    const safeContent = 'html' in content ? { ...content, html: sanitizeToLightEditorHtml(content.html) } : content;
     return (
         <div
             ref={hostRef}
             data-element-id={el.id}
             className="absolute"
             style={style}
-            dangerouslySetInnerHTML={{ __html: layerInnerHtml(safeContent) }}
+            dangerouslySetInnerHTML={{ __html: layerInnerHtml(content) }}
         />
     );
 }, sameLayerProps);

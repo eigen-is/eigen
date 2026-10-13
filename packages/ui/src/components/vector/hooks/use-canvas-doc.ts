@@ -12,6 +12,7 @@ import {
     readVectorFromDoc,
     type StyleDefaults,
     type VectorArrowElement,
+    type VectorChartElement,
     type VectorElement,
     type VectorElementType,
     type VectorFrame,
@@ -85,6 +86,7 @@ export function holdCapture(undoManager: Y.UndoManager | null): () => void {
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
     Partial<Omit<VectorPieElement, 'id' | 'type'>> &
+    Partial<Omit<VectorChartElement, 'id' | 'type'>> &
     Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
     Partial<Omit<VectorImageElement, 'id' | 'type'>> &
     Partial<Omit<VectorLinearElement, 'id' | 'type'>> &

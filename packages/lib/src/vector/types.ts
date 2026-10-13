@@ -14,7 +14,8 @@ export type VectorElementType =
     | 'richtext'
     | 'freedraw'
     | 'line'
-    | 'arrow';
+    | 'arrow'
+    | 'chart';
 
 // The runtime value lists are the single source; the union types derive from them, so a grown
 // list and its type can never drift. read-vector's validators consume the same arrays.
@@ -130,11 +131,26 @@ export type VectorRichTextElement = VectorElementBase &
         padding: number; // px inset between the box edge and the text; the box keeps its stored size
     };
 
-// What an arrow endpoint may dock to: the closed shapes, the pie slice and the two DOM boxes, whose
-// outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
+// A chart: `chart` is the stored ChartSpec JSON (charts/spec.ts), inline data only on a canvas. `fill` is
+// its background and the hatch style of its bars and slices; the stroke draws its axes and gridlines.
+export type VectorChartElement = VectorElementBase &
+    Fillable & {
+        type: 'chart';
+        chart: string;
+        fontFamily: string;
+        color: string;
+    };
+
+// What an arrow endpoint may dock to: the closed shapes, the pie slice, the chart and the two DOM boxes,
+// whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
 // (isBindable in kinds/index.ts) — this union is its type-level face, and the registry test pins the two
 // against each other so neither can grow without the other.
-export type VectorBindableElement = VectorShapeElement | VectorPieElement | VectorRichTextElement | VectorImageElement;
+export type VectorBindableElement =
+    | VectorShapeElement
+    | VectorPieElement
+    | VectorChartElement
+    | VectorRichTextElement
+    | VectorImageElement;
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
@@ -185,6 +201,7 @@ export type VectorArrowElement = VectorElementBase & {
 export type VectorElement =
     | VectorShapeElement
     | VectorPieElement
+    | VectorChartElement
     | VectorImageElement
     | VectorRichTextElement
     | VectorLinearElement

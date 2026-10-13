@@ -838,6 +838,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorBindableElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorChartElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorDiamondElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1053,6 +1054,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `layoutChartMessage` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `MAX_CHART_LABEL_LENGTH` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |

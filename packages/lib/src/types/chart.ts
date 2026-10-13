@@ -1,4 +1,4 @@
-import type { FillStyle, VectorElement } from '../vector/types';
+import type { FillStyle, StrokeStyle, VectorElement } from '../vector/types';
 
 // Google/Excel names: `column` draws vertical bars, `bar` horizontal ones.
 export const CHART_TYPES = ['column', 'bar', 'line', 'pie'] as const;
@@ -41,13 +41,14 @@ export type ChartSpec = {
 export type ChartData = { categories: string[]; series: InlineChartSeries[] };
 
 // What a chart paints with: a canvas chart takes it from its element, docs and sheets use one flat preset.
-// background is a serialized Fill (transparent draws none); strokeColor draws the axes and gridlines.
+// background is a serialized Fill (transparent draws none); strokeColor and strokeStyle draw the axes and gridlines.
 export type ChartPaint = {
     fontFamily: string;
     color: string;
     background: string;
     strokeColor: string;
     strokeWidth: number;
+    strokeStyle: StrokeStyle;
     roughness: number;
     seed: number;
     fillStyle: FillStyle;

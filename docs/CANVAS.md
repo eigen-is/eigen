@@ -48,6 +48,8 @@ Adding a kind: add it to `VectorElementType`, write its file, add one line to `E
 
 The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`. It stores `startAngle` and `sweepAngle` in degrees, clockwise from 3 o'clock, measured in the box-normalized circle, so a resize scales a slice like any other shape. It stores a sweep, not an end angle, because a 360° slice has no distinct end. Its outline is a polygon and its anchors sit on the slice, so an arrow docks on the slice rather than on its box. No tool draws one: slices arrive from charts and Convert to shapes.
 
+The `chart` kind holds one chart's stored spec, kept as stored, and draws it as the canvas's own shapes plus SVG text, each shape through its own kind ([CHARTS.md](CHARTS.md)). Its fill is its background and its stroke its axes. No tool draws one either.
+
 ## Capabilities are asked of the element
 
 `capabilitiesOf(el)` answers what an element supports: fill, hatch, dash, corners, bindable, how it is created. The panel, the tools and the binding code gate on it, never on a type list. It takes the element, not the kind, because some answers depend on geometry: an open line or freehand stroke has nothing to fill until its path closes.
@@ -58,7 +60,7 @@ The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`.
 
 `elementLayer` (`scene-layers.ts`) is the one answer to where an element goes and what it draws: a box, an opacity and the kind's `render` output. `layerInnerHtml` turns that into the markup that both the live canvas and the server compositor mount ([EXPORT.md](EXPORT.md#canvas-pages-are-the-boxes-the-live-canvas-draws)), so the two cannot drift. `sceneToSvg` is the standalone SVG for a download and the clipboard. It is DOM-free, so the Worker runs it.
 
-The live layer is positioned with `transform: translate() rotate()`, never `left`/`top`, because the browser snaps a box origin to whole pixels but not a transform. `ElementLayer`'s memo compares the scalar fields, so pan and drag never rerun rough path generation. An elbow arrow also depends on its two bound shapes, so the memo compares those two rather than routing, which costs 50x more.
+The live layer is positioned with `transform: translate() rotate()`, never `left`/`top`, because the browser snaps a box origin to whole pixels but not a transform. `ElementLayer`'s memo compares the scalar fields, so a pan reruns nothing. A kind draws in its local frame, so its body (`layerContent`) never reads `x`, `y`, `angle` or `opacity`: the layer keeps the body across a change to those alone and moves only the box (`placeLayer`), so a drag never reruns rough path generation or a chart's layout. An elbow arrow also depends on its two bound shapes, so the memo compares those two rather than routing, which costs 50x more. A derived elbow route is local to the arrow's origin, so that body redraws when the arrow itself moves.
 
 Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/ui/src/styles/canvas-text.css`, because list markers and link underlines are out of reach of an inline style. `html` arrives verbatim from any peer or a forged paste, so `ElementLayer` and the paste path both run `sanitizeToLightEditorHtml`.
 
@@ -68,7 +70,7 @@ Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradie
 
 An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
 
-An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, rich text and images.
+An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, the chart, rich text and images.
 
 There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 
