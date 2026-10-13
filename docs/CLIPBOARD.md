@@ -18,7 +18,7 @@ An item is `text`, `image` or `elements`. Geometry (`width`, `height`, `angle`) 
 
 Text and image items carry no position: each app pastes at its own caret, cell or viewport center. The `elements` item is the exception, because a canvas paste lands relative to where it was copied from.
 
-`EigenClipboardTypography` is exactly the ten fields a canvas rich-text box stores, the widest set any consumer can place. The canvas writes and applies all ten. Docs maps the six it has nodes and marks for (font family, color, alignment, bold, italic, underline or strike), and sheets reads none. `fontFamily` is the `EIGEN_FONTS` name, not a CSS stack. The `text` is plain, so per-run marks do not survive.
+`EigenClipboardTypography` is exactly the ten fields a canvas rich-text box stores, the widest set any consumer can place. The canvas writes and applies all ten. Docs maps the six it has nodes and marks for (font family, color, alignment, bold, italic, underline or strike), and sheets reads none. `fontFamily` is the `EIGEN_FONTS` name, not a CSS stack. The `text` is plain, so per-run marks do not survive. No item holds an equation: a docs copy that writes the payload puts one in its text item as its linear form ([DOCS.md](DOCS.md#an-equations-text-is-its-linear-form-and-the-find-bar-skips-it)), so a slide or a cell gets `x/2`, never the equation.
 
 ## Both dimensions are mandatory
 
