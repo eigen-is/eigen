@@ -11,3 +11,4 @@ export {
     parseChartSpec,
     sampleChartSpec,
 } from './spec';
+export { formatTickValue } from './ticks';
