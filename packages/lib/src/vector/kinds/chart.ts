@@ -2,6 +2,7 @@ import { MAX_CHART_SPEC_BYTES, parseChartSpec, sampleChartSpec } from '../../cha
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorChartElement } from '../types';
+import { chartToElements } from './chart-convert';
 import { renderChartSvg } from './chart-render';
 import { defineKind } from './kind';
 import { color, fillField, fontFamily, str } from './read-fields';
@@ -57,4 +58,5 @@ export const chartKind = defineKind<VectorChartElement>({
             .filter((text) => text !== '')
             .join('\n');
     },
+    toShapes: chartToElements,
 });

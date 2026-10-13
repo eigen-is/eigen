@@ -61,6 +61,12 @@ export function paintsNothing(el: VectorElement): boolean {
     return ELEMENT_KINDS[el.type].paintsNothing(el);
 }
 
+// What Convert to shapes writes in the element's place; [] for anything with nothing to unpack, which is
+// every element but a chart that draws.
+export function convertToShapes(el: VectorElement): VectorElement[] {
+    return ELEMENT_KINDS[el.type].toShapes(el);
+}
+
 // Bindable targets for an arrow endpoint, read off the registry through the one capability accessor. A
 // single predicate so every consumer — the reader's dangling-binding pass, the follow math, the elbow
 // router's obstacles, the tool's candidate search — agrees, and a new kind opts in by declaring the

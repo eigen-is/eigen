@@ -64,7 +64,13 @@ import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
 import { EmptyOutlines } from './empty-outline';
 import { randomSeed } from './hooks/element-writes';
-import { applyZOrder, deleteSelection, duplicateSelection } from './hooks/selection-ops';
+import {
+    applyZOrder,
+    convertElementToShapes,
+    deleteSelection,
+    duplicateSelection,
+    selectionShapes,
+} from './hooks/selection-ops';
 import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
 import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
@@ -221,6 +227,7 @@ export function CanvasEditor({
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
+        replaceElement,
         undoManager,
         provider,
     } = doc;
@@ -984,6 +991,13 @@ export function CanvasEditor({
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
     const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;
+    // Laid out only while the menu is open.
+    const menuShapes = useMemo(
+        () => (menuItemId ? selectionShapes(selectedIds, committedById) : []),
+        [menuItemId, selectedIds, committedById],
+    );
+    const onMenuConvertToShapes = () =>
+        convertElementToShapes(selectedIds[0], menuShapes, replaceElement, setSelectedIds, undoManager);
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
@@ -1643,6 +1657,7 @@ export function CanvasEditor({
                 onPaste={onMenuPaste}
                 onDuplicate={onMenuDuplicate}
                 onDelete={onMenuDelete}
+                onConvertToShapes={menuShapes.length > 0 ? onMenuConvertToShapes : undefined}
                 onComment={onAddComment && menuItemId ? () => onAddComment(menuItemId) : undefined}
             />
         </div>
