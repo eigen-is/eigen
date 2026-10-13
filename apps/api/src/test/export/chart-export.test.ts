@@ -5,6 +5,8 @@ import {
     ELEMENT_KINDS,
     elementLayer,
     elementToSvg,
+    FRAME_HEIGHT,
+    FRAME_WIDTH,
     layerInnerHtml,
     SLIDES_STYLE_DEFAULTS,
     type StyleDefaults,
@@ -101,7 +103,9 @@ describe('a chart in the canvas exports', () => {
         const slide = chartElement(SLIDES_STYLE_DEFAULTS, { frameId: 'frame-1' });
         const deck: VectorScene = {
             elements: [slide],
-            frames: [{ id: 'frame-1', index: 'a0', name: '', background: '' }],
+            frames: [
+                { id: 'frame-1', index: 'a0', name: '', background: '', width: FRAME_WIDTH, height: FRAME_HEIGHT },
+            ],
             meta: { background: 'transparent' },
         };
         const html = decode(renderEigenslidesExport(docOf(deck), 'html', 'Deck', []).data);
