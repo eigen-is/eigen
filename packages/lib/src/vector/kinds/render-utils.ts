@@ -56,8 +56,9 @@ function elementTransform(box: Box): string {
 }
 
 // One line of plain SVG text, which every surface draws (WeasyPrint ignores foreignObject). `y` is the
-// line's top and the baseline sits the font's offset below it; a turned line turns about (x, y). 600 is
-// the weight the bundled bold faces carry.
+// line's top and the baseline sits the font's offset below it; a turned line turns about (x, y). Bold is
+// 600, the weight of Inter's and JetBrains Mono's bundled bold faces; Source Serif's is 700, so its width
+// table reserves slightly more than the line draws, and Excalifont has only a regular face.
 export function svgTextLine({ text, x, y, anchor, fontFamily, fontSize, bold, color, rotate }: ChartLabel): string {
     const baseline = y + getVerticalOffset(fontFamily, fontSize, getLineHeightPx(fontFamily, fontSize));
     const turn = rotate === 0 ? '' : ` transform="rotate(${round(rotate)} ${round(x)} ${round(y)})"`;

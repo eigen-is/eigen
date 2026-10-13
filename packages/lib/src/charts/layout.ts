@@ -135,11 +135,13 @@ function context({ id, width: w, height: h, paint }: ChartBox): Context {
     };
 }
 
+// Solid whatever the fill's hatch style: that style is the marks', and a hatched backdrop behind hatched
+// bars reads as noise.
 function backgroundShapes(ctx: Context): VectorElement[] {
     const fill = parseFill(ctx.paint.background);
     if (isTransparentFill(fill)) return [];
     const box = { x: 0, y: 0, width: ctx.width, height: ctx.height };
-    return [rectangle(ctx, 'background', box, TRANSPARENT_COLOR, serializeFill(fill))];
+    return [rectangle(ctx, 'background', box, TRANSPARENT_COLOR, serializeFill({ ...fill, style: 'solid' }))];
 }
 
 function clampValue(value: number | null): number | null {

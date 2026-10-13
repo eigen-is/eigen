@@ -10,7 +10,7 @@ import {
     type ChartType,
     LEGEND_POSITIONS,
 } from '../../types/chart';
-import { serializeFill, solidFill, TRANSPARENT_FILL } from '../../vector/fill';
+import { parseFill, serializeFill, solidFill, TRANSPARENT_FILL } from '../../vector/fill';
 import { getLineHeightPx } from '../../vector/font-metrics';
 import { parsePoints } from '../../vector/geometry';
 import { readElementFromFields } from '../../vector/read-vector';
@@ -193,6 +193,17 @@ describe('layoutChart invariants', () => {
         expect(out.shapes[0].id).toBe('c1:background');
         expect(out.shapes[0].strokeColor).toBe('transparent');
         expect(shapeBounds(out.shapes[0])).toEqual({ left: 0, top: 0, right: 640, bottom: 400 });
+    });
+
+    test("the background paints solid; the fill's hatch style is the marks' alone", () => {
+        const out = layout(
+            'column',
+            {},
+            { paint: { background: solidFill('#ffffff', 'cross-hatch'), fillStyle: 'cross-hatch' } },
+        );
+        const [background] = rects(out, 'background');
+        expect(parseFill(background.fill)).toEqual({ type: 'solid', color: '#ffffff', style: 'solid' });
+        for (const bar of rects(out, 'bar')) expect(parseFill(bar.fill).style).toBe('cross-hatch');
     });
 
     test('gridlines are faint, every other shape opaque', () => {

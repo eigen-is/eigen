@@ -52,9 +52,9 @@ The look is Google's defaults: text scaled to the box, title on top in bold, leg
 
 `renderChartSvg` (`vector/kinds/chart-render.ts`) wraps each shape in its own translate group and calls that kind's `render`, so a chart's bar and a drawn rectangle with the same fields are the same SVG by construction. It imports the four shape kinds one by one: the registry imports the chart kind, so reaching the shapes through `ELEMENT_KINDS` would be an import cycle.
 
-The labels go through `svgTextLine` (`vector/kinds/render-utils.ts`), the one helper that turns a line of text into SVG `<text>`; an arrow's label draws through it too. Plain SVG text is what lets a chart print: WeasyPrint ignores `foreignObject`, so rich text would vanish from a PDF. A bold label is drawn at weight 600, the weight of the bundled bold faces.
+The labels go through `svgTextLine` (`vector/kinds/render-utils.ts`), the one helper that turns a line of text into SVG `<text>`; an arrow's label draws through it too. Plain SVG text is what lets a chart print: WeasyPrint ignores `foreignObject`, so rich text would vanish from a PDF. A bold label is drawn at weight 600, the weight of Inter's and JetBrains Mono's bundled bold faces.
 
-So previews and exports need nothing for charts. The SVG download, the PDF page, a deck's HTML and the preview all draw the chart through the kind, and the export sanitizer keeps every shape and label; `apps/api/src/test/export/chart-export.test.ts` proves it. The SVG download embeds the chart's font, which `sceneFontFamilies` picks up from the kind's `fontFamily` field. The live canvas loads nothing extra: the app's `@font-face` rules load a face the first time SVG text uses it.
+So previews and exports need nothing for charts. The SVG download, the PDF page, a deck's HTML and the preview all draw the chart through the kind, and the export sanitizer keeps every shape and label; `apps/api/src/test/export/chart-export.test.ts` proves it. The SVG download embeds the chart's font, which `sceneFontFamilies` picks up from the kind's `fontFamily` field, but only for a chart with search text: a placeholder chart, or one with no title, series names or categories, adds no font, so its labels fall back to the viewer's fonts unless another element embeds the same one. The live canvas loads nothing extra: the app's `@font-face` rules load a face the first time SVG text uses it.
 
 ## The element's own paint is the chart's paint
 
@@ -62,8 +62,9 @@ A canvas chart takes its `ChartPaint` from its element, so it follows its host's
 
 | Element field | What it paints |
 |---|---|
-| `fill` | The background, and its hatch style is the bars' and slices' fill style |
-| `strokeColor`, `strokeWidth`, `strokeStyle` | The axes and gridlines, not a border |
+| `fill` | The background, always solid; its hatch style is the bars' and slices' fill style |
+| `strokeColor`, `strokeStyle` | The axes and gridlines, not a border |
+| `strokeWidth` | Every shape's line: the axes and gridlines, bar and legend-swatch outlines, slice edges, series lines and markers |
 | `fontFamily`, `color` | Every label |
 | `roughness`, `seed` | Every shape |
 
@@ -73,7 +74,7 @@ Series and slice colors are in the spec, stored when the chart is made. A pie dr
 
 The layout needs a label's width to reserve room for the value-axis labels, the legend and turned or ellipsized category labels, and it runs where there is no DOM. `measureLabel` (`vector/text-width.ts`) sums advance widths from `vector/text-width-data.ts`: one table per Eigen font, regular and bold, for Basic Latin and Latin-1, with an em fallback for every other character. It ignores kerning, so it runs slightly off a browser's measurement, which is why widths only reserve room and placement goes through `text-anchor`.
 
-The table is generated from the static TTFs a docx embeds, whose bold slots are weight 600: `bun apps/api/src/scripts/chart-text-widths.ts`, rerun after a font changes. Excalifont has no bold face, so its bold width is its regular width and the browser fakes the bold. The demo seeder sizes its labels with the same function.
+The table is generated from the static TTFs a docx embeds: `bun apps/api/src/scripts/chart-text-widths.ts`, rerun after a font changes. Inter's and JetBrains Mono's bold TTFs are weight 600, the weight a bold label draws at. Source Serif's is 700, so its bold widths run slightly wide of the 600 the app's variable face draws, which only reserves extra room. Excalifont has only a regular face, so its bold width is its regular width and the browser fakes the bold. The demo seeder sizes its labels with the same function.
 
 ## See also
 
