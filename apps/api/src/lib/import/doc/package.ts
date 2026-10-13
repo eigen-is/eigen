@@ -1,9 +1,10 @@
 import { ApiError } from '../../core/errors';
-import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, W_NS } from '../../core/ooxml';
-import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import { alternativeFor, CONTENT_TYPES_NS, isOn, parseOoxml, W_NS } from '../../core/ooxml';
+import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
+import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
-// The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
+// The parts the reader parses, together (a tree's cost: core/xml.ts); the largest document.xml met is 12.6 MB.
 export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
 
 // A tree costs per element too, so the parts' elements have a cap of their own, past a long report's. Counted as '<' in
@@ -17,9 +18,7 @@ export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
-type DocxRelationship = { type: string; target: string; external: boolean };
-
-export type Part = { path: string; root: XmlElement; rels: Map<string, DocxRelationship> };
+export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
 export type DocxPackage = {
     zip: ZipReader;
@@ -152,9 +151,9 @@ function readContentTypes(root: XmlElement | undefined): DocxPackage['contentTyp
     const overrides = new Map<string, string>();
     for (const entry of root ? xmlElements(root) : []) {
         const contentType = (entry.attributes['ContentType'] ?? '').toLowerCase();
-        if (is(entry, CONTENT_TYPES_NS, 'Default'))
+        if (hasXmlName(entry, CONTENT_TYPES_NS, 'Default'))
             defaults.set((entry.attributes['Extension'] ?? '').toLowerCase(), contentType);
-        if (is(entry, CONTENT_TYPES_NS, 'Override'))
+        if (hasXmlName(entry, CONTENT_TYPES_NS, 'Override'))
             overrides.set((entry.attributes['PartName'] ?? '').replace(/^\//, ''), contentType);
     }
     return { defaults, overrides };
@@ -165,45 +164,12 @@ export function contentTypeOf(pkg: DocxPackage, path: string): string | undefine
     return pkg.contentTypes.overrides.get(path) ?? pkg.contentTypes.defaults.get(extension);
 }
 
-function relsPathOf(partPath: string): string {
-    const slash = partPath.lastIndexOf('/');
-    return `${partPath.slice(0, slash + 1)}_rels/${partPath.slice(slash + 1)}.rels`;
+function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, Relationship> {
+    return relationshipsOf(readXml(zip, relsPathOf(partPath), budget), partPath);
 }
 
-function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, DocxRelationship> {
-    const root = readXml(zip, relsPathOf(partPath), budget);
-    const rels = new Map<string, DocxRelationship>();
-    for (const rel of root ? xmlElements(root) : []) {
-        const id = rel.attributes['Id'];
-        if (!is(rel, PACKAGE_RELATIONSHIPS_NS, 'Relationship') || !id) continue;
-        const target = rel.attributes['Target'] ?? '';
-        const external = rel.attributes['TargetMode'] === 'External';
-        rels.set(id, {
-            type: rel.attributes['Type'] ?? '',
-            target: external ? target : resolvePath(partPath, target),
-            external,
-        });
-    }
-    return rels;
-}
-
-function relOfType(rels: Map<string, DocxRelationship>, type: string): string | undefined {
-    for (const rel of rels.values()) if (rel.type.endsWith(`/${type}`) && !rel.external) return rel.target;
-    return undefined;
-}
-
-function resolvePath(base: string, target: string): string {
-    if (target.startsWith('/')) return target.slice(1);
-    const parts = base.split('/').slice(0, -1);
-    for (const segment of target.split('/')) {
-        if (segment === '..') parts.pop();
-        else if (segment !== '.' && segment !== '') parts.push(segment);
-    }
-    return parts.join('/');
-}
-
-// mc:Choice prefixes whose content this reader understands; any other Choice falls back.
-const UNDERSTOOD_PREFIXES = new Set([
+// Requires names prefixes, not namespaces: Word's spellings of the namespaces this reader reads.
+const WORD_PREFIXES = new Set([
     'w',
     'w14',
     'w15',
@@ -224,20 +190,7 @@ const UNDERSTOOD_PREFIXES = new Set([
     'r',
 ]);
 
-export function isAlternateContent(element: XmlElement): boolean {
-    return is(element, MC_NS, 'AlternateContent');
-}
-
-export function alternative(element: XmlElement): XmlElement[] {
-    for (const choice of xmlElements(element)) {
-        if (is(choice, MC_NS, 'Choice')) {
-            const requires = (choice.attributes['Requires'] ?? '').split(/\s+/).filter(Boolean);
-            if (requires.every((prefix) => UNDERSTOOD_PREFIXES.has(prefix))) return xmlElements(choice);
-        }
-        if (is(choice, MC_NS, 'Fallback')) return xmlElements(choice);
-    }
-    return [];
-}
+export const alternative = alternativeFor(WORD_PREFIXES);
 
 // ── WordprocessingML attributes ─────────────────────────────────────────────────────────────────────────────────
 
@@ -247,10 +200,6 @@ export function w(element: XmlElement | undefined, local: string): string | unde
 
 export function wChild(element: XmlElement | undefined, local: string): XmlElement | undefined {
     return element && xmlChild(element, W_NS, local);
-}
-
-export function is(element: XmlElement, ns: string, local: string): boolean {
-    return element.ns === ns && element.local === local;
 }
 
 // A bare element is on.
@@ -295,8 +244,8 @@ export function descendants(root: XmlElement, ns: string, local: string): XmlEle
     const found: XmlElement[] = [];
     const stack = xmlElements(root).reverse();
     for (let element = stack.pop(); element; element = stack.pop()) {
-        if (is(element, ns, local)) found.push(element);
-        else if (!is(element, W_NS, 'txbxContent')) {
+        if (hasXmlName(element, ns, local)) found.push(element);
+        else if (!hasXmlName(element, W_NS, 'txbxContent')) {
             const children = xmlElements(element);
             for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
         }

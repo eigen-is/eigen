@@ -342,6 +342,43 @@ describe('column and bar', () => {
         expect(count(800)).toBeGreaterThan(count(250));
     });
 
+    // A peer stores the box, so a huge one must not mean huge work. formatTick runs once per tick of
+    // every axis the layout tries, so its calls count the tick work; past the budget it throws.
+    test.each([
+        ['column', 600, 1e6],
+        ['bar', 1e6, 600],
+        ['column', 600, 1e9],
+        ['bar', 1e9, 600],
+        ['line', 1e9, 1e9],
+    ] as const)('a %s at %d × %d lays out in bounded work', (type, width, height) => {
+        let calls = 0;
+        const out = layoutChart({
+            id: 'c1',
+            spec: sampleChartSpec(type),
+            data: sampleData(type),
+            width,
+            height,
+            paint: PAINT,
+            formatTick: (value, step) => {
+                calls++;
+                if (calls > 60) throw new Error('unbounded tick work');
+                return formatTickValue(value, step);
+            },
+        });
+        expect(lines(out, 'gridline').length).toBeLessThanOrEqual(30);
+        expect(out.labels.length).toBeLessThanOrEqual(40);
+    });
+
+    test("a bar chart's value labels drop ticks until they stop touching", () => {
+        const wide: ChartData = { categories: ['A', 'B'], series: [series('S', [123456789, -987654321])] };
+        for (const width of [240, 320, 480, 640, 1200]) {
+            const out = layout('bar', { title: '', legend: 'none' }, { data: wide, width });
+            const ticks = out.labels.filter((label) => label.anchor === 'middle').map(labelBounds);
+            expect(ticks.length).toBeGreaterThanOrEqual(2);
+            for (let i = 1; i < ticks.length; i++) expect(overlaps(ticks[i - 1], ticks[i])).toBe(false);
+        }
+    });
+
     test('the caller formats the ticks', () => {
         const out = layoutChart({
             id: 'c1',

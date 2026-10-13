@@ -16,30 +16,16 @@ import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import {
     A_NS,
     ASVG_NS,
-    BORDER_SIDES,
-    CHECKBOX_GLYPHS,
     CONTENT_TYPES_NS,
     CORE_PROPERTIES_NS,
-    codeBlockStyle,
     DC_NS,
-    DEFAULT_HIGHLIGHT,
     EMU_PER_PX,
-    EMU_PER_TWIP,
-    FONT_FAMILY,
-    headingStyleName,
-    LIST_FORMATS,
-    LIST_LEVELS,
-    MAX_TABLE_COLUMNS,
     MC_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PIC_NS,
     R_NS,
-    STYLE_NAMES,
-    type StyleId,
-    TWIPS_PER_PX,
     W_NS,
     W14_NS,
-    WORD_SETTINGS_URI,
     WP_NS,
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
@@ -70,6 +56,22 @@ import {
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
 import type { ExportMedia } from '../../document/transform/protocol';
+import {
+    BORDER_SIDES,
+    CHECKBOX_GLYPHS,
+    codeBlockStyle,
+    DEFAULT_HIGHLIGHT,
+    EMU_PER_TWIP,
+    FONT_FAMILY,
+    headingStyleName,
+    LIST_FORMATS,
+    LIST_LEVELS,
+    MAX_TABLE_COLUMNS,
+    STYLE_NAMES,
+    type StyleId,
+    TWIPS_PER_PX,
+    WORD_SETTINGS_URI,
+} from '../../document/wordml';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { figureMediaKey } from './docx-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';

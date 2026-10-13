@@ -15,20 +15,14 @@ import type { JSONContent } from '@tiptap/core';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
-    BORDER_SIDES,
     C_NS,
-    FLOATING_WRAPS,
-    headingLevel,
     isOn,
-    LINK_THEME_COLORS,
     M_NS,
     MC_NS,
     O_NS,
     PACKAGE_RELATIONSHIPS_NS,
-    PAGE_SECTION_TYPES,
     parseOoxml,
     R_NS,
-    STYLE_NAMES,
     V_NS,
     W_NS,
     W10_NS,
@@ -48,6 +42,14 @@ import {
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
 import { nodeLook } from '../lib/document/looks';
+import {
+    BORDER_SIDES,
+    FLOATING_WRAPS,
+    headingLevel,
+    LINK_THEME_COLORS,
+    PAGE_SECTION_TYPES,
+    STYLE_NAMES,
+} from '../lib/document/wordml';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
