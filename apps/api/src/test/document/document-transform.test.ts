@@ -785,13 +785,14 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
 // Both doc HTML hashes moved again when the grey of Heading 5, 6 and the subtitle became one rule and the print extras lost the dead text-align classes and the clear-floats list eigen-prose.css carries: those lines, and nothing else.
 // The deck pdf-html hash moved when a printed page lost its scene wrapper and each layer took its place as top and left, the rotation alone a transform, at 1:1 so its @page is 1920 wide: those styles, and nothing else.
+// The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'f62897a5f38147fc08f9dce230a8f4335c9fa1fef91d4755d2a6174e15320ab1';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
