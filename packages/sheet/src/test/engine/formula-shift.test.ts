@@ -186,6 +186,22 @@ describe('engine/formula-shift — functionCopy sheet names, intersections and c
         expect(functionCopy('=SUM(Data!A1:Data!A3)', 1, 0)).toBe('SUM(Data!A2:Data!A4)');
     });
 
+    // A sheet prefix the reader can't split into one sheet per leg is no ref it can move.
+    test('a ref naming more sheets than legs is kept as written', () => {
+        for (const formula of ['=a!b!A1:B2', '=a!!A1:B2', "='x'!'y'!A1:B2"]) {
+            expect(functionCopy(formula, 1, 1)).toBe(formula.slice(1));
+            expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'a', false)).toBe(formula.slice(1));
+        }
+    });
+
+    test("spaces around a range's colon are the range's, and a function's name before its arguments is no ref", () => {
+        expect(functionCopy('=SUM(A1 :B2)', 1, 1)).toBe('SUM(B2:C3)');
+        expect(functionCopy('=SUM(A1: B2)', 1, 1)).toBe('SUM(B2:C3)');
+        expect(functionCopy('=SUM(A1  :  B2)+C1', 1, 1)).toBe('SUM(B2:C3)+D2');
+        expect(functionCopy('=LOG10 (A1)', 1, 1)).toBe('LOG10 (B2)');
+        expect(functionCopy('=A1  B1', 1, 1)).toBe('B2  C2');
+    });
+
     test('a 3D reference, a workbook reference and whole rows and columns still shift as before', () => {
         expect(functionCopy('=SUM(Sheet1:Sheet3!A1)', 1, 1)).toBe('SUM(Sheet1:Sheet3!B2)');
         expect(functionCopy('=[1]Sheet1!A1', 1, 1)).toBe('[1]Sheet1!B2');

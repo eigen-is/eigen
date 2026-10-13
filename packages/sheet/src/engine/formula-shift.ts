@@ -72,9 +72,19 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
             if (s === "'") squote = !squote;
             str += s;
         } else if (s === ' ' && dquote === 0) {
-            // A space is kept, and between two refs it is the intersection operator.
-            result += `${walkFormulaRefs(str, onRef)} `;
-            str = '';
+            // A run of spaces is read at once: kept, and between two refs the intersection operator; around a range's
+            // colon it is the range's, and before a `(` it ends a function's name.
+            let end = i;
+            while (end + 1 < chars.length && chars[end + 1] === ' ') end += 1;
+            const next = chars[end + 1];
+            if (next === '(') {
+                result += str + ' '.repeat(end - i + 1);
+                str = '';
+            } else if (next !== ':' && !str.endsWith(':')) {
+                result += walkFormulaRefs(str, onRef) + ' '.repeat(end - i + 1);
+                str = '';
+            }
+            i = end;
         } else if (s === '(' && dquote === 0) {
             result += str.length > 0 ? `${str}(` : '(';
             str = '';
@@ -151,7 +161,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
 function refOf(token: string, onRef: (ref: string) => string): string {
     const legs = splitUnquoted(token, ':');
     if (splitUnquoted(token, '!').length > 2) {
-        if (legs.length !== 2) return token;
+        if (legs.length !== 2 || legs.some((leg) => splitUnquoted(leg, '!').length !== 2)) return token;
         const second = legs[1].slice(0, legs[1].lastIndexOf('!') + 1);
         const moved = refOf(`${legs[0]}:${legs[1].slice(second.length)}`, onRef);
         const colon = moved.lastIndexOf(':');
