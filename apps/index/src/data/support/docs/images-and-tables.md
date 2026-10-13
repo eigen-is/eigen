@@ -1,14 +1,14 @@
 ---
-title: "Insert images and tables"
-description: "Add an image from your device or Drive, and insert a table into a document."
+title: "Insert images, charts, and tables"
+description: "Add an image from your device or Drive, a chart, or a table to a document."
 type: how-to
-tags: [docs, images, tables, formatting, editor]
+tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
-You can insert images and tables anywhere in a document. Images can come from your device or from Drive. Tables start as a 3×3 grid and you can grow them from there.
+You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
 
 ## Insert an image
 
@@ -56,6 +56,24 @@ On a wide screen, selecting an image also opens the **Image** panel on the right
 Right-click an image and choose **Download original image**. You get the image file at its full size and in its own format. This works with view access too.
 
 The same menu has **Add comment**, to comment on the image itself. See [Comment and discuss](/support/docs/comments).
+
+## Add a chart
+
+1. Place your cursor where you want the chart.
+2. Click **Insert** in the toolbar, choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
+3. The chart appears at the cursor with sample data, and stays selected.
+
+Drag a handle to resize the chart. Its width and height change on their own, so you can make it wider without making it taller.
+
+On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, where the **Legend** goes, each axis's **Title**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. Below them, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
+
+### Edit the numbers
+
+1. Double-click the chart, or click **Edit data** in the **Chart** panel.
+2. The **Edit data** dialog shows the data as a grid: categories down the first column, series across the top row. Type in any cell, or paste cells copied from a spreadsheet.
+3. Click **Save** to update the chart, or **Cancel** to leave it as it was.
+
+A chart prints and downloads as a PDF or a web page. The Word file leaves it out for now and keeps its caption. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Insert a table
 

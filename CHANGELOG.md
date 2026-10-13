@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 ### Added
 
 - **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor and printing follow it; PDF and Word downloads stay A4 with 2 cm margins for now
-- **Charts in Vector and Slides** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking, titles, legend, axis range, gridlines and colors, and **Edit data** (or a double-click) edits its numbers in a grid you can paste spreadsheet cells into
+- **Charts in Vector, Slides and Docs** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking, titles, legend, axis range, gridlines and colors, and **Edit data** (or a double-click) edits its numbers in a grid you can paste spreadsheet cells into. In Docs a chart sits in the text like an image, wraps and aligns like one, and appears in PDF and web page downloads; Word downloads leave it out for now and keep its caption
 
 ## [0.3.3] - 2026-10-13
 

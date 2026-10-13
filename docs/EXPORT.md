@@ -41,7 +41,7 @@ The doc node renderers (`export/doc/render.ts`) are pure and shared with the pre
 
 ## The doc renderers write the DOM the editor holds
 
-A figure is an inline node, so it renders as a `span.figure` with a `span.figcaption`, which a paragraph can hold. A `<figure>` inside a `<p>` closes it in every HTML parser, the sanitizer's and WeasyPrint's, and the paragraph split around it gains margins the editor never draws. `span.figure` parses back with its caption and layout; the `<figure>` rule stays, because the editor's own copy still writes one. Both draw from the shared `.figure` box ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
+A figure is an inline node, so it renders as a `span.figure` with a `span.figcaption`, which a paragraph can hold. A `<figure>` inside a `<p>` closes it in every HTML parser, the sanitizer's and WeasyPrint's, and the paragraph split around it gains margins the editor never draws. `span.figure` parses back with its caption and layout; the `<figure>` rule stays, because the editor's own copy still writes one. Both draw from the shared `.figure` box ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)). A chart takes the same box with inline SVG in place of the image, never an `<img>`, because an SVG image can't reach the page's `@font-face` and its labels would fall back to another font ([CHARTS.md](CHARTS.md#a-docs-chart-draws-flat-at-its-own-size)).
 
 `withTrailingBreaks` (`export/doc/render.ts`) gives a paragraph, heading or code block the trailing `<br>` the editor has, in the export and the preview alike ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
@@ -81,7 +81,7 @@ An SVG goes in as itself, an `asvg:svgBlip` that Word and LibreOffice draw, besi
 
 A figure pasted with a `data:` src has no media file, and the main thread never reads the doc ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)), so the transform Worker decodes each such src once (`pastedFigureMedia`, `export/doc/transform.ts`). A raster goes through `encodeDocxImage` and the thumbnail Worker's own `sharpResize`, so it drops its EXIF and shrinks as a media file does; an SVG goes through `sanitizeExportMedia` and `withSvgFallbacks`. The writer names the item by its `src` (`figureMediaKey`), which no media name can equal, since a media name holds no `/`. Only a `;base64` src is read; a percent-encoded one writes only the caption.
 
-Observed in Word's render on 2026-10-08: a 1204×4 px divider drew 466.5 pt wide until its height became whole twips. So the writer rounds the height to whole twips itself. A figure with no media, an external `src` (a docx fetches nothing) or a media item without a size or fallback writes only its caption.
+Observed in Word's render on 2026-10-08: a 1204×4 px divider drew 466.5 pt wide until its height became whole twips. So the writer rounds the height to whole twips itself. A figure with no media, an external `src` (a docx fetches nothing) or a media item without a size or fallback writes only its caption, and so does a chart, until the writer writes Word charts.
 
 ## A wrapped figure is a floating one-cell table
 
