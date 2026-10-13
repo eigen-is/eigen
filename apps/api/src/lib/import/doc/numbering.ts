@@ -1,5 +1,6 @@
-import { LIST_LEVELS, spellNumber, W_NS } from '../../core/ooxml';
+import { W_NS } from '../../core/ooxml';
 import { is, type XmlElement, xmlElements } from '../../core/xml';
+import { LIST_LEVELS, spellNumber } from '../../document/wordml';
 import { symbolOf } from './docx-fonts';
 import { int, onOff, w, wChild } from './package';
 import { MAX_CHAIN, type ParaProps, readParaProps, type Styles } from './styles';

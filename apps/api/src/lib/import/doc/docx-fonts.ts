@@ -1,7 +1,8 @@
 import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
-import { A_NS, FONT_FAMILY, W_NS } from '../../core/ooxml';
+import { A_NS, W_NS } from '../../core/ooxml';
 import { is, type XmlElement, xmlChild, xmlElements } from '../../core/xml';
+import { FONT_FAMILY } from '../../document/wordml';
 import { descendants, w, wChild } from './package';
 
 // Which bundled font, if any, a Word font draws in: Eigen's by name, a foreign one by its category, an unknown one none.

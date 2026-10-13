@@ -1,8 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
-import { isOn, MAX_TABLE_COLUMNS, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
+import { isOn, W_NS } from '../../core/ooxml';
 import { is, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
+import { MAX_TABLE_COLUMNS, TWIPS_PER_PX } from '../../document/wordml';
 import { build, COLUMN_PX, type Item, inlineText, isWhitespace, type Para } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';

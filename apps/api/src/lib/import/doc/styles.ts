@@ -1,15 +1,14 @@
+import { isOn, W_NS } from '../../core/ooxml';
+import { is, type XmlElement, xmlElements } from '../../core/xml';
+import { lowlight } from '../../document/lowlight';
 import {
     BORDER_SIDES,
     codeBlockLanguage,
     headingLevel,
-    isOn,
     LINK_THEME_COLORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
-    W_NS,
-} from '../../core/ooxml';
-import { is, type XmlElement, xmlElements } from '../../core/xml';
-import { lowlight } from '../../document/lowlight';
+} from '../../document/wordml';
 import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
 import { halfPointsOf, int, onOff, twipsOf, w, wChild } from './package';
 
