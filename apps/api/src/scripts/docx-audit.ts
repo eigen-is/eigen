@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import { readFontSize } from '@workspace/lib/constants/fonts';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
@@ -53,6 +54,7 @@ import {
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
+import { isBodySizedRun } from '../lib/import/doc/paragraphs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
@@ -447,7 +449,8 @@ type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; field
 
 // styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
 // capitals. weightRuns: what bold reads, as a heading draws its own and leaves its style's other formatting. sizeRuns:
-// the size a run's stands out from, a heading's or a title's style's, which draws its own, or else the body's.
+// the size a run's stands out from, a heading's or a title's style's, which draws its own, or else the body's, as in a
+// heading the reader reads as body text.
 // drawn: the color and italic the paragraph's node draws, a heading level's or a title's, which are no mark and from
 // which a run set apart is one: an upright run in a heading that draws italic is the italic mark it came from.
 type Inline = {
@@ -782,6 +785,29 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
     const base = { color: colorOf(plain), indent };
+    // The reader draws a heading or a title of only body-sized runs as body text.
+    const isBodySized = (p: XmlElement, headingRuns: XmlElement[]) => {
+        const faces = descendants(p, W_NS, 'r').flatMap((run) => {
+            const rPr = child(run, 'rPr');
+            const characterRuns = styles
+                .chain(val(child(rPr, 'rStyle')) ?? styles.character)
+                .flatMap((style) => child(style, 'rPr') ?? []);
+            const sources = [...(rPr ? [rPr] : []), ...characterRuns, ...headingRuns];
+            const direct = (local: string) => {
+                const size = val(child(rPr, local));
+                return size === undefined ? undefined : Number(size);
+            };
+            const text = xmlChildren(run, W_NS, 't').map(runText).join('');
+            return facesOf(text, fontsOf(sources), scriptOf(sources))
+                .filter((face) => face.text.trim())
+                .map(({ complex }) =>
+                    complex
+                        ? isBodySizedRun(direct('szCs'), sizeCsOf(headingRuns), sizeCsOf(plain))
+                        : isBodySizedRun(direct('sz'), sizeOf(headingRuns), sizeOf(plain)),
+                );
+        });
+        return faces.length > 0 && faces.every(Boolean);
+    };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
         const chain = styles.chain(val(child(rPr, 'rStyle')) ?? styles.character);
@@ -1049,9 +1075,12 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             caption ||
             scope.note ||
             descendants(element, W14_NS, 'checkbox').length > 0;
-        const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
+        const { numId } = look;
+        const listed = numId !== undefined && numId !== '0';
+        const numbered = listed ? numberItem(numId, look.ilvl) : undefined;
         // A heading can't stand in an Eigen list: Word shows its number as text, which survives as text or not at all.
         const label = look.heading !== undefined && numbered?.ordered ? numbered.label : undefined;
+        const sized = (look.heading !== undefined || !!look.title) && (listed || !isBodySized(element, look.runs));
         const current: Paragraph = {
             spans: [...(label ? [{ text: label, marks: [] }] : []), ...chain.carry],
             image: false,
@@ -1092,7 +1121,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
-            sizeRuns: look.heading !== undefined || look.title ? look.runs : plain,
+            sizeRuns: sized ? look.runs : plain,
             drawn: look.heading ? nodeLook('heading', look.heading) : nodeLook(look.title ?? 'paragraph'),
             marks: !look.code && !caption,
         });
@@ -1311,7 +1340,7 @@ export function auditImported(json: JSONContent): Tally {
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
                 font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
                 if (font) features.push('font');
-                if (attrs['fontSize'] !== null && attrs['fontSize'] !== undefined) features.push('size');
+                if (readFontSize(attrs['fontSize']) !== undefined) features.push('size');
                 if (attrs['caps'] === 'all') features.push('caps');
                 if (attrs['caps'] === 'small') features.push('smallCaps');
             }

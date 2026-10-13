@@ -185,6 +185,20 @@ describe('source side', () => {
         expect(tally.marks.get('size')).toEqual(['big']);
     });
 
+    // As the editor reads it: a size the schema drops draws at the node's own.
+    test('an imported font size is one readFontSize reads', () => {
+        const sized = (text: string, fontSize: unknown) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { fontSize } }],
+        });
+        const imported = auditImported({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [sized('big ', 14), sized('odd', '14pt')] }],
+        });
+        expect(imported.marks.get('size')).toEqual(['big']);
+    });
+
     test("a footnote's marker is no text on either side", async () => {
         const tally = await source(
             `<w:p>${run('Ouch')}<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>${run('.')}</w:p>`,
@@ -417,6 +431,20 @@ describe('both sides', () => {
         expect([source.marks.get('bold'), source.marks.get('italic')]).toEqual([['مملكة', 'Madrid'], ['إسبانيا']]);
         const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
         expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
+    });
+
+    // The reader reads a heading of only runs set by hand at most at the body's size as body text.
+    test('a heading the reader reads as body text sizes its runs against the body on both sides', async () => {
+        const docx = await buildDocxWithBody(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Question', '<w:sz w:val="20"/>')}${run(' fine', '<w:sz w:val="16"/>')}</w:p>`,
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+            },
+        );
+        const source = auditSource(docx);
+        expect(source.marks.get('size')).toEqual(['fine']);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['size']?.kept, features['size']?.invented]).toEqual([1, 0]);
     });
 
     // A link style in a color of its own is Word's look; one in the link look is the link's.
