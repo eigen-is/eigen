@@ -42,7 +42,7 @@ export const CHART_MESSAGES = {
 // own background, in the spec's font. strokeColor draws the baseline at full strength and the gridlines faint
 // (GRIDLINE_OPACITY), so a mid gray gives a clear baseline and Google's light gridlines. strokeWidth is
 // every shape's line; 2 is Google's series line width, so a line series reads at page scale, and it
-// widens a bar by only 1px a side.
+// lengthens a bar by only 1px an end.
 export const FLAT_CHART_PAINT: ChartPaint = {
     color: '#202124',
     background: serializeFill(TRANSPARENT_FILL),
@@ -532,6 +532,9 @@ function barMarks(
     const ups: number[] = [];
     const downs: number[] = [];
     const slot = stacked ? band.width : band.width / series.length;
+    // An outline straddles its bar's edges, so a bar narrows by its outline to keep its slot, and side by
+    // side bars meet outline to outline; a slot thinner than two outlines thins the outline.
+    const stroke = Math.min(ctx.paint.strokeWidth, slot / 2);
     series.forEach((s, si) => {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });
         values[si].forEach((stored, c) => {
@@ -545,11 +548,11 @@ function barMarks(
             }
             const a = scale(from);
             const b = scale(from + value);
-            const offset = band.start(c) + (stacked ? 0 : si * slot);
+            const offset = band.start(c) + (stacked ? 0 : si * slot) + stroke / 2;
             const box = horizontal
-                ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot }
-                : { x: offset, y: Math.min(a, b), width: slot, height: Math.abs(b - a) };
-            shapes.push(rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill));
+                ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot - stroke }
+                : { x: offset, y: Math.min(a, b), width: slot - stroke, height: Math.abs(b - a) };
+            shapes.push({ ...rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill), strokeWidth: stroke });
         });
     });
     return shapes;

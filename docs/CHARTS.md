@@ -56,7 +56,7 @@ The look is Google's defaults: text scaled to the box, title on top in bold, leg
 
 The labels go through `svgTextLine` (`vector/kinds/render-utils.ts`), the one helper that turns a line of text into SVG `<text>`; an arrow's label draws through it too. Plain SVG text is what lets a chart print: WeasyPrint ignores `foreignObject`, so rich text would vanish from a PDF. A bold label is drawn at weight 600, the weight of Inter's and JetBrains Mono's bundled bold faces.
 
-A document or a sheet has no element to take a paint from, so it draws through `renderChartSpecSvg` (`@workspace/lib/vector`, safe on the server): the same painter in one constant paint, `FLAT_CHART_PAINT` (`charts/layout.ts`), which neither stores. That is Google's flat look: near-black text in the spec's font, a mid gray for the baseline and the faint gridlines, line width 2 (Google's series width, and a bar grows only 1px a side), roughness 0, solid marks and no background, so the chart sits on the page. It takes the parsed spec, `null` drawing the placeholder, and for a sheet the resolved range data or why there is none: `'ref'` draws `#REF!` and `'too-many-points'` draws "Too much data for a chart", one centered line without the dashed box. Inline data needs nothing passed; range data with nothing passed draws the placeholder. It returns a complete `<svg>` the size of the box, which a document's HTML inlines and a sheet overlays.
+A document or a sheet has no element to take a paint from, so it draws through `renderChartSpecSvg` (`@workspace/lib/vector`, safe on the server): the same painter in one constant paint, `FLAT_CHART_PAINT` (`charts/layout.ts`), which neither stores. That is Google's flat look: near-black text in the spec's font, a mid gray for the baseline and the faint gridlines, line width 2 (Google's series width, and a bar grows only 1px an end), roughness 0, solid marks and no background, so the chart sits on the page. It takes the parsed spec, `null` drawing the placeholder, and for a sheet the resolved range data or why there is none: `'ref'` draws `#REF!` and `'too-many-points'` draws "Too much data for a chart", one centered line without the dashed box. Inline data needs nothing passed; range data with nothing passed draws the placeholder. It returns a complete `<svg>` the size of the box, which a document's HTML inlines and a sheet overlays.
 
 The placeholder draws its line in Inter, since a spec that doesn't parse names no font.
 
@@ -70,7 +70,7 @@ A canvas chart takes its `ChartPaint` from its element, so it follows its host's
 |---|---|
 | `fill` | The background, always solid; its hatch style is the bars' and slices' fill style |
 | `strokeColor`, `strokeStyle` | The axes and gridlines, not a border |
-| `strokeWidth` | Every shape's line: the axes and gridlines, bar and legend-swatch outlines, slice edges, series lines and markers |
+| `strokeWidth` | Every shape's line: the axes and gridlines, bar and legend-swatch outlines, slice edges, series lines and markers. A bar narrows by its outline across its band, so bars side by side meet outline to outline instead of overlapping, and a bar thinner than two outlines draws a thinner one |
 | `color` | Every label |
 | `roughness`, `seed` | Every shape |
 

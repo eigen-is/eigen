@@ -843,4 +843,38 @@ describe('edge cases', () => {
             }
         }
     });
+
+    test("grouped bars and their outlines never overlap a neighbor's", () => {
+        const data = {
+            categories: ['A', 'B', 'C', 'D', 'E'],
+            series: Array.from({ length: 4 }, (_, s) =>
+                series(
+                    `S${s}`,
+                    [3, 5, 2, 4, 1].map((v) => v + s),
+                    chartColor(s),
+                ),
+            ),
+        };
+        for (const type of ['column', 'bar'] as const) {
+            for (const paint of [{ strokeWidth: 2, roughness: 0 }, { strokeWidth: 4, roughness: 1 }, {}]) {
+                for (const [width, height] of [
+                    [180, 120],
+                    [400, 300],
+                    [1200, 675],
+                ]) {
+                    const out = layout(type, { stacked: false }, { data, width, height, paint });
+                    const bars = rects(out, 'bar');
+                    expect(bars).toHaveLength(20);
+                    // Each bar's extent across the band, its outline included.
+                    const extent = (bar: VectorRectangleElement) => {
+                        const [from, size] = type === 'column' ? [bar.x, bar.width] : [bar.y, bar.height];
+                        return [from - bar.strokeWidth / 2, from + size + bar.strokeWidth / 2];
+                    };
+                    const spans = bars.map(extent).sort((a, b) => a[0] - b[0]);
+                    for (let i = 1; i < spans.length; i++)
+                        expect(spans[i - 1][1]).toBeLessThanOrEqual(spans[i][0] + 1e-9);
+                }
+            }
+        }
+    });
 });
