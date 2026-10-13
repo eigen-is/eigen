@@ -15,7 +15,7 @@ import {
     runAudit,
     type Tally,
 } from '../../scripts/docx-audit';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
 
 // The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
@@ -559,7 +559,7 @@ describe('both sides', () => {
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
     // size, so the photo the doc leaves at its own width has one there.
     test("the writer's docx holds what its doc holds", async () => {
-        const json = buildAllFeaturesDocJson();
+        const json = withoutEquations(buildAllFeaturesDocJson());
         const docx = await eigendocToDocx(json, buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined);
         const written = auditSource(docx);
         const held = auditImported(json);

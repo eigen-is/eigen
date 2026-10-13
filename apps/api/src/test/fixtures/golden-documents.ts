@@ -20,6 +20,7 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
+import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
@@ -210,6 +211,46 @@ function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSON
     return { type: 'text', text, marks };
 }
 
+// (a+b)/2 with a red a, and the sum of i² from i = 1 to n.
+export const GOLDEN_FRACTION: MathRow = [
+    {
+        kind: 'fraction',
+        numerator: [
+            { kind: 'identifier', text: 'a', color: '#C00000' },
+            { kind: 'operator', text: '+' },
+            { kind: 'identifier', text: 'b' },
+        ],
+        denominator: [{ kind: 'number', text: '2' }],
+        line: 'bar',
+    },
+];
+
+export const GOLDEN_SUM: MathRow = [
+    {
+        kind: 'nary',
+        operator: '∑',
+        limits: 'under',
+        sub: [
+            { kind: 'identifier', text: 'i' },
+            { kind: 'operator', text: '=' },
+            { kind: 'number', text: '1' },
+        ],
+        sup: [{ kind: 'identifier', text: 'n' }],
+        body: [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'i' }], sup: [{ kind: 'number', text: '2' }] }],
+    },
+];
+
+function equation(row: MathRow, latex: string, display: boolean): JSONContent {
+    return { type: 'equation', attrs: { mathml: writeMathml(row, latex), display, commentCardId: null } };
+}
+
+// The docx import still reads an equation as its text, so a trip through Word leaves the equations out.
+export function withoutEquations(json: JSONContent): JSONContent {
+    return json.content
+        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
+        : json;
+}
+
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
 // to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
@@ -294,6 +335,15 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'First line\tafter a tab' },
                     { type: 'hardBreak' },
                     { type: 'text', text: 'second line' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Half the sum is ' },
+                    equation(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}', false),
+                    { type: 'text', text: ', and the squares add up to' },
+                    equation(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}', true),
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },

@@ -57,6 +57,8 @@ WeasyPrint reads `<ol start>` and `<ol type>` only as presentational hints, and 
 
 No schema checked the CRDT's JSON, so the writer checks attrs where it uses them and never fails on structure: inline content where a block belongs is wrapped in a paragraph, and a nested block is hoisted out. A node or mark it has no mapping for throws, as the HTML export does, and `apps/api/src/test/export/doc-docx.test.ts` exports a doc holding every node and mark of the schema, so a new node fails a test instead of vanishing from the docx. A comment mark writes nothing and its text stays: comments are not exported, an open [ROADMAP](ROADMAP.md) question. Every zip entry carries the DOS epoch as its date, so one doc always exports to the same bytes.
 
+An equation is Word's own math: the `m:oMath` that `writeOmml` writes from the tree `readStoredEquation` reads, beside the paragraph's runs rather than inside one, and wrapped in `m:oMathPara` when it is displayed. An empty equation stays an empty `m:oMath`, and the typed LaTeX stays behind, because OMML has no slot for it ([DOCS.md](DOCS.md#an-equation-is-an-inline-node-that-stores-its-mathml)).
+
 A code block's language rides a hidden paragraph style of its own, `Code Block (<language>)` based on `Code Block` (`codeBlockStyle` in `apps/api/src/lib/document/wordml.ts`), written only for a language lowlight knows. Word keeps a paragraph's style on a re-save, and LibreOffice keeps its name, so the reader reads the language back from the name. The style is `w:semiHidden` without `w:unhideWhenUsed`, which keeps it out of Word's style gallery once used. Google Docs drops every custom style, so a doc that went through it comes back with no language.
 
 ## Caps cross the docx as Word's toggles

@@ -1,3 +1,4 @@
+import { OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
 import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
@@ -5,7 +6,7 @@ import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
 
 // ── Namespaces ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-export const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+export const W_NS = WORDML_NAMESPACE;
 export const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 export const WP_NS = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
 export const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -21,7 +22,7 @@ export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/mai
 export const V_NS = 'urn:schemas-microsoft-com:vml';
 export const O_NS = 'urn:schemas-microsoft-com:office:office';
 export const W10_NS = 'urn:schemas-microsoft-com:office:word';
-export const M_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
+export const M_NS = OMML_NAMESPACE;
 export const PACKAGE_RELATIONSHIPS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 export const CONTENT_TYPES_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
 export const CORE_PROPERTIES_NS = 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties';

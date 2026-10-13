@@ -5,7 +5,7 @@ import { docSchema } from '../../../lib/document/doc-schema';
 import { HEADING_LOOKS } from '../../../lib/document/looks';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../../fixtures/golden-documents';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -78,9 +78,9 @@ const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(jso
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const source = docSchema().nodeFromJSON(withoutEquations(buildAllFeaturesDocJson())).toJSON();
         const docx = await eigendocToDocx(
-            buildAllFeaturesDocJson(),
+            withoutEquations(buildAllFeaturesDocJson()),
             buildAllFeaturesDocMedia(),
             'All features',
             ORIGIN,
@@ -411,9 +411,12 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title and subtitle, so it holds neither.
+        // The recording predates the title, the subtitle and the equations' paragraph, so it holds none of them.
         source.content = source.content.filter(
-            (block: JSONContent) => block.type !== 'title' && block.type !== 'subtitle',
+            (block: JSONContent) =>
+                block.type !== 'title' &&
+                block.type !== 'subtitle' &&
+                !block.content?.some((inline: JSONContent) => inline.type === 'equation'),
         );
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
+import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
+import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
 import { docSchema } from '../../lib/document/doc-schema';
@@ -9,7 +11,12 @@ import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
+import {
+    buildAllFeaturesDocJson,
+    buildAllFeaturesDocMedia,
+    GOLDEN_FRACTION,
+    GOLDEN_SUM,
+} from '../fixtures/golden-documents';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -341,6 +348,7 @@ describe('docx writer — package', () => {
             'xmlns:pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture',
             'xmlns:w14': 'http://schemas.microsoft.com/office/word/2010/wordml',
             'xmlns:mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+            'xmlns:m': 'http://schemas.openxmlformats.org/officeDocument/2006/math',
             'mc:Ignorable': 'w14',
         };
         expect(roots).toEqual([
@@ -2086,6 +2094,96 @@ describe('docx writer — figures', () => {
         expect(plain.names().filter((path) => path.startsWith('word/media/'))).toEqual(
             'mediaName' in attrs && attrs.mediaName === 'x' ? ['word/media/image1.png'] : [],
         );
+    });
+});
+
+describe('docx writer — equations', () => {
+    function equation(mathml: string, display = false): JSONContent {
+        return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
+    }
+
+    const t = (value: string) => `<m:t xml:space="preserve">${value}</m:t>`;
+    // The all-features doc's two equations as Word writes them; OMML has no slot for the typed LaTeX.
+    const FRACTION_OMML = `<m:oMath><m:f><m:num><m:r><w:rPr><w:color w:val="C00000"/></w:rPr>${t('a')}</m:r><m:r>${t('+b')}</m:r></m:num><m:den><m:r>${t('2')}</m:r></m:den></m:f></m:oMath>`;
+    const SUM_OMML = `<m:oMath><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r>${t('i=1')}</m:r></m:sub><m:sup><m:r>${t('n')}</m:r></m:sup><m:e><m:sSup><m:e><m:r>${t('i')}</m:r></m:e><m:sup><m:r>${t('2')}</m:r></m:sup></m:sSup></m:e></m:nary></m:oMath>`;
+
+    test('an inline equation is an m:oMath beside the runs, not inside one', async () => {
+        const fraction = equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}'));
+        expect(await paragraphsOf(doc(p(text('Half is '), fraction, text('.'))))).toEqual([
+            `<w:p>${run('Half is ')}${FRACTION_OMML}${run('.')}</w:p>`,
+        ]);
+    });
+
+    test('a display equation is an m:oMathPara in its paragraph', async () => {
+        expect(await paragraphsOf(doc(p(text('Sum:'), equation(writeMathml(GOLDEN_SUM), true))))).toEqual([
+            `<w:p>${run('Sum:')}<m:oMathPara>${SUM_OMML}</m:oMathPara></w:p>`,
+        ]);
+    });
+
+    // CT_OMath's content is optional, and LibreOffice opens an empty math zone, as the editor draws an empty box.
+    test('an empty equation, or a string the parser refuses, is an empty m:oMath', async () => {
+        const empty = [equation(''), equation('x^2'), equation(`<math xmlns="${MATHML_NAMESPACE}"><mi>x</mi>`)];
+        expect(await paragraphsOf(doc(...empty.map((node) => p(node)), p(equation('', true))))).toEqual([
+            ...empty.map(() => '<w:p><m:oMath/></w:p>'),
+            '<w:p><m:oMathPara><m:oMath/></m:oMathPara></w:p>',
+        ]);
+    });
+
+    test('a tree past a bound writes its LaTeX as normal text in the equation, as the editor draws it', async () => {
+        const deep = `${'<mrow>'.repeat(MATH_LIMITS.depth + 1)}<mi>x</mi>${'</mrow>'.repeat(MATH_LIMITS.depth + 1)}`;
+        const mathml = `<math xmlns="${MATHML_NAMESPACE}"><semantics>${deep}<annotation encoding="application/x-tex">\\sqrt{x}</annotation></semantics></math>`;
+        expect(await paragraphsOf(doc(p(equation(mathml))))).toEqual([
+            `<w:p><m:oMath><m:r><m:rPr><m:nor/></m:rPr>${t('\\sqrt{x}')}</m:r></m:oMath></w:p>`,
+        ]);
+    });
+
+    // The Yjs binding keeps marks only on text, so an equation ends a link; a marked one sits inside it, where
+    // CT_Hyperlink's content admits math (EG_PContent → EG_RunLevelElements → EG_MathContent).
+    test('an equation between two runs of a link splits it; one carrying the link sits inside', async () => {
+        const link = { type: 'link', attrs: { href: 'https://example.com/x' } };
+        const x = writeMathml([{ kind: 'identifier', text: 'x' }]);
+        const names = (element: XmlElement) => xmlElements(element).map((e) => e.name);
+        const [split, inside] = xmlChildren(
+            await bodyOf(
+                doc(
+                    p(text('see ', link), equation(x), text(' here', link)),
+                    p(text('see ', link), { ...equation(x), marks: [link] }, text(' here', link)),
+                ),
+            ),
+            W,
+            'p',
+        );
+        if (!split || !inside) throw new Error('expected two paragraphs');
+        expect(names(split)).toEqual(['w:hyperlink', 'm:oMath', 'w:hyperlink']);
+        expect(names(inside)).toEqual(['w:hyperlink']);
+        expect(xmlElements(inside).flatMap(names)).toEqual(['w:r', 'm:oMath', 'w:r']);
+    });
+
+    // C1 through the real writer: each of the package's Word equations, stored as the import will store it, is in
+    // document.xml as the tree it was stored from.
+    test('the 108 corpus equations come back from document.xml as the trees they were stored from', async () => {
+        const corpus: { omml: string; display: boolean }[] = JSON.parse(
+            fs.readFileSync(
+                new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
+                'utf8',
+            ),
+        );
+        const stored = corpus.map(({ omml, display }) => {
+            const oMath = parseOoxml(omml);
+            if (!oMath) throw new Error('a corpus equation does not parse');
+            return { row: readOmml(oMath), display };
+        });
+        const zip = await unzip(doc(...stored.map(({ row, display }) => p(equation(writeMathml(row), display)))));
+        const document = parseOoxml(entryText(zip, 'word/document.xml') ?? '');
+        const body = document && xmlChild(document, W, 'body');
+        if (!body) throw new Error('no w:body');
+        const written = xmlChildren(body, W, 'p').map((paragraph) => {
+            const math = only(xmlElements(paragraph));
+            const display = math.local === 'oMathPara';
+            return { row: readOmml(display ? only(xmlElements(math)) : math), display };
+        });
+        expect(written).toHaveLength(108);
+        expect(written).toStrictEqual(stored);
     });
 });
 

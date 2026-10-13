@@ -12,6 +12,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
+import { writeOmml } from '@workspace/math';
 import {
     A_NS,
     ASVG_NS,
@@ -19,6 +20,7 @@ import {
     CORE_PROPERTIES_NS,
     DC_NS,
     EMU_PER_PX,
+    M_NS,
     MC_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PIC_NS,
@@ -29,6 +31,7 @@ import {
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
+import { readStoredEquation } from '../../document/equation';
 import {
     BODY,
     type Border,
@@ -154,6 +157,7 @@ const DOCUMENT_NAMESPACES = [
     `xmlns:pic="${PIC_NS}"`,
     `xmlns:w14="${W14_NS}"`,
     `xmlns:mc="${MC_NS}"`,
+    `xmlns:m="${M_NS}"`,
     'mc:Ignorable="w14"',
 ].join(' ');
 
@@ -1244,6 +1248,15 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
+    // A sibling of the runs, not a run. An empty one stays an empty math zone, as the editor draws an empty box.
+    [
+        'equation',
+        (node) => {
+            const { row, display } = readStoredEquation(node.attrs ?? {});
+            const math = writeOmml(row);
+            return display ? `<m:oMathPara>${math}</m:oMathPara>` : math;
+        },
+    ],
 ]);
 
 // Runs that share a link share one w:hyperlink.
