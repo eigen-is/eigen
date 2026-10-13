@@ -716,6 +716,7 @@ describe('pptx images and backgrounds', () => {
                     },
                     { id: 'f3', index: 'a2', background: { type: 'image', mediaName: 'wide.png', fit: 'cover' } },
                     { id: 'f4', index: 'a3', background: null },
+                    { id: 'f5', index: 'a4', background: { type: 'image', mediaName: 'wide.png', fit: 'contain' } },
                 ],
             ),
             [PNG_MEDIA],
@@ -723,9 +724,12 @@ describe('pptx images and backgrounds', () => {
         const bg = (n: number) => descendants(part(zip, `ppt/slides/slide${n}.xml`), P, 'bgPr')[0];
         expect(srgb(first(bg(1), A, 'solidFill'))).toEqual({ val: 'FF0000', alpha: 50196 });
         expect(attr(first(bg(2), A, 'lin'), 'ang')).toBe('0');
-        const blip = first(bg(3), A, 'blipFill');
-        // A 4:1 picture on a 16:9 slide keeps the middle 16:9 of it.
-        expect(attr(first(blip, A, 'srcRect'), 'l')).toBe('27778');
+        // A 4:1 picture covering a 16:9 slide reaches 4 / (16 / 9) − 1 = 125% past it, half each side.
+        const cover = first(first(bg(3), A, 'blipFill'), A, 'fillRect');
+        expect([attr(cover, 'l'), attr(cover, 'r'), attr(cover, 't')]).toEqual(['-62500', '-62500', undefined]);
+        // Contained, it leaves (1 − 16 / 9 / 4) / 2 of the slide's height empty above and below.
+        const contain = first(first(bg(5), A, 'blipFill'), A, 'fillRect');
+        expect([attr(contain, 't'), attr(contain, 'b'), attr(contain, 'l')]).toEqual(['27778', '27778', undefined]);
         expect(bg(4)).toBeUndefined();
     });
 });
