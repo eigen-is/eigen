@@ -369,7 +369,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy: content is a view over the whole parsed message, and the Worker detaches the buffer it gets.
+                    // A copy: content is a view over the whole parsed message, which would all cross to the transform process.
                     return getBytesVCardPreview(new Uint8Array(att.content).buffer);
                 },
                 VCARD_FORMAT,
@@ -391,7 +391,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+                    // A copy, for the reason the cards route copies: only the part crosses to the transform process.
                     return getBytesEmlPreview(new Uint8Array(att.content).buffer);
                 },
                 EML_FORMAT,
@@ -413,7 +413,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertIcsPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+                    // A copy, for the reason the cards route copies: only the part crosses to the transform process.
                     return getBytesIcsPreview(new Uint8Array(att.content).buffer);
                 },
                 ICS_FORMAT,
