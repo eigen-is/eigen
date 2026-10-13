@@ -12,6 +12,7 @@ test('the barrel exports the API and nothing else', () => {
         'fromDom',
         'readLatex',
         'readMathml',
+        'readMathmlLatex',
         'readOmml',
         'writeLatex',
         'writeMathml',

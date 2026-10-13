@@ -436,6 +436,18 @@ describe('readLatex', () => {
             '\\sqrt\\frac12',
             [{ kind: 'radical', body: [{ kind: 'fraction', numerator: one, denominator: two, line: 'bar' }] }],
         ],
+        // KaTeX and MathJax reject it; it has one sensible reading.
+        [
+            '\\frac\\sqrt{2}{3}',
+            [
+                {
+                    kind: 'fraction',
+                    numerator: [{ kind: 'radical', body: two }],
+                    denominator: [{ kind: 'number', text: '3' }],
+                    line: 'bar',
+                },
+            ],
+        ],
         ['\\sin 3.5', [{ kind: 'function', name: letter('sin'), body: [{ kind: 'number', text: '3.5' }] }]],
         ['\\log 100 x', [{ kind: 'function', name: letter('log'), body: [{ kind: 'number', text: '100' }] }, ...x]],
         ['\\sum 10', [{ kind: 'nary', operator: '∑', limits: 'under', body: [{ kind: 'number', text: '10' }] }]],
@@ -733,6 +745,8 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
             `${'\\sin '.repeat(5000)}x`,
             `${'\\sum '.repeat(5000)}x`,
             `${'\\sqrt['.repeat(5000)}x${']{x}'.repeat(5000)}`,
+            '\\sqrt[x'.repeat(MATH_LIMITS.latexLength / 8),
+            `${'\\sqrt['.repeat(MATH_LIMITS.latexLength / 10 - 1)}x${']{x}'.repeat(MATH_LIMITS.latexLength / 10 - 1)}`,
             `${'\\sqrt'.repeat(MATH_LIMITS.latexLength / 5 - 1)}x`,
             `${'\\frac 1'.repeat(MATH_LIMITS.latexLength / 7 - 1)}1`,
         ]) {

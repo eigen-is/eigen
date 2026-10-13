@@ -76,6 +76,14 @@ function nodeText(node: MathNode): string {
     }
 }
 
+// UnicodeMath ends an operand at a space or an operator and drops the space, so a space keeps a compound node from
+// running into the next: x^2 4, never x^24.
 export function writeText(row: MathRow): string {
-    return row.map(nodeText).join('');
+    return row
+        .map((node, index) => {
+            const next = row[index + 1];
+            const runsOn = next && COMPOUND.has(node.kind) && next.kind !== 'operator' && next.kind !== 'space';
+            return runsOn ? `${nodeText(node)} ` : nodeText(node);
+        })
+        .join('');
 }

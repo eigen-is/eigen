@@ -38,6 +38,12 @@ test.each<[MathRow, string]>([
         [{ kind: 'scripts', base: [{ kind: 'scripts', base: letter('x'), sup: number('2') }], sup: number('3') }],
         '(x^2)^3',
     ],
+    // A compound operand never runs into the next node: x^24 would be x to the 24.
+    [[{ kind: 'scripts', base: letter('x'), sup: number('2') }, ...number('4')], 'x^2 4'],
+    [[{ kind: 'scripts', base: letter('x'), sub: letter('i') }, ...letter('y')], 'x_i y'],
+    [[{ kind: 'fraction', numerator: letter('a'), denominator: letter('b'), line: 'bar' }, ...letter('c')], 'a/b c'],
+    [[{ kind: 'function', name: letter('sin'), body: number('12') }, ...number('3')], 'sin 12 3'],
+    [[{ kind: 'scripts', base: letter('x'), sup: number('2') }, ...operator('+'), ...number('4')], 'x^2+4'],
     [[{ kind: 'radical', body: letter('x') }], '√x'],
     [[{ kind: 'radical', body: sum('x', 'y') }], '√(x+y)'],
     [[{ kind: 'radical', body: letter('x'), degree: number('3') }], '∛x'],

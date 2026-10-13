@@ -62,8 +62,8 @@ export type MathToken = Extract<MathNode, { kind: 'identifier' | 'number' | 'ope
 
 export type MathBudget = { size: number };
 
-// The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 30× headroom.
-const SIZE = 10_000;
+// The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 13× headroom.
+const SIZE = 4_000;
 // writeLatex's costliest unit is an enclose drawing every line around an empty row, 101 characters for a node and its
 // row: so the LaTeX of any admitted tree fits, and reads back.
 const LATEX_LENGTH = 51 * SIZE;
@@ -88,7 +88,7 @@ export function bound(budget: MathBudget, depth: number, size: number): void {
 
 const INVISIBLE = /^[\u200B\u2061-\u2064]$/u;
 const LETTER = /^\p{L}$/u;
-const DIGIT = /^[0-9]$/;
+export const DIGIT = /^[0-9]$/;
 const SPACE_OF_CHAR = new Map<string, MathSpace>([
     [SPACES.normal.text, 'normal'],
     [SPACES.thin.text, 'thin'],
@@ -117,6 +117,14 @@ function token(kind: MathToken['kind'], text: string, variant: MathVariant | und
     if (variant) node.variant = variant;
     if (color) node.color = color;
     return node;
+}
+
+// A number is digits, then a point and digits if any follow: where the one starting at `start` ends.
+export function numberEnd(start: number, digit: (index: number) => boolean, point: (index: number) => boolean): number {
+    let end = start + 1;
+    while (digit(end)) end++;
+    if (point(end) && digit(end + 1)) for (end += 2; digit(end); end++);
+    return end;
 }
 
 export const optional = (row: MathRow) => (row.length > 0 ? row : undefined);
@@ -217,10 +225,11 @@ export class RowBuilder {
                 continue;
             }
             if (DIGIT.test(char)) {
-                end = run(end, DIGIT);
-                if (same(end) && chars[end].char === '.' && same(end + 1) && DIGIT.test(chars[end + 1].char)) {
-                    end = run(end + 1, DIGIT);
-                }
+                end = numberEnd(
+                    start,
+                    (index) => same(index) && DIGIT.test(chars[index].char),
+                    (index) => same(index) && chars[index].char === '.',
+                );
             } else if (LETTER.test(char) && variant === 'normal') {
                 end = run(end, LETTER);
             }

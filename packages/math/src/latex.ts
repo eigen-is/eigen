@@ -3,6 +3,7 @@ import { LATEX_COLORS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } f
 import { ACCENTS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
+    DIGIT,
     equationCells,
     MATH_ENCLOSURES,
     MATH_LIMITS,
@@ -11,6 +12,7 @@ import {
     type MathRow,
     type MathToken,
     type MathVariant,
+    numberEnd,
     optional,
     RowBuilder,
     type RowSlot,
@@ -19,7 +21,6 @@ import {
 import { NOT_XML } from './xml';
 
 const NO_BREAK_SPACE = '\u00A0';
-const DIGIT = /^[0-9]$/;
 
 // The fence characters a \left, \middle or \right takes as they are; the rest are commands.
 const DELIMITER_CHARS: ReadonlySet<string> = new Set('()[]|/');
@@ -196,29 +197,29 @@ class LatexReader {
         return index < this.#end && !this.#tokens[index].command && DIGIT.test(this.#tokens[index].text);
     }
 
-    // An argument is a group, a command with its own arguments (x_\text{max}, as KaTeX and MathJax read it) or one
-    // character.
-    #argumentEnd(index: number, nesting = 0): number {
+    // An argument is a group, a command with its own arguments (x_\text{max}; KaTeX and MathJax only in a script or
+    // \sqrt) or one character.
+    #argumentEnd(index: number, nesting: number): number {
         if (this.#isChar(index, '{')) return this.#partners[index] + 1;
         return index < this.#end && this.#tokens[index].command ? this.#atomEnd(index, nesting + 1) : index + 1;
     }
 
     // TeX ends an optional argument at the first ] outside braces.
-    #bracketEnd(index: number): number {
+    #bracketEnd(index: number, nesting: number): number {
         if (!this.#isChar(index, '[')) return index;
         let close = index + 1;
-        while (close < this.#end && !this.#isChar(close, ']')) close = this.#argumentEnd(close);
+        while (close < this.#end && !this.#isChar(close, ']')) close = this.#argumentEnd(close, nesting);
         if (close >= this.#end) throw new MathError('A [ without its ]', this.#tokens[index].at);
         return close + 1;
     }
 
     // Where the atom at `index` ends, so a reader knows before reading it whether scripts make it a base.
-    #atomEnd(index: number, nesting = 0): number {
+    #atomEnd(index: number, nesting: number): number {
         const token = this.#tokens[index];
         // Each command in an unbraced argument is a level or a wrapper, so the walk ends within both bounds.
         if (nesting > 2 * MATH_LIMITS.depth)
             throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`, token.at);
-        if (!token.command) return this.#argumentEnd(index);
+        if (!token.command) return this.#argumentEnd(index, nesting);
         const command = LATEX_COMMANDS.get(token.text);
         if (!command) return index + 1;
         let end = index + 1;
@@ -226,12 +227,12 @@ class LatexReader {
             case 'left':
                 return this.#partners[index] + 2;
             case 'begin':
-                return this.#argumentEnd(this.#partners[index] + 1);
+                return this.#argumentEnd(this.#partners[index] + 1, nesting);
             case 'big':
                 return end + 1;
             case 'radical':
             case 'arrow':
-                end = this.#bracketEnd(end);
+                end = this.#bracketEnd(end, nesting);
                 break;
             case 'operatorname':
                 if (this.#isChar(end, '*')) end++;
@@ -243,7 +244,7 @@ class LatexReader {
     // A base sits a level below the node its scripts make, two below when both are limits.
     #baseDepth(index: number, limits: boolean, depth: number): number {
         if (!this.#isScriptAt(index)) return depth;
-        return depth + (limits && this.#isScriptAt(this.#argumentEnd(index + 1)) ? 2 : 1);
+        return depth + (limits && this.#isScriptAt(this.#argumentEnd(index + 1, 0)) ? 2 : 1);
     }
 
     #within(start: number, end: number, read: () => void): void {
@@ -261,7 +262,7 @@ class LatexReader {
     #window(read: () => void): void {
         const start = this.#pos;
         if (start >= this.#end) throw new MathError('An argument is missing', this.#offset(start));
-        const end = this.#argumentEnd(start);
+        const end = this.#argumentEnd(start, 0);
         if (this.#isChar(start, '{')) this.#within(start + 1, end - 1, read);
         else this.#within(start, end, read);
         this.#pos = end;
@@ -291,7 +292,7 @@ class LatexReader {
     }
 
     #bracketed(style: Style, depth: number): MathRow | undefined {
-        const end = this.#bracketEnd(this.#pos);
+        const end = this.#bracketEnd(this.#pos, 0);
         if (end === this.#pos) return undefined;
         const pieces: Piece[] = [];
         this.#within(this.#pos + 1, end - 1, () => this.#atoms(pieces, style, depth));
@@ -369,7 +370,7 @@ class LatexReader {
         }
         const base: Piece[] = [];
         if (!this.#isScriptAt(this.#pos)) {
-            const baseDepth = this.#baseDepth(this.#atomEnd(this.#pos), false, depth);
+            const baseDepth = this.#baseDepth(this.#atomEnd(this.#pos, 0), false, depth);
             // A braced base is the base's row, not a group read into the row around it.
             if (baseDepth > depth && this.#isChar(this.#pos, '{')) this.#argument(base, style, baseDepth);
             else this.#atom(base, style, baseDepth);
@@ -392,7 +393,7 @@ class LatexReader {
 
     // The scripts after a base: a scripts node, or for limits a limit under inside a limit over.
     #attach(into: Piece[], base: Piece[], limits: boolean, style: Style, depth: number): void {
-        const both = limits && this.#isScriptAt(this.#argumentEnd(this.#pos + 1));
+        const both = limits && this.#isScriptAt(this.#argumentEnd(this.#pos + 1, 0));
         const { sub, sup } = this.#scripts(style, depth + (both ? 2 : 1), depth + 1);
         if (!sub && !sup) {
             for (const piece of base) into.push(piece);
@@ -430,10 +431,12 @@ class LatexReader {
         if (this.#isChar(this.#pos, '{')) this.#argument(pieces, style, depth);
         else if (LONE.test(charOf(this.#tokens[this.#pos]))) return undefined;
         else if (this.#isDigit(this.#pos)) {
-            let end = this.#pos + 1;
-            while (this.#isDigit(end)) end++;
-            if (this.#isChar(end, '.') && this.#isDigit(end + 1)) for (end += 2; this.#isDigit(end); end++);
-            while (this.#isScriptAt(end)) end = this.#argumentEnd(end + 1);
+            let end = numberEnd(
+                this.#pos,
+                (index) => this.#isDigit(index),
+                (index) => this.#isChar(index, '.'),
+            );
+            while (this.#isScriptAt(end)) end = this.#argumentEnd(end + 1, 0);
             this.#within(this.#pos, end, () => this.#atoms(pieces, style, depth));
         } else this.#scripted(pieces, style, depth);
         return this.#build(pieces, depth);
@@ -450,7 +453,7 @@ class LatexReader {
         // \operatorname* puts its scripts under and over, as \lim does; \limits and \nolimits choose.
         const star = command.kind === 'operatorname' && this.#isChar(this.#pos, '*');
         if (star) this.#pos++;
-        const nameEnd = command.kind === 'function' ? this.#pos : this.#argumentEnd(this.#pos);
+        const nameEnd = command.kind === 'function' ? this.#pos : this.#argumentEnd(this.#pos, 0);
         const explicit = this.#commandAt(nameEnd);
         const limits =
             explicit?.kind === 'limits'
@@ -575,7 +578,7 @@ class LatexReader {
                 if (token.command && token.text === 'middle') throw this.#unexpected(this.#pos - 1);
                 if (!token.command) continue;
                 // \\[2pt] sets a gap; a \\ after the last row starts none, as KaTeX and MathJax read it.
-                this.#pos = this.#bracketEnd(this.#pos);
+                this.#pos = this.#bracketEnd(this.#pos, 0);
                 rows.push(cells);
                 cells = [];
                 if (this.#pos >= this.#end) return;
@@ -623,7 +626,7 @@ class LatexReader {
                 this.#largeOperator(into, command.operator, style, depth);
                 return;
             case 'brace': {
-                const braceDepth = this.#baseDepth(this.#argumentEnd(this.#pos), true, depth);
+                const braceDepth = this.#baseDepth(this.#argumentEnd(this.#pos, 0), true, depth);
                 const body = this.#row(style, braceDepth + 1);
                 const brace: Piece = { node: { kind: 'brace', char: command.char, position: command.position, body } };
                 this.#attach(into, [brace], true, style, depth);
@@ -770,7 +773,7 @@ const FONT_NAMES = namesOf((command) => (command.kind === 'font' ? command.varia
 const SPACE_NAMES = namesOf((command) => (command.kind === 'space' ? command.width : undefined));
 const LINE_NAMES = namesOf((command) => (command.kind === 'line' ? command.position : undefined));
 const FRACTION_NAMES = namesOf((command) =>
-    command.kind === 'fraction' ? `${command.open}${command.close}${command.line}` : undefined,
+    command.kind === 'fraction' ? `${command.open} ${command.close} ${command.line}` : undefined,
 );
 const LIMIT_NAMES = namesOf((command) => (command.kind === 'limit' ? command.position : undefined));
 const BRACE_NAMES = namesOf((command) => (command.kind === 'brace' ? command.char + command.position : undefined));
@@ -951,9 +954,9 @@ function writeFenced(node: Extract<MathNode, { kind: 'fenced' }>, upright: boole
             const environment = ENVIRONMENT_NAMES.get(`${only.layout} ${node.open} ${node.close}`);
             if (environment) return writeTable(only, environment, upright);
         }
-        const fraction = only.kind === 'fraction' && FRACTION_NAMES.get(`${node.open}${node.close}${only.line}`);
-        if (only.kind === 'fraction' && fraction) {
-            return `\\${fraction}{${writeRow(only.numerator, upright)}}{${writeRow(only.denominator, upright)}}`;
+        if (only.kind === 'fraction') {
+            const name = FRACTION_NAMES.get(`${node.open} ${node.close} ${only.line}`);
+            if (name) return `\\${name}{${writeRow(only.numerator, upright)}}{${writeRow(only.denominator, upright)}}`;
         }
     }
     const parts = node.parts.map((row) => writeRow(row, upright));
@@ -981,7 +984,7 @@ function writeNode(node: MathNode, upright: boolean): string {
         case 'fraction': {
             const parts = `{${writeRow(node.numerator, upright)}}{${writeRow(node.denominator, upright)}}`;
             // LaTeX has no skewed fraction: it is written upright.
-            return node.line === 'none' ? `\\genfrac{}{}{0pt}{}${parts}` : `\\${FRACTION_NAMES.get('bar')}${parts}`;
+            return node.line === 'none' ? `\\genfrac{}{}{0pt}{}${parts}` : `\\frac${parts}`;
         }
         case 'scripts':
             if (node.pre) {
