@@ -1,9 +1,9 @@
 import { OMML_NAMESPACE, WORDML_NAMESPACE } from '../omml';
 import { attribute, elementsOf, type MathXmlElement, textOf } from '../xml';
 
-// The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their properties
-// resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't count.
-// Only properties the tree keeps are compared; MATH.md lists what is dropped.
+// The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their
+// properties resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't
+// count. Only properties the tree keeps are compared; MATH.md lists what is dropped.
 
 export type CanonicalItem = string | CanonicalObject;
 export type CanonicalObject = { object: string; properties: Record<string, string>; children: CanonicalChild[] };

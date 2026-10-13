@@ -1,9 +1,9 @@
 import { ACCENTS, COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SCRIPT_CHARS, SPACES } from '../notation';
 import { MATH_ENCLOSURES, type MathNode, type MathRow, type MathToken } from '../tree';
 
-// The canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every
-// generated tree must pass it. It restates the readers' character classes rather than importing them, so a wrong
-// class in a reader can't pass its own yardstick.
+// The canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every generated
+// tree must pass it. It restates the readers' character classes rather than importing them, so a wrong class in a
+// reader can't pass its own yardstick.
 
 const COLOR = /^#[0-9A-F]{6}$/;
 const SPACE_TEXTS = new Set([...Object.values(SPACES).map((space) => space.text), '\u00A0', '\t', '\n', '\r']);

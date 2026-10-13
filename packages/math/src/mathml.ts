@@ -362,8 +362,8 @@ const writeRow = (row: MathRow) => row.map(writeNode).join('');
 
 const writeArgument = (row: MathRow) => (row.length === 1 ? writeNode(row[0]) : `<mrow>${writeRow(row)}</mrow>`);
 
-// A large operator alone in a base is wrapped, so a reader never takes its scripts, limit, accent, line or brace for
-// an n-ary.
+// A large operator alone in a base is wrapped, so a reader never takes its scripts, limit, accent, line or brace for an
+// n-ary.
 function writeBase(row: MathRow): string {
     const [single] = row;
     const bare = row.length === 1 && single.kind === 'operator' && LARGE_OPERATORS.has(single.text);

@@ -63,7 +63,7 @@ export type MathToken = Extract<MathNode, { kind: 'identifier' | 'number' | 'ope
 // `at` is where in its input a reader is, for a MathError's offset.
 export type MathBudget = { size: number; at?: () => number };
 
-// Far above what the equations of a local corpus reach, in depth and in size.
+// The fixture's 108 equations nest at most 7 deep and reach size 182: about 4.5× and 22× room.
 const SIZE = 4_000;
 // writeLatex's costliest unit, an enclose of every line around an empty row, writes 101 characters for 2 units.
 const LATEX_LENGTH = 51 * SIZE;

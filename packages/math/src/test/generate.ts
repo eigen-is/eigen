@@ -2,8 +2,8 @@ import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
 import { defaultVariant, MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
 import { canonicalIssue } from './canonical';
 
-// Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping,
-// characters beyond the BMP. Skewed fractions, every brace character and every fence stay in: only LaTeX loses them.
+// Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping, characters
+// beyond the BMP. Skewed fractions, every brace character and every fence stay in: only LaTeX loses them.
 
 export type Random = () => number;
 
