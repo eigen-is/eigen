@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS } from '@workspace/lib/charts';
+import { MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS, sampleChartSpec } from '@workspace/lib/charts';
+import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { resolveRangeChartData } from '../../engine/chart-data';
+import { renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
 
 const STYLE = { color: '#2a78d6', markers: false, smooth: false };
@@ -141,5 +142,50 @@ describe('resolveRangeChartData', () => {
         );
         const atLimit = data(null, series(ref([0, half - 1], [0, 0])), series(ref([0, half - 1], [1, 1])));
         expect(resolveRangeChartData(atLimit, resolver)).not.toBeString();
+    });
+});
+
+describe('renderSheetChartSvg', () => {
+    const percent = (v: number): Cell => ({ v, m: `${v * 100}%`, ct: { fa: '0%', t: 'n' } });
+    const shares = createArrayResolver([
+        {
+            id: 's1',
+            name: 'Sheet1',
+            data: [
+                [{ v: 'Ajax', m: 'Ajax' }, percent(0.25)],
+                [{ v: 'PSV', m: 'PSV' }, percent(0.5)],
+            ],
+            calculationChain: [],
+            dynamicArrayCompute: [],
+        },
+    ]);
+    const chart = (format: string | null): SheetChart => {
+        const spec = sampleChartSpec('column');
+        return {
+            id: 'c1',
+            index: 'a0',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            spec: JSON.stringify({
+                ...spec,
+                valueAxis: { ...spec.valueAxis, format },
+                data: data(ref([0, 1], [0, 0]), series(ref([0, 1], [1, 1]), 'Share')),
+            }),
+        };
+    };
+
+    test('draws the box with the cells’ labels, and ticks in the first value cell’s format', () => {
+        const svg = renderSheetChartSvg(chart(null), shares);
+        expect(svg).toStartWith('<svg');
+        expect(svg).toContain('width="400" height="300"');
+        expect(svg).toContain('>Ajax<');
+        expect(svg).toContain('>PSV<');
+        expect(svg).toContain('>50%<');
+    });
+
+    test('a stored axis format wins over the cells’', () => {
+        expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
     });
 });

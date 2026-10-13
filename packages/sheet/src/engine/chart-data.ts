@@ -1,7 +1,8 @@
 import { chartLabel, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartData, ChartDataError, RangeChartData } from '@workspace/lib/types/chart';
-import { inlineStringText } from './format';
+import { renderChartSpecSvg } from '@workspace/lib/vector';
+import { inlineStringText, numberDisplay } from './format';
 import type { Cell, CellResolver } from './types';
 
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
@@ -35,23 +36,46 @@ export function resolveRangeChartData(data: RangeChartData, resolver: CellResolv
     const resolved = series.map(({ name, values: _values, ...style }, i) => ({
         ...style,
         // A name is one cell, Google's header cell; a wider ref reads its first.
-        name: typeof name === 'string' ? name : label(resolver.getCell(name.sheetId, name.row[0], name.column[0])),
+        name: typeof name === 'string' ? name : cellLabel(resolver.getCell(name.sheetId, name.row[0], name.column[0])),
         values: cells(valueRefs[i]).map((cell) =>
             typeof cell?.v === 'number' && Number.isFinite(cell.v) ? cell.v : null,
         ),
     }));
     const count = Math.max(0, ...resolved.map((s) => s.values.length));
     return {
-        categories: categories ? cells(categories).map(label) : Array.from({ length: count }, (_, i) => String(i + 1)),
+        categories: categories
+            ? cells(categories).map(cellLabel)
+            : Array.from({ length: count }, (_, i) => String(i + 1)),
         series: resolved,
     };
+}
+
+// A chart as the editor's overlay and the export draw it: its box, its range data read through the
+// resolver, and value ticks in the axis's own format or else the first value cell's, Google's "From
+// source data".
+export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
+    const spec = parseChartSpec(chart.spec);
+    const range = spec?.data.source === 'range' ? spec.data : null;
+    const first = range?.series[0]?.values;
+    const format =
+        spec?.valueAxis.format ??
+        (first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined);
+    return renderChartSpecSvg({
+        id: chart.id,
+        spec,
+        data: range ? resolveRangeChartData(range, resolver) : undefined,
+        width: chart.width,
+        height: chart.height,
+        formatTick: (value) => numberDisplay(value, format),
+    });
 }
 
 function size(ref: CellRangeRef): number {
     return (ref.row[1] - ref.row[0] + 1) * (ref.column[1] - ref.column[0] + 1);
 }
 
-function label(cell: Cell | null): string {
+// The text a chart reads from a cell: the string the grid shows, or a rich-text cell's runs.
+export function cellLabel(cell: Cell | null): string {
     if (cell?.ct?.t === 'inlineStr') return chartLabel(inlineStringText(cell.ct));
     return chartLabel(String(cell?.m ?? cell?.v ?? ''));
 }
