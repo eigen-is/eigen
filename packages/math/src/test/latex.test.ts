@@ -44,9 +44,6 @@ const DELIMITER_COMMANDS = new Set([
         command.kind === 'symbol' && command.class === 'delimiter' ? [command.char] : [],
     ),
 ]);
-const OPERATOR_COMMANDS = new Set(
-    commands('largeOperator').map((command) => command.kind === 'largeOperator' && command.operator),
-);
 
 // C3's losses: a picture LaTeX has no command for is swapped for one it has, so the seeded trees stay comparable.
 const withoutLosses = (row: MathRow): MathRow =>
@@ -61,7 +58,7 @@ const withoutLosses = (row: MathRow): MathRow =>
             case 'accent':
                 return ACCENT_COMMANDS.has(node.accent) ? node : { ...node, accent: '\u0302' };
             case 'nary':
-                if (OPERATOR_COMMANDS.has(node.operator)) return node;
+                if (LARGE_OPERATORS.has(node.operator)) return node;
                 return { ...node, operator: '∑', limits: node.sub || node.sup ? node.limits : naryLimits('∑') };
             case 'fenced': {
                 const fence = (char: string, fallback: string) => (DELIMITER_COMMANDS.has(char) ? char : fallback);
@@ -843,9 +840,8 @@ describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
 });
 
 describe('LATEX_COMMANDS', () => {
-    test('reuses the notation tables: every accent, large operator, variant and space has its command', () => {
+    test('reuses the notation tables: every accent, variant and space has its command', () => {
         for (const accent of ACCENT_COMMANDS) expect(ACCENTS.has(String(accent))).toBe(true);
-        expect([...OPERATOR_COMMANDS].sort()).toEqual([...LARGE_OPERATORS].sort());
         const fonts = new Set(commands('font').map((command) => command.kind === 'font' && command.variant));
         for (const variant of MATH_VARIANTS) expect(fonts).toContain(variant);
         const spaces = new Set(commands('space').map((command) => command.kind === 'space' && command.width));

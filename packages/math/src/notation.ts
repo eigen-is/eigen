@@ -44,9 +44,61 @@ export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]
 
 export const PRIME = '′';
 
-const INTEGRALS: ReadonlySet<string> = new Set('∫∬∭∮∯∰∱∲∳⨋⨌⨍⨎⨏⨐⨑⨒⨓⨔⨕⨖⨗⨘⨙⨚⨛⨜');
+// The large operators by their unicode-math names, which LaTeX writes.
+const INTEGRAL_NAMES: Readonly<Record<string, string>> = {
+    int: '∫',
+    iint: '∬',
+    iiint: '∭',
+    oint: '∮',
+    oiint: '∯',
+    oiiint: '∰',
+    intclockwise: '∱',
+    varointclockwise: '∲',
+    ointctrclockwise: '∳',
+    sumint: '⨋',
+    iiiint: '⨌',
+    intbar: '⨍',
+    intBar: '⨎',
+    fint: '⨏',
+    cirfnint: '⨐',
+    awint: '⨑',
+    rppolint: '⨒',
+    scpolint: '⨓',
+    npolint: '⨔',
+    pointint: '⨕',
+    sqint: '⨖',
+    intlarhk: '⨗',
+    intx: '⨘',
+    intcap: '⨙',
+    intcup: '⨚',
+    upint: '⨛',
+    lowint: '⨜',
+};
 
-export const LARGE_OPERATORS: ReadonlySet<string> = new Set([...INTEGRALS, ...'∑∏∐⋀⋁⋂⋃⨀⨁⨂⨃⨄⨅⨆⨉']);
+export const LARGE_OPERATOR_NAMES: ReadonlyMap<string, string> = new Map(
+    Object.entries({
+        ...INTEGRAL_NAMES,
+        sum: '∑',
+        prod: '∏',
+        coprod: '∐',
+        bigwedge: '⋀',
+        bigvee: '⋁',
+        bigcap: '⋂',
+        bigcup: '⋃',
+        bigodot: '⨀',
+        bigoplus: '⨁',
+        bigotimes: '⨂',
+        bigcupdot: '⨃',
+        biguplus: '⨄',
+        bigsqcap: '⨅',
+        bigsqcup: '⨆',
+        bigtimes: '⨉',
+    }),
+);
+
+const INTEGRALS: ReadonlySet<string> = new Set(Object.values(INTEGRAL_NAMES));
+
+export const LARGE_OPERATORS: ReadonlySet<string> = new Set(LARGE_OPERATOR_NAMES.values());
 
 // Word's defaults: integrals carry their limits beside, every other large operator under and over.
 export function naryLimits(operator: string): 'under' | 'side' {

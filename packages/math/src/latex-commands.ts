@@ -1,4 +1,4 @@
-import { PRIME } from './notation';
+import { LARGE_OPERATOR_NAMES, PRIME } from './notation';
 import type { MathEnclosure, MathSpace, MathVariant } from './tree';
 
 const SYMBOL_CLASSES = ['letter', 'operator', 'relation', 'arrow', 'delimiter', 'misc'] as const;
@@ -305,52 +305,6 @@ const SYMBOL_COMMANDS: Record<(typeof SYMBOL_CLASSES)[number], Record<string, st
     },
 };
 
-// Every character of notation.ts's large-operator table, by its unicode-math name.
-const LARGE_OPERATOR_COMMANDS: Record<string, string> = {
-    sum: '∑',
-    prod: '∏',
-    coprod: '∐',
-    int: '∫',
-    iint: '∬',
-    iiint: '∭',
-    iiiint: '⨌',
-    oint: '∮',
-    oiint: '∯',
-    oiiint: '∰',
-    intclockwise: '∱',
-    varointclockwise: '∲',
-    ointctrclockwise: '∳',
-    sumint: '⨋',
-    intbar: '⨍',
-    intBar: '⨎',
-    fint: '⨏',
-    cirfnint: '⨐',
-    awint: '⨑',
-    rppolint: '⨒',
-    scpolint: '⨓',
-    npolint: '⨔',
-    pointint: '⨕',
-    sqint: '⨖',
-    intlarhk: '⨗',
-    intx: '⨘',
-    intcap: '⨙',
-    intcup: '⨚',
-    upint: '⨛',
-    lowint: '⨜',
-    bigwedge: '⋀',
-    bigvee: '⋁',
-    bigcap: '⋂',
-    bigcup: '⋃',
-    bigodot: '⨀',
-    bigoplus: '⨁',
-    bigotimes: '⨂',
-    bigcupdot: '⨃',
-    biguplus: '⨄',
-    bigsqcap: '⨅',
-    bigsqcup: '⨆',
-    bigtimes: '⨉',
-};
-
 // Word's own accent for \bar is the combining overline; the macron and the double acute have no command.
 const ACCENT_COMMANDS: Record<string, string> = {
     grave: '\u0300',
@@ -418,7 +372,7 @@ const ROWS: [string, LatexRow][] = [
     ),
     ...FUNCTIONS.split(' ').map((name): [string, LatexRow] => [name, { kind: 'function', limits: false }]),
     ...LIMIT_FUNCTIONS.split(' ').map((name): [string, LatexRow] => [name, { kind: 'function', limits: true }]),
-    ...Object.entries(LARGE_OPERATOR_COMMANDS).map(([name, operator]): [string, LatexRow] => [
+    ...Array.from(LARGE_OPERATOR_NAMES, ([name, operator]): [string, LatexRow] => [
         name,
         { kind: 'largeOperator', operator },
     ]),
