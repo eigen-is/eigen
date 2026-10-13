@@ -1,13 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
-import { type ConvertTarget, DRIVE_MIME_DOC, DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
+import { CONVERT_SOURCES, type ConvertTarget, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated } from './keys';
-
-const TARGET_MIME: Record<ConvertTarget, string> = {
-    eigensheets: DRIVE_MIME_SHEETS,
-    eigendoc: DRIVE_MIME_DOC,
-};
 
 type ConvertVariables = {
     ownerId: string;
@@ -27,14 +23,17 @@ export function useConvertDocument() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) =>
+        onSuccess: (data, variables) => {
             invalidateItemCreated(
                 queryClient,
                 variables.ownerId,
                 variables.mountId,
                 variables.parentId,
-                TARGET_MIME[variables.targetType],
-            ),
+                EIGEN_DOC_TYPE_INFO[CONVERT_SOURCES[variables.targetType].type].mime,
+            );
+            // What the file held that did not come over shows nowhere in the new document.
+            if (data.summary) toast.info(data.summary);
+        },
         onError: onMutationError,
     });
 }

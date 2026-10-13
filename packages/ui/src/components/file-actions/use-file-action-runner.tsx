@@ -32,6 +32,12 @@ export type FileActionRunner = {
 // the time the picker is confirmed. A convert saves first, and its label names the row that asked.
 type PickerState = { subjects: FileSubject[]; convert?: { targetType: ConvertTarget; label: string } };
 
+const CONVERTING_TITLES: Record<ConvertTarget, string> = {
+    eigensheets: 'Converting to sheet',
+    eigendoc: 'Converting to document',
+    eigenslides: 'Converting to slides',
+};
+
 // A host whose subject is state (the right-clicked chip or row) passes null while there is none;
 // `exclude` drops a row the host draws itself (the overlay is Quick Look, so it drops that one).
 export function useFileActionRunner(
@@ -59,7 +65,7 @@ export function useFileActionRunner(
         if (!path.parentId) return;
         convertDocument.mutate(
             { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id, parentId: path.parentId, targetType },
-            { onSuccess: (newPath) => openDocument(newPath) },
+            { onSuccess: (result) => openDocument(result.path) },
         );
     };
 
@@ -98,6 +104,9 @@ export function useFileActionRunner(
                 return;
             case 'convert-to-document':
                 convert('eigendoc', action.label);
+                return;
+            case 'convert-to-slides':
+                convert('eigenslides', action.label);
                 return;
             case 'import-contacts':
                 runImport(importContacts.mutate);
@@ -140,11 +149,7 @@ export function useFileActionRunner(
                 />
                 <ProgressDialog
                     open={convertDocument.isPending}
-                    title={
-                        convertDocument.variables?.targetType === 'eigendoc'
-                            ? 'Converting to document'
-                            : 'Converting to sheet'
-                    }
+                    title={convertDocument.variables ? CONVERTING_TITLES[convertDocument.variables.targetType] : ''}
                 />
                 <ProgressDialog open={importContacts.isPending} title={IMPORTING_CONTACTS_TITLE} />
                 <ProgressDialog open={importMail.isPending} title="Importing mail" />

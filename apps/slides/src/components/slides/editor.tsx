@@ -1,4 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
+import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -10,6 +11,7 @@ import {
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
+import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
@@ -248,6 +250,7 @@ function SlideEditorInner({
 
     // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const [importPickerOpen, setImportPickerOpen] = useState(false);
     const insertImage = canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined;
     const canvasRef = useRef<CanvasHandle | null>(null);
 
@@ -327,6 +330,8 @@ function SlideEditorInner({
                     createLabel="New slides"
                     createIcon={Presentation}
                     createType="slides"
+                    onImport={() => setImportPickerOpen(true)}
+                    importLabel="Import slides…"
                     insertItems={
                         <>
                             <DropdownMenuItem onClick={() => addSlideAfter(frameId)}>
@@ -462,6 +467,15 @@ function SlideEditorInner({
                     </>
                 )}
             </ContextMenuAnchor>
+            <DocumentImportPicker
+                path={path}
+                open={importPickerOpen}
+                onOpenChange={setImportPickerOpen}
+                title="Import slides"
+                progressTitle="Importing slides"
+                mime={PPTX_MIME}
+                accept=".pptx"
+            />
         </CanvasDocumentShell>
     );
 }

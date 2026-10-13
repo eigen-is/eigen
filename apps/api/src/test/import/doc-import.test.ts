@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ConvertResult, DrivePath } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
@@ -121,7 +121,8 @@ function nodeTypes(json: JSONContent): string[] {
 describe('Eigendoc docx import/convert', () => {
     test('convert .docx to eigendoc replicates the document content and media', async () => {
         const uploaded = await upload(await buildGoldenDocx(TEST_PNG_BYTES), 'report.docx');
-        const converted = await assertJson<DrivePath>(await convertRequest(uploaded.id));
+        const { path: converted, summary } = await assertJson<ConvertResult>(await convertRequest(uploaded.id));
+        expect(summary).toBeNull();
         expect(converted.type).toBe('doc');
         expect(converted.name).toBe('report.eigendoc');
         expect(converted.parentId).toBe(rootId);
@@ -258,7 +259,7 @@ describe('Eigendoc docx import/convert', () => {
         const uploaded = await upload('not a document', 'notes.txt', 'text/plain');
         const res = await convertRequest(uploaded.id);
         expect(res.status).toBe(400);
-        expect(await res.text()).toBe('Only .docx files can be converted to documents');
+        expect(await res.text()).toBe('Only .docx files can be converted to Docs');
     }, 60_000);
 
     test('convert of a garbage .docx returns 400 Not a valid docx file', async () => {

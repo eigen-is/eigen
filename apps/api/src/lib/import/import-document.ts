@@ -1,22 +1,32 @@
 import {
+    CONVERT_SOURCES,
+    type ConvertResult,
     type ConvertTarget,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
     DRIVE_TYPE_FILE,
     type DrivePath,
+    EIGEN_DOC_TYPE_INFO,
     isCollabType,
+    isConvertSource,
 } from '@workspace/lib/types/drive';
+import { FRAME_HEIGHT, FRAME_WIDTH } from '@workspace/lib/vector';
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
+import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 import { writeEigendocUpdateToYjs } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
+import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../document/slides';
 import {
     type DocImportWorkerResult,
     type ImportTransformJob,
     type SheetsImportJob,
+    type SlidesImportJob,
     type TransformMedia,
+    type TransformWarning,
     toTransferableBuffer,
 } from '../document/transform/protocol';
 import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
@@ -24,7 +34,7 @@ import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
-import { IMPORT_TOO_LARGE } from './messages';
+import { IMPORT_TOO_LARGE, importSummary, PRESENTATION_EMPTY } from './messages';
 
 const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
 
@@ -41,11 +51,28 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<strin
     return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
 }
 
-function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
+type DocumentImport = DocImportWorkerResult & { warnings: TransformWarning[] };
+
+function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocumentImport> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'docx');
     return runImportToDocumentUpdate(
         { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: getPublicOrigin() },
+        toTransferableBuffer(buffer),
+        { signal },
+    );
+}
+
+// The upload cap bounds the pictures' inflated bytes too, as an upload of each would be bounded.
+function importPptxUpdate(
+    buffer: Buffer,
+    frame: SlidesImportJob['frame'],
+    signal?: AbortSignal,
+): Promise<DocumentImport> {
+    documentTransformRunner.assertAdmissible('foreground');
+    assertWithinByteCap(buffer.byteLength, 'pptx');
+    return runImportToDocumentUpdate(
+        { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', frame, maxMediaBytes: getMaxUploadSize() },
         toTransferableBuffer(buffer),
         { signal },
     );
@@ -107,52 +134,58 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: ConvertTarget,
     user: User,
-): Promise<DrivePath> {
+): Promise<ConvertResult> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
     // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
     // is the costliest preparation here. run() rechecks authoritatively.
     documentTransformRunner.assertAdmissible('foreground');
-    const sheets = targetType === 'eigensheets';
-    if (sheets && !sourcePath.name.toLowerCase().endsWith('.xlsx')) {
-        throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
+    const { format, type } = CONVERT_SOURCES[targetType];
+    if (!isConvertSource(sourcePath.name, targetType)) {
+        throw new ApiError(400, `Only .${format} files can be converted to ${EIGEN_DOC_TYPE_INFO[type].labelPlural}`);
     }
-    if (!sheets && !sourcePath.name.toLowerCase().endsWith('.docx')) {
-        throw new ApiError(400, 'Only .docx files can be converted to documents');
-    }
-    assertWithinByteCap(sourcePath.size, sheets ? 'xlsx' : 'docx');
+    assertWithinByteCap(sourcePath.size, format);
 
     const bytes = await mount.readBytes(sourcePath.id);
     if (!bytes) throw new ApiError(404, 'File not found');
     const buffer = Buffer.from(bytes);
+    const name = sourcePath.name.slice(0, -`.${format}`.length);
 
-    if (sheets) {
+    if (targetType === 'eigensheets') {
         const snapshotJson = await importXlsxSnapshot(buffer);
-        const name = sourcePath.name.replace(/\.xlsx$/i, '');
-        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
+        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, type, user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
         writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
-        return newPath;
+        return { path: newPath, summary: null };
     }
 
-    const { update, images } = await importDocxUpdate(buffer);
+    const slides = targetType === 'eigenslides';
+    // No frame for a deck: the new one takes the size the file's slide size picks.
+    const { update, images, warnings } = slides
+        ? await importPptxUpdate(buffer, undefined)
+        : await importDocxUpdate(buffer);
     // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
-    const name = sourcePath.name.replace(/\.docx$/i, '');
-    const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
+    const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, type, user);
     const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
     await saveDocImages(drive, newPath, images, user);
+    if (slides) {
+        // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
+        writeSlidesUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+        return { path: newPath, summary: importSummary(warnings) };
+    }
     writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-    return newPath;
+    return { path: newPath, summary: null };
 }
 
+// Answers the summary of what the file held that did not come over, for the toast.
 export async function importIntoDocument(
     drive: DriveLike,
     path: DrivePath,
     buffer: Buffer,
     user: User,
     signal?: AbortSignal,
-): Promise<void> {
+): Promise<string | null> {
     // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
     // file wearing an eigen mime falls through to the 400 rather than into a transform over
     // the caller's bytes — the same gate exportDocument applies.
@@ -163,7 +196,7 @@ export async function importIntoDocument(
         signal?.throwIfAborted();
         await requireWritePermission(drive, path, user);
         writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
-        return;
+        return null;
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
@@ -176,7 +209,23 @@ export async function importIntoDocument(
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
         writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-        return;
+        return null;
+    }
+
+    if (containerMime === DRIVE_MIME_SLIDES) {
+        // The deck's own frame, which every deck shares today: the slides are fitted into it, letterboxed. The importer
+        // prefixes its picture names per import, so they land beside the deck's media, never over it.
+        const frame = { width: FRAME_WIDTH, height: FRAME_HEIGHT };
+        const { update, images, warnings } = await importPptxUpdate(buffer, frame, signal);
+        // As the docx branch: media before the update that names it, the write check last.
+        const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
+        signal?.throwIfAborted();
+        await requireWritePermission(drive, path, user);
+        await saveDocImages(drive, path, images, user);
+        await requireWritePermission(drive, path, user);
+        // A file with no slides has no pictures either, so nothing was written.
+        const appended = appendSlidesUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+        return appended === 0 ? PRESENTATION_EMPTY : importSummary(warnings);
     }
 
     throw new ApiError(400, `Import into ${path.mimeType} is not supported`);

@@ -12,7 +12,7 @@ type DocumentImportPickerProps = {
     accept: string;
 };
 
-// The import picker docs and sheets share: it binds both import mutations to the shared dialog and
+// The import picker docs, sheets and slides share: it binds both import mutations to the shared dialog and
 // takes the per-type literals (titles, mime, accept) as props. The toolbar keeps only the open state
 // so its File menu can trigger it.
 export function DocumentImportPicker({

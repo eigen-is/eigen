@@ -1,4 +1,4 @@
-// The environment the three import-hook tests share: a DOM to render into, a signed-in user, a toast
+// The environment the import-hook tests share: a DOM to render into, a signed-in user, a toast
 // recorder and a fetch recorder. Each file mocks the Eden client it needs on top of this, because only
 // the route differs.
 //
@@ -38,6 +38,7 @@ export function installTransferHarness(): void {
         toast: {
             success: (message: string) => toasts.push(`success: ${message}`),
             error: (message: string) => toasts.push(`error: ${message}`),
+            info: (message: string) => toasts.push(`info: ${message}`),
         },
     }));
 

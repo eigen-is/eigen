@@ -1524,7 +1524,7 @@ describe('document transform (input bound)', () => {
             'eigensheets',
             {} as unknown as User,
         ).catch((reason: unknown) => reason);
-        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to sheets' });
+        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to Sheets' });
     });
 });
 

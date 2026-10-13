@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1748 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1752 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -521,7 +521,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (405)
+## Types (407)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -613,6 +613,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentEntry` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `Contact` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `ContactSuggestion` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
+| `ConvertResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CreateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `CreateEventInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -681,6 +682,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportCountsResult` | `@workspace/lib/types` | packages/lib/src/types/transfer.ts |
 | `ImportMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `ImportResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
@@ -931,7 +933,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (853)
+## Utilities & constants (855)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1368,7 +1370,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `CONVERT_TARGETS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1406,6 +1408,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `isCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isConvertSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1616,6 +1619,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `materializeFirstPin` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `MAX_ARROW_LABEL_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `MAX_HTML_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `measureLabel` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |

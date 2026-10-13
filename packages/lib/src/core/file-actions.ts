@@ -1,13 +1,27 @@
-import { BookUser, CalendarPlus, Download, Eye, FileText, FolderDown, MailPlus, Sheet } from 'lucide-react';
+import {
+    BookUser,
+    CalendarPlus,
+    Download,
+    Eye,
+    FileText,
+    FolderDown,
+    MailPlus,
+    Presentation,
+    Sheet,
+} from 'lucide-react';
 import { ICS_MAX_BYTES } from '../constants/calendar';
 import { VCARD_MAX_BYTES } from '../constants/contact';
 import { EML_MAX_BYTES } from '../constants/mail';
-import { isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
-import type { FileAction, FileActionId, FileSubject } from '../types/file-subject';
+import { type ConvertTarget, isConvertSource, isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
+import type { FileAction, FileActionId, FileSubject, SubjectInfo } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 
-// A convert writes the new document beside its source, so a read-only Drive subject offers nothing.
-const canConvert = (subject: FileSubject): boolean => !subject.readOnly;
+// Extension only, as the convert route refuses on the name (import-document.ts). A convert writes the new document
+// beside its source, so a read-only Drive subject offers nothing.
+const convertsTo =
+    (target: ConvertTarget) =>
+    (info: SubjectInfo, subject: FileSubject): boolean =>
+        !!info.downloadUrl && isConvertSource(info.name, target) && !subject.readOnly;
 
 // What can be done with a file, answered once for every surface; a predicate never asks which menu is drawing.
 export const FILE_ACTIONS: readonly FileAction[] = [
@@ -25,21 +39,9 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         // A file already at a Drive location has Drive's own Copy to… instead.
         applies: (info, subject) => !!info.downloadUrl && (!subject.drive || !!subject.attachment),
     },
-    {
-        id: 'convert-to-sheet',
-        label: 'Convert to Sheet',
-        icon: Sheet,
-        // Extension only: the convert route refuses on the name (import-document.ts).
-        applies: (info, subject) =>
-            !!info.downloadUrl && info.name.toLowerCase().endsWith('.xlsx') && canConvert(subject),
-    },
-    {
-        id: 'convert-to-document',
-        label: 'Convert to Document',
-        icon: FileText,
-        applies: (info, subject) =>
-            !!info.downloadUrl && info.name.toLowerCase().endsWith('.docx') && canConvert(subject),
-    },
+    { id: 'convert-to-sheet', label: 'Convert to Sheet', icon: Sheet, applies: convertsTo('eigensheets') },
+    { id: 'convert-to-document', label: 'Convert to Document', icon: FileText, applies: convertsTo('eigendoc') },
+    { id: 'convert-to-slides', label: 'Convert to Slides', icon: Presentation, applies: convertsTo('eigenslides') },
     {
         id: 'import-contacts',
         label: 'Import to Contacts',
