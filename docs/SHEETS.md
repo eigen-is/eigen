@@ -187,7 +187,27 @@ A sheet whose formulas the op moved too is still written back whole, and its who
 
 `resolveRangeChartData` (`engine/chart-data.ts`) turns a range chart into the categories and series the layout draws, through a `CellResolver`, so the editor and the server read the same cells. A value is the cell's computed `v` when it is a finite number and a gap otherwise. A label or series name is the cell's display text `m`, the string the grid shows, or a rich-text cell's runs joined, since such a cell has neither `m` nor `v`. A name ref reads its first cell. A chart with no categories counts them 1, 2, … up to its longest series.
 
-A ref that is null, names a missing sheet or spans several rows and several columns at once is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default.
+A ref that is null, names a missing sheet or spans several rows and several columns at once is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default ([ROADMAP](ROADMAP.md)).
+
+`renderSheetChartSvg` (same file) is the chart the editor's overlay and the export both draw: the box, the resolved data, and value ticks through `numberDisplay` in the axis's own format or else the first value cell's, Google's "From source data", so a percent column gets percent ticks.
+
+## A chart's Setup is a block of cells, derived to refs and read back from them
+
+The spec stores a ref per series, so a row insert can shift each one the way Excel shifts a chart's series. Google's Setup instead describes one block of cells: series down its columns or along its rows, and whether its first row and first column hold names. That block is a `ChartRange` (`engine/chart-range.ts`). `chartRangeData` derives the refs from it, and `chartRangeOf` reads it back by deriving both orientations and comparing with the stored refs. Refs no block derives, an imported chart's or one a deleted row nulled, have no Setup to show until a range is typed. The flags name the block's own first row and column, so Switch rows/columns keeps them: a text first row names the series down columns and the categories along rows.
+
+Insert → Chart and a typed data range set a block up the same way (`suggestChartRange`): text in the first row or first column makes it names, the corner cell counting for neither, and series run down the columns unless the block has more data columns than rows. Insert also charts the table around a single selected cell (Excel's current region, `currentRegion`), titles the chart after its series ("North, South and East"), names the horizontal axis after the corner cell when that heads the categories, and places a 600 × 371 column chart below the block with its editor open. A block of more than `MAX_CHART_SERIES` series derives nothing, because `parseChartSpec` would read the stored spec as null: Insert says so in an alert and the editor under the field.
+
+## A chart on the grid redraws only when a cell matrix it reads changes
+
+`ChartBoxs` (`components/ChartBoxs/`) draws the current sheet's charts beside the images, from the same box fields. Every component under the workbook context re-renders on every context change, a selection or a drag included, so `chartSvg` (`state/modules/chart.ts`) keeps one drawing per chart record and the `data` matrices of the sheets its refs name. immer replaces the matrix whose cells an edit touched, so an edit feeding a chart redraws it on the next render and nothing else does. The key is the matrix, not the sheet: the API's `setSelection` and a sheet switch write the per-client `selections` onto the sheet object. `packages/sheet/src/test/components/ChartBoxs/chart-boxes.test.tsx` counts the redraws.
+
+The selected chart is `ctx.activeChart`, per client, so `filterPatch` drops it. A click selects, a drag moves and the `ObjectTransform` ring resizes, each gesture one write. Delete goes through `clearSelectedContents`, the branch a selected image takes, and Escape is the chart's own keydown. Clicking a cell, a header or another sheet's tab deselects through `deselectFloatingObject`, and `changeSheet` drops the selection too, because the chart belongs to the sheet left behind.
+
+## The Chart editor is the app's sidebar, and a typed edit is one undo step
+
+The Workbook reports the chart whose editor is open through `onChartEditorChange`, as it reports the active image, and the app mounts `ChartEditorPanel` where the image panel goes. The state is memoized: the app passes a fresh `hooks` object on every render, which re-fires the reporting effect, and a fresh state each time would re-render the app without end. The panel writes through the Workbook API: `setChartSpec`, and `setChartDataRange` for a typed range, which needs the cells to set the block up.
+
+The shared editor writes a typed title on every keystroke inside a gesture ([CHARTS.md](CHARTS.md#one-chart-editor-edits-a-spec-and-the-host-writes-it)). The Workbook's `beginGesture` opens `undoGesture`, and `setContextWithProduce` merges every write made under it into the last undo entry, so one ⌘Z takes the whole title back while peers still see it as it is typed.
 
 ## A tick box is a validation rule, and the value is its state
 
@@ -274,7 +294,11 @@ A sheet with images wraps its table in a `position:relative` box and emits one a
 
 The stored coordinates are grid pixels from A1, while the table starts at the used range. So the overlay subtracts the rows and columns above and left of that window. An image above or left of the used range pulls the window back to where the image starts, so the offset never goes negative and the page covers the image.
 
-An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images, an open [ROADMAP](ROADMAP.md) row.
+An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images and charts, an open [ROADMAP](ROADMAP.md) row.
+
+## Charts draw in the same overlay as inline SVG
+
+`renderFloatingObjects` (`export/sheets/render.ts`) draws a sheet's images, then its charts in their paint order, as the editor stacks them. A chart is `renderSheetChartSvg`, the editor's own drawing, in a white box at its stored geometry, so the gridlines stop at it as they do on screen. Its ranges read through the render's resolver over every loaded sheet, so a chart on one tab can chart another. The export reads them after the gated recalc and the preview from the stored values. A chart counts like an image for the page size and the window's origin, and the preview clips it to its budget window. The SVG is plain shapes and text, which the sanitizer keeps and WeasyPrint draws ([CHARTS.md](CHARTS.md#the-painter-draws-each-shape-with-its-own-kind-and-the-labels-as-svg-text)).
 
 ## Some xlsx round-trip drifts are decisions
 

@@ -2,7 +2,7 @@
 
 > **TLDR:** A chart is one stored description, a `ChartSpec`: its type, titles, legend, axes, colors and data. One pure layout turns it into ordinary canvas elements plus lines of text, and one painter draws those as plain SVG, so a chart looks the same live, in a preview and in every export. The spec, its reader and the layout are `packages/lib/src/charts/` with the types in `packages/lib/src/types/chart.ts`; the canvas kind and its painter are `packages/lib/src/vector/kinds/chart.ts` and `chart-render.ts`; the shared editor and the Edit data dialog are `packages/ui/src/components/charts/`.
 
-A chart is a column, bar, line or pie chart, in Google's and Excel's names: a column chart has vertical bars, a bar chart horizontal ones. Its `ChartSpec` holds the presentation (title, legend position, axis titles, value-axis min and max, gridlines, stacking, colors) and the data: categories along one axis and one or more series of values. The spec is stored as a JSON string wherever a chart lives. The one place it lives is the `chart` field of a canvas element of kind `chart`, in Vector and Slides ([CANVAS.md](CANVAS.md)). Insert → Chart places one with Google's sample data, the properties panel edits its presentation, and Edit data its numbers ([§ One chart editor edits a spec](#one-chart-editor-edits-a-spec-and-the-host-writes-it)).
+A chart is a column, bar, line or pie chart, in Google's and Excel's names: a column chart has vertical bars, a bar chart horizontal ones. Its `ChartSpec` holds the presentation (title, legend position, axis titles, value-axis min and max, gridlines, stacking, colors) and the data: categories along one axis and one or more series of values. The spec is stored as a JSON string wherever a chart lives: the `chart` field of a canvas element of kind `chart`, in Vector and Slides ([CANVAS.md](CANVAS.md)), and a sheet's `charts` map in Sheets ([§ A sheet chart reads its ranges](#a-sheet-chart-reads-its-ranges-and-its-editor-adds-googles-setup)). On a canvas Insert → Chart places one with Google's sample data, the properties panel edits its presentation, and Edit data its numbers ([§ One chart editor edits a spec](#one-chart-editor-edits-a-spec-and-the-host-writes-it)).
 
 The data is inline or a range. Inline data is the numbers themselves, inside the spec. Range data names cells of a sheet (a `CellRangeRef`: sheet id, first and last row, first and last column), which only a sheet can resolve. A canvas has no sheet, so it draws only inline data.
 
@@ -84,7 +84,7 @@ The converted labels are rich text, each its own layer. The live canvas, a previ
 
 `ChartEditor` (`packages/ui/src/components/charts/`) is Google's Customise rows over one `ChartSpec`: type, stacking, titles, legend, the value axis's min, max and gridlines, and a color per series or per pie slice. It takes a spec and hands back the next one, and knows nothing of where the chart lives, so any surface that stores a spec can mount it. On a canvas the chart kind's panel section is this editor, shown for exactly one selected chart, because a spec doesn't merge across charts the way a color does. Each change is one write of the element's `chart` field, the whole spec serialized.
 
-A typed title writes on every keystroke inside the host's gesture (`PropertyGestureContext`), so the title is one undo step and peers see it as it is typed. A bar chart lies on its side, so its Horizontal axis rows edit the value axis and its Vertical axis rows the category axis. A min at or past the max is not written, because the reader would drop both and the field would snap back. Markers and smooth lines are in the spec and the layout but not in the editor, as on Google's insert surface.
+A typed title writes on every keystroke inside the host's gesture (`PropertyGestureContext`), so the title is one undo step and peers see it as it is typed. A range chart's categories are only known to the sheet that resolves them, so its host passes them in (`categories`) to name the pie slices; without them the slices go by number. A bar chart lies on its side, so its Horizontal axis rows edit the value axis and its Vertical axis rows the category axis. A min at or past the max is not written, because the reader would drop both and the field would snap back. Markers and smooth lines are in the spec and the layout but not in the editor, as on Google's insert surface.
 
 ## Edit data is a grid over inline data, and Save is one write
 
@@ -98,8 +98,13 @@ The layout needs a label's width to reserve room for the value-axis labels, the 
 
 The table is generated from the static TTFs a docx embeds: `bun apps/api/src/scripts/chart-text-widths.ts`, rerun after a font changes. Inter's and JetBrains Mono's bold TTFs are weight 600, the weight a bold label draws at. Source Serif's is 700, so its bold widths run slightly wide of the 600 the app's variable face draws, which only reserves extra room. Excalifont has only a regular face, so its bold width is its regular width and the browser fakes the bold. The demo seeder sizes its labels with the same function.
 
+## A sheet chart reads its ranges, and its editor adds Google's Setup
+
+A sheet keeps its charts beside its cells as `SheetChart` records, and a chart there usually holds range data, which the sheet resolves from its cells when it draws. The editor's overlay and the export draw it through `renderSheetChartSvg`, `renderChartSpecSvg` with the sheet's resolved data and its number formats. Insert → Chart charts the selected cells, and the sheet's Chart editor puts Google's Setup (the data range, Switch rows/columns, headers and labels) above this editor's rows, or Edit data for an inline chart. How the sheet stores, shifts, draws and exports charts: [SHEETS.md § A chart is a floating record](SHEETS.md#a-chart-is-a-floating-record-whose-refs-name-sheets-by-id) and the sections after it.
+
 ## See also
 
 - [CANVAS.md](CANVAS.md): kinds, the reader, layers, and the pie kind a chart's slices are
 - [EXPORT.md](EXPORT.md): the compositor and WeasyPrint's rules for a layer's SVG
+- [SHEETS.md](SHEETS.md): a sheet's charts, their refs, the overlay and the Chart editor
 - [ARCHITECTURE.md § Backend imports of lib](ARCHITECTURE.md#backend-imports-of-lib): `charts` is a BE-safe subpath
