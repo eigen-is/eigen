@@ -12,7 +12,11 @@ import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents'
 const FRAME_PAGE: CanvasPage = { width: 1920, height: 1080, originX: 0, originY: 0, background: null, layers: [] };
 
 function deckHtml(mode: 'screen' | 'pdf'): string {
-    return canvasHtmlDocument({ title: 'Deck', pages: [FRAME_PAGE], scale: 0.5, mode });
+    return canvasHtmlDocument(
+        mode === 'pdf'
+            ? { title: 'Deck', pages: [FRAME_PAGE], mode }
+            : { title: 'Deck', pages: [FRAME_PAGE], scale: 0.5, mode },
+    );
 }
 
 describe('canvasHtmlDocument', () => {
@@ -49,7 +53,7 @@ describe('canvasHtmlDocument', () => {
 
     test('a PDF page sized from far-out artwork is capped at the PDF page limit', () => {
         const page: CanvasPage = { ...FRAME_PAGE, width: 1e9, height: 30_000 };
-        const html = canvasHtmlDocument({ title: 'Drawing', pages: [page], scale: 1, mode: 'pdf' });
+        const html = canvasHtmlDocument({ title: 'Drawing', pages: [page], mode: 'pdf' });
         expect(html).toContain('@page { size: 19200px 19200px; margin: 0; }');
     });
 });

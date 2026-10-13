@@ -106,7 +106,7 @@ async function serveExport(
     signal?: AbortSignal,
 ): Promise<ExportResult> {
     const bytes = await runDocumentExport(job, mount, path, signal);
-    // A deck's PDF document lays its slides out at 1:1 (canvasHtmlDocument), so WeasyPrint scales them
+    // A deck's PDF document lays its slides out at 1:1 (renderPrintPage), so WeasyPrint's zoom scales them
     // onto the sheet.
     const zoom = job.documentType === 'eigenslides' ? DECK_SCALE : 1;
     return {

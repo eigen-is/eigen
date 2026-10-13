@@ -8,6 +8,7 @@ import {
     type Layer,
     layerBoxCss,
     layerInnerHtml,
+    layerPrintCss,
     type MediaResolver,
     orderByFractionalIndex,
     parseBackgroundFill,
@@ -18,8 +19,9 @@ import {
 } from '@workspace/lib/vector';
 
 // The canvas compositor: a page of sceneLayers as an HTML string, for the PDF export and the
-// preview body. A layer carries the same box CSS the live canvas sets (layerBoxCss), so what a user
-// sees is what prints. Worker-pure: no Mount, no preview cache, no DOM.
+// preview body. A screen layer carries the same box CSS the live canvas sets (layerBoxCss), a printed
+// one the same box laid out where it prints (layerPrintCss), so what a user sees is what prints.
+// Worker-pure: no Mount, no preview cache, no DOM.
 //
 // A kind points at its own gradient with `fill="url(#…)"` / `stroke="url(#…)"` and clips an image with
 // `clip-path="url(#…)"`, into the <defs> of the same fragment. That is load-bearing on the PDF path:
@@ -27,7 +29,9 @@ import {
 // viewport layerInnerHtml gives it.
 
 // A deck page is 254mm (960px at 96dpi) wide: 254 x 142.875mm for 16:9, 254 x 190.5mm for 4:3. Every
-// frame is 1920 wide, so a deck prints at 0.5 — a 1920px sheet would be 20 inches.
+// frame is 1920 wide, so a deck shows and prints at 0.5 — a 1920px sheet would be 20 inches. The screen
+// document scales its pages by it; the PDF document lays them out at 1:1 (renderPrintPage), and it is the
+// zoom htmlToPdf hands WeasyPrint for a deck.
 export const DECK_SCALE = 960 / FRAME_WIDTH;
 
 // A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
@@ -88,20 +92,10 @@ export function sceneBackground(scene: VectorScene): BackgroundFill | null {
     return isTransparentColor(scene.meta.background) ? null : { type: 'solid', color: scene.meta.background };
 }
 
-// One page: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled once. The
-// resolver is only for a frame's IMAGE background — a drawing's background is a color token, so
-// those callers pass nothing.
+// One page on screen: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled
+// once. The resolver is only for a frame's IMAGE background — a drawing's background is a color token,
+// so those callers pass nothing.
 export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
-    const pageStyle = [
-        'position:relative',
-        'overflow:hidden',
-        `width:${round(page.width * scale)}px`,
-        `height:${round(page.height * scale)}px`,
-        ...backgroundCss(page.background, resolveMedia),
-    ];
-    // The origin is an offset, not a translate, and a scale of 1 is no transform, so a PDF page leaves
-    // its layers no transformed parent: WeasyPrint clips a translucent layer to the page as mapped by
-    // its parent's transform, and drops it wherever that leaves it.
     const sceneStyle = [
         'position:absolute',
         `top:${round(-page.originY * scale)}px`,
@@ -112,8 +106,30 @@ export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?:
         // awkward ratio (960 / 2870) would leave a gutter between the scene and the page edge.
         ...(scale === 1 ? [] : [`transform:scale(${scale})`, 'transform-origin:0 0']),
     ];
-    const body = page.layers.map(renderLayer).join('');
-    return `<div class="canvas-page" style="${style(pageStyle)}"><div style="${style(sceneStyle)}">${body}</div></div>`;
+    const body = page.layers
+        .map((layer) => renderLayer(layer, { top: '0', left: '0', ...layerBoxCss(layer) }))
+        .join('');
+    return `<div class="canvas-page" style="${style(pageStyle(page, scale, resolveMedia))}"><div style="${style(sceneStyle)}">${body}</div></div>`;
+}
+
+// One page for WeasyPrint, at 1:1 (htmlToPdf's zoom scales a deck onto its sheet) and with no transform
+// above a layer: WeasyPrint lays a page out ignoring transforms and cuts every line whose layout box
+// passes the @page height, and clips a translucent layer to the page as its parent's transform maps it.
+// So every layer is laid out where it prints (layerPrintCss), straight in the page box.
+export function renderPrintPage(page: CanvasPage, resolveMedia?: MediaResolver): string {
+    const origin = { x: page.originX, y: page.originY };
+    const body = page.layers.map((layer) => renderLayer(layer, layerPrintCss(layer, origin))).join('');
+    return `<div class="canvas-page" style="${style(pageStyle(page, 1, resolveMedia))}">${body}</div>`;
+}
+
+function pageStyle(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string[] {
+    return [
+        'position:relative',
+        'overflow:hidden',
+        `width:${round(page.width * scale)}px`,
+        `height:${round(page.height * scale)}px`,
+        ...backgroundCss(page.background, resolveMedia),
+    ];
 }
 
 // The same page in the fit box every SCREEN consumer scales it in — the HTML export document, the
@@ -126,13 +142,8 @@ export function renderFittedPage(page: CanvasPage, scale: number, resolveMedia?:
     return `<div class="page-fit" style="--page-w:${width}px;--page-ar:${width}/${height}">${renderCanvasPage(page, scale, resolveMedia)}</div>`;
 }
 
-function renderLayer(layer: Layer): string {
-    const layerStyle = [
-        'position:absolute',
-        'top:0',
-        'left:0',
-        ...Object.entries(layerBoxCss(layer)).map(([property, value]) => `${property}:${value}`),
-    ];
+function renderLayer(layer: Layer, box: Record<string, string>): string {
+    const layerStyle = ['position:absolute', ...Object.entries(box).map(([property, value]) => `${property}:${value}`)];
     // layerInnerHtml is the whole body, the same string the live canvas mounts. It deliberately omits
     // the <p> margin reset a standalone SVG carries: the PDF wrapper's `* { margin: 0 }` and the app's
     // Tailwind preflight each already supply one.

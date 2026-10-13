@@ -112,28 +112,34 @@ function rect(
     };
 }
 
-// A W x H area at (x, y): twelve opaque blue lines from a quarter down, which run past half the
-// height, an opaque green square and a translucent red one in the bottom quarter.
-function area(frameId: string, x: number, y: number, height: number) {
-    const text: VectorRichTextElement = {
+// `lines` opaque blue lines of 48 px at a line height of 1.2, 57.6 px apart.
+function textBox(
+    frameId: string,
+    box: { x: number; y: number; width: number; height: number },
+    lines: number,
+): VectorRichTextElement {
+    return {
         ...baseDefaultsFor('richtext', SLIDES_STYLE_DEFAULTS),
         ...ELEMENT_KINDS.richtext.defaults(SLIDES_STYLE_DEFAULTS),
         id: '1',
         type: 'richtext',
         index: 'a1',
         frameId,
-        x: x + 100,
-        y: y + height / 4,
-        width: 900,
-        height: (height * 3) / 4 - 40,
+        ...box,
         angle: 0,
         seed: 1,
-        html: Array.from({ length: 12 }, (_, i) => `<p>Line ${i + 1}</p>`).join(''),
+        html: Array.from({ length: lines }, (_, i) => `<p>Line ${i + 1}</p>`).join(''),
         fontSize: 48,
         lineHeight: 1.2,
         color: '#0000ff',
         strokeColor: TRANSPARENT_COLOR,
     };
+}
+
+// A W x H area at (x, y): twelve opaque blue lines from a quarter down, which run past half the
+// height, an opaque green square and a translucent red one in the bottom quarter.
+function area(frameId: string, x: number, y: number, height: number) {
+    const text = textBox(frameId, { x: x + 100, y: y + height / 4, width: 900, height: (height * 3) / 4 - 40 }, 12);
     const green = { x: x + 1100, y: y + height - 260, width: 200, height: 200 };
     const red = { ...green, x: x + 1400 };
     return {
@@ -146,6 +152,8 @@ function area(frameId: string, x: number, y: number, height: number) {
     };
 }
 
+// CI installs neither WeasyPrint nor poppler, so this suite runs only where both a WeasyPrint and a
+// rasterizer are on the machine, and skips everywhere else.
 const suite = (await isWeasyPrintAvailable()) && rasterizer ? describe : describe.skip;
 
 suite('canvas PDF — text, opaque and translucent elements print wherever they sit', () => {
@@ -218,21 +226,52 @@ suite('canvas PDF — text, opaque and translucent elements print wherever they 
         120_000,
     );
 
-    // A drawing's page starts at its content, here far from the scene origin, and prints at 1 px = 0.75 pt.
-    test('a drawing prints all of its lower half', async () => {
-        const [x, y, width, height] = [2000, 3000, 1920, 1080];
-        const placed = area('', x, y, height);
-        // Two corner marks make the page the area plus the 10 px margin: 1940 x 1100 px from (1990, 2990).
-        const corners = [
-            rect('8', '', '#000000', 100, { x, y, width: 20, height: 20 }),
-            rect('9', '', '#000000', 100, { x: x + width - 20, y: y + height - 20, width: 20, height: 20 }),
-        ];
-        const page = await exportPdf('vector', 'lower-half-drawing', {
-            elements: [...placed.elements, ...corners],
-            frames: [],
-            meta: DEFAULT_SCENE_META,
+    // A slide is the page whatever overhangs it: a text box from 600 above the slide runs 30 lines,
+    // 1728 px, past its bottom, and the lines laid out more than a slide's height into the box print.
+    test('a text box starting above a slide prints down to the slide bottom', async () => {
+        const { width, height } = SLIDE_SIZES['16:9'];
+        const page = await exportPdf('slides', 'above-the-slide', {
+            elements: [textBox('f', { x: 100, y: -600, width: 900, height: 1700 }, 30)],
+            frames: [
+                {
+                    id: 'f',
+                    index: 'a0',
+                    name: '',
+                    width,
+                    height,
+                    background: serializeBackgroundFill({ type: 'solid', color: '#ffffff' }),
+                },
+            ],
+            meta: { ...DEFAULT_SCENE_META, slideSize: '16:9' },
         });
-        expect([page.width, page.height]).toEqual([1455, 825]);
-        expectPrinted(page, placed, height, 10, 0.75);
+        // Within a line and a half of the bottom edge, at 0.375 pt per scene pixel.
+        expect(lowestBlueRow(page)).toBeGreaterThan(page.height - 1.5 * 57.6 * 0.375);
     }, 120_000);
+
+    // A drawing's page starts at its content, wherever that is: far from the scene origin, far above and
+    // left of it, and across it. It prints at 1 px = 0.75 pt.
+    test.each([
+        ['far from the origin', 2000, 3000, 1080, 825],
+        ['above and left of the origin', -4000, -3000, 1080, 825],
+        ['across the origin', -960, -500, 1000, 765],
+    ] as const)(
+        'a drawing %s prints all of its lower half',
+        async (_where, x, y, height, pageHeight) => {
+            const width = 1920;
+            const placed = area('', x, y, height);
+            // Two corner marks make the page the area plus the 10 px margin.
+            const corners = [
+                rect('8', '', '#000000', 100, { x, y, width: 20, height: 20 }),
+                rect('9', '', '#000000', 100, { x: x + width - 20, y: y + height - 20, width: 20, height: 20 }),
+            ];
+            const page = await exportPdf('vector', `drawing-${x}-${y}`, {
+                elements: [...placed.elements, ...corners],
+                frames: [],
+                meta: DEFAULT_SCENE_META,
+            });
+            expect([page.width, page.height]).toEqual([1455, pageHeight]);
+            expectPrinted(page, placed, height, 10, 0.75);
+        },
+        120_000,
+    );
 });

@@ -7,7 +7,6 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
-    type HtmlExportMode,
     htmlExportMode,
     type TransformMedia,
     type TransformWarning,
@@ -16,38 +15,35 @@ import {
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, DECK_SCALE, framePages, renderCanvasPage, renderFittedPage } from './render';
+import { type CanvasPage, DECK_SCALE, framePages, renderFittedPage, renderPrintPage } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
 // copy per document type. Runs inside the transform Worker (worker.ts owns execution; the main-thread
 // orchestration lives in export-document.ts): no Mount, no preview cache.
 
-export function canvasHtmlDocument(opts: {
-    title: string;
-    pages: CanvasPage[];
-    scale: number;
-    mode: HtmlExportMode;
-    resolveMedia?: MediaResolver;
-}): string {
-    const { title, pages, scale, mode, resolveMedia } = opts;
+// A screen document scales its pages; a PDF document has no scale to take, because it lays each page out
+// at 1:1 and htmlToPdf's zoom scales it onto the sheet (DECK_SCALE says why).
+type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?: MediaResolver } & (
+    | { mode: 'screen'; scale: number }
+    | { mode: 'pdf' }
+);
+
+export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
+    const { title, pages, mode, resolveMedia } = opts;
     // The screen document wraps each fixed-size page in the shared fit box, so a downloaded deck reads
     // on a phone; the layers inside stay in scene pixels because that is what packages/lib authors.
     // The PDF document has no viewport to be responsive to — WeasyPrint gives each page a sheet — so
-    // its pages stay unwrapped, laid out at 1:1: htmlToPdf's zoom scales them onto the sheet, because
-    // WeasyPrint cuts a line laid out past the @page height and drops a translucent layer its
-    // parent's scale moves, whatever the scale makes of either.
-    const pageScale = mode === 'pdf' ? 1 : scale;
+    // its pages stay unwrapped, laid out where they print (renderPrintPage).
+    const scale = opts.mode === 'pdf' ? 1 : opts.scale;
     const rendered = pages.map((page) =>
-        mode === 'pdf'
-            ? renderCanvasPage(page, pageScale, resolveMedia)
-            : renderFittedPage(page, pageScale, resolveMedia),
+        mode === 'pdf' ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
     // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
-    // is rounded exactly as renderCanvasPage rounds the page box — a sheet a fraction narrower than
-    // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
-    const width = round(pages[0].width * pageScale);
-    const height = round(pages[0].height * pageScale);
+    // is rounded exactly as the page box is — a sheet a fraction narrower than its content is an extra
+    // blank page in WeasyPrint. Callers guarantee at least one page.
+    const width = round(pages[0].width * scale);
+    const height = round(pages[0].height * scale);
     // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
     // compositor emits ordinary HTML, never a foreignObject.
     const body = rendered.join('');
@@ -74,13 +70,11 @@ export function renderEigenslidesExport(
     const pages = framePages(sanitizeSceneHtml(readVectorFromDoc(doc)), resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
-    const html = canvasHtmlDocument({
-        title,
-        pages,
-        scale: DECK_SCALE,
-        mode: htmlExportMode(format),
-        resolveMedia,
-    });
+    const html = canvasHtmlDocument(
+        htmlExportMode(format) === 'pdf'
+            ? { title, pages, mode: 'pdf', resolveMedia }
+            : { title, pages, mode: 'screen', scale: DECK_SCALE, resolveMedia },
+    );
     return { data: toTransferableText(html), warnings: [] };
 }
 

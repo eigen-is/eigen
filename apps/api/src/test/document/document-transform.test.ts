@@ -785,13 +785,14 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
 // Both doc HTML hashes moved again when the grey of Heading 5, 6 and the subtitle became one rule and the print extras lost the dead text-align classes and the clear-floats list eigen-prose.css carries: those lines, and nothing else.
 // The three deck hashes moved when a page's origin became the scene's top and left instead of a translate: each scene wrapper's style, and nothing else on screen; the pdf-html document also lays its slides out at 1:1, so its @page is 1920 wide and no scene carries a scale.
+// The deck pdf-html hash moved again when a printed page lost its scene wrapper and each layer took its place as top and left, the rotation alone a transform: those styles, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
 const GOLDEN_DECK_PREVIEW_SHA256 = '2ccee93f6ba2f2e8b85bc1a8e96ac45b3fd5f58a473fe256daa69b7736b714fa';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '1396b64d47ed6eaa0851acacbdf3b5d5f2c717cc5c7dab1f5bf85d013e1ac7fe';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'dd373a59ec4d48b7b7f65f2ef620b7d4bbe6f735d1458c6e07fc3227ec473a5d';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'f62897a5f38147fc08f9dce230a8f4335c9fa1fef91d4755d2a6174e15320ab1';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
