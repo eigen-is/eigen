@@ -2,7 +2,7 @@ import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
 import type { TransformWarning } from '../document/transform/protocol';
 import { renderDocHtml } from '../export/doc/render';
-import { sanitizeExportHtml } from '../export/sanitize';
+import { KEEP_MATHML, sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
 const PREVIEW_MAX_BLOCKS = 20;
@@ -34,7 +34,7 @@ export function renderEigendocPreviewBody(
     });
 
     const warnings: TransformWarning[] = [];
-    const sanitized = sanitizeExportHtml(html, { allowedRefs: new Set(mediaUrls.values()) });
+    const sanitized = sanitizeExportHtml(html, { ...KEEP_MATHML, allowedRefs: new Set(mediaUrls.values()) });
     const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
 
     return { body: applyPreviewByteGuard(body, warnings), warnings };

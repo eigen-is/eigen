@@ -12,14 +12,12 @@ import {
     writeMathml,
 } from '@workspace/math';
 
-// The node's attribute set as stored: `mathml` in the package's dialect, the typed LaTeX as its x-tex annotation.
-export type EquationAttrs = {
-    mathml: string;
-    display: boolean;
-    commentCardId: string | null;
-};
+// `mathml` is what the writer wrote for the rest: the one string a consumer mounts.
+export type Equation = { row: MathRow; latex: string | undefined; mathml: string; display: boolean };
 
-export type Equation = { row: MathRow; latex: string | undefined; display: boolean };
+type Read = Omit<Equation, 'display'>;
+
+const EMPTY: Read = { row: [], latex: undefined, mathml: writeMathml([]) };
 
 // Either browser puts a parse error in the document instead of throwing: some as the root, others inside it.
 function parseInBrowser(mathml: string): MathXmlElement | null {
@@ -27,39 +25,51 @@ function parseInBrowser(mathml: string): MathXmlElement | null {
     return doc.getElementsByTagName('parsererror').length > 0 ? null : fromDom(doc.documentElement);
 }
 
-// The one catch around the package: a peer writes the stored attr, anyone the pasted HTML. Past a bound an equation
-// shows its LaTeX as text, which below the size bound writes well within the MathML cap; else it reads as nothing.
-function readMath(math: MathXmlElement): { row: MathRow; latex: string | undefined } | undefined {
-    let latex: string | undefined;
+// The one catch around the package: a peer writes the stored attr, anyone the pasted HTML.
+function unlessRefused<T>(read: () => T): T | undefined {
     try {
-        latex = readMathmlLatex(math);
-        const { row } = readMathml(math);
-        // The annotation counts toward no bound, so only the writer weighs it.
-        writeMathml(row, latex);
-        return { row, latex };
+        return read();
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
+        return undefined;
     }
-    return latex !== undefined && latex.length < MATH_LIMITS.size
-        ? { row: [{ kind: 'text', text: latex }], latex }
-        : undefined;
+}
+
+// The annotation counts toward no bound, so only the writer weighs it, and one it refuses goes while the tree stays.
+// Past a bound an equation shows its LaTeX as text, which below the size bound writes well within the MathML cap;
+// else it reads as nothing.
+function readMath(math: MathXmlElement): Read | undefined {
+    const latex = unlessRefused(() => readMathmlLatex(math));
+    const row = unlessRefused(() => readMathml(math).row);
+    if (row) {
+        const annotated = latex === undefined ? undefined : unlessRefused(() => writeMathml(row, latex));
+        return annotated ? { row, latex, mathml: annotated } : { row, latex: undefined, mathml: writeMathml(row) };
+    }
+    if (latex === undefined || latex.length >= MATH_LIMITS.size) return undefined;
+    const text: MathRow = [{ kind: 'text', text: latex }];
+    return { row: text, latex, mathml: writeMathml(text, latex) };
 }
 
 // Every consumer's read of the attrs: the stored string is never mounted as is, and any string reads as an equation
-// the writers can write. The server passes Bun's parser.
+// the writers can write. Only a string the writer could have written is parsed, so no prolog, DOCTYPE or entity
+// reaches either parser. The server passes Bun's parser.
 export function readEquation(
     attrs: Record<string, unknown>,
     parse: (mathml: string) => MathXmlElement | null = parseInBrowser,
 ): Equation {
     const display = attrs['display'] === true;
     const mathml = attrs['mathml'];
-    const math = typeof mathml === 'string' && mathml.length <= MATH_LIMITS.mathmlLength ? parse(mathml) : null;
-    const read = math && readMath(math);
-    return read ? { ...read, display } : { row: [], latex: undefined, display };
+    const math =
+        typeof mathml === 'string' && mathml.startsWith('<math') && mathml.length <= MATH_LIMITS.mathmlLength
+            ? parse(mathml)
+            : null;
+    return { ...((math && readMath(math)) || EMPTY), display };
 }
 
-// Until the package writes an equation's linear text, its LaTeX stands in.
-const equationText = (node: ProseMirrorNode) => readEquation(node.attrs).latex ?? '';
+// Until the package writes an equation's linear text, its LaTeX stands in. Never the node's leafText: Tiptap's input
+// rules compare their match with textBetween, so a leafText equal to the match's prefix would let a rule replace the
+// equation.
+export const equationText = (node: ProseMirrorNode) => readEquation(node.attrs).latex ?? '';
 
 export const EquationNode = Node.create({
     name: 'equation',
@@ -86,11 +96,6 @@ export const EquationNode = Node.create({
         };
     },
 
-    // ProseMirror's textBetween reads leafText, a field TipTap's config lacks.
-    extendNodeSchema(extension) {
-        return extension.name === this.name ? { leafText: equationText } : {};
-    },
-
     parseHTML() {
         return [
             {
@@ -98,7 +103,7 @@ export const EquationNode = Node.create({
                 namespace: MATHML_NAMESPACE,
                 getAttrs(dom) {
                     const read = readMath(fromDom(dom));
-                    return read ? { mathml: writeMathml(read.row, read.latex) } : false;
+                    return read ? { mathml: read.mathml } : false;
                 },
             },
             // One the package refuses parses as nothing rather than as its tokens' text.
@@ -106,14 +111,15 @@ export const EquationNode = Node.create({
         ];
     },
 
-    // No wrapper: a <math> is phrasing content, so a pasted copy keeps its paragraph whole.
+    // In a span, phrasing content like the <math>, so a pasted copy keeps its paragraph whole. Browsers honour
+    // contenteditable on HTML elements only, so on a bare <math> the caret would enter its tokens.
     renderHTML({ node }) {
-        const { row, latex, display } = readEquation(node.attrs);
-        const math = new DOMParser().parseFromString(writeMathml(row, latex), 'application/xml').documentElement;
+        const { mathml, display } = readEquation(node.attrs);
+        const math = new DOMParser().parseFromString(mathml, 'application/xml').documentElement;
         if (display) math.setAttribute('display', 'block');
         // Spelled like the comment mark's, so a cut equation keeps its card the way cut text does.
         if (node.attrs['commentCardId']) math.setAttribute('data-comment-id', node.attrs['commentCardId']);
-        return { dom: math };
+        return ['span', { contenteditable: 'false' }, math];
     },
 
     renderText({ node }) {

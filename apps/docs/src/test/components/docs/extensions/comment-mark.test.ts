@@ -1,27 +1,98 @@
 import { expect, test } from 'bun:test';
-import { getSchema } from '@tiptap/core';
+import { Editor, getSchema } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
+import { NodeSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { commentAnchorText, nodeCommentCardId } from '../../../../components/docs/extensions/comment-mark';
+import {
+    addCommentAnchor,
+    commentAnchorText,
+    nodeCommentCardId,
+    removeCommentAnchors,
+    selectCommentAnchor,
+} from '../../../../components/docs/extensions/comment-mark';
 
 // An equation reads its stored MathML with DOMParser.
 installHappyDom();
 
 const schema = getSchema(getDocExtensions());
+const x = [{ kind: 'identifier' as const, text: 'x' }];
+const equation = (latex?: string, commentCardId: string | null = null) => ({
+    type: 'equation',
+    attrs: { mathml: writeMathml(x, latex), commentCardId },
+});
+const text = (t: string, ...marks: object[]) => ({ type: 'text', text: t, ...(marks.length > 0 ? { marks } : {}) });
+const paragraph = (...content: object[]) => ({ type: 'doc', content: [{ type: 'paragraph', content }] });
 
-test('a comment on an equation anchors by its attribute and quotes its LaTeX', () => {
-    const mathml = writeMathml([{ kind: 'identifier', text: 'x' }], 'x^2');
-    const doc = schema.nodeFromJSON({
-        type: 'doc',
-        content: [
-            {
-                type: 'paragraph',
-                content: [{ type: 'equation', attrs: { mathml, commentCardId: 'card-1' } }],
-            },
-        ],
+// Each inline node as its name or text, its card by attribute and its card by mark.
+function anchors(doc: Node): [string, string | null, string | null][] {
+    const result: [string, string | null, string | null][] = [];
+    doc.descendants((node) => {
+        if (!node.isInline) return;
+        const mark = node.marks.find((m) => m.type.name === 'comment');
+        result.push([node.text ?? node.type.name, node.attrs.commentCardId ?? null, mark?.attrs.cardId ?? null]);
     });
-    const equation = doc.firstChild?.firstChild;
-    expect(equation && nodeCommentCardId(equation)).toBe('card-1');
+    return result;
+}
+
+test('a comment on an equation anchors by its attribute and quotes its LaTeX, or "Equation" without one', () => {
+    const doc = schema.nodeFromJSON(paragraph(equation('x^2', 'card-1')));
+    const node = doc.firstChild?.firstChild;
+    expect(node && nodeCommentCardId(node)).toBe('card-1');
     expect(commentAnchorText(doc, 0, doc.content.size)).toBe('x^2');
+    const bare = schema.nodeFromJSON(paragraph(equation()));
+    expect(commentAnchorText(bare, 0, bare.content.size)).toBe('Equation');
+});
+
+test('a new card on an equation selected alone anchors as its attribute', () => {
+    const editor = new Editor({ extensions: getDocExtensions(), content: paragraph(text('a '), equation('x')) });
+    addCommentAnchor(editor, { from: 3, to: 4 }, 'card-1');
+    expect(anchors(editor.state.doc)).toEqual([
+        ['a ', null, null],
+        ['equation', 'card-1', null],
+    ]);
+    editor.destroy();
+});
+
+// A mark on the equation would last only until reload.
+test('a new card on text and an equation marks the text alone', () => {
+    const editor = new Editor({ extensions: getDocExtensions(), content: paragraph(text('a '), equation('x')) });
+    addCommentAnchor(editor, { from: 1, to: 4 }, 'card-1');
+    expect(anchors(editor.state.doc)).toEqual([
+        ['a ', null, 'card-1'],
+        ['equation', null, null],
+    ]);
+    editor.destroy();
+});
+
+test("a deleted card leaves no anchor: its text's mark, its figure's and its equation's attribute", () => {
+    const editor = new Editor({
+        extensions: getDocExtensions(),
+        content: paragraph(
+            text('a', { type: 'comment', attrs: { cardId: 'card-1' } }),
+            { type: 'figure', attrs: { mediaName: 'a.png', commentCardId: 'card-1' } },
+            equation('x', 'card-1'),
+            equation('y', 'card-2'),
+        ),
+    });
+    removeCommentAnchors(editor, 'card-1');
+    expect(anchors(editor.state.doc)).toEqual([
+        ['a', null, null],
+        ['figure', null, null],
+        ['equation', null, null],
+        ['equation', 'card-2', null],
+    ]);
+    editor.destroy();
+});
+
+test("scrolling to an equation's card selects the equation", () => {
+    const editor = new Editor({
+        extensions: getDocExtensions(),
+        content: paragraph(text('a '), equation('x', 'card-1')),
+    });
+    selectCommentAnchor(editor, 'card-1');
+    const { selection } = editor.state;
+    expect(selection instanceof NodeSelection && selection.node.type.name).toBe('equation');
+    editor.destroy();
 });

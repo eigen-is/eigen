@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { createDocument, generateHTML, getSchema, getText, getTextSerializersFromSchema } from '@tiptap/core';
+import { createDocument, Editor, generateHTML, getSchema, getText, getTextSerializersFromSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import { Window } from 'happy-dom';
@@ -70,18 +70,20 @@ describe('equation renderHTML', () => {
             getDocExtensions(),
         );
         expect(html).toBe(
-            `<p>a <math xmlns="${MATHML_NAMESPACE}" display="block" data-comment-id="card-1"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math></p>`,
+            `<p>a <span contenteditable="false"><math xmlns="${MATHML_NAMESPACE}" display="block" data-comment-id="card-1"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math></span></p>`,
         );
     });
 
     test('never mounts the stored string: what the writer does not write is gone', () => {
         const forged = `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script><foreignObject><img src="a.png"/></foreignObject></math>`;
         const html = generateHTML(equationDoc({ mathml: forged }).toJSON(), getDocExtensions());
-        expect(html).toBe(`<p>a ${MATH}<mi>x</mi></math></p>`);
+        expect(html).toBe(`<p>a <span contenteditable="false">${MATH}<mi>x</mi></math></span></p>`);
     });
 
     test('an empty equation renders an empty <math> for the node view to box', () => {
-        expect(generateHTML(equationDoc({}).toJSON(), getDocExtensions())).toBe(`<p>a ${MATH}</math></p>`);
+        expect(generateHTML(equationDoc({}).toJSON(), getDocExtensions())).toBe(
+            `<p>a <span contenteditable="false">${MATH}</math></span></p>`,
+        );
     });
 });
 
@@ -125,21 +127,31 @@ describe('equation parseHTML', () => {
 });
 
 describe('readEquation', () => {
-    test('reads a stored equation to its tree, LaTeX and display', () => {
-        expect(readEquation({ mathml: writeMathml(xSquared, 'x^2'), display: true })).toEqual({
-            row: xSquared,
-            latex: 'x^2',
-            display: true,
-        });
+    const empty = { row: [], latex: undefined, mathml: `${MATH}</math>`, display: false };
+
+    test('reads a stored equation to its tree, LaTeX, written MathML and display', () => {
+        const mathml = writeMathml(xSquared, 'x^2');
+        expect(readEquation({ mathml, display: true })).toEqual({ row: xSquared, latex: 'x^2', mathml, display: true });
     });
 
     test('a value of the wrong type reads as an empty inline equation', () => {
-        expect(readEquation({ mathml: 7, display: 'true' })).toEqual({ row: [], latex: undefined, display: false });
+        expect(readEquation({ mathml: 7, display: 'true' })).toEqual(empty);
     });
 
     test('an empty or malformed string reads as an empty equation', () => {
         for (const mathml of ['', `${MATH}<mi>x</mi>`, 'x^2']) {
-            expect(readEquation({ mathml })).toEqual({ row: [], latex: undefined, display: false });
+            expect(readEquation({ mathml })).toEqual(empty);
+        }
+    });
+
+    // Bun's parser refuses a DOCTYPE; the browser's would expand its entities, so the two would disagree.
+    test('a prolog, DOCTYPE or entity declaration reads as an empty equation, as on the server', () => {
+        for (const mathml of [
+            `<!DOCTYPE math [<!ENTITY e "x">]>${MATH}<mi>&e;</mi></math>`,
+            `<?xml version="1.0"?>${MATH}<mi>x</mi></math>`,
+            ` ${MATH}<mi>x</mi></math>`,
+        ]) {
+            expect(readEquation({ mathml })).toEqual(empty);
         }
     });
 
@@ -161,33 +173,72 @@ describe('readEquation', () => {
 
     test('a tree past a bound shows its LaTeX as text', () => {
         const mathml = `${MATH}<semantics><mrow>${tooDeep}</mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>`;
+        const row: MathRow = [{ kind: 'text', text: 'x^2' }];
         expect(readEquation({ mathml })).toEqual({
-            row: [{ kind: 'text', text: 'x^2' }],
+            row,
             latex: 'x^2',
+            mathml: writeMathml(row, 'x^2'),
             display: false,
         });
         expect(readEquation({ mathml: `${MATH}${tooDeep}</math>` }).row).toEqual([]);
     });
 
-    test('an annotation the writer refuses reads as an empty equation', () => {
+    test('an annotation the writer refuses goes, and the tree stays', () => {
         const quotes = '"'.repeat(MATH_LIMITS.mathmlLength / 4);
         const mathml = `${MATH}<semantics><mi>x</mi><annotation encoding="application/x-tex">${quotes}</annotation></semantics></math>`;
         expect(mathml.length).toBeLessThan(MATH_LIMITS.mathmlLength);
-        const { row, latex } = readEquation({ mathml });
-        expect(() => writeMathml(row, latex)).not.toThrow();
-        expect({ row, latex }).toEqual({ row: [], latex: undefined });
+        expect(readEquation({ mathml })).toEqual({ row: x, latex: undefined, mathml: writeMathml(x), display: false });
     });
 
     test('takes the caller’s parser', () => {
-        expect(readEquation({ mathml: 'anything' }, () => null).row).toEqual([]);
+        expect(readEquation({ mathml: writeMathml(x) }, () => null).row).toEqual([]);
     });
 });
 
 describe('equation text', () => {
-    test('the LaTeX is its text for textBetween and getText, else nothing', () => {
-        const doc = equationDoc({ mathml: writeMathml(xSquared, 'x^2') });
-        expect(doc.textBetween(0, doc.content.size)).toBe('a x^2');
-        expect(getText(doc, { textSerializers: getTextSerializersFromSchema(schema) })).toBe('a x^2');
-        expect(equationDoc({ mathml: writeMathml(xSquared) }).textBetween(0, doc.content.size)).toBe('a ');
+    test('the LaTeX is its plain text, else nothing', () => {
+        const serializers = { textSerializers: getTextSerializersFromSchema(schema) };
+        expect(getText(equationDoc({ mathml: writeMathml(xSquared, 'x^2') }), serializers)).toBe('a x^2');
+        expect(getText(equationDoc({ mathml: writeMathml(xSquared) }), serializers)).toBe('a ');
+    });
+
+    // An input rule checks its match against textBetween, so an equation read there as its LaTeX would be replaced.
+    describe('typing after an equation never replaces it', () => {
+        // A paragraph of `before`, an equation of `latex`, the caret after it; then `typed`, one key at a time, as
+        // ProseMirror hands each to the input rules before inserting it.
+        function typeAfter(before: string, latex: string, typed: string): ProseMirrorNode {
+            const equation = { type: 'equation', attrs: { mathml: writeMathml(x, latex) } };
+            const content = [
+                { type: 'paragraph', content: [...(before ? [{ type: 'text', text: before }] : []), equation] },
+            ];
+            const editor = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
+            editor.commands.setTextSelection(before.length + 2);
+            for (const key of typed) {
+                const { view } = editor;
+                const { from, to } = view.state.selection;
+                const insert = () => view.state.tr.insertText(key, from, to);
+                if (!view.someProp('handleTextInput', (handle) => handle(view, from, to, key, insert))) {
+                    view.dispatch(insert());
+                }
+            }
+            const { doc } = editor.state;
+            editor.destroy();
+            return doc;
+        }
+
+        const read = (doc: ProseMirrorNode) =>
+            doc.textBetween(0, doc.content.size, '', (leaf) => `[${readEquation(leaf.attrs).latex}]`);
+
+        test('"(c" then ")" stays, not ©', () => {
+            expect(read(typeAfter('light (', 'c', ')'))).toBe('light ([c])');
+        });
+
+        test('"-" then "-" stays, not an em dash', () => {
+            expect(read(typeAfter('', '-', '-'))).toBe('[-]-');
+        });
+
+        test('a rule matched by the text typed after it still applies', () => {
+            expect(read(typeAfter('', 'x', ' --'))).toBe('[x] —');
+        });
     });
 });

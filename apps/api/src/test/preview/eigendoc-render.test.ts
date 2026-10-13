@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';
@@ -39,6 +40,17 @@ describe('renderEigendocPreviewBody', () => {
         expect(body).toContain(MEDIA_URL);
         expect(body).toContain('href="https://example.com/report"');
         expect(body).not.toMatch(/<script/i);
+    });
+
+    // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
+    test("an equation's prescript keeps its empty slot", () => {
+        const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+        const mathml = writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]);
+        const body = previewOf({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'equation', attrs: { mathml } }] }],
+        });
+        expect(body).toContain('<mprescripts></mprescripts><mn>1</mn><none></none>');
     });
 
     test('an ordered list keeps its start and its type, as the export draws them', () => {

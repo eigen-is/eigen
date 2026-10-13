@@ -315,6 +315,16 @@ describe('doc export — equations', () => {
         expect(html).not.toContain('x-tex');
     });
 
+    // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
+    test('a prescript keeps its empty slot', async () => {
+        const html = await exportHtml({
+            mathml: writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]),
+        });
+        expect(html).toContain(
+            '<mmultiscripts><mi>x</mi><mprescripts></mprescripts><mn>1</mn><none></none></mmultiscripts>',
+        );
+    });
+
     test('a forged or malformed stored string never reaches the HTML', async () => {
         const html = await exportHtml(
             { mathml: `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script></math>` },
