@@ -170,6 +170,12 @@ describe("the own reader's output budget", () => {
         });
     });
 
+    test('every sheet counts the default grid recalc gives it, an empty one too', () => {
+        const empty = (count: number) => xlsxFixture({ sheets: Array.from({ length: count }, () => ({})) });
+        expect(xlsxToSheetsOwn(empty(1_500))).toHaveLength(1_500);
+        expect(refused(empty(1_600))).toEqual({ status: 413, message: 'Spreadsheet has too many cells' });
+    });
+
     test("the zip's and the XML's refusals speak of a spreadsheet", () => {
         expect(refused(new Uint8Array(64))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
         expect(refused(buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 300 * 1024 * 1024))).toEqual({

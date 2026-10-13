@@ -16,6 +16,8 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import {
     booleanDisplay,
     cellWrapsText,
+    DEFAULT_SHEET_COLUMN_COUNT,
+    DEFAULT_SHEET_ROW_COUNT,
     iscelldata,
     numberDisplay,
     parseA1Range,
@@ -73,8 +75,8 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 }
 
 // The reader of our own, beside ExcelJS's until the import switches to it: every worksheet's grid, charged against the
-// output budget as it is read. The cells count what they emit, a value or a border, and the grids the span recalc
-// materialises; the text counts every value, display and formula, each shared string and shared formula once per copy.
+// output budget as it is read. The cells count what they emit, a value, a border, a row's height or hidden flag, and
+// the grids recalc materialises; the text counts every value, display and formula, each shared string and shared formula once per copy.
 export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
     try {
         const book = readPackage(bytes);
@@ -93,7 +95,9 @@ export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
             const grid = readGrid(part, { looks, strings, date1904: book.date1904, palette, charge });
-            emitted.span += grid.rows * grid.columns;
+            // Recalc materialises at least the default grid of a sheet, an empty one too.
+            emitted.span +=
+                Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
             if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
             // The columns, merges, views, filter, links, conditional formats and validations are read from grid.rest
             // when they move over; until then a height is estimated at the default column width.

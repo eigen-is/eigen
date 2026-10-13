@@ -29,7 +29,8 @@ export type GridContext = {
     strings: SharedString[];
     date1904: boolean;
     palette: ThemePalette;
-    // Called for each cell the grid emits, a value or a border, with the characters it writes; throws past the budget.
+    // Called for each cell the grid emits, a value or a border, with the characters it writes, and for each row's height
+    // and hidden flag; throws past the budget.
     charge(text: number): void;
 };
 
@@ -55,9 +56,15 @@ export function readGrid(part: Uint8Array, context: GridContext): Grid {
     for (const row of children) {
         const reference = xmlAttr(row, '', 'r');
         r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
-        if (isOn(xmlAttr(row, '', 'hidden'))) grid.rowhidden[r] = 0;
+        if (isOn(xmlAttr(row, '', 'hidden')) && !(r in grid.rowhidden)) {
+            context.charge(0);
+            grid.rowhidden[r] = 0;
+        }
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
-        if (height > 0) grid.heights.set(r, height);
+        if (height > 0) {
+            if (!grid.heights.has(r)) context.charge(0);
+            grid.heights.set(r, height);
+        }
         let c = -1;
         for (const element of xmlChildren(row, SML_NS, 'c')) {
             c = indexOf(columnNumber(xmlAttr(element, '', 'r')), c, REFERENCE_COLUMN_COUNT);

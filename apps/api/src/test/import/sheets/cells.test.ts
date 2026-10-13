@@ -193,6 +193,11 @@ describe('the grid', () => {
         expect(charged).toEqual([6, 5, 0]);
     });
 
+    test("charges each row's height and hidden flag it keeps, once per row", () => {
+        const { charged } = read('<row r="1" hidden="1" ht="30"/><row r="1" hidden="1" ht="20"/><row r="2" ht="15"/>');
+        expect(charged).toEqual([0, 0, 0]);
+    });
+
     test('charges every copy of a shared formula with its own text', () => {
         const { charged, cell } = read(
             '<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1+1</f></c></row><row r="2"><c r="A2"><f t="shared" si="0"/></c></row><row r="3"><c r="A3"><f t="shared" si="0"/></c></row>',
