@@ -108,6 +108,45 @@ describe('a bar chart', () => {
         expect(flat).toEqual(spec(space(bar() + AXES)));
     });
 
+    // Excel's minMax category axis runs up from the origin; a spec's bar chart lists its categories down from the top.
+    test('a horizontal bar chart lists its categories top down, as Excel draws them', () => {
+        const flipped = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
+        expect(flipped.data).toMatchObject({
+            categories: ['East', 'South', 'North'],
+            series: [{ values: [3, 2, 1] }, { values: [6, 5, 4.5] }],
+        });
+        const noAxes = spec(space(bar(TWO_SERIES, { dir: 'bar' })));
+        expect(noAxes.data).toMatchObject({ categories: ['East', 'South', 'North'] });
+        const reversed = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
+        expect(reversed.data).toMatchObject({
+            categories: CATEGORIES,
+            series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
+        });
+    });
+
+    test('a reversed category axis on a column chart reverses its categories', () => {
+        expect(spec(space(bar() + AXES.replace('minMax', 'maxMin'))).data).toMatchObject({
+            categories: ['East', 'South', 'North'],
+            series: [{ values: [3, 2, 1] }, { values: [6, 5, 4.5] }],
+        });
+    });
+
+    test('a short series stays under its own categories when they turn', () => {
+        const short = [{ idx: 0, name: 'A', values: [1, 2] }];
+        expect(spec(space(bar(short, { dir: 'bar' }) + AXES)).data).toMatchObject({
+            categories: ['East', 'South', 'North'],
+            series: [{ values: [null, 2, 1] }],
+        });
+    });
+
+    test('a reversed value axis is no spec', () => {
+        const axes = AXES.replace(
+            '<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>',
+            '<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="maxMin"/>',
+        );
+        expect(read(space(bar() + axes))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+    });
+
     test('percent stacked is no spec, its title kept', () => {
         expect(read(space(bar(TWO_SERIES, { grouping: 'percentStacked' }) + AXES, { head: title('Mix') }))).toEqual({
             unsupported: { title: 'Mix', type: 'barChart' },
@@ -191,9 +230,7 @@ describe('a chart with no spec', () => {
 
     test('two chart groups, secondary axes or a log scale are no spec', () => {
         const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 2, name: 'L', values: [1] })}</c:lineChart>`;
-        expect(read(space(bar() + line + AXES))).toEqual({
-            unsupported: { title: '', type: 'barChart+lineChart' },
-        });
+        expect(read(space(bar() + line + AXES))).toEqual({ unsupported: { title: '', type: 'barChart' } });
         const secondary = AXES.replace('</c:valAx>', '</c:valAx><c:valAx><c:axId val="3"/></c:valAx>');
         expect(read(space(bar() + secondary))).toEqual({ unsupported: { title: '', type: 'barChart' } });
         const log = AXES.replace(
@@ -201,6 +238,11 @@ describe('a chart with no spec', () => {
             '<c:logBase val="10"/><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/>',
         );
         expect(read(space(bar() + log))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+    });
+
+    test("the type is the first group's name, cut to the label limit", () => {
+        const name = `${'x'.repeat(300)}Chart`;
+        expect(read(space(`<c:${name}/>`))).toEqual({ unsupported: { title: '', type: name.slice(0, 200) } });
     });
 
     test('a plot area with no chart group is no spec', () => {
@@ -226,6 +268,35 @@ describe('the data from the caches', () => {
         expect(read.data).toMatchObject({ categories: ['2023', '2024.5'], series: [{ values: [7, -1000] }] });
     });
 
+    test('a numeric category cache shows in its format; text in it and General keep the cached text', () => {
+        const cat = numRef('Sheet1!$A$2:$A$4', [43831, 43862, null], 'mmm yyyy').replace(
+            '<c:pt idx="1"><c:v>43862</c:v></c:pt>',
+            '<c:pt idx="1"><c:v>43862</c:v></c:pt><c:pt idx="2"><c:v>later</c:v></c:pt>',
+        );
+        expect(spec(space(bar([{ idx: 0, name: 'A', values: [1, 2, 3], cat }]) + AXES)).data.categories).toEqual([
+            'Jan 2020',
+            'Feb 2020',
+            'later',
+        ]);
+        const general = numRef('Sheet1!$A$2:$A$3', [2023, 2024.5]);
+        expect(spec(space(bar([{ idx: 0, name: 'A', values: [1, 2], cat: general }]) + AXES)).data.categories).toEqual([
+            '2023',
+            '2024.5',
+        ]);
+    });
+
+    test('a line chart of many series over a long group reads in time', () => {
+        const series = Array.from({ length: MAX_CHART_SERIES }, (_, idx) => ser({ idx, name: `S${idx}`, values: [1] }));
+        const filler = '<c:axId val="1"/>'.repeat(200_000);
+        const root = parseOoxml(
+            space(`<c:lineChart><c:grouping val="standard"/>${series.join('')}${filler}</c:lineChart>${AXES}`),
+        );
+        if (!root) throw new Error('no root');
+        const started = performance.now();
+        expect('spec' in readChart(root, { theme, data: 'cache' })).toBe(true);
+        expect(performance.now() - started).toBeLessThan(500);
+    });
+
     test('multi-level categories read their innermost level', () => {
         const cat = `<c:multiLvlStrRef><c:f>Sheet1!$A$2:$B$4</c:f><c:multiLvlStrCache><c:ptCount val="3"/><c:lvl>${pts(['Jan', 'Feb', 'Mar'])}</c:lvl><c:lvl>${pts(['Q1', null, null])}</c:lvl></c:multiLvlStrCache></c:multiLvlStrRef>`;
         expect(spec(space(bar([{ idx: 0, name: 'A', values: [1, 2, 3], cat }]) + AXES)).data).toMatchObject({
@@ -241,7 +312,7 @@ describe('the data from the caches', () => {
         });
         expect(performance.now() - started).toBeLessThan(100);
         const noCount = huge.replace('<c:ptCount val="1000000000"/>', '');
-        expect(read(space(noCount + AXES))).toEqual({ unsupported: { title: 'Series1', type: 'barChart' } });
+        expect(read(space(noCount + AXES))).toEqual({ unsupported: { title: '', type: 'barChart' } });
     });
 
     test('more points in all than the limit, or more series than the limit, is no spec', () => {
@@ -286,11 +357,13 @@ describe('the title', () => {
     test('a title with no text is the series name for one series, Chart Title for more', () => {
         const auto = '<c:title><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>';
         expect(spec(space(bar(one) + AXES, { head: auto })).title).toBe('Revenue');
+        expect(spec(space(bar([{ idx: 0, values: [1] }]) + AXES, { head: auto })).title).toBe('');
         expect(spec(space(bar() + AXES, { head: auto })).title).toBe('Chart Title');
     });
 
     test('no title and an auto title not deleted shows the only series name', () => {
         expect(spec(space(bar(one) + AXES)).title).toBe('Revenue');
+        expect(spec(space(bar([{ idx: 0, values: [1] }]) + AXES)).title).toBe('');
         expect(spec(space(bar() + AXES)).title).toBe('');
         expect(spec(space(bar(one) + AXES, { head: '<c:autoTitleDeleted val="1"/>' })).title).toBe('');
         expect(spec(space(bar(one) + AXES, { head: '<c:autoTitleDeleted/>' })).title).toBe('');
@@ -340,6 +413,9 @@ describe('the axes, legend and blanks', () => {
     test('dispBlanksAs reads as blanks', () => {
         expect(spec(space(bar() + AXES).replace('val="gap"', 'val="span"')).blanks).toBe('span');
         expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '')).blanks).toBe('gap');
+        expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '<c:dispBlanksAs/>')).blanks).toBe(
+            'zero',
+        );
     });
 });
 
@@ -430,6 +506,13 @@ describe('range data for a workbook', () => {
         }
         const literal = `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart>`;
         expect('unsupported' in read(space(literal + AXES), ranges)).toBe(true);
+    });
+
+    test('a horizontal bar chart over ranges is no spec unless its categories already run top down', () => {
+        expect('unsupported' in read(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES), ranges)).toBe(true);
+        expect('unsupported' in read(space(bar() + AXES.replace('minMax', 'maxMin')), ranges)).toBe(true);
+        const reversed = byRange(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
+        expect(reversed.data.categories).toEqual({ sheetId: 's1', row: [1, 3], column: [0, 0] });
     });
 
     test('an empty c:cat or c:val names no cells', () => {

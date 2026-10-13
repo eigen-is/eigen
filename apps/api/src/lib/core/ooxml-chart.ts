@@ -8,6 +8,7 @@ import {
     type ChartType,
     type LegendPosition,
 } from '@workspace/lib/types/chart';
+import { numberDisplay } from '@workspace/sheet/engine';
 import { type DrawingTheme, drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from './xml';
@@ -29,7 +30,7 @@ const TYPES = new Map<string, ChartType>([
     ['pie3DChart', 'pie'],
 ]);
 
-const LEGEND_POSITIONS = new Map<string, LegendPosition>([
+const LEGEND_BY_POSITION = new Map<string, LegendPosition>([
     ['t', 'top'],
     ['b', 'bottom'],
     ['l', 'left'],
@@ -46,31 +47,31 @@ function unsupported(): never {
     throw UNSUPPORTED;
 }
 
-export function readChart(root: XmlElement, options: { theme: DrawingTheme; data: ChartSource }): ChartRead {
+export function readChart(root: XmlElement, { theme, data }: { theme: DrawingTheme; data: ChartSource }): ChartRead {
     const chart = hasXmlName(root, C_NS, 'chartSpace') ? child(root, 'chart') : undefined;
     const plotArea = child(chart, 'plotArea');
     const groups = elements(plotArea).filter((element) => element.ns === C_NS && element.local.endsWith('Chart'));
     const title = chartTitle(chart, groups);
-    const type = groups.map((group) => group.local).join('+');
+    const override = child(root, 'clrMapOvr');
+    const colors = override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
     try {
         const [group] = groups;
         if (!group || groups.length > 1) unsupported();
-        const spec = parseChartSpec(JSON.stringify(chartSpec(root, group, title, options)));
+        const spec = parseChartSpec(JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title }));
         if (spec) return { spec };
     } catch (error) {
         if (error !== UNSUPPORTED) throw error;
     }
-    return { unsupported: { title, type } };
+    return { unsupported: { title, type: groups.length > 0 ? chartLabel(groups[0].local) : '' } };
 }
 
 function chartSpec(
-    root: XmlElement,
+    chart: XmlElement | undefined,
+    plotArea: XmlElement | undefined,
     group: XmlElement,
-    title: string,
-    { theme, data }: { theme: DrawingTheme; data: ChartSource },
-): ChartSpec {
-    const chart = child(root, 'chart');
-    const plotArea = child(chart, 'plotArea');
+    colors: DrawingTheme,
+    data: ChartSource,
+): Omit<ChartSpec, 'title'> {
     const kind = TYPES.get(group.local) ?? unsupported();
     const type = kind === 'column' && val(child(group, 'barDir')) === 'bar' ? 'bar' : kind;
     const grouping = val(child(group, 'grouping')) ?? (type === 'line' ? 'standard' : 'clustered');
@@ -81,8 +82,14 @@ function chartSpec(
     const valueAxes = children(plotArea, 'valAx');
     const categoryAxes = [...children(plotArea, 'catAx'), ...children(plotArea, 'dateAx')];
     const [valueAxis] = valueAxes;
+    const [categoryAxis] = categoryAxes;
     const scaling = child(valueAxis, 'scaling');
+    const orientation = (axis: XmlElement | undefined) => val(child(child(axis, 'scaling'), 'orientation'));
     if (valueAxes.length > 1 || categoryAxes.length > 1 || child(scaling, 'logBase')) unsupported();
+    if (orientation(valueAxis) === 'maxMin') unsupported();
+    // Excel's minMax category axis runs from the origin, so up a bar chart's side; a spec lists a bar chart's
+    // categories top down, and a column or line chart's left to right.
+    const reversed = (type === 'bar') !== (orientation(categoryAxis) === 'maxMin');
 
     const all = children(group, 'ser');
     if (all.length > MAX_CHART_SERIES) unsupported();
@@ -91,21 +98,19 @@ function chartSpec(
         .sort((a, b) => a.order - b.order)
         .map(({ ser }) => ser);
     const series = type === 'pie' ? ordered.slice(0, 1) : ordered;
-    const override = child(root, 'clrMapOvr');
-    const colors = override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
     const accent = (index: number) => {
         const slot = index < 6 ? colors.map.get(`accent${index + 1}`) : undefined;
         return (slot && colors.scheme.get(slot)) ?? chartColor(index);
     };
     const fillColor = (shape: XmlElement | undefined) =>
         drawingColor(shape && xmlChild(shape, A_NS, 'solidFill'), colors);
+    const markers = type === 'line' && flag(child(group, 'marker')) !== false;
     const style = (ser: XmlElement): ChartSeriesStyle => {
         const shape = child(ser, 'spPr');
         const fill = type === 'line' ? shape && xmlChild(shape, A_NS, 'ln') : shape;
-        const symbol = val(child(child(ser, 'marker'), 'symbol'));
         return {
             color: fillColor(fill) ?? accent(count(val(child(ser, 'idx'))) ?? 0),
-            markers: type === 'line' && symbol !== 'none' && flag(child(group, 'marker')) !== false,
+            markers: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none',
             smooth: type === 'line' && flag(child(ser, 'smooth')) === true,
         };
     };
@@ -114,20 +119,19 @@ function chartSpec(
     const categories = series.map((ser) => child(ser, 'cat')).find(Boolean);
     const numFmt = child(valueAxis, 'numFmt');
     const linked = !numFmt || isOn(xmlAttr(numFmt, '', 'sourceLinked')) === true;
-    const valueCache = child(child(child(first, 'val'), 'numRef'), 'numCache');
     const format = linked
         ? data === 'cache'
-            ? xmlTrimmedText(child(valueCache, 'formatCode'))
+            ? xmlTrimmedText(child(cacheOf(child(first, 'val')), 'formatCode'))
             : undefined
         : xmlAttr(numFmt, '', 'formatCode');
-    const blanks = val(child(chart, 'dispBlanksAs'));
+    const blanks = child(chart, 'dispBlanksAs');
     const presentation = {
         type,
         stacked,
-        title,
         legend: legendPosition(child(chart, 'legend')),
-        blanks: CHART_BLANKS.find((option) => option === blanks) ?? 'gap',
-        categoryAxis: { title: axisTitle(categoryAxes[0]) },
+        // CT_DispBlanksAs: present without a val is zero.
+        blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
+        categoryAxis: { title: axisTitle(categoryAxis) },
         valueAxis: {
             title: axisTitle(valueAxis),
             min: numberOf(val(child(scaling, 'min'))),
@@ -151,22 +155,35 @@ function chartSpec(
     };
 
     if (data === 'cache') {
-        const values = series.map((ser) => cachedPoints(child(ser, 'val')).map(numberOf));
+        const values = series.map((ser) => cachedPoints(cacheOf(child(ser, 'val'))).map(numberOf));
+        const cache = cacheOf(categories);
+        const categoryFormat = cache?.local.startsWith('num') ? xmlTrimmedText(child(cache, 'formatCode')) : '';
+        const label = (point: string | undefined) => {
+            const number = categoryFormat && categoryFormat !== 'General' ? numberOf(point) : null;
+            return chartLabel(number === null ? (point ?? '') : numberDisplay(number, categoryFormat));
+        };
+        const labels = cachedPoints(cache).map(label);
         const longest = values.reduce((most, points) => Math.max(most, points.length), 0);
-        const labels = categories
-            ? cachedPoints(categories).map((point) => chartLabel(point ?? ''))
-            : Array.from({ length: longest }, (_, i) => String(i + 1));
+        const length = Math.max(labels.length, longest);
+        const turned = <T>(points: T[], blank: T): T[] =>
+            reversed ? Array.from({ length }, (_, i) => points[length - 1 - i] ?? blank) : points;
         return {
             ...presentation,
-            sliceColors: slices(Math.max(labels.length, longest)),
+            sliceColors: slices(length),
             data: {
                 source: 'inline',
-                categories: labels,
-                series: series.map((ser, i) => ({ ...style(ser), name: seriesName(ser), values: values[i] })),
+                categories: turned(categories ? labels : Array.from({ length }, (_, i) => String(i + 1)), ''),
+                series: series.map((ser, i) => ({
+                    ...style(ser),
+                    name: seriesName(ser),
+                    values: turned(values[i], null),
+                })),
             },
         };
     }
 
+    // A range can't be read backwards.
+    if (reversed) unsupported();
     // A literal has no cells to name; an empty c:cat or c:val names none.
     const range = (source: XmlElement | undefined): CellRangeRef | null => {
         const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
@@ -205,14 +222,14 @@ function chartSpec(
 }
 
 // Excel's: no title of its own shows the only series' name unless the auto title was deleted; a title element with no
-// text shows that name too, or a placeholder when there are more series.
+// text shows that name too, or a placeholder when there are more series. A series without a name gives none.
 function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string {
     const title = child(chart, 'title');
     const text = cachedText(child(title, 'tx'));
     if (text !== undefined) return chartLabel(text);
     if (!title && flag(child(chart, 'autoTitleDeleted')) !== false) return '';
     const series = groups.flatMap((group) => children(group, 'ser'));
-    if (series.length === 1) return seriesName(series[0]);
+    if (series.length === 1) return chartLabel(cachedText(child(series[0], 'tx')) ?? '');
     return title ? 'Chart Title' : '';
 }
 
@@ -225,7 +242,7 @@ function axisTitle(axis: XmlElement | undefined): string {
 
 function legendPosition(legend: XmlElement | undefined): LegendPosition {
     if (!legend) return 'none';
-    return LEGEND_POSITIONS.get(val(child(legend, 'legendPos')) ?? 'r') ?? 'right';
+    return LEGEND_BY_POSITION.get(val(child(legend, 'legendPos')) ?? 'r') ?? 'right';
 }
 
 // Excel names a series without a name by its index.
@@ -245,13 +262,17 @@ function cachedText(tx: XmlElement | undefined): string | undefined {
     return points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
 }
 
-// A c:cat's or c:val's points by index, a missing point undefined: a ref's cache or a literal, a multi-level cache's
-// innermost level. The count comes from the file, so it is bounded before anything is built.
-function cachedPoints(source: XmlElement | undefined): (string | undefined)[] {
+// A c:cat's or c:val's point container: a ref's cache or a literal.
+function cacheOf(source: XmlElement | undefined): XmlElement | undefined {
     const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
-    const cache = ref
+    return ref
         ? (child(ref, 'numCache') ?? child(ref, 'strCache') ?? child(ref, 'multiLvlStrCache'))
         : (child(source, 'numLit') ?? child(source, 'strLit'));
+}
+
+// A cache's points by index, a missing point undefined, a multi-level cache's innermost level. The count comes from
+// the file, so it is bounded before anything is built.
+function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
     const points = children(child(cache, 'lvl') ?? cache, 'pt');
     let total = count(val(child(cache, 'ptCount')));
     if (total === undefined) {

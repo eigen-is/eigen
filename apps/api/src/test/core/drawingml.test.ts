@@ -6,6 +6,7 @@ import {
     IDENTITY_COLOR_MAP,
     readColorMap,
     readColorScheme,
+    SCHEME_SLOTS,
 } from '../../lib/core/drawingml';
 import { A_NS, parseOoxml } from '../../lib/core/ooxml';
 import { xmlElements } from '../../lib/core/xml';
@@ -40,6 +41,7 @@ const color = (fill: string, ns = A_NS, use = theme) => drawingColor(read(fill, 
 
 describe("a theme's colour scheme", () => {
     test('reads every slot, a system colour by its last colour', () => {
+        expect([...scheme.keys()]).toEqual([...SCHEME_SLOTS]);
         expect(Object.fromEntries(scheme)).toEqual({
             dk1: '#000000',
             lt1: '#ffffff',
@@ -129,6 +131,8 @@ describe('a DrawingML colour', () => {
         );
         expect(color('<a:srgbClr val="F00"/>')).toBeUndefined();
         expect(color('<a:prstClr val="currentColor"/>')).toBeUndefined();
+        expect(color('<a:prstClr val="transparent"/>')).toBeUndefined();
+        expect(color('<a:prstClr val="rebeccaPurple"/>')).toBeUndefined();
         expect(color('<a:prstClr val="rgb(1,2,3)"/>')).toBeUndefined();
         expect(color('<a:sysClr val="windowText"/>')).toBeUndefined();
         expect(color('<a:noFill/>')).toBeUndefined();

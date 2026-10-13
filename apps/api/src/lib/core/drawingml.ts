@@ -10,7 +10,8 @@ export type ColorScheme = ReadonlyMap<string, string>;
 export type ColorMap = ReadonlyMap<string, string>;
 export type DrawingTheme = { scheme: ColorScheme; map: ColorMap };
 
-const SCHEME_SLOTS = [
+// A theme's slots in a:clrScheme's order.
+export const SCHEME_SLOTS: readonly string[] = [
     'dk1',
     'lt1',
     'dk2',
@@ -119,9 +120,12 @@ function hexRgba(hex: string | undefined): Rgba | undefined {
     return [(value >> 16) / 255, ((value >> 8) & 0xff) / 255, (value & 0xff) / 255, 1];
 }
 
+// CSS colour keywords ECMA-376 has no preset for.
+const NOT_PRESETS = new Set(['transparent', 'rebeccapurple']);
+
 // ECMA-376's preset names are CSS's colour keywords, dark, light and medium shortened.
 function presetRgba(name: string | undefined): Rgba | undefined {
-    if (!name || !/^[a-z]+$/i.test(name)) return undefined;
+    if (!name || !/^[a-z]+$/i.test(name) || NOT_PRESETS.has(name.toLowerCase())) return undefined;
     const keyword = name.replace(/^(dk|lt|med)(?=[A-Z])/, (prefix) =>
         prefix === 'dk' ? 'dark' : prefix === 'lt' ? 'light' : 'medium',
     );
@@ -210,6 +214,7 @@ function fromHsl(hue: number, sat: number, lum: number): [number, number, number
 }
 
 // A text body's (c:rich, a:txBody) plain text: a line per paragraph and per break, runs and fields joined.
+// The docx import's drawingLine (import/doc/drawings.ts) walks runs the same way into rich text; to unify later.
 export function drawingLines(body: XmlElement): string[] {
     const lines: string[] = [];
     for (const paragraph of xmlElements(body)) {
