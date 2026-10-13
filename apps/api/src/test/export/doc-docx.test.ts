@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import JSZip from 'jszip';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
@@ -1987,6 +1988,24 @@ describe('docx writer — figures', () => {
             `<w:p>${run('b')}</w:p>`,
             caption('center', 220 + 165 + 23, 165 + 220),
         ]);
+    });
+
+    // T4-R12: until the docx writes Word charts, a chart is left out and its caption kept, as a figure without media.
+    test('a chart is left out, its caption kept as a figure without media keeps it', async () => {
+        const spec = JSON.stringify(sampleChartSpec('column'));
+        const chart = (attrs: Record<string, unknown>) => ({ type: 'chart', attrs: { spec, width: 600, ...attrs } });
+        const charts = doc(
+            p(text('a'), chart({ caption: 'Lost', alignment: 'right' }), text('b')),
+            p(chart({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+            p(text('c'), chart({})),
+        );
+        const figures = doc(
+            p(text('a'), figure({ mediaName: 'gone', caption: 'Lost', alignment: 'right' }), text('b')),
+            p(figure({ mediaName: 'gone', caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+            p(text('c'), figure({ mediaName: 'gone' })),
+        );
+        expect(await blocksOf(charts)).toEqual(await blocksOf(figures));
+        expect((await unzip(charts)).names().filter((name) => /chart|media/.test(name))).toEqual([]);
     });
 
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {

@@ -600,7 +600,8 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
-        if (node.type === 'figure') {
+        // A chart writes as a figure without media, its caption alone, until the docx writes Word charts (T4-R12).
+        if (node.type === 'figure' || node.type === 'chart') {
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();

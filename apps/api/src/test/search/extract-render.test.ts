@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
@@ -66,6 +67,32 @@ describe('extractCollabText', () => {
             content: [{ type: 'paragraph', content: [caps('Typed Words', 'all'), caps(' Small Caps', 'small')] }],
         });
         expect((await extractCollabText('eigendoc', doc)).text).toBe('Typed Words  Small Caps');
+        doc.destroy();
+    });
+
+    // A figure's caption and a chart's text are attributes, which no text node holds.
+    test("eigendoc: a figure's caption, and a chart's caption, titles, series and categories, index as text", async () => {
+        const doc = new Y.Doc();
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Before' },
+                        { type: 'figure', attrs: { mediaName: 'a.png', caption: 'Team photo', alt: 'Unindexed' } },
+                        {
+                            type: 'chart',
+                            attrs: { spec: JSON.stringify(sampleChartSpec('pie')), caption: 'Scores by team' },
+                        },
+                        { type: 'chart', attrs: { spec: 'not a chart' } },
+                    ],
+                },
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe(
+            'Before Team photo Scores by team Points scored Period 1 Team 1 Team 2 Team 3 Team 4',
+        );
         doc.destroy();
     });
 

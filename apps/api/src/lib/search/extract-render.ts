@@ -42,10 +42,12 @@ function cutToBytes(text: string, maxBytes: number): string {
     return bytes.toString('utf-8', 0, end);
 }
 
-function collectProseMirrorText(node: JSONContent, cap: number): string {
+// `attributeText` rides in from the caller's dynamic import, as the canvas kinds do.
+function collectProseMirrorText(node: JSONContent, attributeText: (n: JSONContent) => string[], cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
     const walk = (n: JSONContent): boolean => {
         if (typeof n.text === 'string' && !appendCapped(out, n.text, cap)) return false;
+        for (const text of attributeText(n)) if (!appendCapped(out, text, cap)) return false;
         if (Array.isArray(n.content)) {
             for (const child of n.content) {
                 if (!walk(child)) return false;
@@ -94,7 +96,9 @@ export async function extractCollabText(
     switch (documentType) {
         case 'eigendoc': {
             const { readEigendocFromDoc } = await import('../document/doc');
-            return { text: collectProseMirrorText(readEigendocFromDoc(doc), CONTENT_INDEX_MAX_BYTES), warnings: [] };
+            const { attributeSearchText } = await import('@workspace/lib/docs/eigendoc');
+            const text = collectProseMirrorText(readEigendocFromDoc(doc), attributeSearchText, CONTENT_INDEX_MAX_BYTES);
+            return { text, warnings: [] };
         }
         case 'eigensheets': {
             const { readSheetsFromDoc } = await import('../document/sheets');

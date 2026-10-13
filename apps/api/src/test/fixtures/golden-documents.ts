@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
@@ -430,7 +431,17 @@ export function buildAllFeaturesDocJson(): JSONContent {
             },
             small('One of two tables in a row'),
             small('Two of two'),
-            paragraph('After the tables.'),
+            // The docx leaves the chart out, so the Google Docs re-save, which predates it, still reads the paragraph.
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'After the tables.' },
+                    {
+                        type: 'chart',
+                        attrs: { spec: JSON.stringify(sampleChartSpec('column')), width: 480, height: 297 },
+                    },
+                ],
+            },
             figure({ mediaName: 'chart.png', width: 320, alignment: 'left', caption: 'A chart, left', alt: 'Chart' }),
             figure({ mediaName: 'photo.jpeg', width: null, alt: 'A photo at its own size' }),
             figure({ mediaName: 'diagram.svg', width: 200, caption: 'An SVG', commentCardId: 'card-2' }),

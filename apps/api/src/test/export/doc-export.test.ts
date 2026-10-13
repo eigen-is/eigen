@@ -1,12 +1,15 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
+import { renderDocHtml } from '../../lib/export/doc/render';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
+import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
@@ -193,6 +196,44 @@ describe('doc export — figures', () => {
         expect(proseValue('.eigen-prose .figure[data-layout="wrap-left"]', 'margin')).toBe('0.25em 1em 0.5em 0');
         expect(proseValue('.eigen-prose .figure[data-layout="wrap-right"]', 'float')).toBe('right');
         expect(proseValue('.eigen-prose .figure[data-layout="wrap-right"]', 'margin')).toBe('0.25em 0 0.5em 1em');
+    });
+});
+
+describe('doc export — charts', () => {
+    const chartDoc = (attrs: Record<string, unknown>): JSONContent => ({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [{ type: 'chart', attrs: { spec: JSON.stringify(sampleChartSpec('column')), ...attrs } }],
+            },
+        ],
+    });
+
+    // Inline, so WeasyPrint draws the labels in the page's own fonts; an <img> of an SVG can't reach @font-face.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws a chart as inline SVG at its size in the figure box, its labels as text',
+        async (format) => {
+            const doc = seededDoc(chartDoc({ width: 480, height: 300, alignment: 'right', caption: 'Points' }));
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const html = new TextDecoder().decode(data);
+            expect(html).toContain(
+                '<span class="figure" data-layout="block" data-alignment="right"><svg style="max-width: 100%; height: auto" xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">',
+            );
+            expect(html).toMatch(/<text[^>]*>Team 1<\/text>/);
+            expect(html).toContain('</svg><span class="figcaption">Points</span></span>');
+            expect(html).not.toContain('<img');
+        },
+    );
+
+    test('the sanitizer keeps every shape and label of the chart', () => {
+        const raw = renderDocHtml(chartDoc({ width: 480, height: 300 }), () => null);
+        const count = (html: string, tag: string) => html.split(`<${tag}`).length - 1;
+        const kept = sanitizeExportHtml(raw);
+        for (const tag of ['svg', 'g', 'path', 'text']) {
+            expect(count(raw, tag)).toBeGreaterThan(0);
+            expect(count(kept, tag)).toBe(count(raw, tag));
+        }
     });
 });
 
