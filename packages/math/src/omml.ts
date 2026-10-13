@@ -11,6 +11,7 @@ import {
     mark,
     optional,
     RowBuilder,
+    type RowSlot,
     toColor,
 } from './tree';
 import { attribute, elementsOf, escapeXml, type MathXmlElement, textOf } from './xml';
@@ -126,8 +127,8 @@ function readRun(row: RowBuilder, run: MathXmlElement, depth: number): void {
     row.chars(text, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
 }
 
-function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number): MathRow {
-    const row = new RowBuilder(budget, depth);
+function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
+    const row = new RowBuilder(budget, depth, slot);
     for (const element of elements) readInto(row, element, depth);
     return row.done();
 }
@@ -160,6 +161,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         return slot ? elementsOf(slot) : [];
     };
     const slot = (local: string) => readRow(content(local), budget, depth + 1);
+    const optionalSlot = (local: string) => optional(readRow(content(local), budget, depth + 1, 'optional'));
     switch (element.local) {
         case 'r':
             readRun(row, element, depth);
@@ -180,8 +182,8 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         case 'sSup':
         case 'sSubSup':
         case 'sPre': {
-            const sub = optional(slot('sub'));
-            const sup = optional(slot('sup'));
+            const sub = optionalSlot('sub');
+            const sup = optionalSlot('sup');
             if (!sub && !sup) {
                 readThrough(row, content('e'), depth + 1);
                 return;
@@ -192,14 +194,14 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             return;
         }
         case 'rad': {
-            const degree = isOn(property('degHide')) ? undefined : optional(slot('deg'));
+            const degree = isOn(property('degHide')) ? undefined : optionalSlot('deg');
             row.node({ kind: 'radical', body: slot('e'), ...(degree && { degree }) });
             return;
         }
         case 'nary': {
             const operator = mark(valOf(property('chr')) ?? '') || DEFAULT_NARY;
-            const sub = isOn(property('subHide')) ? undefined : optional(slot('sub'));
-            const sup = isOn(property('supHide')) ? undefined : optional(slot('sup'));
+            const sub = isOn(property('subHide')) ? undefined : optionalSlot('sub');
+            const sup = isOn(property('supHide')) ? undefined : optionalSlot('sup');
             // Without scripts the location shows nothing, so the operator's default stands.
             const location = sub || sup ? valOf(property('limLoc')) : undefined;
             const limits = location === 'undOvr' ? 'under' : location === 'subSup' ? 'side' : naryLimits(operator);
@@ -288,7 +290,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                 layout: 'equations',
                 rows: (equations.length > 0 ? equations.map(elementsOf) : [[]]).map((equation) => {
                     bound(budget, depth + 1, 1);
-                    return equationCells(readRow(equation, budget, depth + 1));
+                    return equationCells(readRow(equation, budget, depth + 1, 'equation'));
                 }),
             });
             return;

@@ -29,7 +29,7 @@ export function attribute(element: MathXmlElement, local: string): string | unde
     return undefined;
 }
 
-const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
+export const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 export function checkedXml(text: string): string {
     if (NOT_XML.test(text)) throw new MathError('An equation holds a character XML cannot hold');

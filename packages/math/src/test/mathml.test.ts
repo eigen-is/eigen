@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
+import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { MATH_LIMITS, type MathRow } from '../tree';
 import { elementsOf, type MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
@@ -34,6 +34,16 @@ describe('C4: the typed LaTeX rides along as the annotation', () => {
 
     test('no annotation is no LaTeX', () => {
         expect(readMathml(el(writeMathml(x))).latex).toBeUndefined();
+    });
+
+    test('the LaTeX reads on its own beside a tree past a bound', () => {
+        let deep = element('mi', ['x']);
+        for (let level = 0; level <= MATH_LIMITS.depth; level++) deep = element('mstyle', [deep]);
+        const annotation = element('annotation', ['x'], { encoding: 'application/x-tex' });
+        const equation = element('math', [element('semantics', [deep, annotation])]);
+        expect(() => readMathml(equation)).toThrow(MathError);
+        expect(readMathmlLatex(equation)).toBe('x');
+        expect(readMathmlLatex(element('math', [annotation]))).toBeUndefined();
     });
 });
 
@@ -162,6 +172,22 @@ describe('readMathml', () => {
             },
         ]);
     });
+});
+
+// Every reader counts the tree it makes, so an empty script or degree costs nothing the tree doesn't hold.
+test.each<[string, MathRow, number]>([
+    ['<msub><mi>x</mi><mrow/></msub>', x, 4],
+    ['<mroot><mi>x</mi><mrow/></mroot>', [{ kind: 'radical', body: x }], 6],
+    // An & in an equation's cell counts as the cell it starts, not as an operator.
+    [
+        '<mtable displaystyle="true"><mtr><mtd><mi>x</mi><mo>&amp;</mo></mtd></mtr></mtable>',
+        [{ kind: 'table', layout: 'equations', rows: [[x, []]] }],
+        8,
+    ],
+])('the largest tree reads with %p for every unit', (unit, read, size) => {
+    const count = Math.floor((MATH_LIMITS.size - 1) / size);
+    const row = Array.from({ length: count }, (): MathRow => [...read, { kind: 'operator', text: '+' }]).flat();
+    expect(readMathml(math(`${unit}<mo>+</mo>`.repeat(count))).row).toStrictEqual(row);
 });
 
 describe('writeMathml', () => {

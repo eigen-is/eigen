@@ -23,6 +23,7 @@ import {
     mark,
     optional,
     RowBuilder,
+    type RowSlot,
     toColor,
 } from './tree';
 import {
@@ -85,17 +86,17 @@ function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undef
     return undefined;
 }
 
-function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number): MathRow {
-    const row = new RowBuilder(budget, depth);
+function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
+    const row = new RowBuilder(budget, depth, slot);
     for (const element of elements) readInto(row, element, depth);
     return row.done();
 }
 
 // An argument is one element; a plain mrow there is the row itself, not a level of its own. So is math, an mrow too.
-function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number): MathRow {
+function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
     if (element && (is(element, 'mrow') || is(element, 'math')) && !patternOf(element))
-        return readRow(elementsOf(element), budget, depth);
-    return readRow(element ? [element] : [], budget, depth);
+        return readRow(elementsOf(element), budget, depth, slot);
+    return readRow(element ? [element] : [], budget, depth, slot);
 }
 
 // Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
@@ -112,7 +113,8 @@ function readScripts(
 ): { sub?: MathRow; sup?: MathRow } {
     const scripts: { sub?: MathRow; sup?: MathRow } = {};
     for (const [index, slot] of slots.entries()) {
-        const script = optional(readArgument(children[index], budget, depth));
+        if (is(children[index], 'none')) continue;
+        const script = optional(readArgument(children[index], budget, depth, 'optional'));
         if (script) scripts[slot] = script;
     }
     return scripts;
@@ -221,7 +223,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             row.node({ kind: 'radical', body: readRow(children, budget, depth + 1) });
             return;
         case 'mroot': {
-            const degree = optional(argument(1));
+            const degree = optional(readArgument(children[1], budget, depth + 1, 'optional'));
             row.node({ kind: 'radical', body: argument(0), ...(degree && { degree }) });
             return;
         }
@@ -292,7 +294,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             const tableRows = (rows.length > 0 ? rows : [[]]).map((cells) => {
                 bound(budget, depth + 1, 1);
                 const read = (cells.length > 0 ? cells.map(elementsOf) : [[]]).map((cell) =>
-                    readRow(cell, budget, depth + 1),
+                    readRow(cell, budget, depth + 1, layout === 'equations' ? 'equation' : 'required'),
                 );
                 return layout === 'equations' ? read.flatMap(equationCells) : read;
             });
@@ -312,17 +314,27 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
     }
 }
 
-export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
-    const budget = { size: 0 };
+// A semantics carries the equation's LaTeX only when it is the whole equation.
+function semanticsOf(math: MathXmlElement): MathXmlElement | undefined {
     const elements = elementsOf(math);
-    const [semantics] = elements;
-    if (elements.length !== 1 || !is(semantics, 'semantics'))
-        return { row: readArgument(math, budget, 1), latex: undefined };
-    const [presentation, ...annotations] = elementsOf(semantics);
-    const tex = annotations.find(
-        (annotation) => is(annotation, 'annotation') && attribute(annotation, 'encoding') === TEX,
-    );
-    return { row: readArgument(presentation, budget, 1), latex: tex && checkedXml(textOf(tex)) };
+    return elements.length === 1 && is(elements[0], 'semantics') ? elements[0] : undefined;
+}
+
+// Apart from the tree, so an equation whose tree is past a bound can still show its LaTeX.
+export function readMathmlLatex(math: MathXmlElement): string | undefined {
+    const semantics = semanticsOf(math);
+    const tex =
+        semantics &&
+        elementsOf(semantics)
+            .slice(1)
+            .find((annotation) => is(annotation, 'annotation') && attribute(annotation, 'encoding') === TEX);
+    return tex && checkedXml(textOf(tex));
+}
+
+export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
+    const semantics = semanticsOf(math);
+    const row = readArgument(semantics ? elementsOf(semantics)[0] : math, { size: 0 }, 1);
+    return { row, latex: readMathmlLatex(math) };
 }
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
