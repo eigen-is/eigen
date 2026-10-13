@@ -97,7 +97,7 @@ async function openSubmenu(label: string) {
     });
 }
 
-const SHORT_ROW = ['Normal text', 'Inter', 'Bold', 'Italic', 'Underline'];
+const SHORT_ROW = ['Normal text', 'Inter', 'Decrease font size', 'Increase font size', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
@@ -115,12 +115,12 @@ test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', asy
 
 test.each([
     [1920, FULL_ROW],
-    [1400, FULL_ROW],
-    [1399, MIDDLE_ROW],
-    [1200, MIDDLE_ROW],
-    [1199, SHORT_ROW],
-    [1000, SHORT_ROW],
-    [999, []],
+    [1520, FULL_ROW],
+    [1519, MIDDLE_ROW],
+    [1300, MIDDLE_ROW],
+    [1299, SHORT_ROW],
+    [1120, SHORT_ROW],
+    [1119, []],
     [390, []],
 ])('at %ipx the icon row holds its first controls in priority order', async (width, row) => {
     await render(width, true);
@@ -129,7 +129,7 @@ test.each([
 
 // Text color, highlight and quote leave the row at some width too, so a menu must reach them at every width.
 test.each(
-    [1920, 1300, 1000, 390].flatMap((width) => [
+    [1920, 1400, 1120, 390].flatMap((width) => [
         [width, 'Text', ['Text color', 'Highlight color']],
         [width, 'Paragraph styles', ['Quote']],
     ]),
@@ -162,7 +162,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
     ]);
 });
 
-test('Format › Text puts the Eigen-only marks after the scripts and capitalisation last', async () => {
+test('Format › Text puts Size after the scripts as Google does, then inline code, and capitalisation last', async () => {
     await render(1920, true);
     await openMenu('Format');
     await openSubmenu('Text');
@@ -173,14 +173,79 @@ test('Format › Text puts the Eigen-only marks after the scripts and capitalisa
         'Strikethrough',
         'Superscript',
         'Subscript',
+        'Size',
         'Inline code',
-        'Small',
         'Small caps',
         expect.stringMatching(/^All caps/),
         '—',
         'Text color',
         'Highlight color',
     ]);
+});
+
+// A step replaces Small, which the schema keeps so a doc that holds it keeps its text, and no menu offers.
+test("Format › Text › Size steps the size, with Google's keys", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'fine', marks: [{ type: 'small' }] }] }],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 5 });
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Text');
+    await openSubmenu('Size');
+    expect(openMenuEntries()).toEqual([
+        `Increase font size${formatForDisplay('Mod+Shift+.')}`,
+        `Decrease font size${formatForDisplay('Mod+Shift+,')}`,
+    ]);
+    const increase = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.trim().startsWith('Increase font size'),
+    );
+    await act(async () => increase?.click());
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+        { type: 'textStyle', attrs: { color: null, fontFamily: null, fontSize: 10, caps: null } },
+    ]);
+});
+
+// Google's "− [11] +" sits between the font and Bold.
+test("the size box shows the selection's size, and a typed size replaces Small", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'body ' },
+                    { type: 'text', text: 'fine', marks: [{ type: 'small' }] },
+                ],
+            },
+        ],
+    });
+    editor.commands.setTextSelection(3);
+    await render(1920, true);
+    const box = () => document.querySelector<HTMLInputElement>('input[aria-label="Font size"]');
+    expect(box()?.value).toBe('11');
+    await act(async () => editor.commands.setTextSelection({ from: 6, to: 10 }));
+    expect(box()?.value).toBe('9');
+    await act(async () => editor.commands.setTextSelection({ from: 1, to: 10 }));
+    expect(box()?.value).toBe('');
+
+    await act(async () => {
+        const input = box();
+        if (!input) return;
+        input.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '14');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => box()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect(editor.getJSON().content?.[0]?.content).toEqual([
+        {
+            type: 'text',
+            text: 'body fine',
+            marks: [{ type: 'textStyle', attrs: { color: null, fontFamily: null, fontSize: 14, caps: null } }],
+        },
+    ]);
+    expect(box()?.value).toBe('14');
 });
 
 test('Format › Paragraph styles lists Normal text, Title, Subtitle, Heading 1 to 6 and then Quote, as Google does', async () => {

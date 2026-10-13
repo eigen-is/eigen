@@ -1,8 +1,9 @@
-import { bundledFont, DOCUMENT_FONT, getFontFamily } from '@workspace/lib/constants/fonts';
+import { bundledFont, DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
 import { ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
 
-// Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, images and tables no wider than the
-// column, no anchor for a comment card this document lacks, and in an italic heading an upright run as the mark.
+// Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, no size the doc draws already, images
+// and tables no wider than the column, no anchor for a comment card this document lacks, and in an italic heading an
+// upright run as the mark.
 export function cleanPastedHTML(html: string, maxWidth: number, cardIds: ReadonlySet<string>): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
@@ -31,6 +32,8 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
         }
     }
 
+    // ProseMirror marks its own copy, whose sizes are all the doc's.
+    const docsCopy = doc.querySelector('[data-pm-slice]') !== null;
     for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
         // A stack's first family the map knows: Google Docs and Word write a font before its generic family, and a
         // copy here writes a bundled font's stack. The document font needs no mark.
@@ -39,6 +42,10 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
             .map((family) => bundledFont(family.replace(/['"]/g, '')))
             .find((bundled) => bundled !== undefined);
         el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
+        // Google Docs writes a size on every span: its body's, which is the doc's, and in a heading the heading's,
+        // which the doc's heading draws as its own.
+        if (el.style.fontSize === `${DOCUMENT_FONT_SIZE}pt` || (!docsCopy && el.closest('h1, h2, h3, h4, h5, h6')))
+            el.style.fontSize = '';
     }
 
     for (const el of doc.querySelectorAll<HTMLElement>('img, table')) {

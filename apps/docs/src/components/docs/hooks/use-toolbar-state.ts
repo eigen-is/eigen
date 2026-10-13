@@ -2,6 +2,7 @@ import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
+import { selectionFontSizes } from '@workspace/lib/docs/eigendoc';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { numberedListType, orderedListDepth } from '../list-numbering';
 import { paragraphStyleOf } from '../paragraph-styles';
@@ -11,6 +12,8 @@ export type ToolbarState = {
     paragraphStyle: string | undefined;
     mixedStyles: boolean;
     fontName: string;
+    // In pt, none for a range of mixed sizes.
+    fontSize: number | undefined;
     color: string;
     highlightColor: string;
     bold: boolean;
@@ -76,6 +79,8 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 });
             }
             const table = active('table');
+            // A heading's own size is read off the page, which an editor not yet mounted has none of.
+            const fontSizes = selectionFontSizes(state, e.isDestroyed ? undefined : e.view);
             const listDepth = orderedListDepth(selection.$from);
             return {
                 // A range of mixed styles, or of styled and Normal text, reads as none.
@@ -83,6 +88,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 mixedStyles: styles.size > 1,
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
+                fontSize: fontSizes.size === 1 ? [...fontSizes][0] : undefined,
                 color: getAttributes(state, 'textStyle')['color'] || '',
                 highlightColor: active('highlight') ? getAttributes(state, 'highlight')['color'] || '' : '',
                 bold: active('bold'),

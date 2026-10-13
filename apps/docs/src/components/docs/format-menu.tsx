@@ -15,6 +15,8 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import {
+    AArrowDown,
+    AArrowUp,
     ALargeSmall,
     AlignCenter,
     AlignJustify,
@@ -122,11 +124,23 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleSubscript().run()}>
                     <Subscript className="h-4 w-4 mr-2" /> Subscript
                 </DropdownMenuItem>
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <ALargeSmall className="h-4 w-4 mr-2" /> Size
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        <DropdownMenuItem onClick={() => editor.chain().focus().stepFontSize(1).run()}>
+                            <AArrowUp className="h-4 w-4 mr-2" /> Increase font size
+                            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+.')}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => editor.chain().focus().stepFontSize(-1).run()}>
+                            <AArrowDown className="h-4 w-4 mr-2" /> Decrease font size
+                            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+,')}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
                     <Code className="h-4 w-4 mr-2" /> Inline code
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleSmall().run()}>
-                    <ALargeSmall className="h-4 w-4 mr-2" /> Small
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCaps('small').run()}>
                     <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
