@@ -66,11 +66,12 @@ describe('pie read', () => {
         expect(readPie({ startAngle: Number.POSITIVE_INFINITY }).startAngle).toBe(270);
     });
 
-    test('sweepAngle stays in (0, 360]: a full turn is a whole slice, nothing at all is malformed', () => {
+    test('sweepAngle stays in (0, 360]: a full turn and a sweep of 0 are a whole slice, a negative one is malformed', () => {
         expect(readPie({ sweepAngle: 45.5 }).sweepAngle).toBe(45.5);
         expect(readPie({ sweepAngle: 360 }).sweepAngle).toBe(360);
         expect(readPie({ sweepAngle: 400 }).sweepAngle).toBe(360);
-        expect(readPie({ sweepAngle: 0 }).sweepAngle).toBe(90);
+        // OOXML's pie with equal start and end angles draws the whole ellipse.
+        expect(readPie({ sweepAngle: 0 }).sweepAngle).toBe(360);
         expect(readPie({ sweepAngle: -30 }).sweepAngle).toBe(90);
         expect(readPie({ sweepAngle: Number.NaN }).sweepAngle).toBe(90);
         expect(readPie({ sweepAngle: '30' }).sweepAngle).toBe(90);
