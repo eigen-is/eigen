@@ -10,6 +10,7 @@ import Typography from '@tiptap/extension-typography';
 import StarterKit from '@tiptap/starter-kit';
 import { TextCaps } from './nodes/caps';
 import { CommentMarkSchema } from './nodes/comment-mark';
+import { EquationNode } from './nodes/equation';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
 import { EigenOrderedList } from './nodes/ordered-list';
@@ -49,6 +50,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         SubtitleNode,
         TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
         FigureNode,
+        EquationNode,
         PageBreakNode,
         Highlight.configure({ multicolor: true }),
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),

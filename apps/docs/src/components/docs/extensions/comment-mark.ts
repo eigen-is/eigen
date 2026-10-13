@@ -21,9 +21,9 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// The card a node anchors: an image holds it as an attribute, text as the comment mark.
+// The card a node anchors: an image or an equation holds it as an attribute, text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
-    if (node.type.name === 'figure') return node.attrs.commentCardId;
+    if (node.type.name === 'figure' || node.type.name === 'equation') return node.attrs.commentCardId;
     return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
 }
 

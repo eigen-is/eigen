@@ -2,7 +2,7 @@
 
 > **TLDR:** Docs is Eigen's word processor: rich text on a page that several people edit at once. A doc is a `.eigendoc` collab document whose truth is ProseMirror content held in a Yjs fragment, and one schema defines that content for the editor and for every server renderer. The schema is `packages/lib/src/docs/eigendoc/`, and the editor is `apps/docs/src/components/docs/`.
 
-The editor is TipTap, a React wrapper around ProseMirror, the editing toolkit that models a document as a tree of nodes (paragraphs, a title and subtitle, headings, lists, tables, task lists, code blocks, images, page breaks) carrying marks (bold, color, font, comment). An image is a `figure` node. The app around it is a Drive-style file list plus one editor route, `/doc/$ownerId/$mountId/$pathId`.
+The editor is TipTap, a React wrapper around ProseMirror, the editing toolkit that models a document as a tree of nodes (paragraphs, a title and subtitle, headings, lists, tables, task lists, code blocks, images, equations, page breaks) carrying marks (bold, color, font, comment). An image is a `figure` node, an equation an `equation` node. The app around it is a Drive-style file list plus one editor route, `/doc/$ownerId/$mountId/$pathId`.
 
 On disk a doc is a container, a Drive folder named like a file (`Notes.eigendoc`), like every collab document ([COLLAB.md](COLLAB.md)). Its `data.db` holds the Yjs state, and the truth inside it is the `XmlFragment` named `default`, which y-prosemirror (the Yjs binding for ProseMirror) keeps in step with the editor. The same container holds the doc's images in `media/`, its comment threads in `chat/` and `comments.db` ([COMMENTS.md](COMMENTS.md)), and its version history.
 
@@ -10,7 +10,7 @@ The server never runs the editor, yet it renders the doc for the drive preview, 
 
 A figure names its image, and never holds bytes or a URL. The name is a file in the container's `media/` folder, resolved to a URL at render ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). A pending name, `pending:<uuid>`, stands in for an image whose upload has not landed yet. A panel is one of the right-side panes: comments, activity, and the figure and table properties.
 
-The sections cover the schema, the title and subtitle, figures, the page and its panels, page breaks, comments, the clipboard, what keeps content inside the page, table columns, fonts and caps, list numbering, and word count. Four things in them surprise people:
+The sections cover the schema, the title and subtitle, figures, the page and its panels, page breaks, equations, comments, the clipboard, what keeps content inside the page, table columns, fonts and caps, list numbering, and word count. Four things in them surprise people:
 
 - The side panels overlay the page instead of taking room from it, and the page slides and scales to stay clear ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
 - A figure stores its width in the page's own pixels, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
@@ -99,6 +99,22 @@ Word starts a page in two more ways, and both give a break. A paragraph with `w:
 
 Empty paragraphs import as blank lines, except a run of them that ends at a break, which is dropped (`isBlank` in `assemble.ts`). Eigen draws an empty line taller than Word, so the blank lines that fill out Word's page would push the break onto a blank page of its own. A blank list item, task item or rule stays. The cases are pinned in `apps/api/src/test/import/doc-import.test.ts`, `apps/api/src/test/import/doc/paragraphs.test.ts` and `apps/api/src/test/import/doc/assemble.test.ts`.
 
+## An equation is an inline node that stores its MathML
+
+An equation is an inline, atomic node like the figure (`packages/lib/src/docs/eigendoc/nodes/equation.ts`), because Word keeps a displayed equation inside its paragraph and Google Docs has only inline ones. Its attributes are `mathml`, `display` and `commentCardId`. `mathml` is MathML in the dialect of `@workspace/math` ([MATH.md](MATH.md)), with the LaTeX a user typed as its `application/x-tex` annotation. `display` says the equation stands on its own line, and a renderer sets `display="block"` on the `<math>` it draws, since the package's writer never writes it. An empty string is an empty equation, which renders an empty `<math>`.
+
+The whole equation is one attribute, so two people editing one equation don't merge: the last write wins. The LaTeX rides only in the annotation, and Word's OMML has no slot for it ([MATH.md](MATH.md#a-word-equation-comes-back-as-drawn-not-as-built)), so a Word round trip keeps the equation's tree and loses what was typed.
+
+## Every reader of an equation goes through readEquation
+
+**No consumer mounts or parses the stored string itself**, because any peer can write it. `readEquation` refuses a string longer than `MATH_LIMITS.mathmlLength` before parsing, parses it, reads it with `readMathml`, and checks that `writeMathml` can write it again, since the annotation counts toward no bound. A tree past a bound shows its LaTeX as text, when the LaTeX is shorter than the size bound; anything else reads as an empty equation. So whatever a peer stored, the writers can write what `readEquation` returns, and renderHTML builds the `<math>` from that, never from the string.
+
+The browser parses with `DOMParser`. The server has none, so `readStoredEquation` (`apps/api/src/lib/document/equation.ts`) passes Bun's parser, and a string either parser refuses reads as an empty equation. The HTML export and the drive preview draw the MathML without the annotation, which no screen draws. A pasted `<math>`, Eigen's own or a web page's, is read and written the same way, keeping its annotation and lifting `display="block"`. One the package refuses pastes as nothing rather than as its tokens' scattered text.
+
+## An equation's text is its LaTeX, and the find bar skips it
+
+Word count, a comment's quote, a plain-text copy and the search index read an equation as its LaTeX, or as nothing when it has none (`leafText` and `renderText` on the node). The find bar matches text nodes only, and prosemirror-search reads any other leaf as one placeholder character, so it never finds an equation.
+
 ## The page keeps its width and slides, then scales, clear of a panel
 
 The page is centered in a scroll box. Its width never changes, so a line breaks in the same place on every screen, and the drive preview and the HTML export lay the doc out at the same width ([EXPORT.md](EXPORT.md#every-format-but-xlsx-docx-and-svg-is-one-html-document)).
@@ -123,7 +139,7 @@ The toolbar lights a button when the whole selection carries the mark or sits in
 
 ## A comment anchors on text as a mark and on a figure as an attribute
 
-A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
+A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure or an equation, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
 
 ## A docs copy with an image writes its items in order, and a docs paste reads its HTML
 

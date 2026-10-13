@@ -6,9 +6,10 @@ export type TextCounts = { words: number; characters: number; charactersExcludin
 
 const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
-// A leaf ends the word before it; a figure adds its caption, never its alt text or media name.
+// A leaf ends the word before it; a figure adds its caption, never its alt text or media name, and any other leaf
+// its own text, an equation's included.
 const leafText = (node: Node) =>
-    `\n${node.type.name === 'figure' ? (readFigureAttrs(node.attrs).caption ?? '') : ''}\n`;
+    `\n${node.type.name === 'figure' ? (readFigureAttrs(node.attrs).caption ?? '') : (node.type.spec.leafText?.(node) ?? '')}\n`;
 
 function countGraphemes(text: string): number {
     let count = 0;
