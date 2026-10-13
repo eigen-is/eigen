@@ -7,7 +7,7 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time. This page is a quick tour of what you can do.
@@ -20,11 +20,11 @@ You can also create a document from Drive by clicking **New** and choosing **New
 
 ## The editor and its toolbar
 
-The document opens on an A4 page with 2 cm margins. At the top you will find the toolbar, which is the main way to format text and manage the file.
+A new document opens on an A4 page with 2 cm margins, which you can change under **File → Page setup…**. At the top you will find the toolbar, which is the main way to format text and manage the file.
 
 The toolbar has three areas:
 
-- **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing one, import a Word file, download, rename, share, email collaborators, view version history, see the page setup, print, and move the document to the trash.
+- **File** menu, on the left. Opens a dropdown with options to create another doc, open an existing one, import a Word file, download, rename, share, email collaborators, view version history, change the page setup, print, and move the document to the trash.
 - **Formatting controls**, in the center. Change the paragraph style (Normal text, Title, Subtitle, Heading 1 through Heading 6) and the font, make text **Bold**, **Italic**, or **Underline**, set text color and highlight color, insert a link or an image, and set alignment and list style (bulleted, numbered, or checklist).
 - **Share** and **Comments** buttons, on the right.
 

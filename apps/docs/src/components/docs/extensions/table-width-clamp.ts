@@ -14,7 +14,8 @@ export const TableWidthClamp = Extension.create({
         return [
             new Plugin({
                 appendTransaction(transactions, _oldState, newState) {
-                    if (!transactions.some((tr) => tr.docChanged)) return null;
+                    // The server drops a viewer's writes, so a clamp in a viewer's tab would only part it from the doc.
+                    if (!editor.isEditable || !transactions.some((tr) => tr.docChanged)) return null;
 
                     const tr = newState.tr;
                     let modified = false;
