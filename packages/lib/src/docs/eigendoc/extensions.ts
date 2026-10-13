@@ -12,6 +12,7 @@ import { TextCaps } from './nodes/caps';
 import { CommentMarkSchema } from './nodes/comment-mark';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
+import { EigenFontSize } from './nodes/font-size';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
@@ -43,6 +44,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextStyle,
         Color,
         EigenFontFamily,
+        EigenFontSize,
         TextCaps,
         TaskList,
         TaskItem.configure({ nested: true }),
