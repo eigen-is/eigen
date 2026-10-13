@@ -128,7 +128,7 @@ function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, conte
         const mathml = writeMathml(readOmml(oMath));
         reader.pkg.chargeMathml(mathml.length);
         const node = { type: 'equation', attrs: { mathml, display } };
-        equationTexts.set(node, ommlText(oMath));
+        equationTexts.set(node, () => ommlText(oMath));
         context.pieces.push({ kind: 'node', node });
     } catch (error) {
         if (!(error instanceof MathError)) throw error;

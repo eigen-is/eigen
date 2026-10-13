@@ -486,6 +486,16 @@ describe('math', () => {
         expect(nodesOfType(json, 'equation')).toEqual([]);
     });
 
+    test('equations and text side by side are set off by a space where none is', async () => {
+        const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
+        const caption = paragraph(
+            `${run('Fig')}${oMath(r('a'))}${oMath(r('b'))}${run('c')}${oMath(r('d'))}${run(' e')}`,
+            '<w:pStyle w:val="Caption"/>',
+        );
+        const { json } = await importDocxBody(`${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${caption}`, { styles });
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual(['Fig a b c d e']);
+    });
+
     test('an equation in a code block is its text', async () => {
         const consolas = '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/>';
         const json = await imported(

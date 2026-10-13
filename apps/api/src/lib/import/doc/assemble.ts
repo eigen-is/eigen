@@ -70,13 +70,22 @@ export function build(raw: Item[]): JSONContent[] {
     return buildLevel(items, 0);
 }
 
-// What an equation reads as where only text goes, a caption or a code block: the reader sets it as it reads one.
-export const equationTexts = new WeakMap<JSONContent, string>();
+// What an equation reads as where only text goes, a caption or a code block: the reader sets it as it reads one, and
+// it is worked out only when read.
+export const equationTexts = new WeakMap<JSONContent, () => string>();
 
+// An equation is set off from the text and equations beside it by a space where none is.
 export function inlineText(nodes: JSONContent[]): string {
-    return nodes
-        .map((node) => (node.type === 'hardBreak' ? '\n' : (node.text ?? equationTexts.get(node) ?? '')))
-        .join('');
+    let text = '';
+    let spaceNext = false;
+    for (const node of nodes) {
+        const equation = equationTexts.get(node);
+        const part = node.type === 'hardBreak' ? '\n' : (node.text ?? equation?.() ?? '');
+        if (part && text && !/\s$/.test(text) && !/^\s/.test(part) && (spaceNext || equation)) text += ' ';
+        text += part;
+        if (part) spaceNext = !!equation;
+    }
+    return text;
 }
 
 // Word's Caption style, or a short line of small text, as Google Docs flattens the style.
