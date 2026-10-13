@@ -69,6 +69,7 @@ test('a label size typed against a cold font face is one undo step', async () =>
                     elements: [arrow],
                     scene: new Map<string, VectorElement>([[arrow.id, arrow]]),
                     onChange: () => {},
+                    onReplace: () => {},
                     onChangeEach: (patch: (el: VectorElement) => Record<string, unknown>) =>
                         sealed(undoManager, () => {
                             for (const [field, v] of Object.entries(patch(arrow))) {

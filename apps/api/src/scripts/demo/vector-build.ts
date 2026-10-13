@@ -1,8 +1,8 @@
 // Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN
 // spec (content.ts) — the stickies-board approach without a fixture. Every element carries the same
 // full field set an editor-authored element would (use-canvas-doc's addElement), so the doc reads
-// back through read-vector unchanged. Text is sized from the Excalifont metrics table because the
-// seeder has no DOM to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
+// back through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM
+// to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
 
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
@@ -18,6 +18,7 @@ import {
     generateNKeysBetween,
     getFontMetrics,
     getLineHeightPx,
+    measureLabel,
     normalizeLinear,
     type Point,
     type StyleDefaults,
@@ -54,7 +55,6 @@ import type {
     SitePlanShape,
     SitePlanText,
 } from './content';
-import { EXCALIFONT_ADVANCES, EXCALIFONT_KERNING } from './excalifont-metrics';
 
 // Fixed PRNG salt so every reseed of the demo world draws the same roughjs seeds (identical jitter).
 const SEED_SALT = 0x5170_2e73;
@@ -64,29 +64,15 @@ const SITE_PLAN_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: F
 const DEFAULT_LABEL_SIZE = 16;
 const DEFAULT_ARROW_LABEL_SIZE = 13;
 
-// Unlisted glyphs fall back to the average advance (the metrics table's own note).
-const AVG_ADVANCE =
-    Object.values(EXCALIFONT_ADVANCES).reduce((sum, w) => sum + w, 0) / Object.keys(EXCALIFONT_ADVANCES).length;
-
-// Client-parity text measurement: width = widest line's summed advances + kerning (em) × fontSize;
-// height = lines × the font's line height. Mirrors the editor's text-measure so labels sit right.
+// Width = the widest line's advances; height = lines × the font's line height.
 function measureExcalifont(text: string, fontSize: number): { width: number; height: number } {
     const lines = text.split('\n');
-    let widest = 0;
-    for (const line of lines) {
-        const chars = [...line];
-        let em = 0;
-        for (let i = 0; i < chars.length; i++) {
-            em += EXCALIFONT_ADVANCES[chars[i]] ?? AVG_ADVANCE;
-            if (i > 0) em += EXCALIFONT_KERNING[chars[i - 1] + chars[i]] ?? 0;
-        }
-        if (em > widest) widest = em;
-    }
-    return { width: widest * fontSize, height: lines.length * getLineHeightPx(FONT, fontSize) };
+    const width = Math.max(...lines.map((line) => measureLabel(line, FONT, fontSize, false)));
+    return { width, height: lines.length * getLineHeightPx(FONT, fontSize) };
 }
 
-// A rich-text box is laid out by the browser's HTML shaper, which runs a little wider than this
-// advance table; at exactly the measured width a one-line label wraps. 8% slack keeps the demo's
+// A rich-text box is laid out by the browser's HTML shaper, which runs a little wider than summed
+// advances; at exactly the measured width a one-line label wraps. 8% slack keeps the demo's
 // labels on one line. Arrow labels are SVG <text> (no wrapping), so they measure unpadded.
 const RICH_TEXT_SLACK = 1.08;
 

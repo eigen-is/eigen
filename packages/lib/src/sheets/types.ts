@@ -135,6 +135,19 @@ export type SheetImage = {
     angle?: number;
 };
 
+// A floating chart on a sheet, in the same grid pixels as SheetImage. `index` is a fractional
+// z-order key, ties broken by id. `spec` is the stored ChartSpec JSON, read only through
+// parseChartSpec (@workspace/lib/charts); its range refs name sheets by id.
+export type SheetChart = {
+    id: string;
+    index: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    spec: string;
+};
+
 // Per-cell data-validation rule, produced by the editor's state layer
 // (state/modules/data-verification.ts) and consumed by the canvas painter
 // (red-triangle indicator + checkbox draw). Keyed by `${row}_${col}` on
@@ -267,6 +280,9 @@ export type Sheet = {
     // decoder materializes the list the way normalizeSheetConfig materializes a
     // config collection, so an op replacing it resolves against any base.
     images?: SheetImage[];
+    // Floating charts by id. Materialized like the config collections, because each chart is
+    // written as its own key and a first write to a missing map would ship the whole map.
+    charts?: Record<string, SheetChart>;
 };
 
 // The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.

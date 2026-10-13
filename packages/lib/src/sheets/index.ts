@@ -9,6 +9,11 @@ export {
     mergeEdgeSides,
     parseCellKey,
 } from './borders';
-export { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from './defaults';
+export {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_ROW_HEIGHT,
+} from './defaults';
 export { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from './snapshot-codec';
 export * from './types';

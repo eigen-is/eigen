@@ -1,5 +1,7 @@
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { mapChartRefs } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
@@ -107,11 +109,20 @@ export function copySheet(ctx: Context, sheetId: string) {
     const order = ctx.sheets[index].order! + 1;
     const sheetName = generateCopySheetName(ctx, sheetId);
     const sheetData = cloneDeep(ctx.sheets[index]);
-    delete sheetData.id;
+    const copyId = uuidv4();
+    sheetData.id = copyId;
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
     delete sheetData.data;
-    api.addSheet(ctx, undefined, uuidv4(), ctx.sheets[index].isPivotTable, sheetName, sheetData);
+    // As in Excel and Google, a copy's charts read the copy where they read the sheet copied.
+    const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);
+    sheetData.charts = Object.fromEntries(
+        Object.values(sheetData.charts ?? {}).map((chart) => {
+            const id = uuidv4();
+            return [id, { ...mapChartRefs(chart, toCopy), id }];
+        }),
+    );
+    api.addSheet(ctx, undefined, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};
     sheetOrderList[ctx.sheets[ctx.sheets.length - 1].id as string] = order;
     api.setSheetOrder(ctx, sheetOrderList);

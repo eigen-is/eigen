@@ -322,6 +322,7 @@ function SlideEditorInner({
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
                     onInsertImage={insertImage}
+                    canvasRef={canvasRef}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New slides"
                     createIcon={Presentation}
@@ -354,6 +355,8 @@ function SlideEditorInner({
                     elements={frameElements}
                     selectedElements={selectedElements}
                     updateElements={doc.updateElements}
+                    replaceElement={doc.replaceElement}
+                    setSelectedIds={setSelectedIds}
                     undoManager={doc.undoManager}
                     aspectLocked={aspectLocked}
                     onAspectLockChange={setAspectLocked}
