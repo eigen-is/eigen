@@ -1,4 +1,6 @@
+import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import { type PageSetup, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
@@ -56,7 +58,12 @@ export type Reader = {
     bodySize: number;
     bodySizeCs: number;
     baseColor: string | undefined;
+    // The doc holds one page, the body's final section's; Word's column places anchors, the page's caps widths.
+    page: PageSetup;
     columnTwips: number;
+    columnPx: number;
+    // Earlier sections whose page differs from it.
+    pagesDropped: number;
     publicOrigin: string | undefined;
 };
 
@@ -79,6 +86,8 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
     const margin = wChild(sectPr, 'pgMar');
+    const page = sectionPage(sectPr);
+    const px = pagePx(page);
     return {
         pkg,
         theme,
@@ -95,12 +104,36 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         bodySize: body.size ?? 20,
         bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color?.hex,
+        page,
         columnTwips:
             (twipsOf(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
             (twipsOf(w(margin, 'left')) ?? 1440) -
             (twipsOf(w(margin, 'right')) ?? 1440),
+        columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
+        pagesDropped: descendants(pkg.document.root, W_NS, 'sectPr').filter(
+            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), page),
+        ).length,
         publicOrigin,
     };
+}
+
+// Through the one reader of a stored page, so a file's page is clamped as a peer's is, and what a section leaves out is
+// the default. w:orient is not read: Word draws the page w by h whatever it says.
+function sectionPage(sectPr: XmlElement | undefined): PageSetup {
+    const size = wChild(sectPr, 'pgSz');
+    const margin = wChild(sectPr, 'pgMar');
+    const mm = (element: XmlElement | undefined, local: string) => {
+        const twips = twipsOf(w(element, local));
+        return twips === undefined ? undefined : (twips * 25.4) / 1440;
+    };
+    return readPageSetup({
+        width: mm(size, 'w'),
+        height: mm(size, 'h'),
+        marginTop: mm(margin, 'top'),
+        marginRight: mm(margin, 'right'),
+        marginBottom: mm(margin, 'bottom'),
+        marginLeft: mm(margin, 'left'),
+    });
 }
 
 export function readDocument(reader: Reader): JSONContent[] {

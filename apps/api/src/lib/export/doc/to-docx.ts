@@ -4,8 +4,8 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import {
-    DEFAULT_PAGE_SETUP,
     MIN_TABLE_COLUMN_PX,
+    type PageSetup,
     pageTwips,
     readFigureAttrs,
     type TitleType,
@@ -82,6 +82,7 @@ export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
+    setup: PageSetup,
     media: DocxMedia[],
     title: string,
     publicOrigin: string | undefined,
@@ -105,9 +106,12 @@ export async function eigendocToDocx(
         // A Spacer's and a figure's mark draw in the body's Regular.
         faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
-    const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
+    const page = pageTwips(setup);
+    const column = page.width - page.margin.left - page.margin.right;
+    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
     const fonts = embeddedFonts(pkg.faces);
+    const section = `<w:sectPr><w:pgSz w:w="${page.width}" w:h="${page.height}"${page.width > page.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${page.margin.top}" w:right="${page.margin.right}" w:bottom="${page.margin.bottom}" w:left="${page.margin.left}" w:header="${Math.min(HEADER_DISTANCE, page.margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, page.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
     const parts: [path: string, xml: string, contentType?: string][] = [
         ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
@@ -118,7 +122,7 @@ export async function eigendocToDocx(
         ],
         [
             'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${SECTION_XML}</w:body></w:document>`,
+            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${section}</w:body></w:document>`,
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
@@ -224,14 +228,8 @@ type Context = {
     upright?: boolean;
 };
 
-const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
-
-const TEXT_COLUMN = PAGE.width - PAGE.margin.left - PAGE.margin.right;
-
 // Word's default 1.25 cm from the page edge, inside a smaller margin.
 const HEADER_DISTANCE = 709;
-
-const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(HEADER_DISTANCE, PAGE.margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
 const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;

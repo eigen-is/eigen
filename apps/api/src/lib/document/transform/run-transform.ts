@@ -11,6 +11,7 @@ import type {
     DocumentTransformRequest,
     ExportTransformJob,
     ExtractTextJob,
+    PreviewResult,
     SheetsImportJob,
     TransformResultFor,
     TransformWarning,
@@ -104,9 +105,8 @@ export async function runTransformToText(
     drivePath: DrivePath,
     job: CollabPreviewJob,
     opts: TransformOptions,
-): Promise<string> {
-    const { body } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return body;
+): Promise<PreviewResult> {
+    return runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
 }
 
 export async function runTransformToExtractedText(

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import {
     DRIVE_MIME_DOC,
@@ -22,7 +23,7 @@ import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
-import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -867,6 +868,34 @@ describe('document transform (eigendoc)', () => {
         expect(preview.body).toBe(body);
     }, 120_000);
 
+    test('the preview carries the page the doc stores, never from a body cached before it had one', async () => {
+        const letter = {
+            width: 279.4,
+            height: 215.9,
+            margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            differentFirstPage: false,
+        };
+        const { mount, path: seeded } = await seedGoldenDocument('letter-doc', 'doc', (doc) => {
+            const map = doc.getMap(PAGE_ROOT);
+            for (const [key, value] of Object.entries(pageRecord(letter))) map.set(key, value);
+        });
+        const home = await getHome(ctx.alice.user.id);
+        const { path: current } = await home.drive.resolveFile(mountId, seeded.id);
+        fs.mkdirSync(mount.previewsDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(mount.previewsDir, `${current.id}-${current.updatedAt.getTime()}.f6.json`),
+            JSON.stringify({ body: '<p>cached before the page</p>' }),
+        );
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${current.id}/text-preview`,
+        );
+        const preview = await res.json();
+        expect(preview.body).toContain('Quarterly Report');
+        expect(preview.page).toEqual(letter);
+    }, 120_000);
+
     test('html export is byte-identical to the pre-move pipeline', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_DOC_EXPORT_HTML_SHA256);
@@ -1049,7 +1078,13 @@ describe('document transform (eigendoc)', () => {
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
         const media = await collectExportMedia(mount, path, 'docx');
-        const direct = await eigendocToDocx(readEigendocFromDoc(persisted), media, path.name, undefined);
+        const direct = await eigendocToDocx(
+            readEigendocFromDoc(persisted),
+            readEigendocPage(persisted),
+            media,
+            path.name,
+            undefined,
+        );
         persisted.destroy();
         expect(docx.equals(Buffer.from(direct))).toBe(true);
         expect(sha256(docx)).toBe(GOLDEN_DOC_EXPORT_DOCX_SHA256);
@@ -1389,11 +1424,11 @@ describe('document transform (docx import)', () => {
 
     test('Worker import returns a Yjs update that commits to the golden document', async () => {
         const response = await runDocxImport(await buildGoldenDocx(TEST_PNG_BYTES));
-        const { update, images } = importDocUpdate(response);
+        const { update, page, images } = importDocUpdate(response);
         expect(response.ok && response.warnings).toEqual([]);
 
         const doc = new Y.Doc();
-        writeEigendocUpdateToYjs(doc, new Uint8Array(update));
+        commitEigendocImport(doc, { update: new Uint8Array(update), page });
         const committed = readEigendocFromDoc(doc);
         doc.destroy();
         expect(committed).toEqual(await referenceDocument());

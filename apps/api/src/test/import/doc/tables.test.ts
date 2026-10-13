@@ -3,10 +3,12 @@ import type { JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables } from '@tiptap/pm/tables';
 import { docSchema } from '../../../lib/document/doc-schema';
-import { COLUMN_PX } from '../../../lib/import/doc/assemble';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Rows and cells, merges, header rows and the writer's floating figure.
+
+// The default page's text column in whole px: no body here has a section of its own.
+const COLUMN_PX = 642;
 
 const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;

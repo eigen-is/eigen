@@ -8,7 +8,7 @@ import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
-import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
@@ -23,6 +23,9 @@ import {
 import { build, deflated, stored } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
+
+// The default page's text column in whole px: no body here has a section of its own.
+const COLUMN_PX = 642;
 
 const run = (text: string, rPr = '') => `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;

@@ -5,7 +5,7 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_PAGE_SETUP, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, type PageSetup, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -207,11 +207,13 @@ function VCardRow({ contact }: { contact: Contact }) {
 
 type IntrinsicPage = { widthPx: number; padding?: string };
 
-// Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page.
-const DOC_PAGE: IntrinsicPage = {
-    widthPx: pagePx(DEFAULT_PAGE_SETUP).width,
-    padding: pageBoxStyle(DEFAULT_PAGE_SETUP).padding,
-};
+function docPage(setup: PageSetup): IntrinsicPage {
+    return { widthPx: pagePx(setup).width, padding: pageBoxStyle(setup).padding };
+}
+
+// Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page:
+// a doc on the page it stores, the rest on the default one.
+const DOC_PAGE = docPage(DEFAULT_PAGE_SETUP);
 const CANVAS_PAGE: IntrinsicPage = { widthPx: CANVAS_PREVIEW_WIDTH };
 
 // The page a mode composes on, so the hero scales by containerW / its width: a deck and a drawing both
@@ -248,17 +250,18 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const [setContent, contentBox] = useElementSize(contentRef);
     const [scale, setScale] = useState(1);
 
-    const page = data ? INTRINSIC_PAGE[data.mode] : null;
+    const page = data?.mode === 'eigendoc' && data.page ? docPage(data.page) : data ? INTRINSIC_PAGE[data.mode] : null;
+    const pageWidthPx = page?.widthPx;
 
     useEffect(() => {
         if (containerW === 0) return;
-        if (page) {
-            setScale(containerW / page.widthPx);
+        if (pageWidthPx) {
+            setScale(containerW / pageWidthPx);
             return;
         }
         const contentW = contentRef.current?.scrollWidth ?? 0;
         if (contentW > 0) setScale(containerW / contentW);
-    }, [containerW, contentBox, data?.body, page]);
+    }, [containerW, contentBox, data?.body, pageWidthPx]);
 
     if (!data?.body) return null;
 
