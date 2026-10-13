@@ -78,8 +78,8 @@ export function isConvertSource(name: string, target: ConvertTarget): boolean {
     return name.toLowerCase().endsWith(`.${CONVERT_SOURCES[target].format}`);
 }
 
-// What a convert or an import answers: `summary` says what the file held that did not come over, for a toast.
-export type ConvertResult = { path: DrivePath; summary: string | null };
+// What an import answers: `summary` says what the file held that did not come over, for a toast. A convert answers its
+// new document's path alone, and shows no summary: the document opens at once.
 export type ImportResult = { success: true; summary: string | null };
 
 // `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe

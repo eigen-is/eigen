@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import { type ConvertResult, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
 import { update } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
@@ -177,7 +177,7 @@ describe('Sheets xlsx import/convert', () => {
             `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
             { method: 'POST' },
         );
-        return (await assertJson<ConvertResult>(res)).path;
+        return assertJson<DrivePath>(res);
     }
 
     test('convert completes even when the client has disconnected (aborted request signal)', async () => {
@@ -203,7 +203,7 @@ describe('Sheets xlsx import/convert', () => {
         );
 
         expect(res.status).toBe(200);
-        const { path: converted } = await assertJson<ConvertResult>(res);
+        const converted = await assertJson<DrivePath>(res);
         expect(converted.name).toBe('detached.eigensheets');
     });
 

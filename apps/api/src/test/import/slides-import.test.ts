@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
-import type { ConvertResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import {
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
@@ -27,7 +27,7 @@ import {
 } from '../setup';
 
 // Route contract of Convert to Slides and Import slides…: what a deck holds after each, what its media folder gets,
-// the summary of what did not come over, and what is refused before anything is written.
+// the summary Import slides… answers with, and what is refused before anything is written.
 
 const TABLE_URI = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 
@@ -149,15 +149,15 @@ async function seededDeck(fileName: string): Promise<DrivePath> {
 }
 
 describe('Convert to Slides', () => {
-    test('makes a deck beside the .pptx with its slides, shapes and pictures, and says what did not come over', async () => {
+    test('makes a deck beside the .pptx with its slides, shapes and pictures, and answers only its path', async () => {
         const uploaded = await upload(PPTX, 'pitch.pptx');
-        const result = await assertJson<ConvertResult>(await convertRequest(uploaded.id));
-        expect(result.path.type).toBe('slides');
-        expect(result.path.name).toBe('pitch.eigenslides');
-        expect(result.path.parentId).toBe(rootId);
-        expect(result.summary).toBe('1 table was not imported.');
+        const result = await assertJson<DrivePath>(await convertRequest(uploaded.id));
+        expect(result.type).toBe('slides');
+        expect(result.name).toBe('pitch.eigenslides');
+        expect(result.parentId).toBe(rootId);
+        expect(result).not.toHaveProperty('summary');
 
-        const deck = await readDeck(result.path.id);
+        const deck = await readDeck(result.id);
         expect(deck.frames.map((frame) => frame.name)).toEqual(['Welcome', '']);
         const [first, second] = deck.frames;
         const on = (frameId: string | undefined) => deck.elements.filter((el) => el.frameId === frameId);
@@ -167,14 +167,13 @@ describe('Convert to Slides', () => {
 
         const [image] = on(second?.id);
         if (image?.type !== 'image') throw new Error('picture missing');
-        expect(await mediaNames(result.path.id)).toEqual([image.mediaName]);
+        expect(await mediaNames(result.id)).toEqual([image.mediaName]);
     }, 60_000);
 
     test('a .pptx with no slides makes a deck with no slides, which the editor seeds as it does a new one', async () => {
         const uploaded = await upload(EMPTY_PPTX, 'empty.pptx');
-        const result = await assertJson<ConvertResult>(await convertRequest(uploaded.id));
-        expect(result.summary).toBeNull();
-        const deck = await readDeck(result.path.id);
+        const result = await assertJson<DrivePath>(await convertRequest(uploaded.id));
+        const deck = await readDeck(result.id);
         expect(deck.frames).toEqual([]);
         expect(deck.elements).toEqual([]);
     }, 60_000);

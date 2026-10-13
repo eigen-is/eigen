@@ -1,6 +1,5 @@
 import {
     CONVERT_SOURCES,
-    type ConvertResult,
     type ConvertTarget,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
@@ -134,7 +133,7 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: ConvertTarget,
     user: User,
-): Promise<ConvertResult> {
+): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
     // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
@@ -156,14 +155,12 @@ export async function convertToDocument(
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, type, user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
         writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
-        return { path: newPath, summary: null };
+        return newPath;
     }
 
     const slides = targetType === 'eigenslides';
     // No frame for a deck: the new one takes the size the file's slide size picks.
-    const { update, images, warnings } = slides
-        ? await importPptxUpdate(buffer, undefined)
-        : await importDocxUpdate(buffer);
+    const { update, images } = slides ? await importPptxUpdate(buffer, undefined) : await importDocxUpdate(buffer);
     // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, type, user);
@@ -172,10 +169,10 @@ export async function convertToDocument(
     if (slides) {
         // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
         writeSlidesUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-        return { path: newPath, summary: importSummary(warnings) };
+        return newPath;
     }
     writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-    return { path: newPath, summary: null };
+    return newPath;
 }
 
 // Answers the summary of what the file held that did not come over, for the toast.

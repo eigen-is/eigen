@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import type { ConvertResult, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
@@ -121,8 +121,7 @@ function nodeTypes(json: JSONContent): string[] {
 describe('Eigendoc docx import/convert', () => {
     test('convert .docx to eigendoc replicates the document content and media', async () => {
         const uploaded = await upload(await buildGoldenDocx(TEST_PNG_BYTES), 'report.docx');
-        const { path: converted, summary } = await assertJson<ConvertResult>(await convertRequest(uploaded.id));
-        expect(summary).toBeNull();
+        const converted = await assertJson<DrivePath>(await convertRequest(uploaded.id));
         expect(converted.type).toBe('doc');
         expect(converted.name).toBe('report.eigendoc');
         expect(converted.parentId).toBe(rootId);

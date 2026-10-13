@@ -1,6 +1,5 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import {
-    type ConvertResult,
     type DriveAccessCheckResult,
     type DrivePath,
     type ImportResult,
@@ -245,7 +244,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, request, user, server }): Promise<ConvertResult> => {
+        async ({ params, request, user, server }): Promise<DrivePath> => {
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             if (!isConvertTarget(params.targetType)) {

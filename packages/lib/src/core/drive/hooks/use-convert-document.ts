@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { CONVERT_SOURCES, type ConvertTarget, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
-import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated } from './keys';
 
@@ -23,17 +22,14 @@ export function useConvertDocument() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (data, variables) => {
+        onSuccess: (_data, variables) =>
             invalidateItemCreated(
                 queryClient,
                 variables.ownerId,
                 variables.mountId,
                 variables.parentId,
                 EIGEN_DOC_TYPE_INFO[CONVERT_SOURCES[variables.targetType].type].mime,
-            );
-            // What the file held that did not come over shows nowhere in the new document.
-            if (data.summary) toast.info(data.summary);
-        },
+            ),
         onError: onMutationError,
     });
 }

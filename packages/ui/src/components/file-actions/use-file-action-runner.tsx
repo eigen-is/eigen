@@ -65,7 +65,7 @@ export function useFileActionRunner(
         if (!path.parentId) return;
         convertDocument.mutate(
             { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id, parentId: path.parentId, targetType },
-            { onSuccess: (result) => openDocument(result.path) },
+            { onSuccess: (newPath) => openDocument(newPath) },
         );
     };
 
