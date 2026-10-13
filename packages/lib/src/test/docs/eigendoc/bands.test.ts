@@ -48,9 +48,10 @@ describe('the header and footer bands', () => {
         const paragraph = (...content: JSONContent[]): JSONContent => ({ type: 'paragraph', content });
 
         // Focusing a band and leaving it leaves an empty paragraph, which prints as nothing.
-        test('is false for no blocks, empty paragraphs and whitespace', () => {
+        test('is false for no blocks, empty paragraphs, whitespace and line breaks', () => {
             expect(bandHasContent(band(paragraph()))).toBe(false);
             expect(bandHasContent(band(paragraph(), paragraph()))).toBe(false);
+            expect(bandHasContent(band(paragraph({ type: 'hardBreak' }, { type: 'text', text: ' ' })))).toBe(false);
             expect(bandHasContent(band(paragraph({ type: 'text', text: '  \t ' })))).toBe(false);
         });
 

@@ -10,12 +10,13 @@ export type BandRoot = (typeof BAND_ROOTS)[number];
 // text that carries it.
 export const BAND_EXCLUDED_NODES = ['pageBreak', 'title', 'subtitle', 'codeBlock'] as const;
 
-// A band prints, and the page draws it, only with something to show: focusing an empty band leaves an empty paragraph.
+// A band prints, and the page draws it, only with something to show: focusing an empty band leaves an empty paragraph,
+// and a line break alone shows nothing either.
 export function bandHasContent(doc: Node): boolean {
     let found = false;
     doc.descendants((node) => {
         if (found) return false;
-        found = node.isText ? /\S/.test(node.text ?? '') : node.isLeaf;
+        found = node.isText ? /\S/.test(node.text ?? '') : node.isLeaf && node.type.name !== 'hardBreak';
         return !found;
     });
     return found;
