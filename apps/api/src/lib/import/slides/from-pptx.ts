@@ -51,7 +51,8 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
                 : fallback;
         };
         const slideSize = { cx: side('cx', DEFAULT_SLIDE_SIZE.cx), cy: side('cy', DEFAULT_SLIDE_SIZE.cy) };
-        const frame = options.frame ?? convertedFrameOf(slideSize);
+        // A Convert's new deck takes Eigen's frame: every deck frame is 16:9 at 1920×1080.
+        const frame = options.frame ?? { width: FRAME_WIDTH, height: FRAME_HEIGHT };
         // Letterboxed: the whole slide fits the frame, centred.
         const scale = Math.min(frame.width / slideSize.cx, frame.height / slideSize.cy);
 
@@ -110,11 +111,6 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     } catch (error) {
         throw importError(error);
     }
-}
-
-// The frame a Convert's new deck takes for the file's slide size: every deck frame is 16:9 at 1920×1080.
-function convertedFrameOf(_slideSize: SlideSize): Frame {
-    return { width: FRAME_WIDTH, height: FRAME_HEIGHT };
 }
 
 // The zip's and the XML's messages speak of archives and markup; the user uploaded a presentation.
