@@ -199,16 +199,19 @@ describe('hyperlinks', () => {
         ).toBeUndefined();
     });
 
-    test("a link lands on its ref's first cell, beside a merge there", () => {
+    test("a link lands on its ref's first cell, beside a merge there, the later of two on one cell winning", () => {
         const { links: found, placed } = links(
-            '<hyperlink ref="B2:C3" location="Other"/><hyperlink ref="D4" location="Other"/>',
+            '<hyperlink ref="B2:C3" location="Other"/><hyperlink ref="D4" location="Stale"/><hyperlink ref="D4:E4" location="Other"/><hyperlink ref="E5:F5" r:id="rId1"/>',
             '<mergeCells><mergeCell ref="B2:C2"/></mergeCells>',
         );
-        expect(Object.keys(found ?? {})).toEqual(['1_1', '3_3']);
+        expect(Object.keys(found ?? {})).toEqual(['1_1', '3_3', '4_4']);
+        // ExcelJS took the link written for the cell alone.
+        expect(found?.['3_3']).toEqual({ linkType: 'sheet', linkAddress: 'Other' });
         expect(placed).toEqual([
             { r: 1, c: 1, v: { mc: { r: 1, c: 1, rs: 1, cs: 2 }, hl: { r: 1, c: 1, id: 'sheet-0' } } },
             { r: 1, c: 2, v: { mc: { r: 1, c: 1 } } },
             { r: 3, c: 3, v: { hl: { r: 3, c: 3, id: 'sheet-0' } } },
+            { r: 4, c: 4, v: { hl: { r: 4, c: 4, id: 'sheet-0' } } },
         ]);
     });
 });
@@ -227,7 +230,7 @@ describe('in the sheet', () => {
     test("a merged or linked cell the grid reads keeps its own value; one it doesn't is a cell of its own", () => {
         const sheet = own(
             '<row r="1"><c r="A1" t="inlineStr"><is><t>title</t></is></c><c r="B1"><v>2</v></c></row>',
-            '<mergeCells><mergeCell ref="A1:A3"/><mergeCell ref="B1:C1"/></mergeCells><hyperlinks><hyperlink ref="E5" location="Sheet1!A1"/></hyperlinks>',
+            '<mergeCells><mergeCell ref="A1:A3"/><mergeCell ref="B1:C1"/><mergeCell ref="G7:G8"/></mergeCells><hyperlinks><hyperlink ref="E5" location="Sheet1!A1"/></hyperlinks>',
         );
         const cells = Object.fromEntries((sheet.celldata ?? []).map(({ r, c, v }) => [`${r}_${c}`, v]));
         expect(cells).toEqual({
@@ -237,10 +240,14 @@ describe('in the sheet', () => {
             '0_1': { v: 2, m: '2', ht: 2, ct: { fa: 'General', t: 'n' }, mc: { r: 0, c: 1, rs: 1, cs: 2 } },
             '0_2': { mc: { r: 0, c: 1 } },
             '4_4': { hl: { r: 4, c: 4, id: 'sheet-0' } },
+            // ExcelJS's path left out the anchor of a one-column merge whose row holds no value.
+            '6_6': { mc: { r: 6, c: 6, rs: 2, cs: 1 } },
+            '7_6': { mc: { r: 6, c: 6 } },
         });
         expect(sheet.config?.merge).toEqual({
             '0_0': { r: 0, c: 0, rs: 3, cs: 1 },
             '0_1': { r: 0, c: 1, rs: 1, cs: 2 },
+            '6_6': { r: 6, c: 6, rs: 2, cs: 1 },
         });
         expect(sheet.hyperlink).toEqual({ '4_4': { linkType: 'cellrange', linkAddress: 'Sheet1!A1' } });
     });

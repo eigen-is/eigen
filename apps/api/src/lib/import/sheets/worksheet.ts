@@ -140,7 +140,8 @@ function readMerges(rest: XmlElement, context: WorksheetContext, worksheet: Work
     if (Object.keys(merge).length > 0) worksheet.config.merge = merge;
 }
 
-// A link lands on its ref's first cell, whether the grid holds a cell there or not. A location is a place in the
+// A link lands on its ref's first cell, whether the grid holds a cell there or not, and of two on one cell the later
+// wins: Excel writes a range's new link after the stale one for its first cell alone. A location is a place in the
 // workbook; with an external relationship it is the target's fragment, which ExcelJS's path read as a place.
 function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: Worksheet): void {
     const hyperlinks = xmlChild(rest, SML_NS, 'hyperlinks');
