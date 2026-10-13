@@ -64,11 +64,17 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let dquote = 0;
     // A quoted sheet name is one token, its delimiters and doubled quotes included.
     let squote = false;
+    // A structured reference's brackets hold names, and a `'` escaping one of their characters.
+    let brackets = 0;
 
     while (i < chars.length) {
         const s = chars[i];
 
-        if (squote || (s === "'" && dquote === 0)) {
+        if (brackets > 0 || (s === '[' && dquote === 0 && !squote)) {
+            if (s === '[') brackets += 1;
+            else if (s === ']') brackets -= 1;
+            str += s;
+        } else if (squote || (s === "'" && dquote === 0)) {
             if (s === "'") squote = !squote;
             str += s;
         } else if (s === ' ' && dquote === 0) {
@@ -82,7 +88,10 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
             }
             i = end;
         } else if (s === '(' && dquote === 0) {
-            result += str.length > 0 ? `${str}(` : '(';
+            // A range may end at a function returning a reference, `B2:INDEX(…)`: its first leg is a ref.
+            const legs = splitUnquoted(str, ':');
+            const name = legs.pop();
+            result += legs.length > 0 ? `${refOf(legs.join(':').trim(), onRef)}:${name}(` : `${str}(`;
             str = '';
         } else if (s === ')' && dquote === 0) {
             result += `${walkFormulaRefs(str, onRef)})`;
@@ -155,6 +164,8 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
 // sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once, and a chained range (`A1:A2:A3`) leg by
 // leg, so its result is #REF! when any leg's is.
 function refOf(token: string, onRef: (ref: string) => string): string {
+    // The second leg of a range a function starts, `INDEX(…):A5`.
+    if (token.startsWith(':')) return `:${refOf(token.slice(1), onRef)}`;
     const legs = splitUnquoted(token, ':');
     if (splitUnquoted(token, '!').length > 2) {
         if (legs.length !== 2 || legs.some((leg) => splitUnquoted(leg, '!').length !== 2)) return token;

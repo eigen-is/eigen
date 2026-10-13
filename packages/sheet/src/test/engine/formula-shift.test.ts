@@ -431,3 +431,21 @@ describe('functionStrChange — unary-minus predecessor scan', () => {
         expect(functionCopy('CONCAT(-3:A10)', 1, 0)).toBe('CONCAT(-3:A10)');
     });
 });
+
+describe('engine/formula-shift — functionCopy functions in a range and structured references', () => {
+    // A range may end or start at a function returning a reference: its other leg is a ref like any.
+    test('a function bordering a colon leaves the leg beside it a ref', () => {
+        expect(functionCopy('SUM(A1:OFFSET(A1,1,0))', 1, 0)).toBe('SUM(A2:OFFSET(A2,1,0))');
+        expect(functionCopy('SUM(B2:INDEX(B:B,ROW()))', 1, 0)).toBe('SUM(B3:INDEX(B:B,ROW()))');
+        expect(functionCopy('INDEX(A:A,1):A5', 1, 0)).toBe('INDEX(A:A,1):A6');
+        expect(functionCopy("SUM('My Sheet'!A1:INDEX('My Sheet'!A:A,3))", 1, 0)).toBe(
+            "SUM('My Sheet'!A2:INDEX('My Sheet'!A:A,3))",
+        );
+    });
+
+    // `'` escapes a structured reference's special character; it opens no sheet name there.
+    test('a structured reference is no ref, and its escape quote opens no sheet name', () => {
+        expect(functionCopy("Table1[[#This Row],[Item '#]]*B1", 1, 0)).toBe("Table1[[#This Row],[Item '#]]*B2");
+        expect(functionCopy('Table1[[#This Row],[A1]]+A1', 1, 0)).toBe('Table1[[#This Row],[A1]]+A2');
+    });
+});
