@@ -129,6 +129,14 @@ test("an equation copied beside an image is its LaTeX in the copy's text item", 
     ]);
 });
 
+test("a page number copied beside an image is # in the copy's text item", () => {
+    const { eigen } = copy([
+        paragraph(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }),
+        paragraph(figure('chart.png')),
+    ]);
+    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Page #', 'image']);
+});
+
 test('a figure whose re-upload fails is left out', async () => {
     const clipboard = copy([paragraph(text('One'), figure('chart.png'))]);
     expect(blocks(await paste(clipboard, async () => null))).toEqual([['One']]);

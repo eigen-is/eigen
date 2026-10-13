@@ -46,6 +46,11 @@ test('a comment on an equation anchors by its attribute and quotes its LaTeX, or
     expect(commentAnchorText(bare, 0, bare.content.size)).toBe('Equation');
 });
 
+test('a comment over a page number quotes its #', () => {
+    const doc = schema.nodeFromJSON(docOf(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }));
+    expect(commentAnchorText(doc, 0, doc.content.size)).toBe('Page #');
+});
+
 test('a new card on an equation selected alone anchors as its attribute', () => {
     const editor = new Editor({
         extensions: [...getDocExtensions(), AtomMarks],

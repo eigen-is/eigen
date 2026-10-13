@@ -105,7 +105,7 @@ Browser print hides the bands, and the PDF, the HTML download, quick look and th
 
 ## A page number is a field that shows #
 
-The `pageNumber` node (`packages/lib/src/docs/eigendoc/nodes/page-number.ts`) is an inline atom whose `kind` is `page` or `pages`. `readPageNumberKind` reads it on parse and on render, so any other value is a page number. It is inline because Google's Page count goes anywhere text goes, the body included (Insert › Page elements › Page numbers › Page count). Its HTML is a `span[data-type="page-number"]` holding `#`, and `#` is also its text for a search or a quoted comment anchor, so no digit shows that a page never had. The editor draws it as a grey chip and names the kind in a tooltip. Word count counts no word for it.
+The `pageNumber` node (`packages/lib/src/docs/eigendoc/nodes/page-number.ts`) is an inline atom whose `kind` is `page` or `pages`. `readPageNumberKind` reads it on parse and on render, so any other value is a page number. It is inline because Google's Page count goes anywhere text goes, the body included (Insert › Page elements › Page numbers › Page count). Its HTML is a `span[data-type="page-number"]` holding `#`, and `#` is also its text for a search, a quoted comment anchor or a copy's text item, so no digit shows that a page never had. The editor draws it as a grey chip and names the kind in a tooltip. Word count counts no word for it.
 
 ## A page break is a dashed rule on screen and a new page on paper
 
@@ -143,7 +143,7 @@ The browser parses with `DOMParser`. The server has none, so `readStoredEquation
 
 ## An equation's text is its LaTeX, and the find bar skips it
 
-Word count, a comment's quote, the text item of a docs copy, a plain-text copy and the search index read an equation as its LaTeX, or as nothing when it has none. The first three call `equationText` in their own leaf callback, as they name the figure there, and a comment on an equation with no LaTeX quotes "Equation". The plain-text copy reads the node's `renderText`. The node has no `leafText`: Tiptap's input rules check their match against `textBetween`, which reads it, so a rule would replace an equation whose LaTeX is the rule's prefix (`light (`, an equation `c`, then `)` gave ©). The find bar matches text nodes only, and prosemirror-search reads any other leaf as one placeholder character, so it never finds an equation.
+Word count, a comment's quote, the text item of a docs copy, a plain-text copy and the search index read an equation as its LaTeX, or as nothing when it has none. The first three call `equationText` in their own leaf callback, as they name the figure there, and a comment on an equation with no LaTeX quotes "Equation". The callback replaces every leaf's `leafText`, so a comment's quote and a copy's text item read any other leaf through its `leafText`, a page number as `#`. The plain-text copy reads the node's `renderText`. The node has no `leafText`: Tiptap's input rules check their match against `textBetween`, which reads it, so a rule would replace an equation whose LaTeX is the rule's prefix (`light (`, an equation `c`, then `)` gave ©). The find bar matches text nodes only, and prosemirror-search reads any other leaf as one placeholder character, so it never finds an equation.
 
 ## The page keeps its width and slides, then scales, clear of a panel
 

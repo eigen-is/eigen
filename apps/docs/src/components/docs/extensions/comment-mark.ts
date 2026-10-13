@@ -71,13 +71,13 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 }
 
 // A comment on an image alone has no text to quote, so the image reads as "Image", and an equation with no text as
-// "Equation".
+// "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
             if (leaf.type.name === 'figure') return 'Image';
             if (leaf.type.name === 'equation') return equationText(leaf) || 'Equation';
-            return '';
+            return leaf.type.spec.leafText?.(leaf) ?? '';
         })
         .slice(0, 100);
 }
