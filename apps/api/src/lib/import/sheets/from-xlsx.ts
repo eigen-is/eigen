@@ -136,9 +136,8 @@ export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
                 chargeCopy,
                 placed: worksheet.placed,
             });
-            // Recalc materialises at least the default grid of a sheet, an empty one too.
-            emitted.span +=
-                Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
+            // The grid its cells span, as recalc materialises it, and at least a default grid, so empty sheets add up.
+            emitted.span += Math.max(grid.rows * grid.columns, DEFAULT_SHEET_ROW_COUNT * DEFAULT_SHEET_COLUMN_COUNT);
             if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
             const { merge = {}, columnlen = {} } = worksheet.config;
             const tallest = new Map<number, number>();

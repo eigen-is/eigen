@@ -429,7 +429,10 @@ describe("the own reader's output budget", () => {
         expect(refused(xlsxFixture({ sheets: [{ data }] }))).toEqual({ status: 413, message: 'Spreadsheet too large' });
     }, 30_000);
 
-    test('every sheet counts the default grid recalc gives it, an empty one too', () => {
+    test('every sheet counts the grid its cells span, the default grid at the least', () => {
+        // A tall, narrow sheet counts its own cells, not a default sheet's width.
+        const tall = '<row r="1"><c r="A1"><v>1</v></c></row><row r="160000"><c r="A160000"><v>1</v></c></row>';
+        expect(xlsxToSheetsOwn(xlsxFixture({ sheets: [{ data: tall }] }))).toHaveLength(1);
         const empty = (count: number) => xlsxFixture({ sheets: Array.from({ length: count }, () => ({})) });
         expect(xlsxToSheetsOwn(empty(1_500))).toHaveLength(1_500);
         expect(refused(empty(1_600))).toEqual({ status: 413, message: 'Spreadsheet has too many cells' });
