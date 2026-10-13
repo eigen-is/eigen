@@ -1,3 +1,4 @@
+import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
 import {
     borderSidesToCss,
@@ -1200,9 +1201,14 @@ export function copiedNumberText(cell: Cell): string | undefined {
     return String(Number(cell.v.toPrecision(15)));
 }
 
-export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) {
+// The range as the clipboard carries it: an HTML table with the cells' styles, and the display text as TSV.
+export function rangeValueToClipboard(
+    ctx: Context,
+    sheetId: string,
+    ranges?: Range,
+): { html: string; text: string } | null {
     const idx = getSheetIndex(ctx, sheetId);
-    if (idx == null) return '';
+    if (idx == null) return null;
     const sheet = ctx.sheets[idx];
 
     const rowIndexArr: number[] = [];
@@ -1243,6 +1249,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
     const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
 
     let cpdata = '';
+    const text: string[][] = [];
     const d = sheet.data;
     if (!d) return null;
 
@@ -1255,6 +1262,8 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         const r = rowIndexArr[i];
 
         cpdata += '<tr>';
+        const textRow: string[] = [];
+        text.push(textRow);
 
         for (let j = 0; j < colIndexArr.length; j += 1) {
             const c = colIndexArr[j];
@@ -1307,7 +1316,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 style += escapeHtml(styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute)));
 
                 if (cell.mc) {
-                    if (!('rs' in cell.mc)) continue;
+                    if (!('rs' in cell.mc)) {
+                        textRow.push('');
+                        continue;
+                    }
                     span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
                 }
                 const cellBorder = borderInfoCompute[`${r}_${c}`];
@@ -1323,6 +1335,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                     c_value = '';
                 }
 
+                textRow.push(String(c_value));
                 column += escapeHtml(String(c_value));
             } else {
                 let style = '';
@@ -1351,7 +1364,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 }
 
                 column = replaceHtml(column, { style, span: '' });
-                column += '';
+                textRow.push('');
             }
 
             column += '</td>';
@@ -1361,7 +1374,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         cpdata += '</tr>';
     }
 
-    return `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`;
+    return {
+        html: `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`,
+        text: cellsToTsv(text),
+    };
 }
 
 export function copy(ctx: Context) {
@@ -1419,11 +1435,11 @@ export function copy(ctx: Context) {
         HasMC,
     };
 
-    const cpdata = rangeValueToHtml(ctx, ctx.currentSheetId, ctx.selections);
+    const cpdata = rangeValueToClipboard(ctx, ctx.currentSheetId, ctx.selections);
 
     if (cpdata) {
         ctx.iscopyself = true;
-        setPendingCopy(cpdata);
+        setPendingCopy(cpdata.html, cpdata.text);
     }
 }
 

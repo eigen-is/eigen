@@ -11,12 +11,10 @@ export function handleCut(ctx: Context) {
 let _pendingCopyHtml: string | null = null;
 let _pendingPlainText: string | null = null;
 
-export function setPendingCopy(html: string) {
+export function setPendingCopy(html: string, plainText: string) {
     _pendingCopyHtml = html;
-    const el = document.createElement('div');
-    el.innerHTML = html;
-    _pendingPlainText = el.innerText || el.textContent || '';
-    sessionStorage.setItem('localClipboard', _pendingPlainText);
+    _pendingPlainText = plainText;
+    sessionStorage.setItem('localClipboard', plainText);
 }
 
 export function consumePendingCopy(): { html: string; plainText: string } | null {
