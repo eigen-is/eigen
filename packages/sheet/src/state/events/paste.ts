@@ -1,3 +1,4 @@
+import { bundledFontOfStack } from '@workspace/lib/constants/fonts';
 import {
     BORDER_SIDE_CSS,
     type CellBorderSides,
@@ -25,7 +26,6 @@ import { setRowHeight } from '../api';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder, setCellValue } from '../modules/cell';
-import { FONT_INDEX_BY_NAME } from '../modules/fonts';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
@@ -1208,18 +1208,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     ? 1
                                     : undefined;
 
-                            const ff = td.style.fontFamily || styles['font-family'] || '';
-                            const ffs = ff.split(',');
-                            for (let i = 0; i < ffs.length; i += 1) {
-                                const faKey = trim(ffs[i].toLowerCase());
-                                const fa: number | undefined = FONT_INDEX_BY_NAME[faKey];
-                                if (isNil(fa)) {
-                                    cell.ff = 0;
-                                } else {
-                                    cell.ff = fa;
-                                    break;
-                                }
-                            }
+                            const ff = bundledFontOfStack(td.style.fontFamily || styles['font-family'] || '');
+                            if (ff) cell.ff = ff;
                             const fs = Math.round(
                                 styles['font-size']
                                     ? parseInt(styles['font-size'].replace('pt', ''), 10)

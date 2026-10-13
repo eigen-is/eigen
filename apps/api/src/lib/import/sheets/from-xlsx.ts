@@ -12,7 +12,13 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    BORDER_STYLES,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_DIGIT_WIDTH,
+    SHEET_DEFAULT_FONT,
+    SHEET_DEFAULT_ROW_HEIGHT,
+} from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     cellWrapsText,
@@ -68,6 +74,10 @@ type ThemePalette = string[];
 // of few cells.
 export const MAX_CELLS = 4_000_000;
 
+// The pixels of a column width unit in a file whose default font isn't Eigen's: Calibri 11's 7 px digit plus padding,
+// near enough. A width counts the file's own default font, so only Eigen's exports convert through Inter's digit.
+const OFFICE_DIGIT_WIDTH = 8;
+
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const checked = repackXlsx(buffer);
 
@@ -80,11 +90,13 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     // One after the other, so their trees are never alive together.
     const theme = readThemePalette(zip);
     const locationLinks = readLocationHyperlinks(zip);
+    const digitWidth =
+        readDefaultFontName(zip) === SHEET_DEFAULT_FONT.name ? SHEET_DEFAULT_DIGIT_WIDTH : OFFICE_DIGIT_WIDTH;
 
     const emitted = { text: 0 };
     const sheets: Sheet[] = [];
     for (const [index, worksheet] of workbook.worksheets.entries()) {
-        sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name), emitted));
+        sheets.push(worksheetToSheet(worksheet, index, theme, digitWidth, locationLinks.get(worksheet.name), emitted));
     }
     return sheets;
 }
@@ -346,6 +358,7 @@ function worksheetToSheet(
     worksheet: Worksheet,
     index: number,
     theme: ThemePalette,
+    digitWidth: number,
     locationLinks: Map<string, string> | undefined,
     emitted: { text: number },
 ): Sheet {
@@ -363,7 +376,7 @@ function worksheetToSheet(
     const colhidden: NonNullable<SheetConfig['colhidden']> = {};
     for (const [i, col] of (worksheet.columns ?? []).entries()) {
         if (col && typeof col.width === 'number' && col.width > 0) {
-            const px = Math.round(col.width * 8);
+            const px = Math.round(col.width * digitWidth);
             colWidthPx[i] = px;
             columnlen[String(i)] = px;
         }
@@ -1106,27 +1119,45 @@ const ROOT_START_TAG = /<([^\s?!/<>][^\s/<>]*)(?:\s+[^\s=/<>]+\s*=\s*(?:"[^"]*"|
 // Global for their lastIndex: each search starts where the schema puts what it looks for.
 const SHEET_DATA_END = /<\/(?:[^\s/<>:]+:)?sheetData\s*>|<(?:[^\s/<>:]+:)?sheetData\s*\/>/g;
 const HYPERLINKS_START_TAG = /<((?:[^\s/<>:]+:)?hyperlinks)[\s/>]/g;
+const FONT_START_TAG = /<((?:[^\s/<>:]+:)?font)[\s/>]/g;
 
-// The rest of a sheet can be the whole decompressed cap, so only its hyperlinks block is parsed, behind the prolog
-// and the root's start tag so the namespaces bound there stay bound and a DOCTYPE is still refused. The schema puts
+// The rest of a sheet can be the whole decompressed cap, so only its hyperlinks block is parsed. The schema puts
 // the block after the sheet data, so the search starts past it: past the bulk of the sheet, and past any opener a
 // comment there could hide.
 function readHyperlinksBlock(sheet: string): XmlElement | undefined {
-    const root = ROOT_START_TAG.exec(sheet);
-    if (!root) return undefined;
-    const head = sheet.slice(0, root.index + root[0].length);
-    SHEET_DATA_END.lastIndex = head.length;
-    HYPERLINKS_START_TAG.lastIndex = SHEET_DATA_END.exec(sheet) ? SHEET_DATA_END.lastIndex : head.length;
-    const open = HYPERLINKS_START_TAG.exec(sheet);
-    if (!open) return undefined;
-    // An end tag that doesn't match is Bun's to refuse.
-    const end = sheet.indexOf(`</${open[1]}`, open.index);
-    const close = end < 0 ? -1 : sheet.indexOf('>', end);
-    if (close < 0) return undefined;
-    const block = sheet.slice(open.index, close + 1);
-    if (!withinParseBound([head, block], HYPERLINKS_BOUND)) return undefined;
-    const wrapped = parsePart(`${head}${block}</${root[1]}>`);
+    const wrapped = readElement(sheet, HYPERLINKS_START_TAG, HYPERLINKS_BOUND, SHEET_DATA_END);
     return wrapped ? xmlChild(wrapped, SML_NS, 'hyperlinks') : undefined;
+}
+
+// The name of styles fonts[0], the default font: what a column width counts the digits of. The schema puts no font
+// before it, and a styles part with thousands of formats runs past PART_BOUND, so only that element is parsed.
+function readDefaultFontName(zip: ZipReader): string | undefined {
+    const bytes = zip.read('xl/styles.xml');
+    const wrapped = bytes && readElement(new TextDecoder().decode(bytes), FONT_START_TAG, PART_BOUND);
+    const font = wrapped && xmlChild(wrapped, SML_NS, 'font');
+    const name = font && xmlChild(font, SML_NS, 'name');
+    return name ? xmlAttr(name, '', 'val') : undefined;
+}
+
+// The first element a start tag pattern finds, past `skip` when it matches, parsed alone inside the prolog and the
+// root's start tag, so the namespaces bound there stay bound and a DOCTYPE is still refused. Returns that root.
+function readElement(part: string, start: RegExp, bound: ParseBound, skip?: RegExp): XmlElement | null {
+    const root = ROOT_START_TAG.exec(part);
+    if (!root) return null;
+    const head = part.slice(0, root.index + root[0].length);
+    start.lastIndex = head.length;
+    if (skip) {
+        skip.lastIndex = head.length;
+        if (skip.exec(part)) start.lastIndex = skip.lastIndex;
+    }
+    const open = start.exec(part);
+    if (!open) return null;
+    // An end tag that doesn't match is Bun's to refuse.
+    const end = part.indexOf(`</${open[1]}`, open.index);
+    const close = end < 0 ? -1 : part.indexOf('>', end);
+    if (close < 0) return null;
+    const block = part.slice(open.index, close + 1);
+    return withinParseBound([head, block], bound) ? parsePart(`${head}${block}</${root[1]}>`) : null;
 }
 
 function readPart(zip: ZipReader, path: string): XmlElement | null {

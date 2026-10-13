@@ -139,7 +139,7 @@ Previews pass the same function the exact set of their own preview URLs ([PREVIE
 
 Export is the one read that recalcs a workbook nobody computed ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)), so an import whose recalc failed still exports values. A recalc failure exports the replayed values with a `recalc-failed` warning. A legacy workbook whose recalc outlasts the 120 s deadline fails the export, an accepted residual.
 
-`to-xlsx.ts` reverses the importer with the same library. A merge's border perimeter is folded onto its master by `mergedBorderSides`, because ExcelJS keeps one style across a merge. Webpage links pass `resolveWebLink`, the editor's gate. Internal links are written in Excel's own `location` form. Floating images are dropped, an open [ROADMAP](ROADMAP.md) row. The class-styled HTML and the round-trip drifts: [SHEETS.md](SHEETS.md).
+`to-xlsx.ts` reverses the importer with the same library. A merge's border perimeter is folded onto its master by `mergedBorderSides`, because ExcelJS keeps one style across a merge. Webpage links pass `resolveWebLink`, the editor's gate. Internal links are written in Excel's own `location` form. Inter is the workbook's default font ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)). Floating images are dropped, an open [ROADMAP](ROADMAP.md) row. The class-styled HTML and the round-trip drifts: [SHEETS.md](SHEETS.md).
 
 ## Canvas pages are the boxes the live canvas draws
 
