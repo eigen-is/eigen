@@ -9,10 +9,12 @@ import {
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
+import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 import { writeEigendocUpdateToYjs } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
 import {
     type DocImportWorkerResult,
+    type ImportTransformJob,
     type SheetsImportJob,
     type TransformMedia,
     toTransferableBuffer,
@@ -22,28 +24,37 @@ import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
+import { IMPORT_TOO_LARGE } from './messages';
 
 const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
 
-// Parsing, guards, recalc and serialization run in the transform Worker; the main
+// Parsing, guards, recalc and serialization run in the transform process; the main
 // thread only commits what it returns — the snapshot for sheets, a ready Yjs update
-// plus extracted media for documents. Nothing is created or mutated before the Worker
+// plus extracted media for documents. Nothing is created or mutated before the transform
 // succeeds, so a failed import leaves source and target untouched.
-// Refuse before the copy: the upload is copied whole (a transfer hands over the WHOLE
-// backing buffer, and the Buffer can be a view over a larger pool), so a job the runner
-// will not admit must not pay for it. run() rechecks authoritatively.
+// Refuse before the copy: a view over a larger pool is copied out, and IPC copies the
+// upload again, so a job the runner will not admit must not pay for it. run() rechecks
+// authoritatively.
 function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
     documentTransformRunner.assertAdmissible('foreground');
+    assertWithinByteCap(buffer.byteLength, 'xlsx');
     return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
 }
 
 function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
     documentTransformRunner.assertAdmissible('foreground');
+    assertWithinByteCap(buffer.byteLength, 'docx');
     return runImportToDocumentUpdate(
         { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: getPublicOrigin() },
         toTransferableBuffer(buffer),
         { signal },
     );
+}
+
+// openZip refuses an archive past the byte cap anyway; refused here, a file that large is never read or copied to the
+// transform. The upload cap allows up to a gigabyte, and a convert reads a stored file of any size.
+function assertWithinByteCap(bytes: number, format: ImportTransformJob['sourceFormat']): void {
+    if (bytes > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, IMPORT_TOO_LARGE[format]);
 }
 
 // The route checked write before buffering, but the job can queue and transform for
@@ -89,7 +100,7 @@ async function saveDocImages(
 }
 
 // No signal parameter by design: conversion detaches from the request so a page
-// reload cannot kill a minute of Worker progress (routes/drive.ts /convert).
+// reload cannot kill a minute of transform progress (routes/drive.ts /convert).
 export async function convertToDocument(
     drive: DriveLike,
     mount: Mount,
@@ -102,6 +113,7 @@ export async function convertToDocument(
     // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
     // is the costliest preparation here. run() rechecks authoritatively.
     documentTransformRunner.assertAdmissible('foreground');
+    assertWithinByteCap(sourcePath.size, targetType === 'eigensheets' ? 'xlsx' : 'docx');
 
     const bytes = await mount.readBytes(sourcePath.id);
     if (!bytes) throw new ApiError(404, 'File not found');
@@ -141,7 +153,7 @@ export async function importIntoDocument(
     signal?: AbortSignal,
 ): Promise<void> {
     // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
-    // file wearing an eigen mime falls through to the 400 rather than into a Worker transform over
+    // file wearing an eigen mime falls through to the 400 rather than into a transform over
     // the caller's bytes — the same gate exportDocument applies.
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
     if (containerMime === DRIVE_MIME_SHEETS) {

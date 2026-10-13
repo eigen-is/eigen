@@ -252,6 +252,9 @@ export function resultBytes(result: TransformResult): number {
 // Buffers from TextEncoder/ExcelJS can be views over a larger pool, and IPC
 // serializes a view's WHOLE backing buffer — copy to an exact standalone one first.
 export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
+    const { buffer } = bytes;
+    if (buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength)
+        return buffer;
     const out = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(out).set(bytes);
     return out;

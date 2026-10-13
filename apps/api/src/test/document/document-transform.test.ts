@@ -21,7 +21,7 @@ import * as collabSchema from '../../lib/collab/schema';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
-import { openZip } from '../../lib/core/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
 import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
@@ -1464,6 +1464,51 @@ describe('document transform (docx import)', () => {
     test('a failed convert creates no destination document', async () => {
         await expectFailedConvertCreatesNoDestination(DOCX_FIXTURE);
     }, 120_000);
+});
+
+// openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
+// to the transform process, in its format's words.
+describe('document transform (input bound)', () => {
+    test.each([
+        [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, SPREADSHEET_TOO_LARGE],
+        [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, DOCUMENT_TOO_LARGE],
+    ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
+        const runSpy = spyOn(documentTransformRunner, 'run');
+        try {
+            const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
+            const path = { id: 'too-large', type, mimeType } as DrivePath;
+            const error = await importIntoDocument({} as unknown as Drive, path, upload, {} as unknown as User).catch(
+                (reason: unknown) => reason,
+            );
+            expect(error).toMatchObject({ status: 413, message });
+            expect(runSpy.mock.calls.filter(([request]) => request.kind === 'import')).toHaveLength(0);
+        } finally {
+            runSpy.mockRestore();
+        }
+    });
+
+    test.each([
+        ['eigensheets', 'large.xlsx', SPREADSHEET_TOO_LARGE],
+        ['eigendoc', 'large.docx', DOCUMENT_TOO_LARGE],
+    ] as const)(
+        'a convert to %s of a stored file past the byte cap is 413 and never reads it',
+        async (target, name, message) => {
+            const mount = {
+                readBytes: () => {
+                    throw new Error('a convert read a stored file past the byte cap');
+                },
+            } as unknown as Mount;
+            const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
+            const error = await convertToDocument(
+                {} as unknown as Drive,
+                mount,
+                path,
+                target,
+                {} as unknown as User,
+            ).catch((reason: unknown) => reason);
+            expect(error).toMatchObject({ status: 413, message });
+        },
+    );
 });
 
 describe('document transform (admission)', () => {

@@ -2,7 +2,11 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from '../../lib/core/errors';
-import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
+import {
+    type DocumentTransformRequest,
+    type DocumentTransformResponse,
+    toTransferableBuffer,
+} from '../../lib/document/transform/protocol';
 import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { exportBytes, importSnapshot, previewBody } from '../fixtures/transform-results';
 
@@ -443,6 +447,17 @@ describe('DocumentTransformRunner', () => {
         expect(buffer.byteLength).toBe(5); // the sender keeps its own
         expect(JSON.parse(previewBody(response)).receivedBytes).toEqual([5]);
         await runner.close();
+    });
+
+    // IPC serializes a view's whole backing buffer, so only a view is copied out; an exact buffer goes as it is.
+    test('toTransferableBuffer copies a view and passes an exact buffer', () => {
+        const whole = new Uint8Array([1, 2, 3]);
+        expect(toTransferableBuffer(whole)).toBe(whole.buffer);
+        const view = new Uint8Array(new ArrayBuffer(1024), 8, 3);
+        view.set([4, 5, 6]);
+        const copied = toTransferableBuffer(view);
+        expect(copied.byteLength).toBe(3);
+        expect([...new Uint8Array(copied)]).toEqual([4, 5, 6]);
     });
 
     test('an export result buffer arrives intact', async () => {
