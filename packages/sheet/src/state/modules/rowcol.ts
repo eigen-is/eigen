@@ -445,8 +445,9 @@ function adjustSelectionForInsert(
 function writeBackSheets(ctx: Context, sheets: Sheet[], id: string) {
     sheets.forEach((next, i) => {
         const sheet = ctx.sheets[i];
-        const keys = Object.keys(next) as (keyof Sheet)[];
-        if (next.id === id || !keys.every((key) => key === 'charts' || next[key] === sheet[key])) {
+        const before: Record<string, unknown> = sheet;
+        const after: Record<string, unknown> = next;
+        if (next.id === id || !Object.keys(next).every((key) => key === 'charts' || after[key] === before[key])) {
             ctx.sheets[i] = next;
             return;
         }

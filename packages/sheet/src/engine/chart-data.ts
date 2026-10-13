@@ -1,21 +1,13 @@
 import { chartLabel, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
-import type { CellRangeRef, InlineChartData, RangeChartData } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartData, ChartDataError, RangeChartData } from '@workspace/lib/types/chart';
 import { inlineStringText } from './format';
 import type { Cell, CellResolver } from './types';
-
-// What the chart layout draws, the shape inline data already has.
-export type ResolvedChartData = Pick<InlineChartData, 'categories' | 'series'>;
-// 'ref': a ref was deleted, names a missing sheet, or spans rows and columns, Excel's #REF.
-export type ChartDataError = 'ref' | 'too-many-points';
 
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
 // text `m` or a rich-text cell's runs, the same strings the grid shows. Hidden rows and columns are
 // read like any other.
-export function resolveRangeChartData(
-    data: RangeChartData,
-    resolver: CellResolver,
-): ResolvedChartData | ChartDataError {
+export function resolveRangeChartData(data: RangeChartData, resolver: CellResolver): ChartData | ChartDataError {
     const sheetIds = new Set(resolver.getSheets().map((sheet) => sheet.id));
     const usable = (ref: CellRangeRef | null): ref is CellRangeRef =>
         ref !== null && sheetIds.has(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
@@ -44,7 +36,9 @@ export function resolveRangeChartData(
         ...style,
         // A name is one cell, Google's header cell; a wider ref reads its first.
         name: typeof name === 'string' ? name : label(resolver.getCell(name.sheetId, name.row[0], name.column[0])),
-        values: cells(valueRefs[i]).map(value),
+        values: cells(valueRefs[i]).map((cell) =>
+            typeof cell?.v === 'number' && Number.isFinite(cell.v) ? cell.v : null,
+        ),
     }));
     const count = Math.max(0, ...resolved.map((s) => s.values.length));
     return {
@@ -55,10 +49,6 @@ export function resolveRangeChartData(
 
 function size(ref: CellRangeRef): number {
     return (ref.row[1] - ref.row[0] + 1) * (ref.column[1] - ref.column[0] + 1);
-}
-
-function value(cell: Cell | null): number | null {
-    return typeof cell?.v === 'number' && Number.isFinite(cell.v) ? cell.v : null;
 }
 
 function label(cell: Cell | null): string {
