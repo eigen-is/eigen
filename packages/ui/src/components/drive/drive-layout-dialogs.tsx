@@ -153,12 +153,13 @@ export function useDriveLayoutDialogs({
     const paletteActions = useMemo(
         () => ({
             onDownload: handleDownloadPath,
+            onExport: exportPath,
             onRename,
             onShare: onShareClick,
             onEmailCollaborators,
             onDelete,
         }),
-        [handleDownloadPath, onRename, onShareClick, onEmailCollaborators, onDelete],
+        [handleDownloadPath, exportPath, onRename, onShareClick, onEmailCollaborators, onDelete],
     );
     usePaletteSelectionActions(paletteActions);
 

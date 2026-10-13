@@ -3,7 +3,7 @@ import type { Box } from '@workspace/lib/vector';
 import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { onImageMoveStart, updateImage } from '../../state';
 import type { Image } from '../../state/types';
@@ -44,6 +44,11 @@ function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageC
     // Safety net (vector's idiom): ObjectTransform's Escape-cancel and no-move paths fire no onCommit,
     // so their snapshot preview would otherwise stick and mask later panel/remote edits. Any pointerup
     // or window blur drops a leftover preview; a real commit's setContext write supersedes it.
+    // The click that selects an image unmounts the focused InactiveImage, so this takes focus, or the workbook's
+    // keydown never sees Delete.
+    const container = useRef<HTMLDivElement>(null);
+    useEffect(() => container.current?.focus({ preventScroll: true }), []);
+
     useEffect(() => {
         const clear = () => setPreview((p) => (p ? null : p));
         document.addEventListener('pointerup', clear);
@@ -61,8 +66,10 @@ function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageC
         // inherits the same scroll offset + freeze clipping as every image.
         <div
             id="sheet-modal-dialog-activeImage"
+            ref={container}
+            tabIndex={-1}
             // pointer-events-auto: the pane-region wrapper is pointer-events none
-            className="absolute pointer-events-auto"
+            className="absolute pointer-events-auto outline-none"
             style={{
                 zIndex: 20,
                 width: box.width,
@@ -139,26 +146,6 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
         [setContext, img.id],
     );
 
-    if (!url) {
-        return (
-            <div
-                id={img.id}
-                className="absolute overflow-hidden pointer-events-auto"
-                style={{
-                    width: w,
-                    height: h,
-                    left: img.x,
-                    top: img.y,
-                    transform: rotate,
-                    transformOrigin: 'center center',
-                    zIndex: 19,
-                }}
-            >
-                <ImagePlaceholder missing={missing} />
-            </div>
-        );
-    }
-
     return (
         <div
             id={img.id}
@@ -178,7 +165,11 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
             onContextMenu={(e) => onContextMenu(e, img)}
             tabIndex={0}
         >
-            <img src={url} alt="" style={{ width: w, height: h }} decoding="async" />
+            {url ? (
+                <img src={url} alt="" style={{ width: w, height: h }} decoding="async" />
+            ) : (
+                <ImagePlaceholder missing={missing} />
+            )}
         </div>
     );
 }
