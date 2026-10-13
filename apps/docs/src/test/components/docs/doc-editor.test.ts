@@ -1,6 +1,6 @@
 // One factory builds the body's editor and each band's. A band's editor binds its own root with its own undo, its schema
 // deletes the nodes a band leaves out and keeps every mark, a paste into it drops comment anchors, and an image pasted
-// into it lands in that editor.
+// into it lands in that editor. A table is fitted to the text column of the page the doc holds, not the one on screen.
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -10,7 +10,10 @@ installHappyDom();
 const Y = await import('yjs');
 const { Editor } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { BAND_EXCLUDED_NODES, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { prosemirrorJSONToYXmlFragment } = await import('@tiptap/y-tiptap');
+const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const { docEditorOptions } = await import('../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -44,7 +47,6 @@ function mount(doc: InstanceType<typeof Y.Doc>, target: Target) {
             target,
             caret: null,
             coarsePointer: false,
-            textColumnWidth: () => 600,
             media: () => media,
             editor: () => editor,
         }),
@@ -160,11 +162,88 @@ test('an image pasted into a band lands in that editor, under the name its re-up
     expect(doc.getXmlFragment('default').toString()).not.toContain('logo');
 });
 
+type PageSetup = typeof DEFAULT_PAGE_SETUP;
+
+// A text column of 108 mm, 408 px.
+const A5: PageSetup = { ...DEFAULT_PAGE_SETUP, width: 148, height: 210 };
+// A text column of 259.4 mm, 980.4 px.
+const LETTER_LANDSCAPE: PageSetup = {
+    ...DEFAULT_PAGE_SETUP,
+    width: 279.4,
+    height: 215.9,
+    margin: { top: 10, right: 10, bottom: 10, left: 10 },
+};
+
+function setPage(doc: InstanceType<typeof Y.Doc>, setup: PageSetup) {
+    const page = doc.getMap(PAGE_ROOT);
+    for (const [key, value] of Object.entries(pageRecord(setup))) page.set(key, value);
+}
+
+const wideTable = {
+    type: 'table',
+    content: [
+        {
+            type: 'tableRow',
+            content: [490, 490].map((width) => ({
+                type: 'tableCell',
+                attrs: { colwidth: [width] },
+                content: [{ type: 'paragraph' }],
+            })),
+        },
+    ],
+};
+
+const colwidths = (editor: InstanceType<typeof Editor>) => {
+    const found: unknown[] = [];
+    editor.state.doc.descendants((node) => {
+        if (node.type.name === 'tableCell') found.push(node.attrs['colwidth']);
+    });
+    return found;
+};
+
+// A docx imported into an open doc lands as one update holding the content and the page. The page on screen still
+// draws the old page until React reads the new one, after the clamp has run.
+test('a remote update that brings a wide table and a page it fits keeps the table, while the old page is on screen', () => {
+    const doc = new Y.Doc();
+    setPage(doc, A5);
+    const onScreen = document.body.appendChild(document.createElement('div'));
+    onScreen.setAttribute('data-document', '');
+    Object.defineProperty(onScreen, 'clientWidth', { value: 408 });
+    const editor = body(doc);
+
+    const remote = new Y.Doc();
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    remote.transact(() => {
+        setPage(remote, LETTER_LANDSCAPE);
+        prosemirrorJSONToYXmlFragment(
+            editor.schema,
+            { type: 'doc', content: [wideTable] },
+            remote.getXmlFragment('default'),
+        );
+    });
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(remote, Y.encodeStateVector(doc)));
+    onScreen.remove();
+
+    expect(colwidths(editor)).toEqual([[490], [490]]);
+});
+
+test('a table wider than a narrower page shrinks to its text column at the next edit', () => {
+    const doc = new Y.Doc();
+    setPage(doc, LETTER_LANDSCAPE);
+    const editor = body(doc);
+    editor.commands.setContent({ type: 'doc', content: [wideTable, { type: 'paragraph' }] });
+    expect(colwidths(editor)).toEqual([[490], [490]]);
+
+    setPage(doc, A5);
+    expect(colwidths(editor)).toEqual([[490], [490]]);
+    editor.commands.insertContentAt(editor.state.doc.content.size - 1, 'x');
+    expect(colwidths(editor)).toEqual([[204], [204]]);
+});
+
 // The uploads below land through the real media resolver; the upload answers when the test lets it.
 const { renderInDocument } = await import('@workspace/ui/test/render-in-document');
 const { act, createElement, useState } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { DEFAULT_PAGE_SETUP } = await import('@workspace/lib/docs/eigendoc');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
@@ -234,7 +313,6 @@ test('a body upload that settles after its editor was built anew swaps the name 
                 provider: null,
                 editable: true,
                 target: { undoManager, cardIds: () => new Set() },
-                textColumnWidth: () => 600,
             },
             [generation],
         );
@@ -267,7 +345,6 @@ test("a band upload that settles after the panel closed swaps the name in the ba
             yDoc: doc,
             provider: null,
             editable: true,
-            textColumnWidth: () => 600,
         });
         rendered.host = { header: editors.header, media, close: () => setOpen(false) };
         return open
@@ -316,7 +393,6 @@ test.each([
             provider: null,
             editable,
             target: { field: 'header' },
-            textColumnWidth: () => 600,
         });
         return null;
     }

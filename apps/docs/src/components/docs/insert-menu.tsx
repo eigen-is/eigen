@@ -125,7 +125,7 @@ export const InsertMenu = ({
         {onAddComment && (
             <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled={active.selectionEmpty} onClick={onAddComment}>
+                <DropdownMenuItem disabled={!active.canComment} onClick={onAddComment}>
                     <MessageSquarePlus className="h-4 w-4 mr-2" /> Comment
                 </DropdownMenuItem>
             </>

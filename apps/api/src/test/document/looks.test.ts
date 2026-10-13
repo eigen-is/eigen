@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DOCUMENT_FONT, DOCUMENT_FONT_SIZE, SMALL_FONT_SIZE } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
 import { W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
@@ -24,7 +24,13 @@ import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const zip = openZip(
-    await eigendocToDocx(buildAllFeaturesDocJson(), buildAllFeaturesDocMedia(), 'Report.eigendoc', undefined),
+    await eigendocToDocx(
+        buildAllFeaturesDocJson(),
+        DEFAULT_PAGE_SETUP,
+        buildAllFeaturesDocMedia(),
+        'Report.eigendoc',
+        undefined,
+    ),
 );
 
 function part(path: string): XmlElement {

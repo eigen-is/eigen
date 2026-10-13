@@ -33,7 +33,7 @@ function Host({ doc, request }: { doc: InstanceType<typeof Y.Doc>; request: Requ
     const setup = usePageSetup(doc);
     const [undoManager] = useState(() => createDocUndoManager(doc));
     const media = useDocMedia(drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC }));
-    const editors = useBandEditors({ media, yDoc: doc, provider: null, editable: true, textColumnWidth: () => 600 });
+    const editors = useBandEditors({ media, yDoc: doc, provider: null, editable: true });
     return createElement(HeadersFootersPanel, {
         editors,
         media,

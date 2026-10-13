@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
@@ -31,8 +33,8 @@ async function docxDocumentXml(doc: Y.Doc): Promise<string> {
     return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
-async function exportStyle(format: 'html' | 'pdf-html'): Promise<string> {
-    const { data } = await renderEigendocExport(seededDoc(), format, 'Report.eigendoc', [], undefined);
+async function exportStyle(format: 'html' | 'pdf-html', doc = seededDoc()): Promise<string> {
+    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
     return new TextDecoder().decode(data).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
 }
 
@@ -55,6 +57,34 @@ describe('doc export — the page', () => {
         expect(pgSz).toContain('w:h="16838"');
         const pgMar = xml.match(/<w:pgMar\b[^>]*>/)?.[0];
         for (const side of ['top', 'right', 'bottom', 'left']) expect(pgMar).toContain(`w:${side}="1134"`);
+    });
+
+    // Letter landscape with 1 cm margins.
+    function letterDoc(): Y.Doc {
+        const doc = seededDoc();
+        const page = { width: 279.4, height: 215.9, margin: { top: 10, right: 10, bottom: 10, left: 10 } };
+        const map = doc.getMap(PAGE_ROOT);
+        for (const [key, value] of Object.entries(pageRecord({ ...page, differentFirstPage: false })))
+            map.set(key, value);
+        return doc;
+    }
+
+    test.each(['html', 'pdf-html'] as const)('%s draws and prints the page the doc stores', async (format) => {
+        const css = await exportStyle(format, letterDoc());
+
+        expect(css).toContain('@page { size: 279.4mm 215.9mm; margin: 10mm 10mm 10mm 10mm; }');
+        const pageRule = css.match(/\.page \{([^}]*)\}/)?.[1];
+        expect(pageRule).toContain('width: 279.4mm;');
+        expect(pageRule).toContain('padding: 10mm 10mm 10mm 10mm;');
+    });
+
+    test('docx is the page the doc stores, landscape when wider than tall', async () => {
+        const xml = await docxDocumentXml(letterDoc());
+
+        expect(xml.match(/<w:pgSz\b[^>]*>/)?.[0]).toBe('<w:pgSz w:w="15840" w:h="12240" w:orient="landscape"/>');
+        expect(xml.match(/<w:pgMar\b[^>]*>/)?.[0]).toBe(
+            '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567" w:header="567" w:footer="567" w:gutter="0"/>',
+        );
     });
 
     test('docx opens on the first paragraph, not an empty one', async () => {
@@ -291,6 +321,46 @@ describe('doc export — page breaks', () => {
         const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
         const { json } = docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+    });
+});
+
+describe('doc export — equations', () => {
+    const MATH = `<math xmlns="${MATHML_NAMESPACE}">`;
+    const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+
+    async function exportHtml(...attrs: Record<string, unknown>[]): Promise<string> {
+        const equations = attrs.map((a) => ({ type: 'equation', attrs: a }));
+        const doc = seededDoc({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        return new TextDecoder().decode(data);
+    }
+
+    // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text.
+    test('an equation is its MathML without the LaTeX, display="block" when it is displayed', async () => {
+        const html = await exportHtml({ mathml: writeMathml(x, 'x') }, { mathml: writeMathml(x, 'x'), display: true });
+        expect(html).toContain(
+            `<p>${MATH}<mi>x</mi></math><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math>`,
+        );
+        expect(html).not.toContain('x-tex');
+    });
+
+    // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
+    test('a prescript keeps its empty slot', async () => {
+        const html = await exportHtml({
+            mathml: writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]),
+        });
+        expect(html).toContain(
+            '<mmultiscripts><mi>x</mi><mprescripts></mprescripts><mn>1</mn><none></none></mmultiscripts>',
+        );
+    });
+
+    test('a forged or malformed stored string never reaches the HTML', async () => {
+        const html = await exportHtml(
+            { mathml: `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script></math>` },
+            { mathml: `${MATH}<mi>x</mi>` },
+        );
+        expect(html).toContain(`<p>${MATH}<mi>x</mi></math>${MATH}</math><br></p>`);
+        expect(html).not.toContain('alert');
     });
 });
 
