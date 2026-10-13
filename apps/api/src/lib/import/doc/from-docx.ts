@@ -91,7 +91,7 @@ export function importError(error: unknown): Error {
     // A stack the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
     if (error instanceof RangeError && /call stack/i.test(error.message))
         return new ApiError(413, DOCUMENT_TOO_LARGE, { cause: error });
-    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
+    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the transform's log.
     console.warn('[import] docx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
     return new ApiError(400, NOT_A_DOCX, { cause: error });
 }

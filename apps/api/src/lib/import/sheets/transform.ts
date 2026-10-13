@@ -5,7 +5,7 @@ import { type TransformWarning, toTransferableText } from '../../document/transf
 import { NOT_AN_XLSX, xlsxToSheets } from './from-xlsx';
 
 // Uploaded xlsx bytes → the lean snapshot JSON the main thread commits. Runs
-// inside the transform Worker (worker.ts owns execution; the conversion logic
+// inside the transform process (child.ts owns execution; the conversion logic
 // stays here in import/, pure over the buffer). The zip/cell guards ride along
 // inside xlsxToSheets with their exact 413s, and a recalc failure comes back as a
 // warning — an import must never fail because recalc hiccuped.

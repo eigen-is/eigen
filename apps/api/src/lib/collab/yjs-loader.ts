@@ -10,7 +10,7 @@ import * as schema from './schema';
 type DocDb = BunSQLiteDatabase<typeof schema>;
 
 // Compressed persisted Yjs state, captured as standalone buffers so it can be
-// transferred to a document-transform Worker (or materialized right here on the
+// sent to the document-transform process (or materialized right here on the
 // main thread). Blob ids ride along for diagnostics only.
 export type YjsStatePayload = {
     snapshot: { id: number; lastUpdateId: number; data: ArrayBuffer } | null;

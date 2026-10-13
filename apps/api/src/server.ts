@@ -66,7 +66,7 @@ async function gracefulShutdown(signal: string) {
     stopAllSchedules();
     server.stop();
     controlSocket.stop();
-    // Stop transform admission and finish/terminate the active Worker before the
+    // Stop transform admission and finish or kill the active transform before the
     // Mount/database teardown below — jobs hold no db leases, but their results
     // must not race the cache/mount shutdown.
     await documentTransformRunner.close();

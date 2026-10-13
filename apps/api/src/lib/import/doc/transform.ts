@@ -13,7 +13,7 @@ import {
 import { DOCUMENT_TOO_LARGE } from '../messages';
 import { importError, readDocx } from './from-docx';
 
-// Runs in the transform Worker, so neither the reader nor the conversion to Yjs blocks the event loop. The main thread
+// Runs in the transform process, so neither the reader nor the conversion to Yjs blocks the event loop. The main thread
 // commits the update and writes the images through Mount.
 export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
