@@ -1,6 +1,7 @@
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
+import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
@@ -72,6 +73,8 @@ type EditorToolbarProps = {
     storageUnavailable: boolean;
     canUndo: boolean;
     canRedo: boolean;
+    pageSetup: PageSetup;
+    onPageSetupChange: (setup: PageSetup) => void;
     onAccessDialogOpen: () => void;
     path: DrivePath;
     onToggleCommentPanel?: () => void;
@@ -94,6 +97,8 @@ export const EditorToolbar = ({
     storageUnavailable,
     canUndo,
     canRedo,
+    pageSetup,
+    onPageSetupChange,
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
@@ -266,6 +271,7 @@ export const EditorToolbar = ({
                                     setHighlightColor={setHighlightColor}
                                     clearFormatting={clearFormatting}
                                     onRestartNumbering={() => setRestartNumberingOpen(true)}
+                                    onPageSetup={() => setPageSetupOpen(true)}
                                     onReplaceImage={onReplaceImage}
                                 />
 
@@ -523,7 +529,13 @@ export const EditorToolbar = ({
                 </DialogContent>
             </Dialog>
 
-            <PageSetupDialog open={pageSetupOpen} onOpenChange={setPageSetupOpen} />
+            <PageSetupDialog
+                open={pageSetupOpen}
+                onOpenChange={setPageSetupOpen}
+                setup={pageSetup}
+                canWrite={canWrite}
+                onSetupChange={onPageSetupChange}
+            />
 
             <WordCountDialog editor={editor} open={wordCountOpen} onOpenChange={setWordCountOpen} />
 
