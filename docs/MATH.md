@@ -123,7 +123,7 @@ Typed LaTeX is kept as it was typed. These losses only touch `writeLatex` output
 
 ## The text form is Word's linear format, written only
 
-`writeText` writes an equation on one line as plain text, in a small subset of UnicodeMath, Word's linear format: `(a+b)/2`, `x^(n+1)`, `∑_(i=1)^n i`, `√(x+1)`, `sin x`. An operand of more than one node is parenthesised, and so is a lone fraction, scripts, n-ary or function, so `(a/b)^2` never reads as a/(b²). A space after a fraction, scripts, n-ary or function ends it before anything but an operator or a space, as UnicodeMath reads a space: `x^2 4`, never `x^24`. Variants stay as Unicode alphanumerics, so 𝐯 and ℝ are searchable. Nothing reads it back, so it is in no round trip; `src/test/text.test.ts` pins one example per node. It is not LaTeX, because as plain text `sin(x)` reads better than `\sin{\left(x\right)}`.
+`writeText` writes an equation on one line as plain text, in a small subset of UnicodeMath, Word's linear format: `(a+b)/2`, `x^(n+1)`, `∑_(i=1)^n i`, `√(x+1)`, `sin x`. A fraction without a bar takes UnicodeMath's `¦`, so a binomial is `(n¦k)`, never n over k. An operand of more than one node is parenthesised, and so is a lone fraction, scripts, n-ary or function, so `(a/b)^2` never reads as a/(b²). A space after a fraction, scripts, n-ary or function ends it before anything but an operator or a space, as UnicodeMath reads a space: `x^2 4`, never `x^24`. Variants stay as Unicode alphanumerics, so 𝐯 and ℝ are searchable. Nothing reads it back, so it is in no round trip; `src/test/text.test.ts` pins one example per node. It is not LaTeX, because as plain text `sin(x)` reads better than `\sin{\left(x\right)}`.
 
 ## The bounds are on the tree, and the MathML cap follows
 

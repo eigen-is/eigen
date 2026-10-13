@@ -20,6 +20,19 @@ test.each<[MathRow, string]>([
     [[{ kind: 'text', text: 'if ', color: '#FF0000' }, ...letter('x')], 'if x'],
     [[...letter('x'), { kind: 'space', width: 'qquad' }, ...letter('y')], 'x y'],
     [[{ kind: 'fraction', numerator: sum('a', 'b'), denominator: number('2'), line: 'bar' }], '(a+b)/2'],
+    // UnicodeMath's ¦ stacks without a bar, so a binomial never reads as n over k.
+    [
+        [
+            {
+                kind: 'fenced',
+                open: '(',
+                close: ')',
+                separator: '',
+                parts: [[{ kind: 'fraction', numerator: letter('n'), denominator: letter('k'), line: 'none' }]],
+            },
+        ],
+        '(n¦k)',
+    ],
     [[{ kind: 'scripts', base: letter('x'), sub: letter('i'), sup: number('2') }], 'x_i^2'],
     [[{ kind: 'scripts', base: letter('x'), sup: sum('n', 'm') }], 'x^(n+m)'],
     [[{ kind: 'scripts', base: letter('X'), sub: letter('a'), sup: letter('b'), pre: true }], '_a^b X'],
