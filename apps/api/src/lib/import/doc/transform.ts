@@ -13,11 +13,8 @@ import {
 import { importError, readDocx } from './from-docx';
 import { DOCUMENT_TOO_LARGE } from './package';
 
-// Uploaded docx bytes → the Yjs update the main thread commits, plus the extracted
-// images it writes through Mount. Runs inside the transform Worker (worker.ts owns
-// execution; the conversion logic stays here in import/, pure over the buffer), so
-// the reader and the ProseMirror-to-Yjs conversion never touch the event loop. Both
-// refuse a file they can't take as a 400 or 413.
+// Runs in the transform Worker, so neither the reader nor the conversion to Yjs blocks the event loop. The main thread
+// commits the update and writes the images through Mount.
 export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,

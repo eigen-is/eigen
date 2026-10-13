@@ -177,6 +177,9 @@ export const DEFAULT_HIGHLIGHT = 'FFFF00';
 // Section types that start a new page; continuous and nextColumn don't, and a missing type is nextPage.
 export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);
 
+// Word's widest table. The reader and the writer cap the grid at it, so no row walks or fills a column past it.
+export const MAX_TABLE_COLUMNS = 63;
+
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const TWIPS_PER_PX = 15;

@@ -28,6 +28,7 @@ import {
     headingStyleName,
     LIST_FORMATS,
     LIST_LEVELS,
+    MAX_TABLE_COLUMNS,
     MC_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PIC_NS,
@@ -899,9 +900,6 @@ function checkboxXml(checked: boolean): string {
 }
 
 // ── Tables: the grid as the editor lays it out ─────────────────────────────────────────────────────────────────────
-
-// Word's widest table. The cap keeps the grid, which every row is filled to, from growing with the doc.
-const MAX_TABLE_COLUMNS = 63;
 
 const CELL_TYPES = new Set(['tableCell', 'tableHeader']);
 
