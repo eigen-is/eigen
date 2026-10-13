@@ -44,7 +44,7 @@ describe('a deck read', () => {
             files: { 'ppt/media/image1.png': PIXEL_PNG },
         });
         const [first, second] = [readPptx(pptx, OPTIONS), readPptx(pptx, OPTIONS)];
-        expect(first.media[0].name).toMatch(/^pptx-[0-9a-f]{8}-image-1\.png$/);
+        expect(first.media[0].name).toMatch(/^pptx-[\w-]{21}-image-1\.png$/);
         expect(first.media[0].name).not.toBe(second.media[0].name);
     });
 });

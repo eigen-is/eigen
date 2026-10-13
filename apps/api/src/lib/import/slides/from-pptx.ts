@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { FRAME_HEIGHT, FRAME_WIDTH, type NewVectorElement } from '@workspace/lib/vector';
+import { nanoid } from 'nanoid';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
 import { XmlError, xmlAttr, xmlChild } from '../../core/xml';
@@ -53,7 +53,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const scale = Math.min(frame.width / slideSize.cx, frame.height / slideSize.cy);
 
         // A random prefix per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
-        const prefix = `pptx-${randomBytes(4).toString('hex')}`;
+        const prefix = `pptx-${nanoid()}`;
         const media: { name: string; path: string; contentType: string }[] = [];
         const names = new Map<string, string>();
         let mediaBytes = 0;
