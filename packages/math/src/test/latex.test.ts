@@ -661,6 +661,16 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '≠\u0338' }], '\\not\\ne'],
         [[{ kind: 'operator', text: '{\u0338' }], '\\not\\{'],
         [[{ kind: 'operator', text: '′\u0338' }], '\\not\\prime'],
+        // \not puts its slash last, after the symbol's marks; it slashes twice as \not\not.
+        [[{ kind: 'identifier', text: 'x\u0338\u0338' }], '\\not\\not x'],
+        [[{ kind: 'identifier', text: 'Γ\u0338\u0338' }], '\\not\\not\\Gamma'],
+        [[{ kind: 'identifier', text: 'x\u20D2\u0338' }], '\\not x\u20D2'],
+        [[{ kind: 'operator', text: '∑\u20D2\u0338' }], '\\not\\sum\u20D2'],
+        [[{ kind: 'operator', text: '#\u0338' }], '\\not\\#'],
+        // A slash before another mark stays where it is, as itself: \not would put it last.
+        [[{ kind: 'identifier', text: 'x\u0338\u20D2' }], 'x\u0338\u20D2'],
+        [[{ kind: 'identifier', text: 'x\u0338\u0335' }], 'x\u0338\u0335'],
+        [[{ kind: 'operator', text: '≠\u20D2' }], '\\ne\u20D2'],
         // An accent outside the accent table is \overset of its mark, which reads back as the accent.
         [[{ kind: 'accent', accent: '\u0311', body: x }], '\\overset{\u0311}{x}'],
         [
@@ -705,6 +715,7 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '^\u0338' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
+        [[{ kind: 'operator', text: "'\u0338" }], '\\not\\prime', [{ kind: 'operator', text: '′\u0338' }]],
     ])('%j is written %p', (row, latex, read) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(read);

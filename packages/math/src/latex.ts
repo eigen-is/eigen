@@ -202,6 +202,11 @@ class LatexReader {
         return this.#isChar(index, '^') || this.#isChar(index, '_');
     }
 
+    // A token of combining marks alone, which join the character before them.
+    #isMark(index: number): boolean {
+        return index < this.#end && !this.#tokens[index].command && /^\p{M}/u.test(this.#tokens[index].text);
+    }
+
     #isDigit(index: number): boolean {
         return index < this.#end && !this.#tokens[index].command && DIGIT.test(this.#tokens[index].text);
     }
@@ -237,8 +242,11 @@ class LatexReader {
             case 'begin':
                 return this.#argumentEnd(this.#partners[index] + 1, nesting);
             case 'big':
-            case 'not':
                 return end + 1;
+            case 'not':
+                while (this.#commandAt(end)?.kind === 'not') end++;
+                for (end++; this.#isMark(end); end++);
+                return end;
             case 'radical':
             case 'arrow':
                 end = this.#bracketEnd(end, nesting);
@@ -769,7 +777,9 @@ class LatexReader {
                 into.push({ chars: this.#delimiter(), style });
                 return;
             case 'not': {
-                // NFC composes the slashed symbol where Unicode has it, such as ≠.
+                // \not\not slashes twice. NFC composes the slashed symbol where Unicode has it, such as ≠.
+                let slashes = NOT;
+                for (; this.#commandAt(this.#pos)?.kind === 'not'; this.#pos++) slashes += NOT;
                 const at = this.#offset(this.#pos);
                 const operator = this.#commandAt(this.#pos);
                 const next = this.#pos < this.#end ? this.#tokens[this.#pos++] : undefined;
@@ -780,7 +790,10 @@ class LatexReader {
                           ? charOf(next)
                           : '';
                 if (char.trim() === '') throw new MathError('\\not takes a symbol', at);
-                into.push({ chars: char + NOT, style });
+                // The slash comes after the marks written after the symbol, as it does after a character's own.
+                let marks = '';
+                for (; this.#isMark(this.#pos); this.#pos++) marks += this.#tokens[this.#pos].text;
+                into.push({ chars: char + marks + slashes, style });
                 return;
             }
             case 'limits':
@@ -873,16 +886,22 @@ function writeChar(char: string): string {
     return [...char].length > 1 ? joined([...char].map(writeChar)) : char;
 }
 
-// A slashed symbol without a command of its own, such as ≢, is \not before the symbol, as TeX draws it.
+// What \not takes: one symbol, a slashed one too, then the marks after it.
+const SLASHABLE = /^(?:\\not ?)*(?:\\[A-Za-z]+|\\[^A-Za-z]|[^\\{}^_&'~])\p{M}*$/u;
+
+// A slashed symbol without a command of its own, such as ≢, is \not before the symbol, as TeX draws it. \not puts its
+// slash last, after the symbol's marks, so a slash before another mark stays as it is.
 function negation(char: string): string | undefined {
     const decomposed = char.normalize('NFD');
-    const slash = decomposed.lastIndexOf(NOT);
-    if (slash < 0) return undefined;
-    const base = (decomposed.slice(0, slash) + decomposed.slice(slash + 1)).normalize('NFC');
-    // \not takes one symbol: a large operator or a prime by its command, not as writeChar sets it apart.
-    const name = base === PRIME ? 'prime' : OPERATOR_NAMES.get(base);
-    const symbol = name ? `\\${name}` : writeChar(base);
-    return /^(?:\\[A-Za-z]+|\\[^A-Za-z]|[^\\{}^_&'~]\p{M}*)$/u.test(symbol) ? joined(['\\not', symbol]) : undefined;
+    if (!decomposed.endsWith(NOT)) return undefined;
+    const base = decomposed.slice(0, -1).normalize('NFC');
+    const written = writeChar(base);
+    if (SLASHABLE.test(written)) return joined(['\\not', written]);
+    // A large operator or a prime by its command, not as writeChar sets it apart; an apostrophe reads back as a prime.
+    const [head = '', ...marks] = base;
+    const name = head === PRIME || head === "'" ? 'prime' : OPERATOR_NAMES.get(head);
+    const symbol = name && joined([`\\${name}`, ...marks]);
+    return symbol && SLASHABLE.test(symbol) ? joined(['\\not', symbol]) : undefined;
 }
 
 // The font a token needs beyond the default (math's, or upright in \operatorname); undefined if none.
