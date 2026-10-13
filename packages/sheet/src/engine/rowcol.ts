@@ -1,4 +1,6 @@
-import { cloneSides, type MergeCell, parseCellKey, type Sheet } from '@workspace/lib/sheets';
+import { parseChartSpec } from '@workspace/lib/charts';
+import { cloneSides, type MergeCell, parseCellKey, type Sheet, type SheetChart } from '@workspace/lib/sheets';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
 import { functionStrChange } from './formula-shift';
@@ -306,6 +308,44 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     });
 }
 
+// A chart ref names its sheet by id, so an op on one sheet moves the refs to it on every sheet's
+// charts. Only a chart whose refs moved is rewritten; a malformed spec stays as stored.
+function shiftChartsAcrossSheets<S extends Sheet>(
+    sheets: S[],
+    sheetId: string,
+    shift: (ref: CellRangeRef) => CellRangeRef | null,
+): S[] {
+    return sheets.map((sheet) => {
+        let charts: Record<string, SheetChart> | null = null;
+        for (const chart of Object.values(sheet.charts ?? {})) {
+            const spec = parseChartSpec(chart.spec);
+            if (spec?.data.source !== 'range') continue;
+            let moved = false;
+            const move = (ref: CellRangeRef) => {
+                if (ref.sheetId !== sheetId) return ref;
+                const next = shift(ref);
+                if (next !== ref) moved = true;
+                return next;
+            };
+            const { categories, series } = spec.data;
+            const data = {
+                ...spec.data,
+                categories: categories && move(categories),
+                series: series.map((s) => ({
+                    ...s,
+                    // A deleted name cell leaves the series unnamed.
+                    name: typeof s.name === 'string' ? s.name : (move(s.name) ?? ''),
+                    values: s.values && move(s.values),
+                })),
+            };
+            if (!moved) continue;
+            charts ??= { ...sheet.charts };
+            charts[chart.id] = { ...chart, spec: JSON.stringify({ ...spec, data }) };
+        }
+        return charts ? { ...sheet, charts } : sheet;
+    });
+}
+
 // config carries several index-keyed maps (rowlen, rowhidden, customHeight and
 // their column twins) that all shift identically when rows/columns move.
 function shiftKeyedMapForInsert(
@@ -392,7 +432,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         }));
     }
 
-    return shiftFormulasAcrossSheets(
+    const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
         targetIndex,
         op.type,
@@ -401,6 +441,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForInsert(ref, op));
 }
 
 function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
@@ -467,7 +508,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         newTarget.conditionalFormatRules = newCFarr;
     }
 
-    return shiftFormulasAcrossSheets(
+    const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
         targetIndex,
         op.type,
@@ -476,4 +517,5 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         removeCount,
         'del',
     );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForDelete(ref, op));
 }
