@@ -27,6 +27,7 @@ const editor = new Editor({
 });
 
 const onReplaceImage = mock(() => {});
+const onOpenBand = mock((_request: unknown) => {});
 
 async function render(width: number, canWrite: boolean) {
     window.happyDOM.setViewport({ width, height: 1000 });
@@ -42,6 +43,7 @@ async function render(width: number, canWrite: boolean) {
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
+        onOpenBand,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
     });
     const router = createRouter({
@@ -149,6 +151,8 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         'Align and indent',
         'Bullets and numbering',
         '—',
+        'Headers and footers',
+        'Page numbers',
         'Page orientation',
         '—',
         'Table',
@@ -387,6 +391,65 @@ test('Format › Image › Replace image opens the picker the image panel opens'
 
     await clickItem('Replace image');
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+    ['Headers and footers', 'header'],
+    ['Page numbers', 'header'],
+])('Format › %s opens the Headers and footers panel', async (item, band) => {
+    onOpenBand.mockClear();
+    await render(1920, true);
+    await openMenu('Format');
+    await clickItem(item);
+    expect(onOpenBand.mock.calls).toEqual([[{ band }]]);
+});
+
+test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    expect(openMenuEntries()).toEqual(['Header', 'Footer', 'Page numbers']);
+    await openSubmenu('Page numbers');
+    expect(openMenuEntries()).toEqual([
+        'In the header',
+        'In the header, not on the first page',
+        'In the footer',
+        'In the footer, not on the first page',
+        '—',
+        'Page count',
+    ]);
+});
+
+test.each([
+    ['Header', { band: 'header' }],
+    ['Footer', { band: 'footer' }],
+])('Insert › Page elements › %s opens the panel on that band', async (item, request) => {
+    onOpenBand.mockClear();
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await clickItem(item);
+    expect(onOpenBand.mock.calls).toEqual([[request]]);
+});
+
+test('a page number preset opens the panel on its band with the preset, and Page count goes in at the caret', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(2);
+    onOpenBand.mockClear();
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await openSubmenu('Page numbers');
+    await clickItem('In the footer, not on the first page');
+    expect(onOpenBand.mock.calls).toEqual([
+        [{ band: 'footer', preset: expect.objectContaining({ band: 'footer', firstPage: false }) }],
+    ]);
+
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await openSubmenu('Page numbers');
+    await clickItem('Page count');
+    expect(editor.getJSON().content?.[0]?.content?.at(-1)).toEqual({ type: 'pageNumber', attrs: { kind: 'pages' } });
 });
 
 // Google has Format › Page orientation beside File › Page setup; both open the one dialog.

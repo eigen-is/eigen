@@ -43,8 +43,10 @@ import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
+import { type BandRequest, HeadersFootersPanel } from './headers-footers-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePageSetup } from './hooks/use-page-setup';
+import { PageBand } from './page-band';
 import { createDocUndoManager, writePageSetup } from './page-setup';
 import { TablePropertiesPanel } from './table-properties-panel';
 
@@ -282,6 +284,19 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
+    // The Headers and footers panel, open on a band: a writer's, on a desktop, in the slot comments take back.
+    const [bandRequest, setBandRequest] = useState<BandRequest | null>(null);
+    const openBands =
+        canWrite && !isMobile
+            ? (request: BandRequest) => {
+                  closePanels();
+                  setBandRequest(request);
+              }
+            : undefined;
+    useEffect(() => {
+        if (panel) setBandRequest(null);
+    }, [panel]);
+
     const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
@@ -398,7 +413,8 @@ const TiptapEditor = ({
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
+    const showSidebar =
+        !isMobile && (panel !== null || bandRequest !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -509,6 +525,7 @@ const TiptapEditor = ({
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
+                                    onOpenBand={openBands}
                                 />
                             }
                         >
@@ -531,7 +548,8 @@ const TiptapEditor = ({
                                         data-document="true"
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            'eigen-paper grid bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            // Rows: the header band, the body, the footer band.
+                                            'eigen-paper grid grid-rows-[auto_1fr_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
@@ -547,7 +565,36 @@ const TiptapEditor = ({
                                                   : undefined
                                         }
                                     >
-                                        <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
+                                        {/* Page 1's header on top, and at the end the footer of the pages after it. */}
+                                        <PageBand
+                                            key={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
+                                            path={path}
+                                            yDoc={yDoc}
+                                            field={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
+                                            edge="top"
+                                            margin={pageSetup.margin.top}
+                                            textColumnWidth={getEditorMaxWidth}
+                                            onOpen={
+                                                openBands &&
+                                                (() =>
+                                                    openBands({
+                                                        band: pageSetup.differentFirstPage ? 'headerFirst' : 'header',
+                                                    }))
+                                            }
+                                        />
+                                        <EditorContent
+                                            editor={editor}
+                                            className="row-start-2 h-full min-w-0 tiptap-wrapper"
+                                        />
+                                        <PageBand
+                                            path={path}
+                                            yDoc={yDoc}
+                                            field="footer"
+                                            edge="bottom"
+                                            margin={pageSetup.margin.bottom}
+                                            textColumnWidth={getEditorMaxWidth}
+                                            onOpen={openBands && (() => openBands({ band: 'footer' }))}
+                                        />
                                     </div>
                                 </div>
                                 {/* Unmounted when closed. The stable gutter ends the panel left of the scrollbar. */}
@@ -556,6 +603,19 @@ const TiptapEditor = ({
                                         <div className="pointer-events-auto absolute inset-y-0 right-0">
                                             {panel ? (
                                                 <PanelColumn activePanel={panel} {...panelProps} />
+                                            ) : bandRequest ? (
+                                                <HeadersFootersPanel
+                                                    path={path}
+                                                    yDoc={yDoc}
+                                                    provider={provider}
+                                                    setup={pageSetup}
+                                                    onSetupChange={(from, to) =>
+                                                        writePageSetup(yDoc, undoManager, from, to)
+                                                    }
+                                                    request={bandRequest}
+                                                    textColumnWidth={getEditorMaxWidth}
+                                                    onClose={() => setBandRequest(null)}
+                                                />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
                                                     editor={editor}
