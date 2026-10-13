@@ -6,6 +6,12 @@ import type { ImageResult, WorkerInput } from '../../shared/thumbnail-worker';
 // A docx image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to in the Worker.
 export const DOCX_IMAGE_MAX_SIZE = 2560;
 
+// The part extension of each type encodeDocxImage writes, which an Office package embeds as is.
+export const RASTER_EXTENSIONS = new Map([
+    ['image/png', 'png'],
+    ['image/jpeg', 'jpeg'],
+]);
+
 // Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha
 // retries as PNG.
 const PNG_SOURCES = new Set(['image/png', 'image/gif']);

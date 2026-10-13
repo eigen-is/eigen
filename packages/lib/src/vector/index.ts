@@ -18,7 +18,7 @@ export { renderChartSpecSvg } from './kinds/chart-render';
 // anything a peer write couldn't be. `labelText` travels with them so the in-canvas textarea commits
 // exactly what the reader keeps.
 export { labelText, MAX_ARROW_LABEL_BYTES, num, oneOf } from './kinds/read-fields';
-export { SVG_NS } from './kinds/render-utils';
+export { isBordered, SVG_NS } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';
 export * from './read-vector';
