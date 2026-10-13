@@ -65,6 +65,8 @@ export function cellsToHtmlTable(rows: string[][]): string {
 export function htmlTableCells(html: string): string[][] | null {
     const table = new DOMParser().parseFromString(html, 'text/html').querySelector('table');
     if (!table) return null;
+    // Google marks a line break inside a cell with <br>, which textContent drops.
+    for (const br of table.querySelectorAll('br')) br.replaceWith('\n');
     const rows: string[][] = [...table.rows].map(() => []);
     for (const [r, row] of [...table.rows].entries()) {
         let c = 0;

@@ -84,6 +84,11 @@ describe('the HTML table', () => {
         ]);
     });
 
+    test("a <br> inside a cell is a line break, as Google's HTML marks one", () => {
+        const html = '<table><tr><td>North<br>East</td><td><span>1</span><br/><span>2</span></td></tr></table>';
+        expect(htmlTableCells(html)).toEqual([['North\nEast', '1\n2']]);
+    });
+
     test('HTML without a table is not cells', () => {
         expect(htmlTableCells('<p>hello</p>')).toBeNull();
     });

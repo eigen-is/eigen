@@ -57,16 +57,20 @@ async function open(spec: InlineSpec) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => {
-        root.render(
-            createElement(ChartDataDialog, {
-                spec,
-                open: true,
-                onOpenChange: (next: boolean) => openChanges.push(next),
-                onSave: (next: ChartSpec) => saved.push(next),
-            }),
-        );
-    });
+    // A rerender is the host's spec changing under the open dialog, a peer's edit.
+    const rerender = async (next: InlineSpec) => {
+        await act(async () => {
+            root.render(
+                createElement(ChartDataDialog, {
+                    spec: next,
+                    open: true,
+                    onOpenChange: (change: boolean) => openChanges.push(change),
+                    onSave: (change: ChartSpec) => saved.push(change),
+                }),
+            );
+        });
+    };
+    await rerender(spec);
     cleanups.push(async () => {
         await act(async () => root.unmount());
         container.remove();
@@ -182,6 +186,7 @@ async function open(spec: InlineSpec) {
     return {
         saved,
         openChanges,
+        rerender,
         dialog,
         cell,
         columnHeader,
@@ -253,6 +258,25 @@ describe('ChartDataDialog: the grid', () => {
         await dialog.mouseDown(dialog.cell(4, 0), true);
         expect(dialog.highlighted('columnheader')).toEqual(['A', 'B']);
         expect(dialog.highlighted('rowheader')).toEqual(['3', '4', '5']);
+    });
+
+    // The header of the categories column, as in Google.
+    test('A1 shows the category axis title and types it', async () => {
+        const dialog = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
+        expect(dialog.cell(0, 0).textContent).toBe('Teams');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A1: Teams');
+        await dialog.type('Squads');
+        await dialog.key('Enter');
+        expect(dialog.cell(0, 0).textContent).toBe('Squads');
+        expect((await dialog.save()).categoryAxis.title).toBe('Squads');
+    });
+
+    test("Save leaves a peer's category axis title alone when A1 did not change", async () => {
+        const dialog = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
+        await dialog.rerender({ ...sample(), categoryAxis: { title: 'Squads' } });
+        await dialog.select(1, 1);
+        await dialog.type('7');
+        expect((await dialog.save()).categoryAxis.title).toBe('Squads');
     });
 
     test('Save writes the grid once, Cancel nothing', async () => {
@@ -486,8 +510,15 @@ describe('ChartDataDialog: numbers as Sheets shows them', () => {
         expect((await dialog.save()).data.series[0].values).toEqual([1234, 1234, 0.12, -5.5]);
     });
 
+    test('a percent is its share without float noise, and an exponent reads', async () => {
+        const dialog = await open(sample());
+        // 33.3 / 100 is 0.33299999999999996 in floating point.
+        await dialog.paste(1, 1, { 'text/plain': '33.3%\n1.5E3\n-2e-2' });
+        expect((await dialog.save()).data.series[0].values.slice(0, 3)).toEqual([0.333, 1500, -0.02]);
+    });
+
     test('anything else is still flagged', async () => {
-        for (const text of ['1,23', '12%%', '$', '1.2.3', '12 apples', '%5']) {
+        for (const text of ['1,23', '12%%', '$', '1.2.3', '12 apples', '%5', '0x10', '0b11', '$0x10', '0x10%']) {
             const dialog = await open(sample());
             await dialog.paste(1, 1, { 'text/plain': text });
             expect(dialog.button('Save').disabled).toBe(true);
@@ -537,17 +568,13 @@ describe('ChartDataDialog: paste fits the grid', () => {
         expect((await dialog.save()).data.categories.slice(0, 2)).toEqual(['North', 'South']);
     });
 
-    test('a corner header names the category axis while it has no title', async () => {
-        const block = { 'text/plain': 'Month\tNorth\nJan\t10' };
-        const dialog = await open(sample());
-        await dialog.paste(0, 0, block);
+    test('a pasted corner header titles the category axis, and shows in A1', async () => {
+        const dialog = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
+        await dialog.paste(0, 0, { 'text/plain': 'Month\tNorth\nJan\t10' });
+        expect(dialog.cell(0, 0).textContent).toBe('Month');
         const spec = await dialog.save();
         expect(spec.categoryAxis.title).toBe('Month');
         expect(spec.data.series[0]).toMatchObject({ name: 'North', values: [10, 65, 38, 80] });
-
-        const titled = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
-        await titled.paste(0, 0, block);
-        expect((await titled.save()).categoryAxis.title).toBe('Teams');
     });
 
     test('a single value pastes into the selected cell', async () => {

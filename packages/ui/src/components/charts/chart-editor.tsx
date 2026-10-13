@@ -17,6 +17,7 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import type { ReactNode } from 'react';
 import { CHART_TYPE_OPTIONS } from './chart-types';
+import { fromPercent } from './percent';
 
 const LEGEND_LABELS: Record<LegendPosition, string> = {
     top: 'Top',
@@ -61,7 +62,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
     const percent = spec.stacking === 'percent' && (type === 'column' || type === 'bar');
     const shownBound = (bound: number | null) =>
         bound === null ? undefined : percent ? Number((bound * 100).toPrecision(12)) : bound;
-    const storedBound = (typed: number) => (percent ? typed / 100 : typed);
+    const storedBound = (typed: number) => (percent ? fromPercent(typed) : typed);
 
     const setValueAxis = (patch: Partial<ChartSpec['valueAxis']>) => {
         const next = { ...valueAxis, ...patch };
@@ -147,7 +148,14 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                         <MergedSelect
                             value={spec.stacking}
                             options={STACKING_OPTIONS}
-                            onChange={(stacking) => onChange({ ...spec, stacking })}
+                            onChange={(stacking) =>
+                                // Shares and raw values don't carry over: a raw max of 100 would be 10,000%.
+                                onChange(
+                                    (stacking === 'percent') === (spec.stacking === 'percent')
+                                        ? { ...spec, stacking }
+                                        : { ...spec, stacking, valueAxis: { ...valueAxis, min: null, max: null } },
+                                )
+                            }
                         />
                     </PropertyRow>
                 )}

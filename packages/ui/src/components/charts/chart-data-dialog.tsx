@@ -34,6 +34,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useLayoutEffect, useRef, useState } from 'react';
+import { fromPercent } from './percent';
 
 type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
@@ -42,10 +43,11 @@ type GridColumn = { name: string; style: ChartSeriesStyle };
 // A row carries its slice color, so a removed row takes its pie slice's color with it. New series and rows
 // are automatic (null), so the palette colors them by position.
 type GridRow = { category: string; color: string | null; cells: string[] };
-type Grid = { columns: GridColumn[]; rows: GridRow[] };
+// The corner, A1, heads the categories column: the category axis title, as in Google.
+type Grid = { corner: string; columns: GridColumn[]; rows: GridRow[] };
 
 // Grid coordinates: row 0 is the series names (the sheet's row 1), column 0 the categories (column A), so
-// (0, 0) is the empty corner cell.
+// (0, 0) is the corner.
 type CellRef = { row: number; column: number };
 // A header click selects whole rows or columns, which Delete removes rather than clears.
 type GridSelection = { anchor: CellRef; focus: CellRef; whole?: 'rows' | 'columns' };
@@ -56,9 +58,10 @@ type Editing = { mode: 'replace' | 'in-place'; text: string };
 const newColumn = (): GridColumn => ({ name: '', style: DEFAULT_CHART_SERIES_STYLE });
 const newRow = (columns: number): GridRow => ({ category: '', color: null, cells: Array(columns).fill('') });
 
-function gridOf({ data, sliceColors }: InlineChartSpec): Grid {
+function gridOf({ data, sliceColors, categoryAxis }: InlineChartSpec): Grid {
     const count = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
     return {
+        corner: categoryAxis.title,
         columns: data.series.map(({ name, values, ...style }) => ({ name, style })),
         rows: Array.from({ length: count }, (_, i) => ({
             category: data.categories[i] ?? '',
@@ -70,14 +73,15 @@ function gridOf({ data, sliceColors }: InlineChartSpec): Grid {
 
 // A number as Sheets shows one in the en convention: grouped (1,234), after a currency symbol ($1,234.00,
 // -€5) or a percent (12% is 0.12). An empty cell is a gap; anything else is NaN, and flagged.
-const NUMBER_TEXT = /^([-+]?)[$€£¥]?(\d{1,3}(?:,\d{3})+(?:\.\d*)?|[^,$€£¥%]+)(%?)$/;
+const NUMBER_TEXT = /^([-+]?)[$€£¥]?(\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d*\.?\d+(?:e[-+]?\d+)?)(%?)$/i;
 function numberOf(text: string): number | null {
     const trimmed = text.trim();
     if (trimmed === '') return null;
     const match = NUMBER_TEXT.exec(trimmed);
     if (!match) return Number.NaN;
     const [, sign, digits, percent] = match;
-    return Number(`${sign}${digits.replaceAll(',', '')}`) / (percent ? 100 : 1);
+    const value = Number(`${sign}${digits.replaceAll(',', '')}`);
+    return percent ? fromPercent(value) : value;
 }
 const isNumberText = (text: string) => {
     const value = numberOf(text);
@@ -85,7 +89,7 @@ const isNumberText = (text: string) => {
 };
 
 function cellText(grid: Grid, { row, column }: CellRef): string {
-    if (row === 0) return grid.columns[column - 1]?.name ?? '';
+    if (row === 0) return column === 0 ? grid.corner : (grid.columns[column - 1]?.name ?? '');
     const source = grid.rows[row - 1];
     if (!source) return '';
     return column === 0 ? source.category : (source.cells[column - 1] ?? '');
@@ -125,18 +129,20 @@ function fill(grid: Grid, row: number, column: number, block: string[][]): { gri
         const source = grid.rows[i] ?? newRow(series);
         return { ...source, cells: Array.from({ length: series }, (_, j) => source.cells[j] ?? '') };
     });
+    let corner = grid.corner;
     let clipped = false;
     for (const [i, line] of block.entries()) {
         for (const [j, value] of line.entries()) {
             const r = row + i;
             const c = column + j;
             if (r > rows || c > series) clipped = true;
-            else if (r === 0 && c > 0) columns[c - 1].name = chartLabel(value);
+            else if (r === 0 && c === 0) corner = chartLabel(value);
+            else if (r === 0) columns[c - 1].name = chartLabel(value);
             else if (r > 0 && c === 0) next[r - 1].category = chartLabel(value);
             else if (r > 0) next[r - 1].cells[c - 1] = value.trim();
         }
     }
-    return { grid: { columns, rows: next }, clipped };
+    return { grid: { corner, columns, rows: next }, clipped };
 }
 
 // A loop, not Math.max(...): a pasted block can have more rows than a call takes arguments.
@@ -146,9 +152,8 @@ function widthOf(block: string[][]): number {
     return width;
 }
 
-// An empty value typed past the data adds nothing; the corner holds nothing.
+// An empty value typed past the data adds nothing.
 function writeCell(grid: Grid, { row, column }: CellRef, text: string): { grid: Grid; clipped: boolean } {
-    if (row === 0 && column === 0) return { grid, clipped: false };
     if (text === '' && (row > grid.rows.length || column > grid.columns.length)) return { grid, clipped: false };
     return fill(grid, row, column, [[text]]);
 }
@@ -156,6 +161,7 @@ function writeCell(grid: Grid, { row, column }: CellRef, text: string): { grid: 
 function clearRange(grid: Grid, { top, bottom, left, right }: Range): Grid {
     const inside = (r: number, c: number) => r >= top && r <= bottom && c >= left && c <= right;
     return {
+        corner: inside(0, 0) ? '' : grid.corner,
         columns: grid.columns.map((column, j) => (inside(0, j + 1) ? { ...column, name: '' } : column)),
         rows: grid.rows.map((row, i) => ({
             ...row,
@@ -176,7 +182,11 @@ function removeWhole(grid: Grid, whole: 'rows' | 'columns', range: Range): Grid 
     const keep = (j: number) => j + 1 < range.left || j + 1 > range.right;
     const columns = cleared.columns.filter((_, j) => keep(j));
     if (columns.length === 0) return clearRange(cleared, { ...range, left: 1, top: 0, bottom: grid.rows.length });
-    return { columns, rows: cleared.rows.map((row) => ({ ...row, cells: row.cells.filter((_, j) => keep(j)) })) };
+    return {
+        ...cleared,
+        columns,
+        rows: cleared.rows.map((row) => ({ ...row, cells: row.cells.filter((_, j) => keep(j)) })),
+    };
 }
 
 const plural = (n: number, noun: string) => `${n.toLocaleString('en')} ${noun}${n === 1 ? '' : 's'}`;
@@ -257,9 +267,9 @@ function EditableGrid({
     onCancel: () => void;
     onSave: (spec: ChartSpec) => void;
 }) {
-    const [grid, setGrid] = useState(() => gridOf(spec));
-    // A pasted corner header, Google's name for the category axis.
-    const [categoryTitle, setCategoryTitle] = useState(spec.categoryAxis.title);
+    // As the chart was when the dialog opened, so Save keeps a peer's axis title its corner didn't change.
+    const [opened] = useState(() => gridOf(spec));
+    const [grid, setGrid] = useState(opened);
     const [selection, setSelection] = useState<GridSelection>({
         anchor: { row: 0, column: 0 },
         focus: { row: 0, column: 0 },
@@ -329,10 +339,7 @@ function EditableGrid({
                 column: Math.min(Math.max(focus.column, 0), shown.columns - 1),
             },
         });
-    const startEditing = (cell: CellRef) => {
-        if (cell.row === 0 && cell.column === 0) return;
-        setEditing({ mode: 'in-place', text: cellText(grid, cell) });
-    };
+    const startEditing = (cell: CellRef) => setEditing({ mode: 'in-place', text: cellText(grid, cell) });
 
     const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.nativeEvent.isComposing) return;
@@ -373,10 +380,7 @@ function EditableGrid({
         e.preventDefault();
     };
 
-    const onChange = (text: string) => {
-        if (active.row === 0 && active.column === 0) return;
-        setEditing({ mode: editing?.mode ?? 'replace', text });
-    };
+    const onChange = (text: string) => setEditing({ mode: editing?.mode ?? 'replace', text });
 
     const selectedCells = () =>
         Array.from({ length: range.bottom - range.top + 1 }, (_, i) =>
@@ -413,8 +417,6 @@ function EditableGrid({
             .slice(0, INLINE_GRID_MAX_CATEGORIES + 2)
             .map((line) => line.slice(0, INLINE_GRID_MAX_SERIES + 2));
         const pasted = fill(grid, active.row, active.column, cut);
-        const corner = active.row === 0 && active.column === 0 ? chartLabel(block[0][0]?.trim() ?? '') : '';
-        if (categoryTitle === '' && corner !== '') setCategoryTitle(corner);
         setClipped(pasted.clipped ? { rows: block.length, columns: width } : null);
         setEditing(null);
         setGrid(pasted.grid);
@@ -455,7 +457,7 @@ function EditableGrid({
         }
         onSave({
             ...spec,
-            categoryAxis: { title: categoryTitle },
+            categoryAxis: final.corner === opened.corner ? spec.categoryAxis : { title: final.corner },
             sliceColors: final.rows.map((row) => row.color),
             data: {
                 source: 'inline',

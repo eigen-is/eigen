@@ -241,6 +241,29 @@ describe('ChartEditor', () => {
             min.dispatchEvent(new Event('input', { bubbles: true }));
         });
         expect(editor.last().valueAxis).toMatchObject({ min: -0.2, max: 1 });
+        // 33.3 / 100 is 0.33299999999999996 in floating point.
+        await act(async () => {
+            setValue?.call(max, '33.3');
+            max.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        expect(editor.last().valueAxis.max).toBe(0.333);
+    });
+
+    // A raw max of 100 would be 10,000% under a 100% stack, and a share of 1 a raw 1 out of it.
+    test('a switch to or from a 100% stack sets min and max back to auto, in the same change', async () => {
+        const bounded = { ...sample('column').valueAxis, min: 0, max: 100 };
+        const raw = await mount({ ...sample('column'), valueAxis: bounded });
+        await raw.choose('Stacking', 'Standard');
+        expect(raw.last().valueAxis).toMatchObject({ min: 0, max: 100 });
+        await raw.choose('Stacking', '100%');
+        expect(raw.changes).toHaveLength(2);
+        expect(raw.last()).toMatchObject({ stacking: 'percent', valueAxis: { min: null, max: null } });
+
+        const shares = { ...sample('column').valueAxis, min: 0, max: 1 };
+        const percent = await mount({ ...sample('column'), stacking: 'percent', valueAxis: shares });
+        await percent.choose('Stacking', 'None');
+        expect(percent.changes).toHaveLength(1);
+        expect(percent.last()).toMatchObject({ stacking: 'none', valueAxis: { min: null, max: null } });
     });
 
     test('a max at or below the min is not written', async () => {
