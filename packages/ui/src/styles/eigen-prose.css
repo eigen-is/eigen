@@ -575,6 +575,37 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     }
 }
 
+/* ===== Equations ===== */
+
+/* Every <math> Eigen draws, in the editor, its panel and an export. */
+math {
+    font-family: "STIX Two Math", math;
+}
+
+/* An inline atom, so the comment mark's button sits in its corner. */
+.tiptap .equation {
+    position: relative;
+}
+
+/* A displayed equation takes its line, centred; as the figure, a full-width box on the bottom of its line keeps
+   ProseMirror's trailing break on that line. */
+.tiptap .equation[data-display] {
+    display: inline-flex;
+    justify-content: center;
+    width: 100%;
+    vertical-align: bottom;
+}
+
+/* An empty equation, in the editor and its panel. */
+.equation-placeholder {
+    display: inline-block;
+    width: 0.8em;
+    height: 1em;
+    vertical-align: -0.15em;
+    border: 1px dashed currentColor;
+    opacity: 0.5;
+}
+
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
 /* For shadow DOM usage: won't apply (correct — preview has its own white container) */
 .dark .eigen-prose:not(.eigen-paper *) {
