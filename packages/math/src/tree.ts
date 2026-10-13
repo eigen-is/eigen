@@ -251,13 +251,13 @@ export class RowBuilder {
                 while (same(end) && test.test(chars[end].char)) end++;
                 return end;
             };
+            if (SCRIPT_CHARS.has(char)) {
+                start = this.#scripts(chars, start);
+                continue;
+            }
             if (marks !== '') {
                 this.#marked(char, marks, variant, color);
                 start++;
-                continue;
-            }
-            if (SCRIPT_CHARS.has(char)) {
-                start = this.#scripts(chars, start);
                 continue;
             }
             const space = SPACE_OF_CHAR.get(char);
@@ -287,7 +287,8 @@ export class RowBuilder {
         }
     }
 
-    // A run of script characters (x², x₁₂) is one scripts node on the token before it, else on an empty base.
+    // A run of script characters (x², x₁₂) is one scripts node on the token before it, else on an empty base. Their
+    // marks go with them into the script.
     #scripts(chars: StyledChar[], start: number): number {
         const rows = {
             sub: new RowBuilder(this.budget, this.depth + 1, 'optional'),
@@ -296,9 +297,9 @@ export class RowBuilder {
         let end = start;
         for (; end < chars.length; end++) {
             const { char, marks, variant, color } = chars[end];
-            const script = marks === '' ? SCRIPT_CHARS.get(char) : undefined;
+            const script = SCRIPT_CHARS.get(char);
             if (!script) break;
-            rows[script[0]].chars(script[1], variant, variant, color);
+            rows[script[0]].chars(script[1] + marks, variant, variant, color);
         }
         const last = this.#row.at(-1);
         const base = last?.kind === 'identifier' || last?.kind === 'number' || last?.kind === 'operator' ? [last] : [];

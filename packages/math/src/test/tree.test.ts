@@ -143,6 +143,19 @@ describe('RowBuilder', () => {
                 },
             ],
         ],
+        [
+            'a script character keeps its marks in the script',
+            'x²́₂̸',
+            '<mi>x</mi><mn>²́₂̸</mn>',
+            [
+                {
+                    kind: 'scripts',
+                    base: letter('x'),
+                    sub: [{ kind: 'operator', text: '2̸' }],
+                    sup: [{ kind: 'accent', accent: '́', body: [{ kind: 'number', text: '2' }] }],
+                },
+            ],
+        ],
     ])('%s', (_, text, mathml, row) => {
         for (const read of readEach(text, mathml)) {
             expect(read).toStrictEqual(row);

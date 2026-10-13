@@ -83,6 +83,9 @@ const TEXTS = [
     'ℝ',
     '😀',
     '\u0302',
+    '\u0338',
+    '²',
+    '₋',
     '¯',
     'a b ',
     '∑',
@@ -286,7 +289,8 @@ describe('every reader ends in a tree or a MathError, within its time budget', (
             ...['\\limits', '\\sin', '\\lim', '\\operatorname', '\\operatorname*{arg}', '\\text{', '\\text{a  b}'],
             ...['\\color{red}', '\\textcolor{blue}', '\\mathbf', '\\mathrm', '\\hat', '\\overline', '\\overbrace'],
             ...['\\overset', '\\xrightarrow', '\\xrightarrow[a]', '\\prescript', '\\boxed', '\\enclose{top}', '\\pmod'],
-            ...['\\alpha', '\\displaystyle', '\\unknown', '\\href{javascript:alert(1)}{x}'],
+            ...['\\alpha', '\\displaystyle', '\\unknown', '\\href{javascript:alert(1)}{x}', '\\not', '\\Gamma'],
+            ...['\u0301', '\u0338', '\u0311', '²', '⁻', '₂'],
         ];
         const random = seeded(7);
         const start = performance.now();
