@@ -1,6 +1,7 @@
 import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
 import {
     bound,
+    casesOf,
     defaultVariant,
     equationCells,
     hexColor,
@@ -490,7 +491,11 @@ function piece(node: MathNode): Run | string {
                 ['sepChr', node.parts.length < 2 ? undefined : node.separator],
                 ['endChr', node.close],
             ]);
-            return `<m:d>${pr}${node.parts.map((part) => argument('e', part)).join('')}</m:d>`;
+            const cases = casesOf(node);
+            const parts = cases
+                ? `<m:e>${writeMatrix(cases, 'left')}</m:e>`
+                : node.parts.map((part) => argument('e', part)).join('');
+            return `<m:d>${pr}${parts}</m:d>`;
         }
         case 'function':
             return `<m:func>${argument('fName', node.name)}${argument('e', node.body)}</m:func>`;
@@ -535,13 +540,17 @@ function piece(node: MathNode): Run | string {
                 );
                 return `<m:eqArr>${equations.join('')}</m:eqArr>`;
             }
-            // Google Docs draws an m:m without its column count flat. ST_Integer255 caps the count; columns past it
-            // keep the default, centred.
-            const columns = Math.min(Math.max(...node.rows.map((cells) => cells.length)), 255);
-            const pr = `<m:mPr><m:mcs><m:mc><m:mcPr>${val('count', String(columns))}${val('mcJc', 'center')}</m:mcPr></m:mc></m:mcs></m:mPr>`;
-            return `<m:m>${pr}${node.rows.map((cells) => `<m:mr>${cells.map((cell) => argument('e', cell)).join('')}</m:mr>`).join('')}</m:m>`;
+            return writeMatrix(node, 'center');
         }
     }
+}
+
+// Google Docs draws an m:m without its column count flat. ST_Integer255 caps the count; columns past it keep the
+// default, centred.
+function writeMatrix(node: Extract<MathNode, { kind: 'table' }>, justification: 'center' | 'left'): string {
+    const columns = Math.min(Math.max(...node.rows.map((cells) => cells.length)), 255);
+    const pr = `<m:mPr><m:mcs><m:mc><m:mcPr>${val('count', String(columns))}${val('mcJc', justification)}</m:mcPr></m:mc></m:mcs></m:mPr>`;
+    return `<m:m>${pr}${node.rows.map((cells) => `<m:mr>${cells.map((cell) => argument('e', cell)).join('')}</m:mr>`).join('')}</m:m>`;
 }
 
 const writeRun = ({ properties, text }: Run) =>

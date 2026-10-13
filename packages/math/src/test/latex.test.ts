@@ -436,7 +436,7 @@ describe('readLatex', () => {
                         [
                             {
                                 kind: 'table',
-                                layout: 'equations',
+                                layout: 'matrix',
                                 rows: [
                                     [one, x],
                                     [two, letter('y')],
@@ -692,6 +692,42 @@ describe('writeLatex', () => {
             '\\operatorname{arg\u2212max}{x}',
         ],
         [[{ kind: 'scripts', base: [{ kind: 'identifier', text: 'a-b' }], sup: x }], '{\\operatorname{a-b}}^{x}'],
+        // A { before a matrix is cases; before equations it is a fenced aligned.
+        [
+            [
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [
+                        [
+                            {
+                                kind: 'table',
+                                layout: 'matrix',
+                                rows: [
+                                    [one, x],
+                                    [two, letter('y')],
+                                ],
+                            },
+                        ],
+                    ],
+                },
+            ],
+            '\\begin{cases}1 & x \\\\ 2 & y\\end{cases}',
+        ],
+        [
+            [
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [[{ kind: 'table', layout: 'equations', rows: [[one, x]] }]],
+                },
+            ],
+            '\\left\\{\\begin{aligned}1 & x\\end{aligned}\\right.',
+        ],
         // An accent outside the accent table is \overset of its mark, which reads back as the accent.
         [[{ kind: 'accent', accent: '\u0311', body: x }], '\\overset{\u0311}{x}'],
         [

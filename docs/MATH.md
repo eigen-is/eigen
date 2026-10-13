@@ -52,6 +52,7 @@ The other rules of the form:
 | brace | `mover` or `munder` with its character as `mo stretchy="true"` |
 | a bare fence character | `mo stretchy="false"`, so it doesn't grow around a fraction beside it |
 | text | `mtext`, its edge spaces as U+00A0, which MathML doesn't trim |
+| a matrix alone in a `{` with no closing fence, LaTeX's cases | its `mtable` with `columnalign="left"`, as amsmath aligns cases |
 
 A variant is the Unicode alphanumeric where one exists and `mathvariant` where none does, such as bold-italic digits. MathML draws a lone letter italic, so an upright capital Greek letter is written `mathvariant="normal"` and an italic one as its alphanumeric, 𝛤. Chrome honours only `mathvariant="normal"` but draws the alphanumerics. The writer never writes `display`: whether an equation stands on its own line belongs to the document that holds it.
 
@@ -78,7 +79,7 @@ The OMML round trip keeps the object tree, every property the tree holds and eve
 | a hyphen-minus as an operator | the minus sign U+2212 | 12, 43, 44, 56, 57, 60, 61, 63, 79, 80, 83, 90, 91, 156, 158, 159, 160 |
 | an empty script or degree that shows | a hidden one | 18, 69 |
 
-An empty slot in Word draws only a placeholder box while editing, so hiding it changes nothing on the page. `m:box` reads as its content, and so does `m:phant`, shown even where Word hides it. Keeping a box or a linear fraction would put Word internals into the MathML for equations that look the same without them. Dropped and not compared: Word's equation number, the `#` in a run of an `m:eqArr` equation and the `(8)` after it, which belongs to the document. A run in a tracked insertion or in an alternative's fallback counts as the equation's own, since Word shows it as part of the equation. The writer puts a `#` in an equation in an `m:box`, a marked one too, so it reads back as the character. Also dropped: per-run font size (an equation takes its paragraph's size), `w:b` and `w:i` in math, `m:lit`, `m:ctrlPr` apart from a deletion, `m:grow`, `m:mcs`, `m:mcJc` and `m:groupChr`'s `vertJc` (the writer sets `top` under a brace, as Word does). The writer still writes an `m:d`'s fences and an `m:m`'s column count, centred, where they are Word's defaults: Google Docs drops the fences an `m:d` leaves out and draws a matrix without `m:mcs` flat. `writeOmml` writes no LaTeX, because OMML has no slot for it.
+An empty slot in Word draws only a placeholder box while editing, so hiding it changes nothing on the page. `m:box` reads as its content, and so does `m:phant`, shown even where Word hides it. Keeping a box or a linear fraction would put Word internals into the MathML for equations that look the same without them. Dropped and not compared: Word's equation number, the `#` in a run of an `m:eqArr` equation and the `(8)` after it, which belongs to the document. A run in a tracked insertion or in an alternative's fallback counts as the equation's own, since Word shows it as part of the equation. The writer puts a `#` in an equation in an `m:box`, a marked one too, so it reads back as the character. Also dropped: per-run font size (an equation takes its paragraph's size), `w:b` and `w:i` in math, `m:lit`, `m:ctrlPr` apart from a deletion, `m:grow`, `m:mcs`, `m:mcJc` and `m:groupChr`'s `vertJc` (the writer sets `top` under a brace, as Word does). The writer still writes an `m:d`'s fences and an `m:m`'s column count, centred, where they are Word's defaults: Google Docs drops the fences an `m:d` leaves out and draws a matrix without `m:mcs` flat. A matrix alone in a `{` with no closing fence, LaTeX's cases, is justified left. Word writes cases as that `m:d` around an `m:m` or an `m:eqArr` (fixture equation 173); the `m:eqArr` stays an equations table. `writeOmml` writes no LaTeX, because OMML has no slot for it.
 
 ## LaTeX is a small TeX subset, read through one command table
 
@@ -99,7 +100,7 @@ The parser follows TeX where a user would notice. `%` starts a comment and `~` i
 | a large operator alone | `{\sum}`, so it takes no body |
 | scripts on an empty base | `{}_{6}^{14}C`; prescripts are `\prescript{14}{6}{C}` (mathtools) |
 | a fraction without a line | `\binom{n}{k}` in parentheses, else `\genfrac{}{}{0pt}{}{a}{b}` |
-| a table in fences | `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix` and `Vmatrix`; a `{` before equations is `cases`; bare tables are `matrix` and `aligned` |
+| a table in fences | `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix` and `Vmatrix`; a `{` before a matrix is `cases`, before equations `\left\{` around `aligned`; bare tables are `matrix` and `aligned` |
 | a brace with a label | `\overbrace{x}^{n}`, as Word puts a limit over a group character |
 | an upright word or letter | `\mathrm{sin}`, `\mathrm{d}` |
 | an italic capital Greek letter | `\mathit{\Gamma}`; an upright one is `\Gamma`, as TeX draws it |

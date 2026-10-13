@@ -245,6 +245,29 @@ describe('writeMathml', () => {
         }
     });
 
+    // LaTeX's cases: a { before a matrix alone, its columns aligned left with MathML's own cell spacing.
+    test('a { before a matrix alone aligns its columns left; a matrix elsewhere and equations keep theirs', () => {
+        const matrix: MathNode = { kind: 'table', layout: 'matrix', rows: [[x, x]] };
+        const equations: MathNode = { kind: 'table', layout: 'equations', rows: [[x, x]] };
+        const fenced = (table: MathNode, open = '{', close = ''): MathRow => [
+            { kind: 'fenced', open, close, separator: '', parts: [[table]] },
+        ];
+        const cells = '<mtr><mtd><mi>x</mi></mtd><mtd><mi>x</mi></mtd></mtr>';
+        expect(writeMathml(fenced(matrix))).toBe(
+            `<math xmlns="${MATHML_NAMESPACE}"><mrow><mo fence="true">{</mo><mtable columnalign="left">${cells}</mtable>` +
+                '<mo fence="true"></mo></mrow></math>',
+        );
+        expect(writeMathml(fenced(matrix, '(', ')'))).toContain(`<mtable>${cells}</mtable>`);
+        expect(writeMathml([matrix])).toContain(`<mtable>${cells}</mtable>`);
+        expect(writeMathml(fenced(equations))).toContain(
+            `<mtable displaystyle="true" columnalign="right left">${cells}</mtable>`,
+        );
+        for (const row of [fenced(matrix), fenced(equations)]) {
+            expect(viaMathml(row)).toStrictEqual(row);
+            expect(viaOmml(row)).toStrictEqual(row);
+        }
+    });
+
     test('never writes display', () => {
         expect(writeMathml(x)).not.toContain('display=');
     });

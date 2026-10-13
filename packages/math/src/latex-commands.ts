@@ -1,5 +1,5 @@
 import { LARGE_OPERATOR_NAMES, PRIME } from './notation';
-import type { MathEnclosure, MathSpace, MathVariant } from './tree';
+import { CASES, type MathEnclosure, type MathSpace, type MathVariant } from './tree';
 
 const SYMBOL_CLASSES = ['letter', 'operator', 'relation', 'arrow', 'delimiter', 'misc'] as const;
 
@@ -441,7 +441,7 @@ export const LATEX_ENVIRONMENTS: ReadonlyMap<string, LatexEnvironment> = new Map
     ['Bmatrix', { layout: 'matrix', open: '{', close: '}' }],
     ['vmatrix', { layout: 'matrix', open: '|', close: '|' }],
     ['Vmatrix', { layout: 'matrix', open: '‖', close: '‖' }],
-    ['cases', { layout: 'equations', open: '{', close: '' }],
+    ['cases', { layout: 'matrix', ...CASES }],
     ['aligned', { layout: 'equations', open: '', close: '' }],
 ]);
 

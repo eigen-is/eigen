@@ -12,6 +12,7 @@ import {
 } from './notation';
 import {
     bound,
+    casesOf,
     defaultVariant,
     equationCells,
     hexColor,
@@ -427,7 +428,8 @@ function writeNode(node: MathNode): string {
         }
         case 'fenced': {
             const separator = `<mo separator="true">${escapeXml(node.separator)}</mo>`;
-            const parts = node.parts.map(writeRow).join(separator);
+            const cases = casesOf(node);
+            const parts = cases ? writeTable(cases, ' columnalign="left"') : node.parts.map(writeRow).join(separator);
             return `<mrow><mo fence="true">${escapeXml(node.open)}</mo>${parts}<mo fence="true">${escapeXml(node.close)}</mo></mrow>`;
         }
         case 'function':
@@ -454,13 +456,14 @@ function writeNode(node: MathNode): string {
             const columns = Math.max(0, ...node.rows.map((cells) => cells.length));
             // Equations align as Word's & marks do: right of the first mark, left of the next, by turns.
             const align = Array.from({ length: columns }, (_, index) => (index % 2 === 0 ? 'right' : 'left')).join(' ');
-            const layout = node.layout === 'equations' ? ` displaystyle="true" columnalign="${align}"` : '';
-            const rows = node.rows.map(
-                (cells) => `<mtr>${cells.map((cell) => `<mtd>${writeRow(cell)}</mtd>`).join('')}</mtr>`,
-            );
-            return `<mtable${layout}>${rows.join('')}</mtable>`;
+            return writeTable(node, node.layout === 'equations' ? ` displaystyle="true" columnalign="${align}"` : '');
         }
     }
+}
+
+function writeTable(node: Extract<MathNode, { kind: 'table' }>, layout: string): string {
+    const rows = node.rows.map((cells) => `<mtr>${cells.map((cell) => `<mtd>${writeRow(cell)}</mtd>`).join('')}</mtr>`);
+    return `<mtable${layout}>${rows.join('')}</mtable>`;
 }
 
 export function writeMathml(row: MathRow, latex?: string): string {

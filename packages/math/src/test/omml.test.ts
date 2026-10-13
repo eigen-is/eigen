@@ -456,6 +456,22 @@ describe('writeOmml', () => {
             '<m:oMath><m:m><m:mPr><m:mcs><m:mc><m:mcPr><m:count m:val="2"/><m:mcJc m:val="center"/></m:mcPr></m:mc>' +
                 `</m:mcs></m:mPr><m:mr>${e}${e}</m:mr><m:mr>${e}</m:mr></m:m></m:oMath>`,
         );
+        // A { before a matrix alone is LaTeX's cases, its columns aligned left.
+        expect(
+            writeOmml([
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [[{ kind: 'table', layout: 'matrix', rows: [[[x], [x]]] }]],
+                },
+            ]),
+        ).toBe(
+            '<m:oMath><m:d><m:dPr><m:begChr m:val="{"/><m:endChr m:val=""/></m:dPr><m:e><m:m><m:mPr><m:mcs><m:mc><m:mcPr>' +
+                `<m:count m:val="2"/><m:mcJc m:val="left"/></m:mcPr></m:mc></m:mcs></m:mPr><m:mr>${e}${e}</m:mr></m:m></m:e>` +
+                '</m:d></m:oMath>',
+        );
         // ST_Integer255
         expect(writeOmml([{ kind: 'table', layout: 'matrix', rows: [Array(300).fill([x])] }])).toContain(
             '<m:count m:val="255"/>',

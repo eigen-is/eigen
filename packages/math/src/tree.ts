@@ -152,6 +152,18 @@ export function numberEnd(start: number, digit: (index: number) => boolean, poin
 
 export const optional = (row: MathRow) => (row.length > 0 ? row : undefined);
 
+// LaTeX's cases: a { before a matrix alone. Every writer aligns its columns left, as amsmath does.
+export const CASES = { open: '{', close: '' } as const;
+
+export function casesOf(node: MathNode): Extract<MathNode, { kind: 'table' }> | undefined {
+    if (node.kind !== 'fenced' || node.open !== CASES.open || node.close !== CASES.close) return undefined;
+    const [part, ...rest] = node.parts;
+    const [table, ...after] = part;
+    return rest.length === 0 && after.length === 0 && table?.kind === 'table' && table.layout === 'matrix'
+        ? table
+        : undefined;
+}
+
 // Word marks alignment points with & in an equation: they split it into cells.
 export function equationCells(row: MathRow): MathRow[] {
     const cells: MathRow[] = [[]];
