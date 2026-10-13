@@ -57,7 +57,7 @@ Other people see your changes once you save them, not while you type. If two peo
 
 Copy an equation from Word for the web, or from a web page that shows math, and paste it into a document. It comes in as an equation you can edit, in the line or on its own line as it was. When the page includes the equation's LaTeX, the **LaTeX** field shows it.
 
-An equation copied from one Eigen document to another stays an equation, with its LaTeX. An equation copied from Google Docs pastes as plain text. To bring in the equations of a Word file, [import the file](/support/docs/import-word).
+An equation copied from one Eigen document to another stays an equation, with its LaTeX. An equation copied from Google Docs pastes as plain text. So does one from a web page that draws its math without keeping a copy of it, as pages made with MathJax 4 do unless they change its settings. To bring in the equations of a Word file, [import the file](/support/docs/import-word).
 
 ## Comment on an equation
 

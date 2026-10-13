@@ -43,6 +43,14 @@ const equationsIn = (doc: ProseMirrorNode) => {
     return equations;
 };
 
+const nodeNamesIn = (doc: ProseMirrorNode) => {
+    const names: string[] = [];
+    doc.descendants((node) => {
+        names.push(node.type.name);
+    });
+    return names;
+};
+
 const parsed = (html: string) => equationsIn(createDocument(html, schema));
 
 // Nested past MATH_LIMITS.depth, so every reader refuses the tree.
@@ -167,7 +175,7 @@ describe('a drawn equation pastes as its <math> alone', () => {
 
     test.each([
         [
-            // Word for the web's inline shape: the display sample's without MathJax_Display.
+            // Constructed from the display sample's shape without MathJax_Display, until an inline capture exists.
             'Word for the web inline',
             `<p>a <span class="MathJax" data-mathml="&lt;math ${XMLNS}&gt;&lt;mi&gt;x&lt;/mi&gt;&lt;/math&gt;" role="presentation"><nobr aria-hidden="true"><span class="math"><span class="mi">𝑥</span></span></nobr><span class="MJX_Assistive_MathML" role="presentation"><math ${XMLNS}><mi>x</mi></math></span></span> b</p>`,
             equation('x', false),
@@ -179,20 +187,30 @@ describe('a drawn equation pastes as its <math> alone', () => {
         ],
         ['KaTeX inline', `<p>a ${katex('')} b</p>`, equation('x^2', false, 'x^2')],
         [
-            'MathJax 3 and 4',
+            'MathJax 3, and 4 with its hidden MathML on',
             `<p>a <mjx-container class="MathJax" jax="CHTML"><mjx-math class="MJX-TEX" aria-hidden="true"><mjx-msup><mjx-mi class="mjx-i"><mjx-c class="mjx-c1D465 TEX-I">𝑥</mjx-c></mjx-mi><mjx-script><mjx-mn class="mjx-n" size="s"><mjx-c class="mjx-c32">2</mjx-c></mjx-mn></mjx-script></mjx-msup></mjx-math><mjx-assistive-mml unselectable="on" display="inline"><math ${XMLNS}>${xSquaredMath}</math></mjx-assistive-mml></mjx-container> b</p>`,
             equation('x^2', false),
         ],
         [
             // Its annotation's \displaystyle reads as nothing, so the panel edits it.
-            'Wikipedia, its fallback image parsing as nothing',
+            'Wikipedia, its fallback image dropped',
             `<p>a <span class="mwe-math-element"><span class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math ${XMLNS} alttext="{\\displaystyle x^{2}}"><semantics><mrow class="MJX-TeXAtom-ORD"><mstyle displaystyle="true" scriptlevel="0"><msup><mi>x</mi><mrow class="MJX-TeXAtom-ORD"><mn>2</mn></mrow></msup></mstyle></mrow><annotation encoding="application/x-tex">{\\displaystyle x^{2}}</annotation></semantics></math></span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/x" class="mwe-math-fallback-image-inline" aria-hidden="true" alt="{\\displaystyle x^{2}}"></span> b</p>`,
             equation('x^2', false, '{\\displaystyle x^{2}}'),
         ],
     ])('%s pastes once, inline in its sentence', (_source, html, expected) => {
         const doc = pasted(html);
         expect(equationsIn(doc)).toEqual([expected]);
+        expect(nodeNamesIn(doc)).not.toContain('figure');
         expect(doc.textContent).toBe('a  b');
+    });
+
+    // MathJax 4 turns its hidden MathML off by default, so the page holds only the glyphs.
+    test('MathJax 4 by default pastes as its text', () => {
+        const doc = pasted(
+            `<p>a <mjx-container class="MathJax" jax="CHTML"><mjx-math class="MJX-TEX" aria-hidden="true"><mjx-msup><mjx-mi class="mjx-i"><mjx-c class="mjx-c1D465 TEX-I">𝑥</mjx-c></mjx-mi><mjx-script><mjx-mn class="mjx-n" size="s"><mjx-c class="mjx-c32">2</mjx-c></mjx-mn></mjx-script></mjx-msup></mjx-math></mjx-container> b</p>`,
+        );
+        expect(equationsIn(doc)).toEqual([]);
+        expect(doc.textContent).toBe('a 𝑥2 b');
     });
 
     test('KaTeX displayed pastes once, displayed', () => {
@@ -208,6 +226,33 @@ describe('a drawn equation pastes as its <math> alone', () => {
         );
         expect(equationsIn(doc)).toEqual([equation('x', false), equation('x', false)]);
         expect(doc.textContent).toBe(' and ');
+    });
+
+    test("an element with a renderer's class around one equation and other text keeps the text", () => {
+        const doc = pasted(
+            `<div class="MathJax"><p>Intro.</p><p>See <math ${XMLNS}><mi>x</mi></math></p><p>Outro.</p></div><article class="katex"><h1>Title</h1><p>Body <span class="katex-mathml"><math ${XMLNS}><mi>x</mi></math></span></p></article>`,
+        );
+        expect(equationsIn(doc)).toEqual([equation('x', false), equation('x', false)]);
+        expect(doc.textContent).toBe('Intro.See Outro.TitleBody ');
+    });
+
+    test("the pasted body keeps its place though it carries a renderer's class", () => {
+        const doc = new DOMParser().parseFromString(
+            `<html><body class="katex"><span class="katex-mathml">${katexMath('')}</span></body></html>`,
+            'text/html',
+        );
+        unwrapRenderedMath(doc.body);
+        expect(doc.body).not.toBeNull();
+        expect(doc.body.querySelectorAll('math').length).toBe(1);
+    });
+
+    test('4,000 equations in one wrapper unwrap in linear time', () => {
+        const html = `<div class="MathJax">${`<p><math ${XMLNS}><mi>x</mi></math></p>`.repeat(4000)}</div>`;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const start = performance.now();
+        unwrapRenderedMath(doc.body);
+        expect(performance.now() - start).toBeLessThan(500);
+        expect(doc.body.querySelectorAll('math').length).toBe(4000);
     });
 });
 

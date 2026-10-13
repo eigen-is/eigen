@@ -88,17 +88,19 @@ export function equationMath({ mathml, display }: Pick<Equation, 'mathml' | 'dis
     return math;
 }
 
-// What KaTeX and MathJax (2 to 4; 2 is Word for the web's, its CommonHTML output classed apart) wrap a drawn equation
-// in: the glyphs and a hidden copy of the <math>.
-const MATH_DRAWINGS = '.katex, .MathJax, .MathJax_CHTML';
+// A drawn equation holds a hidden copy of its <math> beside the glyphs or image: KaTeX's, MathJax 2's (Word for the
+// web's, its CommonHTML output classed apart), MathJax 3's, MathJax 4's with its hidden MathML on, and Wikipedia's.
+const MATH_HOLDERS = '.katex-mathml, .MJX_Assistive_MathML, mjx-assistive-mml, .mwe-math-mathml-a11y';
+const MATH_DRAWINGS = '.katex, .MathJax, .MathJax_CHTML, .mwe-math-element';
 
-// A paste of a drawn equation would hold its glyphs as text beside it, so each drawing becomes its <math> alone. One
-// holds a single <math>, so an element holding two is the page's own. A displayed one's outer wrapper holds only the
-// drawing, and Wikipedia's fallback image parses as nothing, since a figure's image has a media name.
+// A paste of a drawn equation would hold its glyphs as text, or its image as a figure, beside it, so each drawing
+// becomes its <math> alone. Only a <math> in a holder directly in a drawing counts, so a page's own element with a
+// renderer's class keeps what else it holds, and the pasted root itself stays. A displayed one's outer wrapper holds
+// only the drawing.
 export function unwrapRenderedMath(root: ParentNode): void {
     for (const math of root.querySelectorAll('math')) {
-        const drawing = math.parentElement?.closest(MATH_DRAWINGS);
-        if (drawing?.querySelectorAll('math').length === 1) drawing.replaceWith(math);
+        const drawing = math.parentElement?.matches(MATH_HOLDERS) ? math.parentElement.parentElement : null;
+        if (drawing?.matches(MATH_DRAWINGS) && drawing !== root && root.contains(drawing)) drawing.replaceWith(math);
     }
 }
 
