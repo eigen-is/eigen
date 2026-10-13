@@ -164,20 +164,22 @@ process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
     const ack: ChildAck = { jobId, ack: true };
     process.send?.(ack);
     const startedAt = performance.now();
-    let response: DocumentTransformResponse;
-    try {
-        response = await handleRequest(request);
-    } catch (err) {
-        response = { ok: false, error: toTransformError(err) };
-    }
-    const envelope: ChildResponseEnvelope = {
-        jobId,
-        response,
-        transformMs: performance.now() - startedAt,
-        peakRssBytes: peakRss(),
-    };
     // Never an exit after the send: it would drop the reply. The runner kills the child once it has it.
-    process.send?.(envelope);
+    const reply = (response: DocumentTransformResponse) => {
+        const envelope: ChildResponseEnvelope = {
+            jobId,
+            response,
+            transformMs: performance.now() - startedAt,
+            peakRssBytes: peakRss(),
+        };
+        process.send?.(envelope);
+    };
+    // The send serializes the result, which can fail too, out of memory included: it is answered like any throw.
+    try {
+        reply(await handleRequest(request));
+    } catch (err) {
+        reply({ ok: false, error: toTransformError(err) });
+    }
 });
 
 // A parent that died first leaves no one to kill the child.
