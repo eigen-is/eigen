@@ -398,21 +398,70 @@ describe('math', () => {
 });
 
 describe('sizes', () => {
-    // ST_HpsMeasure: half-points, or a universal measure in Strict OOXML.
-    test('a run of 8pt on an 11 pt body is small, one of 11pt is not', async () => {
-        const styles = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+    const sizesOf = (json: JSONContent) =>
+        marksOfType(json, 'textStyle')
+            .filter((mark) => mark.attrs['fontSize'] !== null)
+            .map((mark) => [mark.text, mark.attrs['fontSize']]);
+    const BODY_11 = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>';
+
+    // ST_HpsMeasure: half-points, or a universal measure in Strict OOXML. Small is the editor's no longer.
+    test('a run in a size other than the body has it in pt, one at the body size none', async () => {
         const json = await imported(
-            paragraph(`${run('fine', '<w:sz w:val="8pt"/>')}${run(' body', '<w:sz w:val="11pt"/>')}`),
-            { styles },
+            paragraph(
+                `${run('fine', '<w:sz w:val="8pt"/>')}${run(' body', '<w:sz w:val="11pt"/>')}${run(' big', '<w:sz w:val="28"/>')}${run(' half', '<w:sz w:val="21"/>')}`,
+            ),
+            { styles: BODY_11 },
         );
-        expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['fine']);
+        expect(sizesOf(json)).toEqual([
+            ['fine', 8],
+            [' big', 14],
+            [' half', 10.5],
+        ]);
+        expect(marksOfType(json, 'small')).toEqual([]);
     });
 
-    // P8: small is relative to the body; 9 pt in a 9 pt body is body text.
-    test('9 pt runs on a 9 pt body are not small', async () => {
+    // The docx's own body is the doc's body, whatever its size: a 12 pt Word body draws as the doc's 11 pt.
+    test('on a 12 pt body its runs have no size, and an 11 pt run has one', async () => {
+        const styles = `${BODY_11}<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:sz w:val="24"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="BodyText"><w:name w:val="Body Text"/><w:basedOn w:val="Normal"/></w:style>`;
+        const json = await imported(
+            `${paragraph(`${run('plain')}${run(' set', '<w:sz w:val="24"/>')}${run(' less', '<w:sz w:val="22"/>')}`)}${paragraph(run('styled'), '<w:pStyle w:val="BodyText"/>')}`,
+            { styles },
+        );
+        expect(sizesOf(json)).toEqual([[' less', 11]]);
+    });
+
+    // P8: the body is what's normal; 9 pt in a 9 pt body is body text.
+    test('9 pt runs on a 9 pt body have no size', async () => {
         const styles = '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="18"/></w:rPr></w:rPrDefault></w:docDefaults>';
         const json = await imported(paragraph(run('body', '<w:sz w:val="18"/>')), { styles });
-        expect(marksOfType(json, 'small')).toEqual([]);
+        expect(sizesOf(json)).toEqual([]);
+    });
+
+    // A heading draws its own size, as it does its bold; a run set apart from the style keeps its own.
+    test("a heading's style size is no mark, a run's own size is", async () => {
+        const styles = `${BODY_11}<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>`;
+        const json = await imported(
+            paragraph(
+                `${run('Plan')}${run(' as styled', '<w:sz w:val="32"/>')}${run(' big', '<w:sz w:val="40"/>')}`,
+                '<w:pStyle w:val="Heading1"/>',
+            ),
+            { styles },
+        );
+        expect(nodesOfType(json, 'heading')).toHaveLength(1);
+        expect(sizesOf(json)).toEqual([[' big', 20]]);
+    });
+
+    // A hostile w:sz reaches the page's CSS and WeasyPrint, so it lands in the editor's range.
+    test("a size past Word's lands in Google's 1 to 400 pt", async () => {
+        const json = await imported(
+            paragraph(`${run('huge', '<w:sz w:val="99999"/>')}${run(' none', '<w:sz w:val="0"/>')}`),
+            { styles: BODY_11 },
+        );
+        expect(sizesOf(json)).toEqual([
+            ['huge', 400],
+            [' none', 1],
+        ]);
     });
 });
 
@@ -435,7 +484,11 @@ describe('complex script', () => {
             { styles },
         );
         expect(marksOfType(json, 'italic').map((mark) => mark.text)).toEqual(['Spain ']);
-        expect(marksOfType(json, 'small').map((mark) => mark.text)).toEqual(['مملكة']);
+        expect(
+            marksOfType(json, 'textStyle')
+                .filter((mark) => mark.attrs['fontSize'] !== null)
+                .map((mark) => [mark.text, mark.attrs['fontSize']]),
+        ).toEqual([['مملكة', 7]]);
     });
 
     test("bCs toggles through the styles as b does, and a heading's is its own", async () => {

@@ -168,12 +168,21 @@ describe('source side', () => {
         ]);
     });
 
-    test('small text is noticeably smaller than the body, not a point smaller', async () => {
+    test('a font size is a size other than the body', async () => {
         // No size in the styles: Word's 10 pt body.
         const tally = await source(
-            `<w:p>${run('body', '<w:sz w:val="18"/>')}${run(' small', '<w:sz w:val="16"/>')}</w:p>`,
+            `<w:p>${run('body', '<w:sz w:val="20"/>')}${run(' small', '<w:sz w:val="16"/>')}${run(' big', '<w:sz w:val="28"/>')}</w:p>`,
         );
-        expect(tally.marks.get('small')).toEqual(['small']);
+        expect(tally.marks.get('size')).toEqual(['small', 'big']);
+    });
+
+    // As the import reads it: a heading draws its own size, so only a run set apart from its style's has one.
+    test("a heading's style size is no font size, a run's own is", async () => {
+        const tally = await source(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Plan')}${run(' big', '<w:sz w:val="48"/>')}</w:p>`,
+            '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+        );
+        expect(tally.marks.get('size')).toEqual(['big']);
     });
 
     test("a footnote's marker is no text on either side", async () => {
