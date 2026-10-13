@@ -1,5 +1,5 @@
 import { ApiError } from '../../core/errors';
-import { CONTENT_TYPES_NS, isOn, MC_NS, parseOoxml, W_NS } from '../../core/ooxml';
+import { alternativeFor, CONTENT_TYPES_NS, isOn, parseOoxml, W_NS } from '../../core/ooxml';
 import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
 import { is, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
@@ -168,8 +168,8 @@ function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string,
     return relationshipsOf(readXml(zip, relsPathOf(partPath), budget), partPath);
 }
 
-// mc:Choice prefixes whose content this reader understands; any other Choice falls back.
-const UNDERSTOOD_PREFIXES = new Set([
+// Requires names prefixes, not namespaces: Word's spellings of the namespaces this reader reads.
+const WORD_PREFIXES = new Set([
     'w',
     'w14',
     'w15',
@@ -190,20 +190,7 @@ const UNDERSTOOD_PREFIXES = new Set([
     'r',
 ]);
 
-export function isAlternateContent(element: XmlElement): boolean {
-    return is(element, MC_NS, 'AlternateContent');
-}
-
-export function alternative(element: XmlElement): XmlElement[] {
-    for (const choice of xmlElements(element)) {
-        if (is(choice, MC_NS, 'Choice')) {
-            const requires = (choice.attributes['Requires'] ?? '').split(/\s+/).filter(Boolean);
-            if (requires.every((prefix) => UNDERSTOOD_PREFIXES.has(prefix))) return xmlElements(choice);
-        }
-        if (is(choice, MC_NS, 'Fallback')) return xmlElements(choice);
-    }
-    return [];
-}
+export const alternative = alternativeFor(WORD_PREFIXES);
 
 // ── WordprocessingML attributes ─────────────────────────────────────────────────────────────────────────────────
 

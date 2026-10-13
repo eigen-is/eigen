@@ -1,5 +1,5 @@
 import type { EigenFont } from '@workspace/lib/constants/fonts';
-import { parseXml, type XmlElement } from './xml';
+import { is, parseXml, type XmlElement, xmlElements } from './xml';
 
 // The OOXML vocabulary the docx writer writes and the readers recognise, one source both ways: namespaces, style
 // names, list formats, units and Word's spelling of a number.
@@ -48,6 +48,26 @@ const STRICT_NAMESPACES = new Map([
 // A part read with Strict's namespaces as their transitional twins, wherever it declares them.
 export function parseOoxml(input: string | Uint8Array): XmlElement | null {
     return parseXml(input, STRICT_NAMESPACES);
+}
+
+// ── Markup compatibility ────────────────────────────────────────────────────────────────────────────────────────
+
+export function isAlternateContent(element: XmlElement): boolean {
+    return is(element, MC_NS, 'AlternateContent');
+}
+
+// The first mc:Choice whose Requires prefixes the format's reader all understands, else the mc:Fallback, else nothing.
+export function alternativeFor(understood: ReadonlySet<string>): (element: XmlElement) => XmlElement[] {
+    return (element) => {
+        for (const choice of xmlElements(element)) {
+            if (is(choice, MC_NS, 'Choice')) {
+                const requires = (choice.attributes['Requires'] ?? '').split(/\s+/).filter(Boolean);
+                if (requires.every((prefix) => understood.has(prefix))) return xmlElements(choice);
+            }
+            if (is(choice, MC_NS, 'Fallback')) return xmlElements(choice);
+        }
+        return [];
+    };
 }
 
 // ── Styles: Word lists a style by its name, which a re-save keeps where an id may change ────────────────────────────

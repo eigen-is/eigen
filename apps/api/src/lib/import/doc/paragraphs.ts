@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
-import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
+import { CHECKBOX_GLYPHS, isAlternateContent, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
 import { is, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
@@ -12,7 +12,6 @@ import {
     DOCUMENT_TOO_LARGE,
     type DocxPackage,
     descendants,
-    isAlternateContent,
     type Part,
     twipsOf,
     w,
