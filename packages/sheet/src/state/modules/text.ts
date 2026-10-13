@@ -170,7 +170,7 @@ export function getFontSet(format: CellStyle | null | undefined, defaultFontSize
     fontAttr.push(!format.bl ? 'normal' : 'bold');
 
     // font-size
-    fontAttr.push(`${format.fs ? Math.ceil(format.fs) : defaultFontSize}pt`);
+    fontAttr.push(`${format.fs || defaultFontSize}pt`);
 
     const fallback = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
 
