@@ -131,9 +131,10 @@ export const groupXfrm = (
         `<a:chOff x="${child[0]}" y="${child[1]}"/><a:chExt cx="${child[2]}" cy="${child[3]}"/>`,
     );
 
-export function graphicFrame(uri: string, x: number, y: number, cx: number, cy: number): string {
+// `data` is a:graphicData's content: a chart's c:chart reference.
+export function graphicFrame(uri: string, x: number, y: number, cx: number, cy: number, data = ''): string {
     const id = ids++;
-    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Frame ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></p:xfrm><a:graphic><a:graphicData uri="${uri}"/></a:graphic></p:graphicFrame>`;
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Frame ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></p:xfrm><a:graphic><a:graphicData uri="${uri}">${data}</a:graphicData></a:graphic></p:graphicFrame>`;
 }
 
 export const solid = (hex: string) => `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;

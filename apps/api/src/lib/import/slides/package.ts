@@ -37,7 +37,7 @@ const NOT_A_PRESENTATION = new Set([
 ]);
 
 // The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so
-// a relationship can't hand the reader notes, a diagram, a chart or a part of another kind.
+// a relationship can't hand the reader notes, a diagram or a part of another kind.
 const PART_TYPES = {
     slide: `${PML}.slide+xml`,
     slideLayout: `${PML}.slidelayout+xml`,
@@ -45,6 +45,9 @@ const PART_TYPES = {
     theme: 'application/vnd.openxmlformats-officedocument.theme+xml',
 };
 export type PartKind = keyof typeof PART_TYPES;
+
+// A graphic frame's chart, parsed only under ppt/charts/ and of this type; never its own relationships.
+const CHART_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 
 // Pictures are read raw, never parsed, and only these of the types an import stores: the media a slide shows.
 const SLIDE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml']);
@@ -59,6 +62,8 @@ export type PptxPackage = {
     // The part a relationship of this kind names, parsed once; a damaged layout, master or theme is none.
     related(from: Part, kind: Exclude<PartKind, 'slide'>): Part | undefined;
     slide(path: string): Part | undefined;
+    // The c:chartSpace an r:id names, parsed once; a missing or damaged one is none.
+    chart(from: Part, id: string | undefined): XmlElement | undefined;
     // The picture an r:embed names, when it is one the deck can show.
     media(from: Part, id: string | undefined): MediaPart | undefined;
     readMedia(path: string): Uint8Array | undefined;
@@ -76,6 +81,8 @@ export type DeckWalk = {
     // Children walked and elements written, each capped: a master's shapes count again for every slide.
     shapes: number;
     elements: number;
+    // Chart parts' elements read: a part's again for each colour map it is painted with.
+    chartNodes: number;
     // The update's weight so far, charged as each frame and element is written.
     weight: number;
     // A layout's or master's elements and the children walked for them, by part and colour map: read once, copied onto
@@ -169,11 +176,23 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
             );
         return parts.get(path);
     };
+    const charts = new Map<string, XmlElement | undefined>();
     return {
         presentation,
         slides,
         related,
         slide: (path) => read(path, 'slide'),
+        chart: (from, id) => {
+            const rel = id ? from.rels.get(id) : undefined;
+            const path = rel && !rel.external && rel.type.endsWith('/chart') ? rel.target : undefined;
+            if (!path?.startsWith('ppt/charts/') || pkg.contentTypeOf(path) !== CHART_TYPE) return undefined;
+            if (!charts.has(path))
+                charts.set(
+                    path,
+                    optional(() => parse(path)),
+                );
+            return charts.get(path);
+        },
         media: (from, id) => {
             const rel = id ? from.rels.get(id) : undefined;
             if (!rel || rel.external || !rel.type.endsWith('/image') || !rel.target.startsWith('ppt/'))

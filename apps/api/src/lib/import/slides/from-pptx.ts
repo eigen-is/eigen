@@ -71,6 +71,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             slide: { width: slideSize.cx * scale, height: slideSize.cy * scale },
             shapes: 0,
             elements: 0,
+            chartNodes: 0,
             weight: 0,
             decorations: new Map(),
             read: (nodes) => {
