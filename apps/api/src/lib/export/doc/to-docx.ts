@@ -72,7 +72,7 @@ import {
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
-import { figureMediaKey } from './docx-image';
+import { figureMediaKey, RASTER_EXTENSIONS } from './docx-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
@@ -1048,11 +1048,6 @@ const TABLE_LOOK = {
 // One image part and relationship per media name; an SVG's PNG is its blip, the SVG its extension.
 type Image = { rId: string; svgRId?: string; part: string; width: number; height: number };
 
-const RASTER_EXTENSIONS = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-]);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = readFigureAttrs(node.attrs ?? {});
@@ -1354,12 +1349,15 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     // Gated after the strip, or a character XML can't hold could hide a scheme; trimmed as a URL parser trims.
     const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
-    // What a URI reference can't hold; `%` stays, so an encoded href encodes no further.
-    const target = absoluteHref(kept, publicOrigin).replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
-        encodeURIComponent(character),
-    );
+    const target = uriReference(absoluteHref(kept, publicOrigin));
     const title = attrs?.['title'];
     return { target, tooltip: typeof title === 'string' && title ? title : undefined };
+}
+
+// A relationship target percent-encodes what a URI reference can't hold; `%` stays, so an encoded href encodes no
+// further.
+export function uriReference(href: string): string {
+    return href.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) => encodeURIComponent(character));
 }
 
 // ── Styles, every value from eigen-prose.css ────────────────────────────────────────────────────────────────────
