@@ -1,3 +1,5 @@
+import type { FillStyle, VectorElement } from '../vector/types';
+
 // Google/Excel names: `column` draws vertical bars, `bar` horizontal ones.
 export const CHART_TYPES = ['column', 'bar', 'line', 'pie'] as const;
 export const LEGEND_POSITIONS = ['top', 'bottom', 'left', 'right', 'none'] as const;
@@ -34,3 +36,48 @@ export type ChartSpec = {
     sliceColors: string[];
     data: InlineChartData | RangeChartData;
 };
+
+// A chart's data with its ranges resolved: inline data as stored, or the values a sheet reads from its ranges.
+export type ChartData = { categories: string[]; series: InlineChartSeries[] };
+
+// What a chart paints with: a canvas chart takes it from its element, docs and sheets use one flat preset.
+// background is a serialized Fill (transparent draws none); strokeColor draws the axes and gridlines.
+export type ChartPaint = {
+    fontFamily: string;
+    color: string;
+    background: string;
+    strokeColor: string;
+    strokeWidth: number;
+    roughness: number;
+    seed: number;
+    fillStyle: FillStyle;
+};
+
+// One line of chart text. y is the line's TOP: a renderer adds the font's baseline offset, a rich-text box
+// takes it as its top. The label turns `rotate` degrees (0, -45 or -90) about (x, y).
+export type ChartLabel = {
+    text: string;
+    x: number;
+    y: number;
+    anchor: 'start' | 'middle' | 'end';
+    fontFamily: string;
+    fontSize: number;
+    bold: boolean;
+    color: string;
+    rotate: number;
+};
+
+// The chart's box is width × height from (0, 0); every shape and label is in those local coordinates.
+// formatTick draws a value-axis label for a tick and the step between ticks.
+export type ChartLayoutInput = {
+    id: string;
+    spec: ChartSpec;
+    data: ChartData;
+    width: number;
+    height: number;
+    paint: ChartPaint;
+    formatTick: (value: number, step: number) => string;
+};
+
+// shapes are in paint order: background, gridlines, bars or slices, lines, markers, baseline, legend swatches.
+export type ChartLayout = { shapes: VectorElement[]; labels: ChartLabel[] };

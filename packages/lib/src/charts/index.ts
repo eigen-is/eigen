@@ -1,3 +1,4 @@
+export { layoutChart } from './layout';
 export {
     CHART_PALETTE,
     chartColor,
