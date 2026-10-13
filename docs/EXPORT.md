@@ -167,7 +167,7 @@ An arrow's shaft is hidden under its label by a `<mask>`, because WeasyPrint ign
 
 ## An import writes nothing until the Worker succeeds
 
-`importIntoDocument` replaces an open document (`/import`, `/import-from-drive`) and `convertToDocument` (`/convert`) creates one beside the source, both in `import/import-document.ts`. The Worker converts bytes only and never sees an owner, mount or path. So a failed transform creates no document and mutates no Yjs state, and its 400 or 413 crosses the boundary unchanged. An xlsx comes back as snapshot JSON, committed without parsing; a docx as a ready Yjs update plus images.
+`importIntoDocument` replaces an open document (`/import`, `/import-from-drive`) and `convertToDocument` (`/convert`) creates one beside the source, both in `import/import-document.ts`. The Worker converts bytes only and never sees an owner, mount or path. So a failed transform creates no document and mutates no Yjs state, and its 400 or 413 crosses the boundary unchanged. An xlsx comes back as snapshot JSON, committed without parsing; a docx as a ready Yjs update, its page and images.
 
 The route checks write before it buffers, but the job can queue for minutes, long enough for a share to be revoked. So `importIntoDocument` checks write again as the last await before the synchronous Yjs write, and a revoked writer gets a 403. `convertToDocument` needs no recheck, because `SharedDrive.create` checks write. It takes no abort signal either: a page reload must not kill a minute of conversion, and the file appears through the drive SSE refresh.
 
@@ -208,7 +208,7 @@ The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later
 
 The JSON is checked against the schema block by block. A block the schema refuses keeps its text as paragraphs, so a reader slip never fails an import.
 
-The doc's page is the body's last `w:sectPr`, Word's document-level section, its size and margins read through `readPageSetup`, so a hostile `w:pgSz` clamps as a peer's write does, and what the section leaves out is the default. A doc has one page, so an earlier section with another size or margins is dropped with a warning. `w:orient` is not read: Word draws the page `w` by `h` whatever it says. Images and tables import no wider than that page's text column.
+The doc's page is the body's last `w:sectPr`, Word's document-level section, its size and margins read through `readPageSetup`, so a hostile `w:pgSz` clamps as a peer's write does. A size the section leaves out is the default A4, a margin Word's 1 in, so the page and the anchors placed in its column match what Word draws. A doc has one page, so an earlier section with another size or margins is dropped with a warning. `w:orient` is not read: Word draws the page `w` by `h` whatever it says. Images and tables import no wider than that page's text column.
 
 `commitEigendocImport` (`document/doc.ts`) clears the body and the header and footer fragments, applies the update and sets every page key in one transaction, so an import replaces rather than appends and leaves no header or page of the doc before it. The page keys are set on the live doc, never in the update: a key the Worker's own doc sets is concurrent with the live one, and Yjs keeps whichever client id orders last.
 
