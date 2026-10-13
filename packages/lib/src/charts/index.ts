@@ -1,4 +1,4 @@
-export { layoutChart } from './layout';
+export { layoutChart, layoutChartMessage } from './layout';
 export {
     CHART_PALETTE,
     chartColor,

@@ -75,25 +75,12 @@ type Context = {
 
 type LegendItem = { name: string; color: string };
 
-export function layoutChart({ id, spec, data, width: w, height: h, paint, formatTick }: ChartLayoutInput): ChartLayout {
-    const width = Math.max(0, w);
-    const height = Math.max(0, h);
-    const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
-    const ctx: Context = {
-        id,
-        paint,
-        width,
-        height,
-        fontSize,
-        lineHeight: getLineHeightPx(paint.fontFamily, fontSize),
-        pad: fontSize,
-        gap: fontSize / 2,
-        labels: [],
-    };
-    const fill = parseFill(paint.background);
-    const background = isTransparentFill(fill)
-        ? []
-        : [rectangle(ctx, 'background', { x: 0, y: 0, width, height }, TRANSPARENT_COLOR, serializeFill(fill))];
+// The box and paint every layout starts from, a message's included.
+type ChartBox = Pick<ChartLayoutInput, 'id' | 'width' | 'height' | 'paint'>;
+
+export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
+    const ctx = context(box);
+    const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
 
     const count = data.series.reduce((most, series) => Math.max(most, series.values.length), data.categories.length);
@@ -123,6 +110,36 @@ export function layoutChart({ id, spec, data, width: w, height: h, paint, format
             : layoutCartesian(ctx, spec, { categories, series: data.series }, values, frame, formatTick);
     if (!plot) return message(MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
+}
+
+// The chart's background and one centered line instead of a plot, as a chart with nothing to plot draws.
+export function layoutChartMessage(box: ChartBox, text: string): ChartLayout {
+    const ctx = context(box);
+    return { shapes: backgroundShapes(ctx), labels: messageLabel(ctx, text) };
+}
+
+function context({ id, width: w, height: h, paint }: ChartBox): Context {
+    const width = Math.max(0, w);
+    const height = Math.max(0, h);
+    const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
+    return {
+        id,
+        paint,
+        width,
+        height,
+        fontSize,
+        lineHeight: getLineHeightPx(paint.fontFamily, fontSize),
+        pad: fontSize,
+        gap: fontSize / 2,
+        labels: [],
+    };
+}
+
+function backgroundShapes(ctx: Context): VectorElement[] {
+    const fill = parseFill(ctx.paint.background);
+    if (isTransparentFill(fill)) return [];
+    const box = { x: 0, y: 0, width: ctx.width, height: ctx.height };
+    return [rectangle(ctx, 'background', box, TRANSPARENT_COLOR, serializeFill(fill))];
 }
 
 function clampValue(value: number | null): number | null {
@@ -319,7 +336,7 @@ function layoutCartesian(
                   { x: plot.left, y: at },
                   { x: plot.right, y: at },
               ];
-        return line(ctx, key, ends, ctx.paint.strokeColor, 'sharp', opacity);
+        return { ...line(ctx, key, ends, ctx.paint.strokeColor, 'sharp', opacity), strokeStyle: ctx.paint.strokeStyle };
     };
     const band = horizontal ? bandScale(count, plot.top, plot.bottom) : bandScale(count, plot.left, plot.right);
     const zero = Math.min(hi, Math.max(lo, 0));

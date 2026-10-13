@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, sampleChartSpec } from '../../charts';
+import { formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
 import {
     CHART_TYPES,
     type ChartData,
@@ -23,6 +23,7 @@ const PAINT: ChartPaint = {
     background: solidFill('#ffffff'),
     strokeColor: '#1e1e1e',
     strokeWidth: 1,
+    strokeStyle: 'solid',
     roughness: 0,
     seed: 7,
     fillStyle: 'solid',
@@ -207,6 +208,15 @@ describe('layoutChart invariants', () => {
                 'gridline',
             ),
         ).toEqual([]);
+    });
+
+    test('the paint dashes the gridlines and the baseline, never the marks', () => {
+        const out = layout('column', {}, { paint: { strokeStyle: 'dashed' } });
+        for (const shape of out.shapes) {
+            const part = shape.id.split(':')[1];
+            const rule = part === 'gridline' || part === 'baseline';
+            expect([part, shape.strokeStyle]).toEqual([part, rule ? 'dashed' : 'solid']);
+        }
     });
 
     test('text sizes scale with the box, the title bold and larger', () => {
@@ -580,6 +590,22 @@ describe('unusable data', () => {
                 expect(out.labels[0]).toMatchObject({ text: 'No data', anchor: 'middle', x: 320 });
             }
         }
+    });
+
+    test('a message alone is the background and one centered line that fits the box', () => {
+        const box = { id: 'c1', width: 640, height: 400, paint: PAINT };
+        const out = layoutChartMessage(box, 'Nothing here');
+        expect(out.shapes.map((shape) => shape.id)).toEqual(['c1:background']);
+        expect(out.labels).toEqual(
+            layout('column', {}, { data: { categories: [], series: [] } }).labels.map((l) => ({
+                ...l,
+                text: 'Nothing here',
+            })),
+        );
+        const narrow = layoutChartMessage({ ...box, width: 90 }, 'A message far wider than the box');
+        expect(narrow.labels).toHaveLength(1);
+        expect(narrow.labels[0].text.endsWith('…')).toBe(true);
+        expect(measureLabel(narrow.labels[0].text, 'Inter', narrow.labels[0].fontSize, false)).toBeLessThanOrEqual(90);
     });
 
     test('a box too small draws no chart and nothing outside the box', () => {
