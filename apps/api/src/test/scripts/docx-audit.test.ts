@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
@@ -558,7 +559,7 @@ describe('both sides', () => {
     });
 
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
-    // size, so the photo the doc leaves at its own width has one there.
+    // size, so the photo the doc leaves at its own width has one there, and a page number is its field's cached 1.
     test("the writer's docx holds what its doc holds", async () => {
         const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(
@@ -569,7 +570,11 @@ describe('both sides', () => {
             undefined,
         );
         const written = auditSource(docx);
-        const held = auditImported(json);
+        const cached = (node: JSONContent): JSONContent =>
+            node.type === 'pageNumber'
+                ? { type: 'text', text: '1', marks: node.marks }
+                : { ...node, content: node.content?.map(cached) };
+        const held = auditImported(cached(json));
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),
             imageWidths: count(held, 'images'),
