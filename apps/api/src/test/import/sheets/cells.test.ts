@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { parseOoxml } from '../../../lib/core/ooxml';
-import { xmlElements } from '../../../lib/core/xml';
 import { readGrid } from '../../../lib/import/sheets/cells';
+import { readInBatches } from '../../../lib/import/sheets/package';
 import { readSharedStrings } from '../../../lib/import/sheets/strings';
 import { readLooks } from '../../../lib/import/sheets/styles';
+import { cellKey, type PlacedCell } from '../../../lib/import/sheets/worksheet';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 
 // A worksheet's grid: each cell's value, display, type, formula and look, the borders, row heights and hidden rows.
@@ -12,19 +13,21 @@ const PALETTE = ['#FFFFFF', '#000000'];
 const STYLES = `<numFmts><numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd"/></numFmts><fonts><font/><font><b/></font></fonts><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill></fills><borders><border/><border><bottom style="thin"/></border></borders><cellXfs><xf/><xf numFmtId="14"/><xf numFmtId="164"/><xf fontId="1" fillId="2"/><xf><alignment horizontal="left"/></xf><xf borderId="1"/><xf numFmtId="10" fillId="2"/></cellXfs>`;
 const [DATE, CUSTOM_DATE, BOLD_FILLED, LEFT, BORDERED, PERCENT_FILLED] = [1, 2, 3, 4, 5, 6];
 
-function read(data: string, options: { strings?: string[]; date1904?: boolean; before?: string } = {}) {
-    const charged: number[] = [];
+function read(data: string, options: { strings?: string[]; date1904?: boolean; placed?: PlacedCell[] } = {}) {
+    const charged: [number, number][] = [];
     const copied: number[] = [];
     const sst = new TextEncoder().encode(
         `<sst xmlns="${SML}">${(options.strings ?? []).map((si) => `<si>${si}</si>`).join('')}</sst>`,
     );
-    const grid = readGrid(new TextEncoder().encode(sheetXml({ data, before: options.before })), {
+    const part = new TextEncoder().encode(sheetXml({ data }));
+    const grid = readGrid(readInBatches(part, 'sheetData', 'row').children, {
         looks: readLooks(parseOoxml(`<styleSheet xmlns="${SML}">${STYLES}</styleSheet>`) ?? undefined, PALETTE),
         strings: readSharedStrings(sst, PALETTE),
         date1904: options.date1904 ?? false,
         palette: PALETTE,
-        charge: (text) => charged.push(text),
+        charge: (cells, text) => charged.push([cells, text]),
         chargeCopy: (chars) => copied.push(chars),
+        placed: new Map((options.placed ?? []).map((placed) => [cellKey(placed.r, placed.c), placed])),
     });
     const cell = (ref: string) => {
         const c = ref.charCodeAt(0) - 65;
@@ -192,12 +195,20 @@ describe('the grid', () => {
             `<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><f>A1</f><v>12</v></c><c r="C1" s="${BORDERED}"/><c r="D1"/></row>`,
             { strings: ['<t>abc</t>'] },
         );
-        expect(charged).toEqual([6, 5, 0]);
+        expect(charged).toEqual([
+            [1, 6],
+            [1, 5],
+            [1, 0],
+        ]);
     });
 
     test("charges each row's height and hidden flag it keeps, once per row", () => {
         const { charged } = read('<row r="1" hidden="1" ht="30"/><row r="1" hidden="1" ht="20"/><row r="2" ht="15"/>');
-        expect(charged).toEqual([0, 0, 0]);
+        expect(charged).toEqual([
+            [1, 0],
+            [1, 0],
+            [1, 0],
+        ]);
     });
 
     test('charges every copy of a shared formula with its own text', () => {
@@ -205,19 +216,37 @@ describe('the grid', () => {
             '<row r="1"><c r="A1"><f t="shared" ref="A1:A3" si="0">B1+1</f></c></row><row r="2"><c r="A2"><f t="shared" si="0"/></c></row><row r="3"><c r="A3"><f t="shared" si="0"/></c></row>',
         );
         expect(cell('A3')?.f).toBe('=B3+1');
-        expect(charged).toEqual([5, 5, 5]);
+        expect(charged).toEqual([
+            [1, 5],
+            [1, 5],
+            [1, 5],
+        ]);
         // The translation is weighed before it runs.
         expect(copied).toEqual([4, 4]);
     });
 
-    test("keeps the worksheet's other elements for the parts read beside the grid", () => {
-        const { grid } = read('<row r="1"/>', {
-            before: '<sheetPr><tabColor rgb="FFFF0000"/></sheetPr><cols><col min="1" max="1" width="20"/></cols>',
+    test("a placed cell takes the grid's cell there, charged for its text alone, and one the grid lacks is emitted", () => {
+        const { grid, cell, charged } = read('<row r="1"><c r="A1"><v>1</v></c><c r="B1"/></row>', {
+            placed: [
+                { r: 0, c: 0, v: { mc: { r: 0, c: 0, rs: 1, cs: 2 } } },
+                { r: 0, c: 1, v: { mc: { r: 0, c: 0 } } },
+                { r: 4, c: 2, v: { hl: { r: 4, c: 2, id: 'sheet-0' } } },
+            ],
         });
-        expect(grid.rest && xmlElements(grid.rest).map((element) => element.local)).toEqual([
-            'sheetPr',
-            'cols',
-            'sheetData',
+        expect(cell('A1')).toEqual({
+            v: 1,
+            m: '1',
+            ht: 2,
+            ct: { fa: 'General', t: 'n' },
+            mc: { r: 0, c: 0, rs: 1, cs: 2 },
+        });
+        expect(cell('B1')).toEqual({ mc: { r: 0, c: 0 } });
+        expect(cell('C5')).toEqual({ hl: { r: 4, c: 2, id: 'sheet-0' } });
+        expect(grid.celldata).toHaveLength(3);
+        expect([grid.rows, grid.columns]).toEqual([5, 3]);
+        expect(charged).toEqual([
+            [0, 1],
+            [0, 0],
         ]);
     });
 });

@@ -6,7 +6,7 @@ import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
 // The own reader against ExcelJS's, on workbooks that hold only what it reads so far: values, types, dates, formulas,
-// looks, borders, row heights, hidden rows and the sheets. Each workbook steers clear of the differences the reader
+// looks, borders, row heights, hidden rows, the sheets, columns, merges, views, the filter and hyperlinks. Each workbook steers clear of the differences the reader
 // makes on purpose (docs: the xlsx plan's difference classes), so any difference here is a regression.
 
 // The cell order is the file's for the own reader and the row order for ExcelJS's.
@@ -17,11 +17,25 @@ function normalized(sheets: Sheet[]): Sheet[] {
     }));
 }
 
-async function expectSameSheets(bytes: Uint8Array): Promise<Sheet[]> {
-    const own = normalized(xlsxToSheetsOwn(bytes));
-    expect(own).toEqual(normalized(await xlsxToSheets(Buffer.from(bytes))));
+async function expectSameSheets(bytes: Uint8Array, as = normalized): Promise<Sheet[]> {
+    const own = as(xlsxToSheetsOwn(bytes));
+    expect(own).toEqual(as(await xlsxToSheets(Buffer.from(bytes))));
     return own;
 }
+
+// ExcelJS gave a merged cell its anchor's value, which the own reader leaves to the anchor.
+function withoutCopiedValues(sheets: Sheet[]): Sheet[] {
+    return normalized(sheets).map((sheet) => ({
+        ...sheet,
+        celldata: sheet.celldata?.map(({ r, c, v }) => {
+            if (!v?.mc || 'rs' in v.mc) return { r, c, v };
+            const { v: _value, m: _display, ct: _type, ...rest } = v;
+            return { r, c, v: rest };
+        }),
+    }));
+}
+
+const SHEET_RELS = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/a?b=1&amp;c=2" TargetMode="External"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="mailto:someone@example.com" TargetMode="External"/></Relationships>`;
 
 const STYLES = `<numFmts count="4"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/><numFmt numFmtId="165" formatCode="&quot;€&quot;#,##0.00"/><numFmt numFmtId="166" formatCode="d/m/yyyy h:mm"/><numFmt numFmtId="167" formatCode="dd/mm/yyyy"/></numFmts>
 <fonts><font><sz val="11"/><color theme="1"/><name val="Calibri"/></font><font><b/><i/><sz val="14"/><color rgb="FF1F4E79"/><name val="Arial"/></font><font><u/><strike/><sz val="20"/><color theme="4" tint="-0.249977111117893"/><name val="Times New Roman"/></font><font><sz val="9"/><color theme="5" tint="0.39997558519241921"/><name val="Courier New"/></font></fonts>
@@ -121,6 +135,99 @@ describe("the own reader against ExcelJS's", () => {
         );
         expect(own[0].config?.rowlen?.['0']).toBe(40);
         expect(own[0].config?.rowhidden).toEqual({ 2: 0, 4: 0 });
+    });
+
+    test('columns, frozen panes, gridlines and the filter', async () => {
+        const data =
+            '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>1</v></c></row><row r="2"><c r="C2" s="11" t="s"><v>5</v></c></row>';
+        const sheets = (before: string, after: string) => ({ data, before, after });
+        const [first, second, third] = await expectSameSheets(
+            xlsxFixture({
+                sheets: [
+                    sheets(
+                        '<sheetViews><sheetView showGridLines="0" tabSelected="1" workbookViewId="0"><pane xSplit="1" ySplit="2" topLeftCell="B3" activePane="bottomRight" state="frozen"/><selection pane="bottomRight" activeCell="C4" sqref="C4"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="30.7109375" customWidth="1"/><col min="2" max="2" width="4" hidden="1" customWidth="1"/><col min="3" max="5" width="12.5" customWidth="1"/><col min="8" max="16384" width="9.140625" hidden="1"/></cols>',
+                        '<autoFilter ref="A1:B9"/>',
+                    ),
+                    sheets(
+                        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozenSplit"/></sheetView></sheetViews><cols><col min="4" max="4" width="0" hidden="1"/><col min="2" max="3" width="40"/></cols>',
+                        '<autoFilter ref="$B$1:$C$2"><filterColumn colId="0"><filters><filter val="1"/></filters></filterColumn></autoFilter>',
+                    ),
+                    sheets(
+                        '<sheetViews><sheetView workbookViewId="0"><pane xSplit="2400" ySplit="1200" topLeftCell="C5"/></sheetView></sheetViews>',
+                        '',
+                    ),
+                ],
+                styles: STYLES,
+                strings: STRINGS,
+                colors: OFFICE_COLORS,
+            }),
+        );
+        expect(first).toMatchObject({ showGridLines: false, frozen: { type: 'rangeBoth' }, filterRange: {} });
+        expect(Object.keys(first.config?.colhidden ?? {})).toHaveLength(1 + 16384 - 7);
+        expect(second.config?.columnlen).toEqual({ 1: 320, 2: 320 });
+        expect(third.frozen).toBeUndefined();
+    });
+
+    test("an Eigen export's widths count Inter's digit", async () => {
+        const [sheet] = await expectSameSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        data: '<row r="1"><c r="A1"><v>1</v></c></row>',
+                        before: '<cols><col min="1" max="2" width="11.11"/></cols>',
+                    },
+                ],
+                styles: '<fonts><font><sz val="10"/><name val="Inter"/></font></fonts><cellXfs><xf/></cellXfs>',
+            }),
+        );
+        expect(sheet.config?.columnlen).toEqual({ 0: 100, 1: 100 });
+    });
+
+    test('merges, with values, looks and borders on their cells', async () => {
+        const data = [
+            '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" s="8"/><c r="D1" s="3" t="s"><v>1</v></c><c r="E1"><v>7</v></c></row>',
+            '<row r="2"><c r="A2" s="9"/><c r="B2"/><c r="E2" t="s"><v>0</v></c></row>',
+            '<row r="5"><c r="F5" s="9"/></row>',
+        ].join('');
+        const [sheet] = await expectSameSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        data,
+                        after: '<mergeCells count="4"><mergeCell ref="A1:B2"/><mergeCell ref="D1:D3"/><mergeCell ref="F5:H5"/><mergeCell ref="A7:C8"/></mergeCells>',
+                    },
+                ],
+                styles: STYLES,
+                strings: STRINGS,
+                colors: OFFICE_COLORS,
+            }),
+            withoutCopiedValues,
+        );
+        expect(Object.keys(sheet.config?.merge ?? {})).toEqual(['0_0', '0_3', '4_5', '6_0']);
+    });
+
+    test('hyperlinks, external and to places in the workbook, on cells with values and on styled cells', async () => {
+        const data = [
+            '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>0</v></c><c r="D1" s="8"/></row>',
+            '<row r="2"><c r="A2" t="s"><v>0</v></c><c r="B2" t="inlineStr"><is><t>to Data</t></is></c><c r="C2" t="s"><v>4</v></c></row>',
+        ].join('');
+        const [sheet] = await expectSameSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        name: 'Data',
+                        data,
+                        after: `<hyperlinks><hyperlink ref="A1" r:id="rId1" tooltip="tip"/><hyperlink ref="B1" r:id="rId2"/><hyperlink ref="C1" location="'Second sheet'!B2" display="go"/><hyperlink ref="D1" location="Data!A1"/><hyperlink ref="A2" location="Data"/><hyperlink ref="B2:C2" location="'Second sheet'"/></hyperlinks>`,
+                    },
+                    { name: 'Second sheet', data: '<row r="2"><c r="B2"><v>1</v></c></row>' },
+                ],
+                styles: STYLES,
+                strings: STRINGS,
+                colors: OFFICE_COLORS,
+                parts: [{ name: 'xl/worksheets/_rels/sheet1.xml.rels', data: SHEET_RELS }],
+            }),
+        );
+        expect(Object.keys(sheet.hyperlink ?? {})).toEqual(['0_0', '0_1', '0_2', '0_3', '1_0', '1_1']);
     });
 
     test('a workbook with no styles, theme or shared strings', async () => {

@@ -10,9 +10,10 @@ import {
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import { NOT_AN_XLSX, readInBatches, TOO_MANY_CELLS } from './package';
+import { NOT_AN_XLSX, TOO_MANY_CELLS } from './package';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
+import { cellKey, type PlacedCell } from './worksheet';
 
 // A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula and look, the
 // borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
@@ -30,15 +31,16 @@ export type GridContext = {
     date1904: boolean;
     palette: ThemePalette;
     // Called for each cell the grid emits, a value or a border, with the characters it writes, and for each row's height
-    // and hidden flag; throws past the budget.
-    charge(text: number): void;
+    // and hidden flag; a placed cell is charged already. Throws past the budget.
+    charge(cells: number, text: number): void;
     // Called before a shared formula's copy is translated, with the characters to translate; throws past the budget.
     chargeCopy(chars: number): void;
+    // The merged and linked cells, by cellKey: the grid's cell at one takes its keys, and the rest are emitted as they
+    // are. Emptied by the read.
+    placed: Map<number, PlacedCell>;
 };
 
 export type Grid = {
-    // The worksheet without its rows: its columns, merges, views and rules.
-    rest: XmlElement | undefined;
     celldata: { r: number; c: number; v: FortuneCell }[];
     borderInfo: Record<string, CellBorderSides>;
     // In points, as written.
@@ -49,22 +51,27 @@ export type Grid = {
     columns: number;
 };
 
-export function readGrid(part: Uint8Array, context: GridContext): Grid {
-    const { rest, children } = readInBatches(part, 'sheetData', 'row');
-    const grid: Grid = { rest, celldata: [], borderInfo: {}, heights: new Map(), rowhidden: {}, rows: 0, columns: 0 };
+// `rows` are the <row> elements of <sheetData>, in the file's order.
+export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid {
+    const grid: Grid = { celldata: [], borderInfo: {}, heights: new Map(), rowhidden: {}, rows: 0, columns: 0 };
+    const emit = (entry: PlacedCell) => {
+        grid.celldata.push(entry);
+        grid.rows = Math.max(grid.rows, entry.r + 1);
+        grid.columns = Math.max(grid.columns, entry.c + 1);
+    };
     // A shared formula's copies name it by its si, after the anchor that holds its text.
     const shared = new Map<string, { text: string; r: number; c: number }>();
     let r = -1;
-    for (const row of children) {
+    for (const row of rows) {
         const reference = xmlAttr(row, '', 'r');
         r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
         if (isOn(xmlAttr(row, '', 'hidden')) && !(r in grid.rowhidden)) {
-            context.charge(0);
+            context.charge(1, 0);
             grid.rowhidden[r] = 0;
         }
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
         if (height > 0) {
-            if (!grid.heights.has(r)) context.charge(0);
+            if (!grid.heights.has(r)) context.charge(1, 0);
             grid.heights.set(r, height);
         }
         let c = -1;
@@ -77,17 +84,23 @@ export function readGrid(part: Uint8Array, context: GridContext): Grid {
                 context,
                 formulaOf(xmlChild(element, SML_NS, 'f'), r, c, shared, context),
             );
+            const placed = context.placed.get(cellKey(r, c));
             const empty =
-                cell.v === undefined && cell.f === undefined && cell.bg === undefined && cell.fc === undefined;
+                !placed &&
+                cell.v === undefined &&
+                cell.f === undefined &&
+                cell.bg === undefined &&
+                cell.fc === undefined;
             if (empty && !look.border) continue;
-            context.charge(length(cell.v) + length(cell.m) + length(cell.f));
+            context.charge(placed ? 0 : 1, length(cell.v) + length(cell.m) + length(cell.f));
             if (look.border) grid.borderInfo[`${r}_${c}`] = look.border;
             if (empty) continue;
-            grid.celldata.push({ r, c, v: cell });
-            grid.rows = Math.max(grid.rows, r + 1);
-            grid.columns = Math.max(grid.columns, c + 1);
+            context.placed.delete(cellKey(r, c));
+            emit({ r, c, v: placed ? { ...cell, ...placed.v } : cell });
         }
     }
+    for (const placed of context.placed.values()) emit(placed);
+    context.placed.clear();
     return grid;
 }
 
