@@ -103,8 +103,8 @@ export function readBudget(): ReadBudget {
 // of its child `container`, are parsed a batch of whole children at a time. A batch is parsed behind the part's prolog
 // and the start tags around the children, so prefixes bind and a DOCTYPE is still refused. The cut is checked, not
 // trusted: the part without the children must parse with a marker in their place, and every batch on its own, so a cut
-// anywhere but between two children is malformed XML, or, where a comment or CDATA hides the marker, a reason to parse
-// the part whole; never a misread. The rest of the part is parsed first, so its other elements can be read before the
+// anywhere but between two children, which a comment, CDATA or an instruction can hide, is a reason to parse the part
+// whole, and a part that won't parse whole is malformed XML; never a misread. The rest of the part is parsed first, so its other elements can be read before the
 // children are.
 export function readInBatches(
     part: Uint8Array,
@@ -121,7 +121,7 @@ export function readInBatches(
     const span = childrenSpan(text, container);
     const restText = span && Buffer.concat([text.subarray(0, span.start), MARKER, text.subarray(span.end)]);
     if (restText) budget.chargeWhole(restText);
-    const rest = restText && parseRest(restText);
+    const rest = restText && parseCut(restText);
     const holder = holderOf(rest);
     if (!span || !holder?.children.some(isMarker)) {
         budget.chargeWhole(text);
@@ -133,13 +133,22 @@ export function readInBatches(
     function* batches(within: Span): Generator<XmlElement> {
         const open = Buffer.from(`<${within.prefix}${child}`);
         const step = Math.max(BATCH_BYTES, within.wrapper.length);
+        let read = 0;
         for (let at = within.start; at < within.end; ) {
             const next = at + step < within.end ? findTag(text, open, at + step) : -1;
             const end = next < 0 || next > within.end ? within.end : next;
             if (end - at > MAX_BATCH_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
-            yield* childrenOf(
-                parseOoxml(Buffer.concat([within.wrapper, text.subarray(at, end), within.closing])) ?? undefined,
-            );
+            const batch = parseCut(Buffer.concat([within.wrapper, text.subarray(at, end), within.closing]));
+            if (!batch) {
+                // A cut a comment, CDATA or an instruction hides breaks the batch it ends; the batches before it ended at
+                // a child, so the part is read whole past the children they held.
+                budget.chargeWhole(text);
+                yield* childrenOf(parseOoxml(part) ?? undefined).slice(read);
+                return;
+            }
+            const children = childrenOf(batch);
+            read += children.length;
+            yield* children;
             at = end;
         }
     }
@@ -153,8 +162,9 @@ function isMarker(node: XmlElement['children'][number]): boolean {
     return typeof node === 'object' && 'ns' in node && node.ns === MARKER_NS;
 }
 
-// Malformed XML here is no verdict: the cut may sit in a comment or CDATA, so the part is then read whole.
-function parseRest(text: Buffer): XmlElement | undefined {
+// Malformed XML here is no verdict: the cut may sit in a comment, CDATA or an instruction, so the part is then read
+// whole.
+function parseCut(text: Buffer): XmlElement | undefined {
     try {
         return parseOoxml(text) ?? undefined;
     } catch (error) {

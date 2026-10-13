@@ -196,13 +196,24 @@ describe("a part's children, a batch at a time", () => {
         expect([...readInBatches(encode(part), undefined, 'si', readBudget()).children]).toHaveLength(COUNT);
     });
 
-    // A cut inside a comment, CDATA or a tag leaves a batch malformed: a 400, never a misread.
-    test('a cut that falls inside a comment is malformed XML', () => {
+    // A cut inside a comment, CDATA or an instruction leaves its batch malformed, never misread: the part is read whole
+    // from there, past the rows already read.
+    test('a cut that falls inside a comment, CDATA or an instruction reads the part whole', () => {
         let filler = '';
-        for (let index = 1; filler.length < BATCH_BYTES - 5000; index++) filler += `<row r="${index}"/>`;
-        // The first row tag past a batch's length is the commented one.
-        const part = sheetXml({ data: `${filler}<!--${' '.repeat(10_000)}<row r="999999"/> --><row r="999998"/>` });
-        expect(thrown(() => rowsOf(part))).toBeInstanceOf(XmlError);
+        let count = 0;
+        while (filler.length < BATCH_BYTES - 5000) filler += `<row r="${++count}"/>`;
+        // The first row tag past a batch's length is the hidden one.
+        const padding = ' '.repeat(10_000);
+        for (const hidden of [
+            `<!--${padding}<row r="999999"/> -->`,
+            `<row r="999997"><c r="A999997" t="inlineStr"><is><t><![CDATA[${padding}<row b]]></t></is></c></row>`,
+            `<?x ${padding}<row r="999999"/> ?>`,
+        ]) {
+            const part = sheetXml({ data: `${filler}${hidden}<row r="999998"/>` });
+            const { rows } = rowsOf(part);
+            expect(rows.slice(0, count)).toEqual(Array.from({ length: count }, (_, index) => String(index + 1)));
+            expect(rows.slice(count)).toEqual(hidden.startsWith('<row') ? ['999997', '999998'] : ['999998']);
+        }
     });
 
     test('a grid a comment pretends to start is no grid: the part is read whole', () => {
