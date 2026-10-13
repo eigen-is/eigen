@@ -33,6 +33,7 @@ import type {
     RichText,
     Cell as XlsxCell,
 } from 'exceljs';
+import { relsPathOf } from '../../core/opc';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
@@ -254,7 +255,7 @@ function rewriteInternalHyperlinks(buffer: Buffer, labelsBySheet: Map<number, Ma
         });
         if (ids.length === 0) continue;
         rewritten.set(path, stripped);
-        const relsPath = `xl/worksheets/_rels/sheet${sheetFile[1]}.xml.rels`;
+        const relsPath = relsPathOf(path);
         if (zip.entry(relsPath)) {
             let rels = text(relsPath);
             for (const id of ids) {
