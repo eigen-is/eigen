@@ -46,7 +46,7 @@ export type Grid = {
     // In points, as written.
     heights: Map<number, number>;
     rowhidden: Record<string, number>;
-    // The span of the cells, as recalc materialises it.
+    // The rows and columns the cells reach; recalc materialises at least a default grid's.
     rows: number;
     columns: number;
 };

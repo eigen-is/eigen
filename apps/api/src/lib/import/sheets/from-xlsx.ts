@@ -106,7 +106,7 @@ export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
         const font = fonts && xmlChild(fonts, SML_NS, 'font');
         const fontName = font && xmlChild(font, SML_NS, 'name');
         const digitWidth = digitWidthOf(fontName && xmlAttr(fontName, '', 'val'));
-        const emitted = { cells: 0, text: 0, span: 0, translated: 0 };
+        const emitted = { cells: 0, text: 0, span: 0, slots: 0, translated: 0 };
         const charge = (cells: number, text: number) => {
             emitted.cells += cells;
             emitted.text += text;
@@ -136,9 +136,13 @@ export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
                 chargeCopy,
                 placed: worksheet.placed,
             });
-            // The grid its cells span, as recalc materialises it, and at least a default grid, so empty sheets add up.
+            // The cells' span, at least a default grid's so empty sheets add up; and the grid recalc materialises from it,
+            // at least a default grid deep and wide, so a narrow sheet builds far more slots than it spans.
             emitted.span += Math.max(grid.rows * grid.columns, DEFAULT_SHEET_ROW_COUNT * DEFAULT_SHEET_COLUMN_COUNT);
             if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
+            emitted.slots +=
+                Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
+            if (emitted.slots > MAX_GRID_SLOTS) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
             const { merge = {}, columnlen = {} } = worksheet.config;
             const tallest = new Map<number, number>();
             for (const { r, c, v } of grid.celldata) {
@@ -249,6 +253,10 @@ export const MAX_TEXT = 250_000_000;
 // the corpus translate at most 3.1M characters (a GOV.UK inspections workbook, 24,706 copies); five times that is
 // about 5 s.
 export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
+// Recalc materialises a sheet's rows by its columns, each at least a default grid's (engine/defaults.ts), about 13 bytes
+// a slot, so a narrow sheet's span is far smaller than its grid. The 986 workbooks of the corpus build at most 27.3M
+// (docling's inflated test file, one sheet of a million rows); four times that recalcs in about a second at 1.4 GB.
+export const MAX_GRID_SLOTS = 110_000_000;
 
 // Every part is counted, not only those exceljs reads as sheets: a byte search, as a sheet may be the decompressed cap.
 function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {

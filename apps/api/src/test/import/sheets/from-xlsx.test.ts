@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets, xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';
+import {
+    MAX_GRID_SLOTS,
+    MAX_SHARED_FORMULA_TEXT,
+    MAX_TEXT,
+    xlsxToSheets,
+    xlsxToSheetsOwn,
+} from '../../../lib/import/sheets/from-xlsx';
 import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -436,6 +442,19 @@ describe("the own reader's output budget", () => {
         const empty = (count: number) => xlsxFixture({ sheets: Array.from({ length: count }, () => ({})) });
         expect(xlsxToSheetsOwn(empty(1_500))).toHaveLength(1_500);
         expect(refused(empty(1_600))).toEqual({ status: 413, message: 'Spreadsheet has too many cells' });
+    });
+
+    // Each sheet holding A1 and XFD1 spans 16,384 cells, and recalc builds it 100 rows deep: 1.6M slots.
+    test('the grid recalc materialises, every sheet at least a default grid deep and wide, has a budget of its own', () => {
+        const wide = (count: number) =>
+            xlsxFixture({
+                sheets: Array.from({ length: count }, () => ({
+                    data: '<row r="1"><c r="A1"><v>1</v></c><c r="XFD1"><v>1</v></c></row>',
+                })),
+            });
+        const fits = Math.floor(MAX_GRID_SLOTS / (100 * 16_384));
+        expect(xlsxToSheetsOwn(wide(fits))).toHaveLength(fits);
+        expect(refused(wide(fits + 1))).toEqual({ status: 413, message: 'Spreadsheet too large' });
     });
 
     test("the zip's and the XML's refusals speak of a spreadsheet", () => {
