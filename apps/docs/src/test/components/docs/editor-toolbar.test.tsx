@@ -442,7 +442,7 @@ test('a page number preset opens the panel on its band with the preset, and Page
     await openSubmenu('Page numbers');
     await clickItem('In the footer, not on the first page');
     expect(onOpenBand.mock.calls).toEqual([
-        [{ band: 'footer', preset: expect.objectContaining({ band: 'footer', firstPage: false }) }],
+        [{ band: 'footer', preset: expect.objectContaining({ band: 'footer', onFirstPage: false }) }],
     ]);
 
     await openMenu('Insert');

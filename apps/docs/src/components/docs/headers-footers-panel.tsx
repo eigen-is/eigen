@@ -21,10 +21,10 @@ import { useDocEditor, useDocMedia } from './doc-editor';
 // Google's Insert › Page numbers pictures: a number on the right of the header or the footer, on every page or from
 // page 2.
 export const PAGE_NUMBER_PRESETS = [
-    { label: 'In the header', band: 'header', firstPage: true },
-    { label: 'In the header, not on the first page', band: 'header', firstPage: false },
-    { label: 'In the footer', band: 'footer', firstPage: true },
-    { label: 'In the footer, not on the first page', band: 'footer', firstPage: false },
+    { label: 'In the header', band: 'header', onFirstPage: true },
+    { label: 'In the header, not on the first page', band: 'header', onFirstPage: false },
+    { label: 'In the footer', band: 'footer', onFirstPage: true },
+    { label: 'In the footer, not on the first page', band: 'footer', onFirstPage: false },
 ] as const;
 
 type PageNumberPreset = (typeof PAGE_NUMBER_PRESETS)[number];
@@ -89,7 +89,14 @@ export function HeadersFootersPanel({
     const [focused, setFocused] = useState<BandRoot>(request.band);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const differentFirstPageId = useId();
-    const editor = editors[focused];
+    // A first page's band the panel no longer shows, as Different first page went off, hands over to the other pages'.
+    const active =
+        setup.differentFirstPage || (focused !== 'headerFirst' && focused !== 'footerFirst')
+            ? focused
+            : focused === 'headerFirst'
+              ? 'header'
+              : 'footer';
+    const editor = editors[active];
 
     const look = useEditorState({
         editor,
@@ -108,10 +115,10 @@ export function HeadersFootersPanel({
     const setDifferentFirstPage = (differentFirstPage: boolean) =>
         onSetupChange(setup, { ...setup, differentFirstPage });
 
-    const applyPreset = ({ band, firstPage }: PageNumberPreset) => {
-        if (!firstPage && !setup.differentFirstPage) setDifferentFirstPage(true);
+    const applyPreset = ({ band, onFirstPage }: PageNumberPreset) => {
+        if (!onFirstPage && !setup.differentFirstPage) setDifferentFirstPage(true);
         addPageNumber(editors[band]);
-        if (firstPage && setup.differentFirstPage) addPageNumber(editors[FIRST_PAGE_BAND[band]]);
+        if (onFirstPage && setup.differentFirstPage) addPageNumber(editors[FIRST_PAGE_BAND[band]]);
     };
 
     const insertField = (kind: PageNumberKind) =>
@@ -135,7 +142,7 @@ export function HeadersFootersPanel({
                 // The page's light look, so a band's colors read as they print.
                 className={cn(
                     'eigen-paper rounded-md border bg-background px-2 py-1 text-foreground',
-                    field === focused && 'border-ring',
+                    field === active && 'border-ring',
                 )}
                 onFocus={() => setFocused(field)}
             >

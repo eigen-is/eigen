@@ -131,3 +131,13 @@ test('the toolbar inserts into the band last focused', async () => {
     expect(doc.getXmlFragment('footer').toString()).toContain('<pagenumber kind="pages">');
     expect(doc.getXmlFragment('header').toString()).not.toContain('pagenumber');
 });
+
+test('once Different first page goes off, the toolbar acts on the other pages’ band instead of a hidden one', async () => {
+    const doc = new Y.Doc();
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+    await render(doc, { band: 'headerFirst' });
+    await act(async () => doc.getMap(PAGE_ROOT).set('differentFirstPage', false));
+    await click('Page count');
+    expect(doc.getXmlFragment('header').toString()).toContain('<pagenumber kind="pages">');
+    expect(doc.getXmlFragment('headerFirst').toString()).not.toContain('pagenumber');
+});
