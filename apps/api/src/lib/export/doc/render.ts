@@ -4,12 +4,13 @@ import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { writeMathml } from '@workspace/math';
+import { type MathRow, writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
+import { MAX_SVG_EQUATIONS } from '../math-svg';
 
 // A TipTap figure node can carry a mediaName, an external `src`, or both; the caller decides which
 // wins. Canvas documents resolve their media through MediaResolver (packages/lib) instead.
@@ -90,6 +91,31 @@ function renderFigureNode(
     return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${img}${cap}</span>`;
 }
 
+// Without the annotation, which no screen draws and the sanitizer would keep as text. The PDF finds the SVG MathJax drew
+// of an equation by this string.
+export function equationMathml(row: MathRow, display: boolean): string {
+    const math = writeMathml(row);
+    return display ? math.replace('<math', '<math display="block"') : math;
+}
+
+function renderEquationNode({ node }: { node: Node }): string {
+    const { row, display } = readStoredEquation(node.attrs);
+    return equationMathml(row, display);
+}
+
+// The PDF draws its first MAX_SVG_EQUATIONS equations as the SVGs MathJax drew of them, and the rest as text: until the
+// package writes an equation's linear text, its LaTeX stands in.
+function renderEquationSvgs(mathSvgs: ReadonlyMap<string, string>): ({ node }: { node: Node }) => string {
+    let drawn = 0;
+    return ({ node }) => {
+        const { row, latex, display } = readStoredEquation(node.attrs);
+        const svg = drawn < MAX_SVG_EQUATIONS ? mathSvgs.get(equationMathml(row, display)) : undefined;
+        if (svg === undefined) return escapeHtml(latex ?? '');
+        drawn++;
+        return `<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`;
+    };
+}
+
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
 // with a <br> that holds its last line, so the export writes that <br> too. renderCodeBlockNode writes a code block's.
 function withTrailingBreaks(node: JSONContent): JSONContent {
@@ -147,11 +173,11 @@ function smaller(capitals: string): string {
 }
 
 // The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
-// small caps.
+// small caps and equations.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean },
+    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; mathSvgs?: ReadonlyMap<string, string> },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(json));
     return renderToHTMLString({
@@ -162,12 +188,7 @@ export function renderDocHtml(
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
-                // Without the annotation, which no screen draws and the sanitizer would keep as text.
-                equation: ({ node }) => {
-                    const { row, display } = readStoredEquation(node.attrs);
-                    const math = writeMathml(row);
-                    return display ? math.replace('<math', '<math display="block"') : math;
-                },
+                equation: options?.mathSvgs ? renderEquationSvgs(options.mathSvgs) : renderEquationNode,
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },

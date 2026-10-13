@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import { JSDOM } from 'jsdom';
@@ -8,6 +8,7 @@ import { openZip } from '../../lib/core/zip';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
+import * as mathSvg from '../../lib/export/math-svg';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
@@ -298,26 +299,65 @@ describe('doc export — page breaks', () => {
 describe('doc export — equations', () => {
     const MATH = `<math xmlns="${MATHML_NAMESPACE}">`;
     const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+    const y: MathRow = [{ kind: 'identifier', text: 'y' }];
 
-    async function exportHtml(...attrs: Record<string, unknown>[]): Promise<string> {
+    async function exportEquations(format: 'html' | 'pdf-html', ...attrs: Record<string, unknown>[]): Promise<string> {
         const equations = attrs.map((a) => ({ type: 'equation', attrs: a }));
         const doc = seededDoc({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
-        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
         return new TextDecoder().decode(data);
     }
 
     // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text.
     test('an equation is its MathML without the LaTeX, display="block" when it is displayed', async () => {
-        const html = await exportHtml({ mathml: writeMathml(x, 'x') }, { mathml: writeMathml(x, 'x'), display: true });
+        const html = await exportEquations(
+            'html',
+            { mathml: writeMathml(x, 'x') },
+            { mathml: writeMathml(x, 'x'), display: true },
+        );
         expect(html).toContain(
             `<p>${MATH}<mi>x</mi></math><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math>`,
         );
         expect(html).not.toContain('x-tex');
+        expect(html).not.toContain('<svg');
+    });
+
+    // WeasyPrint draws no MathML.
+    test('the PDF draws an equation as SVG, a displayed one in a block', async () => {
+        const html = await exportEquations(
+            'pdf-html',
+            { mathml: writeMathml(x, 'x') },
+            { mathml: writeMathml(y, 'y'), display: true },
+        );
+        expect(html).toMatch(
+            /<p><span class="math-svg"><svg [^>]*>[\s\S]*?<\/svg><\/span><span class="math-svg" data-display="block"><svg [^>]*>[\s\S]*?<\/svg><\/span><br><\/p>/,
+        );
+        expect(html.match(/<svg/g)).toHaveLength(2);
+        expect(html).not.toMatch(/<math|x-tex/);
+    });
+
+    // A repeat of a drawn equation counts again, as WeasyPrint draws each, and MathJax draws each string once.
+    test(`past ${mathSvg.MAX_SVG_EQUATIONS} equations the PDF writes the rest as their LaTeX`, async () => {
+        const drawn = Array.from({ length: mathSvg.MAX_SVG_EQUATIONS }, () => ({ mathml: writeMathml(x, 'x') }));
+        const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
+        try {
+            const html = await exportEquations(
+                'pdf-html',
+                ...drawn,
+                { mathml: writeMathml(x, 'x') },
+                { mathml: writeMathml(y, 'y') },
+            );
+            expect(html.match(/class="math-svg"/g)).toHaveLength(mathSvg.MAX_SVG_EQUATIONS);
+            expect(html).toContain('</svg></span>xy<br></p>');
+            expect(mathmlToSvg).toHaveBeenCalledTimes(1);
+        } finally {
+            mathmlToSvg.mockRestore();
+        }
     });
 
     // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
     test('a prescript keeps its empty slot', async () => {
-        const html = await exportHtml({
+        const html = await exportEquations('html', {
             mathml: writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]),
         });
         expect(html).toContain(
@@ -326,7 +366,8 @@ describe('doc export — equations', () => {
     });
 
     test('a forged or malformed stored string never reaches the HTML', async () => {
-        const html = await exportHtml(
+        const html = await exportEquations(
+            'html',
             { mathml: `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script></math>` },
             { mathml: `${MATH}<mi>x</mi>` },
         );

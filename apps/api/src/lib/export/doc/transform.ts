@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
+import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
@@ -16,8 +17,9 @@ import {
 import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
+import { MAX_SVG_EQUATIONS, mathmlToSvg } from '../math-svg';
 import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
-import { renderDocHtml, withAbsoluteLinks } from './render';
+import { equationMathml, renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
@@ -25,8 +27,9 @@ import type { DocxMedia } from './to-docx';
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
 // HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
-// serves, but for the small caps the PDF fakes (render.ts). The docx is written from the JSON by
-// to-docx.ts, which loads lazily so an HTML export never evaluates it, its styles or its fonts.
+// serves, but for the small caps the PDF fakes and the equations it draws as SVG (render.ts). The
+// docx is written from the JSON by to-docx.ts, which loads lazily so an HTML export never evaluates
+// it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -41,10 +44,11 @@ export async function renderEigendocExport(
         return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
     }
     const dataUriMap = toDataUriMap(media);
+    const pdf = htmlExportMode(format) === 'pdf';
     const body = renderDocHtml(
         withAbsoluteLinks(json, publicOrigin),
         (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-        { synthesizeSmallCaps: htmlExportMode(format) === 'pdf' },
+        { synthesizeSmallCaps: pdf, ...(pdf && { mathSvgs: await equationSvgs(json) }) },
     );
     const html = exportHtmlDocument({
         title,
@@ -52,6 +56,24 @@ export async function renderEigendocExport(
         body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
+}
+
+// WeasyPrint draws no MathML, so the PDF draws its first MAX_SVG_EQUATIONS equations as SVG, keyed by the MathML the
+// screen draws. One drawing per distinct string, one at a time.
+async function equationSvgs(json: JSONContent): Promise<Map<string, string>> {
+    const mathml = new Set<string>();
+    let count = 0;
+    const visit = (node: JSONContent) => {
+        if (node.type === 'equation' && count++ < MAX_SVG_EQUATIONS) {
+            const { row, display } = readStoredEquation(node.attrs ?? {});
+            mathml.add(equationMathml(row, display));
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    visit(json);
+    const svgs = new Map<string, string>();
+    for (const math of mathml) svgs.set(math, await mathmlToSvg(math));
+    return svgs;
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
@@ -153,6 +175,12 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
+
+/* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline; a displayed one is centred, and the
+   trailing <br> that holds a paragraph's last line would add an empty one under it */
+.math-svg > svg { display: inline; max-width: none; }
+.math-svg[data-display] { display: block; text-align: center; }
+.math-svg[data-display] + br { display: none; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
 ul[data-type="taskList"] li > label input[type="checkbox"] {

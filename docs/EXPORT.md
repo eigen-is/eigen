@@ -31,7 +31,7 @@ The response is silent while the job queues and its Worker runs. Queue wait plus
 
 ## Every format but xlsx, docx and SVG is one HTML document
 
-`html` and `pdf-html` render the same document, so WeasyPrint prints what the HTML download serves. There is one document per type to get right, not one per format. Each type's entry (`renderEigendocExport`, `renderEigensheetsExport`, `renderEigenslidesExport`) decides once which one it renders, for what differs on paper: a sheet's page fits its widest and tallest sheet, a deck's pages leave the fit box, and a doc fakes small caps where the font has none ([DOCS.md](DOCS.md#the-pdf-fakes-small-caps-where-the-font-has-none)). A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
+`html` and `pdf-html` render the same document, so WeasyPrint prints what the HTML download serves. There is one document per type to get right, not one per format. Each type's entry (`renderEigendocExport`, `renderEigensheetsExport`, `renderEigenslidesExport`) decides once which one it renders, for what differs on paper: a sheet's page fits its widest and tallest sheet, a deck's pages leave the fit box, and a doc fakes small caps where the font has none ([DOCS.md](DOCS.md#the-pdf-fakes-small-caps-where-the-font-has-none)) and draws its equations as SVG ([§ The PDF draws an equation as the SVG MathJax makes of it](#the-pdf-draws-an-equation-as-the-svg-mathjax-makes-of-it)). A doc's `<title>` keeps the extension (`Report.eigendoc`) while the docx title drops it; that output is pinned in `apps/api/src/test/export/document-export-route.test.ts`.
 
 A doc's page comes from a page setup ([DOCS.md](DOCS.md#a-doc-stores-its-page-in-a-page-map-beside-its-content)): the HTML's screen page and the PDF's `@page` from `pageStylesheet` (in `PRINT_EXTRAS`, `export/doc/transform.ts`), and the docx's page size and margins from `pageTwips`. All three take `DEFAULT_PAGE_SETUP`, A4 with 2 cm margins, not the page the doc stores, a [ROADMAP](ROADMAP.md) row.
 
@@ -46,6 +46,17 @@ A figure is an inline node, so it renders as a `span.figure` with a `span.figcap
 `withTrailingBreaks` (`export/doc/render.ts`) gives a paragraph, heading or code block the trailing `<br>` the editor has, in the export and the preview alike ([DOCS.md](DOCS.md#the-node-view-and-the-export-draw-one-figure-box)).
 
 The static renderer nests a text's marks the other way round from the editor: it wraps the first mark innermost, where ProseMirror draws it outermost. Rendered as is, a link's own color would sit outside its `<a>`, and `.eigen-prose a` would draw the link color over it. `inEditorMarkOrder` (`document/doc-schema.ts`) hands the renderer the doc over a schema whose marks rank in reverse, so the export and the preview nest marks as the editor does: the `<a>` outermost, its color inside it.
+
+## The PDF draws an equation as the SVG MathJax makes of it
+
+The HTML download draws an equation as the MathML the editor holds, without its LaTeX annotation, which no screen draws. WeasyPrint draws no MathML, so the PDF draws each one as an SVG that MathJax 4 (`@mathjax/src`) makes from that same MathML string. `renderEigendocExport` (`export/doc/transform.ts`) runs an async pass before the render: it collects the equations' MathML strings, has `mathmlToSvg` (`export/math-svg.ts`) draw each distinct string once, and hands `renderDocHtml` the map, whose `equation` mapping only looks its string up. The module sits outside `export/doc/` because the canvas exporters print through WeasyPrint too.
+
+- MathJax loads on the first equation, once per Worker, so an export with none never evaluates it. It loads a font range the first time a character needs one, so every equation goes through the promise API.
+- Every glyph is a path of its own (`fontCache: 'none'`). A glyph cache would write each glyph's id in every equation's `<defs>`, and one HTML document would hold the same id many times. An inline equation is one SVG: MathJax's inline line breaks would split it into several around an element the sanitizer drops.
+- The SVG goes through `sanitizeExportHtml` with the rest of the body, which keeps all of it but `focusable`. MathJax's `vertical-align` puts an inline one on the text's baseline. A displayed one (`span.math-svg[data-display]`, `PRINT_EXTRAS`) is a centred block, and the `<br>` that holds its paragraph's last line is hidden, or it adds an empty line under the equation.
+- `MAX_SVG_EQUATIONS` (1,000) bounds the equations a PDF draws, counting each one WeasyPrint draws, repeats included. Over the 108 corpus equations MathJax takes 1 to 2 ms an equation after 0.4 s to load, and WeasyPrint 10 to 20 ms to draw one, so 1,000 add about 20 s to a PDF, inside WeasyPrint's 60 s. Past them an equation prints as its LaTeX, as search reads it, or as nothing when it has none. A tree at the math bounds takes MathJax 0.6 s, and the transform deadline ends a document of those ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#admission-is-bounded-by-predicted-wait)).
+
+The tests are in `apps/api/src/test/export/math-svg.test.ts` and the equations block of `doc-export.test.ts`.
 
 ## An ordered list draws its first number and its marker inline
 
