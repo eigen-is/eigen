@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    DEFAULT_SCENE_META,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     serializeBinding,
@@ -168,8 +169,7 @@ describe('document/slides', () => {
     test('Convert carries the update meta; Import leaves the target meta alone', () => {
         const converted = new Y.Doc();
         writeSlidesUpdateToYjs(converted, DECK_UPDATE);
-        expect(readVectorFromDoc(converted).meta).toEqual(readVectorFromDoc(scratchOf(DECK_UPDATE)).meta);
-        expect(readVectorFromDoc(converted).meta.background).toBe('#123456');
+        expect(converted.getMap('meta').toJSON()).toEqual({ background: '#123456' });
 
         const imported = existingDeck();
         appendSlidesUpdateToYjs(imported, DECK_UPDATE);
@@ -192,6 +192,7 @@ describe('document/slides', () => {
                 width: -5,
                 height: 'tall',
                 strokeWidth: 1e9,
+                strokeColor: 'url(javascript:x)',
                 seed: 0,
             });
             rawEntry(doc, 'elements', 'bogus', { id: 'bogus', type: 'script', index: 'a1', frameId: 'f-ok' });
@@ -199,6 +200,7 @@ describe('document/slides', () => {
             rawEntry(doc, 'elements', 'lost', { id: 'lost', type: 'ellipse', index: 'zzz~', frameId: 'nowhere' });
             doc.getMap('elements').set('scalar', 12);
             doc.getMap('meta').set('background', 'url(javascript:x)');
+            doc.getMap('meta').set('onload', 'x');
         });
         const source = readVectorFromDoc(scratchOf(update));
         const target = new Y.Doc();
@@ -216,7 +218,23 @@ describe('document/slides', () => {
                 sourceIndexOf.get(source.elements[i].frameId) ?? -1,
             );
         }
-        expect(scene.meta).toEqual(source.meta);
+
+        // The stored records, not a second read: the reader would heal a raw copy of the update all over again.
+        const stored = Object.values(target.getMap('elements').toJSON());
+        expect(stored.map((record) => record.type).sort()).toEqual(['ellipse', 'rectangle']);
+        expect(stored.find((record) => record.type === 'rectangle')).toMatchObject({
+            x: 1_000_000,
+            y: 0,
+            width: 0,
+            height: 0,
+            strokeWidth: 100,
+        });
+        expect(JSON.stringify(stored)).not.toContain('javascript');
+        expect(target.getMap('meta').toJSON()).toEqual({ background: DEFAULT_SCENE_META.background });
+
+        const imported = existingDeck();
+        appendSlidesUpdateToYjs(imported, update);
+        expect(imported.getMap('meta').toJSON()).toEqual({ background: '#ffffff' });
     });
 
     test('an update with elements but no slides adds nothing', () => {
