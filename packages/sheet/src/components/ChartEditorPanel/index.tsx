@@ -1,4 +1,4 @@
-import { MAX_CHART_SERIES, parseChartSpec } from '@workspace/lib/charts';
+import { parseChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
@@ -14,6 +14,7 @@ import { Table } from 'lucide-react';
 import { type RefObject, useState } from 'react';
 import { columnIndexToLabel, rowIndexToLabel } from '../../engine/a1-notation';
 import {
+    CHART_RANGE_REFUSALS,
     type ChartRange,
     chartRangeData,
     chartRangeOf,
@@ -81,10 +82,8 @@ function SetupSection({ editor, spec, data, workbook, onChange }: SetupSectionPr
         if (draft === null || draft.trim() === text) return setError(null);
         const ref = parseChartRangeText(draft, sheets, sheetId);
         if (!ref) return setError('Enter a range such as A1:D10');
-        if (!workbook.current?.setChartDataRange(chart.id, ref)) {
-            return setError(`Pick a range with values in 1 to ${MAX_CHART_SERIES} series`);
-        }
-        setError(null);
+        const refusal = workbook.current?.setChartDataRange(chart.id, ref);
+        setError(refusal ? CHART_RANGE_REFUSALS[refusal] : null);
     };
 
     // The three toggles re-derive the refs from the same block, each series keeping its style.

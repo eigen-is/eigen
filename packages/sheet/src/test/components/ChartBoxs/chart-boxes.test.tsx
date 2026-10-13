@@ -116,6 +116,11 @@ const press = (target: EventTarget, type: string, init: KeyboardEventInit | Poin
         target.dispatchEvent(event);
     });
 
+const clickCell = (container: HTMLElement) =>
+    act(async () => {
+        container.querySelector('.sheet-cell-area')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+
 const peerSets = (sheetId: string, r: number, c: number, v: number): Op[] => [
     { op: 'replace', id: sheetId, path: ['data', r, c], value: { v, m: String(v) } },
 ];
@@ -184,8 +189,26 @@ test('dragging the chart moves it in one write', async () => {
     expect(charts()?.c1).toMatchObject({ x: 300, y: 10 });
 });
 
+test('a cancelled pointer, a touch pan the browser took, moves nothing on the next tap', async () => {
+    const { box, container, charts } = await mount();
+    const el = box();
+    if (!el) throw new Error('no chart');
+    await press(el, 'pointerdown', { clientX: 10, clientY: 10, pointerType: 'touch' });
+    await press(document, 'pointermove', { clientX: 30, clientY: 40, pointerType: 'touch' });
+    await press(document, 'pointercancel', { pointerType: 'touch' });
+    expect(box()?.style.left).toBe('300px');
+    await press(document, 'pointermove', { clientX: 90, clientY: 90, pointerType: 'touch' });
+    await press(document, 'pointerup', { clientX: 90, clientY: 90, pointerType: 'touch' });
+    expect(charts()?.c1).toEqual(chart);
+    expect(box()?.style.left).toBe('300px');
+    // Only the selected chart keeps the browser from panning the grid under a finger.
+    expect(box()?.classList.contains('touch-none')).toBe(true);
+    await clickCell(container);
+    expect(box()?.classList.contains('touch-none')).toBe(false);
+});
+
 test('a double-click opens the chart editor, and the editor follows the chart', async () => {
-    const { box, editors, step } = await mount();
+    const { box, container, editors, step } = await mount();
     const el = box();
     if (!el) throw new Error('no chart');
     await act(async () => el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
@@ -199,7 +222,7 @@ test('a double-click opens the chart editor, and the editor follows the chart', 
     });
     await step((w) => w.updateChartBox('c1', { x: 10 }));
     expect(editors.at(-1)?.chart.x).toBe(10);
-    await step((w) => w.closeChartEditor());
+    await clickCell(container);
     expect(editors.at(-1)).toBeNull();
 });
 
@@ -229,7 +252,7 @@ test('⋮ Edit the chart opens the editor, Delete chart removes it', async () =>
     expect(charts()).toEqual({});
 });
 
-test('⋮ Download chart → SVG saves the painter’s svg, for a viewer too', async () => {
+test('⋮ Download chart → SVG saves the painter’s svg on white, for a viewer too', async () => {
     const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
     try {
         const { box } = await mount(false);
@@ -256,6 +279,8 @@ test('⋮ Download chart → SVG saves the painter’s svg, for a viewer too', a
         expect(blob.type).toBe('image/svg+xml');
         const saved_svg = await blob.text();
         expect(saved_svg).toStartWith('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"');
+        // White under the painter's transparent background, as the export draws it.
+        expect(saved_svg).toContain('viewBox="0 0 400 300"><rect width="100%" height="100%" fill="#fff"/>');
         expect(saved_svg).toContain('>Scores<');
     } finally {
         saved.mockRestore();

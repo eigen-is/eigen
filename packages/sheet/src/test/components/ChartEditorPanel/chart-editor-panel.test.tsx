@@ -13,6 +13,7 @@ const { act, createElement, createRef, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
 const { ChartEditorPanel } = await import('../../../components/ChartEditorPanel');
+const { CHART_RANGE_REFUSALS } = await import('../../../engine/chart-range');
 type Sheet = import('../../../state').Sheet;
 type ChartEditorState = import('../../../state').ChartEditorState;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
@@ -162,6 +163,17 @@ test('an invalid range says so and writes nothing', async () => {
     const before = spec();
     await type('input[aria-label="Data range"]', 'Nowhere!A1:B3', 'blur');
     expect(container.textContent).toContain('Enter a range such as A1:D10');
+    expect(spec()).toEqual(before);
+});
+
+test('a range with too much data or too many series says which and writes nothing', async () => {
+    const { container, spec, type } = await mount(rangeChart());
+    const before = spec();
+    await type('input[aria-label="Data range"]', 'A1:B3000', 'Enter');
+    expect(container.textContent).toContain(CHART_RANGE_REFUSALS['too-many-points']);
+    expect(spec()).toEqual(before);
+    await type('input[aria-label="Data range"]', 'A1:AJ40', 'Enter');
+    expect(container.textContent).toContain(CHART_RANGE_REFUSALS['too-many-series']);
     expect(spec()).toEqual(before);
 });
 

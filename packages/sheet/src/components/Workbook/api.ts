@@ -3,7 +3,7 @@ import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { applyPatches, produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
-import { chartRangeData, suggestChartRange } from '../../engine/chart-range';
+import { type ChartRangeRefusal, setUpChartRange } from '../../engine/chart-range';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
 import {
@@ -189,21 +189,12 @@ export function generateAPIs(
 
         deleteChart: (id: string) => setContext((draftCtx) => deleteChart(draftCtx, id)),
 
-        // False when the range derives no chart (no values, or more series than a chart holds), which
-        // writes nothing.
-        setChartDataRange: (id: string, ref: CellRangeRef): boolean => {
-            if (!chartRangeData(suggestChartRange(ref, createContextResolver(context)))) return false;
+        // Sets the range up, or says why it holds no chart and writes nothing.
+        setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {
+            const setup = setUpChartRange(ref, createContextResolver(context));
+            if (typeof setup === 'string') return setup;
             setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
-            return true;
         },
-
-        closeChartEditor: () =>
-            setContext(
-                (draftCtx) => {
-                    if (draftCtx.activeChart) draftCtx.activeChart.editor = false;
-                },
-                { noHistory: true },
-            ),
 
         // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
         beginGesture: () => {

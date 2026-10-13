@@ -113,3 +113,28 @@ test('writes inside a panel gesture undo and redo as one step, and the next writ
     await step((w) => w.redo());
     expect(title()).toBe('Sco');
 });
+
+test('a field typed key by key in a gesture keeps one forward and one inverse write in its undo entry', async () => {
+    const { sent, step, charts } = await mountWorkbook();
+    let id = '';
+    await step((w) => {
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
+    });
+    const typed = 'Points scored by each team, month by month';
+    let release = () => {};
+    await step((w) => {
+        release = w.beginGesture();
+    });
+    for (let i = 1; i <= 40; i += 1) {
+        await step((w) => w.setChartSpec(id, { ...sampleChartSpec('column'), title: typed.slice(0, i) }));
+    }
+    release();
+    const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title;
+
+    await step((w) => w.undo());
+    expect(title()).toBe('Points scored');
+    expect(sent.at(-1)).toHaveLength(1);
+    await step((w) => w.redo());
+    expect(title()).toBe(typed.slice(0, 40));
+    expect(sent.at(-1)).toHaveLength(1);
+});

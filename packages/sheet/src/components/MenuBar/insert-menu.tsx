@@ -1,4 +1,3 @@
-import { MAX_CHART_SERIES } from '@workspace/lib/charts';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -9,6 +8,7 @@ import {
 import { useContext } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { WorkbookContext } from '../../context';
+import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -107,12 +107,8 @@ export function InsertMenu() {
                 disabled={selection == null || context.allowEdit === false}
                 onClick={() =>
                     setContext((draftCtx) => {
-                        if (!insertChartFromSelection(draftCtx, uuidv4())) {
-                            showAlert(
-                                `A chart holds up to ${MAX_CHART_SERIES} series. Select fewer rows or columns.`,
-                                'ok',
-                            );
-                        }
+                        const refusal = insertChartFromSelection(draftCtx, uuidv4());
+                        if (refusal) showAlert(CHART_RANGE_REFUSALS[refusal], 'ok');
                     })
                 }
             >

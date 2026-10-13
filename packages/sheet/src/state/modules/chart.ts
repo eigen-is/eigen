@@ -4,7 +4,7 @@ import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { generateKeyBetween, orderByFractionalIndex } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
 import { renderSheetChartSvg } from '../../engine/chart-data';
-import { chartRangeData, currentRegion, suggestChartRange, suggestChartSpec } from '../../engine/chart-range';
+import { type ChartRangeRefusal, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
@@ -80,10 +80,11 @@ export function editsDeletedChart(ctx: Context, patches: Patch[]): boolean {
 const NEW_CHART_SIZE = { width: 600, height: 371 };
 
 // Insert → Chart: a column chart of the selection, or of the table around a single selected cell, below
-// it at Google's default size, selected with its editor open. False when the selection derives no chart.
-export function insertChartFromSelection(ctx: Context, id: string): boolean {
+// it at Google's default size, selected with its editor open. Inserts nothing and says why for a selection
+// that holds no chart.
+export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRefusal | undefined {
     const selection = ctx.selections?.at(-1);
-    if (!selection || ctx.allowEdit === false) return false;
+    if (!selection || ctx.allowEdit === false) return;
     const [{ row, column }] = clipToUsedExtent(ctx, [selection]);
     const resolver = createContextResolver(ctx);
     const ref = currentRegion(
@@ -91,11 +92,10 @@ export function insertChartFromSelection(ctx: Context, id: string): boolean {
         resolver,
     );
     const spec = suggestChartSpec(ref, resolver);
-    if (!spec) return false;
+    if (typeof spec === 'string') return spec;
     const x = ref.column[0] === 0 ? 0 : ctx.visibledatacolumn[ref.column[0] - 1];
     insertChart(ctx, id, { x, y: ctx.visibledatarow[ref.row[1]], ...NEW_CHART_SIZE }, spec);
-    ctx.activeChart = { id, editor: true };
-    return true;
+    selectChart(ctx, id, true);
 }
 
 // A typed data range is set up the way Insert sets up a selection, each series keeping its style.
@@ -104,8 +104,8 @@ export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     const spec = chart ? parseChartSpec(chart.spec) : null;
     if (!spec) return;
     const styles = spec.data.series.map(({ color, markers, smooth }) => ({ color, markers, smooth }));
-    const data = chartRangeData(suggestChartRange(ref, createContextResolver(ctx)), styles);
-    if (data) setChartSpec(ctx, id, { ...spec, data });
+    const setup = setUpChartRange(ref, createContextResolver(ctx), styles);
+    if (typeof setup !== 'string') setChartSpec(ctx, id, { ...spec, data: setup.data });
 }
 
 // Selecting a chart keeps its editor open when another chart's was.

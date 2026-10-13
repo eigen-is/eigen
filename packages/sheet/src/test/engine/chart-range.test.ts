@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import {
@@ -12,7 +12,7 @@ import {
     suggestChartRange,
     suggestChartSpec,
 } from '../../engine/chart-range';
-import type { Cell } from '../../engine/types';
+import type { Cell, CellResolver } from '../../engine/types';
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
     sheetId,
@@ -183,6 +183,7 @@ describe('the data range as A1 text', () => {
 describe('suggestChartSpec', () => {
     test('a column chart titled after its series, the corner cell naming the horizontal axis', () => {
         const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
+        if (typeof spec === 'string') throw new Error(spec);
         expect(spec).toMatchObject({
             type: 'column',
             title: 'North, South and East',
@@ -193,23 +194,23 @@ describe('suggestChartSpec', () => {
     });
 
     test('one or two series titles read naturally, unnamed series leave it empty', () => {
-        expect(suggestChartSpec(ref([0, 3], [0, 1]), resolver)?.title).toBe('North');
-        expect(suggestChartSpec(ref([0, 3], [0, 2]), resolver)?.title).toBe('North and South');
-        expect(suggestChartSpec(ref([0, 2], [0, 1], 's3'), resolver)?.title).toBe('');
+        expect(suggestChartSpec(ref([0, 3], [0, 1]), resolver)).toMatchObject({ title: 'North' });
+        expect(suggestChartSpec(ref([0, 3], [0, 2]), resolver)).toMatchObject({ title: 'North and South' });
+        expect(suggestChartSpec(ref([0, 2], [0, 1], 's3'), resolver)).toMatchObject({ title: '' });
     });
 
-    test('more series than a chart holds suggests nothing', () => {
+    test('more series than a chart holds is refused', () => {
         const many: (Cell | null)[][] = [Array.from({ length: 40 }, (_, i) => num(i))];
         const wideResolver = createArrayResolver([
             { id: 'w', name: 'W', data: many, calculationChain: [], dynamicArrayCompute: [] },
         ]);
         // One row of 40: the row is longer, so 1 series of 40 points.
-        expect(suggestChartSpec(ref([0, 0], [0, 39], 'w'), wideResolver)?.data.series).toHaveLength(1);
+        expect(suggestChartSpec(ref([0, 0], [0, 39], 'w'), wideResolver)).toMatchObject({ data: { series: [{}] } });
         const square = Array.from({ length: 40 }, () => Array.from({ length: 40 }, () => num(1)));
         const squareResolver = createArrayResolver([
             { id: 'q', name: 'Q', data: square, calculationChain: [], dynamicArrayCompute: [] },
         ]);
-        expect(suggestChartSpec(ref([0, 39], [0, 39], 'q'), squareResolver)).toBeNull();
+        expect(suggestChartSpec(ref([0, 39], [0, 39], 'q'), squareResolver)).toBe('too-many-series');
     });
 });
 
@@ -224,5 +225,23 @@ describe('currentRegion', () => {
 
     test('an empty cell stays itself', () => {
         expect(currentRegion(ref([8, 8], [8, 8]), resolver)).toEqual(ref([8, 8], [8, 8]));
+    });
+
+    test('a 10,000-row table stops growing past the values a chart draws, in linear reads', () => {
+        const rows = Array.from({ length: 10_000 }, (_, r) => Array.from({ length: 5 }, (_, c) => num(r * c)));
+        const tall = createArrayResolver([
+            { id: 't', name: 'Tall', data: rows, calculationChain: [], dynamicArrayCompute: [] },
+        ]);
+        let reads = 0;
+        const counted: CellResolver = {
+            ...tall,
+            getCell: (sheetId, row, column) => {
+                reads += 1;
+                return tall.getCell(sheetId, row, column);
+            },
+        };
+        const region = currentRegion(ref([3, 3], [2, 2], 't'), counted);
+        expect(suggestChartSpec(region, counted)).toBe('too-many-points');
+        expect(reads).toBeLessThan(4 * MAX_CHART_POINTS);
     });
 });

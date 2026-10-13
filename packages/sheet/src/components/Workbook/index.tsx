@@ -12,7 +12,7 @@ import type {
     EigenClipboardImageItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
-import { cloneDeep } from 'es-toolkit/compat';
+import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
@@ -247,8 +247,20 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 const { undoList, undoGesture } = globalCache.current;
                                 const last = undoList.at(-1);
                                 if (undoGesture && last?.gesture === undoGesture) {
-                                    last.patches.push(...filteredPatches);
-                                    last.inversePatches.unshift(...filteredInversePatches);
+                                    const [patch] = filteredPatches;
+                                    const previous = last.patches.at(-1);
+                                    // A field typed key by key keeps its first old value and its latest new one.
+                                    if (
+                                        filteredPatches.length === 1 &&
+                                        patch.op === 'replace' &&
+                                        previous?.op === 'replace' &&
+                                        isEqual(previous.path, patch.path)
+                                    ) {
+                                        last.patches[last.patches.length - 1] = patch;
+                                    } else {
+                                        last.patches.push(...filteredPatches);
+                                        last.inversePatches.unshift(...filteredInversePatches);
+                                    }
                                 } else {
                                     undoList.push({
                                         patches: filteredPatches,

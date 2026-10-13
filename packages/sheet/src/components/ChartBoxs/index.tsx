@@ -105,11 +105,23 @@ function ChartBox({ chart }: { chart: SheetChart }) {
             },
             { signal: controller.signal },
         );
+        // A touch the browser took for a pan never ends in pointerup, so the next tap would commit a move.
+        document.addEventListener(
+            'pointercancel',
+            () => {
+                controller.abort();
+                setPreview(null);
+            },
+            { signal: controller.signal },
+        );
     };
 
+    // White as the export draws it. The labels name Inter without embedding it: the font files are bundled
+    // into the server's export only.
     const download = () => {
         const title = parseChartSpec(chart.spec)?.title;
-        downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${title || 'Chart'}.svg`);
+        const white = svg.replace(/^<svg[^>]*>/, (open) => `${open}<rect width="100%" height="100%" fill="#fff"/>`);
+        downloadBlob(new Blob([white], { type: 'image/svg+xml' }), `${title || 'Chart'}.svg`);
     };
 
     return (
@@ -118,8 +130,13 @@ function ChartBox({ chart }: { chart: SheetChart }) {
             data-chart-id={chart.id}
             data-active={active || undefined}
             tabIndex={-1}
-            // pointer-events-auto: the pane-region wrapper is pointer-events none
-            className={cn('group absolute pointer-events-auto bg-background outline-none', canEdit && 'cursor-move')}
+            // pointer-events-auto: the pane-region wrapper is pointer-events none. touch-none only while
+            // selected, so a finger on an unselected chart still pans the grid.
+            className={cn(
+                'group absolute pointer-events-auto bg-background outline-none',
+                canEdit && 'cursor-move',
+                active && canEdit && 'touch-none',
+            )}
             style={{ left: box.x, top: box.y, width: box.width, height: box.height, zIndex: active ? 20 : 19 }}
             onPointerDown={startMove}
             onMouseDown={(e) => e.stopPropagation()}

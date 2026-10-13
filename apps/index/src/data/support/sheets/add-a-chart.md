@@ -21,7 +21,7 @@ A column chart appears below the cells, and the **Chart editor** opens on the ri
 - Each column of numbers becomes a series, named by the text above it. When the table has more columns than rows, each row becomes a series instead, named by the text on its left.
 - The series names make the chart title.
 
-A chart holds up to 32 series. Hidden rows and columns are included in the chart for now.
+A chart holds up to 32 series and 2,000 values. Hidden rows and columns are included in the chart for now.
 
 ## Change the data and the look
 
