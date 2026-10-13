@@ -59,6 +59,28 @@ describe('media', () => {
     });
 });
 
+describe('relationship targets', () => {
+    const imageAt = async (target: string, path: string, mode = '') =>
+        (
+            await importDocxBody(paragraph(picture('rId9')), {
+                rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="${target}"${mode}/>`,
+                media: { [path]: BYTES },
+            })
+        ).images.map(({ name, contentType }) => [name, contentType]);
+
+    test("a target with '..' resolves against the part's folder", async () => {
+        expect(await imageAt('../media/x.png', 'media/x.png')).toEqual([['image-1.png', 'image/png']]);
+    });
+
+    test('an absolute target is a part name from the package root', async () => {
+        expect(await imageAt('/word/media/x.png', 'word/media/x.png')).toEqual([['image-1.png', 'image/png']]);
+    });
+
+    test('an External target is no image, though a part of its name is in the package', async () => {
+        expect(await imageAt('media/x.png', 'word/media/x.png', ' TargetMode="External"')).toEqual([]);
+    });
+});
+
 describe('placement', () => {
     const anchored = (inner: string) =>
         GOLDEN_DOCX_IMAGE_RUN.replace('<wp:inline>', `<wp:anchor>${inner}`).replace('</wp:inline>', '</wp:anchor>');

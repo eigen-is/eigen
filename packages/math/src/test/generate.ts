@@ -1,0 +1,202 @@
+import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
+import { MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
+import { canonicalIssue } from './canonical';
+
+// Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping,
+// characters beyond the BMP. Skewed fractions, every brace character and every fence stay in: only LaTeX loses them.
+
+type Random = () => number;
+
+// mulberry32: small, seedable, good enough to spread choices.
+function seeded(seed: number): Random {
+    let state = seed;
+    return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let t = Math.imul(state ^ (state >>> 15), 1 | state);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
+
+const LETTERS = ['x', 'y', 'Z', 'α', 'Ω', 'ж', 'ℏ', 'h', 'R'];
+const WORDS = ['sin', 'dx', 'lim', 'если'];
+const NUMBERS = ['0', '42', '3.14'];
+// `&` stays out of an equations cell, where it is the cell break.
+const OPERATORS = [
+    '&',
+    '+',
+    '−',
+    '=',
+    '<',
+    '>',
+    '"',
+    '(',
+    ')',
+    '[',
+    '|',
+    '{',
+    '′',
+    '∑',
+    '∫',
+    '‾',
+    '_',
+    '˙',
+    '→',
+    '/',
+    '.',
+    '∂',
+    '∇',
+];
+const TEXTS = ['if', 'a < b & c', ' edge ', 'x\u00A0y', ']]>', 'non-BMP 😀', 'javascript:alert(1)', '"quoted"'];
+const COLORS = [undefined, undefined, undefined, '#FF0000', '#000000', '#0A0B0C'];
+const FENCE_CHARS = ['(', ')', '[', ']', '{', '}', '|', '‖', '⟨', '⟩', '⌈', ''];
+const BRACE_CHARS = ['⏞', '⏟', '⏜', '⏝', '→', '‾', '{'];
+// U+0311 is no table accent: it is written as it is.
+const ACCENT_CHARS = [...ACCENTS.keys(), '\u0311'];
+const NARY_OPERATORS = [...LARGE_OPERATORS].filter((_, index) => index % 4 === 0).concat('⋆');
+
+function token(random: Random): MathNode {
+    const color = pick(random, COLORS);
+    const variant = random() < 0.3 ? pick(random, MATH_VARIANTS) : undefined;
+    switch (pick(random, ['letter', 'word', 'number', 'operator'] as const)) {
+        case 'letter':
+            return {
+                kind: 'identifier',
+                text: pick(random, LETTERS),
+                variant: variant === 'italic' ? undefined : variant,
+                color,
+            };
+        case 'word':
+            return { kind: 'identifier', text: pick(random, WORDS), color };
+        case 'number':
+            return {
+                kind: 'number',
+                text: pick(random, NUMBERS),
+                variant: variant === 'normal' ? undefined : variant,
+                color,
+            };
+        case 'operator':
+            return {
+                kind: 'operator',
+                text: pick(random, OPERATORS),
+                variant: variant === 'normal' ? undefined : variant,
+                color,
+            };
+    }
+}
+
+function row(random: Random, depth: number, nonEmpty = false, equationCell = false): MathRow {
+    const nodes: MathRow = [];
+    const length = Math.floor(random() * 4) + (nonEmpty ? 1 : 0);
+    while (nodes.length < length) {
+        const next = node(random, depth);
+        if (canonicalIssue([...nodes.slice(-2), next], equationCell) === undefined) nodes.push(next);
+    }
+    return nodes;
+}
+
+function optional(random: Random, depth: number): MathRow | undefined {
+    return random() < 0.5 ? row(random, depth, true) : undefined;
+}
+
+function node(random: Random, depth: number): MathNode {
+    const leaf = depth >= 4 || random() < 0.5;
+    const kind = leaf
+        ? pick(random, ['token', 'token', 'token', 'text', 'space'] as const)
+        : pick(random, [
+              'fraction',
+              'scripts',
+              'radical',
+              'nary',
+              'fenced',
+              'function',
+              'accent',
+              'line',
+              'brace',
+              'limit',
+              'enclose',
+              'table',
+          ] as const);
+    const inner = depth + 1;
+    switch (kind) {
+        case 'token':
+            return token(random);
+        case 'text':
+            return { kind: 'text', text: pick(random, TEXTS), color: pick(random, COLORS) };
+        case 'space':
+            return { kind: 'space', width: pick(random, MATH_SPACES) };
+        case 'fraction':
+            return {
+                kind: 'fraction',
+                numerator: row(random, inner),
+                denominator: row(random, inner),
+                line: pick(random, ['bar', 'none', 'skewed'] as const),
+            };
+        case 'scripts': {
+            const sub = optional(random, inner);
+            const sup = sub ? optional(random, inner) : row(random, inner, true);
+            return { kind: 'scripts', base: row(random, inner), sub, sup, pre: random() < 0.3 ? true : undefined };
+        }
+        case 'radical':
+            return { kind: 'radical', body: row(random, inner), degree: optional(random, inner) };
+        case 'nary': {
+            const operator = pick(random, NARY_OPERATORS);
+            const sub = optional(random, inner);
+            const sup = optional(random, inner);
+            const limits = sub || sup ? pick(random, ['under', 'side'] as const) : naryLimits(operator);
+            return { kind: 'nary', operator, limits, sub, sup, body: row(random, inner) };
+        }
+        case 'fenced': {
+            const parts = Array.from({ length: 1 + Math.floor(random() * 3) }, () => row(random, inner));
+            const separator = parts.length > 1 ? pick(random, ['|', ',', '', '│']) : '';
+            return {
+                kind: 'fenced',
+                open: pick(random, FENCE_CHARS),
+                close: pick(random, FENCE_CHARS),
+                separator,
+                parts,
+            };
+        }
+        case 'function':
+            return { kind: 'function', name: row(random, inner), body: row(random, inner) };
+        case 'accent':
+            return { kind: 'accent', accent: pick(random, ACCENT_CHARS), body: row(random, inner) };
+        case 'line':
+            return { kind: 'line', position: pick(random, ['over', 'under'] as const), body: row(random, inner) };
+        case 'brace':
+            return {
+                kind: 'brace',
+                char: pick(random, BRACE_CHARS),
+                position: pick(random, ['over', 'under'] as const),
+                body: row(random, inner),
+            };
+        case 'limit':
+            return {
+                kind: 'limit',
+                position: pick(random, ['over', 'under'] as const),
+                base: row(random, inner),
+                limit: row(random, inner),
+            };
+        case 'enclose':
+            return {
+                kind: 'enclose',
+                notation: MATH_ENCLOSURES.filter(() => random() < 0.5),
+                body: row(random, inner),
+            };
+        case 'table': {
+            const layout = pick(random, ['matrix', 'equations'] as const);
+            const columns = 1 + Math.floor(random() * 3);
+            const rows = Array.from({ length: 1 + Math.floor(random() * 3) }, () =>
+                Array.from({ length: columns }, () => row(random, inner, false, layout === 'equations')),
+            );
+            return { kind: 'table', layout, rows };
+        }
+    }
+}
+
+export function generateTree(seed: number): MathRow {
+    // Through JSON, so absent fields are absent rather than undefined, as a reader leaves them.
+    return JSON.parse(JSON.stringify(row(seeded(seed), 1)));
+}

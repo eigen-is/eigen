@@ -1,10 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
-import { isOn, MAX_TABLE_COLUMNS, TWIPS_PER_PX, W_NS } from '../../core/ooxml';
-import { type XmlElement, xmlElements } from '../../core/xml';
+import { isOn, W_NS } from '../../core/ooxml';
+import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
+import { MAX_TABLE_COLUMNS, TWIPS_PER_PX } from '../../document/wordml';
 import { build, COLUMN_PX, type Item, inlineText, isWhitespace, type Para } from './assemble';
-import { int, is, onOff, twipsOf, w, wChild } from './package';
+import { int, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
 
@@ -22,7 +23,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         return rows.flatMap((row) => row.cells.flatMap((cell) => readBlocks(reader, cellContent(cell), scope)));
     const tblPr = wChild(table, 'tblPr');
     const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
-        .filter((col) => is(col, W_NS, 'gridCol'))
+        .filter((col) => hasXmlName(col, W_NS, 'gridCol'))
         .map((col) => twipsOf(w(col, 'w')) ?? 0)
         .slice(0, MAX_TABLE_COLUMNS);
     const columns = grid.length || MAX_TABLE_COLUMNS;
@@ -184,7 +185,7 @@ function gridFiller(columnPx: number[], column: number, colspan: number, type = 
 }
 
 function cellContent(cell: XmlElement): XmlElement[] {
-    return xmlElements(cell).filter((child) => !is(child, W_NS, 'tcPr'));
+    return xmlElements(cell).filter((child) => !hasXmlName(child, W_NS, 'tcPr'));
 }
 
 function cellFill(cell: XmlElement): boolean {
