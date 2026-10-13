@@ -1,9 +1,9 @@
 // Row and column header strips: header backgrounds, sequence labels, and
 // the separator lines (hidden rows/columns get a doubled separator).
 
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { type Context, getSheetConfig } from '../context';
 import { defaultFont, getMeasureText } from '../modules/text';
-import { indexToColumnChar } from '../utils';
 import { canvasColors } from './colors';
 import { colEndX, colStartX, HALF_PIXEL, headerVisibleRange, rowEndY, rowStartY } from './geometry';
 
@@ -155,7 +155,7 @@ export function drawColumnHeader(
         const startX = colStartX(sheetCtx.visibledatacolumn, c, scrollWidth);
         const endX = colEndX(sheetCtx.visibledatacolumn, c, scrollWidth);
 
-        const columnLabel = indexToColumnChar(c);
+        const columnLabel = columnIndexToLabel(c);
         // Triggered before column header cell render; return false to skip
         if (
             sheetCtx.hooks.beforeRenderColumnHeaderCell?.(

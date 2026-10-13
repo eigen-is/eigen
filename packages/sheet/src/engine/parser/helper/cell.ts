@@ -5,8 +5,6 @@ import {
     REFERENCE_ROW_COUNT,
 } from '@workspace/lib/sheets';
 
-export { columnIndexToLabel, columnLabelToIndex };
-
 export type CellCoordinate = {
     index: number;
     label: string;
