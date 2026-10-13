@@ -9,7 +9,7 @@ So the shell adds only what the engine has no word for: a deck as an ordered lis
 - The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
 - A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
 - A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
-- The deck writer, for the pptx import, appends an update under fresh ids and never rewrites what the deck holds ([§ The deck writer appends and never rewrites the deck](#the-deck-writer-appends-and-never-rewrites-the-deck)).
+- The deck writer, which a pptx Convert and Import slides… write through, appends an update under fresh ids and never rewrites what the deck holds ([§ The deck writer appends and never rewrites the deck](#the-deck-writer-appends-and-never-rewrites-the-deck)).
 
 ## A slide is a frame, and the shell adds only the deck's words
 
@@ -49,11 +49,11 @@ A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): sol
 
 ## The deck writer appends and never rewrites the deck
 
-The server has a deck writer for the pptx import, `apps/api/src/lib/document/slides.ts`, which appends a Yjs update into a deck. That import is not built yet, so nothing calls it. The update is untrusted, so the writer first reads it back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The caller bounds the update's size and record count, and hands it media names that are already free in the deck's `media/` folder, since the writer stores them as given.
+The server has a deck writer for the pptx import, `apps/api/src/lib/document/slides.ts`, which appends a Yjs update into a deck: Convert to Slides on a `.pptx` in Drive, and File → Import slides… in an open deck ([EXPORT.md](EXPORT.md#a-pptx-import-adds-slides-and-leaves-a-box-where-it-cant-draw)). The update is untrusted, so the writer first reads it back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The caller bounds the update's size and record count, and hands it media names that are already free in the deck's `media/` folder, since the writer stores them as given.
 
 The write appends in one transaction. Every slide and element gets a fresh id and an index after the deck's topmost, in the update's own order. Element frame ids and arrow bindings are remapped to the new ids, and an imported element starts with no comment cards. Nothing already in the deck is cleared or rewritten, because an open tab's undo stack and its comments point at those Y.Maps. The work is linear in the update's records.
 
-`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone.
+`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`. A file with no slides leaves that deck with none, and the first writer to open it seeds it like a new one, so there is one empty-deck path. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone, and answers how many slides it added: none means the file had none, which Import slides… says instead of adding nothing silently.
 
 ## Export and preview render the pages the canvas draws
 

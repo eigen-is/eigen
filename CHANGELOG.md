@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor and printing follow it; PDF and Word downloads stay A4 with 2 cm margins for now
 - **Charts in Vector and Slides** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking, titles, legend, axis range, gridlines and colors, and **Edit data** (or a double-click) edits its numbers in a grid you can paste spreadsheet cells into
 - **PowerPoint export** — File → Download → **Microsoft PowerPoint (.pptx)** saves a presentation as a .pptx, also from Drive and ⌘K. Text, shapes, arrows, images and backgrounds carry over; a chart arrives as its shapes
+- **PowerPoint import** — **Convert to Slides** on a .pptx in Drive makes a presentation from it, and File → **Import slides…** adds a .pptx's slides after the open presentation's own. Text, shapes, pictures and backgrounds carry over; a table, chart or SmartArt graphic leaves a box saying what was there, and Import slides… ends with a message counting what did not come over
 
 ### Changed
 

@@ -1,6 +1,6 @@
 # Document Content Layer
 
-> **TLDR:** The server reads Eigen documents to export them, preview them and index them for search, and writes docs and sheets to import a file into them. `apps/api/src/lib/document/` holds a reader for every Eigen document type and a writer for docs, sheets and decks. The heavy readers run in a child process, off the API's event loop, and import parses its file there too. **The docs and sheets writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first. The deck writer appends; it is for the pptx import, which is not built yet, so nothing calls it.
+> **TLDR:** The server reads Eigen documents to export them, preview them and index them for search, and writes docs, sheets and decks to import a file into them. `apps/api/src/lib/document/` holds a reader for every Eigen document type and a writer for docs, sheets and decks. The heavy readers run in a child process, off the API's event loop, and import parses its file there too. **The docs and sheets writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first. The deck writer appends, so a pptx imported into a deck adds its slides.
 
 Most of the time the server does not look inside a document. A collab document is Yjs data that the browsers edit, and the server only relays and stores it ([COLLAB.md](COLLAB.md)). Four features need the content as content. Export turns a document into a file such as DOCX, XLSX, PDF or SVG ([EXPORT.md](EXPORT.md)). Preview renders what Drive shows of a file before it is opened ([PREVIEWS.md](PREVIEWS.md)). Search pulls the text out for its content index ([SEARCH.md](SEARCH.md)). Import turns a `.docx` into a doc or an `.xlsx` into a sheet, either a new one or by replacing an existing one's content.
 
@@ -16,7 +16,7 @@ Two details surprise people: capture leaves the database open, because a live se
 |---|---|---|---|
 | `.eigendoc` | `readEigendocFromDoc` (`doc.ts`) | ProseMirror `JSONContent` | `writeEigendocUpdateToYjs` |
 | `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshotToYjs` |
-| `.eigenslides` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | `writeSlidesUpdateToYjs`, `appendSlidesUpdateToYjs` (`slides.ts`), for the pptx import, not built yet |
+| `.eigenslides` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | `writeSlidesUpdateToYjs`, `appendSlidesUpdateToYjs` (`slides.ts`), for the pptx import |
 | `.eigenvector` | `readVectorFromDoc` | `VectorScene` | none |
 | `.eigenstickies` | `readStickiesContent` (`stickies.ts`, main thread) | card and column text | none |
 | `.eigenchat` | `readChatContent` (`chat.ts`, main thread) | the newest messages as text | none |
