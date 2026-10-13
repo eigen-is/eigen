@@ -1,6 +1,8 @@
 export { getDocExtensions, PROSE_TEXTBLOCKS } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';
+export type { ChartAttrs } from './nodes/chart';
+export { CHART_DEFAULT_SIZE, ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export type { FigureAttrs } from './nodes/figure';
 export { FigureNode, readFigureAttrs } from './nodes/figure';
@@ -22,4 +24,5 @@ export {
     pageTwips,
     readPageSetup,
 } from './page';
+export { attributeSearchText } from './search-text';
 export { MIN_TABLE_COLUMN_PX } from './table';

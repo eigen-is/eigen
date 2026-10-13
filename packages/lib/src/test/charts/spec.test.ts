@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     CHART_PALETTE,
     chartColor,
+    chartSearchText,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
@@ -74,6 +75,21 @@ describe('sampleChartSpec', () => {
         expect(pie.legend).toBe('none');
         expect(pie.data.series).toHaveLength(1);
         expect(pie.sliceColors).toEqual(CHART_PALETTE.slice(0, 4));
+    });
+});
+
+describe('chartSearchText', () => {
+    test("a chart's titles, series names and categories, a line each; none for a spec that doesn't parse", () => {
+        expect(chartSearchText(sampleChartSpec('line')).split('\n')).toEqual([
+            'Points scored',
+            'Period 1',
+            'Period 2',
+            'Team 1',
+            'Team 2',
+            'Team 3',
+            'Team 4',
+        ]);
+        expect(chartSearchText(null)).toBe('');
     });
 });
 

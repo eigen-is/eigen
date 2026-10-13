@@ -3,6 +3,7 @@ export {
     CHART_PALETTE,
     chartColor,
     chartLabel,
+    chartSearchText,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,
