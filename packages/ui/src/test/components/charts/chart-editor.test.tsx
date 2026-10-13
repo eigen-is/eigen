@@ -162,10 +162,10 @@ describe('ChartEditor', () => {
     test('stacking shows for column and bar, writes the grouping, and is gone for line and pie', async () => {
         const column = await mount(sample('column'));
         expect(column.rowLabels()).toContain('Stacking');
-        expect(await column.options('Stacking')).toEqual(['None', 'Stacked', '100% stacked']);
-        await column.choose('Stacking', '100% stacked');
+        expect(await column.options('Stacking')).toEqual(['None', 'Standard', '100%']);
+        await column.choose('Stacking', '100%');
         expect(column.last().stacking).toBe('percent');
-        await column.choose('Stacking', 'Stacked');
+        await column.choose('Stacking', 'Standard');
         expect(column.last().stacking).toBe('stacked');
         await column.choose('Stacking', 'None');
         expect(column.last().stacking).toBe('none');
@@ -217,6 +217,30 @@ describe('ChartEditor', () => {
         expect(column.last().valueAxis.min).toBe(10);
         await column.type('Auto', '');
         expect(column.last().valueAxis.min).toBeNull();
+    });
+
+    // A 100% stack stores its min and max as fractions, Excel's c:min and c:max, and the editor shows percents.
+    test('under a 100% stack, min and max read and write as percents', async () => {
+        const percent: ChartSpec = {
+            ...sample('column'),
+            stacking: 'percent',
+            valueAxis: { ...sample('column').valueAxis, max: 0.07 },
+        };
+        const editor = await mount(percent);
+        const [min, max] = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Auto"]')];
+        expect(max.value).toBe('7');
+        await act(async () => {
+            max.focus();
+            setValue?.call(max, '100');
+            max.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        expect(editor.last().valueAxis.max).toBe(1);
+        await act(async () => {
+            min.focus();
+            setValue?.call(min, '-20');
+            min.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        expect(editor.last().valueAxis).toMatchObject({ min: -0.2, max: 1 });
     });
 
     test('a max at or below the min is not written', async () => {
@@ -298,6 +322,18 @@ describe('ChartEditor', () => {
         expect(editor.changes).toEqual([picked]);
         expect(editor.row('Period 2').textContent).toBe('Automatic');
         expect(await editor.automatic('Period 1')).toBeUndefined();
+    });
+
+    // Marked as the current color, the palette swatch an automatic color draws in would pin it unseen.
+    test("an automatic color's popover marks no swatch as the current one", async () => {
+        const editor = await mount(sample('column'));
+        const trigger = editor.row('Period 1').querySelector('button');
+        await act(async () => trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        const popover = [...document.querySelectorAll('[data-slot="popover-content"]')].at(-1);
+        const swatches = [...(popover?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+        expect(swatches.some((swatch) => swatch.style.backgroundColor !== '')).toBe(true);
+        const marked = swatches.filter((swatch) => swatch.style.backgroundColor && swatch.querySelector('svg'));
+        expect(marked.map((swatch) => swatch.title)).toEqual([]);
     });
 
     test('a picked slice color resets to the palette in one write', async () => {

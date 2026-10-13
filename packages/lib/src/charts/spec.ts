@@ -20,8 +20,7 @@ import {
     type RangeChartData,
     type RangeChartSeries,
 } from '../types/chart';
-import { isColorToken } from '../vector/fill';
-import { bool, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
+import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 
 // Hard limits: every peer lays out and paints whatever is stored, so they bound one chart's cost.
@@ -143,7 +142,7 @@ function chartSpec(v: unknown): ChartSpec {
             gridlines: bool(prop(valueAxis, 'gridlines'), defaults.valueAxis.gridlines),
             format: typeof format === 'string' ? text(format) : defaults.valueAxis.format,
         },
-        sliceColors: slices.map(colorOrNull),
+        sliceColors: slices.map((v) => color(v, null)),
         fontFamily: fontFamily(prop(spec, 'fontFamily'), defaults.fontFamily),
         data: chartData(prop(spec, 'data')),
     };
@@ -194,15 +193,10 @@ function rangeSeries(v: unknown): RangeChartSeries {
 
 function seriesStyle(series: object): ChartSeriesStyle {
     return {
-        color: colorOrNull(prop(series, 'color')),
+        color: color(prop(series, 'color'), null),
         markers: bool(prop(series, 'markers'), DEFAULT_CHART_SERIES_STYLE.markers),
         smooth: bool(prop(series, 'smooth'), DEFAULT_CHART_SERIES_STYLE.smooth),
     };
-}
-
-// Anything but a color token reads null, the palette's color at the index.
-function colorOrNull(v: unknown): string | null {
-    return isColorToken(v) ? v : null;
 }
 
 function cellRange(v: unknown): CellRangeRef {

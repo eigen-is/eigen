@@ -26,10 +26,11 @@ const LEGEND_LABELS: Record<LegendPosition, string> = {
     none: 'None',
 };
 const LEGEND_OPTIONS = LEGEND_POSITIONS.map((value) => ({ value, label: LEGEND_LABELS[value] }));
+// Google's words for Excel's grouping.
 const STACKING_OPTIONS: { value: ChartStacking; label: string }[] = [
     { value: 'none', label: 'None' },
-    { value: 'stacked', label: 'Stacked' },
-    { value: 'percent', label: '100% stacked' },
+    { value: 'stacked', label: 'Standard' },
+    { value: 'percent', label: '100%' },
 ];
 
 type ChartEditorProps = {
@@ -54,6 +55,13 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
         data.source === 'inline' ? data.categories : (categories ?? spec.sliceColors.map(() => ''))
     ).map((category, i) => category || `Slice ${i + 1}`);
     const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? null);
+
+    // A 100% stack's min and max are fractions of the whole, Excel's c:min and c:max, shown and typed as
+    // percents; toPrecision keeps 0.07 from showing as 7.000000000000001.
+    const percent = spec.stacking === 'percent' && (type === 'column' || type === 'bar');
+    const shownBound = (bound: number | null) =>
+        bound === null ? undefined : percent ? Number((bound * 100).toPrecision(12)) : bound;
+    const storedBound = (typed: number) => (percent ? typed / 100 : typed);
 
     const setValueAxis = (patch: Partial<ChartSpec['valueAxis']>) => {
         const next = { ...valueAxis, ...patch };
@@ -100,17 +108,17 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
             </PropertyRow>
             <PropertyRow label="Min">
                 <PropertyNumberInput
-                    value={valueAxis.min ?? undefined}
+                    value={shownBound(valueAxis.min)}
                     placeholder="Auto"
-                    onChange={(min) => setValueAxis({ min })}
+                    onChange={(min) => setValueAxis({ min: storedBound(min) })}
                     onClear={() => setValueAxis({ min: null })}
                 />
             </PropertyRow>
             <PropertyRow label="Max">
                 <PropertyNumberInput
-                    value={valueAxis.max ?? undefined}
+                    value={shownBound(valueAxis.max)}
                     placeholder="Auto"
-                    onChange={(max) => setValueAxis({ max })}
+                    onChange={(max) => setValueAxis({ max: storedBound(max) })}
                     onClear={() => setValueAxis({ max: null })}
                 />
             </PropertyRow>

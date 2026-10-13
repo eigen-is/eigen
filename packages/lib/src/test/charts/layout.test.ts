@@ -350,6 +350,18 @@ describe('column and bar', () => {
         }
     });
 
+    test('100% stacked: min and max are shares, so 0.5 ends the axis at 50%', () => {
+        const data: ChartData = { categories: ['A'], series: [series('S1', [1]), series('S2', [3], '#eb6834')] };
+        const out = layout(
+            'column',
+            { stacking: 'percent', valueAxis: { ...sampleChartSpec('column').valueAxis, max: 0.5 } },
+            { data },
+        );
+        const ticks = out.labels.filter((label) => label.anchor === 'end').map((label) => label.text);
+        expect(ticks[0]).toBe('0%');
+        expect(ticks.at(-1)).toBe('50%');
+    });
+
     test('100% stacked with mixed signs: shares of the absolute sum, negatives below zero', () => {
         const mixed: ChartData = {
             categories: ['A', 'B'],

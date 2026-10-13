@@ -267,7 +267,8 @@ type ValueAxis = { lo: number; hi: number; ticks: number[]; texts: string[]; wid
 
 // Column and line chart a vertical value axis left of a horizontal band axis; bar turns both. The axis
 // left of the plot takes its title turned -90°, the one below takes it upright.
-// A 100% stack plots shares and labels its ticks as percents, whatever the source cells' format.
+// A 100% stack plots shares and labels its ticks as percents, whatever the source cells' format; its min
+// and max are shares too, Excel's c:min and c:max (1 is 100%).
 function layoutCartesian(
     ctx: Context,
     spec: ChartSpec,

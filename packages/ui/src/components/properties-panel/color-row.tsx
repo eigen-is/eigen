@@ -67,9 +67,10 @@ function ColorButton({ value, onChange, allowNone, noneLabel = 'None', automatic
                         </button>
                     )}
                     {/* Reset only to an automatic color: elsewhere a picked color is replaced by picking
-                        another, and where paint is optional the None swatch is the way back. */}
+                        another, and where paint is optional the None swatch is the way back. An automatic
+                        color marks no swatch, so a click on the palette color it draws in is a visible pick. */}
                     <ColorPicker
-                        value={displayColor ?? ''}
+                        value={automatic?.active ? '' : (displayColor ?? '')}
                         onChange={pick}
                         showReset={automatic !== undefined && !automatic.active}
                         resetLabel="Automatic"

@@ -104,8 +104,9 @@ export function cleanStr(v: unknown, fallback: string): string {
 }
 
 // Colors come from the ColorPicker: hex or the 'transparent' sentinel (fill.ts owns the vocabulary).
-// Anything else → the field default; this closes `url(...)` paint-server smuggling into export.
-export function color(v: unknown, fallback: string): string {
+// Anything else → the field default, or null for a chart's automatic color; this closes `url(...)`
+// paint-server smuggling into export.
+export function color<T extends string | null>(v: unknown, fallback: T): string | T {
     return isColorToken(v) ? v : fallback;
 }
 
