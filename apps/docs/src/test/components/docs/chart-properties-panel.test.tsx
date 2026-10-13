@@ -74,6 +74,14 @@ const type = (input: HTMLInputElement | null | undefined, value: string) =>
         setValue?.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
     });
+// A keydown on the field, returned so the test can see whether the browser's own handling of it was prevented.
+const press = async (input: HTMLInputElement | null, init: KeyboardEventInit) => {
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    await act(async () => {
+        input?.dispatchEvent(event);
+    });
+    return event;
+};
 
 test('a title typed into the panel is one undo step, and the chart stays selected', async () => {
     const { editor, undoManager, spec } = await mount();
@@ -88,6 +96,33 @@ test('a title typed into the panel is one undo step, and the chart stays selecte
     undoManager.undo();
     expect(spec()?.title).toBe('Points scored');
 });
+
+// The field still holds the caret after typing, so ⌘Z reaches the field, not the editor's keymap. The browser's own
+// field undo would walk the text back a character at a time, writing each one.
+const fieldTitle = {
+    'Chart title': (spec: ReturnType<typeof parseChartSpec>) => spec?.title,
+    'Horizontal axis title': (spec: ReturnType<typeof parseChartSpec>) => spec?.categoryAxis?.title,
+    'Vertical axis title': (spec: ReturnType<typeof parseChartSpec>) => spec?.valueAxis?.title,
+};
+for (const [placeholder, read] of Object.entries(fieldTitle)) {
+    test(`⌘Z in the ${placeholder} field takes the typed text back as one step, and ⇧⌘Z puts it back`, async () => {
+        const { spec } = await mount();
+        const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
+        const before = read(spec());
+        for (const typed of ['G', 'Go', 'Goa', 'Goal']) await type(input, typed);
+        expect(read(spec())).toBe('Goal');
+
+        const undo = await press(input, { key: 'z', metaKey: true });
+        expect(undo.defaultPrevented).toBe(true);
+        expect(read(spec())).toBe(before);
+        expect(input?.value).toBe(before ?? '');
+
+        const redo = await press(input, { key: 'z', metaKey: true, shiftKey: true });
+        expect(redo.defaultPrevented).toBe(true);
+        expect(read(spec())).toBe('Goal');
+        expect(input?.value).toBe('Goal');
+    });
+}
 
 test("a Style toggle wraps the chart in one undo step and lights it, the spec's rows untouched", async () => {
     const { editor, undoManager, spec } = await mount();

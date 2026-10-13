@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
+import { undoChord } from '@workspace/ui/lib/undoChord';
+import { createContext, type KeyboardEvent, useCallback, useContext, useEffect, useRef } from 'react';
 import type * as Y from 'yjs';
 
 // Opens one undo step and returns its release. Every control in the panel writes on every change — a
@@ -14,13 +15,27 @@ const NO_GESTURE: BeginGesture = () => () => {};
 
 export const PropertyGestureContext = createContext<BeginGesture>(NO_GESTURE);
 
+// The host's undo and redo, for the fields that write as the user types: what such a field shows is already the
+// document's, so ⌘Z in it takes back the document's step. Left to the browser, the field's own undo walks the text
+// back a character at a time, writing each one. A host whose undo hotkey fires in fields too (the canvas) has none.
+export type PropertyHistory = { undo: () => void; redo: () => void };
+
+export const PropertyHistoryContext = createContext<PropertyHistory | null>(null);
+
 // The hold every panel control that writes as the user goes runs on: `hold` opens the gesture on the
 // first write and is idempotent, `end` releases it on a commit or a blur and may be called again.
 // Released on unmount too — a gesture the control never sees end (Escape mid-edit deselects and
 // unmounts the section, and so does a peer deleting the element) would leave the hold open, and every
-// later edit would merge into that one undo step.
-export function useHeldGesture(): { hold: () => void; end: () => void } {
+// later edit would merge into that one undo step. `undoKey` ends the edit on ⌘Z, ⇧⌘Z or Ctrl+Y and runs
+// the host's history, if it has one; it returns whether the key was one, so the field drops its draft
+// and shows what the undo left.
+export function useHeldGesture(): {
+    hold: () => void;
+    end: () => void;
+    undoKey: (e: KeyboardEvent) => boolean;
+} {
     const beginGesture = useContext(PropertyGestureContext);
+    const history = useContext(PropertyHistoryContext);
     const release = useRef<(() => void) | null>(null);
 
     const hold = useCallback(() => {
@@ -31,8 +46,21 @@ export function useHeldGesture(): { hold: () => void; end: () => void } {
         release.current = null;
     }, []);
     useEffect(() => end, [end]);
+    const undoKey = useCallback(
+        (e: KeyboardEvent) => {
+            const chord = undoChord(e);
+            if (!chord) return false;
+            end();
+            if (history) {
+                e.preventDefault();
+                history[chord]();
+            }
+            return true;
+        },
+        [end, history],
+    );
 
-    return { hold, end };
+    return { hold, end, undoKey };
 }
 
 // One discrete op = one undo step. Y.UndoManager merges everything inside a 500ms capture window, so a

@@ -7,6 +7,7 @@ import {
     holdCapture,
     PropertiesPanel,
     PropertyGestureContext,
+    PropertyHistoryContext,
     PropertySection,
     sealed,
 } from '@workspace/ui/components/properties-panel';
@@ -47,29 +48,36 @@ type ChartPropertiesPanelProps = {
 export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartPropertiesPanelProps) {
     const { spec, layout, alignment, caption } = useSelectedChart(editor);
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
+    // A field that writes as the user types keeps the caret out of the editor's keymap, so it hands ⌘Z to the doc.
+    const history = useMemo(
+        () => ({ undo: () => editor.commands.undo(), redo: () => editor.commands.redo() }),
+        [editor],
+    );
     const write = (attributes: ChartAttrs) => writeChart(editor, undoManager, attributes);
 
     return (
         <PropertyGestureContext.Provider value={beginGesture}>
-            <PropertiesPanel title="Chart">
-                {spec && (
-                    <ChartEditor spec={spec} onChange={(next) => write({ spec: JSON.stringify(next) })}>
-                        {spec.data.source === 'inline' && (
-                            <Button variant="outline" size="sm" className="w-full" onClick={onEditData}>
-                                <Table /> Edit data
-                            </Button>
-                        )}
-                    </ChartEditor>
-                )}
-                <FigureLayoutSection layout={layout} alignment={alignment} onChange={write} />
-                <PropertySection title="Caption">
-                    <FigureField
-                        value={caption}
-                        placeholder="Caption"
-                        onCommit={(value) => write({ caption: value || null })}
-                    />
-                </PropertySection>
-            </PropertiesPanel>
+            <PropertyHistoryContext.Provider value={history}>
+                <PropertiesPanel title="Chart">
+                    {spec && (
+                        <ChartEditor spec={spec} onChange={(next) => write({ spec: JSON.stringify(next) })}>
+                            {spec.data.source === 'inline' && (
+                                <Button variant="outline" size="sm" className="w-full" onClick={onEditData}>
+                                    <Table /> Edit data
+                                </Button>
+                            )}
+                        </ChartEditor>
+                    )}
+                    <FigureLayoutSection layout={layout} alignment={alignment} onChange={write} />
+                    <PropertySection title="Caption">
+                        <FigureField
+                            value={caption}
+                            placeholder="Caption"
+                            onCommit={(value) => write({ caption: value || null })}
+                        />
+                    </PropertySection>
+                </PropertiesPanel>
+            </PropertyHistoryContext.Provider>
         </PropertyGestureContext.Provider>
     );
 }

@@ -7,7 +7,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { PropertyGestureContext } = await import('../../../components/properties-panel');
+const { PropertyGestureContext, PropertyHistoryContext } = await import('../../../components/properties-panel');
 const { ChartEditor } = await import('../../../components/charts');
 
 // React reads an input's value off its own tracker, so the native setter is what a keystroke looks like.
@@ -20,7 +20,11 @@ afterEach(async () => {
 });
 
 // Mounts the editor over `spec`, feeding every change back in as the new spec, as a host does.
-async function mount(spec: ChartSpec, beginGesture?: () => () => void) {
+async function mount(
+    spec: ChartSpec,
+    beginGesture?: () => () => void,
+    history: { undo: () => void; redo: () => void } | null = null,
+) {
     const changes: ChartSpec[] = [];
     const container = document.createElement('div');
     document.body.append(container);
@@ -36,8 +40,9 @@ async function mount(spec: ChartSpec, beginGesture?: () => () => void) {
             },
         });
         await act(async () => {
+            const held = createElement(PropertyHistoryContext.Provider, { value: history }, editor);
             root.render(
-                beginGesture ? createElement(PropertyGestureContext.Provider, { value: beginGesture }, editor) : editor,
+                beginGesture ? createElement(PropertyGestureContext.Provider, { value: beginGesture }, held) : held,
             );
         });
     };
@@ -61,6 +66,12 @@ async function mount(spec: ChartSpec, beginGesture?: () => () => void) {
             setValue?.call(field, value);
             field.dispatchEvent(new Event('input', { bubbles: true }));
         });
+    };
+    // The keydown, returned so a test can see whether the browser's own handling of it was prevented.
+    const press = async (placeholder: string, init: KeyboardEventInit) => {
+        const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+        await act(async () => input(placeholder).dispatchEvent(event));
+        return event;
     };
     const blur = async (placeholder: string) => {
         const field = input(placeholder);
@@ -109,7 +120,7 @@ async function mount(spec: ChartSpec, beginGesture?: () => () => void) {
         if (!change) throw new Error('the editor wrote nothing');
         return change;
     };
-    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options };
+    return { changes, last, sectionTitles, rowLabels, input, type, press, blur, row, choose, options };
 }
 
 const sample = (type: ChartType) => sampleChartSpec(type);
@@ -241,5 +252,36 @@ describe('ChartEditor', () => {
         expect([opened, released]).toEqual([1, 0]);
         await editor.blur('Chart title');
         expect([opened, released]).toEqual([1, 1]);
+    });
+
+    test("⌘Z in a typed title ends its gesture and runs the host's undo instead of the field's own", async () => {
+        let released = 0;
+        const undone: string[] = [];
+        const editor = await mount(
+            sample('column'),
+            () => () => {
+                released += 1;
+            },
+            { undo: () => undone.push('undo'), redo: () => undone.push('redo') },
+        );
+        for (const typed of ['P', 'Po', 'Poi']) await editor.type('Chart title', typed);
+        expect((await editor.press('Chart title', { key: 'z', metaKey: true })).defaultPrevented).toBe(true);
+        expect((await editor.press('Chart title', { key: 'y', ctrlKey: true })).defaultPrevented).toBe(true);
+        expect(undone).toEqual(['undo', 'redo']);
+        expect(released).toBe(1);
+    });
+
+    test("without a host history, the canvas's case, ⌘Z ends the gesture and is left to the page's undo hotkey", async () => {
+        let released = 0;
+        const editor = await mount(sample('column'), () => () => {
+            released += 1;
+        });
+        for (const typed of ['P', 'Po', 'Poi']) await editor.type('Chart title', typed);
+        expect((await editor.press('Chart title', { key: 'z', metaKey: true })).defaultPrevented).toBe(false);
+        expect(released).toBe(1);
+        // A key that is no undo leaves the gesture alone.
+        await editor.type('Chart title', 'Poin');
+        await editor.press('Chart title', { key: 'a', metaKey: true });
+        expect(released).toBe(1);
     });
 });
