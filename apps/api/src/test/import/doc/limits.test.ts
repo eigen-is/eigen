@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
+import { M_NS } from '../../../lib/core/ooxml';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
@@ -9,8 +10,13 @@ import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import {
+    MAX_DOCX_PIECES,
+    MAX_DOCX_WEIGHT,
+    MAX_DOCX_XML_BYTES,
+    MAX_DOCX_XML_TAGS,
+} from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
@@ -461,6 +467,16 @@ describe('output budget', () => {
         const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
         expect([result.status, result.message]).toEqual([413, 'Document too large']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // A space in m:t writes 26 characters of MathML: these 22 KB zipped built 400M characters, 1.07 GB, before the weigh.
+    test('MathML past the budget is 413 as it is written', async () => {
+        const space = `<m:oMath><m:r><m:t xml:space="preserve">a${' '.repeat(4000)}a</m:t></m:r></m:oMath>`;
+        const docx = await buildDocxWithBody(`<w:p xmlns:m="${M_NS}">${space.repeat(3870)}</w:p>`);
+        const result = measuredImport(docx);
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(384 * MB);
+        expect(result.cpuMs).toBeLessThan(1500);
     }, 30_000);
 });
 

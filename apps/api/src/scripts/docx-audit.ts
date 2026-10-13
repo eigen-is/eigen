@@ -917,12 +917,25 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             blocks(box, { ...context.scope, chain: newChain(), fields: [] });
     };
 
+    // An equation is no text: a word boundary, as on the imported side. An m:oMathPara holds its equations directly.
+    const isMath = (node: XmlElement) => node.ns === M_NS && (node.local === 'oMath' || node.local === 'oMathPara');
+    const equations = (node: XmlElement, context: Inline) => {
+        const count = node.local === 'oMath' ? 1 : xmlChildren(node, M_NS, 'oMath').length;
+        if (visible(context.scope)) add(tally, 'equations', count);
+        space(context);
+    };
+
     const runContent = (container: XmlElement, look: RunLook, context: Inline) => {
         const { fields } = context.scope;
         for (const node of xmlElements(container)) {
             if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) runContent(choice, look, context);
+                continue;
+            }
+            // CT_R holds no math, but the reader reads it there.
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) continue;
@@ -995,10 +1008,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 if (choice) inline(choice, context);
                 continue;
             }
-            // An equation is no text: a word boundary, as on the imported side.
-            if (node.ns === M_NS && node.local === 'oMath') {
-                if (visible(context.scope)) add(tally, 'equations');
-                space(context);
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) {

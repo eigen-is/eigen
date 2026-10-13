@@ -72,12 +72,19 @@ describe('source side', () => {
             `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${inner}</w:p>`;
         const sentence = p(`${run('So')}${math}${run('holds')}`);
         const field = `<w:r><w:fldChar w:fldCharType="begin"/></w:r>${math}<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
-        const tally = await source(
-            `${sentence}${p(`<w:del w:id="1" w:author="a">${math}</w:del>${field}`)}${p(`<m:oMathPara>${math}${math}</m:oMathPara>`)}`,
-        );
+        const body = `${sentence}${p(`<w:del w:id="1" w:author="a">${math}</w:del>${field}`)}${p(`<m:oMathPara>${math}${math}</m:oMathPara>`)}`;
+        const tally = await source(body);
         expect([tally.words, count(tally, 'equations')]).toEqual([['So', 'holds'], 3]);
-        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(sentence))).json);
-        expect([imported.words, count(imported, 'equations')]).toEqual([['So', 'holds'], 1]);
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(body))).json);
+        expect([imported.words, count(imported, 'equations')]).toEqual([['So', 'holds'], 3]);
+    });
+
+    // CT_R holds no math, but the reader reads it there, so the audit counts it too.
+    test('an equation directly in a run counts, each of an m:oMathPara there too', async () => {
+        const math = '<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>';
+        const body = `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:r>${math}<m:oMathPara>${math}${math}</m:oMathPara></w:r></w:p>`;
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(body))).json);
+        expect([count(await source(body), 'equations'), count(imported, 'equations')]).toEqual([3, 3]);
     });
 
     test("a w:t's surrounding whitespace counts only where xml:space preserves it, as Word draws it", async () => {

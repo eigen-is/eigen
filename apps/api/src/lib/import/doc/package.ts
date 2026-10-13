@@ -14,6 +14,14 @@ export const MAX_DOCX_XML_TAGS = 750_000;
 // A piece past a run's first is a node no tag counts, held before the output is weighed; the corpus's most is 1,055.
 export const MAX_DOCX_PIECES = 75_000;
 
+// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
+// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
+// heaviest weighs 57,688.
+export const MAX_DOCX_WEIGHT = 150_000;
+
+// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
+export const CHARS_PER_UNIT = 512;
+
 export const DOCUMENT_TOO_LARGE = 'Document too large';
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
@@ -36,6 +44,9 @@ export type DocxPackage = {
     readMedia(path: string): Uint8Array | undefined;
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
     chargePiece(): void;
+    // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
+    // build hundreds of MB before the output is weighed.
+    chargeMathml(length: number): void;
 };
 
 // An encrypted docx is an OLE compound file holding the package as a stream of this name.
@@ -52,6 +63,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         left: MAX_DOCX_XML_BYTES,
         tags: MAX_DOCX_XML_TAGS,
         pieces: MAX_DOCX_PIECES,
+        mathml: MAX_DOCX_WEIGHT * CHARS_PER_UNIT,
         charged: new Set(),
         parsed: new Map(),
         failed: new Map(),
@@ -101,6 +113,10 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
             budget.pieces--;
             if (budget.pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         },
+        chargeMathml: (length) => {
+            budget.mathml -= length;
+            if (budget.mathml < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        },
     };
 }
 
@@ -109,6 +125,7 @@ type Budget = {
     left: number;
     tags: number;
     pieces: number;
+    mathml: number;
     charged: Set<string>;
     parsed: Map<string, XmlElement | undefined>;
     failed: Map<string, unknown>;

@@ -4,7 +4,7 @@ import { MATH_LIMITS, type MathRow, writeMathml } from '@workspace/math';
 import { writeZip } from '../../../lib/core/zip';
 import { CODE_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A run's look: which marks Word's formatting becomes, and which it doesn't.
 
@@ -393,6 +393,7 @@ describe('symbols', () => {
 
 describe('math', () => {
     const M = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
+    const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
     const r = (text: string) => `<m:r><m:t>${text}</m:t></m:r>`;
     const oMath = (inner: string, ns = M) => `<m:oMath xmlns:m="${ns}">${inner}</m:oMath>`;
     const SQUARE = `<m:sSup><m:e>${r('x')}</m:e><m:sup>${r('2')}</m:sup></m:sSup>${r('+1')}`;
@@ -459,6 +460,30 @@ describe('math', () => {
             ),
         );
         expect(contents(json)).toEqual([[{ type: 'text', text: 'So x2+1 x2 +1' }]]);
+    });
+
+    // As the package reads it: an alternative's fallback, and no object a tracked deletion of its control deletes.
+    test("an equation's text reads an alternative's fallback and leaves out an object whose control is deleted", async () => {
+        const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${r('x')}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;
+        const alternative = `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="w14">${r('c')}</mc:Choice><mc:Fallback>${r('f')}</mc:Fallback></mc:AlternateContent>`;
+        const deleted = `<m:sSup><m:sSupPr><m:ctrlPr><w:del w:id="1" w:author="a"><w:rPr/></w:del></m:ctrlPr></m:sSupPr><m:e>${r('z')}</m:e><m:sup>${r('3')}</m:sup></m:sSup>`;
+        const json = await imported(paragraph(oMath(`${deep}${alternative}${deleted}${r('w')}`)));
+        expect(contents(json)).toEqual([[{ type: 'text', text: 'x f w' }]]);
+    });
+
+    test('an m:oMathPara holds only its own m:oMath: a deleted one or one in an alternative is none', async () => {
+        const para = `<m:oMathPara xmlns:m="${M}" xmlns:mc="${MC}"><w:del w:id="1" w:author="a"><m:oMath>${r('d')}</m:oMath></w:del><mc:AlternateContent><mc:Choice Requires="w14"><m:oMath>${r('c')}</m:oMath></mc:Choice><mc:Fallback><m:oMath>${r('f')}</m:oMath></mc:Fallback></mc:AlternateContent><m:oMath>${r('b')}</m:oMath></m:oMathPara>`;
+        expect(contents(await imported(paragraph(para)))).toEqual([[equation(id('b'), true)]]);
+    });
+
+    // A caption is plain text: a block figure's Caption line, and the writer's floating one-cell table.
+    test("an equation in a figure's caption is its text there", async () => {
+        const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
+        const caption = paragraph(`${run('Figure 1: ')}${oMath(SQUARE)}`, '<w:pStyle w:val="Caption"/>');
+        const float = `<w:tbl><w:tblPr><w:tblpPr w:tblpXSpec="right"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${paragraph(oMath(r('y')))}</w:tc></w:tr></w:tbl>`;
+        const { json } = await importDocxBody(`${paragraph(GOLDEN_DOCX_IMAGE_RUN)}${caption}${float}`, { styles });
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['caption'])).toEqual(['Figure 1: x2 +1', 'y']);
+        expect(nodesOfType(json, 'equation')).toEqual([]);
     });
 
     test('an equation in a code block is its text', async () => {

@@ -304,13 +304,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                 piece.node.marks = [...(piece.node.marks ?? []), { type: 'italic' }];
         if (quote > 0) stripLook(half, QUOTE_LOOK.italic && !look.italic ? 'italic' : undefined, QUOTE_LOOK.color);
         if (look.color) stripLook(half, undefined, look.color);
-        const content = half.flatMap((piece): JSONContent[] => {
-            if (piece.kind !== 'node') return [];
-            // A code block holds only text, so an equation there is its text.
-            if (role.kind === 'code' && piece.text !== undefined)
-                return piece.text ? [{ type: 'text', text: piece.text }] : [];
-            return [piece.node];
-        });
+        const content = half.flatMap((piece) => (piece.kind === 'node' ? [piece.node] : []));
         if (!numbered && task) trimStart(content);
         if (content.length > MAX_INLINE_NODES) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const visible = isShown(half);
