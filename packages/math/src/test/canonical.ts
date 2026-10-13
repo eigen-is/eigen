@@ -11,6 +11,7 @@ const INVISIBLE = /[\u200B\u2061-\u2064]|\uFE0E|\uFE0F/u;
 const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 const isLetter = (char: string) => /^\p{L}$/u.test(char);
+const startsWithLetter = (cluster: string | undefined) => cluster !== undefined && isLetter([...cluster][0]);
 // Each character with the combining marks it keeps.
 const clustersOf = (text: string) => text.match(/\P{M}\p{M}*/gu) ?? [];
 const isMarked = (text: string) => /\p{M}/u.test(text);
@@ -44,7 +45,17 @@ function tokenIssue(node: MathToken): string | undefined {
     }
     switch (node.kind) {
         case 'identifier':
-            if (clusters.length === 0 || !clusters.every((cluster) => isLetter([...cluster][0])))
+            // A word's hyphen stands between two letters, as \operatorname draws one.
+            if (
+                clusters.length === 0 ||
+                !clusters.every(
+                    (cluster, index) =>
+                        startsWithLetter(cluster) ||
+                        (cluster === '-' &&
+                            startsWithLetter(clusters[index - 1]) &&
+                            startsWithLetter(clusters[index + 1])),
+                )
+            )
                 return `identifier ${node.text}`;
             if (clusters.length > 1 && (node.variant || isMarked(node.text)))
                 return `styled or marked word ${node.text}`;

@@ -199,7 +199,7 @@ export class RowBuilder {
                     char,
                     LETTER.test(char) ? (letters ?? defaultVariant('identifier', char)) : others,
                 ];
-                this.#chars.push({ char: base === '-' ? MINUS : base, marks: '', variant, color });
+                this.#chars.push({ char: base, marks: '', variant, color });
             }
             // Every two waiting characters or marks make at least one part (two quads are one qquad): bound them as
             // they come.
@@ -280,12 +280,19 @@ export class RowBuilder {
                     (index) => same(index) && chars[index].char === '.',
                 );
             } else if (LETTER.test(char) && variant === 'normal') {
+                // A word: upright letters, and a hyphen between two of them, as \operatorname draws it.
                 end = run(end, LETTER);
+                while (chars[end]?.char === '-' && same(end) && same(end + 1) && LETTER.test(chars[end + 1].char))
+                    end = run(end + 1, LETTER);
             }
-            const text = chars
-                .slice(start, end)
-                .map((styled) => styled.char)
-                .join('');
+            // Any other hyphen-minus is the minus sign.
+            const text =
+                char === '-'
+                    ? MINUS
+                    : chars
+                          .slice(start, end)
+                          .map((styled) => styled.char)
+                          .join('');
             const kind = DIGIT.test(char) ? 'number' : LETTER.test(char) ? 'identifier' : 'operator';
             this.#push(token(kind, text, variant, color), text.length);
             start = end;
@@ -322,7 +329,8 @@ export class RowBuilder {
     // An accent mark is an accent over the character, innermost first; any other stays with it, composed by NFC.
     #marked(char: string, marks: string, variant: MathVariant, color: string | undefined): void {
         const accents = [...marks].filter((mark) => ACCENTS.has(mark));
-        const text = (char + [...marks].filter((mark) => !ACCENTS.has(mark)).join('')).normalize('NFC');
+        const base = char === '-' ? MINUS : char;
+        const text = (base + [...marks].filter((mark) => !ACCENTS.has(mark)).join('')).normalize('NFC');
         const [first] = text;
         let node: MathNode = token(
             DIGIT.test(text) ? 'number' : LETTER.test(first) ? 'identifier' : 'operator',

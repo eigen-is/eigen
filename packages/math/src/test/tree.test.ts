@@ -280,6 +280,47 @@ describe('the minus sign', () => {
         expect(canonicalIssue([{ kind: 'operator', text: '-' }])).toBeDefined();
     });
 
+    // amsmath's \operatorname draws a - as a hyphen, as KaTeX and MathJax do; a word keeps it between its letters.
+    test('a hyphen between the letters of an upright word stays a hyphen', () => {
+        const word: MathRow = [{ kind: 'identifier', text: 'arg-max' }];
+        const upright = (text: string): MathNode => ({ kind: 'identifier', text, variant: 'normal' });
+        expect(readLatex('\\operatorname{arg-max}')).toStrictEqual(word);
+        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>arg-max</mi></math>`)).row).toStrictEqual(word);
+        expect(
+            readOmml(
+                el(
+                    `<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>arg-max</m:t></m:r></m:oMath>`,
+                ),
+            ),
+        ).toStrictEqual(word);
+        for (const via of [viaMathml, viaOmml, viaLatex]) expect(via(word)).toStrictEqual(word);
+        expect(writeMathml(word)).toContain('<mi>arg-max</mi>');
+        expect(writeText(word)).toBe('arg-max');
+        // Outside a word, and outside \operatorname in LaTeX or in an mo, it is the minus sign.
+        const minusBetween = (a: MathNode, b: MathNode): MathRow => [a, { kind: 'operator', text: '\u2212' }, b];
+        expect(readLatex('\\mathrm{a-b}')).toStrictEqual(minusBetween(upright('a'), upright('b')));
+        expect(readLatex('\\operatorname{arg-}')).toStrictEqual([
+            ...letter('arg'),
+            { kind: 'operator', text: '\u2212' },
+        ]);
+        expect(readLatex('\\operatorname{a-2}')).toStrictEqual(
+            minusBetween(upright('a'), { kind: 'number', text: '2' }),
+        );
+        expect(
+            readMathml(
+                el(
+                    `<math xmlns="${MATHML_NAMESPACE}"><mi mathvariant="normal">a</mi><mo>-</mo><mi mathvariant="normal">b</mi></math>`,
+                ),
+            ).row,
+        ).toStrictEqual(minusBetween(upright('a'), upright('b')));
+        expect(readLatex('\\operatorname{a-\\not-b}')).toStrictEqual([
+            upright('a'),
+            { kind: 'operator', text: '\u2212' },
+            { kind: 'operator', text: '\u2212\u0338' },
+            upright('b'),
+        ]);
+    });
+
     test('is written U+2212 in MathML, OMML and text, and - in LaTeX', () => {
         expect(writeMathml(minus)).toContain('<mo>\u2212</mo>');
         expect(writeOmml(minus)).toContain('a\u2212b');

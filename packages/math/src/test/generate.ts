@@ -29,7 +29,8 @@ export const pick = <T>(random: Random, items: readonly T[]): T => items[Math.fl
 
 // Marked tokens and slashed relations too, as readers compose them: x\u0338 stays, = and U+0338 compose to ≠.
 const LETTERS = ['x', 'y', 'Z', 'α', 'Ω', 'Γ', 'ж', 'ℏ', 'h', 'R', 'x\u0338', 'Γ\u0338'];
-const WORDS = ['sin', 'dx', 'lim', 'если'];
+// A hyphen between the letters of an upright word is a hyphen, as \operatorname draws it.
+const WORDS = ['sin', 'dx', 'lim', 'если', 'arg-max'];
 const NUMBERS = ['0', '42', '3.14'];
 // `&` stays out of an equations cell, where it is the cell break.
 const OPERATORS = [

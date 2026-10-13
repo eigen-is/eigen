@@ -671,6 +671,27 @@ describe('writeLatex', () => {
         [[{ kind: 'identifier', text: 'x\u0338\u20D2' }], 'x\u0338\u20D2'],
         [[{ kind: 'identifier', text: 'x\u0338\u0335' }], 'x\u0338\u0335'],
         [[{ kind: 'operator', text: '≠\u20D2' }], '\\ne\u20D2'],
+        // In \operatorname a - between letters is a hyphen, as amsmath draws it, so a minus there is written as itself.
+        [[{ kind: 'identifier', text: 'arg-max' }], '{\\operatorname{arg-max}}'],
+        [
+            [{ kind: 'function', name: [{ kind: 'identifier', text: 'arg-max' }], body: x }],
+            '\\operatorname{arg-max}{x}',
+        ],
+        [
+            [
+                {
+                    kind: 'function',
+                    name: [
+                        { kind: 'identifier', text: 'arg' },
+                        { kind: 'operator', text: '\u2212' },
+                        { kind: 'identifier', text: 'max' },
+                    ],
+                    body: x,
+                },
+            ],
+            '\\operatorname{arg\u2212max}{x}',
+        ],
+        [[{ kind: 'scripts', base: [{ kind: 'identifier', text: 'a-b' }], sup: x }], '{\\operatorname{a-b}}^{x}'],
         // An accent outside the accent table is \overset of its mark, which reads back as the accent.
         [[{ kind: 'accent', accent: '\u0311', body: x }], '\\overset{\u0311}{x}'],
         [

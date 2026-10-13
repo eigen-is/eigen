@@ -56,8 +56,9 @@ const TEXT_COMMANDS: ReadonlyMap<string, string> = new Map(
 
 type Token = { text: string; at: number; command: boolean; space: boolean };
 
-// `letters` undefined is math's default: italic, but upright for a capital Greek letter, as TeX draws it.
-type Style = { letters: MathVariant | undefined; others: MathVariant; color: string | undefined };
+// `letters` undefined is math's default: italic, but upright for a capital Greek letter, as TeX draws it. `hyphen` is
+// \operatorname's: a - between letters there is a hyphen, as amsmath draws it, and the minus sign elsewhere.
+type Style = { letters: MathVariant | undefined; others: MathVariant; color: string | undefined; hyphen?: true };
 
 // What an atom adds to its row. Characters wait in the row's builder, so tokens come out canonical across atoms.
 type Piece = { chars: string; style: Style } | { text: string; color: string | undefined } | { node: MathNode };
@@ -168,9 +169,10 @@ class LatexReader {
         const row = new RowBuilder(this.#budget, depth, slot);
         for (const piece of pieces) {
             if ('node' in piece) row.node(piece.node);
-            else if ('chars' in piece)
-                row.chars(piece.chars, piece.style.letters, piece.style.others, piece.style.color);
-            else row.text(piece.text, piece.color);
+            else if ('chars' in piece) {
+                const { letters, others, color, hyphen } = piece.style;
+                row.chars(hyphen ? piece.chars : piece.chars.replaceAll('-', MINUS), letters, others, color);
+            } else row.text(piece.text, piece.color);
         }
         return row.done();
     }
@@ -478,7 +480,7 @@ class LatexReader {
         style: Style,
         depth: number,
     ): void {
-        const upright: Style = { ...style, letters: 'normal', others: 'normal' };
+        const upright: Style = { ...style, letters: 'normal', others: 'normal', hyphen: true };
         // \operatorname* puts its scripts under and over, as \lim does; \limits and \nolimits choose.
         const star = command.kind === 'operatorname' && this.#isChar(this.#pos, '*');
         if (star) this.#pos++;
@@ -918,7 +920,11 @@ const colored = (color: string | undefined, latex: string) => {
 };
 
 function writeToken(node: MathToken, upright: boolean): string {
-    const text = joined(clusters(node.text).map(writeChar));
+    // In \operatorname a - between letters is a hyphen, so the minus sign is written as itself there.
+    const text = upright && node.text === MINUS ? MINUS : joined(clusters(node.text).map(writeChar));
+    // A word with a hyphen keeps it only in \operatorname, braced so it takes no body.
+    if (!upright && node.kind === 'identifier' && node.text.includes('-'))
+        return colored(node.color, `{\\operatorname{${text}}}`);
     const font = fontOf(node, upright);
     return colored(node.color, font ? `\\${FONT_NAMES.get(font)}{${text}}` : text);
 }

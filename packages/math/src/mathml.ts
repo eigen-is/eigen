@@ -5,6 +5,7 @@ import {
     FENCES,
     LARGE_OPERATORS,
     LINES,
+    MINUS,
     naryLimits,
     SPACES,
     toAlphanumeric,
@@ -176,7 +177,9 @@ function readToken(row: RowBuilder, element: MathXmlElement): void {
     const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
     // MathML draws a lone letter in an mi italic and anything else upright.
     const lone = element.local === 'mi' && isCluster(text);
-    row.chars(text, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
+    // A hyphen-minus in an mo is the minus sign; in an mi it may join a word, as in arg-max.
+    const chars = element.local === 'mo' ? text.replaceAll('-', MINUS) : text;
+    row.chars(chars, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
 }
 
 function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {

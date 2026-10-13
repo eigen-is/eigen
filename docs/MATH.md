@@ -17,8 +17,8 @@ The sections cover the canonical form, the marks the MathML writer adds so its r
 Word splits a run wherever an edit happened, so `x+1` may be three runs or one. The readers feed characters with their style into `RowBuilder` (`src/tree.ts`), which cuts tokens only when the next node arrives:
 
 - A number is a maximal run of digits with at most one decimal point between digits.
-- An identifier is one letter (`\p{L}`), italic or styled, or a maximal run of upright letters (`sin`, Word's `sty=p`).
-- An operator is one character. The minus sign is U+2212: every reader folds an ASCII hyphen-minus outside text to it, since Chrome draws a `-` in an `mo` as a hyphen. MathML, OMML and the text form write U+2212, and LaTeX writes `-`.
+- An identifier is one letter (`\p{L}`), italic or styled, or a maximal run of upright letters (`sin`, Word's `sty=p`). A hyphen-minus between two letters of such a run stays a hyphen in the word (`arg-max`), as amsmath's `\operatorname`, KaTeX and MathJax draw it.
+- An operator is one character. The minus sign is U+2212: every reader folds any other ASCII hyphen-minus outside text to it, since Chrome draws a `-` in an `mo` as a hyphen. The LaTeX reader keeps a hyphen only inside `\operatorname` and the MathML reader never in an `mo`, since TeX and MathML draw a minus sign there. MathML, OMML and the text form write U+2212, and LaTeX writes `-`.
 - `variant` is left out when it is the default: italic for one letter, but upright for a capital Greek letter as TeX and Word draw it, and upright for a word, a number and an operator. So an upright Γ beside other upright letters is part of a word: `\Gamma\Delta` reads as `\mathrm{\Gamma\Delta}` does. `color` is `#RRGGBB`, left out for Word's `auto`; an explicit `#000000` stays.
 - A Unicode Mathematical Alphanumeric (𝐯, ℝ, ℎ) folds to its letter and a variant.
 
@@ -103,7 +103,8 @@ The parser follows TeX where a user would notice. `%` starts a comment and `~` i
 | a brace with a label | `\overbrace{x}^{n}`, as Word puts a limit over a group character |
 | an upright word or letter | `\mathrm{sin}`, `\mathrm{d}` |
 | an italic capital Greek letter | `\mathit{\Gamma}`; an upright one is `\Gamma`, as TeX draws it |
-| a function name the table lacks | `\operatorname{…}`, its letters written against the upright font inside |
+| a function name the table lacks | `\operatorname{…}`, its letters written against the upright font inside, and a minus sign as U+2212, since a `-` there is a hyphen |
+| a word with a hyphen | `{\operatorname{arg-max}}`, the only place a `-` is a hyphen, braced so it takes no body |
 | n-ary limits | `\limits` or `\nolimits` only where Word's default (integrals beside, the rest under and over) differs |
 | text | `\text{…}` with `% # & ~ $ { } _ ^ \` escaped, a no-break space as `~` and a run of spaces as control spaces, since TeX reads a run as one |
 | an accent outside the accent table, such as U+0311 | `\overset{̑}{x}`, its bare mark, which reads back as the accent; MathJax draws it, KaTeX rejects it |
