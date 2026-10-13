@@ -1,6 +1,7 @@
 // In millimetres because paper is defined in them; pagePx and pageTwips return this shape in their unit. Orientation is width > height.
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
-export type PageSetup = { width: number; height: number; margin: PageMargin };
+// differentFirstPage: page 1 takes the headerFirst and footerFirst bands instead of header and footer.
+export type PageSetup = { width: number; height: number; margin: PageMargin; differentFirstPage: boolean };
 
 const A4 = { name: 'A4', width: 210, height: 297 } as const;
 
@@ -25,6 +26,7 @@ export const DEFAULT_PAGE_SETUP: PageSetup = {
     width: A4.width,
     height: A4.height,
     margin: { top: 20, right: 20, bottom: 20, left: 20 },
+    differentFirstPage: false,
 };
 
 // The paper a page is cut from, either way round. Within 1 mm, because Word stores the page in twips.
@@ -47,7 +49,7 @@ const MAX_PAPER_MM = 558.8;
 // The least text column and text height the margins leave.
 export const MIN_TEXT_MM = 25;
 
-export function pageRecord({ width, height, margin }: PageSetup) {
+export function pageRecord({ width, height, margin, differentFirstPage }: PageSetup) {
     return {
         width,
         height,
@@ -55,10 +57,11 @@ export function pageRecord({ width, height, margin }: PageSetup) {
         marginRight: margin.right,
         marginBottom: margin.bottom,
         marginLeft: margin.left,
+        differentFirstPage,
     };
 }
 
-type PageKey = keyof ReturnType<typeof pageRecord>;
+type PageKey = Exclude<keyof ReturnType<typeof pageRecord>, 'differentFirstPage'>;
 
 const DEFAULT_PAGE_RECORD = pageRecord(DEFAULT_PAGE_SETUP);
 
@@ -82,11 +85,18 @@ export function readPageSetup(record: Record<string, unknown>): PageSetup {
     const height = paper('height');
     const [left, right] = fit(width, 'marginLeft', 'marginRight');
     const [top, bottom] = fit(height, 'marginTop', 'marginBottom');
-    return { width, height, margin: { top, right, bottom, left } };
+    return {
+        width,
+        height,
+        margin: { top, right, bottom, left },
+        differentFirstPage: record.differentFirstPage === true,
+    };
 }
 
-function convert({ width, height, margin }: PageSetup, fromMm: (mm: number) => number): PageSetup {
+function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
+    const { width, height, margin } = setup;
     return {
+        ...setup,
         width: fromMm(width),
         height: fromMm(height),
         margin: {
