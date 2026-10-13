@@ -250,7 +250,8 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
     const [setContent, contentBox] = useElementSize(contentRef);
     const [scale, setScale] = useState(1);
 
-    const page = data?.mode === 'eigendoc' && data.page ? docPage(data.page) : data ? INTRINSIC_PAGE[data.mode] : null;
+    const docSetup = data?.mode === 'eigendoc' ? data.page : undefined;
+    const page = docSetup ? docPage(docSetup) : data && INTRINSIC_PAGE[data.mode];
     const pageWidthPx = page?.widthPx;
 
     useEffect(() => {

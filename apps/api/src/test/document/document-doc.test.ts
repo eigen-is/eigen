@@ -60,13 +60,15 @@ describe('document/doc', () => {
             type: 'doc',
             content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR' }] }],
         });
-        const header = prosemirrorJSONToYDoc(
-            schema,
-            { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'LETTERHEAD' }] }] },
-            'header',
-        );
-        Y.applyUpdate(doc, Y.encodeStateAsUpdate(header));
-        header.destroy();
+        for (const root of BAND_ROOTS) {
+            const band = prosemirrorJSONToYDoc(
+                schema,
+                { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'LETTERHEAD' }] }] },
+                root,
+            );
+            Y.applyUpdate(doc, Y.encodeStateAsUpdate(band));
+            band.destroy();
+        }
         doc.getMap(PAGE_ROOT).set('marginLeft', 50);
         doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
 

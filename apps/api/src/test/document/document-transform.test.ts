@@ -1427,6 +1427,12 @@ describe('document transform (docx import)', () => {
         const { update, page, images } = importDocUpdate(response);
         expect(response.ok && response.warnings).toEqual([]);
 
+        // The page travels beside the update, never in it: commitEigendocImport sets its keys on the live doc.
+        const updateOnly = new Y.Doc();
+        Y.applyUpdate(updateOnly, new Uint8Array(update));
+        expect(updateOnly.share.has(PAGE_ROOT)).toBe(false);
+        updateOnly.destroy();
+
         const doc = new Y.Doc();
         commitEigendocImport(doc, { update: new Uint8Array(update), page });
         const committed = readEigendocFromDoc(doc);

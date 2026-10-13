@@ -108,13 +108,15 @@ describe('the page', () => {
         expect(warnings).toEqual([{ code: 'section-pages-dropped', count: 1 }]);
     });
 
-    test('a body without a section, or a section without a size or margins, takes the default', async () => {
-        expect((await importDocxBody(paragraph(run('One')))).page).toEqual(DEFAULT_PAGE_SETUP);
-        expect((await importDocxBody(`${paragraph(run('One'))}<w:sectPr/>`)).page).toEqual(DEFAULT_PAGE_SETUP);
+    test("a size a section leaves out is the default A4, a margin Word's 1 in", async () => {
+        const WORD_MARGIN = { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 };
+        const WORD_PAGE = { ...DEFAULT_PAGE_SETUP, margin: WORD_MARGIN };
+        expect((await importDocxBody(paragraph(run('One')))).page).toEqual(WORD_PAGE);
+        expect((await importDocxBody(`${paragraph(run('One'))}<w:sectPr/>`)).page).toEqual(WORD_PAGE);
         const { page: read } = await importDocxBody(
             `${paragraph(run('One'))}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`,
         );
-        expect(read).toEqual({ ...DEFAULT_PAGE_SETUP, width: 215.9, height: 279.4 });
+        expect(read).toEqual({ ...WORD_PAGE, width: 215.9, height: 279.4 });
     });
 
     test('a hostile size and negative margins clamp as a stored page does', async () => {
@@ -136,7 +138,7 @@ describe('the page', () => {
         expect(read.width - read.margin.left - read.margin.right).toBeCloseTo(25, 6);
     });
 
-    // 1,000 px of picture: the editor's column on A4 with 2 cm margins is 642 px, on a page with 5 cm margins 415.
+    // 1,000 px of picture: the column on A4 with Word's 1 in margins is 601 px, on a page with 5 cm margins 415.
     test("an image imports no wider than the page's text column", async () => {
         const wide = paragraph(GOLDEN_DOCX_IMAGE_RUN.replaceAll('381000', '9525000'));
         const widths = async (body: string) =>
@@ -145,7 +147,7 @@ describe('the page', () => {
         const px = pagePx(
             readPageSetup({ width: mm(11906), height: mm(16838), marginLeft: mm(2835), marginRight: mm(2835) }),
         );
-        expect(await widths(wide)).toEqual([642]);
+        expect(await widths(wide)).toEqual([601]);
         expect(await widths(`${wide}${narrow}`)).toEqual([Math.floor(px.width - px.margin.left - px.margin.right)]);
         expect(await widths(`${wide}${narrow}`)).toEqual([415]);
     });

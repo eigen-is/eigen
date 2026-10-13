@@ -100,7 +100,7 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 // job kind decides which the Worker returns and which limits it runs under. The runner
 // validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
 // these narrow instead of re-checking.
-export async function runTransformToText(
+export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
     job: CollabPreviewJob,

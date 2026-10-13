@@ -24,8 +24,8 @@ import { build, deflated, stored } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
 
-// The default page's text column in whole px: no body here has a section of its own.
-const COLUMN_PX = 642;
+// No body here has a section, so Word's: A4 less its 1 in margins, a 601 px text column.
+const COLUMN_PX = 601;
 
 const run = (text: string, rPr = '') => `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;

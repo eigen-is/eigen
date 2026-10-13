@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { type PageSetup, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import { type PageSetup, pagePx, pageTwips, readPageSetup } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
@@ -58,7 +58,7 @@ export type Reader = {
     bodySize: number;
     bodySizeCs: number;
     baseColor: string | undefined;
-    // The doc holds one page, the body's final section's; Word's column places anchors, the page's caps widths.
+    // The doc holds one page, the body's final section's; its text column places anchors and caps widths.
     page: PageSetup;
     columnTwips: number;
     columnPx: number;
@@ -85,9 +85,9 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
-    const margin = wChild(sectPr, 'pgMar');
     const page = sectionPage(sectPr);
     const px = pagePx(page);
+    const twips = pageTwips(page);
     return {
         pkg,
         theme,
@@ -105,10 +105,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color?.hex,
         page,
-        columnTwips:
-            (twipsOf(w(wChild(sectPr, 'pgSz'), 'w')) ?? 11906) -
-            (twipsOf(w(margin, 'left')) ?? 1440) -
-            (twipsOf(w(margin, 'right')) ?? 1440),
+        columnTwips: twips.width - twips.margin.left - twips.margin.right,
         columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
         pagesDropped: descendants(pkg.document.root, W_NS, 'sectPr').filter(
             (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), page),
@@ -117,8 +114,11 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     };
 }
 
-// Through the one reader of a stored page, so a file's page is clamped as a peer's is, and what a section leaves out is
-// the default. w:orient is not read: Word draws the page w by h whatever it says.
+// Word draws a margin a section leaves out at 1 in; a size it leaves out is the default A4.
+const WORD_MARGIN_MM = 25.4;
+
+// Through the one reader of a stored page, so a file's page is clamped as a peer's is. w:orient is not read: Word draws
+// the page w by h whatever it says.
 function sectionPage(sectPr: XmlElement | undefined): PageSetup {
     const size = wChild(sectPr, 'pgSz');
     const margin = wChild(sectPr, 'pgMar');
@@ -129,10 +129,10 @@ function sectionPage(sectPr: XmlElement | undefined): PageSetup {
     return readPageSetup({
         width: mm(size, 'w'),
         height: mm(size, 'h'),
-        marginTop: mm(margin, 'top'),
-        marginRight: mm(margin, 'right'),
-        marginBottom: mm(margin, 'bottom'),
-        marginLeft: mm(margin, 'left'),
+        marginTop: mm(margin, 'top') ?? WORD_MARGIN_MM,
+        marginRight: mm(margin, 'right') ?? WORD_MARGIN_MM,
+        marginBottom: mm(margin, 'bottom') ?? WORD_MARGIN_MM,
+        marginLeft: mm(margin, 'left') ?? WORD_MARGIN_MM,
     });
 }
 

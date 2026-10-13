@@ -111,7 +111,6 @@ export async function eigendocToDocx(
     const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
     const fonts = embeddedFonts(pkg.faces);
-    const section = `<w:sectPr><w:pgSz w:w="${page.width}" w:h="${page.height}"${page.width > page.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${page.margin.top}" w:right="${page.margin.right}" w:bottom="${page.margin.bottom}" w:left="${page.margin.left}" w:header="${Math.min(HEADER_DISTANCE, page.margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, page.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
 
     const parts: [path: string, xml: string, contentType?: string][] = [
         ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
@@ -122,7 +121,7 @@ export async function eigendocToDocx(
         ],
         [
             'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${section}</w:body></w:document>`,
+            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
@@ -230,6 +229,13 @@ type Context = {
 
 // Word's default 1.25 cm from the page edge, inside a smaller margin.
 const HEADER_DISTANCE = 709;
+
+// The page in twips.
+function sectionXml({ width, height, margin }: PageSetup): string {
+    const orient = width > height ? ' w:orient="landscape"' : '';
+    const bands = `w:header="${Math.min(HEADER_DISTANCE, margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, margin.bottom)}"`;
+    return `<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/></w:sectPr>`;
+}
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
 const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
