@@ -360,6 +360,22 @@ describe('doc export — caps', () => {
         );
     });
 
+    // The schema's renderHTML reads the stored size, so a forged one draws nothing.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws a font size in pt, and a forged one not at all',
+        async (format) => {
+            const sized = (text: string, fontSize: unknown) => ({
+                type: 'text',
+                text,
+                marks: [{ type: 'textStyle', attrs: { fontSize } }],
+            });
+            const html = await exportBody(format, [
+                { type: 'paragraph', content: [sized('Big', 14), sized(' forged', '1pt; position: fixed')] },
+            ]);
+            expect(html).toContain('<p><span style="font-size: 14pt">Big</span><span> forged</span></p>');
+        },
+    );
+
     test('html draws small caps in CSS over the letters as typed', async () => {
         expect(await exportBody('html', [{ type: 'paragraph', content: [caps(' Name', 'small')] }])).toContain(
             '<p><span style="font-variant-caps: small-caps"> Name</span></p>',

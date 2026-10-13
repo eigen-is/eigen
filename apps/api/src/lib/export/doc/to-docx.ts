@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName, readFontSize } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_PAGE_SETUP,
     MIN_TABLE_COLUMN_PX,
@@ -339,14 +339,19 @@ function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' |
     return face;
 }
 
-// Word's auto line scales with the tallest face, CSS's doesn't: a paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
+// Word's auto line scales with the tallest face's own line height, CSS's unitless one with the largest size alone: a
+// paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
 function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
-    const mark = fontLineHeight(markFace.family) * markFace.size;
-    let tallest = mark;
-    for (const face of faces) tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
-    return tallest === mark ? undefined : Math.round((styleSpacing(style, 'line') * mark) / tallest);
+    let tallest = fontLineHeight(markFace.family) * markFace.size;
+    let largest = markFace.size;
+    for (const face of faces) {
+        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
+        largest = Math.max(largest, face.size);
+    }
+    const css = fontLineHeight(markFace.family) * largest;
+    return tallest === css ? undefined : Math.round((styleSpacing(style, 'line') * css) / tallest);
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -1329,13 +1334,16 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ],
     [
         'textStyle',
-        ({ color, fontFamily, caps }) => {
+        ({ color, fontFamily, fontSize, caps }) => {
             const name = typeof fontFamily === 'string' ? getFontName(fontFamily) : undefined;
+            const size = readFontSize(fontSize);
             return {
                 color: colorOf(color),
                 font: name && EIGEN_FONT_NAMES.includes(name) ? name : undefined,
                 caps: caps === 'all' || undefined,
                 smallCaps: caps === 'small' || undefined,
+                // Only a size of its own, or it would unset Small's before it.
+                ...(size !== undefined && { size: halfPoints(size) }),
             };
         },
     ],

@@ -651,6 +651,18 @@ describe('docx writer — paragraphs and headings', () => {
             '',
         ]);
     });
+
+    // A unitless CSS line-height scales with each span's size, as Word's auto line does with the tallest face: only
+    // the family's own line height needs the rescale.
+    test('a run in a larger size keeps the line, in a family the line of that family', async () => {
+        const big = { type: 'textStyle', attrs: { fontSize: 24 } };
+        const bigSerif = { type: 'textStyle', attrs: { fontSize: 24, fontFamily: 'Source Serif 4' } };
+        const body = await bodyOf(doc(p(text('a'), text('b', big)), p(text('c', bigSerif))));
+        expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
+            '',
+            '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
+        ]);
+    });
 });
 
 describe('docx writer — marks', () => {
@@ -668,6 +680,29 @@ describe('docx writer — marks', () => {
 
     test('small is direct formatting from the CSS: 9 pt, a little spaced', async () => {
         expect(await runProps({ type: 'small' })).toEqual([
+            ['spacing', '2'],
+            ['sz', '18'],
+            ['szCs', '18'],
+        ]);
+    });
+
+    test("a font size is w:sz and w:szCs in half points, landing in the editor's range", async () => {
+        const sized = (fontSize: unknown) => runProps({ type: 'textStyle', attrs: { fontSize } });
+        expect(await sized(10.5)).toEqual([
+            ['sz', '21'],
+            ['szCs', '21'],
+        ]);
+        expect(await sized(1e6)).toEqual([
+            ['sz', '800'],
+            ['szCs', '800'],
+        ]);
+        expect(await sized('12pt')).toEqual([]);
+    });
+
+    // Small comes before textStyle in the marks; a style without a size leaves Small's.
+    test("a color beside Small keeps Small's size", async () => {
+        expect(await runProps({ type: 'small' }, { type: 'textStyle', attrs: { color: '#c00000' } })).toEqual([
+            ['color', 'C00000'],
             ['spacing', '2'],
             ['sz', '18'],
             ['szCs', '18'],
