@@ -145,6 +145,34 @@ describe('a DrawingML colour', () => {
     });
 });
 
+describe('the placeholder colour', () => {
+    const referenced = (phClr: string) => ({ ...theme, phClr });
+
+    test("phClr is the colour the theme carries, the entry's own transforms applied on top", () => {
+        expect(color('<a:schemeClr val="phClr"/>', A_NS, referenced('#4472c4'))).toBe('#4472c4');
+        expect(
+            color('<a:schemeClr val="phClr"><a:shade val="50000"/></a:schemeClr>', A_NS, referenced('#ffffff')),
+        ).toBe(color('<a:srgbClr val="FFFFFF"><a:shade val="50000"/></a:srgbClr>'));
+        expect(
+            color('<a:schemeClr val="phClr"><a:lumMod val="50000"/></a:schemeClr>', A_NS, referenced('#808080')),
+        ).toBe('#404040');
+    });
+
+    test("the placeholder's alpha is kept unless the entry sets its own", () => {
+        expect(color('<a:schemeClr val="phClr"/>', A_NS, referenced('#4472c480'))).toBe('#4472c480');
+        expect(
+            color('<a:schemeClr val="phClr"><a:alpha val="25000"/></a:schemeClr>', A_NS, referenced('#4472c480')),
+        ).toBe('#4472c440');
+    });
+
+    test('phClr names no slot: the map never reaches it, and a placeholder that is no colour gives nothing', () => {
+        const mapped = { ...theme, map: new Map([...IDENTITY_COLOR_MAP, ['phClr', 'accent1']]) };
+        expect(color('<a:schemeClr val="phClr"/>', A_NS, mapped)).toBeUndefined();
+        expect(color('<a:schemeClr val="phClr"/>', A_NS, referenced('red'))).toBeUndefined();
+        expect(color('<a:schemeClr val="accent2"/>', A_NS, referenced('#000000'))).toBe('#ed7d31');
+    });
+});
+
 describe('a colour map', () => {
     test("reads a clrMap's slots over the identity, ignoring what names no slot", () => {
         const [clrMap] = xmlElements(read('<a:clrMap bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="nope"/>'));
