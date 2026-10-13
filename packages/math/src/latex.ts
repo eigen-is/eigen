@@ -1,6 +1,6 @@
 import { MathError } from './error';
-import { LATEX_COLORS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
-import { ACCENTS, MINUS, naryLimits, PRIME, SPACES } from './notation';
+import { LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
+import { ACCENTS, COLOR_NAMES, MINUS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
     clusters,
@@ -345,7 +345,7 @@ class LatexReader {
     #color(): string {
         const at = this.#offset(this.#pos) + 1;
         const name = this.#raw();
-        const color = hexColor(name) ?? LATEX_COLORS.get(name);
+        const color = hexColor(name) ?? COLOR_NAMES.get(name);
         if (!color) throw new MathError(`Unknown colour ${name}`, at);
         return color;
     }

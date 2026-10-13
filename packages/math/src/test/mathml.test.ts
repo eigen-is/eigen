@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
+import { readLatex } from '../latex';
 import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../mathml';
-import { MATH_LIMITS, type MathNode, type MathRow } from '../tree';
+import { MATH_LIMITS, type MathEnclosure, type MathNode, type MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
-import { el, letter, viaMathml, viaOmml } from './parse';
+import { FOREIGN_MATHML } from './fixtures/foreign-mathml';
+import { el, htmlMath, letter, viaLatex, viaMathml, viaOmml } from './parse';
 
 const math = (content: string) => el(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
@@ -85,11 +87,26 @@ describe('readMathml', () => {
         expect(readMathml(math('<mstyle><!--c--><mi>x<?pi y?></mi></mstyle>')).row).toEqual(x);
     });
 
-    test('a colour is #RRGGBB or nothing; an unknown variant is none', () => {
-        expect(readMathml(math('<mi mathcolor="#00b050">x</mi>')).row).toEqual([
-            { kind: 'identifier', text: 'x', color: '#00B050' },
-        ]);
-        for (const value of ['red', 'javascript:alert(1)', '#F00', 'url(#a)', '#FF00001', ' #FF0000', '#GG0000', '']) {
+    test('a colour is #RRGGBB, #RGB, a CSS name or nothing; an unknown variant is none', () => {
+        for (const [value, color] of [
+            ['#00b050', '#00B050'],
+            ['#f0A', '#FF00AA'],
+            ['red', '#FF0000'],
+            ['Navy', '#000080'],
+        ]) {
+            expect(readMathml(math(`<mi mathcolor="${value}">x</mi>`)).row).toEqual([
+                { kind: 'identifier', text: 'x', color },
+            ]);
+        }
+        for (const value of [
+            'javascript:alert(1)',
+            'rebeccapurple',
+            'url(#a)',
+            '#FF00001',
+            ' #FF0000',
+            '#GG0000',
+            '',
+        ]) {
             expect(readMathml(math(`<mi mathcolor="${value}">x</mi>`)).row).toEqual(x);
             expect(readMathml(math(`<mtext mathcolor="${value}">if</mtext>`)).row).toEqual([
                 { kind: 'text', text: 'if' },
@@ -178,6 +195,232 @@ describe('readMathml', () => {
                 limit: letter('b'),
             },
         ]);
+    });
+});
+
+const html = (content: string) => htmlMath(`<p><math>${content}</math></p>`);
+const fenced = (open: string, close: string, separator: string, parts: MathRow[]): MathRow => [
+    { kind: 'fenced', open, close, separator, parts },
+];
+
+describe('foreign MathML', () => {
+    test.each(FOREIGN_MATHML)('$source: $expected', ({ mathml, latex, expected }) => {
+        const read = readMathml(el(mathml));
+        expect(read).toStrictEqual({ row: readLatex(expected), latex });
+        expect(readMathml(htmlMath(`<p>${mathml}</p>`))).toStrictEqual(read);
+        expect(canonicalIssue(read.row)).toBeUndefined();
+        expect(viaMathml(read.row)).toStrictEqual(read.row);
+        expect(viaOmml(read.row)).toStrictEqual(read.row);
+        expect(viaLatex(read.row)).toStrictEqual(read.row);
+    });
+
+    test('math in an HTML DOM, prefixed or in no namespace, reads as MathML', () => {
+        expect(readMathml(html('<mi>x</mi>')).row).toEqual(x);
+        expect(readMathml(htmlMath('<p><mml:math><mml:mi>x</mml:mi></mml:math></p>')).row).toEqual(x);
+        expect(readMathml(el('<math><mi>x</mi></math>')).row).toEqual(x);
+        expect(readMathml(el(`<mml:math xmlns:mml="${MATHML_NAMESPACE}"><mml:mi>x</mml:mi></mml:math>`)).row).toEqual(
+            x,
+        );
+        // A browser's HTML parser keeps the prefix in the local name.
+        const xhtml = 'http://www.w3.org/1999/xhtml';
+        const prefixed = (local: string, children: (string | object)[]) => ({
+            ns: xhtml,
+            local,
+            attributes: {},
+            children,
+        });
+        expect(readMathml(prefixed('mml:math', [prefixed('mml:mi', ['x'])])).row).toEqual(x);
+        // Another namespace's element still reads as its content.
+        const svg = { ns: 'http://www.w3.org/2000/svg', local: 'mi', attributes: {}, children: ['x'] };
+        expect(readMathml(element('math', [element('mn', ['1']), svg])).row).toEqual([{ kind: 'number', text: '1' }]);
+    });
+
+    test('entities arrive decoded through the DOM', () => {
+        expect(readMathml(html('<mi>&lambda;</mi><mo>&#x2212;</mo><mi>&#120582;</mi>')).row).toEqual([
+            { kind: 'identifier', text: 'λ' },
+            { kind: 'operator', text: '−' },
+            { kind: 'identifier', text: 'λ' },
+        ]);
+    });
+
+    test('mfenced is a fenced row: ( ) and , by default, one separator for the tree', () => {
+        const [a, b, c] = [letter('a'), letter('b'), letter('c')];
+        expect(readMathml(math('<mfenced><mi>a</mi><mi>b</mi></mfenced>')).row).toEqual(fenced('(', ')', ',', [a, b]));
+        expect(readMathml(math('<mfenced open="[" close="" separators="; ,"><mi>a</mi></mfenced>')).row).toEqual(
+            fenced('[', '', '', [a]),
+        );
+        expect(readMathml(math('<mfenced separators=""><mi>a</mi><mi>b</mi></mfenced>')).row).toEqual(
+            fenced('(', ')', '', [[...a, ...b]]),
+        );
+        expect(
+            readMathml(math('<mfenced separators=";,"><mi>a</mi><mrow><mi>b</mi></mrow><mi>c</mi></mfenced>')).row,
+        ).toEqual(fenced('(', ')', ';', [a, b, c]));
+        expect(readMathml(math('<mfenced/>')).row).toEqual(fenced('(', ')', '', [[]]));
+    });
+
+    test('mstyle and every element pass mathvariant and mathcolor down; displaystyle and scriptlevel do nothing', () => {
+        const sample =
+            '<mstyle mathvariant="bold" mathcolor="red" displaystyle="true" scriptlevel="1"><mi>x</mi>' +
+            '<mfrac><mn>1</mn><mi mathvariant="normal" mathcolor="#00f">y</mi></mfrac><mtext>if</mtext></mstyle>';
+        expect(readMathml(math(sample)).row).toEqual([
+            { kind: 'identifier', text: 'x', variant: 'bold', color: '#FF0000' },
+            {
+                kind: 'fraction',
+                numerator: [{ kind: 'number', text: '1', variant: 'bold', color: '#FF0000' }],
+                denominator: [{ kind: 'identifier', text: 'y', variant: 'normal', color: '#0000FF' }],
+                line: 'bar',
+            },
+            { kind: 'text', text: 'if', color: '#FF0000' },
+        ]);
+        expect(readMathml(math('<mrow mathcolor="nope"><mi>x</mi></mrow>')).row).toEqual(x);
+    });
+
+    test('maction reads its selected child, the first by default', () => {
+        const action = (selection: string) => `<maction actiontype="toggle"${selection}><mi>a</mi><mi>b</mi></maction>`;
+        expect(readMathml(math(action(' selection="2"'))).row).toEqual(letter('b'));
+        for (const selection of ['', ' selection="3"', ' selection="x"']) {
+            expect(readMathml(math(action(selection))).row).toEqual(letter('a'));
+        }
+    });
+
+    test('a zero linethickness is no line, in any unit', () => {
+        for (const thickness of ['0', '0px', '0em', '0pt']) {
+            expect(readMathml(math(`<mfrac linethickness="${thickness}"><mi>a</mi><mi>b</mi></mfrac>`)).row).toEqual([
+                { kind: 'fraction', numerator: letter('a'), denominator: letter('b'), line: 'none' },
+            ]);
+        }
+        expect(readMathml(math('<mfrac linethickness="1px"><mi>a</mi><mi>b</mi></mfrac>')).row[0]).toMatchObject({
+            line: 'bar',
+        });
+    });
+
+    test('ms is text without quotes; mpadded and mphantom read as their content', () => {
+        expect(readMathml(math('<ms lquote="«">a b</ms>')).row).toEqual([{ kind: 'text', text: 'a b' }]);
+        expect(
+            readMathml(math('<mpadded width="+1em"><mi>x</mi></mpadded><mphantom><mn>1</mn></mphantom>')).row,
+        ).toEqual([...x, { kind: 'number', text: '1' }]);
+    });
+
+    test.each<[string, MathEnclosure[]]>([
+        ['box', ['top', 'bottom', 'left', 'right']],
+        ['roundedbox', ['top', 'bottom', 'left', 'right']],
+        ['circle', ['top', 'bottom', 'left', 'right']],
+        ['actuarial', ['top', 'right']],
+        ['madruwb', ['bottom', 'right']],
+        ['longdiv', ['top', 'left']],
+        ['updiagonalstrike box', ['top', 'bottom', 'left', 'right', 'updiagonalstrike']],
+        ['radical', []],
+    ])('menclose notation %p draws the lines nearest it', (notation, lines) => {
+        expect(readMathml(math(`<menclose notation="${notation}"><mi>x</mi></menclose>`)).row).toEqual([
+            { kind: 'enclose', notation: lines, body: x },
+        ]);
+    });
+
+    test('a space is the one nearest its em width', () => {
+        const spaces =
+            '<mspace width="0.167em"/><mspace width="0.222em"/><mspace width="0.278em"/><mspace width="0pt"/>';
+        expect(readMathml(math(spaces)).row).toEqual([
+            { kind: 'space', width: 'thin' },
+            { kind: 'space', width: 'medium' },
+            { kind: 'space', width: 'thick' },
+        ]);
+    });
+
+    test('a scripted large operator takes the next element as its body, unless that is an operator or space', () => {
+        const sum = '<munderover><mo>∑</mo><mi>i</mi><mi>n</mi></munderover>';
+        const nary = (body: MathRow): MathNode => ({
+            kind: 'nary',
+            operator: '∑',
+            limits: 'under',
+            sub: letter('i'),
+            sup: letter('n'),
+            body,
+        });
+        const plus: MathNode = { kind: 'operator', text: '+' };
+        expect(readMathml(math(`<mi>y</mi><mo>=</mo>${sum}<mi>x</mi><mo>+</mo><mn>1</mn>`)).row).toEqual([
+            ...letter('y'),
+            { kind: 'operator', text: '=' },
+            nary(x),
+            plus,
+            { kind: 'number', text: '1' },
+        ]);
+        // Temml wraps the operator in an mrow of its own.
+        expect(readMathml(math(`<mrow><mrow>${sum}</mrow><mrow><mi>x</mi><mo>+</mo></mrow></mrow>`)).row).toEqual([
+            nary([...x, plus]),
+        ]);
+        expect(readMathml(math(`${sum}<mo>+</mo><mi>x</mi>`)).row).toEqual([nary([]), plus, ...x]);
+        expect(readMathml(math(`${sum}<mrow><mo>(</mo><mi>x</mi></mrow>`)).row).toEqual([
+            nary([]),
+            { kind: 'operator', text: '(' },
+            ...x,
+        ]);
+        expect(readMathml(math(`<mfrac>${sum}<mn>2</mn></mfrac>`)).row).toEqual([
+            { kind: 'fraction', numerator: [nary([])], denominator: [{ kind: 'number', text: '2' }], line: 'bar' },
+        ]);
+    });
+
+    test('a name before U+2061 takes the next element as its body, unless that is an operator', () => {
+        const sin: MathRow = [{ kind: 'identifier', text: 'sin' }];
+        const fn = '<mi>sin</mi><mo>\u2061</mo>';
+        expect(readMathml(math(`<mn>2</mn>${fn}<mi>x</mi>`)).row).toEqual([
+            { kind: 'number', text: '2' },
+            { kind: 'function', name: sin, body: x },
+        ]);
+        // Temml spaces the name from its body inside an mrow; KaTeX puts the U+2061 in the base of \lim's limit.
+        expect(readMathml(math(`<mrow>${fn}<mspace width="0.1667em"/></mrow><mi>x</mi>`)).row).toEqual([
+            { kind: 'function', name: sin, body: x },
+        ]);
+        const lim = '<munder><mrow><mi>lim</mi><mo>\u2061</mo></mrow><mi>n</mi></munder>';
+        expect(readMathml(math(`${lim}<mi>x</mi>`)).row).toEqual([
+            {
+                kind: 'function',
+                name: [
+                    {
+                        kind: 'limit',
+                        position: 'under',
+                        base: [{ kind: 'identifier', text: 'lim' }],
+                        limit: letter('n'),
+                    },
+                ],
+                body: x,
+            },
+        ]);
+        expect(readMathml(math(`${fn}<mo>(</mo><mi>x</mi><mo>)</mo>`)).row).toEqual([
+            ...sin,
+            { kind: 'operator', text: '(' },
+            ...x,
+            { kind: 'operator', text: ')' },
+        ]);
+        expect(readMathml(math(fn)).row).toEqual(sin);
+    });
+
+    test("an accent, line or brace says so, or its character does as MathML's operator dictionary has it", () => {
+        const over = (script: string, attributes = '') =>
+            readMathml(math(`<mover${attributes}><mi>x</mi>${script}</mover>`)).row;
+        for (const char of ['^', 'ˆ', '\u0302']) {
+            expect(over(`<mo stretchy="false">${char}</mo>`)).toEqual([{ kind: 'accent', accent: '\u0302', body: x }]);
+        }
+        expect(over('<mo>→</mo>')).toEqual([{ kind: 'accent', accent: '\u20D7', body: x }]);
+        expect(over('<mo>^</mo>', ' accent="false"')).toEqual([
+            { kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '^' }] },
+        ]);
+        expect(over('<mo>^^</mo>')[0]).toMatchObject({ kind: 'limit' });
+        expect(over('<mo accent="true">―</mo>')).toEqual([{ kind: 'line', position: 'over', body: x }]);
+        expect(over('<mo>⏞</mo>')).toEqual([{ kind: 'brace', char: '⏞', position: 'over', body: x }]);
+        expect(
+            readMathml(math('<munder accentunder="true"><mi>x</mi><mo stretchy="true">‾</mo></munder>')).row,
+        ).toEqual([{ kind: 'line', position: 'under', body: x }]);
+    });
+
+    // Where a foreign shape meets Eigen's own, the writer marks its own.
+    test.each<MathNode>([
+        { kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '→' }] },
+        { kind: 'limit', position: 'under', base: x, limit: [{ kind: 'operator', text: '⏟' }] },
+        { kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '^' }] },
+        { kind: 'function', name: letter('f'), body: [{ kind: 'space', width: 'thin' }] },
+        { kind: 'function', name: letter('f'), body: [{ kind: 'operator', text: '+' }] },
+    ])('%j survives the MathML trip', (node) => {
+        expect(viaMathml([node])).toStrictEqual([node]);
     });
 });
 

@@ -21,10 +21,16 @@ export const ACCENTS: ReadonlyMap<string, string> = new Map([
     ['\u20E1', '↔'],
 ]);
 
-// What an accent's spacing character folds to on read. Word also writes the overline accent as U+203E.
+// What an accent's spacing character folds to on read. Word also writes the overline accent as U+203E, MathJax as
+// U+2015; KaTeX and MathJax write the hat and tilde as ASCII, the acute and grave as modifier letters.
 export const COMBINING_ACCENTS: ReadonlyMap<string, string> = new Map([
     ...Array.from(ACCENTS, ([combining, spacing]): [string, string] => [spacing, combining]),
     ['‾', '\u0305'],
+    ['\u2015', '\u0305'],
+    ['^', '\u0302'],
+    ['~', '\u0303'],
+    ['\u02CA', '\u0301'],
+    ['\u02CB', '\u0300'],
 ]);
 
 export const LINES = { over: '‾', under: '_' } as const;
@@ -43,6 +49,33 @@ export const SPACES: Readonly<Record<MathSpace, { text: string; width: string }>
 export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄']);
 
 export const PRIME = '′';
+
+// CSS's basic colour names and the rest LaTeX's xcolor shares with CSS, as browsers draw them: KaTeX and MathJax hand
+// a name to CSS, and MathML takes CSS's.
+export const COLOR_NAMES: ReadonlyMap<string, string> = new Map([
+    ['aqua', '#00FFFF'],
+    ['black', '#000000'],
+    ['blue', '#0000FF'],
+    ['brown', '#A52A2A'],
+    ['cyan', '#00FFFF'],
+    ['fuchsia', '#FF00FF'],
+    ['gray', '#808080'],
+    ['green', '#008000'],
+    ['lime', '#00FF00'],
+    ['magenta', '#FF00FF'],
+    ['maroon', '#800000'],
+    ['navy', '#000080'],
+    ['olive', '#808000'],
+    ['orange', '#FFA500'],
+    ['pink', '#FFC0CB'],
+    ['purple', '#800080'],
+    ['red', '#FF0000'],
+    ['silver', '#C0C0C0'],
+    ['teal', '#008080'],
+    ['violet', '#EE82EE'],
+    ['white', '#FFFFFF'],
+    ['yellow', '#FFFF00'],
+]);
 
 // The minus operator: Chrome draws an ASCII hyphen-minus in an mo as a hyphen, so every reader folds one to U+2212.
 export const MINUS = '\u2212';

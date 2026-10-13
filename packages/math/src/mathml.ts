@@ -1,6 +1,7 @@
 import { MathError } from './error';
 import {
     ACCENTS,
+    COLOR_NAMES,
     COMBINING_ACCENTS,
     FENCES,
     LARGE_OPERATORS,
@@ -22,9 +23,12 @@ import {
     MATH_SPACES,
     MATH_VARIANTS,
     type MathBudget,
+    type MathEnclosure,
     type MathNode,
     type MathRow,
+    type MathSpace,
     type MathToken,
+    type MathVariant,
     mark,
     optional,
     RowBuilder,
@@ -42,8 +46,9 @@ import {
 } from './xml';
 
 export const MATHML_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
+const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 const TEX = 'application/x-tex';
-const FUNCTION_APPLICATION = '\u2061';
+const FUNCTION_APPLICATION = '⁡';
 
 // Which children of a script element are the sub- and superscript.
 const SCRIPT_SLOTS = new Map<string, ('sub' | 'sup')[]>([
@@ -55,92 +60,222 @@ const SCRIPT_SLOTS = new Map<string, ('sub' | 'sup')[]>([
     ['munderover', ['sub', 'sup']],
 ]);
 
-const SPACE_OF_WIDTH = new Map(MATH_SPACES.map((space) => [SPACES[space].width, space]));
 const SPACE: ReadonlySet<string> = new Set(' ');
+
+// The lines a line reads from: KaTeX writes \underline with U+203E, MathJax both with U+2015.
+const LINE_CHARS = {
+    over: new Set([LINES.over, '―']),
+    under: new Set([LINES.under, LINES.over, '―']),
+} as const;
+
+// Braces MathML's operator dictionary stretches, so MathJax doesn't mark them.
+const BRACES: ReadonlySet<string> = new Set('⏜⏝⏞⏟⎴⎵');
+
+// MathML's other notations as the lines nearest them.
+const BOX: readonly MathEnclosure[] = ['top', 'bottom', 'left', 'right'];
+const NOTATIONS: ReadonlyMap<string, readonly MathEnclosure[]> = new Map([
+    ['box', BOX],
+    ['roundedbox', BOX],
+    ['circle', BOX],
+    ['actuarial', ['top', 'right']],
+    ['madruwb', ['right', 'bottom']],
+    ['longdiv', ['left', 'top']],
+]);
+
+const NO_LINE = /^0(?:px|em|pt)?$/;
 
 // ── Reader ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// What an element hands the tokens in it: its own mathvariant and mathcolor, else its parent's, as mstyle does.
+type Scope = { budget: MathBudget; variant?: MathVariant; color?: string };
+
+// MathML has no n-ary or function: a scripted large operator, or a name before U+2061, waits for the next element.
+type Waiting = { kind: 'nary' | 'function'; element: MathXmlElement; scope: Scope; depth: number };
+
+// An HTML DOM may put math in the XHTML namespace or none, with its prefix (mml:mi) in the local name.
+function nameOf(element: MathXmlElement | undefined): string | undefined {
+    if (!element) return undefined;
+    if (element.ns === MATHML_NAMESPACE) return element.local;
+    if (element.ns !== XHTML_NAMESPACE && element.ns !== '') return undefined;
+    return element.local.slice(element.local.indexOf(':') + 1);
+}
+
 function is(element: MathXmlElement | undefined, local: string): element is MathXmlElement {
-    return element?.ns === MATHML_NAMESPACE && element.local === local;
+    return nameOf(element) === local;
 }
 
 const isFlagged = (element: MathXmlElement | undefined, flag: string) =>
     is(element, 'mo') && attribute(element, flag) === 'true';
 
-const colorOf = (element: MathXmlElement) => hexColor(attribute(element, 'mathcolor'));
+// Temml writes unstretched parentheses as fences too: a fence stretches.
+const isFence = (element: MathXmlElement | undefined) =>
+    is(element, 'mo') && attribute(element, 'fence') === 'true' && attribute(element, 'stretchy') !== 'false';
 
-// An n-ary (a scripted large operator, or one marked largeop), a fenced row or a function (name, U+2061, body).
+// MathJax marks \left … \right by TeX class, not as fences.
+const isClassed = (element: MathXmlElement | undefined, texClass: string) =>
+    is(element, 'mo') && attribute(element, 'data-mjx-texclass') === texClass;
+
+const isApplication = (element: MathXmlElement | undefined) =>
+    is(element, 'mo') && trimXmlSpace(textOf(element)) === FUNCTION_APPLICATION;
+
+// A colour is #RRGGBB, #RGB or a CSS name; anything else is none, so a forged one reaches no writer.
+function colorOf(value: string | undefined): string | undefined {
+    if (value === undefined) return undefined;
+    const hex = /^#[0-9A-Fa-f]{3}$/.test(value) ? value.replace(/[0-9A-Fa-f]/g, '$&$&') : value;
+    return hexColor(hex) ?? COLOR_NAMES.get(value.toLowerCase());
+}
+
+function scopeOf(element: MathXmlElement, scope: Scope): Scope {
+    const mathvariant = attribute(element, 'mathvariant');
+    const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant) ?? scope.variant;
+    const color = colorOf(attribute(element, 'mathcolor')) ?? scope.color;
+    return variant === scope.variant && color === scope.color ? scope : { ...scope, variant, color };
+}
+
+// The space nearest a width: KaTeX writes a thin space 0.1667em, MathJax 0.167em.
+function spaceOf(width = ''): MathSpace | undefined {
+    const em = width.endsWith('em') ? Number(width.slice(0, -2)) : Number.NaN;
+    return MATH_SPACES.find((space) => Math.abs(Number.parseFloat(SPACES[space].width) - em) < 0.01);
+}
+
+// The first child of a script element.
+const baseOf = (element: MathXmlElement | undefined) =>
+    element && SCRIPT_SLOTS.has(nameOf(element) ?? '') ? elementsOf(element)[0] : undefined;
+
+// A large operator: one character from the table under scripts, or one marked largeop. A mark after it makes a symbol
+// of its own, such as ∑̸.
+function isLargeOperator(element: MathXmlElement | undefined): boolean {
+    const base = baseOf(element);
+    const operator = base ?? element;
+    if (!is(operator, 'mo')) return false;
+    const text = trimXmlSpace(textOf(operator));
+    const char = mark(text);
+    return (
+        char !== '' &&
+        char === text &&
+        (isFlagged(operator, 'largeop') || (base !== undefined && LARGE_OPERATORS.has(char)))
+    );
+}
+
+// Eigen's n-ary (its operator marked largeop, then its body), a fenced row or a function (name, U+2061, body).
 function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undefined {
     const children = elementsOf(mrow);
     const [first] = children;
-    const scripted = first?.ns === MATHML_NAMESPACE && SCRIPT_SLOTS.has(first.local);
-    const operator = scripted ? elementsOf(first)[0] : first;
-    if (is(operator, 'mo')) {
-        // One character: a mark after it makes a symbol of its own, such as ∑̸.
-        const text = trimXmlSpace(textOf(operator));
-        const char = mark(text);
-        if (char && char === text && (isFlagged(operator, 'largeop') || (scripted && LARGE_OPERATORS.has(char))))
-            return 'nary';
-    }
-    if (children.length >= 2 && isFlagged(first, 'fence') && isFlagged(children.at(-1), 'fence')) return 'fenced';
-    if (children.length === 3 && is(children[1], 'mo') && trimXmlSpace(textOf(children[1])) === FUNCTION_APPLICATION)
-        return 'function';
+    const last = children.at(-1);
+    if (isLargeOperator(first) && isFlagged(baseOf(first) ?? first, 'largeop')) return 'nary';
+    const mathjax =
+        attribute(mrow, 'data-mjx-texclass') === 'INNER' && isClassed(first, 'OPEN') && isClassed(last, 'CLOSE');
+    if (children.length >= 2 && ((isFence(first) && isFence(last)) || mathjax)) return 'fenced';
+    // Temml spaces a name from its body inside the name's mrow: that space is no body.
+    if (children.length === 3 && isApplication(children[1]) && !is(children[2], 'mspace')) return 'function';
     return undefined;
 }
 
-function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
-    const row = new RowBuilder(budget, depth, slot);
-    for (const element of elements) readInto(row, element, depth);
+// An operator or a space after a function name or n-ary is no body; Temml wraps unstretched parentheses in an mrow.
+function leadsWithOperator(element: MathXmlElement): boolean {
+    let first: MathXmlElement | undefined = element;
+    for (let level = 0; level < MATH_LIMITS.depth && is(first, 'mrow') && !patternOf(first); level++)
+        first = elementsOf(first)[0];
+    return is(first, 'mo') || is(first, 'mspace');
+}
+
+// KaTeX puts the U+2061 after \lim inside the base of its limit.
+function isFunctionName(element: MathXmlElement, next: MathXmlElement | undefined): boolean {
+    if (isApplication(next)) return true;
+    const base = baseOf(element);
+    return is(base, 'mrow') && isApplication(elementsOf(base).at(-1));
+}
+
+function readRow(elements: MathXmlElement[], scope: Scope, depth: number, slot?: RowSlot): MathRow {
+    const row = new RowBuilder(scope.budget, depth, slot);
+    const waiting = readElements(row, elements, depth, scope);
+    if (waiting) settle(row, waiting);
     return row.done();
 }
 
 // An argument is one element; a plain mrow there is the row itself, not a level of its own. So is math, an mrow too.
-function readArgument(element: MathXmlElement | undefined, budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
+function readArgument(element: MathXmlElement | undefined, scope: Scope, depth: number, slot?: RowSlot): MathRow {
     if (element && (is(element, 'mrow') || is(element, 'math')) && !patternOf(element))
-        return readRow(elementsOf(element), budget, depth, slot);
-    return readRow(element ? [element] : [], budget, depth, slot);
+        return readRow(elementsOf(element), scopeOf(element, scope), depth, slot);
+    return readRow(element ? [element] : [], scope, depth, slot);
 }
 
-// Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
-function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number): void {
-    bound(row.budget, depth, 0);
-    for (const element of elements) readInto(row, element, depth);
+// Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound. What waits at
+// its end waits for the element after it.
+function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting | undefined {
+    bound(scope.budget, depth, 0);
+    return readElements(row, elements, depth, scope);
+}
+
+function readElements(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting | undefined {
+    let waiting: Waiting | undefined;
+    for (let index = 0; index < elements.length; index++) {
+        const element = elements[index];
+        if (waiting) {
+            const body = leadsWithOperator(element) ? undefined : readArgument(element, scope, depth + 1);
+            settle(row, waiting, body);
+            waiting = undefined;
+            if (body) continue;
+        }
+        if (isFunctionName(element, elements[index + 1])) {
+            waiting = { kind: 'function', element, scope, depth };
+            if (!isApplication(elements[index + 1])) continue;
+            // Temml spaces the name from its body.
+            index++;
+            while (is(elements[index + 1], 'mspace')) index++;
+            continue;
+        }
+        waiting = readInto(row, element, depth, scope);
+    }
+    return waiting;
+}
+
+// A waiting n-ary takes its body, or none; a function name without one reads as it is.
+function settle(row: RowBuilder, waiting: Waiting, body?: MathRow): void {
+    const { element, scope, depth } = waiting;
+    if (waiting.kind === 'nary') {
+        row.node(readNary(element, scope, depth, body ?? readRow([], scope, depth + 1)));
+    } else if (body) {
+        row.node({ kind: 'function', name: readArgument(element, scope, depth + 1), body });
+    } else {
+        const left = readInto(row, element, depth, scope);
+        if (left) settle(row, left);
+    }
 }
 
 function readScripts(
     children: MathXmlElement[],
     slots: readonly ('sub' | 'sup')[],
-    budget: MathBudget,
+    scope: Scope,
     depth: number,
 ): { sub?: MathRow; sup?: MathRow } {
     const scripts: { sub?: MathRow; sup?: MathRow } = {};
     for (const [index, slot] of slots.entries()) {
         if (is(children[index], 'none')) continue;
-        const script = optional(readArgument(children[index], budget, depth, 'optional'));
+        const script = optional(readArgument(children[index], scope, depth, 'optional'));
         if (script) scripts[slot] = script;
     }
     return scripts;
 }
 
-function readPattern(mrow: MathXmlElement, budget: MathBudget, depth: number): MathNode | undefined {
+function readNary(scripted: MathXmlElement, outer: Scope, depth: number, body: MathRow): MathNode {
+    const scope = scopeOf(scripted, outer);
+    const name = nameOf(scripted) ?? '';
+    const slots = SCRIPT_SLOTS.get(name) ?? [];
+    const [operatorElement, ...scripts] = slots.length > 0 ? elementsOf(scripted) : [scripted];
+    const operator = mark(textOf(operatorElement));
+    const { sub, sup } = readScripts(scripts, slots, scope, depth + 1);
+    const under = ['munder', 'mover', 'munderover'].includes(name);
+    const limits = sub || sup ? (under ? 'under' : 'side') : naryLimits(operator);
+    return { kind: 'nary', operator, limits, ...(sub && { sub }), ...(sup && { sup }), body };
+}
+
+function readPattern(mrow: MathXmlElement, scope: Scope, depth: number): MathNode | undefined {
     const children = elementsOf(mrow);
     switch (patternOf(mrow)) {
         case 'nary': {
             const [scripted, ...body] = children;
-            const slots = SCRIPT_SLOTS.get(scripted.local) ?? [];
-            const [operatorElement, ...scripts] = slots.length > 0 ? elementsOf(scripted) : [scripted];
-            const operator = mark(textOf(operatorElement));
-            const { sub, sup } = readScripts(scripts, slots, budget, depth + 1);
-            const under = ['munder', 'mover', 'munderover'].includes(scripted.local);
-            const limits = sub || sup ? (under ? 'under' : 'side') : naryLimits(operator);
-            return {
-                kind: 'nary',
-                operator,
-                limits,
-                ...(sub && { sub }),
-                ...(sup && { sup }),
-                body: readRow(body, budget, depth + 1),
-            };
+            return readNary(scripted, scope, depth, readRow(body, scope, depth + 1));
         }
         case 'fenced': {
             const parts: MathXmlElement[][] = [[]];
@@ -158,76 +293,93 @@ function readPattern(mrow: MathXmlElement, budget: MathBudget, depth: number): M
                 open: mark(textOf(children[0])),
                 close: mark(textOf(children[children.length - 1])),
                 separator: parts.length > 1 ? separator : '',
-                parts: parts.map((part) => readRow(part, budget, depth + 1)),
+                parts: parts.map((part) => readRow(part, scope, depth + 1)),
             };
         }
         case 'function':
             return {
                 kind: 'function',
-                name: readArgument(children[0], budget, depth + 1),
-                body: readArgument(children[2], budget, depth + 1),
+                name: readArgument(children[0], scope, depth + 1),
+                body: readArgument(children[2], scope, depth + 1),
             };
         case undefined:
-            return undefined;
+            return;
     }
 }
 
-function readToken(row: RowBuilder, element: MathXmlElement): void {
+function readToken(row: RowBuilder, element: MathXmlElement, name: string, scope: Scope): void {
     const text = trimXmlSpace(textOf(element));
-    const mathvariant = attribute(element, 'mathvariant');
-    const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
+    const { variant, color } = scope;
     // MathML draws a lone letter in an mi italic and anything else upright.
-    const lone = element.local === 'mi' && isCluster(text);
+    const lone = name === 'mi' && isCluster(text);
     // A hyphen-minus in an mo is the minus sign; in an mi it may join a word, as in arg-max.
-    const chars = element.local === 'mo' ? text.replaceAll('-', MINUS) : text;
-    row.chars(chars, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
+    const chars = name === 'mo' ? text.replaceAll('-', MINUS) : text;
+    row.chars(chars, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', color);
 }
 
-function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
-    const { budget } = row;
+function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer: Scope): Waiting | undefined {
+    const scope = scopeOf(element, outer);
+    const { budget } = scope;
     const children = elementsOf(element);
-    const argument = (index: number) => readArgument(children[index], budget, depth + 1);
-    if (element.ns !== MATHML_NAMESPACE) {
-        readThrough(row, children, depth + 1);
-        return;
-    }
-    switch (element.local) {
+    const argument = (index: number) => readArgument(children[index], scope, depth + 1);
+    const name = nameOf(element);
+    if (baseOf(element) && isLargeOperator(element)) return { kind: 'nary', element, scope: outer, depth };
+    switch (name) {
         case 'mi':
         case 'mn':
         case 'mo':
-            readToken(row, element);
+            readToken(row, element, name, scope);
             return;
+        // MathML Core draws a string literal without the quotes MathML 3 put around it.
+        case 'ms':
         case 'mtext':
-            row.text(trimXmlSpace(textOf(element)), colorOf(element));
+            row.text(trimXmlSpace(textOf(element)), scope.color);
             return;
         case 'mspace': {
-            const width = SPACE_OF_WIDTH.get(attribute(element, 'width') ?? '');
+            const space = spaceOf(attribute(element, 'width'));
             // As characters, so two quads pair as they do in text.
-            if (width) row.chars(SPACES[width].text, 'normal', 'normal', undefined);
+            if (space) row.chars(SPACES[space].text, 'normal', 'normal', undefined);
             return;
         }
         case 'math':
         case 'mrow': {
-            const node = readPattern(element, budget, depth);
-            if (node) row.node(node);
-            else readThrough(row, children, depth + 1);
+            const node = readPattern(element, scope, depth);
+            if (!node) return readThrough(row, children, depth + 1, scope);
+            row.node(node);
+            return;
+        }
+        // Deprecated, but Word for the web and OMML2MML write it. The tree holds one separator: the first stands for
+        // all.
+        case 'mfenced': {
+            const separator = mark(attribute(element, 'separators') ?? ',');
+            const parts =
+                separator && children.length > 1
+                    ? children.map((child) => readArgument(child, scope, depth + 1))
+                    : [readRow(children, scope, depth + 1)];
+            row.node({
+                kind: 'fenced',
+                open: mark(attribute(element, 'open') ?? '('),
+                close: mark(attribute(element, 'close') ?? ')'),
+                separator: parts.length > 1 ? separator : '',
+                parts,
+            });
             return;
         }
         case 'mfrac': {
             const line =
                 attribute(element, 'bevelled') === 'true'
                     ? 'skewed'
-                    : attribute(element, 'linethickness') === '0'
+                    : NO_LINE.test(attribute(element, 'linethickness') ?? '')
                       ? 'none'
                       : 'bar';
             row.node({ kind: 'fraction', numerator: argument(0), denominator: argument(1), line });
             return;
         }
         case 'msqrt':
-            row.node({ kind: 'radical', body: readRow(children, budget, depth + 1) });
+            row.node({ kind: 'radical', body: readRow(children, scope, depth + 1) });
             return;
         case 'mroot': {
-            const degree = optional(readArgument(children[1], budget, depth + 1, 'optional'));
+            const degree = optional(readArgument(children[1], scope, depth + 1, 'optional'));
             row.node({ kind: 'radical', body: argument(0), ...(degree && { degree }) });
             return;
         }
@@ -237,12 +389,9 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         case 'mmultiscripts': {
             const prescripts = children.findIndex((child) => is(child, 'mprescripts'));
             const first = prescripts < 0 ? 1 : prescripts + 1;
-            const slots = SCRIPT_SLOTS.get(element.local) ?? ['sub', 'sup'];
-            const { sub, sup } = readScripts(children.slice(first), slots, budget, depth + 1);
-            if (!sub && !sup) {
-                readThrough(row, children.slice(0, 1), depth + 1);
-                return;
-            }
+            const slots = SCRIPT_SLOTS.get(name) ?? ['sub', 'sup'];
+            const { sub, sup } = readScripts(children.slice(first), slots, scope, depth + 1);
+            if (!sub && !sup) return readThrough(row, children.slice(0, 1), depth + 1, scope);
             const scripts: MathNode = { kind: 'scripts', base: argument(0), ...(sub && { sub }), ...(sup && { sup }) };
             if (prescripts >= 0) scripts.pre = true;
             row.node(scripts);
@@ -250,22 +399,30 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         }
         case 'mover':
         case 'munder': {
-            const over = element.local === 'mover';
+            const position = name === 'mover' ? 'over' : 'under';
             const script = children[1];
-            const char = is(script, 'mo') ? mark(textOf(script)) : '';
-            if (char && attribute(element, over ? 'accent' : 'accentunder') === 'true') {
-                if (char === LINES[over ? 'over' : 'under']) {
-                    row.node({ kind: 'line', position: over ? 'over' : 'under', body: argument(0) });
-                    return;
-                }
-                if (over) {
-                    row.node({ kind: 'accent', accent: COMBINING_ACCENTS.get(char) ?? char, body: argument(0) });
-                    return;
-                }
+            const text = is(script, 'mo') ? trimXmlSpace(textOf(script)) : '';
+            const char = mark(text);
+            // An accent says so on the element or its mo, a brace that it stretches; MathJax and Temml leave both to
+            // MathML's operator dictionary. Eigen writes a limit's lone operator in an mrow, so it is neither.
+            const said =
+                attribute(element, position === 'over' ? 'accent' : 'accentunder') ??
+                (script && attribute(script, 'accent'));
+            const stretchy = script && attribute(script, 'stretchy');
+            const dictionary = said === undefined && char !== '' && char === text;
+            const accent =
+                said === 'true' ||
+                (dictionary && stretchy !== 'true' && (COMBINING_ACCENTS.has(char) || ACCENTS.has(char)));
+            const brace = stretchy === 'true' || (dictionary && stretchy === undefined && BRACES.has(char));
+            if (char && said === 'true' && LINE_CHARS[position].has(char)) {
+                row.node({ kind: 'line', position, body: argument(0) });
+            } else if (char && accent && position === 'over') {
+                row.node({ kind: 'accent', accent: COMBINING_ACCENTS.get(char) ?? char, body: argument(0) });
+            } else if (char && brace) {
+                row.node({ kind: 'brace', char, position, body: argument(0) });
+            } else {
+                row.node({ kind: 'limit', position, base: argument(0), limit: argument(1) });
             }
-            const position = over ? 'over' : 'under';
-            if (char && isFlagged(script, 'stretchy')) row.node({ kind: 'brace', char, position, body: argument(0) });
-            else row.node({ kind: 'limit', position, base: argument(0), limit: argument(1) });
             return;
         }
         // Outside an n-ary: a limit under inside a limit over.
@@ -274,18 +431,20 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             base.node({
                 kind: 'limit',
                 position: 'under',
-                base: readArgument(children[0], budget, depth + 2),
-                limit: readArgument(children[1], budget, depth + 2),
+                base: readArgument(children[0], scope, depth + 2),
+                limit: readArgument(children[1], scope, depth + 2),
             });
             row.node({ kind: 'limit', position: 'over', base: base.done(), limit: argument(2) });
             return;
         }
         case 'menclose': {
-            const notation = (attribute(element, 'notation') ?? '').split(/\s+/);
+            const notation = (attribute(element, 'notation') ?? '')
+                .split(/\s+/)
+                .flatMap((value): readonly string[] => NOTATIONS.get(value) ?? [value]);
             row.node({
                 kind: 'enclose',
                 notation: MATH_ENCLOSURES.filter((enclosure) => notation.includes(enclosure)),
-                body: readRow(children, budget, depth + 1),
+                body: readRow(children, scope, depth + 1),
             });
             return;
         }
@@ -298,23 +457,28 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
             const tableRows = (rows.length > 0 ? rows : [[]]).map((cells) => {
                 bound(budget, depth + 1, 1);
                 const read = (cells.length > 0 ? cells.map(elementsOf) : [[]]).map((cell) =>
-                    readRow(cell, budget, depth + 1, layout === 'equations' ? 'equation' : 'required'),
+                    readRow(cell, scope, depth + 1, layout === 'equations' ? 'equation' : 'required'),
                 );
                 return layout === 'equations' ? read.flatMap(equationCells) : read;
             });
             row.node({ kind: 'table', layout, rows: tableRows });
             return;
         }
+        // The child shown, counted from 1.
+        case 'maction': {
+            const shown = children[Number(attribute(element, 'selection') ?? 1) - 1] ?? children[0];
+            return readThrough(row, shown ? [shown] : [], depth + 1, scope);
+        }
         case 'semantics':
-            readThrough(row, children.slice(0, 1), depth + 1);
-            return;
+            return readThrough(row, children.slice(0, 1), depth + 1, scope);
         case 'annotation':
         case 'annotation-xml':
         case 'none':
         case 'mprescripts':
             return;
+        // mstyle, mpadded, mphantom (the tree has no phantom: it shows) and anything unknown.
         default:
-            readThrough(row, children, depth + 1);
+            return readThrough(row, children, depth + 1, scope);
     }
 }
 
@@ -337,7 +501,8 @@ export function readMathmlLatex(math: MathXmlElement): string | undefined {
 
 export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
     const semantics = semanticsOf(math);
-    const row = readArgument(semantics ? elementsOf(semantics)[0] : math, { size: 0 }, 1);
+    const scope = scopeOf(math, { budget: { size: 0 } });
+    const row = readArgument(semantics ? elementsOf(semantics)[0] : math, scope, 1);
     return { row, latex: readMathmlLatex(math) };
 }
 
@@ -366,14 +531,16 @@ function writeToken(node: MathToken): string {
 
 const writeRow = (row: MathRow) => row.map(writeNode).join('');
 
-const writeArgument = (row: MathRow) => (row.length === 1 ? writeNode(row[0]) : `<mrow>${writeRow(row)}</mrow>`);
+const wrap = (row: MathRow) => `<mrow>${writeRow(row)}</mrow>`;
+
+const writeArgument = (row: MathRow) => (row.length === 1 ? writeNode(row[0]) : wrap(row));
 
 // A large operator alone in a base is wrapped, so a reader never takes its scripts, limit, accent, line or brace for an
 // n-ary.
 function writeBase(row: MathRow): string {
     const [single] = row;
     const bare = row.length === 1 && single.kind === 'operator' && LARGE_OPERATORS.has(single.text);
-    return bare ? `<mrow>${writeRow(row)}</mrow>` : writeArgument(row);
+    return bare ? wrap(row) : writeArgument(row);
 }
 
 function writeScripts(tag: string, base: string, node: { sub?: MathRow; sup?: MathRow }): string {
@@ -432,8 +599,12 @@ function writeNode(node: MathNode): string {
             const parts = cases ? writeTable(cases, ' columnalign="left"') : node.parts.map(writeRow).join(separator);
             return `<mrow><mo fence="true">${escapeXml(node.open)}</mo>${parts}<mo fence="true">${escapeXml(node.close)}</mo></mrow>`;
         }
-        case 'function':
-            return `<mrow>${writeArgument(node.name)}<mo>${FUNCTION_APPLICATION}</mo>${writeArgument(node.body)}</mrow>`;
+        case 'function': {
+            // A lone space is wrapped, so the reader never takes it for the space Temml puts after a name.
+            const body =
+                node.body.length === 1 && node.body[0].kind === 'space' ? wrap(node.body) : writeArgument(node.body);
+            return `<mrow>${writeArgument(node.name)}<mo>${FUNCTION_APPLICATION}</mo>${body}</mrow>`;
+        }
         case 'accent': {
             const char = ACCENTS.get(node.accent) ?? node.accent;
             return `<mover accent="true">${writeBase(node.body)}<mo>${escapeXml(char)}</mo></mover>`;
@@ -448,7 +619,12 @@ function writeNode(node: MathNode): string {
         }
         case 'limit': {
             const tag = node.position === 'over' ? 'mover' : 'munder';
-            return `<${tag}>${writeBase(node.base)}${writeArgument(node.limit)}</${tag}>`;
+            // A lone operator is wrapped, so the reader never takes it for an accent or a brace.
+            const limit =
+                node.limit.length === 1 && node.limit[0].kind === 'operator'
+                    ? wrap(node.limit)
+                    : writeArgument(node.limit);
+            return `<${tag}>${writeBase(node.base)}${limit}</${tag}>`;
         }
         case 'enclose':
             return `<menclose notation="${escapeXml(node.notation.join(' '))}">${writeRow(node.body)}</menclose>`;
