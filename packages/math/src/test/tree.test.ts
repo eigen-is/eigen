@@ -183,6 +183,17 @@ describe('RowBuilder', () => {
         }
     });
 
+    // UAX #15's stream-safe 30, so NFC on a character costs at most 30² however many marks come.
+    test('a character keeps its first 30 marks in every reader, and drops the rest', () => {
+        const marks = '\u0316\u0338'.repeat(1000);
+        const kept = `x${'\u0316'.repeat(15)}${'\u0338'.repeat(15)}`.normalize('NFC');
+        for (const read of readEach(`x${marks}`, `<mi>x${marks}</mi>`)) {
+            expect(read).toStrictEqual([{ kind: 'identifier', text: kept }]);
+            expect(canonicalIssue(read)).toBeUndefined();
+        }
+        expect(canonicalIssue([{ kind: 'identifier', text: `${kept}\u0338` }])).toBeDefined();
+    });
+
     test('the accent a mark makes is a level, so at the deepest row it is an error', () => {
         const accented: MathRow = [{ kind: 'accent', accent: '\u0301', body: letter('e') }];
         const deepest = (levels: number): MathRow =>

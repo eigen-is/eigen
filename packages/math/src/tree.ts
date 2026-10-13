@@ -74,6 +74,8 @@ export const MATH_LIMITS = {
     // Every node, row, table row and character of text counts one.
     size: SIZE,
     latexLength: LATEX_LENGTH,
+    // Marks one character keeps, UAX #15's stream-safe 30, so NFC on it stays cheap; a reader drops the rest.
+    marks: 30,
     // 64 characters a unit (an menclose of every line), the annotation escaped at six a character (&quot;), the root.
     mathmlLength: 64 * SIZE + 6 * LATEX_LENGTH + 512,
 } as const;
@@ -190,7 +192,7 @@ export class RowBuilder {
             const last = this.#chars.at(-1);
             if (MARK.test(char)) {
                 // A combining mark joins the character before it; after a space or nothing it marks nothing.
-                if (!last || SPACE_OF_CHAR.has(last.char)) continue;
+                if (!last || SPACE_OF_CHAR.has(last.char) || [...last.marks].length >= MATH_LIMITS.marks) continue;
                 last.marks += char;
             } else {
                 const [base, variant] = fromAlphanumeric(char) ?? [

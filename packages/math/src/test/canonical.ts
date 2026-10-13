@@ -1,5 +1,5 @@
 import { ACCENTS, COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SCRIPT_CHARS, SPACES } from '../notation';
-import { MATH_ENCLOSURES, type MathNode, type MathRow, type MathToken } from '../tree';
+import { MATH_ENCLOSURES, MATH_LIMITS, type MathNode, type MathRow, type MathToken } from '../tree';
 
 // The canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every generated
 // tree must pass it. It restates the readers' character classes rather than importing them, so a wrong class in a
@@ -40,6 +40,7 @@ function tokenIssue(node: MathToken): string | undefined {
     for (const cluster of clusters.filter(isMarked)) {
         if ([...cluster].some((char) => ACCENTS.has(char))) return `an accent mark in ${node.text}`;
         if (cluster.normalize('NFC') !== cluster) return `uncomposed ${node.text}`;
+        if ([...cluster].length > MATH_LIMITS.marks + 1) return `more than ${MATH_LIMITS.marks} marks in ${node.text}`;
     }
     switch (node.kind) {
         case 'identifier':
