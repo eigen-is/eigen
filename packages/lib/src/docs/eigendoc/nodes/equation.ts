@@ -61,20 +61,28 @@ function readMath(math: MathXmlElement): Read | undefined {
     return { row: text, latex, mathml: writeMathml(text, latex) };
 }
 
-// Every consumer's read of the attrs: the stored string is never mounted as is, and any string reads as an equation
-// the writers can write. Only a string the writer could have written is parsed, so no prolog, DOCTYPE or entity
-// reaches either parser. The server passes Bun's parser.
-export function readEquation(
-    attrs: Record<string, unknown>,
-    parse: (mathml: string) => MathXmlElement | null = parseInBrowser,
-): Equation {
-    const display = attrs['display'] === true;
+type Parse = (mathml: string) => MathXmlElement | null;
+
+// Only a string the writer could have written is parsed, so no prolog, DOCTYPE or entity reaches either parser.
+function parseStored(attrs: Record<string, unknown>, parse: Parse): MathXmlElement | null {
     const mathml = attrs['mathml'];
-    const math =
-        typeof mathml === 'string' && mathml.startsWith('<math') && mathml.length <= MATH_LIMITS.mathmlLength
-            ? parse(mathml)
-            : null;
-    return { ...((math && readMath(math)) || EMPTY), display };
+    return typeof mathml === 'string' && mathml.startsWith('<math') && mathml.length <= MATH_LIMITS.mathmlLength
+        ? parse(mathml)
+        : null;
+}
+
+// Every consumer's read of the attrs: the stored string is never mounted as is, and any string reads as an equation
+// the writers can write. The server passes Bun's parser.
+export function readEquation(attrs: Record<string, unknown>, parse: Parse = parseInBrowser): Equation {
+    const math = parseStored(attrs, parse);
+    return { ...((math && readMath(math)) || EMPTY), display: attrs['display'] === true };
+}
+
+// The LaTeX alone, without reading the tree: what an equation past a render's budget prints. Unlike readEquation's,
+// it stays where the writer would refuse it beside the tree, as text has no MathML cap.
+export function readEquationLatex(attrs: Record<string, unknown>, parse: Parse = parseInBrowser): string | undefined {
+    const math = parseStored(attrs, parse);
+    return math ? unlessRefused(() => readMathmlLatex(math)) : undefined;
 }
 
 // The <math> a browser draws: the writer's MathML, as a block when the equation is displayed.

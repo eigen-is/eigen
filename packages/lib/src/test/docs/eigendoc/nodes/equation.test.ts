@@ -4,7 +4,7 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readLatex, writeMathml } from '@workspace/math';
 import { Window } from 'happy-dom';
 import { JSDOM } from 'jsdom';
-import { getDocExtensions, readEquation } from '../../../../docs/eigendoc';
+import { getDocExtensions, readEquation, readEquationLatex } from '../../../../docs/eigendoc';
 
 // jsdom's, since happy-dom's HTML parser puts a <math> in the XHTML namespace, where a browser's puts it in MathML's.
 const { window } = new JSDOM();
@@ -198,6 +198,16 @@ describe('readEquation', () => {
 
     test('takes the caller’s parser', () => {
         expect(readEquation({ mathml: writeMathml(x) }, () => null).row).toEqual([]);
+    });
+});
+
+describe('readEquationLatex', () => {
+    test("reads the annotation without the tree, through the stored string's gate", () => {
+        const deep = `${MATH}<semantics><mrow>${tooDeep}</mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>`;
+        expect(readEquationLatex({ mathml: deep })).toBe('x^2');
+        expect(readEquationLatex({ mathml: writeMathml(xSquared) })).toBeUndefined();
+        expect(readEquationLatex({ mathml: ` ${writeMathml(xSquared, 'x^2')}` })).toBeUndefined();
+        expect(readEquationLatex({ mathml: writeMathml(xSquared, 'x^2') }, () => null)).toBeUndefined();
     });
 });
 
