@@ -1,4 +1,4 @@
-import { chartLabel, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
+import { chartColor, chartLabel, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
@@ -14,14 +14,17 @@ import type { Cell, CellResolver } from './types';
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
 // text `m` or a rich-text cell's runs, the same strings the grid shows. Hidden rows and columns are
 // read like any other. A series whose values were deleted is left out, as Google does, and keeps its
-// color in the spec for an undo.
+// color in the spec for an undo. An automatic color resolves by the series' index in the spec, before
+// that, so the series after a deleted one keep the color the editor shows them in.
 export function resolveRangeChartData(data: RangeChartData, resolver: CellResolver): ChartData | ChartDataError {
     const sheetIds = new Set(resolver.getSheets().map((sheet) => sheet.id));
     const usable = (ref: CellRangeRef): boolean =>
         sheetIds.has(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
     const { categories } = data;
     if (categories !== null && !usable(categories)) return 'ref';
-    const series = data.series.flatMap(({ values, ...rest }) => (values ? [{ ...rest, values }] : []));
+    const series = data.series.flatMap(({ values, color, ...rest }, i) =>
+        values ? [{ ...rest, color: color ?? chartColor(i), values }] : [],
+    );
     if (series.length === 0) return 'ref';
     for (const s of series) {
         if (!usable(s.values) || (typeof s.name !== 'string' && !sheetIds.has(s.name.sheetId))) return 'ref';
