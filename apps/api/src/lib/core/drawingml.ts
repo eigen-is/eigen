@@ -142,7 +142,7 @@ function presetRgba(name: string | undefined): Rgba | undefined {
 }
 
 // ST_Percentage: thousandths of a percent, or Strict's '50%'; as a fraction.
-function percent(value: string | undefined): number | undefined {
+export function percent(value: string | undefined): number | undefined {
     const trimmed = value?.trim();
     if (!trimmed) return undefined;
     const fraction = trimmed.endsWith('%') ? Number(trimmed.slice(0, -1)) / 100 : Number(trimmed) / 100000;

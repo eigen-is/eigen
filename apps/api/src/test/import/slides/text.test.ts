@@ -86,6 +86,13 @@ describe('a text body', () => {
         expect(html).toBe('<p>a &lt;b&gt; &amp; &quot;c&quot;</p><p>one<br>two3</p><p></p><p>x y</p>');
     });
 
+    test("unwraps markup compatibility inside a paragraph, taking the choice PowerPoint's reader can read", () => {
+        const choice = (requires: string) =>
+            `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="${requires}">${run('choice')}</mc:Choice><mc:Fallback>${run('fallback')}</mc:Fallback></mc:AlternateContent>`;
+        expect(textOf(`<a:p>${run('a ')}${choice('a14')}</a:p>`)?.html).toBe('<p>a fallback</p>');
+        expect(textOf(`<a:p>${run('a ')}${choice('a')}</a:p>`)?.html).toBe('<p>a choice</p>');
+    });
+
     test('with no visible text is none', () => {
         expect(textOf('<a:p/>')).toBeUndefined();
         expect(textOf(para('   '))).toBeUndefined();
@@ -101,11 +108,11 @@ describe('a text body', () => {
             color: '#4f81bd',
             fontFamily: 'Source Serif 4',
             fontWeight: 'normal',
-            fontStyle: 'italic',
-            textDecoration: 'underline',
+            fontStyle: 'normal',
+            textDecoration: 'none',
         });
-        // The smaller run keeps its bold inline; its size is lost.
-        expect(found?.html).toBe('<p><strong>tiny</strong>most of the text</p>');
+        // Each run keeps its marks inline; the smaller one's size is lost.
+        expect(found?.html).toBe('<p><strong>tiny</strong><em><u>most of the text</u></em></p>');
         expect(textOf(para('plain'))).toMatchObject({ fontSize: 36, color: '#000000', fontFamily: 'Inter' });
     });
 
@@ -192,6 +199,16 @@ describe('run properties', () => {
         expect(textOf(para('first'), { listStyle })?.fontSize).toBe(60);
     });
 
+    test("never come from the paragraph's own defRPr, which PowerPoint ignores", () => {
+        const found = textOf(
+            `<a:p><a:pPr>${defRPr(' sz="4000" b="1"', schemeFill('accent2'))}</a:pPr>${run('t')}</a:p>`,
+            {
+                listStyle: level(1, '', defRPr(' sz="1000"')),
+            },
+        );
+        expect(found).toMatchObject({ fontSize: 20, fontWeight: 'normal', color: '#000000' });
+    });
+
     test('take a property each from wherever it is stated nearest', () => {
         const found = textOf(para('text', ' b="1"'), {
             lstStyle: level(1, '', defRPr(' sz="2000"')),
@@ -252,6 +269,18 @@ describe('inline marks', () => {
             fontStyle: 'italic',
             textDecoration: 'underline',
             html: '<p>all bold and italic</p>',
+        });
+    });
+
+    test("a mark is the box's only when every character has it, as no run could take it off", () => {
+        const found = textOf(`<a:p>${run('Mostly bold text', ' b="1"')}${run('plain')}</a:p>`);
+        expect(found).toMatchObject({ fontWeight: 'normal', html: '<p><strong>Mostly bold text</strong>plain</p>' });
+        // A run of spaces has no characters to count.
+        const spaced = textOf(`<a:p>${run('Bold', ' b="1"')}${run(' ')}${run('Text', ' b="1" u="sng"')}</a:p>`);
+        expect(spaced).toMatchObject({
+            fontWeight: 'bold',
+            textDecoration: 'none',
+            html: '<p>Bold <u>Text</u></p>',
         });
     });
 
@@ -358,6 +387,11 @@ describe('the body', () => {
         expect(textOf(para('t'))?.padding).toBeCloseTo(14.4, 6);
         expect(textOf(para('t'), { bodyPr: ' lIns="0" rIns="127000"' })?.padding).toBeCloseTo(10, 6);
         expect(textOf(para('t'), { inherited: [[' lIns="0" rIns="0"', '']] })?.padding).toBe(0);
+        // Strict writes a universal measure: 10 pt and 0.5 cm.
+        expect(textOf(para('t'), { bodyPr: ' lIns="10pt" rIns="0.5cm"' })?.padding).toBeCloseTo(
+            (20 + 3600 / 127) / 2,
+            6,
+        );
     });
 
     test("normAutofit's fontScale shrinks the text and lnSpcReduction its lines", () => {

@@ -9,10 +9,11 @@ import {
     type VectorRichTextElement,
     type VerticalAlign,
 } from '@workspace/lib/vector';
-import { drawingColor } from '../../core/drawingml';
+import { drawingColor, percent } from '../../core/drawingml';
 import { A_NS, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import { POINTS_PER_UNIT } from '../doc/package';
 import { fillIn, paintOf, type SlideTheme } from './inherit';
 import { alternative, type Lost } from './package';
 
@@ -50,6 +51,16 @@ export type RichTextFields = Pick<
 >;
 
 export const EMU_PER_POINT = 12_700;
+
+// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
+export function emu(value: string | undefined): number | undefined {
+    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
+    const points = POINTS_PER_UNIT.get(unit);
+    const result =
+        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
+    return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
+}
+
 // ECMA-376's default run size, 18 pt, in hundredths of a point.
 const DEFAULT_SIZE = 1800;
 // a:bodyPr's left and right inset where no body states one: 0.1 inch.
@@ -100,8 +111,8 @@ export function richTextOf(
     const bodyAttr = (name: string) => firstOf(bodyPrs, (bodyPr) => xmlAttr(bodyPr, '', name));
     const autofit = bodyPrs.flatMap(xmlElements).find((child) => child.ns === A_NS && AUTOFITS.has(child.local));
     const normal = autofit?.local === 'normAutofit' ? autofit : undefined;
-    const fontScale = fraction(normal && xmlAttr(normal, '', 'fontScale')) ?? 1;
-    const lineReduction = fraction(normal && xmlAttr(normal, '', 'lnSpcReduction')) ?? 0;
+    const fontScale = share(normal && xmlAttr(normal, '', 'fontScale')) ?? 1;
+    const lineReduction = share(normal && xmlAttr(normal, '', 'lnSpcReduction')) ?? 0;
     const fontRef = source.style && xmlChild(source.style, A_NS, 'fontRef');
     const context = { theme, pxPerEmu: pxPerEmu * fontScale, fontRef, rels: source.rels, lost };
 
@@ -117,7 +128,7 @@ export function richTextOf(
                 (entry) => entry !== undefined,
             ),
         );
-        // PowerPoint draws a run without its own paragraph's defRPr, the style text typed into it would take.
+        // PowerPoint ignores a paragraph's own defRPr.
         const inherited = levels.flatMap((entry) => xmlChild(entry, A_NS, 'defRPr') ?? []);
         const chain = pPr ? [pPr, ...levels] : levels;
         const bullet = chain.flatMap(xmlElements).find((child) => child.ns === A_NS && BULLETS.has(child.local));
@@ -143,24 +154,33 @@ export function richTextOf(
         }
         paragraphs.push({ list: bullet && BULLETS.get(bullet.local), level, runs, text, chain });
     }
-    const [box] = [...covered.values()].sort((a, b) => b.chars - a.chars);
-    if (!box || box.chars === 0) return undefined;
+    const counted = [...covered.values()].filter((style) => style.chars > 0);
+    const [box] = counted.sort((a, b) => b.chars - a.chars);
+    if (!box) return undefined;
+    // A mark is the box's only when every character has it: the editor can't take one off a run.
+    const every = (mark: keyof Marks) => counted.every((style) => style[mark]);
+    const marks: Marks = {
+        bold: every('bold'),
+        italic: every('italic'),
+        underline: every('underline'),
+        strike: every('strike'),
+    };
 
     const first = paragraphs.find((paragraph) => paragraph.text)?.chain ?? [];
     const lnSpc = firstOf(first, (pPr) => xmlChild(pPr, A_NS, 'lnSpc'));
-    const percent = fraction(lnSpc && attrOf(xmlChild(lnSpc, A_NS, 'spcPct'), 'val'));
+    const spacing = share(lnSpc && attrOf(xmlChild(lnSpc, A_NS, 'spcPct'), 'val'));
     const points = Number(lnSpc && attrOf(xmlChild(lnSpc, A_NS, 'spcPts'), 'val'));
     const inset = (name: string) => {
-        const value = Number(bodyAttr(name));
-        return Number.isFinite(value) && value >= 0 ? value : DEFAULT_SIDE_INSET;
+        const value = emu(bodyAttr(name));
+        return value !== undefined && value >= 0 ? value : DEFAULT_SIDE_INSET;
     };
     return {
-        html: htmlOf(paragraphs, box),
+        html: htmlOf(paragraphs, marks),
         fontFamily: box.fontFamily,
         fontSize: box.size,
-        fontWeight: box.bold ? 'bold' : 'normal',
-        fontStyle: box.italic ? 'italic' : 'normal',
-        textDecoration: box.underline ? 'underline' : box.strike ? 'line-through' : 'none',
+        fontWeight: marks.bold ? 'bold' : 'normal',
+        fontStyle: marks.italic ? 'italic' : 'normal',
+        textDecoration: marks.underline ? 'underline' : marks.strike ? 'line-through' : 'none',
         textAlign: ALIGNS.get(firstOf(first, (pPr) => xmlAttr(pPr, '', 'algn')) ?? '') ?? 'left',
         verticalAlign: ANCHORS.get(bodyAttr('anchor') ?? '') ?? 'top',
         color: box.color,
@@ -169,7 +189,7 @@ export function richTextOf(
         lineHeight:
             Number.isFinite(points) && points > 0
                 ? ((points / 100) * EMU_PER_POINT * pxPerEmu) / box.size
-                : SINGLE_LINE * Math.max(0, (percent ?? 1) - lineReduction),
+                : SINGLE_LINE * Math.max(0, (spacing ?? 1) - lineReduction),
         padding: ((inset('lIns') + inset('rIns')) / 2) * pxPerEmu,
     };
 }
@@ -251,7 +271,7 @@ function htmlPrefix(html: string, bytes: number): string {
 
 // Bulleted paragraphs nest as lists by level, each list inside the item before it. Cut at a paragraph so the canvas
 // reader keeps it whole, and every list still closed.
-function htmlOf(paragraphs: Paragraph[], box: RunStyle): string {
+function htmlOf(paragraphs: Paragraph[], marks: Marks): string {
     const closing = (open: OpenList[]) =>
         open
             .map((list) => `</li></${list.tag}>`)
@@ -276,7 +296,7 @@ function htmlOf(paragraphs: Paragraph[], box: RunStyle): string {
                 next.push({ tag: list, level });
             }
         }
-        const inline = inlineOf(paragraph.runs, box);
+        const inline = inlineOf(paragraph.runs, marks);
         const size = Buffer.byteLength(`${piece}<p>${inline}</p>`);
         const room = MAX_HTML_BYTES - bytes - Buffer.byteLength(closing(next));
         if (size > room) {
@@ -293,8 +313,8 @@ function htmlOf(paragraphs: Paragraph[], box: RunStyle): string {
     return html + closing(open);
 }
 
-// A run's marks where it differs from the box, neighbours with the same marks sharing their tags.
-function inlineOf(runs: Run[], box: RunStyle): string {
+// A run's marks the box lacks, neighbours with the same marks sharing their tags.
+function inlineOf(runs: Run[], box: Marks): string {
     const decoration = box.underline ? 'underline' : box.strike ? 'strike' : undefined;
     let html = '';
     let current = '';
@@ -336,10 +356,8 @@ function attrOf(element: XmlElement | undefined, name: string, ns = ''): string 
     return element && xmlAttr(element, ns, name);
 }
 
-// ST_Percentage and its kin: thousandths of a percent, or Strict's '50%'; as a fraction.
-function fraction(value: string | undefined): number | undefined {
-    const trimmed = value?.trim();
-    if (!trimmed) return undefined;
-    const result = trimmed.endsWith('%') ? Number(trimmed.slice(0, -1)) / 100 : Number(trimmed) / 100_000;
-    return Number.isFinite(result) && result >= 0 ? result : undefined;
+// A share no smaller than none: a font scale, a line spacing.
+function share(value: string | undefined): number | undefined {
+    const fraction = percent(value);
+    return fraction !== undefined && fraction >= 0 ? fraction : undefined;
 }

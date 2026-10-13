@@ -15,7 +15,6 @@ import { ApiError } from '../../core/errors';
 import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
-import { POINTS_PER_UNIT } from '../doc/package';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import {
     decorationsOf,
@@ -35,7 +34,7 @@ import {
     styleLine,
 } from './inherit';
 import { alternative, blipMedia, type DeckWalk, type Frame, type Lost, type Part } from './package';
-import { EMU_PER_POINT, richTextOf } from './text';
+import { emu, richTextOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
@@ -115,15 +114,6 @@ type Xfrm = {
     flipV: boolean;
     child?: { x: number; y: number; cx: number; cy: number };
 };
-
-// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
-function emu(value: string | undefined): number | undefined {
-    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
-    const points = POINTS_PER_UNIT.get(unit);
-    const result =
-        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
-    return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
-}
 
 function point(element: XmlElement | undefined, x: string, y: string) {
     const [px, py] = [emu(element && xmlAttr(element, '', x)), emu(element && xmlAttr(element, '', y))];
@@ -234,7 +224,7 @@ type Walk = {
     deck: DeckWalk;
     inheritance: SlideInheritance;
     presentation: Part;
-    // The part whose relationships name the pictures.
+    // The part whose relationships name the pictures and the links.
     part: Part;
     // A layout's or master's shapes: its placeholders are prompts, never drawn on a slide.
     copied: boolean;
