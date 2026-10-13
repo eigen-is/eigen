@@ -94,7 +94,7 @@ describe('drive selection commands', () => {
     });
 });
 
-// Published by the File menu, so each open document offers exactly its File › Download formats.
+// Published by the File menu and by Drive, so a document offers exactly its File › Download formats.
 describe('download as', () => {
     const onExport = () => {};
 
