@@ -62,6 +62,12 @@ async function render(node: ReturnType<typeof createElement>) {
 }
 
 const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+// The grid opens on A1, as a sheet does, so B2 is selected first.
+const typeInB2 = async (value: string) => {
+    const b2 = dialog()?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
+    await act(async () => b2?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
+    await type(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]') ?? null, value);
+};
 const buttonIn = (scope: ParentNode | undefined, label: string) =>
     [...(scope?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((el) => el.textContent?.trim() === label);
 const click = async (target: HTMLElement | undefined) => {
@@ -162,7 +168,7 @@ describe('ChartPanelSection', () => {
     test('Edit data saves the grid as one write; Cancel writes nothing', async () => {
         const { container, writes } = await section([chart('c1')]);
         await click(buttonIn(container, 'Edit data'));
-        await type(dialog()?.querySelector('input[aria-label="B2"]') ?? null, '7');
+        await typeInB2('7');
         await click(buttonIn(dialog(), 'Save'));
         expect(writes).toHaveLength(1);
         const written = writes[0].chart;
@@ -170,7 +176,7 @@ describe('ChartPanelSection', () => {
         expect(spec?.data.source === 'inline' && spec.data.series[0].values[0]).toBe(7);
 
         await click(buttonIn(container, 'Edit data'));
-        await type(dialog()?.querySelector('input[aria-label="B2"]') ?? null, '8');
+        await typeInB2('8');
         await click(buttonIn(dialog(), 'Cancel'));
         expect(writes).toHaveLength(1);
     });
