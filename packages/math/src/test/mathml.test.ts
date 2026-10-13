@@ -1,19 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
-import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import { MATH_LIMITS, type MathRow } from '../tree';
 import { elementsOf, type MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { generateTree } from './generate';
-import { el } from './parse';
+import { el, viaOmml } from './parse';
 
 const math = (content: string) => el(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
-const viaOmml = (row: MathRow) =>
-    readOmml(
-        elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${writeOmml(row)}</root>`))[0],
-    );
 const element = (local: string, children: (string | object)[], attributes = {}): MathXmlElement => ({
     ns: MATHML_NAMESPACE,
     local,

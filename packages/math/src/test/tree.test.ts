@@ -1,16 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
-import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
+import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
 import { MATH_ENCLOSURES, MATH_LIMITS, type MathRow } from '../tree';
-import { elementsOf } from '../xml';
-import { el } from './parse';
+import { el, viaOmml } from './parse';
 
 const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
-const viaOmml = (row: MathRow) =>
-    readOmml(
-        elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${writeOmml(row)}</root>`))[0],
-    );
 
 function nested(levels: number): MathRow {
     return levels === 1 ? [{ kind: 'identifier', text: 'x' }] : [{ kind: 'radical', body: nested(levels - 1) }];
@@ -56,7 +51,7 @@ describe('MATH_LIMITS', () => {
     });
 
     test('whitespace costs linear time, so a forged run of spaces near the string cap reads at once', () => {
-        const spaces = ' '.repeat(MATH_LIMITS.mathmlLength - 256);
+        const spaces = ' '.repeat(40_000);
         const omml = el(
             `<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:d><m:dPr><m:begChr m:val="(${spaces}("/></m:dPr><m:e/></m:d></m:oMath>`,
         );

@@ -264,14 +264,14 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         }
         // Outside an n-ary: a limit under inside a limit over.
         case 'munderover': {
-            bound(budget, depth + 1, 2);
-            const under: MathNode = {
+            const base = new RowBuilder(budget, depth + 1);
+            base.node({
                 kind: 'limit',
                 position: 'under',
                 base: readArgument(children[0], budget, depth + 2),
                 limit: readArgument(children[1], budget, depth + 2),
-            };
-            row.node({ kind: 'limit', position: 'over', base: [under], limit: argument(2) });
+            });
+            row.node({ kind: 'limit', position: 'over', base: base.done(), limit: argument(2) });
             return;
         }
         case 'menclose': {

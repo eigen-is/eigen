@@ -7,15 +7,13 @@ import { canonicalIssue } from './canonical';
 import { type CanonicalItem, type CanonicalObject, canonicalOmml } from './canonical-omml';
 import { CORPUS, type CorpusEquation } from './corpus';
 import { generateTree } from './generate';
-import { el } from './parse';
+import { el, parseWritten } from './parse';
 
 const NAMESPACES = `xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}"`;
 const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
 const oMath = (content: string) => el(`<m:oMath ${NAMESPACES}>${content}</m:oMath>`);
 const read = (content: string) => readOmml(oMath(content));
-// The writer leaves m: and w: to the caller, as the docx writer binds them on its root.
-const parseWritten = (omml: string) => elementsOf(el(`<root ${NAMESPACES}>${omml}</root>`))[0];
 const run = (text: string, properties = '') => `<m:r>${properties}<m:t>${text}</m:t></m:r>`;
 
 // ── C1: docx round trip ─────────────────────────────────────────────────────────────────────────────────────────

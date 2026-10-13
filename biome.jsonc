@@ -140,15 +140,10 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "react": { "message": "math is a leaf: no React (see ARCHITECTURE.md § Dependency direction)." },
-                  "react-dom": { "message": "math is a leaf: no React (see ARCHITECTURE.md § Dependency direction)." },
-                  "bun": { "message": "math is a leaf: no Bun API (see ARCHITECTURE.md § Dependency direction)." }
-                },
                 "patterns": [
                   {
-                    "group": ["@workspace/*", "@workspace/**", "bun:*", "node:*"],
-                    "message": "math is a leaf: it imports no workspace package and no Bun or Node API (see ARCHITECTURE.md § Dependency direction)."
+                    "group": ["**", "!./**", "!../**"],
+                    "message": "@workspace/math is a leaf: no dependencies (see ARCHITECTURE.md § Dependency direction)."
                   },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.
                   {
@@ -162,7 +157,7 @@
                 ]
               }
             },
-            // The package tsconfig keeps Bun's types for the tests, so tsc would let these through.
+            // bun-types declares these, and the package tsconfig keeps it for the tests, so tsc lets them through.
             "noRestrictedGlobals": {
               "level": "error",
               "options": {
@@ -173,8 +168,9 @@
                   "setImmediate": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
                   "require": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
                   "global": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "document": "math is a leaf: no DOM (see ARCHITECTURE.md § Dependency direction).",
-                  "window": "math is a leaf: no DOM (see ARCHITECTURE.md § Dependency direction)."
+                  "__dirname": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
+                  "__filename": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
+                  "module": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction)."
                 }
               }
             }

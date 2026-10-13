@@ -1,6 +1,8 @@
 import { Window } from 'happy-dom';
 import { fromDom } from '../dom';
-import type { MathXmlElement } from '../xml';
+import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
+import type { MathRow } from '../tree';
+import { elementsOf, type MathXmlElement } from '../xml';
 
 const window = new Window();
 
@@ -10,3 +12,9 @@ export function el(xml: string): MathXmlElement {
     if (document.getElementsByTagName('parsererror').length > 0) throw new Error(`Malformed XML: ${xml}`);
     return fromDom(document.documentElement);
 }
+
+// The writer leaves m: and w: to the caller, as the docx writer binds them on its root.
+export const parseWritten = (omml: string) =>
+    elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${omml}</root>`))[0];
+
+export const viaOmml = (row: MathRow) => readOmml(parseWritten(writeOmml(row)));
