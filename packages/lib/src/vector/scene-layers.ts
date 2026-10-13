@@ -88,7 +88,7 @@ export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): L
 
 // The class every rich-text body wraps in. It carries the descendant rules an inline style cannot
 // reach — list markers, blockquote rule, link underline (packages/ui/src/styles/canvas-text.css,
-// which the app imports and the standalone export document embeds).
+// which the app imports and the export document and the svg download embed).
 export const RICH_TEXT_CLASS = 'eigen-canvas-text';
 
 // The layer's body as one HTML string — everything a DOM host mounts inside the layer box, so the live
