@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from '../../lib/core/errors';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
@@ -331,7 +332,7 @@ describe('DocumentTransformRunner', () => {
     });
 
     // A death after the child took the job is the job's: JSC aborts, faults or traps when a heap allocation fails, and
-    // a SIGKILL the runner did not send is the kernel's OOM killer. SIGBUS is left out: macOS reports it as SIGUSR1.
+    // a SIGKILL the runner did not send is the kernel's OOM killer. SIGBUS is in the Linux-only block: macOS reports it as SIGUSR1.
     test.each(['SIGABRT', 'SIGSEGV', 'SIGTRAP', 'SIGKILL'] as const)(
         'a child killed by %s after taking the job ran out of memory, and the slot is released',
         async (signal) => {
@@ -556,4 +557,30 @@ describe.skipIf(process.platform !== 'linux')('DocumentTransformRunner memory li
         },
         30_000,
     );
+
+    test('a child killed by SIGBUS after taking the job ran out of memory', async () => {
+        const runner = makeRunner();
+        const died = await runner.run(makeRequest({ behavior: 'signal', signal: 'SIGBUS' }), PREVIEW_OPTIONS);
+        expect(errorCode(died)).toBe('out-of-memory');
+        await runner.close();
+    });
+
+    // A soft CPU limit ends a spinning orphan with SIGXCPU, a crash; a hard one would SIGKILL it, which reads as out of
+    // memory. GC and JIT threads spend CPU on every core, so the limit counts them all.
+    test('the child runs under the wrapper: its data limit, a soft CPU limit, no core, the OOM killer first, the JIT knob', async () => {
+        const runner = makeRunner({ memoryLimitKiB: 1024 * 1024 });
+        const response = await runner.run(makeRequest({ behavior: 'limits' }), PREVIEW_OPTIONS);
+        const { oomScoreAdj, limits, jit } = JSON.parse(previewBody(response));
+        const limit = (name: string) =>
+            String(limits)
+                .match(new RegExp(`^${name}\\s+(\\S+)\\s+(\\S+)`, 'm'))
+                ?.slice(1);
+        const cpuSeconds = Math.ceil(PREVIEW_OPTIONS.deadlineMs / 1000) * availableParallelism() + 60;
+        expect(oomScoreAdj).toBe('1000');
+        expect(limit('Max data size')).toEqual([String(1024 ** 3), String(1024 ** 3)]);
+        expect(limit('Max cpu time')).toEqual([String(cpuSeconds), 'unlimited']);
+        expect(limit('Max core file size')?.[0]).toBe('0');
+        expect(jit).toBe('67108864');
+        await runner.close();
+    });
 });

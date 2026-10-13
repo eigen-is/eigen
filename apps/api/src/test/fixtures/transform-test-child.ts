@@ -3,6 +3,7 @@
 // through). Lets the runner suite exercise timeout/crash/signal/malformed/copy and
 // memory-limit behavior without heavy document jobs.
 
+import { readFileSync } from 'node:fs';
 import {
     type ChildRequestEnvelope,
     type ChildResponseEnvelope,
@@ -18,6 +19,7 @@ type TestDirective = {
         | 'signal'
         | 'oom-reply'
         | 'allocate'
+        | 'limits'
         | 'malformed'
         | 'malformed-ok'
         | 'malformed-warnings'
@@ -85,6 +87,16 @@ process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
                 send({ jobId, response: { ok: false, error: toTransformError(err) } });
             }
             return;
+        case 'limits': {
+            // What the Linux wrapper set, read back from inside.
+            const body = JSON.stringify({
+                oomScoreAdj: readFileSync('/proc/self/oom_score_adj', 'utf8').trim(),
+                limits: readFileSync('/proc/self/limits', 'utf8'),
+                jit: process.env['BUN_JSC_jitMemoryReservationSize'],
+            });
+            send({ jobId, response: { ok: true, result: { body }, warnings: [] } });
+            return;
+        }
         case 'malformed':
             send({ nonsense: true });
             return;

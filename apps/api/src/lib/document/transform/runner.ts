@@ -1,4 +1,4 @@
-import { totalmem } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { Subprocess } from 'bun';
 import { ApiError } from '../../core/errors';
@@ -61,10 +61,11 @@ const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 // Linux alone takes the limits: macOS refuses setrlimit for the data segment. $1 is the data segment in KiB (dash's
 // unit), $2 the CPU seconds, the rest the command. The kernel kills the child before the API when the host runs out
 // first; a refused data limit runs the child unbounded with a warning, never an outage; the CPU limit bounds an orphan
-// that spins; an abort, an expected death here, writes no core.
+// that spins, soft only, so it ends by SIGXCPU, a crash, where a hard one's SIGKILL would read as out of memory; an
+// abort, an expected death here, writes no core.
 const LIMITED_COMMAND =
-    'echo 1000 > /proc/self/oom_score_adj; ulimit -d "$1" 2>/dev/null || echo "[transform] memory limit not applied" >&2; ulimit -t "$2"; ulimit -c 0; shift 2; exec "$@"';
-// GC and JIT threads spend CPU beside the job's, so the CPU limit sits past the deadline.
+    'echo 1000 > /proc/self/oom_score_adj; ulimit -d "$1" 2>/dev/null || echo "[transform] memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
+// GC and JIT threads spend CPU on every core beside the job's own, so the CPU limit is the deadline on each, plus slack.
 const CPU_SLACK_SECONDS = 60;
 // JSC reserves 512 MB for JIT code inside the data limit; 64 MB hands about 0.33 GB back to the heap, no slowdown measured.
 const JIT_RESERVATION_BYTES = '67108864';
@@ -379,7 +380,7 @@ export class DocumentTransformRunner {
                 withLimits(
                     [process.execPath, this.entry],
                     this.memoryLimitKiB,
-                    Math.ceil(job.deadlineMs / 1000) + CPU_SLACK_SECONDS,
+                    Math.ceil(job.deadlineMs / 1000) * availableParallelism() + CPU_SLACK_SECONDS,
                 ),
                 {
                     // What the transform graph reads: the data root and mode the eml preview's mail imports resolve
