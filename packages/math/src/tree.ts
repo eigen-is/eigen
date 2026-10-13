@@ -122,6 +122,9 @@ function token(kind: MathToken['kind'], text: string, variant: MathVariant | und
     return node;
 }
 
+// A text node's text: a tab or line break is a space, as MathML would trim it at an edge.
+export const mathText = (raw: string) => checkedXml(raw).replace(/[\t\n\r]/g, ' ');
+
 // A number is digits, then a point and digits if any follow: where the one starting at `start` ends.
 export function numberEnd(start: number, digit: (index: number) => boolean, point: (index: number) => boolean): number {
     let end = start + 1;
@@ -174,8 +177,7 @@ export class RowBuilder {
     }
 
     text(raw: string, color: string | undefined): void {
-        // A tab or line break is a space: MathML would trim it at an edge.
-        const text = checkedXml(raw).replace(/[\t\n\r]/g, ' ');
+        const text = mathText(raw);
         if (text === '') return;
         this.#flush();
         const last = this.#row.at(-1);

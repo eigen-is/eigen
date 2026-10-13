@@ -10,6 +10,7 @@ test('the barrel exports the API and nothing else', () => {
         'OMML_NAMESPACE',
         'WORDML_NAMESPACE',
         'fromDom',
+        'mathText',
         'readLatex',
         'readMathml',
         'readMathmlLatex',
