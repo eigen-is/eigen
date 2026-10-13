@@ -13,9 +13,8 @@ import { drawingColor, percent } from '../../core/drawingml';
 import { A_NS, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { POINTS_PER_UNIT } from '../doc/package';
-import { fillIn, paintOf, type SlideTheme } from './inherit';
-import { alternative, type Lost } from './package';
+import { fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
+import { alternative, EMU_PER_POINT, emu, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
 // font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
@@ -25,8 +24,8 @@ import { alternative, type Lost } from './package';
 export type TextSource = {
     // The shape's own p:txBody.
     body: XmlElement;
-    // The p:txBody of the layout's and the master's placeholder it inherits from.
-    inherited: XmlElement[];
+    // The bodyPr and lstStyle of the layout's and the master's placeholder it inherits from, read with their part.
+    inherited: Pick<ShapeProperties, 'bodyPr' | 'listStyle'>[];
     // The master's p:titleStyle, p:bodyStyle or p:otherStyle, or the presentation's p:defaultTextStyle.
     listStyle: XmlElement | undefined;
     // The p:style the shape or its placeholder chain states, whose fontRef names a theme font and a colour.
@@ -50,17 +49,6 @@ export type RichTextFields = Pick<
     | 'lineHeight'
     | 'padding'
 >;
-
-export const EMU_PER_POINT = 12_700;
-
-// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
-export function emu(value: string | undefined): number | undefined {
-    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
-    const points = POINTS_PER_UNIT.get(unit);
-    const result =
-        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
-    return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
-}
 
 // ECMA-376's default run size, 18 pt, in hundredths of a point.
 const DEFAULT_SIZE = 1800;
@@ -104,9 +92,9 @@ export function richTextOf(
     pxPerEmu: number,
     lost: Lost,
 ): RichTextFields | undefined {
-    const bodies = [source.body, ...source.inherited];
-    const shapeLists = bodies.flatMap((body) => xmlChild(body, A_NS, 'lstStyle') ?? []);
-    const bodyPrs = bodies.flatMap((body) => xmlChild(body, A_NS, 'bodyPr') ?? []);
+    const bodies = bodiesOf(source);
+    const shapeLists = bodies.flatMap((body) => body.listStyle ?? []);
+    const bodyPrs = bodies.flatMap((body) => body.bodyPr ?? []);
     const bodyAttr = (name: string) => firstOf(bodyPrs, (bodyPr) => xmlAttr(bodyPr, '', name));
     const autofit = bodyPrs.flatMap(xmlElements).find((child) => child.ns === A_NS && AUTOFITS.has(child.local));
     const normal = autofit?.local === 'normAutofit' ? autofit : undefined;
@@ -211,8 +199,8 @@ const APPROXIMATE_TURNS = new Map([
 ]);
 
 export function verticalTurnOf(source: TextSource, lost: Lost): number {
-    const bodyPr = [source.body, ...source.inherited]
-        .flatMap((body) => xmlChild(body, A_NS, 'bodyPr') ?? [])
+    const bodyPr = bodiesOf(source)
+        .flatMap((body) => body.bodyPr ?? [])
         .find((found) => xmlAttr(found, '', 'vert') !== undefined);
     const vert = (bodyPr && xmlAttr(bodyPr, '', 'vert')) ?? 'horz';
     const approximate = APPROXIMATE_TURNS.get(vert);
@@ -221,6 +209,12 @@ export function verticalTurnOf(source: TextSource, lost: Lost): number {
         return approximate;
     }
     return VERTICAL_TURNS.get(vert) ?? 0;
+}
+
+// The shape's own body first, then its placeholders'.
+function bodiesOf(source: TextSource): TextSource['inherited'] {
+    const own = { bodyPr: xmlChild(source.body, A_NS, 'bodyPr'), listStyle: xmlChild(source.body, A_NS, 'lstStyle') };
+    return [own, ...source.inherited];
 }
 
 type RunContext = {

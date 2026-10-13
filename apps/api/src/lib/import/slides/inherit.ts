@@ -9,7 +9,7 @@ import {
 } from '../../core/drawingml';
 import { A_NS, isOn, P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
-import { blipMedia, type DeckWalk, type Lost, type Part, type PptxPackage } from './package';
+import { blipMedia, type DeckWalk, emu, type Lost, type Part, type PptxPackage } from './package';
 
 // What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
 // map, the background, and the shapes the layout and master draw beneath the slide's own.
@@ -17,12 +17,34 @@ import { blipMedia, type DeckWalk, type Lost, type Part, type PptxPackage } from
 export type SlideTheme = {
     colors: DrawingTheme;
     fonts: { major: string; minor: string };
-    // a:fmtScheme, the style matrix p:style and a background's bgRef index into, and the theme part naming its pictures.
-    formats: XmlElement | undefined;
+    // a:fmtScheme's style matrix, which p:style and a background's bgRef index into, and the theme part naming its
+    // pictures.
+    formats: StyleMatrix;
     part?: Part;
 };
 
-export type Placeholder = { type: string | undefined; idx: string | undefined; shape: XmlElement };
+type StyleMatrix = { fills: XmlElement[]; backgrounds: XmlElement[]; lines: XmlElement[] };
+
+// What a placeholder's type and idx match it by.
+export type PlaceholderKey = { type: string | undefined; idx: string | undefined };
+
+// A layout's or master's placeholder and what a slide's inherits from it.
+export type Placeholder = PlaceholderKey & { properties: ShapeProperties };
+
+// What a shape states that the next in its chain answers where it doesn't. A placeholder's are read once with its part:
+// each lookup costs its element's children, and every slide shape that inherits it would look again.
+export type ShapeProperties = {
+    xfrm: Xfrm | undefined;
+    // The preset's or custGeom's name, and the a:prstGeom a pie's angles are in.
+    geometry: string | undefined;
+    preset: XmlElement | undefined;
+    fill: XmlElement | undefined;
+    ln: XmlElement | undefined;
+    style: XmlElement | undefined;
+    // Its p:txBody's a:bodyPr and a:lstStyle.
+    bodyPr: XmlElement | undefined;
+    listStyle: XmlElement | undefined;
+};
 
 // A part's placeholders by idx, type and kind, read once with the part; the first of each wins.
 type Placeholders = {
@@ -35,7 +57,8 @@ type Master = {
     part: Part;
     theme: SlideTheme;
     placeholders: Placeholders;
-    txStyles: XmlElement | undefined;
+    // p:txStyles' p:titleStyle, p:bodyStyle and p:otherStyle.
+    textStyles: { title: XmlElement | undefined; body: XmlElement | undefined; other: XmlElement | undefined };
 };
 
 type Layout = { part: Part; master: Master | undefined; placeholders: Placeholders; showMasterSp: boolean };
@@ -45,10 +68,13 @@ export type SlideInheritance = {
     layout: Layout | undefined;
     master: Master | undefined;
     theme: SlideTheme;
+    // The presentation's p:defaultTextStyle.
+    defaultTextStyle: XmlElement | undefined;
 };
 
 // Layouts and masters are parsed and read once per file, whichever slides share them.
 export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInheritance {
+    const defaultTextStyle = xmlChild(pkg.presentation.root, P_NS, 'defaultTextStyle');
     const masters = new Map<string, Master>();
     const layouts = new Map<string, Layout>();
     const masterOf = (part: Part): Master => {
@@ -62,16 +88,30 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
             return (font && xmlAttr(xmlChild(font, A_NS, 'latin') ?? font, '', 'typeface')) ?? '';
         };
         const clrMap = xmlChild(part.root, P_NS, 'clrMap');
+        const formats = elements && xmlChild(elements, A_NS, 'fmtScheme');
+        const list = (name: string) => {
+            const found = formats && xmlChild(formats, A_NS, name);
+            return found ? xmlElements(found) : [];
+        };
+        const txStyles = xmlChild(part.root, P_NS, 'txStyles');
         const master: Master = {
             part,
             theme: {
                 colors: { scheme: readColorScheme(theme), map: readColorMap(clrMap ?? part.root) },
                 fonts: { major: fontOf('majorFont'), minor: fontOf('minorFont') },
-                formats: elements && xmlChild(elements, A_NS, 'fmtScheme'),
+                formats: {
+                    fills: list('fillStyleLst'),
+                    backgrounds: list('bgFillStyleLst'),
+                    lines: list('lnStyleLst').filter((line) => line.ns === A_NS && line.local === 'ln'),
+                },
                 part: themePart,
             },
             placeholders: placeholdersOf(part.root),
-            txStyles: xmlChild(part.root, P_NS, 'txStyles'),
+            textStyles: {
+                title: txStyles && xmlChild(txStyles, P_NS, 'titleStyle'),
+                body: txStyles && xmlChild(txStyles, P_NS, 'bodyStyle'),
+                other: txStyles && xmlChild(txStyles, P_NS, 'otherStyle'),
+            },
         };
         masters.set(part.path, master);
         return master;
@@ -96,14 +136,14 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
         const theme = master?.theme ?? NO_THEME;
         const override = xmlChild(xmlChild(slide.root, P_NS, 'clrMapOvr') ?? slide.root, A_NS, 'overrideClrMapping');
         const colors = override ? { ...theme.colors, map: readColorMap(override) } : theme.colors;
-        return { slide, layout, master, theme: { ...theme, colors } };
+        return { slide, layout, master, theme: { ...theme, colors }, defaultTextStyle };
     };
 }
 
 const NO_THEME: SlideTheme = {
     colors: { scheme: new Map(), map: IDENTITY_COLOR_MAP },
     fonts: { major: '', minor: '' },
-    formats: undefined,
+    formats: { fills: [], backgrounds: [], lines: [] },
 };
 
 function shows(root: XmlElement): boolean {
@@ -120,11 +160,67 @@ export function nonVisualOf(shape: XmlElement): XmlElement | undefined {
     return xmlElements(shape).find((child) => child.ns === P_NS && child.local.startsWith('nv'));
 }
 
-export function placeholderOf(shape: XmlElement): Placeholder | undefined {
+export function placeholderOf(shape: XmlElement): PlaceholderKey | undefined {
     const nv = nonVisualOf(shape);
     const nvPr = nv && xmlChild(nv, P_NS, 'nvPr');
     const ph = nvPr && xmlChild(nvPr, P_NS, 'ph');
-    return ph && { type: xmlAttr(ph, '', 'type'), idx: xmlAttr(ph, '', 'idx'), shape };
+    return ph && { type: xmlAttr(ph, '', 'type'), idx: xmlAttr(ph, '', 'idx') };
+}
+
+export function propertiesOf(shape: XmlElement): ShapeProperties {
+    const spPr = xmlChild(shape, P_NS, 'spPr');
+    const body = xmlChild(shape, P_NS, 'txBody');
+    const preset = spPr && xmlChild(spPr, A_NS, 'prstGeom');
+    return {
+        // spPr's a:xfrm, or a graphic frame's own p:xfrm.
+        xfrm: readXfrm(spPr ? xmlChild(spPr, A_NS, 'xfrm') : xmlChild(shape, P_NS, 'xfrm')),
+        geometry: preset
+            ? xmlAttr(preset, '', 'prst')
+            : spPr && xmlChild(spPr, A_NS, 'custGeom')
+              ? 'custGeom'
+              : undefined,
+        preset,
+        fill: fillIn(spPr),
+        ln: spPr && xmlChild(spPr, A_NS, 'ln'),
+        style: xmlChild(shape, P_NS, 'style'),
+        bodyPr: body && xmlChild(body, A_NS, 'bodyPr'),
+        listStyle: body && xmlChild(body, A_NS, 'lstStyle'),
+    };
+}
+
+export type Xfrm = {
+    x: number;
+    y: number;
+    cx: number;
+    cy: number;
+    rot: number;
+    flipH: boolean;
+    flipV: boolean;
+    child?: { x: number; y: number; cx: number; cy: number };
+};
+
+function point(element: XmlElement | undefined, x: string, y: string) {
+    const [px, py] = [emu(element && xmlAttr(element, '', x)), emu(element && xmlAttr(element, '', y))];
+    return px === undefined || py === undefined ? undefined : { x: px, y: py };
+}
+
+export function readXfrm(xfrm: XmlElement | undefined): Xfrm | undefined {
+    const off = xfrm && point(xmlChild(xfrm, A_NS, 'off'), 'x', 'y');
+    const ext = xfrm && point(xmlChild(xfrm, A_NS, 'ext'), 'cx', 'cy');
+    if (!xfrm || !off || !ext) return undefined;
+    const chOff = point(xmlChild(xfrm, A_NS, 'chOff'), 'x', 'y');
+    const chExt = point(xmlChild(xfrm, A_NS, 'chExt'), 'cx', 'cy');
+    const rot = Number(xmlAttr(xfrm, '', 'rot') ?? 0) / 60_000;
+    return {
+        ...off,
+        // A negative extent is no extent.
+        cx: Math.max(0, ext.x),
+        cy: Math.max(0, ext.y),
+        rot: Number.isFinite(rot) ? rot : 0,
+        flipH: isOn(xmlAttr(xfrm, '', 'flipH')) ?? false,
+        flipV: isOn(xmlAttr(xfrm, '', 'flipV')) ?? false,
+        child: chOff && chExt && { ...chOff, cx: chExt.x, cy: chExt.y },
+    };
 }
 
 function placeholdersOf(root: XmlElement): Placeholders {
@@ -134,8 +230,9 @@ function placeholdersOf(root: XmlElement): Placeholders {
     };
     const tree = spTreeOf(root);
     for (const shape of tree ? xmlElements(tree) : []) {
-        const placeholder = placeholderOf(shape);
-        if (!placeholder) continue;
+        const key = placeholderOf(shape);
+        if (!key) continue;
+        const placeholder = { ...key, properties: propertiesOf(shape) };
         if (placeholder.idx !== undefined) first(placeholders.byIdx, placeholder.idx, placeholder);
         first(placeholders.byType, placeholder.type, placeholder);
         first(placeholders.byKind, placeholderKind(placeholder.type), placeholder);
@@ -154,7 +251,7 @@ export function placeholderKind(type: string | undefined): string {
 
 // The layout's and the master's placeholder a slide's own inherits from, nearest first. A layout matches by idx, then
 // by type; a master by kind alone, as its dt, ftr and sldNum carry the idx 2 to 4 that layouts reuse for body text.
-export function inheritedPlaceholders(own: Placeholder, inheritance: SlideInheritance): Placeholder[] {
+export function inheritedPlaceholders(own: PlaceholderKey, inheritance: SlideInheritance): Placeholder[] {
     const layout = inheritance.layout?.placeholders;
     const fromLayout =
         layout &&
@@ -166,16 +263,11 @@ export function inheritedPlaceholders(own: Placeholder, inheritance: SlideInheri
 }
 
 // The master's text style for a placeholder of this kind, or the presentation's default for any other shape.
-export function listStyleOf(
-    own: Placeholder | undefined,
-    inheritance: SlideInheritance,
-    presentation: Part,
-): XmlElement | undefined {
-    if (!own) return xmlChild(presentation.root, P_NS, 'defaultTextStyle');
-    const styles = inheritance.master?.txStyles;
+export function listStyleOf(own: PlaceholderKey | undefined, inheritance: SlideInheritance): XmlElement | undefined {
+    if (!own) return inheritance.defaultTextStyle;
+    const styles = inheritance.master?.textStyles;
     const kind = placeholderKind(own.type);
-    const name = kind === 'title' ? 'titleStyle' : kind === 'body' ? 'bodyStyle' : 'otherStyle';
-    return styles && xmlChild(styles, P_NS, name);
+    return styles && (kind === 'title' ? styles.title : kind === 'body' ? styles.body : styles.other);
 }
 
 // The shape lists drawn beneath a slide's own, bottom first: the master's, then the layout's, as showMasterSp allows.
@@ -285,17 +377,14 @@ export function backgroundGradientAngle(width: number, height: number): Gradient
 // A style matrix entry: a bgRef or fillRef idx of 1–999 picks from fillStyleLst, 1001 and up from bgFillStyleLst.
 export function styleFill(theme: SlideTheme, idx: string | undefined): XmlElement | undefined {
     const index = Number(idx);
-    if (!theme.formats || !Number.isInteger(index) || index < 1) return undefined;
-    const [list, at] = index >= 1001 ? ['bgFillStyleLst', index - 1001] : ['fillStyleLst', index - 1];
-    const fills = xmlChild(theme.formats, A_NS, list);
-    return fills && xmlElements(fills)[at];
+    if (!Number.isInteger(index) || index < 1) return undefined;
+    return index >= 1001 ? theme.formats.backgrounds[index - 1001] : theme.formats.fills[index - 1];
 }
 
 // An lnRef's a:ln in lnStyleLst, idx 1 and up; 0 is no line.
 export function styleLine(theme: SlideTheme, idx: string | undefined): XmlElement | undefined {
     const index = Number(idx);
-    const lines = theme.formats && xmlChild(theme.formats, A_NS, 'lnStyleLst');
-    return lines && Number.isInteger(index) && index >= 1 ? xmlChildren(lines, A_NS, 'ln')[index - 1] : undefined;
+    return Number.isInteger(index) && index >= 1 ? theme.formats.lines[index - 1] : undefined;
 }
 
 // The slide's p:bg, else its layout's, else its master's (88% of decks paint from the master).

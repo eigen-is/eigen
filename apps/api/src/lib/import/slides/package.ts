@@ -3,6 +3,7 @@ import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
+import { POINTS_PER_UNIT } from '../doc/package';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 
@@ -183,6 +184,17 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
 }
 
 const LESS_THAN = 0x3c;
+
+export const EMU_PER_POINT = 12_700;
+
+// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
+export function emu(value: string | undefined): number | undefined {
+    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
+    const points = POINTS_PER_UNIT.get(unit);
+    const result =
+        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
+    return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
+}
 
 // The picture an a:blip shows: its svgBlip extension's, else its own.
 export function blipMedia(pkg: PptxPackage, from: Part, blip: XmlElement | undefined): MediaPart | undefined {

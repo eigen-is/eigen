@@ -1,7 +1,21 @@
 import { describe, expect, test } from 'bun:test';
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { box, buildPptx, PIXEL_PNG, type PptxFixture, para, rel, scheme, solid, sp, THEME } from '../../fixtures/pptx';
+import {
+    box,
+    buildPptx,
+    PIXEL_PNG,
+    type PptxFixture,
+    para,
+    pptxParts,
+    rel,
+    scheme,
+    solid,
+    sp,
+    styleRefs,
+    THEME,
+    zipParts,
+} from '../../fixtures/pptx';
 
 // What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the colour
 // map and the background.
@@ -82,6 +96,40 @@ describe('placeholders', () => {
         readPptx(pptx, OPTIONS);
         // Quadratic matching took seconds here; one lookup each takes milliseconds.
         expect(performance.now() - started).toBeLessThan(1000);
+    });
+
+    test("what slide shapes inherit is read once: a master placeholder's, its text styles, the presentation's default and the theme's style lists", () => {
+        // 100,000 empty elements where a lookup scans: once a slide shape, they took seconds.
+        const junk = (prefix: string) => `<${prefix}:x/>`.repeat(100_000);
+        const placeholder = (inner: string) =>
+            `<p:sp><p:nvSpPr><p:cNvPr id="2" name=""/><p:cNvSpPr/><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr>${inner}</p:sp>`;
+        const at = `<p:spPr>${box(0, 0, 100, 100)}</p:spPr>`;
+        const text = '<p:txBody><a:bodyPr/><a:p><a:r><a:t>x</a:t></a:r></a:p></p:txBody>';
+        const own = placeholder(`<p:spPr/>${text}`).repeat(2000);
+        const cases: PptxFixture[] = [
+            { masters: [{ shapes: placeholder(`${at}<p:txBody>${'<a:p/>'.repeat(100_000)}</p:txBody>`) }] },
+            { masters: [{ shapes: placeholder(`<p:spPr>${box(0, 0, 100, 100)}${junk('a')}</p:spPr>`) }] },
+            { masters: [{ shapes: placeholder(`${at}${junk('p')}`) }] },
+            {
+                masters: [{ shapes: placeholder(at), txStyles: `<p:txStyles>${junk('p')}<p:bodyStyle/></p:txStyles>` }],
+            },
+        ].map((fixture) => ({ ...fixture, slides: [{ shapes: own }] }));
+        const shape = sp({ xfrm: box(0, 0, 1, 1), text: para('x'), style: styleRefs(1, 1) }).repeat(2000);
+        const presentation = pptxParts({ slides: [{ shapes: shape }] });
+        presentation['ppt/presentation.xml'] = String(presentation['ppt/presentation.xml']).replace(
+            '</p:presentation>',
+            `${junk('p')}<p:defaultTextStyle/></p:presentation>`,
+        );
+        const theme = THEME.replace('<a:fillStyleLst>', `<a:fillStyleLst>${junk('a')}`.replace(/a:x/g, 'a:noFill'));
+        for (const pptx of [
+            ...cases.map(buildPptx),
+            zipParts(presentation),
+            buildPptx({ theme, slides: [{ shapes: shape }] }),
+        ]) {
+            const started = performance.now();
+            readPptx(pptx, OPTIONS);
+            expect(performance.now() - started).toBeLessThan(1000);
+        }
     });
 
     test("a slide's empty placeholder is not drawn, and the title's text names the frame", () => {

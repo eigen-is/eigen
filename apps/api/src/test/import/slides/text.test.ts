@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_HTML_BYTES } from '@workspace/lib/vector';
-import { parseOoxml } from '../../../lib/core/ooxml';
+import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
 import type { Relationship } from '../../../lib/core/opc';
+import { type XmlElement, xmlChild } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
 import { richTextOf } from '../../../lib/import/slides/text';
@@ -26,7 +27,7 @@ const THEME: SlideTheme = {
         ]),
     },
     fonts: { major: 'Georgia', minor: 'Consolas' },
-    formats: undefined,
+    formats: { fills: [], backgrounds: [], lines: [] },
 };
 
 const UNCOUNTED = () => {};
@@ -39,6 +40,12 @@ const parse = (xml: string) => {
 
 const txBody = (paragraphs: string, bodyPr = '', lstStyle = '') =>
     parse(`<p:txBody ${NS}><a:bodyPr${bodyPr}/><a:lstStyle>${lstStyle}</a:lstStyle>${paragraphs}</p:txBody>`);
+
+// A placeholder's body as its part reads it.
+const inheritedOf = (body: XmlElement) => ({
+    bodyPr: xmlChild(body, A_NS, 'bodyPr'),
+    listStyle: xmlChild(body, A_NS, 'lstStyle'),
+});
 
 type Source = {
     bodyPr?: string;
@@ -55,7 +62,7 @@ function textOf(paragraphs: string, source: Source = {}) {
     return richTextOf(
         {
             body: txBody(paragraphs, source.bodyPr, source.lstStyle),
-            inherited: (source.inherited ?? []).map(([bodyPr, lstStyle]) => txBody('', bodyPr, lstStyle)),
+            inherited: (source.inherited ?? []).map(([bodyPr, lstStyle]) => inheritedOf(txBody('', bodyPr, lstStyle))),
             listStyle:
                 source.listStyle === undefined
                     ? undefined
@@ -416,7 +423,13 @@ describe('the body', () => {
         expect(found?.lineHeight).toBeCloseTo(0.96, 6);
         // The layout's autofit applies where the slide's body states none.
         const inherited = richTextOf(
-            { body: body(''), inherited: [body(autofit)], listStyle: undefined, style: undefined, rels: new Map() },
+            {
+                body: body(''),
+                inherited: [inheritedOf(body(autofit))],
+                listStyle: undefined,
+                style: undefined,
+                rels: new Map(),
+            },
             THEME,
             1 / 6350,
             UNCOUNTED,
@@ -425,7 +438,7 @@ describe('the body', () => {
         const own = richTextOf(
             {
                 body: body('<a:noAutofit/>'),
-                inherited: [body(autofit)],
+                inherited: [inheritedOf(body(autofit))],
                 listStyle: undefined,
                 style: undefined,
                 rels: new Map(),

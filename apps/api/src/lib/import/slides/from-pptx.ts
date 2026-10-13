@@ -84,7 +84,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             const part = pkg.slide(path);
             if (!part) return [];
             const slide = inheritance(part);
-            const { elements, title } = readSlideShapes(deck, slide, pkg.presentation);
+            const { elements, title } = readSlideShapes(deck, slide);
             return [{ name: title, background: backgroundOf(slide, deck), elements }];
         });
 

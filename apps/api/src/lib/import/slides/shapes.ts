@@ -24,17 +24,21 @@ import {
     inheritedPlaceholders,
     listStyleOf,
     nonVisualOf,
-    type Placeholder,
+    type PlaceholderKey,
     paintOf,
     placeholderKind,
     placeholderOf,
+    propertiesOf,
+    readXfrm,
+    type ShapeProperties,
     type SlideInheritance,
     spTreeOf,
     styleFill,
     styleLine,
+    type Xfrm,
 } from './inherit';
-import { alternative, blipMedia, type DeckWalk, type Lost, type Part } from './package';
-import { emu, richTextOf, verticalTurnOf } from './text';
+import { alternative, blipMedia, type DeckWalk, emu, type Lost, type Part } from './package';
+import { richTextOf, verticalTurnOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
@@ -102,41 +106,6 @@ function turn(rot: number, flipH: boolean, flipV: boolean): Turn {
     const [cos, sin] = [Math.cos(r), Math.sin(r)];
     const [h, v] = [flipH ? -1 : 1, flipV ? -1 : 1];
     return [cos * h, sin * h, -sin * v, cos * v];
-}
-
-type Xfrm = {
-    x: number;
-    y: number;
-    cx: number;
-    cy: number;
-    rot: number;
-    flipH: boolean;
-    flipV: boolean;
-    child?: { x: number; y: number; cx: number; cy: number };
-};
-
-function point(element: XmlElement | undefined, x: string, y: string) {
-    const [px, py] = [emu(element && xmlAttr(element, '', x)), emu(element && xmlAttr(element, '', y))];
-    return px === undefined || py === undefined ? undefined : { x: px, y: py };
-}
-
-function readXfrm(xfrm: XmlElement | undefined): Xfrm | undefined {
-    const off = xfrm && point(xmlChild(xfrm, A_NS, 'off'), 'x', 'y');
-    const ext = xfrm && point(xmlChild(xfrm, A_NS, 'ext'), 'cx', 'cy');
-    if (!xfrm || !off || !ext) return undefined;
-    const chOff = point(xmlChild(xfrm, A_NS, 'chOff'), 'x', 'y');
-    const chExt = point(xmlChild(xfrm, A_NS, 'chExt'), 'cx', 'cy');
-    const rot = Number(xmlAttr(xfrm, '', 'rot') ?? 0) / 60_000;
-    return {
-        ...off,
-        // A negative extent is no extent.
-        cx: Math.max(0, ext.x),
-        cy: Math.max(0, ext.y),
-        rot: Number.isFinite(rot) ? rot : 0,
-        flipH: isOn(xmlAttr(xfrm, '', 'flipH')) ?? false,
-        flipV: isOn(xmlAttr(xfrm, '', 'flipV')) ?? false,
-        child: chOff && chExt && { ...chOff, cx: chExt.x, cy: chExt.y },
-    };
 }
 
 // A shape as DrawingML places it: its centre, extents, turn and flips.
@@ -226,7 +195,6 @@ function onSlide(box: Box, deck: DeckWalk): boolean {
 type Walk = {
     deck: DeckWalk;
     inheritance: SlideInheritance;
-    presentation: Part;
     // The part whose relationships name the pictures and the links.
     part: Part;
     // A layout's or master's shapes: its placeholders are prompts, never drawn on a slide.
@@ -234,7 +202,7 @@ type Walk = {
     out: SlideShapes;
 };
 
-export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, presentation: Part): SlideShapes {
+export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): SlideShapes {
     const out: SlideShapes = { elements: [], title: '' };
     // The frame: its name, a title of at most 100 characters, weighs nothing besides.
     weigh(deck, 1);
@@ -247,7 +215,7 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, p
     });
     for (const part of [...decorationsOf(inheritance), inheritance.slide]) {
         const tree = spTreeOf(part.root);
-        const walk: Walk = { deck, inheritance, presentation, part, copied: part !== inheritance.slide, out };
+        const walk: Walk = { deck, inheritance, part, copied: part !== inheritance.slide, out };
         if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
     }
     return out;
@@ -282,30 +250,24 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         const own = placeholderOf(shape);
         if (walk.copied && own) continue;
         const inherited = own ? inheritedPlaceholders(own, walk.inheritance) : [];
-        const chain = [shape, ...inherited.map((placeholder) => placeholder.shape)];
-        const xfrm = chain.map(xfrmOf).find((found) => found !== undefined);
+        const chain = [propertiesOf(shape), ...inherited.map((placeholder) => placeholder.properties)];
+        const xfrm = chain.find((link) => link.xfrm)?.xfrm;
         if (!xfrm) continue;
         const placed = place(placeIn, xfrm);
         if (!onSlide(placed.box, walk.deck)) continue;
-        const spPrs = chain.flatMap((link) => xmlChild(link, P_NS, 'spPr') ?? []);
-        const style = styleIn(chain);
+        // The p:style the shape paints by: a placeholder with none of its own takes its layout's or master's.
+        const style = chain.find((link) => link.style)?.style;
         if (shape.local === 'graphicFrame') {
             const graphic = xmlChild(shape, A_NS, 'graphic');
             const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
             const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
             placeholderBox(walk, shape, kind, placed.box);
-        } else if (shape.local === 'pic') readPicture(walk, shape, spPrs, linesOf(spPrs, walk, style), placed);
-        else readShape(walk, { shape, own, inherited, spPrs, style, placed, group });
+        } else if (shape.local === 'pic') readPicture(walk, shape, chain, linesOf(chain, walk, style), placed);
+        else readShape(walk, { shape, own, chain, style, placed, group });
     }
 }
 
 const DRAWN = new Set(['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame', 'contentPart']);
-
-// spPr's a:xfrm, or a graphic frame's own p:xfrm.
-function xfrmOf(shape: XmlElement): Xfrm | undefined {
-    const spPr = xmlChild(shape, P_NS, 'spPr');
-    return readXfrm(spPr ? xmlChild(spPr, A_NS, 'xfrm') : xmlChild(shape, P_NS, 'xfrm'));
-}
 
 function push(walk: Walk, element: NewVectorElement): void {
     if (++walk.deck.elements > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
@@ -321,13 +283,12 @@ function weigh(deck: DeckWalk, weight: number): void {
     if (deck.weight > MAX_PPTX_WEIGHT) throw new ApiError(413, PRESENTATION_TOO_LARGE);
 }
 
-// A drawn shape and what it inherits: its placeholder, the layout's and master's it takes from, the spPr of each
-// nearest first, and where it lands.
+// A drawn shape and what it inherits: its placeholder, what it and the layout's and master's placeholders it takes from
+// state, nearest first, and where it lands.
 type Leaf = {
     shape: XmlElement;
-    own: Placeholder | undefined;
-    inherited: Placeholder[];
-    spPrs: XmlElement[];
+    own: PlaceholderKey | undefined;
+    chain: ShapeProperties[];
     // The p:style its paint and text take.
     style: XmlElement | undefined;
     placed: Placed;
@@ -335,16 +296,16 @@ type Leaf = {
 };
 
 function readShape(walk: Walk, leaf: Leaf): void {
-    const { shape, own, inherited, spPrs, style, placed, group } = leaf;
+    const { shape, own, chain, style, placed, group } = leaf;
     const { theme } = walk.inheritance;
-    const shaped = spPrs.find((spPr) => geometryOf(spPr) !== undefined);
-    const geometry = (shaped && geometryOf(shaped)) ?? 'rect';
+    const shaped = chain.find((link) => link.geometry !== undefined);
+    const geometry = shaped?.geometry ?? 'rect';
     const body = xmlChild(shape, P_NS, 'txBody');
-    const lines = linesOf(spPrs, walk, style);
+    const lines = linesOf(chain, walk, style);
     const source = body && {
         body,
-        inherited: inherited.flatMap((placeholder) => xmlChild(placeholder.shape, P_NS, 'txBody') ?? []),
-        listStyle: listStyleOf(own, walk.inheritance, walk.presentation),
+        inherited: chain.slice(1),
+        listStyle: listStyleOf(own, walk.inheritance),
         style,
         rels: walk.part.rels,
     };
@@ -355,7 +316,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint.
     const lost = (drawn: Set<string>) => (drawn.has(geometry) ? walk.deck.lost : UNDRAWN);
     const paint = {
-        fill: fillOf(spPrs, walk, { group, style, box, lost: lost(OUTLINED) }),
+        fill: fillOf(chain, walk, { group, style, box, lost: lost(OUTLINED) }),
         ...strokeOf(lines, walk, lost(STROKED)),
     };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
@@ -389,7 +350,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
             shapeAndText({ type: 'diamond', corners: 'straight' });
             break;
         case 'pie':
-            shapeAndText({ type: 'pie', ...pieAngles(shaped, placed) });
+            shapeAndText({ type: 'pie', ...pieAngles(shaped?.preset, placed) });
             break;
         case 'line':
         case 'straightConnector1':
@@ -415,12 +376,6 @@ const OUTLINED = new Set(['rect', 'roundRect', 'ellipse', 'diamond', 'pie']);
 const STROKED = new Set([...OUTLINED, 'line', 'straightConnector1']);
 const UNDRAWN: Lost = () => {};
 
-function geometryOf(spPr: XmlElement): string | undefined {
-    const preset = xmlChild(spPr, A_NS, 'prstGeom');
-    if (preset) return xmlAttr(preset, '', 'prst');
-    return xmlChild(spPr, A_NS, 'custGeom') ? 'custGeom' : undefined;
-}
-
 // The title's text, one line, for the frame's name.
 const MAX_TITLE_CHARS = 100;
 
@@ -434,21 +389,16 @@ const TRANSPARENT_FILL_JSON = PPTX_STYLE.fill;
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 const NO_STROKE: Stroke = { strokeColor: TRANSPARENT_COLOR, strokeWidth: PPTX_STYLE.strokeWidth, strokeStyle: 'solid' };
 
-// The p:style the shape paints by: a placeholder with none of its own takes its layout's or master's.
-function styleIn(chain: XmlElement[]): XmlElement | undefined {
-    return chain.map((link) => xmlChild(link, P_NS, 'style')).find((found) => found !== undefined);
-}
-
 // The first fill the chain states, a placeholder's own before its layout's and master's; else p:style's fillRef, its
 // colour the style matrix entry's phClr.
 function fillOf(
-    spPrs: XmlElement[],
+    chain: ShapeProperties[],
     walk: Walk,
     { group, style, box, lost }: { group: GroupFill | undefined; style: XmlElement | undefined; box: Box; lost: Lost },
 ): string {
     const { theme } = walk.inheritance;
     const options = { group, angle: elementGradientAngle(box.width, box.height), lost };
-    const fill = spPrs.map(fillIn).find((found) => found !== undefined);
+    const fill = chain.find((link) => link.fill)?.fill;
     const reference = style && xmlChild(style, A_NS, 'fillRef');
     const paint = fill
         ? paintOf(fill, theme, options)
@@ -460,10 +410,10 @@ function fillOf(
 // and colour comes from the first that states it.
 type Lines = { lns: XmlElement[]; entry: XmlElement | undefined; reference: XmlElement | undefined };
 
-function linesOf(spPrs: XmlElement[], walk: Walk, style: XmlElement | undefined): Lines {
+function linesOf(chain: ShapeProperties[], walk: Walk, style: XmlElement | undefined): Lines {
     const reference = style && xmlChild(style, A_NS, 'lnRef');
     const entry = reference && styleLine(walk.inheritance.theme, xmlAttr(reference, '', 'idx'));
-    const lns = spPrs.flatMap((spPr) => xmlChild(spPr, A_NS, 'ln') ?? []);
+    const lns = chain.flatMap((link) => link.ln ?? []);
     return { lns: entry ? [...lns, entry] : lns, entry, reference };
 }
 
@@ -488,9 +438,8 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
 
 // A pie's adj1 and adj2 are angles on the ellipse as drawn in its own box; the kind's are its box-normalized circle's,
 // which a group's scale leaves alone.
-function pieAngles(spPr: XmlElement | undefined, placed: Placed): { startAngle: number; sweepAngle: number } {
+function pieAngles(preset: XmlElement | undefined, placed: Placed): { startAngle: number; sweepAngle: number } {
     const guides = new Map<string, number>();
-    const preset = spPr && xmlChild(spPr, A_NS, 'prstGeom');
     const list = preset && xmlChild(preset, A_NS, 'avLst');
     for (const gd of list ? xmlChildren(list, A_NS, 'gd') : []) {
         const [, value] = xmlAttr(gd, '', 'fmla')?.match(/^val\s+(-?\d+)$/) ?? [];
@@ -538,7 +487,7 @@ function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorEle
 function readPicture(
     walk: Walk,
     shape: XmlElement,
-    spPrs: XmlElement[],
+    chain: ShapeProperties[],
     lines: Lines,
     { box, mirrored }: Placed,
 ): void {
@@ -560,7 +509,7 @@ function readPicture(
         mediaName: walk.deck.mediaName(part),
         objectFit: 'fill',
         // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.
-        corners: spPrs.map(geometryOf).find((found) => found !== undefined) === 'roundRect' ? 'curved' : 'straight',
+        corners: chain.find((link) => link.geometry !== undefined)?.geometry === 'roundRect' ? 'curved' : 'straight',
     });
 }
 
