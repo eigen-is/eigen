@@ -45,6 +45,7 @@ import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
 import {
     A_NS,
+    AHYP_NS,
     ASVG_NS,
     CONTENT_TYPES_NS,
     CORE_PROPERTIES_NS,
@@ -869,6 +870,10 @@ const PARAGRAPH_GAP_EM = canvasTextLength('.eigen-canvas-text p + p', 'margin-to
 // The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's, which a tall line or a deep nesting passes.
 const MAX_SPACING = 158_400;
 const MAX_MARGIN = 51_206_400;
+// ST_TextIndentLevelType's deepest level, and ST_TextFontSize's range.
+const MAX_LEVEL = 8;
+const MIN_FONT_SIZE = 100;
+const MAX_FONT_SIZE = 400_000;
 
 function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
     const em = (n: number) => emu(slide, n * box.fontSize);
@@ -882,7 +887,7 @@ function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): strin
             em(paragraph.depth * LIST_INDENT_EM) + paragraph.quotes * (em(QUOTE_INDENT_EM) + emu(slide, QUOTE_BAR_PX)),
         );
         const indent = paragraph.marker ? -em(MARKER_EM[paragraph.marker]) : 0;
-        const level = Math.min(8, Math.max(0, paragraph.depth - 1));
+        const level = Math.min(MAX_LEVEL, Math.max(0, paragraph.depth - 1));
         const attrs = [
             margin ? ` marL="${margin}"` : '',
             indent ? ` indent="${indent}"` : '',
@@ -925,7 +930,7 @@ function trimmed(runs: Run[]): Run[] {
 }
 
 function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, marks: Marks, opacity: number): string {
-    const size = Math.min(400_000, Math.max(100, centipoints(slide, box.fontSize)));
+    const size = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, centipoints(slide, box.fontSize)));
     const spacing = centipoints(slide, box.letterSpacing);
     const attrs = [
         ` sz="${size}"`,
@@ -942,7 +947,7 @@ function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, 
     // A link draws in the run's color, as canvas-text.css draws it: PowerPoint's own extension for that.
     const link =
         marks.href && tag === 'a:rPr'
-            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
+            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="${AHYP_NS}" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
             : '';
     return `<${tag}${attrs} dirty="0">${fill}${fonts}${link}</${tag}>`;
 }
