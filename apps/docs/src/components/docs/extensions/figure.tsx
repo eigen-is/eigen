@@ -36,7 +36,7 @@ export function clampFigureWidth(width: number, maxWidth: number) {
     return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
 }
 
-type FigureOptions = {
+export type FigureOptions = {
     // The host decides whether a menu opens, so an image with no rows keeps the browser's own.
     onContextMenu: (node: PMNode, pos: number, event: React.MouseEvent) => void;
     onOpenComment: (cardId: string) => void;

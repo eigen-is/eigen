@@ -1,19 +1,7 @@
-import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import type { Node } from '@tiptap/pm/model';
-import { Selection } from '@tiptap/pm/state';
-import type { Editor } from '@tiptap/react';
-import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
+import { EditorContent, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
-import {
-    classifyPaste,
-    clipboardTextItemHasContent,
-    hasRichHtmlBeyondMarker,
-    materializeClipboardSvg,
-    needsReUpload,
-    reUploadImage,
-} from '@workspace/lib/clipboard';
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
@@ -21,28 +9,16 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
-import { userColor } from '@workspace/lib/constants/colors';
-import { getFontName } from '@workspace/lib/constants/fonts';
-import { getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
-import {
-    isPendingMediaName,
-    MediaResolverProvider,
-    useCopyToMediaFolder,
-    useMediaResolver,
-    useUploadFile,
-    useZombieMediaSweep,
-} from '@workspace/lib/drive';
-import { useIsCoarsePointer } from '@workspace/lib/media';
+import { pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
-import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
     type CommentContextMenuItem,
     CommentLifecycleDialogs,
@@ -59,22 +35,17 @@ import { useProseMirrorSearchController } from '@workspace/ui/components/search/
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
-import { insertEigenItems, writeDocsClipboard } from './clipboard';
+import { useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
-import { Figure } from './extensions/figure';
-import { EditorTable } from './extensions/table';
-import { TableWidthClamp } from './extensions/table-width-clamp';
 import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePageSetup } from './hooks/use-page-setup';
 import { createDocUndoManager, writePageSetup } from './page-setup';
-import { cleanPastedHTML } from './paste';
 import { TablePropertiesPanel } from './table-properties-panel';
 
 function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
@@ -84,62 +55,6 @@ function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: numbe
     });
     return anchors;
 }
-
-function swapFigureMediaName(editor: Editor, pendingName: string, newName: string | null) {
-    const positions: number[] = [];
-    editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'figure' && node.attrs.mediaName === pendingName) {
-            positions.push(pos);
-        }
-        return true;
-    });
-    if (positions.length === 0) return;
-    editor.commands.command(({ tr, dispatch }) => {
-        // Iterate in reverse so earlier positions stay valid after later deletes
-        for (let i = positions.length - 1; i >= 0; i--) {
-            const pos = positions[i];
-            const node = tr.doc.nodeAt(pos);
-            if (!node) continue;
-            if (newName === null) {
-                tr.delete(pos, pos + node.nodeSize);
-            } else {
-                tr.setNodeAttribute(pos, 'mediaName', newName);
-            }
-        }
-        if (dispatch) dispatch(tr);
-        return true;
-    });
-}
-
-// The textStyle `fontFamily` attr is an EIGEN_FONTS name, but a stored doc may hold a full CSS stack and
-// y-prosemirror hydrates without parseHTML, so this pass collapses a known stack to its name on editable
-// load. renderHTML maps the name back to the same stack. Kept out of the undo history.
-function normalizeFontFamilyMarks(editor: Editor) {
-    const markType = editor.schema.marks.textStyle;
-    if (!markType) return;
-    const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
-    editor.state.doc.descendants((node, pos) => {
-        if (!node.isText) return;
-        const mark = node.marks.find((m) => m.type === markType);
-        if (!mark) return;
-        const family = mark.attrs.fontFamily;
-        if (typeof family !== 'string' || !family) return;
-        const canon = getFontName(family);
-        if (canon === family) return;
-        targets.push({ from: pos, to: pos + node.nodeSize, attrs: { ...mark.attrs, fontFamily: canon } });
-    });
-    if (targets.length === 0) return;
-    editor.commands.command(({ tr, dispatch }) => {
-        for (const { from, to, attrs } of targets) {
-            tr.addMark(from, to, markType.create(attrs));
-        }
-        tr.setMeta('addToHistory', false);
-        if (dispatch) dispatch(tr);
-        return true;
-    });
-}
-
-const lowlight = createLowlight(common);
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
@@ -232,13 +147,10 @@ const TiptapEditor = ({
     initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
-    const uploadFile = useUploadFile(path.ownerId, path.mountId);
-    const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
-    const { resolveMediaPath, startUpload } = useMediaResolver();
+    const media = useDocMedia(path);
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
     const { isMobile } = useLayout();
-    const isCoarsePointer = useIsCoarsePointer();
     const {
         panel,
         commentPanelOpen,
@@ -256,16 +168,11 @@ const TiptapEditor = ({
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-    const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
     // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
-    const mediaFolderIdRef = useRef(mediaFolderId);
-    mediaFolderIdRef.current = mediaFolderId;
-    const resolveMediaPathRef = useRef(resolveMediaPath);
-    resolveMediaPathRef.current = resolveMediaPath;
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = usePageSetup(yDoc);
     // The page at 96 dpi, for the layout math below and the text column before the page mounts.
@@ -320,19 +227,18 @@ const TiptapEditor = ({
         [isMobile, openComments],
     );
 
-    const editor = useEditor(
+    const editor = useDocEditor(
         {
+            path,
+            yDoc,
+            provider,
             editable: canWrite,
+            target: { undoManager, cardIds: () => new Set(Object.keys(cardsRef.current)) },
+            figure: {
+                onOpenComment: handleCommentClick,
+                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+            },
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
-                // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
-                // drags nothing, and a tap beside a border would start a drag that swallows the caret.
-                EditorTable.configure({ resizable: !isCoarsePointer }),
-                Figure.configure({
-                    onOpenComment: handleCommentClick,
-                    onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-                }),
-                TableWidthClamp,
                 SearchHighlight,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
@@ -346,102 +252,11 @@ const TiptapEditor = ({
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: toggleComments,
                 }),
-                Collaboration.configure({
-                    document: yDoc,
-                    yUndoOptions: { undoManager },
-                }),
-                CollaborationCaret.configure({
-                    provider,
-                    // userId is what the server's awareness gate checks; without it every frame is dropped
-                    user: {
-                        name: auth.user!.name,
-                        color: userColor(auth.user!.id),
-                        userId: auth.user!.id,
-                    },
-                    render: (user: Record<string, string>) =>
-                        renderPresenceCaret({ name: user.name, color: user.color }),
-                }),
             ],
-            editorProps: {
-                attributes: {
-                    class: 'eigen-prose',
-                },
-                handleDOMEvents: {
-                    copy: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
-                    cut: (view, event) => writeDocsClipboard(view, event, resolveMediaPathRef.current),
-                },
-                transformPastedHTML: (html: string) =>
-                    cleanPastedHTML(html, getEditorMaxWidth(), new Set(Object.keys(cardsRef.current))),
-                handleDrop: (view, event) => {
-                    if (!event.dataTransfer) return false;
-                    const files = Array.from(event.dataTransfer.files);
-                    const imageFile = files.find((f) => f.type.startsWith('image/'));
-                    if (imageFile && mediaFolderIdRef.current) {
-                        event.preventDefault();
-                        const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                        if (dropPos) {
-                            const tr = view.state.tr.setSelection(Selection.near(view.state.doc.resolve(dropPos.pos)));
-                            view.dispatch(tr);
-                        }
-                        handleImageUpload(imageFile).catch(() => {});
-                        return true;
-                    }
-                    return false;
-                },
-                handlePaste: (_view, event) => {
-                    if (!event.clipboardData) return false;
-                    const paste = classifyPaste(event.clipboardData);
-                    const mediaFolderId = mediaFolderIdRef.current;
-
-                    // A vector SVG payload (or a pasted SVG document) lands as a figure through the exact
-                    // image-upload path — stored in media/, served as-is, rendered by <image>. Its images
-                    // are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
-                    // rewrites the svg's refs before it's stored.
-                    if (paste.svg && mediaFolderId) {
-                        event.preventDefault();
-                        materializeClipboardSvg(paste.svg.svg, paste.svg.items, mediaFolderId, uploadFile.mutateAsync)
-                            .then(handleImageUpload)
-                            .catch(() => {});
-                        return true;
-                    }
-
-                    if (paste.eigen) {
-                        // Images take this path for the cross-mount re-upload, a docs copy's through its own
-                        // HTML; text only when text/html is marker-only (a canvas text copy), so a sheets table
-                        // still parses in PM. Claimed only with an item this editor can place, or ⌘V on a bare
-                        // `elements` item is dead.
-                        const hasImage = paste.eigen.items.some((i) => i.type === 'image');
-                        const hasText = paste.eigen.items.some(
-                            (i) => i.type === 'text' && clipboardTextItemHasContent(i),
-                        );
-                        if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
-                            event.preventDefault();
-                            if (editorRef.current) {
-                                insertEigenItems(
-                                    editorRef.current,
-                                    paste.eigen.items,
-                                    paste.html,
-                                    pastedMediaName,
-                                ).catch(() => {});
-                            }
-                            return true;
-                        }
-                    }
-
-                    const imageFile = paste.imageFiles[0];
-                    if (imageFile && mediaFolderId) {
-                        event.preventDefault();
-                        handleImageUpload(imageFile).catch(() => {});
-                        return true;
-                    }
-                    return false;
-                },
-            },
+            textColumnWidth: getEditorMaxWidth,
         },
         [handleCommentClick],
     );
-
-    editorRef.current = editor;
 
     // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector.
     const { canUndo, canRedo } = useEditorState({
@@ -456,65 +271,6 @@ const TiptapEditor = ({
             };
         },
     });
-
-    const handleImageUpload = async (file: File) => {
-        if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
-        const { pendingName, promise } = startUpload(file);
-        editorRef.current.chain().focus().setFigure({ mediaName: pendingName }).run();
-        const result = await promise;
-        if (editorRef.current) {
-            swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
-        }
-    };
-
-    const handleReplaceImage = async (file: File) => {
-        if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
-        const { pendingName, promise } = startUpload(file);
-        // Reset width so the new image's aspect ratio is recomputed on load
-        editorRef.current.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
-        const result = await promise;
-        if (!editorRef.current) return;
-        swapFigureMediaName(editorRef.current, pendingName, result?.name ?? null);
-    };
-
-    const handleImagePickFromDrive = async (paths: DrivePath[]) => {
-        if (!mediaFolderIdRef.current || !editorRef.current) return;
-        const results = await copyToMediaFolder
-            .mutateAsync({ paths, mediaFolderId: mediaFolderIdRef.current })
-            .catch(() => null);
-        if (!results) return;
-        for (const result of results) {
-            editorRef.current.chain().focus().setFigure({ mediaName: result.name }).run();
-        }
-    };
-
-    const handleReplaceImageFromDrive = async (paths: DrivePath[]) => {
-        if (!mediaFolderIdRef.current || !editorRef.current || paths.length === 0) return;
-        const replaced = editorRef.current.getAttributes('figure').mediaName;
-        const result = await copyToMediaFolder
-            .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
-            .catch(() => null);
-        // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
-        if (result?.[0] && editorRef.current?.isActive('figure', { mediaName: replaced })) {
-            editorRef.current.chain().focus().updateFigure({ mediaName: result[0].name, width: null }).run();
-        }
-    };
-
-    // The name a pasted image item is stored under: another document's file is re-uploaded into this
-    // one's media/ first, and skipped if that fails rather than falling back to an unresolvable name.
-    const pastedMediaName = async (item: EigenClipboardImageItem): Promise<string | null> => {
-        const currentMediaFolderId = mediaFolderIdRef.current;
-        if (!needsReUpload(item.sourceParentId, currentMediaFolderId) || !currentMediaFolderId) return item.mediaName;
-        const result = await reUploadImage(
-            item.sourcePathId,
-            item.sourceOwnerId,
-            item.sourceMountId,
-            currentMediaFolderId,
-            uploadFile.mutateAsync,
-            item.mediaName,
-        );
-        return result?.mediaName ?? null;
-    };
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;
@@ -556,7 +312,7 @@ const TiptapEditor = ({
     const canAddComment = canWrite && !!chatFolderId;
     // Opens only when a row will render; otherwise the browser's own menu shows.
     figureContextMenuRef.current = (node, pos, event) => {
-        const imagePath = resolveMediaPath(node.attrs.mediaName ?? '');
+        const imagePath = media.resolveMediaPath(node.attrs.mediaName ?? '');
         const comment = commentMenuItem(nodeCommentCardId(node));
         if (!imagePath && !comment && !canAddComment) return;
         // Selected first, so Add comment anchors to it.
@@ -638,38 +394,6 @@ const TiptapEditor = ({
             editor.off('selectionUpdate', onUpdate);
         };
     }, [editor]);
-
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
-    // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
-    useZombieMediaSweep({
-        ready: !!editor,
-        scan: () => {
-            const names: string[] = [];
-            editor?.state.doc.descendants((node) => {
-                if (
-                    node.type.name === 'figure' &&
-                    typeof node.attrs.mediaName === 'string' &&
-                    isPendingMediaName(node.attrs.mediaName)
-                ) {
-                    names.push(node.attrs.mediaName);
-                }
-                return true;
-            });
-            return names;
-        },
-        remove: (names) => {
-            if (!editor) return;
-            for (const name of names) swapFigureMediaName(editor, name, null);
-        },
-    });
-
-    // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
-    // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
-    // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
-    useEffect(() => {
-        if (!editor || !canWrite) return;
-        normalizeFontFamilyMarks(editor);
-    }, [editor, canWrite]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
@@ -777,8 +501,12 @@ const TiptapEditor = ({
                                     onToggleActivityPanel={toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
-                                    onImageUpload={mediaFolderId ? handleImageUpload : undefined}
-                                    onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                                    onImageUpload={
+                                        mediaFolderId ? (file) => media.uploadImage(editor, file) : undefined
+                                    }
+                                    onImagePickFromDrive={
+                                        mediaFolderId ? (paths) => media.insertFromDrive(editor, paths) : undefined
+                                    }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
                                 />
@@ -852,8 +580,8 @@ const TiptapEditor = ({
                 onOpenChange={setReplacePickerOpen}
                 title="Replace image"
                 canPick={(item) => isImageMime(item.mimeType)}
-                onPickFromDrive={handleReplaceImageFromDrive}
-                onPickFromDevice={(files) => files[0] && handleReplaceImage(files[0])}
+                onPickFromDrive={(paths) => media.replaceFromDrive(editor, paths)}
+                onPickFromDevice={(files) => files[0] && media.replaceImage(editor, files[0])}
                 accept="image/*"
             />
 
