@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { gradientStops } from '@workspace/lib/background';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import {
@@ -441,6 +442,30 @@ describe('pptx shapes', () => {
         const normal = (Math.atan2(-4, 1) * 180) / Math.PI + 360;
         expect(Number(attr(lin, 'ang'))).toBe(Math.round(normal * 60_000));
         expect(attr(lin, 'scaled')).toBe('0');
+    });
+
+    test("a gradient writes Eigen's OKLab ramp as its stops, element and background alike", () => {
+        const red = '#ff0000';
+        const blue = '#0000ff';
+        const zip = pptx(
+            sceneOf(
+                [
+                    element('rectangle', {
+                        fill: serializeFill({ type: 'gradient', from: red, to: blue, angle: 90, style: 'solid' }),
+                    }),
+                ],
+                [{ id: 'f1', index: 'a0', background: { type: 'gradient', from: red, to: blue, angle: 90 } }],
+            ),
+        );
+        const ramp = gradientStops(red, blue);
+        expect(ramp).toHaveLength(9);
+        // PowerPoint interpolates its stops in sRGB, whose midpoint is 800080.
+        expect(ramp[4].color.toUpperCase()).not.toBe('#800080');
+        const slide = part(zip, 'ppt/slides/slide1.xml');
+        for (const fill of [first(first(slide, P, 'bgPr'), A, 'gradFill'), first(only(zip), A, 'gradFill')]) {
+            const stops = descendants(fill, A, 'gs').map((gs) => [Number(attr(gs, 'pos')), srgb(gs).val]);
+            expect(stops).toEqual(ramp.map((stop) => [stop.offset * 100_000, stop.color.slice(1).toUpperCase()]));
+        }
     });
 
     test('a two-point arrow is a connector line, flipped toward its end, with its heads', () => {
