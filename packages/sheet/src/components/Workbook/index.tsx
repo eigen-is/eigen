@@ -1,3 +1,4 @@
+import { parseChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
@@ -11,19 +12,22 @@ import type {
     EigenClipboardImageItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
-import { cloneDeep } from 'es-toolkit/compat';
+import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
+import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
     api,
     applySheetView,
     type CellWithRowAndCol,
+    type ChartEditorState,
     COPY_ACTION_TABLE_MARKER,
     type Context,
+    createContextResolver,
     defaultContext,
     defaultSettings,
     editsDeletedChart,
@@ -240,11 +244,31 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             // noUndo: emit the op (peers need the swap/correction) but record no local
                             // undo entry, so a cross-mount paste stays a single ⌘Z.
                             if (!options.noUndo) {
-                                globalCache.current.undoList.push({
-                                    patches: filteredPatches,
-                                    inversePatches: filteredInversePatches,
-                                    options,
-                                });
+                                const { undoList, undoGesture } = globalCache.current;
+                                const last = undoList.at(-1);
+                                if (undoGesture && last?.gesture === undoGesture) {
+                                    const [patch] = filteredPatches;
+                                    const previous = last.patches.at(-1);
+                                    // A field typed key by key keeps its first old value and its latest new one.
+                                    if (
+                                        filteredPatches.length === 1 &&
+                                        patch.op === 'replace' &&
+                                        previous?.op === 'replace' &&
+                                        isEqual(previous.path, patch.path)
+                                    ) {
+                                        last.patches[last.patches.length - 1] = patch;
+                                    } else {
+                                        last.patches.push(...filteredPatches);
+                                        last.inversePatches.unshift(...filteredInversePatches);
+                                    }
+                                } else {
+                                    undoList.push({
+                                        patches: filteredPatches,
+                                        inversePatches: filteredInversePatches,
+                                        options,
+                                        gesture: undoGesture,
+                                    });
+                                }
                                 globalCache.current.redoList = [];
                             }
                             emitOp(result, filteredPatches, options);
@@ -353,6 +377,30 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const active = context.insertedImgs?.find((img) => img.id === context.activeImg) ?? null;
             mergedSettings.hooks?.onActiveImageChange?.(active);
         }, [context.activeImg, context.insertedImgs, mergedSettings.hooks]);
+
+        const currentSheetIndex = getSheetIndex(context, context.currentSheetId);
+        const editingChart = context.activeChart?.editor
+            ? context.sheets[currentSheetIndex ?? -1]?.charts?.[context.activeChart.id]
+            : undefined;
+        // Rebuilt on every sheet change while the editor is open: a renamed sheet renames its data range,
+        // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
+        // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
+        const chartEditor = useMemo((): ChartEditorState | null => {
+            if (!editingChart) return null;
+            const data = parseChartSpec(editingChart.spec)?.data;
+            const resolver = createContextResolver(context);
+            const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
+            return {
+                chart: editingChart,
+                sheetId: context.currentSheetId,
+                sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
+                categories: typeof resolved === 'object' ? resolved.categories : [],
+                seriesNames: data?.source === 'range' ? data.series.map((s) => seriesName(s.name, resolver)) : [],
+            };
+        }, [editingChart, context.currentSheetId, context.sheets]);
+        useEffect(() => {
+            mergedSettings.hooks?.onChartEditorChange?.(chartEditor);
+        }, [chartEditor, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({

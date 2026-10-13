@@ -52,6 +52,8 @@ export type Context = {
     insertedImgs?: Image[];
     editingInsertedImgs?: Image;
     activeImg?: string;
+    // The selected chart on the current sheet, and whether its editor sidebar is open.
+    activeChart?: { id: string; editor: boolean };
     presences?: Presence[];
     // Transient find highlight state (UI-only, never persisted/synced — like
     // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).
