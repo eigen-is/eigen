@@ -7,7 +7,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
-import { FRAME_ASPECT_RATIO, parseBackgroundFill, type VectorElement, type VectorFrame } from '@workspace/lib/vector';
+import { parseBackgroundFill, type VectorElement, type VectorFrame } from '@workspace/lib/vector';
 import type { useContextMenu } from '@workspace/ui/components/context-menu';
 import { FrameThumbnail } from '@workspace/ui/components/vector';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
@@ -94,7 +94,7 @@ export function SlidePanel({
                             <div
                                 className="w-36 rounded border border-primary overflow-hidden shadow-lg"
                                 style={{
-                                    aspectRatio: FRAME_ASPECT_RATIO,
+                                    aspectRatio: `${dragged.width}/${dragged.height}`,
                                     ...getBackgroundStyle(parseBackgroundFill(dragged.background), resolveMediaUrl),
                                 }}
                             />

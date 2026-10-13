@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1733 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1735 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -521,7 +521,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (405)
+## Types (406)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -842,6 +842,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `RenderOutput` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `SlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SnapLine` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -931,7 +932,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (838)
+## Utilities & constants (839)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1557,11 +1558,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FONT_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FONT_WEIGHTS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `FRAME_ASPECT_RATIO` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_CARD_BORDER` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_CARD_RADIUS` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
-| `FRAME_HEIGHT` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `frameClipRadius` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1610,6 +1609,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `nearestPoint` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `nearestSlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `NEW_TEXT_BOX_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1683,6 +1683,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `SLIDE_SIZE_KEYS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `SLIDE_SIZES` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SLIDES_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

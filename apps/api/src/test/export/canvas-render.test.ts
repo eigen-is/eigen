@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { VectorElement, VectorScene } from '@workspace/lib/vector';
+import { DEFAULT_SCENE_META, type VectorElement, type VectorScene } from '@workspace/lib/vector';
 import { drawingPage, emptyPage, framePages, renderCanvasPage, renderFittedPage } from '../../lib/export/canvas/render';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
 
@@ -32,7 +32,7 @@ describe('drawingPage', () => {
     });
 
     test('an empty drawing has no page', () => {
-        expect(drawingPage({ elements: [], frames: [], meta: { background: 'transparent' } }, noMedia)).toBeNull();
+        expect(drawingPage({ elements: [], frames: [], meta: DEFAULT_SCENE_META }, noMedia)).toBeNull();
     });
 
     test('a transparent scene background is no background at all', () => {
@@ -221,7 +221,7 @@ describe('framePages', () => {
     });
 
     test('a deck with no frames has no pages', () => {
-        const empty = { elements: [], frames: [], meta: { background: 'transparent' } };
+        const empty = { elements: [], frames: [], meta: DEFAULT_SCENE_META };
         expect(framePages(empty, noMedia)).toEqual([]);
     });
 });

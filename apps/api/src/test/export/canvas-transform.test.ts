@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { SlideSize } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
@@ -52,12 +53,13 @@ describe('canvasHtmlDocument', () => {
 
 // A rich-text box is a schemaless collaborator string, and a <style> element in it is document-wide
 // CSS in whatever embeds the body — the downloaded .html and the sheet WeasyPrint prints.
-function deckExportHtml(format: DocumentExportFormat, html: string): string {
+function deckExportHtml(format: DocumentExportFormat, html: string, slideSize: SlideSize = '16:9'): string {
     const scene = buildGoldenDeckScene();
     const doc = new Y.Doc();
     seedDeckDoc(doc, {
         ...scene,
         elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)),
+        meta: { ...scene.meta, slideSize },
     });
     return new TextDecoder().decode(renderEigenslidesExport(doc, format, 'Deck', []).data);
 }
@@ -72,6 +74,21 @@ describe('renderEigenslidesExport', () => {
     test('the html download opens a text box link in a new tab, as the canvas does', () => {
         const link = '<p><a href="https://a.example/" target="_blank" rel="noopener noreferrer">a</a></p>';
         expect(deckExportHtml('html', link)).toContain(link);
+    });
+
+    // 960 px at 96 dpi is 254 mm, so a 16:9 sheet is 254 x 142.875 mm and a 4:3 one 254 x 190.5 mm,
+    // Google's PDF sizes. Every page of the download takes the deck's shape too.
+    test.each([
+        ['16:9', 540],
+        ['4:3', 720],
+    ] as const)('a %s deck prints on its own sheet, and the download pages follow', (slideSize, height) => {
+        expect(deckExportHtml('pdf-html', '<p>hi</p>', slideSize)).toContain(
+            `@page { size: 960px ${height}px; margin: 0; }`,
+        );
+        const screen = deckExportHtml('html', '<p>hi</p>', slideSize);
+        const pages = screen.match(/<div class="page-fit" style="[^"]*">/g) ?? [];
+        expect(pages.length).toBe(buildGoldenDeckScene().frames.length);
+        for (const page of pages) expect(page).toContain(`--page-ar:960/${height}`);
     });
 
     test('keeps the embedded font faces the document needs', () => {

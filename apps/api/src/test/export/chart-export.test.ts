@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import {
     baseDefaultsFor,
+    DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     elementLayer,
     elementToSvg,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     layerInnerHtml,
+    SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     type StyleDefaults,
     sceneToSvg,
@@ -71,7 +71,7 @@ function asParsed(fragment: string): string {
 
 describe('a chart in the canvas exports', () => {
     const chart = chartElement(VECTOR_STYLE_DEFAULTS);
-    const scene: VectorScene = { elements: [chart], frames: [], meta: { background: 'transparent' } };
+    const scene: VectorScene = { elements: [chart], frames: [], meta: DEFAULT_SCENE_META };
 
     test('the SVG download keeps the chart as drawn: shapes and text, no foreignObject', () => {
         const svg = decode(renderEigenvectorExport(docOf(scene), 'svg', 'Drawing', []).data);
@@ -104,10 +104,8 @@ describe('a chart in the canvas exports', () => {
         const slide = chartElement(SLIDES_STYLE_DEFAULTS, { frameId: 'frame-1' });
         const deck: VectorScene = {
             elements: [slide],
-            frames: [
-                { id: 'frame-1', index: 'a0', name: '', background: '', width: FRAME_WIDTH, height: FRAME_HEIGHT },
-            ],
-            meta: { background: 'transparent' },
+            frames: [{ id: 'frame-1', index: 'a0', name: '', background: '', ...SLIDE_SIZES['16:9'] }],
+            meta: DEFAULT_SCENE_META,
         };
         const html = decode(renderEigenslidesExport(docOf(deck), 'html', 'Deck', []).data);
         const layer = elementLayer(slide);

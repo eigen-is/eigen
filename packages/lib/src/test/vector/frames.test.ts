@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
     elementsInFrame,
-    FRAME_ASPECT_RATIO,
     FRAME_FIELDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     framesFrom,
     nearestFrameId,
+    nearestSlideSize,
     pointInFrame,
+    SLIDE_SIZES,
     type VectorFrame,
 } from '../../vector/frames';
 import { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
@@ -18,18 +17,29 @@ function frames(...ids: string[]): VectorFrame[] {
         id,
         index: `a${i}`,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: '',
     }));
 }
 
-describe('frames', () => {
-    // The one fact a test can hold that the declarations don't: every frame in this programme is 16:9
-    // at 1920x1080, and the size is a constant rather than a stored field.
-    test('every frame is 16:9 at 1920x1080', () => {
-        expect([FRAME_WIDTH, FRAME_HEIGHT]).toEqual([1920, 1080]);
-        expect(FRAME_ASPECT_RATIO).toBeCloseTo(16 / 9);
+describe('SLIDE_SIZES', () => {
+    // Google's sizes: both 10 in wide, so a 4:3 slide is the 16:9 one with 360 px more height and a
+    // switch moves nothing off the page.
+    test('16:9 is 1920x1080 and 4:3 keeps the width at 1920x1440', () => {
+        expect(SLIDE_SIZES).toEqual({ '16:9': { width: 1920, height: 1080 }, '4:3': { width: 1920, height: 1440 } });
+    });
+});
+
+describe('nearestSlideSize', () => {
+    test("PowerPoint's and Google's widescreen sizes, and 16:10, are 16:9", () => {
+        expect(nearestSlideSize(12_192_000, 6_858_000)).toBe('16:9');
+        expect(nearestSlideSize(9_144_000, 5_143_500)).toBe('16:9');
+        expect(nearestSlideSize(1920, 1200)).toBe('16:9');
+    });
+
+    test('4:3 and A4 landscape are 4:3', () => {
+        expect(nearestSlideSize(9_144_000, 6_858_000)).toBe('4:3');
+        expect(nearestSlideSize(10_692_000, 7_560_000)).toBe('4:3');
     });
 });
 
@@ -51,18 +61,18 @@ describe('pointInFrame', () => {
     test('the page and its edges are inside', () => {
         expect(pointInFrame({ x: 0, y: 0 }, page)).toBe(true);
         expect(pointInFrame({ x: 960, y: 540 }, page)).toBe(true);
-        expect(pointInFrame({ x: FRAME_WIDTH, y: FRAME_HEIGHT }, page)).toBe(true);
+        expect(pointInFrame({ x: page.width, y: page.height }, page)).toBe(true);
     });
 
     test('the letterbox backdrop around it is outside', () => {
         expect(pointInFrame({ x: -1, y: 540 }, page)).toBe(false);
         expect(pointInFrame({ x: 960, y: -1 }, page)).toBe(false);
-        expect(pointInFrame({ x: FRAME_WIDTH + 1, y: 540 }, page)).toBe(false);
-        expect(pointInFrame({ x: 960, y: FRAME_HEIGHT + 1 }, page)).toBe(false);
+        expect(pointInFrame({ x: page.width + 1, y: 540 }, page)).toBe(false);
+        expect(pointInFrame({ x: 960, y: page.height + 1 }, page)).toBe(false);
     });
 });
 
-test('FRAME_FIELDS is the stored key allow-list, and excludes the constant size', () => {
+test('FRAME_FIELDS is the stored key allow-list, and excludes the size the deck sets', () => {
     expect(FRAME_FIELDS).toEqual(['id', 'index', 'name', 'background']);
 });
 
