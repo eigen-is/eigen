@@ -77,13 +77,41 @@ type LayerBoxCss = { width: string; height: string; transform: string; opacity?:
 // center and translate is origin-independent, so `translate(x,y) rotate(a)` is the single-<svg>
 // renderer's `translate(x y) rotate(a w/2 h/2)` exactly.
 export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): LayerBoxCss {
-    const rotate = box.angle === 0 ? '' : ` rotate(${round(box.angle)}deg)`;
+    const rotate = box.angle === 0 ? '' : ` ${rotateCss(box.angle)}`;
     return {
         width: `${round(box.width)}px`,
         height: `${round(box.height)}px`,
         transform: `translate(${round(box.x)}px,${round(box.y)}px)${rotate}`,
-        ...(opacity === 100 ? null : { opacity: `${round(opacity / 100)}` }),
+        ...opacityCss(opacity),
     };
+}
+
+type LayerPrintCss = { top: string; left: string; width: string; height: string; transform?: string; opacity?: string };
+
+// The same box laid out where it prints, for a page whose top-left is `origin` in scene units. WeasyPrint
+// lays a page out ignoring transforms and cuts every line whose layout box passes the @page height, so the
+// origin rides in top and left and only the rotation stays a transform. A rotation about the default box
+// center places the box exactly where layerBoxCss's translate-then-rotate does.
+export function layerPrintCss(
+    { box, opacity }: Pick<Layer, 'box' | 'opacity'>,
+    origin: { x: number; y: number },
+): LayerPrintCss {
+    return {
+        top: `${round(box.y - origin.y)}px`,
+        left: `${round(box.x - origin.x)}px`,
+        width: `${round(box.width)}px`,
+        height: `${round(box.height)}px`,
+        ...(box.angle === 0 ? null : { transform: rotateCss(box.angle) }),
+        ...opacityCss(opacity),
+    };
+}
+
+function rotateCss(angle: number): string {
+    return `rotate(${round(angle)}deg)`;
+}
+
+function opacityCss(opacity: number): { opacity: string } | null {
+    return opacity === 100 ? null : { opacity: `${round(opacity / 100)}` };
 }
 
 // The class every rich-text body wraps in. It carries the descendant rules an inline style cannot

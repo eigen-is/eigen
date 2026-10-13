@@ -64,7 +64,7 @@ export function renderEigenvectorExport(
     if (!page) throw new ApiError(400, 'The drawing is empty');
     // The shared canvas document sanitizes the assembled body and owns the @page rule, the fonts and
     // the reset — a deck's pages and a drawing's single page leave through the same wrapper.
-    const html = canvasHtmlDocument({ title, pages: [page], scale: 1, mode: 'pdf' });
+    const html = canvasHtmlDocument({ title, pages: [page], mode: 'pdf' });
     return { data: toTransferableText(html), warnings: [] };
 }
 

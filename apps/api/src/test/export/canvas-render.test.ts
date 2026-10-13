@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_SCENE_META, type VectorElement, type VectorScene } from '@workspace/lib/vector';
-import { drawingPage, emptyPage, framePages, renderCanvasPage, renderFittedPage } from '../../lib/export/canvas/render';
+import {
+    drawingPage,
+    emptyPage,
+    framePages,
+    renderCanvasPage,
+    renderFittedPage,
+    renderPrintPage,
+} from '../../lib/export/canvas/render';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
 
 // Box fields only: a Partial of the whole union would widen `type` on the spread below and stop the
@@ -175,6 +182,27 @@ describe('renderFittedPage', () => {
         const html = renderFittedPage(page, 0.5);
         expect(html.startsWith('<div class="page-fit" style="--page-w:60px;--page-ar:60/40">')).toBe(true);
         expect(html).toContain('<div class="canvas-page"');
+    });
+});
+
+// WeasyPrint lays a page out ignoring transforms and cuts a line laid out past the @page height, so a
+// printed layer is laid out where it prints, with no transform above it (canvas-pdf.test.ts).
+describe('renderPrintPage', () => {
+    test('a layer is laid out at its box minus the page origin, straight in the 1:1 page box', () => {
+        const page = drawingPage(sceneOf('v-rect', { x: -4000, y: -3000 }), noMedia);
+        if (!page) throw new Error('expected a page');
+        const html = renderPrintPage(page);
+        expect(html).toContain(
+            '<div class="canvas-page" style="position:relative;overflow:hidden;width:120px;height:80px">' +
+                '<div style="position:absolute;top:10px;left:10px;width:100px;height:60px">',
+        );
+        expect(html).not.toContain('transform');
+    });
+
+    test('a rotation is the only transform, about the box centre', () => {
+        const page = drawingPage(sceneOf('v-rect', { x: 12, y: 34, angle: 30, opacity: 50 }), noMedia);
+        if (!page) throw new Error('expected a page');
+        expect(renderPrintPage(page)).toContain('transform:rotate(30deg);opacity:0.5');
     });
 });
 

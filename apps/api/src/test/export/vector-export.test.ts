@@ -295,7 +295,8 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
         // The page is the document body's only child, and every <svg> in it is one layer's own
         // viewport — the old arm put the whole drawing in a single root <svg> with a viewBox.
         expect(html).toContain('<body>\n    <div class="canvas-page"');
-        expect(html).toContain('transform-origin:0 0');
+        // The page prints at 1:1, so no transform sits above a layer (canvas-pdf.test.ts says why).
+        expect(html).not.toContain('transform:scale');
         const svgs = (html.match(/<svg\b/g) ?? []).length;
         const layerViewports = (html.match(/<div style="position:absolute[^"]*"><svg\b/g) ?? []).length;
         expect(svgs).toBeGreaterThan(1);

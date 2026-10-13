@@ -143,7 +143,7 @@ Export is the one read that recalcs a workbook nobody computed ([SHEETS.md § Th
 
 ## Canvas pages are the boxes the live canvas draws
 
-A deck's HTML and PDF and a drawing's PDF are pages of compositor layers (`export/canvas/render.ts`), which the canvas previews share. It restates no geometry: `layerBoxCss`, `layerInnerHtml` and `backgroundCss` come from `packages/lib`, and each layer gets the box `element-layer.tsx` gives it live. So what a user sees is what prints. A page holds the scene at 1:1 and scales it once, because a layer's body is authored in scene pixels. A non-text layer sits in an `overflow="visible"` `<svg>`, because roughjs overshoots its box.
+A deck's HTML and PDF and a drawing's PDF are pages of compositor layers (`export/canvas/render.ts`), which the canvas previews share. It restates no geometry: `layerBoxCss`, `layerPrintCss`, `layerInnerHtml` and `backgroundCss` come from `packages/lib`, and each screen layer gets the box `element-layer.tsx` gives it live, each printed layer the same box laid out where it prints. So what a user sees is what prints. A screen page holds the scene at 1:1 and scales it once, because a layer's body is authored in scene pixels. A non-text layer sits in an `overflow="visible"` `<svg>`, because roughjs overshoots its box.
 
 `canvasHtmlDocument` (`export/canvas/transform.ts`) wraps all three, with one `@page` rule, font block and reset, so they cannot drift. It embeds `canvas-text.css` for the list and link rules an inline style cannot reach.
 
@@ -151,7 +151,7 @@ Before layout, `sanitizeSceneHtml` filters every text box to `LIGHT_EDITOR_TAGS`
 
 ## A deck prints each frame at half scale
 
-A frame is the page, at the deck's slide size, and an overhanging element is clipped as the canvas clips it. Every frame is 1920 wide, so the page renders at 0.5: 960 by 540 px for 16:9 and 960 by 720 px for 4:3, which is 254 × 142.875 mm and 254 × 190.5 mm, Google's PDF sizes. A 1920 px `@page` would be a 20-inch sheet. The HTML download wraps each page in a `.page-fit` box that scales it to the viewport, so a deck reads on a phone, with a `@media` ladder first for a browser that cannot divide `100cqw` by a length. The PDF keeps the pages unscaled, because WeasyPrint has no viewport. The `.page-fit` rules mirror `packages/ui/src/styles/globals.css`, since a standalone file cannot import it.
+A frame is the page, at the deck's slide size, and an overhanging element is clipped as the canvas clips it. Every frame is 1920 wide, so the page prints at 0.5: 960 by 540 px for 16:9 and 960 by 720 px for 4:3, which is 254 × 142.875 mm and 254 × 190.5 mm, Google's PDF sizes. The PDF document lays each slide out at 1:1 on a 1920 px `@page`, and `htmlToPdf` hands WeasyPrint a zoom of 0.5 (`DECK_SCALE`) that prints it at 960. The HTML download wraps each page in a `.page-fit` box that scales it to the viewport, so a deck reads on a phone, with a `@media` ladder first for a browser that cannot divide `100cqw` by a length. The PDF has no fit box, because WeasyPrint has no viewport. The `.page-fit` rules mirror `packages/ui/src/styles/globals.css`, since a standalone file cannot import it.
 
 ## A drawing downloads its own SVG and prints as layers
 
@@ -162,6 +162,8 @@ The `pdf` arm is a single compositor page sized to the content plus 10 px on eac
 ## WeasyPrint dictates how a layer references its paint
 
 A gradient (`fill="url(#…)"`) or an image clip (`clip-path="url(#…)"`) stays an SVG attribute pointing at the element's own `<defs>`. WeasyPrint resolves `url(#id)` only within the same `<svg>`.
+
+No transform sits above a PDF layer, and a layer's only transform is its rotation: `renderPrintPage` lays each layer out where it prints, its box minus the page's origin as `top` and `left` (`layerPrintCss`, beside the live canvas's `layerBoxCss`), and a deck scales through WeasyPrint's zoom, never a CSS `scale`. WeasyPrint 68 lays a page out ignoring transforms and cuts every line whose layout box passes the `@page` height, and it clips a translucent element to the page as its parent's transform maps it. A layer laid out at the scene origin and moved by a `translate` would lose a text box's lines wherever its layout box passed the page bottom: in a slide's lower half under a scale of 0.5, in a text box starting above a slide, in a drawing drawn above or left of the scene origin (`canvas-pdf.test.ts`).
 
 An arrow's shaft is hidden under its label by a `<mask>`, because WeasyPrint ignores `clip-rule="evenodd"`. WeasyPrint applies a mask after drawing a node's children, so the reference goes on each shaft `<path>`, never a wrapping `<g>`. See `labelMask` and `maskShaft` in `packages/lib/src/vector/kinds/arrow-render.ts`.
 
