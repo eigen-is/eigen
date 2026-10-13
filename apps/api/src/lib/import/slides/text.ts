@@ -105,9 +105,7 @@ export function richTextOf(
     lost: Lost,
 ): RichTextFields | undefined {
     const bodies = [source.body, ...source.inherited];
-    const lists = [...bodies.map((body) => xmlChild(body, A_NS, 'lstStyle')), source.listStyle].filter(
-        (list) => list !== undefined,
-    );
+    const shapeLists = bodies.flatMap((body) => xmlChild(body, A_NS, 'lstStyle') ?? []);
     const bodyPrs = bodies.flatMap((body) => xmlChild(body, A_NS, 'bodyPr') ?? []);
     const bodyAttr = (name: string) => firstOf(bodyPrs, (bodyPr) => xmlAttr(bodyPr, '', name));
     const autofit = bodyPrs.flatMap(xmlElements).find((child) => child.ns === A_NS && AUTOFITS.has(child.local));
@@ -124,13 +122,16 @@ export function richTextOf(
         const pPr = xmlChild(paragraph, A_NS, 'pPr');
         const lvl = Number((pPr && xmlAttr(pPr, '', 'lvl')) ?? 0);
         const level = Number.isInteger(lvl) && lvl >= 0 && lvl < 9 ? lvl : 0;
-        const levels = lists.flatMap((list) =>
+        const levelsOf = (list: XmlElement) =>
             [xmlChild(list, A_NS, `lvl${level + 1}pPr`), xmlChild(list, A_NS, 'defPPr')].filter(
                 (entry) => entry !== undefined,
-            ),
-        );
+            );
+        const shapeLevels = shapeLists.flatMap(levelsOf);
+        const textLevels = source.listStyle ? levelsOf(source.listStyle) : [];
         // PowerPoint ignores a paragraph's own defRPr.
-        const inherited = levels.flatMap((entry) => xmlChild(entry, A_NS, 'defRPr') ?? []);
+        const defaults = (levels: XmlElement[]) => levels.flatMap((entry) => xmlChild(entry, A_NS, 'defRPr') ?? []);
+        const inherited = { shape: defaults(shapeLevels), text: defaults(textLevels) };
+        const levels = [...shapeLevels, ...textLevels];
         const chain = pPr ? [pPr, ...levels] : levels;
         const bullet = chain.flatMap(xmlElements).find((child) => child.ns === A_NS && BULLETS.has(child.local));
         const runs: Run[] = [];
@@ -231,10 +232,15 @@ type RunContext = {
     lost: Lost;
 };
 
-// The run's own properties, else the shape style's fontRef for its font and colour, else what its level inherits.
-function runStyleOf(rPr: XmlElement | undefined, inherited: XmlElement[], context: RunContext): RunStyle {
+// A run's defRPr chain at its level: the shape's and its placeholders' list styles, then the master's text style or the
+// presentation's default.
+type Inherited = { shape: XmlElement[]; text: XmlElement[] };
+
+// The run's own properties, else what its level inherits. The shape style's fontRef colour comes beneath the shape's
+// list styles and its font beneath every one, as LibreOffice draws it.
+function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: RunContext): RunStyle {
     const { theme, fontRef } = context;
-    const chain = rPr ? [rPr, ...inherited] : inherited;
+    const chain = [...(rPr ? [rPr] : []), ...inherited.shape, ...inherited.text];
     const attr = (name: string) => firstOf(chain, (element) => xmlAttr(element, '', name));
     const number = (name: string) => {
         const value = Number(attr(name));
@@ -249,9 +255,7 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: XmlElement[], contex
     };
     const refIdx = fontRef && xmlAttr(fontRef, '', 'idx');
     const typeface =
-        (rPr && typefaceIn(rPr)) ??
-        (refIdx === 'major' ? '+mj-lt' : refIdx === 'minor' ? '+mn-lt' : undefined) ??
-        firstOf(inherited, typefaceIn);
+        firstOf(chain, typefaceIn) ?? (refIdx === 'major' ? '+mj-lt' : refIdx === 'minor' ? '+mn-lt' : undefined);
     const font = typeface === '+mj-lt' ? theme.fonts.major : typeface === '+mn-lt' ? theme.fonts.minor : typeface;
     const size = number('sz');
     const underline = attr('u');
@@ -261,8 +265,9 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: XmlElement[], contex
         size: ((size !== undefined && size > 0 ? size : DEFAULT_SIZE) / 100) * EMU_PER_POINT * context.pxPerEmu,
         color:
             (rPr && colorIn(rPr)) ??
+            firstOf(inherited.shape, colorIn) ??
             (fontRef && drawingColor(fontRef, theme.colors)) ??
-            firstOf(inherited, colorIn) ??
+            firstOf(inherited.text, colorIn) ??
             SLIDES_STYLE_DEFAULTS.color,
         letterSpacing: ((number('spc') ?? 0) / 100) * EMU_PER_POINT * context.pxPerEmu,
         bold: isOn(attr('b')) ?? false,

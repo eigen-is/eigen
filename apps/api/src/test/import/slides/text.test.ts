@@ -217,27 +217,35 @@ describe('run properties', () => {
         expect(found).toMatchObject({ fontSize: 40, fontWeight: 'bold', fontStyle: 'italic', color: '#c0504d' });
     });
 
-    test("resolve the theme's fonts, and the shape style's font and colour beneath the run's own", () => {
+    test("resolve the theme's fonts", () => {
         expect(textOf(para('t', '', '<a:latin typeface="+mn-lt"/>'))?.fontFamily).toBe('JetBrains Mono');
         expect(textOf(para('t', '', '<a:latin typeface="Arial"/>'))?.fontFamily).toBe('Inter');
         expect(textOf(para('t', '', '<a:latin typeface="Times New Roman"/>'))?.fontFamily).toBe('Source Serif 4');
         // An unknown font is the deck's default.
         expect(textOf(para('t', '', '<a:latin typeface="Papyrus"/>'))?.fontFamily).toBe('Inter');
+    });
 
-        const style = fontRef('major', '<a:schemeClr val="bg1"/>');
-        const inherited = level(1, '', defRPr('', `${schemeFill('accent2')}<a:latin typeface="+mn-lt"/>`));
-        expect(textOf(para('t'), { style, listStyle: inherited })).toMatchObject({
+    // As LibreOffice draws it: a shape's own list style beats its style's fontRef, whose colour beats the master's
+    // text styles and the presentation's default, whose typeface beats the fontRef's.
+    test("take the shape style's fontRef colour beneath the list styles a shape states, its font beneath every one", () => {
+        const style = fontRef('major', '<a:schemeClr val="accent1"/>');
+        const red = level(1, '', defRPr('', `${schemeFill('accent2')}<a:latin typeface="Times New Roman"/>`));
+        expect(textOf(para('t'), { style })).toMatchObject({ fontFamily: 'Source Serif 4', color: '#4f81bd' });
+        expect(textOf(para('t'), { style, lstStyle: red })).toMatchObject({
             fontFamily: 'Source Serif 4',
-            color: '#ffffff',
-        });
-        expect(
-            textOf(para('t', '', `${schemeFill('accent1')}<a:latin typeface="Consolas"/>`), { style }),
-        ).toMatchObject({ fontFamily: 'JetBrains Mono', color: '#4f81bd' });
-        // A fontRef naming no colour leaves the colour to the list styles.
-        expect(textOf(para('t'), { style: fontRef('minor'), listStyle: inherited })).toMatchObject({
-            fontFamily: 'JetBrains Mono',
             color: '#c0504d',
         });
+        expect(textOf(para('t'), { style, inherited: [['', red]] })).toMatchObject({ color: '#c0504d' });
+        const minor = level(1, '', defRPr('', `${schemeFill('accent2')}<a:latin typeface="+mn-lt"/>`));
+        expect(textOf(para('t'), { style, listStyle: minor })).toMatchObject({
+            fontFamily: 'JetBrains Mono',
+            color: '#4f81bd',
+        });
+        expect(
+            textOf(para('t', '', `${schemeFill('tx1')}<a:latin typeface="Arial"/>`), { style, lstStyle: red }),
+        ).toMatchObject({ fontFamily: 'Inter', color: '#000000' });
+        // A fontRef naming no colour leaves the colour to the list styles.
+        expect(textOf(para('t'), { style: fontRef('minor'), listStyle: minor })).toMatchObject({ color: '#c0504d' });
     });
 
     test('a run stating no fill keeps the inherited colour', () => {
