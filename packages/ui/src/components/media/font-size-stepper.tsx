@@ -10,7 +10,7 @@ type FontSizeStepperProps = {
     onStep: (by: 1 | -1) => void;
 };
 
-// Google Docs' and Sheets' "− [11] +".
+// Google Docs' and Sheets' "− [11] +", as narrow as theirs: a 32px box between 24px buttons.
 export function FontSizeStepper({ value, onChange, onStep }: FontSizeStepperProps) {
     const shown = value === undefined ? '' : String(value);
     // Editable buffer so typing doesn't apply on every keystroke; commit on blur/Enter.
@@ -31,13 +31,19 @@ export function FontSizeStepper({ value, onChange, onStep }: FontSizeStepperProp
     };
 
     return (
-        <div className="flex items-center gap-0.5">
-            <TooltipButton icon={Minus} tooltipText="Decrease font size" preventFocusLoss onClick={() => onStep(-1)} />
+        <div className="flex items-center">
+            <TooltipButton
+                icon={Minus}
+                tooltipText="Decrease font size"
+                className="h-6 w-6"
+                preventFocusLoss
+                onClick={() => onStep(-1)}
+            />
             <input
                 value={draft}
                 inputMode="decimal"
                 aria-label="Font size"
-                className="h-7 w-10 rounded-md border border-input bg-background text-center text-xs tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-6 w-8 rounded-md border border-input bg-background px-0 text-center text-xs tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={commit}
                 onKeyDown={(e) => {
@@ -47,7 +53,13 @@ export function FontSizeStepper({ value, onChange, onStep }: FontSizeStepperProp
                     if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                 }}
             />
-            <TooltipButton icon={Plus} tooltipText="Increase font size" preventFocusLoss onClick={() => onStep(1)} />
+            <TooltipButton
+                icon={Plus}
+                tooltipText="Increase font size"
+                className="h-6 w-6"
+                preventFocusLoss
+                onClick={() => onStep(1)}
+            />
         </div>
     );
 }

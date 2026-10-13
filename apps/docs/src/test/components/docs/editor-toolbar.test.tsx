@@ -115,12 +115,12 @@ test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', asy
 
 test.each([
     [1920, FULL_ROW],
-    [1520, FULL_ROW],
-    [1519, MIDDLE_ROW],
-    [1300, MIDDLE_ROW],
-    [1299, SHORT_ROW],
-    [1120, SHORT_ROW],
-    [1119, []],
+    [1490, FULL_ROW],
+    [1489, MIDDLE_ROW],
+    [1270, MIDDLE_ROW],
+    [1269, SHORT_ROW],
+    [1090, SHORT_ROW],
+    [1089, []],
     [390, []],
 ])('at %ipx the icon row holds its first controls in priority order', async (width, row) => {
     await render(width, true);
@@ -129,7 +129,7 @@ test.each([
 
 // Text color, highlight and quote leave the row at some width too, so a menu must reach them at every width.
 test.each(
-    [1920, 1400, 1120, 390].flatMap((width) => [
+    [1920, 1400, 1090, 390].flatMap((width) => [
         [width, 'Text', ['Text color', 'Highlight color']],
         [width, 'Paragraph styles', ['Quote']],
     ]),

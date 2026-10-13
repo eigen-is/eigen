@@ -127,10 +127,10 @@ export const EditorToolbar = ({
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
     // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sit centered beside the five menus from 1114, 1296 and 1511px.
-    const showsRow = useMediaQuery('(min-width: 1120px)');
-    const showsMiddle = useMediaQuery('(min-width: 1300px)');
-    const showsAll = useMediaQuery('(min-width: 1520px)');
+    // sit centered beside the five menus from 1086, 1268 and 1483px.
+    const showsRow = useMediaQuery('(min-width: 1090px)');
+    const showsMiddle = useMediaQuery('(min-width: 1270px)');
+    const showsAll = useMediaQuery('(min-width: 1490px)');
     // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
     const isMobile = useIsMobile();
 
