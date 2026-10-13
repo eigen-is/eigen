@@ -26,7 +26,7 @@ Open **Insert → Page elements → Page numbers** and pick where the number goe
 - **In the header** or **In the footer** puts the number on the right of every page.
 - **In the header, not on the first page** or **In the footer, not on the first page** leaves the first page without one, which suits a cover page or a letter. It turns on **Different first page** for you.
 
-The panel lists the same four choices under **Page numbers**. To add the number of pages, as in "Page 3 of 7", click **Page count** in the panel's toolbar. **Page count** in the **Page numbers** menu puts it in your text, at the cursor. On screen, a page number and a page count both show as **#**.
+**Format → Page numbers** opens the panel at its **Page numbers** section, with the same four choices as **Every page** and **From page 2**, once for the header and once for the footer. A header or footer that already has a page number keeps that one. To add the number of pages, as in "Page 3 of 7", click **Page count** in the panel's toolbar. **Page count** in the **Page numbers** menu puts it in your text, at the cursor. On screen, a page number and a page count both show as **#**.
 
 ## Give the first page its own header and footer
 
