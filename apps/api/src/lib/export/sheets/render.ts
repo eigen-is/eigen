@@ -512,8 +512,9 @@ function renderFloatingObjects(
         const placed = place(img, angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
         if (placed) parts.push(`<img ${placed.attr} src="${escapeHtml(src)}" alt="">`);
     }
+    // White like the editor's chart box, so the gridlines stop at a chart.
     for (const chart of orderByFractionalIndex(Object.values(sheet.charts ?? {}))) {
-        const placed = place(chart);
+        const placed = place(chart, ';background:#fff');
         if (placed) parts.push(`<div ${placed.attr}>${renderSheetChartSvg({ ...chart, ...placed }, resolver)}</div>`);
     }
     return parts.join('');

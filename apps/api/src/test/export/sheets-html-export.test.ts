@@ -1091,7 +1091,7 @@ describe('Sheets HTML export — charts', () => {
 
     test('draws each chart as inline SVG at its stored box, with the labels its cells hold', () => {
         const out = renderSheetsHtml([sheetWithChart()], NO_MEDIA);
-        const [box] = classesFor(out, 'position:absolute;left:120px;top:40px;width:400px;height:300px');
+        const [box] = classesFor(out, 'position:absolute;left:120px;top:40px;width:400px;height:300px;background:#fff');
         expect(box).toBeDefined();
         expect(out.html).toContain(
             `<div class="${box}"><svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"`,
