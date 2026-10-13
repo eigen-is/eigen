@@ -210,7 +210,7 @@ export function xmlChild(element: XmlElement, ns: string, local: string): XmlEle
     );
 }
 
-export function is(element: XmlElement, ns: string, local: string): boolean {
+export function hasXmlName(element: XmlElement, ns: string, local: string): boolean {
     return element.ns === ns && element.local === local;
 }
 

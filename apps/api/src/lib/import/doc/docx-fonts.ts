@@ -1,7 +1,7 @@
 import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
 import { A_NS, W_NS } from '../../core/ooxml';
-import { is, type XmlElement, xmlChild, xmlElements } from '../../core/xml';
+import { hasXmlName, type XmlElement, xmlChild, xmlElements } from '../../core/xml';
 import { FONT_FAMILY } from '../../document/wordml';
 import { descendants, w, wChild } from './package';
 
@@ -24,7 +24,7 @@ export function readTheme(root: XmlElement | undefined, defaults: Languages): Th
         if (!collection) return undefined;
         const byScript = new Map(
             xmlElements(collection)
-                .filter((font) => is(font, A_NS, 'font'))
+                .filter((font) => hasXmlName(font, A_NS, 'font'))
                 .map((font) => [font.attributes['script'] ?? '', typeface(font)]),
         );
         const scripted = (face: 'cs' | 'ea') => (language: string | undefined) =>
@@ -138,7 +138,7 @@ export function readFontTable(root: XmlElement | undefined): FontTable {
     const table: FontTable = new Map();
     for (const font of root ? xmlElements(root) : []) {
         const name = w(font, 'name');
-        if (!is(font, W_NS, 'font') || !name) continue;
+        if (!hasXmlName(font, W_NS, 'font') || !name) continue;
         const pitch = w(wChild(font, 'pitch'), 'val');
         const family = w(wChild(font, 'family'), 'val') ?? '';
         const category =

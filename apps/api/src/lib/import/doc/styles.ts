@@ -1,5 +1,5 @@
 import { isOn, W_NS } from '../../core/ooxml';
-import { is, type XmlElement, xmlElements } from '../../core/xml';
+import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import {
     BORDER_SIDES,
@@ -430,11 +430,11 @@ export class Styles {
         this.docRun = readRunProps(wChild(wChild(defaults, 'rPrDefault'), 'rPr'), theme);
         this.docPara = readParaProps(wChild(wChild(defaults, 'pPrDefault'), 'pPr'));
         for (const element of root ? xmlElements(root) : []) {
-            if (!is(element, W_NS, 'style')) continue;
+            if (!hasXmlName(element, W_NS, 'style')) continue;
             const id = w(element, 'styleId') ?? '';
             const type = w(element, 'type') ?? 'paragraph';
             const firstRow = xmlElements(element).find(
-                (child) => is(child, W_NS, 'tblStylePr') && w(child, 'type') === 'firstRow',
+                (child) => hasXmlName(child, W_NS, 'tblStylePr') && w(child, 'type') === 'firstRow',
             );
             const name = w(wChild(element, 'name'), 'val') ?? id;
             this.byId.set(id, {

@@ -1,4 +1,4 @@
-import { is, parseXml, type XmlElement, xmlElements } from './xml';
+import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
 // DrawingML's unit. Word's own vocabulary is document/wordml.ts.
@@ -50,18 +50,18 @@ export function parseOoxml(input: string | Uint8Array): XmlElement | null {
 // ── Markup compatibility ────────────────────────────────────────────────────────────────────────────────────────
 
 export function isAlternateContent(element: XmlElement): boolean {
-    return is(element, MC_NS, 'AlternateContent');
+    return hasXmlName(element, MC_NS, 'AlternateContent');
 }
 
 // The first mc:Choice whose Requires prefixes the format's reader all understands, else the mc:Fallback, else nothing.
 export function alternativeFor(understood: ReadonlySet<string>): (element: XmlElement) => XmlElement[] {
     return (element) => {
         for (const choice of xmlElements(element)) {
-            if (is(choice, MC_NS, 'Choice')) {
+            if (hasXmlName(choice, MC_NS, 'Choice')) {
                 const requires = (choice.attributes['Requires'] ?? '').split(/\s+/).filter(Boolean);
                 if (requires.every((prefix) => understood.has(prefix))) return xmlElements(choice);
             }
-            if (is(choice, MC_NS, 'Fallback')) return xmlElements(choice);
+            if (hasXmlName(choice, MC_NS, 'Fallback')) return xmlElements(choice);
         }
         return [];
     };

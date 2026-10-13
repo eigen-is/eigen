@@ -1,7 +1,7 @@
 import { ApiError } from '../../core/errors';
 import { alternativeFor, CONTENT_TYPES_NS, isOn, parseOoxml, W_NS } from '../../core/ooxml';
 import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
-import { is, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
 // The parts the reader parses, together (a tree's cost: core/xml.ts); the largest document.xml met is 12.6 MB.
@@ -151,9 +151,9 @@ function readContentTypes(root: XmlElement | undefined): DocxPackage['contentTyp
     const overrides = new Map<string, string>();
     for (const entry of root ? xmlElements(root) : []) {
         const contentType = (entry.attributes['ContentType'] ?? '').toLowerCase();
-        if (is(entry, CONTENT_TYPES_NS, 'Default'))
+        if (hasXmlName(entry, CONTENT_TYPES_NS, 'Default'))
             defaults.set((entry.attributes['Extension'] ?? '').toLowerCase(), contentType);
-        if (is(entry, CONTENT_TYPES_NS, 'Override'))
+        if (hasXmlName(entry, CONTENT_TYPES_NS, 'Override'))
             overrides.set((entry.attributes['PartName'] ?? '').replace(/^\//, ''), contentType);
     }
     return { defaults, overrides };
@@ -244,8 +244,8 @@ export function descendants(root: XmlElement, ns: string, local: string): XmlEle
     const found: XmlElement[] = [];
     const stack = xmlElements(root).reverse();
     for (let element = stack.pop(); element; element = stack.pop()) {
-        if (is(element, ns, local)) found.push(element);
-        else if (!is(element, W_NS, 'txbxContent')) {
+        if (hasXmlName(element, ns, local)) found.push(element);
+        else if (!hasXmlName(element, W_NS, 'txbxContent')) {
             const children = xmlElements(element);
             for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
         }

@@ -1,5 +1,5 @@
 import { PACKAGE_RELATIONSHIPS_NS } from './ooxml';
-import { is, type XmlElement, xmlElements } from './xml';
+import { hasXmlName, type XmlElement, xmlElements } from './xml';
 
 // The Open Packaging Conventions every OOXML format shares: a part's relationships and the part names they resolve to.
 
@@ -16,7 +16,7 @@ export function relationshipsOf(root: XmlElement | undefined, partPath: string):
     const rels = new Map<string, Relationship>();
     for (const rel of root ? xmlElements(root) : []) {
         const id = rel.attributes['Id'];
-        if (!is(rel, PACKAGE_RELATIONSHIPS_NS, 'Relationship') || !id) continue;
+        if (!hasXmlName(rel, PACKAGE_RELATIONSHIPS_NS, 'Relationship') || !id) continue;
         const target = rel.attributes['Target'] ?? '';
         const external = rel.attributes['TargetMode'] === 'External';
         rels.set(id, {

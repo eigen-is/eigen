@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
-import { is, type XmlElement, xmlElements, xmlText } from '../../core/xml';
+import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES } from '../../document/wordml';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
@@ -372,7 +372,7 @@ function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
         const direct = readRunProps(wChild(run, 'rPr'), reader.theme);
         const props = mergeRun(paraRun, reader.styles.run(direct.style), direct);
         return xmlElements(run)
-            .filter((child) => is(child, W_NS, 't'))
+            .filter((child) => hasXmlName(child, W_NS, 't'))
             .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, reader.pkg.chargePiece))
             .filter((face) => face.text.trim())
             .map((face) => ({ ...face, direct }));

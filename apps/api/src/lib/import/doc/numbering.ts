@@ -1,5 +1,5 @@
 import { W_NS } from '../../core/ooxml';
-import { is, type XmlElement, xmlElements } from '../../core/xml';
+import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { LIST_LEVELS, spellNumber } from '../../document/wordml';
 import { symbolOf } from './docx-fonts';
 import { int, onOff, w, wChild } from './package';
@@ -49,20 +49,20 @@ export class Numbering {
         private readonly styles: Styles,
     ) {
         for (const element of root ? xmlElements(root) : []) {
-            if (is(element, W_NS, 'abstractNum')) {
+            if (hasXmlName(element, W_NS, 'abstractNum')) {
                 const levels = new Map<number, Level>();
                 for (const lvl of xmlElements(element)) {
-                    if (is(lvl, W_NS, 'lvl')) levels.set(int(w(lvl, 'ilvl')) ?? 0, readLevel(lvl));
+                    if (hasXmlName(lvl, W_NS, 'lvl')) levels.set(int(w(lvl, 'ilvl')) ?? 0, readLevel(lvl));
                 }
                 this.abstracts.set(w(element, 'abstractNumId') ?? '', {
                     levels,
                     styleLink: w(wChild(element, 'numStyleLink'), 'val'),
                 });
             }
-            if (is(element, W_NS, 'num')) {
+            if (hasXmlName(element, W_NS, 'num')) {
                 const overrides = new Map<number, Override>();
                 for (const override of xmlElements(element)) {
-                    if (!is(override, W_NS, 'lvlOverride')) continue;
+                    if (!hasXmlName(override, W_NS, 'lvlOverride')) continue;
                     const lvl = wChild(override, 'lvl');
                     overrides.set(int(w(override, 'ilvl')) ?? 0, {
                         start: startOf(wChild(override, 'startOverride')),
