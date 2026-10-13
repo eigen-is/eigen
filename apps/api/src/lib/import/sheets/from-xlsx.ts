@@ -23,7 +23,6 @@ import {
     REFERENCE_ROW_COUNT,
     toA1,
     unquoteSheetName,
-    update,
 } from '@workspace/sheet/engine';
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import Range from 'exceljs/lib/doc/range';
@@ -31,19 +30,19 @@ import { ApiError } from '../../core/errors';
 import { PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
+import { DAY_MS, dateDisplay, EXCEL_EPOCH_MS, readGrid } from './cells';
+import { NOT_AN_XLSX, readPackage, SPREADSHEET_TOO_LARGE, TOO_MANY_CELLS } from './package';
+import { readSharedStrings } from './strings';
 import {
     BORDER_STYLE_MAP,
     HORIZONTAL_MAP,
     normalizeMonthMinuteTokens,
+    readLooks,
     resolveColor,
     type ThemePalette,
     themePalette,
     VERTICAL_MAP,
 } from './styles';
-
-// Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
-const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
-const DAY_MS = 86_400_000;
 
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
 
@@ -71,6 +70,58 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
         sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name), emitted));
     }
     return sheets;
+}
+
+// The reader of our own, beside ExcelJS's until the import switches to it: every worksheet's grid, charged against the
+// output budget as it is read. The cells count what they emit, a value or a border, and the grids the span recalc
+// materialises; the text counts every value, display and formula, each shared string and shared formula once per copy.
+export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
+    try {
+        const book = readPackage(bytes);
+        const palette = themePalette(book.theme);
+        const looks = readLooks(book.styles, palette);
+        const strings = readSharedStrings(book.sharedStrings, palette);
+        const emitted = { cells: 0, text: 0, span: 0 };
+        const charge = (text: number) => {
+            emitted.cells += 1;
+            emitted.text += text;
+            if (emitted.cells > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
+            if (emitted.text > MAX_TEXT) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
+        };
+        const sheets: Sheet[] = [];
+        for (const { name, path } of book.sheets) {
+            const part = book.pkg.zip.read(path);
+            if (!part) continue;
+            const grid = readGrid(part, { looks, strings, date1904: book.date1904, palette, charge });
+            emitted.span += grid.rows * grid.columns;
+            if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
+            // The columns, merges, views, filter, links, conditional formats and validations are read from grid.rest
+            // when they move over; until then a height is estimated at the default column width.
+            const tallest = new Map<number, number>();
+            for (const { r, c, v } of grid.celldata) {
+                const height = estimateCellHeight(v, c, r, {}, {});
+                if (height > Math.max(SHEET_DEFAULT_ROW_HEIGHT, tallest.get(r) ?? 0)) tallest.set(r, height);
+            }
+            const rowlen: NonNullable<SheetConfig['rowlen']> = {};
+            for (const [r, height] of tallest) rowlen[r] = Math.round(height);
+            for (const [r, points] of grid.heights)
+                if (points !== DEFAULT_ROW_HEIGHT_PT) rowlen[r] = Math.round(points * (4 / 3));
+            const config: SheetConfig = {};
+            if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
+            if (Object.keys(grid.rowhidden).length > 0) config.rowhidden = grid.rowhidden;
+            if (Object.keys(grid.borderInfo).length > 0) config.borderInfo = grid.borderInfo;
+            sheets.push({ name, id: `sheet-${sheets.length}`, order: sheets.length, celldata: grid.celldata, config });
+        }
+        return sheets;
+    } catch (error) {
+        // The zip's and the XML's messages speak of archives and markup; the user uploaded a spreadsheet.
+        if (error instanceof ZipError)
+            throw new ApiError(error.status, error.status === 413 ? SPREADSHEET_TOO_LARGE : NOT_AN_XLSX, {
+                cause: error,
+            });
+        if (error instanceof XmlError) throw new ApiError(400, NOT_AN_XLSX, { cause: error });
+        throw error;
+    }
 }
 
 // The upload route bounds only the compressed bytes, and exceljs inflates the whole package, where an out-of-memory
@@ -387,7 +438,7 @@ function worksheetToSheet(
             if (emitted.text > MAX_TEXT) throw tooLarge();
             celldata.push({ r, c, v: converted });
 
-            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, converted, c, r, merge, colWidthPx));
+            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(converted, c, r, merge, colWidthPx));
         });
 
         const isDefaultHeight = row.height === DEFAULT_ROW_HEIGHT_PT;
@@ -919,14 +970,13 @@ const PT_TO_PX = 4 / 3;
 const LINE_HEIGHT_FACTOR = 1.35;
 
 function estimateCellHeight(
-    cell: XlsxCell,
     converted: FortuneCell,
     c: number,
     r: number,
     merge: NonNullable<SheetConfig['merge']>,
     colWidthPx: Record<number, number>,
 ): number {
-    const fontSize = cell.style?.font?.size ?? DEFAULT_FONT_SIZE;
+    const fontSize = converted.fs ?? DEFAULT_FONT_SIZE;
     const lineHeightPx = fontSize * PT_TO_PX * LINE_HEIGHT_FACTOR;
     if (!cellWrapsText(converted)) {
         return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
@@ -1175,19 +1225,7 @@ function resolveFormulaResult(
 
 function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; display: string } {
     const serial = (date.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
-    // Render with the same formatter the sheet engine uses (numfmt) so the imported display
-    // matches the editor — Excel date formats use lowercase month tokens (m/mm/mmm) and "…"
-    // literal-text escapes that a hand-rolled replacer mangles. numfmt renders a bare serial
-    // under 'General' as a raw number, so undated cells fall back to a date pattern; a malformed
-    // format string from a hostile workbook makes numfmt throw, so guard this boundary.
-    const fmt = numFmt && numFmt !== 'General' ? numFmt : 'm/d/yyyy';
-    let display: string;
-    try {
-        display = update(fmt, serial);
-    } catch {
-        display = update('yyyy-mm-dd', serial);
-    }
-    return { value: serial, display };
+    return { value: serial, display: dateDisplay(serial, numFmt) };
 }
 
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {

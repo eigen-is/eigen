@@ -1,5 +1,5 @@
 import { bundledFont } from '@workspace/lib/constants/fonts';
-import type { BorderSide, CellBorderSides, Cell as FortuneCell } from '@workspace/lib/sheets';
+import type { BorderSide, CellBorderSides, CellStyle, Cell as FortuneCell } from '@workspace/lib/sheets';
 import { BORDER_STYLES } from '@workspace/lib/sheets';
 import { is_date } from '@workspace/sheet/engine';
 import { A_NS, isOn, SML_NS } from '../../core/ooxml';
@@ -122,8 +122,8 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
 }
 
 // A run's properties read as a font, its face named by rFont.
-export function fontLook(font: XmlElement | undefined, palette: ThemePalette): FortuneCell {
-    const look: FortuneCell = {};
+export function fontLook(font: XmlElement | undefined, palette: ThemePalette): CellStyle {
+    const look: CellStyle = {};
     if (!font) return look;
     const child = (name: string) => xmlChild(font, SML_NS, name);
     // A bare toggle is on.
