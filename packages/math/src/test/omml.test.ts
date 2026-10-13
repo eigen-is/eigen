@@ -16,7 +16,7 @@ const oMath = (content: string) => el(`<m:oMath ${NAMESPACES}>${content}</m:oMat
 const read = (content: string) => readOmml(oMath(content));
 const run = (text: string, properties = '') => `<m:r>${properties}<m:t>${text}</m:t></m:r>`;
 
-// ── C1: docx round trip ─────────────────────────────────────────────────────────────────────────────────────────
+// ── docx round trip ─────────────────────────────────────────────────────────────────────────────────────────────
 
 function expectRoundTrip(equation: CorpusEquation) {
     const original = el(equation.omml);
@@ -24,7 +24,7 @@ function expectRoundTrip(equation: CorpusEquation) {
     expect(canonicalOmml(parseWritten(writeOmml(readOmml(original))))).toEqual(expected);
 }
 
-describe('C1: OMML → tree → OMML keeps what Word shows', () => {
+describe('OMML → tree → OMML keeps what Word shows', () => {
     for (const equation of CORPUS) {
         test(`#${equation.i} ${equation.file}`, () => expectRoundTrip(equation));
     }
@@ -50,9 +50,8 @@ describe('C1: OMML → tree → OMML keeps what Word shows', () => {
         expect(fence(empty, 2)).not.toEqual(fence('', 2));
     });
 
-    // The research prototype's misses that are in the fixture, so the loop above covers them; #146 and #151 are
-    // Zenodo, checked locally (C7).
-    test('the prototype misses are in the fixture', () => {
+    // Equations an OMML reader easily gets wrong stay in the fixture, so the loop above covers them.
+    test('the hard cases stay in the fixture', () => {
         expect([3, 87, 173, 174].filter((index) => !CORPUS.some((equation) => equation.i === index))).toEqual([]);
     });
 

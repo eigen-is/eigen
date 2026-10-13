@@ -11,7 +11,7 @@ import { canonicalIssue } from './canonical';
 import { generateTree, pick, type Random, seeded } from './generate';
 import { el, parseWritten, viaOmml } from './parse';
 
-// C6 and C8 over the whole package: every reader on seeded random input, the largest admitted trees through every
+// Over the whole package: every reader on seeded random input, the largest admitted trees through every
 // writer, and what each writer may put in its output.
 
 const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
@@ -259,7 +259,7 @@ const MATHML: Grammar = {
     written: (row) => el(writeMathml(row)),
 };
 
-describe('C6: every reader ends in a tree or a MathError, within its time budget', () => {
+describe('every reader ends in a tree or a MathError, within its time budget', () => {
     test.each<[string, Grammar, (root: MathXmlElement) => MathRow]>([
         ['readOmml', OMML, readOmml],
         ['readMathml', MATHML, (root) => readMathml(root).row],
@@ -337,7 +337,7 @@ describe('C6: every reader ends in a tree or a MathError, within its time budget
     });
 });
 
-// ── C8: output safety ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Output safety ──────────────────────────────────────────────────────────────────────────────────────────────
 
 // Every string a tree holds, as one character or as text, holding what XML, LaTeX or a URL would act on.
 const HOSTILE_CHARS = ['<', '>', '"', '&', '\\', '%', '#', '}'];
@@ -386,7 +386,7 @@ function ommlVocabulary(element: MathXmlElement): string[] {
     return [...own, ...attributes, ...elementsOf(element).flatMap(ommlVocabulary)];
 }
 
-describe('C8: a writer’s output holds only its own vocabulary', () => {
+describe('a writer’s output holds only its own vocabulary', () => {
     // LaTeX's vocabulary is the command table: the reader knows nothing else, so output that reads back holds
     // nothing else. The text form is one line.
     test('hostile, forged and 200 seeded trees through every writer', () => {

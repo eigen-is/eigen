@@ -1,7 +1,7 @@
 import { COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SPACES } from '../notation';
 import { MATH_ENCLOSURES, type MathNode, type MathRow, type MathToken } from '../tree';
 
-// A3's canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every
+// The canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every
 // generated tree must pass it. It restates the readers' character classes rather than importing them, so a wrong
 // class in a reader can't pass its own yardstick.
 

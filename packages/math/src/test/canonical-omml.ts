@@ -1,9 +1,9 @@
 import { OMML_NAMESPACE, WORDML_NAMESPACE } from '../omml';
 import { attribute, elementsOf, type MathXmlElement, textOf } from '../xml';
 
-// C1's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their properties
+// The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their properties
 // resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't count.
-// Only properties the tree keeps are compared; A5 lists what is dropped.
+// Only properties the tree keeps are compared; MATH.md lists what is dropped.
 
 export type CanonicalItem = string | CanonicalObject;
 export type CanonicalObject = { object: string; properties: Record<string, string>; children: CanonicalChild[] };
@@ -112,7 +112,7 @@ export function canonicalOmml(oMath: MathXmlElement): CanonicalItem[] {
     return canonicalRow(elementsOf(oMath));
 }
 
-// ── C1's normalisations ────────────────────────────────────────────────────────────────────────────────────────
+// ── The round trip's normalisations ────────────────────────────────────────────────────────────────────────────
 
 function walk(row: CanonicalItem[], visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalItem[] {
     return row.flatMap((item) => visit(typeof item === 'string' ? item : descend(item, visit)));
@@ -148,7 +148,7 @@ function revealEmpty(object: CanonicalObject): CanonicalItem[] {
     return [{ ...object, properties }];
 }
 
-// A5's losses and A3's normalisations, each with the equations it changes: omml.test.ts keeps the list exact.
+// What Word loses and the canonical form folds, each with the equations it changes: omml.test.ts keeps the list exact.
 export const NORMALISATIONS: { reason: string; indices: number[]; apply: (row: CanonicalItem[]) => CanonicalItem[] }[] =
     [
         {

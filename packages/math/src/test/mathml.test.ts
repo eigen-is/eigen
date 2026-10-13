@@ -15,7 +15,7 @@ const element = (local: string, children: (string | object)[], attributes = {}):
     children,
 });
 
-describe('C4: the typed LaTeX rides along as the annotation', () => {
+describe('the typed LaTeX rides along as the annotation', () => {
     test.each(['a<b', 'x &amp; y', ']]>', '\\mathbb{R} 𝟘 😀', ' \\quad '])('%p', (latex) => {
         const written = readMathml(el(writeMathml(x, latex)));
         expect(written).toEqual({ row: x, latex });
@@ -102,7 +102,7 @@ describe('readMathml', () => {
         expect(() => readMathml(element('math', [element('mi', ['\uD800'])]))).toThrow(MathError);
     });
 
-    // A3: whatever MathML comes in, the tree is canonical, so the docx trip and the stored trip keep it.
+    // Whatever MathML comes in, the tree is canonical, so the docx trip and the stored trip keep it.
     test.each([
         '<mspace width="1em"/><mspace width="1em"/>',
         '<mspace width="1em"/><mspace width="2em"/><mtext>\u2003</mtext>',

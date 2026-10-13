@@ -45,7 +45,7 @@ const DELIMITER_COMMANDS = new Set([
     ),
 ]);
 
-// C3's losses: a picture LaTeX has no command for is swapped for one it has, so the seeded trees stay comparable.
+// What LaTeX loses: a picture LaTeX has no command for is swapped for one it has, so the seeded trees stay comparable.
 const withoutLosses = (row: MathRow): MathRow =>
     JSON.parse(JSON.stringify(row), (_, node) => {
         switch (node?.kind) {
@@ -74,7 +74,7 @@ function expected(index: number, tree: MathRow): MathRow {
     return LOSSES.reduce((row, loss) => (loss.indices.includes(index) ? loss.apply(row) : row), tree);
 }
 
-describe('C3: tree → LaTeX → tree is the identity, but for the listed losses', () => {
+describe('tree → LaTeX → tree is the identity, but for the listed losses', () => {
     for (const equation of CORPUS) {
         test(`fixture #${equation.i}`, () => {
             const tree = readOmml(el(equation.omml));
@@ -649,7 +649,7 @@ describe('writeLatex', () => {
     });
 });
 
-describe('C4: typed LaTeX rides along as the annotation', () => {
+describe('typed LaTeX rides along as the annotation', () => {
     test.each(['a<b', 'x \\& y', '\\text{]]>}', '\\text{non-BMP 😀} 𝟘', '\\mathbb{R}^n % "quoted"'])('%p', (latex) => {
         const row = readLatex(latex);
         expect(readMathml(el(writeMathml(row, latex)))).toStrictEqual({ row, latex });
@@ -667,7 +667,7 @@ describe('C4: typed LaTeX rides along as the annotation', () => {
     });
 });
 
-describe('C6: readLatex ends in a tree or a MathError, in linear time', () => {
+describe('readLatex ends in a tree or a MathError, in linear time', () => {
     // What MathML admits, LaTeX and OMML read back: no reader walks a level its own writer's output lacks.
     test('the depth bound counts the tree’s levels, as MathML does', () => {
         const leaf: MathRow = [{ kind: 'identifier', text: 'x', variant: 'bold', color: '#FF0000' }];
@@ -848,7 +848,7 @@ describe('LATEX_COMMANDS', () => {
         for (const width of MATH_SPACES) expect(spaces).toContain(width);
     });
 
-    // The editor turns `\name` + space into `\name{}…`: the count it inserts must be what the reader takes.
+    // `arguments` is what the reader takes, so a caller completing `\name` inserts the right number of braces.
     test('each command’s arguments are the number of arguments it reads', () => {
         const samples: Partial<Record<LatexCommand['kind'], string[]>> = {
             color: ['red', 'x'],
