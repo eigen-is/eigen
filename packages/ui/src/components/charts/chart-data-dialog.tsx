@@ -1,7 +1,8 @@
-// Edit data: a chart's inline data as a small grid, categories down the first column and series across the
-// first row. Google links a Sheet instead; this is the grid PowerPoint and Keynote offer. The grid edits a
-// draft, so Save is one change of the spec and Cancel leaves it as it was. A chart past the grid's limits (an
-// imported one) shows its data read-only rather than as thousands of inputs.
+// Edit data: a chart's inline data as a small sheet, categories down column A and series across row 1, with
+// Eigen Sheets' look and keys. Google links a Sheet instead; this is the grid PowerPoint and Keynote offer,
+// with a trailing empty row and column to grow into. The grid edits a draft, so Save is one change of the
+// spec and Cancel leaves it as it was. A chart past the grid's limits (an imported one) shows its data
+// read-only rather than as thousands of cells.
 
 import {
     chartColor,
@@ -10,9 +11,17 @@ import {
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
-    MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
 } from '@workspace/lib/charts';
+import { cellsToHtmlTable, cellsToTsv, htmlTableCells, parseTsv } from '@workspace/lib/clipboard';
+import {
+    columnIndexToLabel,
+    SHEET_COLUMN_HEADER_HEIGHT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_FONT_SIZE,
+    SHEET_DEFAULT_ROW_HEIGHT,
+    SHEET_ROW_HEADER_WIDTH,
+} from '@workspace/lib/sheets';
 import type { ChartSeriesStyle, ChartSpec, InlineChartData } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -23,10 +32,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
-import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
-import { Plus, X } from 'lucide-react';
-import { type ClipboardEvent, useState } from 'react';
+import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useLayoutEffect, useRef, useState } from 'react';
 
 type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
@@ -35,6 +42,15 @@ type GridColumn = { name: string; style: ChartSeriesStyle };
 // A row carries its slice color, so a removed row takes its pie slice's color with it.
 type GridRow = { category: string; color: string; cells: string[] };
 type Grid = { columns: GridColumn[]; rows: GridRow[] };
+
+// Grid coordinates: row 0 is the series names (the sheet's row 1), column 0 the categories (column A), so
+// (0, 0) is the empty corner cell.
+type CellRef = { row: number; column: number };
+// A header click selects whole rows or columns, which Delete removes rather than clears.
+type GridSelection = { anchor: CellRef; focus: CellRef; whole?: 'rows' | 'columns' };
+// Typing into a cell replaces it, and an arrow then commits; F2, Enter or a double-click edit in place,
+// where an arrow moves the caret. As in Sheets.
+type Editing = { mode: 'replace' | 'in-place'; text: string };
 
 const newColumn = (index: number): GridColumn => ({
     name: '',
@@ -61,16 +77,37 @@ function gridOf({ data, sliceColors }: InlineChartSpec): Grid {
 const isNumberText = (text: string) => text.trim() === '' || Number.isFinite(Number(text));
 const numberOf = (text: string) => (text.trim() === '' ? null : Number(text));
 
-// Pasted tab-separated text fills the grid from the cell it lands in (grid coordinates: row 0 is the series
-// names, column 0 the categories), growing it as far as the limits allow; `clipped` says some didn't fit.
-function pasteInto(grid: Grid, row: number, column: number, text: string): { grid: Grid; clipped: boolean } {
-    const lines = text
-        .replace(/\r?\n$/, '')
-        .split(/\r?\n/)
-        .map((line) => line.split('\t'));
-    const width = Math.max(...lines.map((line) => line.length));
+function cellText(grid: Grid, { row, column }: CellRef): string {
+    if (row === 0) return grid.columns[column - 1]?.name ?? '';
+    const source = grid.rows[row - 1];
+    if (!source) return '';
+    return column === 0 ? source.category : (source.cells[column - 1] ?? '');
+}
+
+// The grid as shown: the data plus a trailing row and column while one more still fits.
+function shownSize({ columns, rows }: Grid) {
+    return {
+        rows: rows.length + 1 + (fitsInlineGrid(columns.length, rows.length + 1) ? 1 : 0),
+        columns: columns.length + 1 + (fitsInlineGrid(columns.length + 1, rows.length) ? 1 : 0),
+    };
+}
+
+function rangeOf({ anchor, focus }: GridSelection) {
+    return {
+        top: Math.min(anchor.row, focus.row),
+        bottom: Math.max(anchor.row, focus.row),
+        left: Math.min(anchor.column, focus.column),
+        right: Math.max(anchor.column, focus.column),
+    };
+}
+type Range = ReturnType<typeof rangeOf>;
+
+// A block of text fills the grid from (row, column), growing it as far as the limits allow; `clipped` says
+// some didn't fit. A paste and a committed cell both land through here.
+function fill(grid: Grid, row: number, column: number, block: string[][]): { grid: Grid; clipped: boolean } {
+    const width = Math.max(...block.map((line) => line.length));
     let series = Math.max(grid.columns.length, Math.min(INLINE_GRID_MAX_SERIES, column + width - 1));
-    let rows = Math.max(grid.rows.length, Math.min(INLINE_GRID_MAX_CATEGORIES, row + lines.length - 1));
+    let rows = Math.max(grid.rows.length, Math.min(INLINE_GRID_MAX_CATEGORIES, row + block.length - 1));
     // The points limit holds the growth back, new series first.
     while (!fitsInlineGrid(series, rows) && series > grid.columns.length) series -= 1;
     while (!fitsInlineGrid(series, rows) && rows > grid.rows.length) rows -= 1;
@@ -81,7 +118,7 @@ function pasteInto(grid: Grid, row: number, column: number, text: string): { gri
         return { ...source, cells: Array.from({ length: series }, (_, j) => source.cells[j] ?? '') };
     });
     let clipped = false;
-    for (const [i, line] of lines.entries()) {
+    for (const [i, line] of block.entries()) {
         for (const [j, value] of line.entries()) {
             const r = row + i;
             const c = column + j;
@@ -94,6 +131,41 @@ function pasteInto(grid: Grid, row: number, column: number, text: string): { gri
     return { grid: { columns, rows: next }, clipped };
 }
 
+// An empty value typed into the trailing row or column adds nothing; the corner holds nothing.
+function writeCell(grid: Grid, { row, column }: CellRef, text: string): Grid {
+    if (row === 0 && column === 0) return grid;
+    if (text === '' && (row > grid.rows.length || column > grid.columns.length)) return grid;
+    return fill(grid, row, column, [[text]]).grid;
+}
+
+function clearRange(grid: Grid, { top, bottom, left, right }: Range): Grid {
+    const inside = (r: number, c: number) => r >= top && r <= bottom && c >= left && c <= right;
+    return {
+        columns: grid.columns.map((column, j) => (inside(0, j + 1) ? { ...column, name: '' } : column)),
+        rows: grid.rows.map((row, i) => ({
+            ...row,
+            category: inside(i + 1, 0) ? '' : row.category,
+            cells: row.cells.map((cell, j) => (inside(i + 1, j + 1) ? '' : cell)),
+        })),
+    };
+}
+
+// Whole rows or columns go, the header row or category column among them clears instead; the last row or
+// series empties rather than leaving a chart with none.
+function removeWhole(grid: Grid, whole: 'rows' | 'columns', range: Range): Grid {
+    const cleared = clearRange(grid, whole === 'rows' ? { ...range, bottom: 0 } : { ...range, right: 0 });
+    if (whole === 'rows') {
+        const rows = cleared.rows.filter((_, i) => i + 1 < range.top || i + 1 > range.bottom);
+        return { ...cleared, rows: rows.length > 0 ? rows : [newRow(0, grid.columns.length)] };
+    }
+    const keep = (j: number) => j + 1 < range.left || j + 1 > range.right;
+    const columns = cleared.columns.filter((_, j) => keep(j));
+    if (columns.length === 0) return clearRange(cleared, { ...range, left: 1, top: 0, bottom: grid.rows.length });
+    return { columns, rows: cleared.rows.map((row) => ({ ...row, cells: row.cells.filter((_, j) => keep(j)) })) };
+}
+
+const plural = (n: number, noun: string) => `${n.toLocaleString('en')} ${noun}${n === 1 ? '' : 's'}`;
+
 type ChartDataDialogProps = {
     spec: InlineChartSpec;
     open: boolean;
@@ -105,13 +177,23 @@ export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataD
     const readOnly = exceedsInlineGridLimits(spec.data);
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg" showCloseButton={false}>
+            <DialogContent
+                size="lg"
+                showCloseButton={false}
+                // Escape while a cell is open cancels the edit, not the dialog. Radix hears Escape on the
+                // document before the cell editor's own keydown does.
+                onEscapeKeyDown={(e) => {
+                    if (e.target instanceof Element && e.target.matches('[data-cell-editor][data-editing]')) {
+                        e.preventDefault();
+                    }
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle>Edit data</DialogTitle>
                     <DialogDescription>
                         {readOnly
                             ? 'This chart has more data than the editor holds, so it opens read-only.'
-                            : 'Categories go down the first column and series across the first row. Paste cells from a spreadsheet to fill several at once.'}
+                            : 'Categories go down column A and series across row 1. Type in the empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
                     </DialogDescription>
                 </DialogHeader>
                 {readOnly ? (
@@ -131,9 +213,26 @@ export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataD
     );
 }
 
-const CELL_INPUT = 'h-7 px-2 text-xs md:text-xs';
+const columnLeft = (column: number) => SHEET_ROW_HEADER_WIDTH + column * SHEET_DEFAULT_COL_WIDTH;
+const rowTop = (row: number) => SHEET_COLUMN_HEADER_HEIGHT + row * SHEET_DEFAULT_ROW_HEIGHT;
+const ARROWS: Record<string, [number, number]> = {
+    ArrowUp: [-1, 0],
+    ArrowDown: [1, 0],
+    ArrowLeft: [0, -1],
+    ArrowRight: [0, 1],
+};
+const GRID_LINES = 'border-r border-b border-(--sheet-grid-line)';
+const HEADER = cn(
+    GRID_LINES,
+    'flex items-center justify-center bg-(--sheet-header-background) text-(--sheet-header-text)',
+);
+// The highlight is translucent, as Sheets lays it over its header; painted over the header's own
+// background, a sticky header stays opaque over the cells scrolling under it.
+const HIGHLIGHT = 'bg-linear-to-r from-(--sheet-header-highlight) to-(--sheet-header-highlight)';
 
-// Mounted with the dialog, so every opening starts from the chart as stored.
+// Mounted with the dialog, so every opening starts from the chart as stored. One input sits on the active
+// cell and keeps the focus, invisible until a cell is edited, as Sheets' cell input does: a key lands in
+// it, and a canvas host's clipboard and keys stand down for a focused input.
 function EditableGrid({
     spec,
     onCancel,
@@ -144,161 +243,339 @@ function EditableGrid({
     onSave: (spec: ChartSpec) => void;
 }) {
     const [grid, setGrid] = useState(() => gridOf(spec));
-    const [clipped, setClipped] = useState(false);
-    const { columns, rows } = grid;
+    const [selection, setSelection] = useState<GridSelection>({
+        anchor: { row: 1, column: 1 },
+        focus: { row: 1, column: 1 },
+    });
+    const [editing, setEditing] = useState<Editing | null>(null);
+    const [clipped, setClipped] = useState<{ rows: number; columns: number } | null>(null);
+    const scroller = useRef<HTMLDivElement>(null);
+    const input = useRef<HTMLInputElement>(null);
+    const dragging = useRef(false);
+
+    const { rows } = grid;
+    const shown = shownSize(grid);
+    const active = selection.anchor;
+    const range = rangeOf(selection);
     const invalid = rows.some((row) => !row.cells.every(isNumberText));
 
-    const setColumns = (next: GridColumn[]) => setGrid({ columns: next, rows });
-    const setRows = (next: GridRow[]) => setGrid({ columns, rows: next });
-    const setCell = (i: number, j: number, text: string) =>
-        setRows(
-            rows.map((row, r) => (r === i ? { ...row, cells: row.cells.map((c, k) => (k === j ? text : c)) } : row)),
-        );
+    // The active cell scrolls into view below the header strip and right of the row numbers.
+    useLayoutEffect(() => {
+        const el = scroller.current;
+        if (!el) return;
+        const x = columnLeft(selection.focus.column);
+        const y = rowTop(selection.focus.row);
+        if (x - SHEET_ROW_HEADER_WIDTH < el.scrollLeft) el.scrollLeft = x - SHEET_ROW_HEADER_WIDTH;
+        else if (x + SHEET_DEFAULT_COL_WIDTH > el.scrollLeft + el.clientWidth)
+            el.scrollLeft = x + SHEET_DEFAULT_COL_WIDTH - el.clientWidth;
+        if (y - SHEET_COLUMN_HEADER_HEIGHT < el.scrollTop) el.scrollTop = y - SHEET_COLUMN_HEADER_HEIGHT;
+        else if (y + SHEET_DEFAULT_ROW_HEIGHT > el.scrollTop + el.clientHeight)
+            el.scrollTop = y + SHEET_DEFAULT_ROW_HEIGHT - el.clientHeight;
+    }, [selection.focus]);
 
-    // A single value pastes as typing does; several cells fill the grid.
-    const onPaste = (row: number, column: number) => (e: ClipboardEvent<HTMLInputElement>) => {
-        const text = e.clipboardData.getData('text/plain');
-        if (!/[\t\n]/.test(text)) return;
-        e.preventDefault();
-        const pasted = pasteInto(grid, row, column, text);
-        setGrid(pasted.grid);
-        setClipped(pasted.clipped);
+    // The open edit lands in the grid; Save and every move go from the committed grid.
+    const committed = () => (editing ? writeCell(grid, active, editing.text) : grid);
+
+    const selectCell = (next: Grid, cell: CellRef) => {
+        const size = shownSize(next);
+        const clamped = {
+            row: Math.min(Math.max(cell.row, 0), size.rows - 1),
+            column: Math.min(Math.max(cell.column, 0), size.columns - 1),
+        };
+        setGrid(next);
+        setEditing(null);
+        setSelection({ anchor: clamped, focus: clamped });
+    };
+    const commitAndMove = (rowDelta: number, columnDelta: number) =>
+        selectCell(committed(), { row: active.row + rowDelta, column: active.column + columnDelta });
+    const extend = (focus: CellRef) =>
+        setSelection({
+            anchor: active,
+            focus: {
+                row: Math.min(Math.max(focus.row, 0), shown.rows - 1),
+                column: Math.min(Math.max(focus.column, 0), shown.columns - 1),
+            },
+        });
+    const startEditing = (cell: CellRef) => {
+        if (cell.row === 0 && cell.column === 0) return;
+        setEditing({ mode: 'in-place', text: cellText(grid, cell) });
     };
 
-    const save = () =>
+    const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.nativeEvent.isComposing) return;
+        const arrow = ARROWS[e.key];
+        if (editing) {
+            if (e.key === 'Escape') {
+                setEditing(null);
+            } else if (e.key === 'Enter') {
+                commitAndMove(e.shiftKey ? -1 : 1, 0);
+            } else if (e.key === 'Tab') {
+                commitAndMove(0, e.shiftKey ? -1 : 1);
+            } else if (arrow && editing.mode === 'replace' && !e.shiftKey) {
+                commitAndMove(...arrow);
+            } else {
+                return;
+            }
+            e.preventDefault();
+            return;
+        }
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (arrow) {
+            if (e.shiftKey) extend({ row: selection.focus.row + arrow[0], column: selection.focus.column + arrow[1] });
+            else commitAndMove(...arrow);
+        } else if (e.key === 'Tab') {
+            // Past the grid's edge Tab leaves it, so the keyboard reaches Save.
+            const column = active.column + (e.shiftKey ? -1 : 1);
+            if (column < 0 || column >= shown.columns) return;
+            commitAndMove(0, e.shiftKey ? -1 : 1);
+        } else if (e.key === 'Enter' || e.key === 'F2') {
+            startEditing(active);
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (selection.whole) selectCell(removeWhole(grid, selection.whole, range), active);
+            else setGrid(clearRange(grid, range));
+        } else {
+            // A printable key types into the empty input, and onChange opens the cell.
+            return;
+        }
+        e.preventDefault();
+    };
+
+    const onChange = (text: string) => {
+        if (active.row === 0 && active.column === 0) return;
+        setEditing({ mode: editing?.mode ?? 'replace', text });
+    };
+
+    const selectedCells = () =>
+        Array.from({ length: range.bottom - range.top + 1 }, (_, i) =>
+            Array.from({ length: range.right - range.left + 1 }, (_, j) =>
+                cellText(grid, { row: range.top + i, column: range.left + j }),
+            ),
+        );
+    const onCopy = (e: ClipboardEvent<HTMLInputElement>) => {
+        // While a cell is open, its text copies as any input's does.
+        if (editing) return;
+        e.preventDefault();
+        const cells = selectedCells();
+        e.clipboardData.setData('text/plain', cellsToTsv(cells));
+        e.clipboardData.setData('text/html', cellsToHtmlTable(cells));
+    };
+    const onCut = (e: ClipboardEvent<HTMLInputElement>) => {
+        if (editing) return;
+        onCopy(e);
+        setGrid(clearRange(grid, range));
+    };
+    // Cells from a spreadsheet arrive as TSV, or, where its plain text lost the tabs, as an HTML table.
+    const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+        const text = e.clipboardData.getData('text/plain');
+        const table = /[\t\n]/.test(text) ? parseTsv(text) : htmlTableCells(e.clipboardData.getData('text/html'));
+        const block = table ?? (text ? [[text]] : []);
+        // An open cell takes a single value as typing does.
+        if (block.length === 0 || (editing && block.flat().length === 1)) return;
+        e.preventDefault();
+        const pasted = fill(grid, active.row, active.column, block);
+        const width = Math.max(...block.map((line) => line.length));
+        setClipped(pasted.clipped ? { rows: block.length, columns: width } : null);
+        setEditing(null);
+        setGrid(pasted.grid);
+        setSelection({
+            anchor: active,
+            focus: {
+                row: Math.min(active.row + block.length - 1, shownSize(pasted.grid).rows - 1),
+                column: Math.min(active.column + width - 1, shownSize(pasted.grid).columns - 1),
+            },
+        });
+    };
+
+    const pointTo = (e: MouseEvent, cell: CellRef, whole?: GridSelection['whole'], focus = cell) => {
+        // The input keeps the focus, so the next key lands in it.
+        e.preventDefault();
+        input.current?.focus();
+        dragging.current = true;
+        if (e.shiftKey) {
+            setSelection({ anchor: active, focus, whole });
+            return;
+        }
+        const next = committed();
+        setGrid(next);
+        setEditing(null);
+        setSelection({ anchor: cell, focus, whole });
+    };
+    const lastRow = shown.rows - 1;
+    const lastColumn = shown.columns - 1;
+
+    const save = () => {
+        const final = committed();
+        // An open cell that isn't a number is flagged, as Enter would have left it.
+        if (final.rows.some((row) => !row.cells.every(isNumberText))) {
+            setGrid(final);
+            setEditing(null);
+            return;
+        }
         onSave({
             ...spec,
-            sliceColors: rows.map((row) => row.color),
+            sliceColors: final.rows.map((row) => row.color),
             data: {
                 source: 'inline',
-                categories: rows.map((row) => row.category),
-                series: columns.map(({ name, style }, j) => ({
+                categories: final.rows.map((row) => row.category),
+                series: final.columns.map(({ name, style }, j) => ({
                     ...style,
                     name,
-                    values: rows.map((row) => numberOf(row.cells[j])),
+                    values: final.rows.map((row) => numberOf(row.cells[j])),
                 })),
             },
         });
+    };
+
+    const label = (cell: CellRef) => `${columnIndexToLabel(cell.column)}${cell.row + 1}`;
+    const box = (top: number, left: number, bottom: number, right: number) => ({
+        top: rowTop(top),
+        left: columnLeft(left),
+        width: (right - left + 1) * SHEET_DEFAULT_COL_WIDTH,
+        height: (bottom - top + 1) * SHEET_DEFAULT_ROW_HEIGHT,
+    });
 
     return (
         <>
-            <div className="max-h-[60vh] overflow-auto rounded-md border">
-                <table className="border-separate border-spacing-1">
-                    <thead>
-                        <tr>
-                            <th />
-                            {columns.map((column, j) => (
-                                <th key={j} className="font-normal">
-                                    <div className="flex items-center gap-0.5">
-                                        <Input
-                                            aria-label={`Series ${j + 1} name`}
-                                            className={cn(CELL_INPUT, 'w-24 font-medium')}
-                                            value={column.name}
-                                            maxLength={MAX_CHART_LABEL_LENGTH}
-                                            onChange={(e) =>
-                                                setColumns(
-                                                    columns.map((c, k) =>
-                                                        k === j ? { ...c, name: e.target.value } : c,
-                                                    ),
-                                                )
-                                            }
-                                            onPaste={onPaste(0, j + 1)}
-                                        />
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            aria-label="Remove column"
-                                            disabled={columns.length === 1}
-                                            onClick={() =>
-                                                setGrid({
-                                                    columns: columns.filter((_, k) => k !== j),
-                                                    rows: rows.map((row) => ({
-                                                        ...row,
-                                                        cells: row.cells.filter((_, k) => k !== j),
-                                                    })),
-                                                })
-                                            }
+            {/* eigen-paper: the grid keeps Sheets' light look in dark mode, as the workbook does. isolate
+                keeps the sticky headers' stacking inside the grid. */}
+            <div
+                ref={scroller}
+                className="eigen-paper relative isolate max-h-[60vh] w-fit max-w-full overflow-auto rounded-md border bg-background font-sans select-none"
+                style={{ fontSize: `${SHEET_DEFAULT_FONT_SIZE}pt` }}
+                onMouseUp={() => {
+                    dragging.current = false;
+                }}
+            >
+                <div
+                    role="grid"
+                    aria-label="Chart data"
+                    aria-rowcount={shown.rows + 1}
+                    aria-colcount={shown.columns + 1}
+                    aria-multiselectable
+                    className="grid w-max text-(--sheet-cell-text)"
+                    style={{
+                        gridTemplateColumns: `${SHEET_ROW_HEADER_WIDTH}px repeat(${shown.columns}, ${SHEET_DEFAULT_COL_WIDTH}px)`,
+                        gridAutoRows: SHEET_DEFAULT_ROW_HEIGHT,
+                    }}
+                >
+                    <div role="row" aria-rowindex={1} className="contents">
+                        {/* The corner selects every cell. */}
+                        <div
+                            className={cn(HEADER, 'sticky top-0 left-0 z-30')}
+                            onMouseDown={(e) =>
+                                pointTo(e, { row: 0, column: 0 }, undefined, { row: lastRow, column: lastColumn })
+                            }
+                        />
+                        {Array.from({ length: shown.columns }, (_, column) => {
+                            const selected = column >= range.left && column <= range.right;
+                            return (
+                                <div
+                                    key={column}
+                                    role="columnheader"
+                                    aria-colindex={column + 2}
+                                    aria-selected={selected}
+                                    className={cn(
+                                        HEADER,
+                                        'sticky top-0 z-20',
+                                        selected && cn(HIGHLIGHT, 'shadow-[inset_0_-1px_0_var(--selection-handle)]'),
+                                    )}
+                                    onMouseDown={(e) =>
+                                        pointTo(e, { row: 0, column }, 'columns', { row: lastRow, column })
+                                    }
+                                >
+                                    {columnIndexToLabel(column)}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {Array.from({ length: shown.rows }, (_, row) => {
+                        const rowSelected = row >= range.top && row <= range.bottom;
+                        return (
+                            <div key={row} role="row" aria-rowindex={row + 2} className="contents">
+                                <div
+                                    role="rowheader"
+                                    aria-selected={rowSelected}
+                                    className={cn(
+                                        HEADER,
+                                        'sticky left-0 z-10',
+                                        rowSelected && cn(HIGHLIGHT, 'shadow-[inset_-1px_0_0_var(--selection-handle)]'),
+                                    )}
+                                    onMouseDown={(e) =>
+                                        pointTo(e, { row, column: 0 }, 'rows', { row, column: lastColumn })
+                                    }
+                                >
+                                    {row + 1}
+                                </div>
+                                {Array.from({ length: shown.columns }, (_, column) => {
+                                    const cell = { row, column };
+                                    const text = cellText(grid, cell);
+                                    const bad = row > 0 && column > 0 && !isNumberText(text);
+                                    return (
+                                        <div
+                                            key={column}
+                                            role="gridcell"
+                                            aria-colindex={column + 2}
+                                            aria-selected={rowSelected && column >= range.left && column <= range.right}
+                                            aria-invalid={bad || undefined}
+                                            className={cn(
+                                                GRID_LINES,
+                                                'truncate px-1 leading-[19px]',
+                                                (row === 0 || column === 0) && 'font-bold',
+                                                bad && 'bg-destructive/10 text-destructive',
+                                            )}
+                                            onMouseDown={(e) => pointTo(e, cell)}
+                                            onMouseEnter={(e) => {
+                                                if (dragging.current && e.buttons === 1) extend(cell);
+                                            }}
+                                            onDoubleClick={() => {
+                                                setSelection({ anchor: cell, focus: cell });
+                                                startEditing(cell);
+                                            }}
                                         >
-                                            <X />
-                                        </Button>
-                                    </div>
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows.map((row, i) => (
-                            <tr key={i}>
-                                <td>
-                                    <Input
-                                        aria-label={`Row ${i + 1} label`}
-                                        className={cn(CELL_INPUT, 'w-32')}
-                                        value={row.category}
-                                        maxLength={MAX_CHART_LABEL_LENGTH}
-                                        onChange={(e) =>
-                                            setRows(
-                                                rows.map((r, k) => (k === i ? { ...r, category: e.target.value } : r)),
-                                            )
-                                        }
-                                        onPaste={onPaste(i + 1, 0)}
-                                    />
-                                </td>
-                                {row.cells.map((cell, j) => (
-                                    <td key={j}>
-                                        <Input
-                                            aria-label={`Row ${i + 1}, series ${j + 1}`}
-                                            aria-invalid={!isNumberText(cell)}
-                                            inputMode="decimal"
-                                            className={cn(CELL_INPUT, 'w-24 text-right tabular-nums')}
-                                            value={cell}
-                                            onChange={(e) => setCell(i, j, e.target.value)}
-                                            onPaste={onPaste(i + 1, j + 1)}
-                                        />
-                                    </td>
-                                ))}
-                                <td>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        aria-label="Remove row"
-                                        disabled={rows.length === 1}
-                                        onClick={() => setRows(rows.filter((_, k) => k !== i))}
-                                    >
-                                        <X />
-                                    </Button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!fitsInlineGrid(columns.length, rows.length + 1)}
-                    onClick={() => setRows([...rows, newRow(rows.length, columns.length)])}
-                >
-                    <Plus /> Add row
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!fitsInlineGrid(columns.length + 1, rows.length)}
-                    onClick={() =>
-                        setGrid({
-                            columns: [...columns, newColumn(columns.length)],
-                            rows: rows.map((row) => ({ ...row, cells: [...row.cells, ''] })),
-                        })
-                    }
-                >
-                    <Plus /> Add column
-                </Button>
+                                            {text}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                </div>
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute -mt-px -ml-px box-content border border-selection-handle bg-(--sheet-selection-fill)"
+                    style={box(range.top, range.left, range.bottom, range.right)}
+                />
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute bg-(--sheet-selection-fill)"
+                    style={box(active.row, active.column, active.row, active.column)}
+                />
+                <input
+                    ref={input}
+                    data-cell-editor
+                    data-editing={editing ? '' : undefined}
+                    aria-label={label(active)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className={cn(
+                        'absolute border border-(--sheet-editor-border) bg-background px-1 leading-[19px] outline-none select-text',
+                        editing ? 'shadow-[0_2px_5px_var(--sheet-editor-shadow)]' : 'pointer-events-none opacity-0',
+                        (active.row === 0 || active.column === 0) && 'font-bold',
+                    )}
+                    style={box(active.row, active.column, active.row, active.column)}
+                    value={editing?.text ?? ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    onCopy={onCopy}
+                    onCut={onCut}
+                    onPaste={onPaste}
+                />
             </div>
             {clipped && (
                 <p className="text-xs text-muted-foreground">
-                    Some pasted cells didn't fit: a chart holds up to {INLINE_GRID_MAX_SERIES} series,{' '}
-                    {INLINE_GRID_MAX_CATEGORIES} rows and {MAX_CHART_POINTS.toLocaleString('en')} values.
+                    Pasted {plural(clipped.rows, 'row')} × {plural(clipped.columns, 'column')}; the chart holds up to{' '}
+                    {INLINE_GRID_MAX_SERIES} series and {INLINE_GRID_MAX_CATEGORIES} categories,{' '}
+                    {MAX_CHART_POINTS.toLocaleString('en')} values in all, so the rest was left out.
                 </p>
             )}
             {invalid && <p className="text-xs text-destructive">Values must be numbers.</p>}

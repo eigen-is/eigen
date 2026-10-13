@@ -162,7 +162,7 @@ describe('ChartPanelSection', () => {
     test('Edit data saves the grid as one write; Cancel writes nothing', async () => {
         const { container, writes } = await section([chart('c1')]);
         await click(buttonIn(container, 'Edit data'));
-        await type(dialog()?.querySelector('input[aria-label="Row 1, series 1"]') ?? null, '7');
+        await type(dialog()?.querySelector('input[aria-label="B2"]') ?? null, '7');
         await click(buttonIn(dialog(), 'Save'));
         expect(writes).toHaveLength(1);
         const written = writes[0].chart;
@@ -170,7 +170,7 @@ describe('ChartPanelSection', () => {
         expect(spec?.data.source === 'inline' && spec.data.series[0].values[0]).toBe(7);
 
         await click(buttonIn(container, 'Edit data'));
-        await type(dialog()?.querySelector('input[aria-label="Row 1, series 1"]') ?? null, '8');
+        await type(dialog()?.querySelector('input[aria-label="B2"]') ?? null, '8');
         await click(buttonIn(dialog(), 'Cancel'));
         expect(writes).toHaveLength(1);
     });
