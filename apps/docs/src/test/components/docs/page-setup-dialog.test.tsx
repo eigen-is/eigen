@@ -119,7 +119,15 @@ test('Landscape turns the paper, and a size picked then keeps the orientation', 
     await click(button('OK'));
 
     expect(onSetupChange.mock.calls).toEqual([
-        [DEFAULT_PAGE_SETUP, { width: 279.4, height: 215.9, margin: { top: 25.4, right: 20, bottom: 20, left: 20 } }],
+        [
+            DEFAULT_PAGE_SETUP,
+            {
+                width: 279.4,
+                height: 215.9,
+                margin: { top: 25.4, right: 20, bottom: 20, left: 20 },
+                differentFirstPage: false,
+            },
+        ],
     ]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
@@ -163,6 +171,7 @@ test("OK leaves a collaborator's change to a field the user didn't touch", async
         width: 215.9,
         height: 279.4,
         margin: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+        differentFirstPage: false,
     };
     const doc = new Y.Doc();
     for (const [key, value] of Object.entries(pageRecord(opened))) doc.getMap(PAGE_ROOT).set(key, value);
@@ -182,6 +191,7 @@ test("OK leaves a collaborator's change to a field the user didn't touch", async
         width: 279.4,
         height: 215.9,
         margin: { ...opened.margin, top: 30 },
+        differentFirstPage: false,
     });
 });
 

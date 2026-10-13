@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import { type PageSetup, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
@@ -39,15 +39,15 @@ const CHARS_PER_UNIT = 512;
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
-    const { doc, images, warnings } = readDocx(buffer, options);
-    return { json: doc.toJSON(), images, warnings };
+): { json: JSONContent; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
+    const { doc, page, images, warnings } = readDocx(buffer, options);
+    return { json: doc.toJSON(), page, images, warnings };
 }
 
 export function readDocx(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { doc: Node; images: DocxImage[]; warnings: TransformWarning[] } {
+): { doc: Node; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
@@ -80,7 +80,8 @@ export function readDocx(
         const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        return { doc, images, warnings };
+        if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
+        return { doc, page: reader.page, images, warnings };
     } catch (error) {
         throw importError(error);
     }
