@@ -12,7 +12,7 @@ import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import { NOT_AN_XLSX, readInBatches, TOO_MANY_CELLS } from './package';
 import { type SharedString, stringOf, textOf } from './strings';
-import type { Look, ThemePalette } from './styles';
+import { type Look, NO_LOOK, type ThemePalette } from './styles';
 
 // A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula and look, the
 // borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
@@ -45,8 +45,6 @@ export type Grid = {
     rows: number;
     columns: number;
 };
-
-const NO_LOOK: Look = { cell: {}, aligned: false, isDate: false };
 
 export function readGrid(part: Uint8Array, context: GridContext): Grid {
     const { rest, children } = readInBatches(part, 'sheetData', 'row');

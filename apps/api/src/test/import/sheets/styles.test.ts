@@ -52,6 +52,17 @@ describe('a number format', () => {
         expect(hours).toMatchObject({ numFmt: '0\\h', isDate: false });
     });
 
+    // A long code read once per xf was a 4 KB zip that held the reader for a minute.
+    test('is resolved once however many formats name it', () => {
+        const code = 'h:mm:ss '.repeat(12_500);
+        const started = performance.now();
+        const resolved = looks(
+            `<numFmts><numFmt numFmtId="164" formatCode="${code}"/></numFmts>${xfs(...Array.from({ length: 2_000 }, () => '<xf numFmtId="164"/>'))}`,
+        );
+        expect(performance.now() - started).toBeLessThan(2_000);
+        expect(resolved[1999]).toMatchObject({ numFmt: code, isDate: true });
+    });
+
     test('General, id 0 or an id nothing names is no format', () => {
         for (const look of looks(
             `<numFmts><numFmt numFmtId="165" formatCode="General"/></numFmts>${xfs('<xf numFmtId="0"/>', '<xf numFmtId="165"/>', '<xf numFmtId="999"/>')}`,
