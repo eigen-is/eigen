@@ -572,6 +572,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     const sketch = { roughness: 3, seed: 999 };
 
     const rect = base({ id: 'rect1', type: 'rectangle', ...paint, ...sketch, corners: 'round' });
+    const pie = base({ id: 'pie1', type: 'pie', ...paint, ...sketch, startAngle: 120, sweepAngle: 45 });
     const richtext = base({
         id: 'rich1',
         type: 'richtext',
@@ -636,6 +637,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 
     const cases = [
         { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'corners'] },
+        { record: pie, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'startAngle', 'sweepAngle'] },
         {
             record: richtext,
             fields: [

@@ -4,7 +4,7 @@
 
 A drawing is a `.eigenvector` file and a deck is a `.eigenslides` file. Both are collab documents ([COLLAB.md](COLLAB.md)): the content is a Yjs document that every open editor holds a copy of, and the server relays and stores the changes. Both use the same three roots in it. `elements` holds one small map per element: its type, position, size, rotation, colors, and whatever that type needs, such as the points of a line or the HTML of a text box. `frames` holds the slides of a deck. A frame is one page of fixed size, and an element on a slide names its frame. Only a deck writes frames, so a drawing has none. `meta` holds the background.
 
-An element's type is called its kind. Each kind is one `defineKind` module that answers every question the engine has about it: its defaults, how to read and validate it, its bounds, whether a click hits it, and how to draw it. Rendering, bounds, hit testing and the panel never ask "is this a rectangle". They ask the kind. Adding a shape is adding that module, plus its name in `VectorElementType` and its entries in `ELEMENT_KINDS`, `TOOL_ORDER` and `ELEMENT_KIND_UI`.
+An element's type is called its kind. Each kind is one `defineKind` module that answers every question the engine has about it: its defaults, how to read and validate it, its bounds, whether a click hits it, and how to draw it. Rendering, bounds, hit testing and the panel never ask "is this a rectangle". They ask the kind. Adding a shape is adding that module, plus its name in `VectorElementType` and its entries in `ELEMENT_KINDS` and `ELEMENT_KIND_UI`.
 
 Nothing in a stored document is trusted. Any collaborator, or a forged paste, can write any value. So one function, the reader, turns the Yjs document into a clean scene and repairs what it finds, and everything else works from that scene. The server runs the same reader for previews, export and search.
 
@@ -38,13 +38,15 @@ A pasted clipboard record goes through the same `readElementFromFields`, so a fo
 
 ## A kind is one registry entry
 
-Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, in-place editor, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`.
+Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. A bindable kind may give its own `anchorPoints`, the points a bound arrow snaps to; without them they are the box's four edge midpoints. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, in-place editor, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`.
 
 `kinds/index.ts` derives the rest: `ELEMENT_FIELDS`, the type validator, the toolbar tools, `baseDefaultsFor` (so a panel reset restores exactly what create gave). A host's style table (`VECTOR_STYLE_DEFAULTS`, `SLIDES_STYLE_DEFAULTS`) decides how a new element looks, never which kinds exist.
 
 **A `case 'rectangle'` in rendering, bounds, hit testing or the panel is a review finding.** `.type` is still read where behavior is truly per kind: the arrow and line family (`isLinearElement`), the rich-text sanitizer, the image's media name.
 
-Adding a kind: add it to `VectorElementType`, write its file, add one line to `ELEMENT_KINDS` and to `TOOL_ORDER`, and one `ELEMENT_KIND_UI` entry. Both registries are a `Record` over every type, so TypeScript rejects a half-added kind. `TOOL_ORDER` is a plain list, which TypeScript does not check for a missing kind.
+Adding a kind: add it to `VectorElementType`, write its file, add one line to `ELEMENT_KINDS` and one `ELEMENT_KIND_UI` entry. Both registries are a `Record` over every type, so TypeScript rejects a half-added kind. `ELEMENT_FIELDS` walks `ELEMENT_KINDS`, so the new kind's fields are stored the day it joins. A kind a tool draws also joins `CREATION_ORDER`, the toolbar's order, which the registry test pins against the `creation` capability.
+
+The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`. It stores `startAngle` and `sweepAngle` in degrees, clockwise from 3 o'clock, measured in the box-normalized circle, so a resize scales a slice like any other shape. It stores a sweep, not an end angle, because a 360° slice has no distinct end. Its outline is a polygon and its anchors sit on the slice, so an arrow docks on the slice rather than on its box. No tool draws one: slices arrive from charts and Convert to shapes.
 
 ## Capabilities are asked of the element
 
@@ -66,7 +68,7 @@ Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradie
 
 An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
 
-An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, rich text and images.
+An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, rich text and images.
 
 There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 

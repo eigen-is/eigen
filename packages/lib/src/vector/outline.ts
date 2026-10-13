@@ -135,7 +135,7 @@ export function outlineDistance(shape: OutlineShape, p: Point): number {
 // instead of the sharp box behind a rounded corner.
 export function outlineContains(shape: OutlineShape, p: Point): boolean {
     if (shape.kind === 'rounded') return coreDistance(p, shape.core) <= shape.radius;
-    if (shape.kind === 'polygon') return shape.corners.length > 2 && insideConvex(p, shape.corners);
+    if (shape.kind === 'polygon') return shape.corners.length > 2 && insidePolygon(p, shape.corners);
     if (shape.kind === 'ellipse') {
         if (shape.rx <= 0 || shape.ry <= 0) return false;
         return ((p.x - shape.cx) / shape.rx) ** 2 + ((p.y - shape.cy) / shape.ry) ** 2 <= 1;
@@ -209,6 +209,23 @@ function coreDistance(p: Point, core: Point[]): number {
     let best = Number.POSITIVE_INFINITY;
     for (const [a, b] of coreEdges(core)) best = Math.min(best, distanceToSegment(p, a, b));
     return core.length > 2 && insideConvex(p, core) ? -best : best;
+}
+
+// Not insideConvex: a pie slice past 180° is a non-convex polygon.
+function insidePolygon(p: Point, poly: Point[]): boolean {
+    for (const [a, b] of coreEdges(poly)) if (distanceToSegment(p, a, b) < EPS) return true;
+    return pointInPolygon(p, poly);
+}
+
+// Even-odd ray cast. The edge itself is either side, so a caller that counts it checks it first.
+export function pointInPolygon(p: Point, points: Point[]): boolean {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const a = points[i];
+        const b = points[j];
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
 }
 
 function insideConvex(p: Point, poly: Point[]): boolean {

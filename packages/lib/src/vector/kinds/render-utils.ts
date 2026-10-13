@@ -14,6 +14,7 @@ import {
     type VectorArrowElement,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorPieElement,
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '../types';
@@ -21,8 +22,9 @@ import {
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// What the one rough box drawable serves: the closed shapes, plus the two DOM boxes whose border it is.
-type RoughBoxElement = VectorShapeElement | VectorImageElement | VectorRichTextElement;
+// What the one rough box drawable serves: the closed shapes and the pie slice, plus the two DOM boxes
+// whose border it is.
+type RoughBoxElement = VectorShapeElement | VectorPieElement | VectorImageElement | VectorRichTextElement;
 
 // A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
@@ -51,8 +53,14 @@ function med(a: number[], b: number[]): number[] {
 }
 
 function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
-    if (el.type === 'ellipse') {
+    // A whole slice is the ellipse: roughjs's arc would draw its two radii as a seam.
+    if (el.type === 'ellipse' || (el.type === 'pie' && el.sweepAngle >= 360)) {
         return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
+    }
+    if (el.type === 'pie') {
+        const start = (el.startAngle * Math.PI) / 180;
+        const stop = ((el.startAngle + el.sweepAngle) * Math.PI) / 180;
+        return gen.arc(el.width / 2, el.height / 2, el.width, el.height, start, stop, true, roughOptions(el, false));
     }
     const box = { x: 0, y: 0, width: el.width, height: el.height };
     const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
@@ -109,7 +117,7 @@ function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
         options.fill = fill;
         options.fillStyle = fillStyle;
     }
-    if (el.type === 'ellipse') options.curveFitting = 1;
+    if (el.type === 'ellipse' || el.type === 'pie') options.curveFitting = 1;
     return options;
 }
 
