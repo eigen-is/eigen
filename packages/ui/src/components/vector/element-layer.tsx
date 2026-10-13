@@ -14,6 +14,7 @@ import {
     layerContent,
     layerInnerHtml,
     type MediaResolver,
+    PLACEMENT_FIELDS,
     placeLayer,
     type RenderOutput,
     type VectorArrowElement,
@@ -35,11 +36,8 @@ type ElementLayerProps = {
     onFitHeight?: FitHeight;
 };
 
-// Every field but the four only the layer's box reads: a kind draws in its local frame, so a move, a
-// turn or a fade re-places the body without redrawing it.
-const BODY_FIELDS = ELEMENT_FIELDS.filter(
-    (field) => field !== 'x' && field !== 'y' && field !== 'angle' && field !== 'opacity',
-);
+// A kind draws in its local frame, so a move, a turn or a fade re-places the body without redrawing it.
+const BODY_FIELDS = ELEMENT_FIELDS.filter((field) => !PLACEMENT_FIELDS.includes(field));
 
 // Pan/zoom re-renders without touching elements, so identity settles those in one compare; a drag and
 // a Yjs tick hand over fresh objects, so those need the field compare — every ELEMENT_FIELDS value is a
@@ -53,10 +51,6 @@ function sameFields(a: VectorElement, b: VectorElement, fields: readonly string[
         if (ra[field] !== rb[field]) return false;
     }
     return true;
-}
-
-function sameElement(a: VectorElement, b: VectorElement): boolean {
-    return sameFields(a, b, ELEMENT_FIELDS);
 }
 
 // A derived elbow route is routed in scene space around its bound shapes and then made local to the
@@ -80,7 +74,7 @@ function sameRouteContext(
         const a = boundShape(binding, prev);
         const b = boundShape(binding, next);
         if (a === b) continue;
-        if (!a || !b || !sameElement(a, b)) return false;
+        if (!a || !b || !sameFields(a, b, ELEMENT_FIELDS)) return false;
     }
     return true;
 }
@@ -92,7 +86,7 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     // the auto-fit off the box it is dragging.
     if (prev.onFitHeight !== next.onFitHeight) return false;
     if (prev.resolveMedia !== next.resolveMedia) return false;
-    if (!sameElement(prev.el, next.el)) return false;
+    if (!sameFields(prev.el, next.el, ELEMENT_FIELDS)) return false;
     // Same element fields AND the same scene map → identical output (the pan/zoom common case). A drag
     // rebuilds the map every frame, so identity alone cannot settle those: only an elbow arrow whose
     // OWN fields are unchanged might still need re-routing (a BOUND SHAPE moved), and that is the one

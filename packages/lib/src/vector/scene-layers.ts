@@ -49,9 +49,11 @@ export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}):
     return content && placeLayer(el, content);
 }
 
-// What the element draws, in its own frame: no kind's render reads x, y, angle or opacity, so a host may
-// keep this across a move. Null when the kind draws nothing at all (an image with no media name and no
-// border is the only such element today).
+// The fields only placeLayer reads: no kind's render does, so a host may keep a body across a change to them.
+export const PLACEMENT_FIELDS: readonly string[] = ['x', 'y', 'angle', 'opacity'];
+
+// What the element draws, in its own frame. Null when the kind draws nothing at all (an image with no
+// media name and no border is the only such element today).
 export function layerContent(el: VectorElement, opts: ElementLayerOptions = {}): RenderOutput | null {
     const content = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: opts.route });
     return !('html' in content) && content.svg === '' ? null : content;
