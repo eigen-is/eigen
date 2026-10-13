@@ -139,7 +139,7 @@ const DIMENSION = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|mm|cm|in|pc|px|em|ex
 const LONE = /^[^\p{L}0-9]+$/u;
 
 class LatexReader {
-    readonly #budget: MathBudget = { size: 0 };
+    readonly #budget: MathBudget = { size: 0, at: () => this.#offset(this.#pos) };
     readonly #latex: string;
     readonly #tokens: Token[];
     readonly #partners: number[];
@@ -163,7 +163,6 @@ class LatexReader {
     }
 
     #build(pieces: Piece[], depth: number, slot?: RowSlot): MathRow {
-        bound(this.#budget, depth, 0, this.#offset(this.#pos));
         const row = new RowBuilder(this.#budget, depth, slot);
         for (const piece of pieces) {
             if ('node' in piece) row.node(piece.node);
@@ -282,7 +281,7 @@ class LatexReader {
 
     #spliced(into: Piece[], style: Style, depth: number): void {
         this.#wrappers++;
-        bound(this.#budget, this.#wrappers, 0, this.#offset(this.#pos));
+        bound(this.#budget, this.#wrappers, 0);
         this.#argument(into, style, depth);
         this.#wrappers--;
     }
@@ -585,7 +584,7 @@ class LatexReader {
         const rows: MathRow[][] = [];
         this.#within(this.#pos, end, () => {
             let cells: MathRow[] = [];
-            bound(this.#budget, cellDepth, 1, this.#offset(this.#pos));
+            bound(this.#budget, cellDepth, 1);
             for (;;) {
                 const pieces: Piece[] = [];
                 this.#atoms(pieces, style, cellDepth);
@@ -602,7 +601,7 @@ class LatexReader {
                 rows.push(cells);
                 cells = [];
                 if (this.#pos >= this.#end) return;
-                bound(this.#budget, cellDepth, 1, this.#offset(this.#pos));
+                bound(this.#budget, cellDepth, 1);
             }
             rows.push(cells);
         });
@@ -620,7 +619,7 @@ class LatexReader {
 
     // One atom, without its scripts, into a row at `depth`.
     #atom(into: Piece[], style: Style, depth: number): void {
-        bound(this.#budget, depth, 0, this.#offset(this.#pos));
+        bound(this.#budget, depth, 0);
         const token = this.#tokens[this.#pos];
         if (this.#isChar(this.#pos, '{')) {
             this.#spliced(into, style, depth);

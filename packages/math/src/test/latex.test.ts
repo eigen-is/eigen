@@ -801,6 +801,25 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
         }
     });
 
+    test('a bound error points into the LaTeX, whichever bound it meets', () => {
+        for (const latex of [
+            'x'.repeat(5000),
+            '1'.repeat(5000),
+            `\\text{${'a'.repeat(5000)}}`,
+            'x+'.repeat(2100),
+            '\\frac{}{}'.repeat(1400),
+            `\\begin{matrix}${'x&'.repeat(3000)}x\\end{matrix}`,
+            `{${'\\mathbf{'.repeat(40)}x${'}'.repeat(41)}`,
+        ]) {
+            const offset = thrown(() => readLatex(latex))?.offset;
+            expect({ latex: latex.slice(0, 16), offset }).toEqual({
+                latex: latex.slice(0, 16),
+                offset: expect.any(Number),
+            });
+            expect(offset).toBeLessThanOrEqual(latex.length);
+        }
+    });
+
     // What LaTeX admits, MathML stores and reads back: neither counts a row or node the tree lacks.
     test('the size bound counts the tree, as MathML does', () => {
         const plus: MathNode = { kind: 'operator', text: '+' };

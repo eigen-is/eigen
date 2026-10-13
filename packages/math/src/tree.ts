@@ -60,7 +60,8 @@ export type MathNode =
 
 export type MathToken = Extract<MathNode, { kind: 'identifier' | 'number' | 'operator' }>;
 
-export type MathBudget = { size: number };
+// `at` is where in its input a reader is, for a MathError's offset.
+export type MathBudget = { size: number; at?: () => number };
 
 // Far above what the equations of a local corpus reach, in depth and in size.
 const SIZE = 4_000;
@@ -78,12 +79,12 @@ export const MATH_LIMITS = {
 } as const;
 
 // Every reader calls this as it builds: at each level it walks, and for each node, row and character it makes.
-export function bound(budget: MathBudget, depth: number, size: number, offset?: number): void {
+export function bound(budget: MathBudget, depth: number, size: number): void {
     budget.size += size;
     if (depth > MATH_LIMITS.depth)
-        throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`, offset);
+        throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`, budget.at?.());
     if (budget.size > MATH_LIMITS.size)
-        throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, offset);
+        throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, budget.at?.());
 }
 
 // Variation selectors too: an emoji presentation is no math.
