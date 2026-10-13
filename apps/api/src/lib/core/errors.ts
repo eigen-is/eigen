@@ -27,6 +27,12 @@ export function payloadTooLarge(): ApiError {
     return new ApiError(413, 'Upload too large');
 }
 
+// JSC's words for an allocation it refused with a throw rather than an abort. Every catch a document transform reaches
+// lets it through, so the transform process answers it as out of memory, never as a bad file or a dropped part.
+export function isOutOfMemory(error: unknown): error is RangeError {
+    return error instanceof RangeError && error.message === 'Out of memory';
+}
+
 // An overwrite whose base updatedAt the file no longer carries; the inline editor answers it as a conflict.
 export class StaleWriteError extends ApiError {
     constructor(readonly currentUpdatedAt: Date) {

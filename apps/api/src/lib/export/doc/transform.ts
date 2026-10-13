@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
+import { isOutOfMemory } from '../../core/errors';
 import { readEigendocFromDoc } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
@@ -108,7 +109,8 @@ async function withSvgFallbacks(media: ExportMedia[]): Promise<DocxMedia[]> {
                 .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
                 .toBuffer();
             prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
-        } catch {
+        } catch (error) {
+            if (isOutOfMemory(error)) throw error;
             // One librsvg can't read, or not in time, leaves the docx; its caption stays.
         }
     }

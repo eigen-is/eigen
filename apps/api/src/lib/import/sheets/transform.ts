@@ -1,6 +1,6 @@
 import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import { ApiError } from '../../core/errors';
+import { ApiError, isOutOfMemory } from '../../core/errors';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
 import { xlsxToSheets } from './from-xlsx';
 
@@ -22,7 +22,7 @@ async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
     try {
         return await xlsxToSheets(buffer);
     } catch (err) {
-        if (err instanceof ApiError) throw err;
+        if (err instanceof ApiError || isOutOfMemory(err)) throw err;
         throw new ApiError(400, 'Not a valid xlsx file');
     }
 }

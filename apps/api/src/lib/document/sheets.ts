@@ -7,6 +7,7 @@ import {
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
+import { isOutOfMemory } from '../core/errors';
 
 // Materialized Yjs doc → Sheet[]. Every consumer of a persisted workbook reads it in
 // the document-transform Worker, so there is no Mount-side loader here: capture
@@ -44,6 +45,7 @@ export function readSheetsFromDoc(
     try {
         return { sheets: recalcSheets(replayed), recalcError: null };
     } catch (e) {
+        if (isOutOfMemory(e)) throw e;
         return { sheets: replayed, recalcError: e instanceof Error ? e.message : String(e) };
     }
 }

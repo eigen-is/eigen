@@ -31,6 +31,7 @@ import { ApiError } from '../../core/errors';
 import { A_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
+import { SPREADSHEET_TOO_LARGE } from '../messages';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -118,7 +119,7 @@ function repackXlsx(buffer: Buffer): Buffer {
         return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
     } catch (error) {
         if (!(error instanceof ZipError)) throw error;
-        const message = error.status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file';
+        const message = error.status === 413 ? SPREADSHEET_TOO_LARGE : 'Not a valid xlsx file';
         throw new ApiError(error.status, message, { cause: error });
     }
 }
@@ -272,7 +273,7 @@ function textLength(value: unknown): number {
 }
 
 function tooLarge(): ApiError {
-    return new ApiError(413, 'Spreadsheet too large');
+    return new ApiError(413, SPREADSHEET_TOO_LARGE);
 }
 
 function tooManyCells(): ApiError {

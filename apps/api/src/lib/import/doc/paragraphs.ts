@@ -4,13 +4,13 @@ import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES } from '../../document/wordml';
+import { DOCUMENT_TOO_LARGE } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import {
     alternative,
-    DOCUMENT_TOO_LARGE,
     type DocxPackage,
     descendants,
     type Part,
