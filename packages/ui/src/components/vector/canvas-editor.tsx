@@ -27,12 +27,14 @@ import {
     type MarqueeMode,
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
+    type NewVectorElement,
     orderByFractionalIndex,
     type Point,
     paintsNothing,
     parseIdList,
     parsePoints,
     pointInFrame,
+    randomSeed,
     resizeLinear,
     rotatePoint,
     SNAP_SCREEN_THRESHOLD,
@@ -44,6 +46,7 @@ import {
     snapBoxToTargets,
     type VectorArrowElement,
     type VectorElement,
+    type VectorElementPatch,
 } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
@@ -64,7 +67,6 @@ import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
 import { EmptyOutlines } from './empty-outline';
-import { randomSeed } from './hooks/element-writes';
 import {
     applyZOrder,
     convertElementToShapes,
@@ -73,7 +75,7 @@ import {
     selectionShapes,
 } from './hooks/selection-ops';
 import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
-import { type CanvasDoc, type NewVectorElement, sealed, type VectorElementPatch } from './hooks/use-canvas-doc';
+import { type CanvasDoc, sealed } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';

@@ -7,26 +7,23 @@ import {
     followBindings,
     generateNKeysBetween,
     isVectorElementType,
+    type NewVectorElement,
     parseBinding,
     readElementFromFields,
     readVectorFromDoc,
     type StyleDefaults,
+    topmostIndex,
     type VectorArrowElement,
-    type VectorChartElement,
     type VectorElement,
-    type VectorElementType,
+    type VectorElementPatch,
     type VectorFrame,
-    type VectorImageElement,
-    type VectorLinearElement,
     type VectorMeta,
-    type VectorPieElement,
-    type VectorRichTextElement,
     type VectorScene,
-    type VectorShapeElement,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, replaceElementInDoc, topmostIndex, writeElementInDoc } from './element-writes';
+import { duplicateElementsInDoc, replaceElementInDoc } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -80,21 +77,6 @@ export function holdCapture(undoManager: Y.UndoManager | null): () => void {
         undoManager.stopCapturing();
     };
 }
-
-// A partial patch over the write/read allow-list — every field optional, so a caller sets any
-// subset of any element variant's fields (the union members share the geometry base). id/type
-// are never patched; z-order changes rewrite `index`.
-export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
-    Partial<Omit<VectorPieElement, 'id' | 'type'>> &
-    Partial<Omit<VectorChartElement, 'id' | 'type'>> &
-    Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
-    Partial<Omit<VectorImageElement, 'id' | 'type'>> &
-    Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
-    Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
-
-// addElement input: the caller names a `type` and overrides whatever it likes; the hook fills
-// the rest from lib defaults and generates id/seed/index.
-export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
 // After a patch, re-run followBindings and write the geometry into the same transact for every
 // arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
