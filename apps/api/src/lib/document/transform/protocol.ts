@@ -129,6 +129,8 @@ export type CountedWarningCode =
     | 'corrupt-blobs-skipped'
     | 'blocks-flattened'
     | 'images-unshown'
+    | 'images-dropped'
+    | 'mirrors-dropped'
     | 'graphics-dropped'
     | 'tables-dropped'
     | 'charts-dropped'

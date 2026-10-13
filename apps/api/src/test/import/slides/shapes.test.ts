@@ -363,6 +363,18 @@ describe('pictures', () => {
             deck.media[0].name,
             '<p>Picture not imported</p>',
         ]);
+        expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    });
+
+    test('a mirrored picture keeps its box and counts its lost mirror; flipped back by its group it is none', () => {
+        const mirrored = (shapes: string) =>
+            deckOf({ slides: [{ shapes, rels: rel('rId2', 'image', '../media/a.png') }], files }).warnings;
+        const flipped = pic({ xfrm: box(0, 0, 10, 10, ' flipH="1"'), embed: 'rId2' });
+        expect(mirrored(flipped + pic({ xfrm: box(0, 0, 10, 10, ' flipV="1"'), embed: 'rId2' }))).toEqual([
+            { code: 'mirrors-dropped', count: 2 },
+        ]);
+        const group = groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX], ' flipH="1"');
+        expect(mirrored(grp(group, flipped))).toEqual([]);
     });
 });
 

@@ -60,7 +60,7 @@ const DROPPED = {
     diagram: { label: 'SmartArt not imported', code: 'diagrams-dropped' },
     ole: { label: 'Embedded object not imported', code: 'objects-dropped' },
     object: { label: 'Object not imported', code: 'objects-dropped' },
-    picture: { label: 'Picture not imported', code: 'images-unshown' },
+    picture: { label: 'Picture not imported', code: 'images-dropped' },
 } satisfies Record<string, { label: string; code: CountedWarningCode }>;
 type Dropped = keyof typeof DROPPED;
 
@@ -507,7 +507,7 @@ function lineOf(placed: Placed, stroke: Stroke, spPrs: XmlElement[]): NewVectorE
         : { type: 'arrow', ...line, startArrowhead, endArrowhead, elbow: false };
 }
 
-function readPicture(walk: Walk, shape: XmlElement, spPrs: XmlElement[], { box }: Placed): void {
+function readPicture(walk: Walk, shape: XmlElement, spPrs: XmlElement[], { box, mirrored }: Placed): void {
     const blipFill = xmlChild(shape, P_NS, 'blipFill');
     const blip = blipFill && xmlChild(blipFill, A_NS, 'blip');
     const extensions = blip && xmlChild(blip, A_NS, 'extLst');
@@ -521,6 +521,8 @@ function readPicture(walk: Walk, shape: XmlElement, spPrs: XmlElement[], { box }
         if (embedded(blip) || (blip && xmlAttr(blip, R_NS, 'link'))) placeholderBox(walk, 'picture', box);
         return;
     }
+    // An image can't mirror; a shape the canvas draws is symmetric, and its text PowerPoint never mirrors.
+    if (mirrored) count(walk, 'mirrors-dropped');
     push(walk, {
         type: 'image',
         ...box,

@@ -134,7 +134,7 @@ describe('a pptx package', () => {
             'richtext',
             'richtext',
         ]);
-        expect(deck.warnings).toContainEqual({ code: 'images-unshown', count: 3 });
+        expect(deck.warnings).toContainEqual({ code: 'images-dropped', count: 3 });
     });
 
     test(`the parsed parts are capped together at ${MAX_PPTX_XML_BYTES} bytes and ${MAX_PPTX_XML_TAGS} tags`, () => {

@@ -149,6 +149,8 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'byte-guard-truncated': (w) => typeof w['bytes'] === 'number',
     'blocks-flattened': (w) => typeof w['count'] === 'number',
     'images-unshown': (w) => typeof w['count'] === 'number',
+    'images-dropped': (w) => typeof w['count'] === 'number',
+    'mirrors-dropped': (w) => typeof w['count'] === 'number',
     'graphics-dropped': (w) => typeof w['count'] === 'number',
     'tables-dropped': (w) => typeof w['count'] === 'number',
     'charts-dropped': (w) => typeof w['count'] === 'number',
