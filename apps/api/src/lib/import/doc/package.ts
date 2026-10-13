@@ -1,6 +1,6 @@
 import { ApiError } from '../../core/errors';
 import { CONTENT_TYPES_NS, isOn, MC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, W_NS } from '../../core/ooxml';
-import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import { is, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { openZip, ZipError, type ZipReader } from '../../core/zip';
 
 // The parts the reader parses, together. A tree costs 20–40× its XML, and the largest document.xml met is 12.6 MB.
@@ -247,10 +247,6 @@ export function w(element: XmlElement | undefined, local: string): string | unde
 
 export function wChild(element: XmlElement | undefined, local: string): XmlElement | undefined {
     return element && xmlChild(element, W_NS, local);
-}
-
-export function is(element: XmlElement, ns: string, local: string): boolean {
-    return element.ns === ns && element.local === local;
 }
 
 // A bare element is on.

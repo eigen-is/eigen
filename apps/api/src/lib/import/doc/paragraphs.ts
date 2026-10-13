@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../core/errors';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES, W_NS } from '../../core/ooxml';
-import { type XmlElement, xmlElements, xmlText } from '../../core/xml';
+import { is, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
@@ -12,7 +12,6 @@ import {
     DOCUMENT_TOO_LARGE,
     type DocxPackage,
     descendants,
-    is,
     isAlternateContent,
     type Part,
     twipsOf,

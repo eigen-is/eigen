@@ -8,10 +8,10 @@ import {
     STYLE_NAMES,
     W_NS,
 } from '../../core/ooxml';
-import { type XmlElement, xmlElements } from '../../core/xml';
+import { is, type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
-import { halfPointsOf, int, is, onOff, twipsOf, w, wChild } from './package';
+import { halfPointsOf, int, onOff, twipsOf, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
 export type DocxRunProps = {

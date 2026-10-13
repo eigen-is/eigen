@@ -1,7 +1,7 @@
 import { LIST_LEVELS, spellNumber, W_NS } from '../../core/ooxml';
-import { type XmlElement, xmlElements } from '../../core/xml';
+import { is, type XmlElement, xmlElements } from '../../core/xml';
 import { symbolOf } from './docx-fonts';
-import { int, is, onOff, w, wChild } from './package';
+import { int, onOff, w, wChild } from './package';
 import { MAX_CHAIN, type ParaProps, readParaProps, type Styles } from './styles';
 
 // Word's counters, emulated in document order: lists sharing a definition continue, a start override restarts once.
