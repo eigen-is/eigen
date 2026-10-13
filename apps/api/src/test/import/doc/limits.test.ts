@@ -2,8 +2,9 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
-import { openZip } from '../../../lib/core/zip';
+import { openZip, ZipReader } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
@@ -151,7 +152,7 @@ async function rejection(read: () => unknown): Promise<ApiError> {
     return error;
 }
 
-describe('XML parts', () => {
+describe('XML budget', () => {
     afterEach(() => {
         for (const spy of spies) spy.mockRestore();
         spies.length = 0;
@@ -159,13 +160,47 @@ describe('XML parts', () => {
     const spies: { mockRestore(): void }[] = [];
     const padding = (bytes: number) => `<!--${'x'.repeat(bytes)}-->`;
 
-    // A part's size refuses nothing: what a parse costs is the transform process's memory to bound.
-    test.each([
-        ['a document.xml', padding(17 * MB), {}],
-        ['a fontTable.xml', '', { fontTable: padding(17 * MB) }],
-        ['a document.xml and a styles.xml together', padding(9 * MB), { styles: padding(9 * MB) }],
-    ])('%s of 17 MB imports', async (_, body, parts) => {
-        expect(texts(await imported(`${paragraph(run('Body'))}${body}`, parts))).toEqual(['Body']);
+    test('a document.xml past the budget is 413 before it inflates or parses', async () => {
+        const docx = await buildDocxWithBody(`${paragraph(run('Body'))}${padding(MAX_PACKAGE_XML_BYTES)}`);
+        const reads = spyOn(ZipReader.prototype, 'read');
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(reads, parses);
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        // The package's structure was read through the spies; the body was not.
+        expect(parses).toHaveBeenCalled();
+        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
+        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(MAX_PACKAGE_XML_BYTES);
+    });
+
+    // Memory follows the elements, not the bytes: 4.5 MB of empty paragraphs would cost more than 16 MB of prose.
+    test('a body past the tag budget is 413 before it parses', async () => {
+        const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_PACKAGE_XML_TAGS));
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
+    });
+
+    test('a fontTable.xml past the budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_PACKAGE_XML_BYTES) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    });
+
+    test('a styles.xml past the tag budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_PACKAGE_XML_TAGS) }),
+        );
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+    });
+
+    test('the budget counts the parts together', async () => {
+        const half = padding(MAX_PACKAGE_XML_BYTES / 2);
+        const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
     test('a 23 MB webSettings.xml beside a small body imports: the reader never parses it', async () => {
@@ -249,14 +284,37 @@ describe('XML parts', () => {
         expect(texts(json)).toEqual(['Body', '[1]']);
     });
 
-    test('a SmartArt part of 17 MB imports its text', async () => {
-        const kept = '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>';
+    // A graphic's part is read once every part the document needs is, so the budget it meets costs the graphic only.
+    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
         const { json, warnings } = await importDocxBody(
             `${paragraph(run('Body'))}${paragraph(smartArt)}`,
-            smartArtData(`${padding(17 * MB)}${kept}`),
+            smartArtData(padding(MAX_PACKAGE_XML_BYTES)),
+        );
+        expect(texts(json)).toEqual(['Body']);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+    });
+
+    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
+        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_PACKAGE_XML_TAGS / 4);
+        const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const smartArtPart = smartArtData(
+            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
+        );
+        const { json, warnings } = await importDocxBody(
+            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
+            {
+                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+                media: {
+                    ...smartArtPart.media,
+                    'word/charts/chart1.xml': new TextEncoder().encode(
+                        `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
+                    ),
+                },
+            },
         );
         expect(texts(json)).toEqual(['Body', 'Kept']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
     });
 
     // As a corrupt file is, rather than as a server error.
@@ -956,8 +1014,8 @@ describe('links', () => {
 // Seconds of work, so on CI and locally on request.
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 
-// What a long report holds: headings, sentences in styled runs, links, lists two deep and tables, repeated up to the
-// output's budget, a node and a mark weighing one each.
+// What a long report holds: headings, sentences in styled runs, links, lists two deep and tables, repeated up to
+// whichever budget it meets first: the XML's bytes or tags, or the output's, a node and a mark weighing one each.
 async function honestBody(): Promise<string> {
     const sentence = 'The committee reviewed the quarterly figures and agreed on the next steps for the project. ';
     const blocks = [
@@ -976,11 +1034,13 @@ async function honestBody(): Promise<string> {
             ],
         ),
     ].join('');
+    const tags = blocks.split('<').length - 1;
     const weigh = (node: JSONContent): number =>
         (node.marks?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + 1 + weigh(child), 0);
     const weight = weigh((await importDocxBody(blocks)).json);
     const margin = 0.98;
-    return blocks.repeat(Math.floor((margin * MAX_DOCX_WEIGHT) / weight));
+    const fits = Math.min(MAX_PACKAGE_XML_BYTES / blocks.length, MAX_PACKAGE_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
+    return blocks.repeat(Math.floor(margin * fits));
 }
 
 describe.skipIf(!runSlow)('an honest document just under the budget', () => {
@@ -1010,22 +1070,23 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         expect(result.cpuMs).toBeLessThan(10_000);
     }, 120_000);
 
-    // Word's spelling marks and language tags: 850,000 elements, few of them the document's.
-    test('50,000 paragraphs of 17 tags each import within 1 GB of peak RSS', async () => {
+    // Word's spelling marks and language tags: elements up to the tag budget, few of them the document's.
+    test('paragraphs of 17 tags each just under the tag budget import within 1 GB of peak RSS', async () => {
         const lang = '<w:rPr><w:lang w:val="en-US"/></w:rPr>';
+        const count = Math.floor((0.98 * MAX_PACKAGE_XML_TAGS) / 17);
         const body = paragraph(
             `<w:proofErr w:type="spellStart"/>${run('Word', '<w:lang w:val="en-US"/>')}<w:proofErr w:type="spellEnd"/>`,
             `<w:spacing w:after="0"/>${lang}`,
-        ).repeat(50_000);
+        ).repeat(count);
         const result = measuredImport(await buildDocxWithBody(body));
-        expect(result.blocks).toBe(50_000);
+        expect(result.blocks).toBe(count);
         expect(result.rssGrowth).toBeLessThan(1024 * MB);
     }, 120_000);
 });
 
-// The transform process's memory limit is Linux's alone. At 1 GiB of data segment the child has about 0.35 GB to use, which
-// 3 million empty paragraphs outgrow as they parse: the limit ends it with a crash, never the kernel's OOM killer, whose
-// SIGKILL the job line would show.
+// The transform process's memory limit is Linux's alone, the backstop past the budgets. At 1 GiB of data segment the child
+// has about 0.35 GB to use, which the honest document outgrows: the limit ends it with a crash, never the kernel's OOM
+// killer, whose SIGKILL the job line would show.
 describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the memory of the transform process', () => {
     test('is 413, ended by the memory limit', async () => {
         const runner = documentTransformRunner as unknown as { memoryLimitKiB: number };
@@ -1034,7 +1095,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
         const logSpy = spyOn(console, 'log');
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            const docx = await buildDocxWithBody('<w:p/>'.repeat(3_000_000));
+            const docx = await buildDocxWithBody(await honestBody());
             const job = {
                 kind: 'import',
                 sourceFormat: 'docx',

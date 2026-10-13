@@ -1,10 +1,22 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from '../../lib/core/ooxml';
-import { isEncryptedPackage, openPackage, optional, relationshipsOf, relOfType, relsPathOf } from '../../lib/core/opc';
+import {
+    isEncryptedPackage,
+    MAX_PACKAGE_XML_BYTES,
+    MAX_PACKAGE_XML_TAGS,
+    openPackage,
+    optional,
+    relationshipsOf,
+    relOfType,
+    relsPathOf,
+} from '../../lib/core/opc';
+import * as xml from '../../lib/core/xml';
 import { XmlError } from '../../lib/core/xml';
-import { writeZip, ZipError } from '../../lib/core/zip';
+import { writeZip, ZipError, ZipReader } from '../../lib/core/zip';
+import { build, deflated } from '../fixtures/raw-zip';
 
+const MESSAGES = { passwordProtected: 'Locked', tooLarge: 'Too large' };
 const IMAGE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
 function rels(relationships: string, partPath = 'word/document.xml') {
@@ -38,6 +50,12 @@ describe('a relationship target', () => {
 
     test('an absolute target is a part name from the package root', () => {
         expect(targetOf('/word/media/x.png', 'word/glossary/document.xml')).toBe('word/media/x.png');
+    });
+
+    // A '..' kept would pass a format's prefix check on a part outside its folder.
+    test("an absolute target's '.' and '..' are resolved from the root, never above it", () => {
+        expect(targetOf('/ppt/../evil.xml', 'ppt/slides/slide1.xml')).toBe('evil.xml');
+        expect(targetOf('/../../word/./x.png')).toBe('word/x.png');
     });
 
     test('an External target is kept as written, and is no part', () => {
@@ -75,7 +93,7 @@ describe('a package', () => {
     const ROOT_RELS = `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument" Target="a/b.xml"/></Relationships>`;
     const zip = (files: Record<string, string>) =>
         writeZip(Object.entries(files).map(([name, data]) => ({ name, data })));
-    const open = (files: Record<string, string>) => openPackage(zip(files), 'Locked');
+    const open = (files: Record<string, string>) => openPackage(zip(files), MESSAGES);
     // An OLE compound file: its signature, then a directory entry naming a stream in UTF-16.
     const ole = (stream: string) => {
         const bytes = new Uint8Array(4096);
@@ -95,10 +113,10 @@ describe('a package', () => {
     test("an encrypted one is refused with the format's message; any other OLE file is no zip", () => {
         expect(isEncryptedPackage(ole('EncryptedPackage'))).toBe(true);
         expect(isEncryptedPackage(ole('Workbook'))).toBe(false);
-        const locked = thrown(() => openPackage(ole('EncryptedPackage'), 'Locked'));
+        const locked = thrown(() => openPackage(ole('EncryptedPackage'), MESSAGES));
         expect(locked).toBeInstanceOf(ApiError);
         expect(locked).toMatchObject({ status: 400, message: 'Locked' });
-        expect(thrown(() => openPackage(ole('Workbook'), 'Locked'))).toBeInstanceOf(ZipError);
+        expect(thrown(() => openPackage(ole('Workbook'), MESSAGES))).toBeInstanceOf(ZipError);
     });
 
     test('reads a part once, and its relationships, the package\'s own under ""', () => {
@@ -131,6 +149,70 @@ describe('a package', () => {
         expect(thrown(() => optional(() => thrownBy(new ZipError('too-large'))))).toBeInstanceOf(ZipError);
         expect(thrown(() => optional(() => thrownBy(new ApiError(413, 'Too large'))))).toBeInstanceOf(ApiError);
         expect(optional(() => 1)).toBe(1);
+    });
+
+    test('an optional read past the budget is undefined on request', () => {
+        expect(optional(() => thrownBy(new ApiError(413, 'Too large')), true)).toBeUndefined();
+        expect(thrown(() => optional(() => thrownBy(new ApiError(400, 'Bad')), true))).toBeInstanceOf(ApiError);
+    });
+});
+
+describe("a package's parse budget", () => {
+    const spies: { mockRestore(): void }[] = [];
+    afterEach(() => {
+        for (const spy of spies) spy.mockRestore();
+        spies.length = 0;
+    });
+    const comment = (bytes: number) => `<a><!--${'x'.repeat(bytes)}--></a>`;
+    const pkg = (files: Record<string, string>) =>
+        openPackage(build(Object.entries(files).map(([name, data]) => deflated(name, data))), MESSAGES);
+    const refusal = (run: () => unknown) => {
+        try {
+            run();
+        } catch (error) {
+            return error instanceof ApiError ? [error.status, error.message] : error;
+        }
+        return undefined;
+    };
+
+    test('a part past the bytes left is 413 before it inflates, and leaves the budget to the parts after it', () => {
+        const reads = spyOn(ZipReader.prototype, 'read');
+        spies.push(reads);
+        const half = MAX_PACKAGE_XML_BYTES / 2;
+        const opened = pkg({ 'a.xml': comment(half), 'b.xml': comment(half), 'c.xml': '<c/>' });
+        expect(opened.part('a.xml')?.local).toBe('a');
+        expect(refusal(() => opened.part('b.xml'))).toEqual([413, 'Too large']);
+        expect(reads.mock.calls.map(([name]) => name)).not.toContain('b.xml');
+        expect(opened.part('c.xml')?.local).toBe('c');
+    });
+
+    test('the parts past the tags left are 413 before they parse', () => {
+        const parses = spyOn(xml, 'parseXml');
+        spies.push(parses);
+        const tags = (count: number) => `<a>${'<b/>'.repeat(count - 2)}</a>`;
+        const opened = pkg({ 'a.xml': tags(MAX_PACKAGE_XML_TAGS / 2), 'b.xml': tags(MAX_PACKAGE_XML_TAGS / 2 + 1) });
+        expect(opened.part('a.xml')?.local).toBe('a');
+        const parsed = parses.mock.calls.length;
+        expect(refusal(() => opened.part('b.xml'))).toEqual([413, 'Too large']);
+        expect(parses.mock.calls.length).toBe(parsed);
+    });
+
+    test('[Content_Types].xml and the relationships parts are charged too', () => {
+        const types = `<Types xmlns="${CONTENT_TYPES_NS}">${comment(MAX_PACKAGE_XML_BYTES - 1000)}</Types>`;
+        const opened = pkg({ '[Content_Types].xml': types, '_rels/.rels': comment(1000), 'a.xml': '<a/>' });
+        expect(refusal(() => opened.relationships(''))).toEqual([413, 'Too large']);
+    });
+
+    // 1 MB of upload: the declared size is the budget's to read, so not a byte of it inflates.
+    test('a [Content_Types].xml that inflates to 180 MB is 413 at once', () => {
+        const reads = spyOn(ZipReader.prototype, 'read');
+        spies.push(reads);
+        const bomb = build([deflated('[Content_Types].xml', comment(180 * 1024 * 1024))]);
+        expect(bomb.length).toBeLessThan(1024 * 1024);
+        const started = performance.now();
+        expect(refusal(() => openPackage(bomb, MESSAGES))).toEqual([413, 'Too large']);
+        expect(performance.now() - started).toBeLessThan(100);
+        expect(reads).not.toHaveBeenCalled();
     });
 });
 

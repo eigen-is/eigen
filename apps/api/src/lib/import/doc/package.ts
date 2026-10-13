@@ -3,6 +3,7 @@ import { alternativeFor, isOn, W_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { ZipReader } from '../../core/zip';
+import { DOCUMENT_TOO_LARGE } from '../messages';
 
 export const NOT_A_DOCX = 'Not a valid docx file';
 const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
@@ -19,14 +20,15 @@ export type DocxPackage = {
     footnotes?: Part;
     endnotes?: Part;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
-    // A part a drawing names, read when met; a damaged one is no part.
+    // A part a drawing names, read when met; a damaged one is no part, and so is one past the budget: every part the
+    // document needs is read before it, so it costs only its graphic.
     readPart(path: string): XmlElement | undefined;
     // An image's bytes; a damaged entry is none, and costs only its picture.
     readMedia(path: string): Uint8Array | undefined;
 };
 
 export function readPackage(bytes: Uint8Array): DocxPackage {
-    const pkg = openPackage(bytes, PASSWORD_PROTECTED);
+    const pkg = openPackage(bytes, { passwordProtected: PASSWORD_PROTECTED, tooLarge: DOCUMENT_TOO_LARGE });
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
     const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
@@ -50,7 +52,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
         contentTypeOf: pkg.contentTypeOf,
-        readPart: (path) => optional(() => pkg.part(path)),
+        readPart: (path) => optional(() => pkg.part(path), true),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
     };
 }
