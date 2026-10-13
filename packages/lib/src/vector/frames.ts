@@ -14,7 +14,7 @@ export const FRAME_WIDTH = 1920;
 // reader stamps it on every frame.
 export const SLIDE_SIZE_KEYS = ['16:9', '4:3'] as const;
 export type SlideSize = (typeof SLIDE_SIZE_KEYS)[number];
-export const SLIDE_SIZES: Record<SlideSize, Extent> = {
+export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
     '16:9': { width: FRAME_WIDTH, height: 1080 },
     '4:3': { width: FRAME_WIDTH, height: 1440 },
 };

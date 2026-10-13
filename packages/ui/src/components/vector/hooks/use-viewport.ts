@@ -172,8 +172,8 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     // Opening view: the scene origin at the container center (infinite), or the frame letterboxed
     // (frame mode, re-run on every `resetKey` change so a frame switch resets the pan, and on every
     // change of the frame's size). Waits for a real size: a mobile comment deep link mounts the canvas
-    // inside a hidden wrapper, which measures 0 until the pane closes. Frame mode keeps observing — a letterboxed page must stay letterboxed
-    // across a resize; infinite mode centers once and disconnects.
+    // inside a hidden wrapper, which measures 0 until the pane closes. Frame mode keeps observing — a
+    // letterboxed page must stay letterboxed across a resize; infinite mode centers once and disconnects.
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
