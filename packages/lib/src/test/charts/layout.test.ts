@@ -708,3 +708,139 @@ describe('unusable data', () => {
         }
     });
 });
+
+describe('edge cases', () => {
+    const one = (values: (number | null)[]): ChartData => ({
+        categories: values.map((_, i) => `C${i}`),
+        series: [series('S', values)],
+    });
+    const valueTicks = (out: ChartLayout) =>
+        out.labels.filter((label) => label.anchor === 'end' && label.rotate === 0).map((label) => label.text);
+    const small = { width: 400, height: 300 };
+
+    test('a span too small for a tick step lays out as a zero span, every number finite', () => {
+        for (const type of ['column', 'bar', 'line'] as const) {
+            const out = layout(type, {}, { ...small, data: one([1e-310, 2e-310]) });
+            for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
+            expect(ofPart(out, 'baseline')).toHaveLength(1);
+        }
+    });
+
+    test('the value axis draws at most 20 ticks, however many d3 hands back', () => {
+        const column = layout('column', { title: '', legend: 'none' }, { data: one([61]), width: 400, height: 2000 });
+        expect(valueTicks(column).length).toBeGreaterThan(10);
+        expect(valueTicks(column).length).toBeLessThanOrEqual(20);
+        const pinned = { title: '', min: 10, max: 30, gridlines: true, format: null };
+        const fixed = layout('column', { valueAxis: pinned }, { data: one([20]), width: 400, height: 2000 });
+        expect(valueTicks(fixed).length).toBeLessThanOrEqual(20);
+    });
+
+    test('tiny values get distinct tick labels', () => {
+        const texts = valueTicks(layout('column', {}, { ...small, data: one([1e-20, 3e-20]) }));
+        expect(texts.length).toBeGreaterThan(2);
+        expect(new Set(texts).size).toBe(texts.length);
+    });
+
+    test('a huge value still draws a plot', () => {
+        for (const type of ['column', 'bar'] as const) {
+            const out = layout(type, {}, { ...small, data: one([1e100]) });
+            expect(out.labels.map((label) => label.text)).not.toContain('Chart too small');
+            expect(rects(out, 'bar')).toHaveLength(1);
+        }
+    });
+
+    test('a line axis fits the data; bars still start at zero', () => {
+        const out = layout('line', {}, { data: one([1000, 1002, 1004]) });
+        const lowest = Number(valueTicks(out)[0].replaceAll(',', ''));
+        expect(lowest).toBeGreaterThan(0);
+        expect(lowest).toBeLessThanOrEqual(1000);
+        const gridlines = lines(out, 'gridline').map((line) => line.y);
+        const plotHeight = Math.max(...gridlines, lines(out, 'baseline')[0].y) - Math.min(...gridlines);
+        expect(lines(out, 'line')[0].height).toBeGreaterThan(plotHeight / 2);
+        expect(valueTicks(layout('column', {}, { data: one([1000, 1002, 1004]) }))[0]).toBe('0');
+        // A flat line has no span of its own, so its axis starts at zero.
+        expect(valueTicks(layout('line', {}, { data: one([7]) }))[0]).toBe('0');
+        expect(valueTicks(layout('line', {}, { data: one([-5, -5]) })).at(-1)).toBe('0');
+    });
+
+    test('no plottable value says No data for every type', () => {
+        for (const type of CHART_TYPES) {
+            for (const blanks of ['gap', 'zero', 'span'] as const) {
+                const out = layout(type, { blanks }, { data: one([null, null]) });
+                expect(out.shapes.map((shape) => shape.id)).toEqual(['c1:background']);
+                expect(out.labels.map((label) => label.text)).toEqual(['No data']);
+            }
+        }
+    });
+
+    test('all zeros draw axes from 0 to 1 with flat marks', () => {
+        for (const type of ['column', 'bar', 'line'] as const) {
+            const out = layout(type, {}, { data: one([0, 0, 0]) });
+            for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
+            const ticks = out.labels
+                .filter((label) => /^\d/.test(label.text) && !label.text.startsWith('C'))
+                .map((label) => label.text);
+            expect([ticks[0], ticks.at(-1)]).toEqual(['0.0', '1.0']);
+            if (type === 'line') expect(lines(out, 'line')[0].height).toBe(0);
+            else for (const bar of rects(out, 'bar')) expect(type === 'column' ? bar.height : bar.width).toBe(0);
+        }
+    });
+
+    test('a stack of mixed signs covers both sums, negatives below zero', () => {
+        const data = { categories: ['A', 'B'], series: [series('S', [5, -3]), series('T', [2, -1])] };
+        const out = layout('column', { stacked: true }, { data });
+        const ticks = valueTicks(out).map(Number);
+        expect(ticks[0]).toBeLessThanOrEqual(-4);
+        expect(ticks.at(-1)).toBeGreaterThanOrEqual(7);
+        const baseline = lines(out, 'baseline')[0].y;
+        for (const bar of rects(out, 'bar').filter((bar) => bar.id.endsWith(':1'))) {
+            expect(bar.y).toBeGreaterThanOrEqual(baseline - 0.01);
+        }
+    });
+
+    test('pinned bounds: exact decimal labels, and a min past the data draws a finite empty plot', () => {
+        const axis = { title: '', min: 0.1, max: 0.7, gridlines: true, format: null };
+        expect(valueTicks(layout('column', { valueAxis: axis }, { data: one([0.3, 0.5]) }))).toEqual([
+            '0.1',
+            '0.2',
+            '0.3',
+            '0.4',
+            '0.5',
+            '0.6',
+            '0.7',
+        ]);
+        const past = layout('column', { valueAxis: { ...axis, min: 200, max: null } }, { data: one([1, 2]) });
+        for (const n of numbersIn(past)) expect(Number.isFinite(n)).toBe(true);
+        expect(Number(valueTicks(past)[0])).toBe(200);
+        for (const bar of rects(past, 'bar')) expect(bar.height).toBe(0);
+        for (const [min, max] of [
+            [1e20, null],
+            [0, 1e-310],
+        ]) {
+            const out = layout('column', { valueAxis: { ...axis, min, max } }, { data: one([1, 2]) });
+            for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
+        }
+    });
+
+    test('a crowded legend keeps to its share of the box and counts what it drops', () => {
+        const many = Array.from({ length: 32 }, (_, i) => series(`Series ${i + 1}`, [i, i + 1]));
+        for (const legend of ['top', 'bottom', 'left', 'right'] as const) {
+            const out = layout(
+                'column',
+                { legend, title: '' },
+                { ...small, data: { categories: ['A', 'B'], series: many } },
+            );
+            const swatches = rects(out, 'legend');
+            expect(swatches.length).toBeLessThan(32);
+            const more = out.labels.find((label) => /^\+\d+$/.test(label.text));
+            expect(more?.text).toBe(`+${32 - swatches.length}`);
+            if (legend === 'top') {
+                const rows = out.labels.filter((label) => label.anchor === 'start').map(labelBounds);
+                const top = Math.min(...rows.map((row) => row.top));
+                const bottom = Math.max(...rows.map((row) => row.bottom));
+                expect(bottom - top).toBeLessThanOrEqual(300 * 0.3);
+                expect(Math.min(...lines(out, 'gridline').map((line) => line.y))).toBeGreaterThan(bottom);
+            }
+        }
+    });
+});
