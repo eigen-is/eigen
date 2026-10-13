@@ -213,11 +213,25 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
         width: shape.width * deck.scale,
         height: shape.height * deck.scale,
     });
-    for (const part of [...decorationsOf(inheritance), inheritance.slide]) {
+    for (const part of decorationsOf(inheritance)) {
+        const walk: Walk = { deck, inheritance, part, copied: true, out };
+        // A slide's clrMapOvr repaints them.
+        const key = `${part.path} ${JSON.stringify([...inheritance.theme.colors.map])}`;
+        const known = deck.decorations.get(key);
+        if (known) {
+            deck.shapes += known.shapes;
+            if (deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+            for (const element of known.elements) push(walk, { ...element });
+            continue;
+        }
+        const [elements, shapes] = [out.elements.length, deck.shapes];
         const tree = spTreeOf(part.root);
-        const walk: Walk = { deck, inheritance, part, copied: part !== inheritance.slide, out };
         if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
+        deck.decorations.set(key, { elements: out.elements.slice(elements), shapes: deck.shapes - shapes });
     }
+    const tree = spTreeOf(inheritance.slide.root);
+    const walk: Walk = { deck, inheritance, part: inheritance.slide, copied: false, out };
+    if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
     return out;
 }
 
@@ -309,7 +323,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
         style,
         rels: walk.part.rels,
     };
-    const text = source && richTextOf(source, theme, walk.deck.scale, walk.deck.lost);
+    const text = source && richTextOf(source, theme, walk.deck.scale, walk.deck.lost, walk.deck.read);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
     const textBox = text && source ? turned(box, verticalTurnOf(source, walk.deck.lost)) : box;

@@ -31,6 +31,10 @@ export type PptxOptions = { frame?: Frame; maxMediaBytes: number };
 
 export const MAX_MEDIA_PARTS = 1000;
 
+// Paragraphs and their children read: each body is read once, a layout's or master's again only for another colour
+// map. Ten times the corpus's most, 24,697 in a 369-slide deck; 240,000 runs read in 0.4 s.
+export const MAX_TEXT_NODES = 250_000;
+
 // ST_SlideSizeCoordinate's range, 1 to 56 inches; PowerPoint's 4:3 where the file states none.
 const MIN_SLIDE_EMU = 914_400;
 const MAX_SLIDE_EMU = 51_206_400;
@@ -56,6 +60,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const media: { name: string; path: string; contentType: string }[] = [];
         const names = new Map<string, string>();
         let mediaBytes = 0;
+        let text = 0;
         const losses = new Map<CountedWarningCode, Set<XmlElement>>();
         const deck: DeckWalk = {
             pkg,
@@ -65,6 +70,11 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             shapes: 0,
             elements: 0,
             weight: 0,
+            decorations: new Map(),
+            read: (nodes) => {
+                text += nodes;
+                if (text > MAX_TEXT_NODES) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+            },
             lost: (code, source) => losses.set(code, (losses.get(code) ?? new Set()).add(source)),
             mediaName: (part) => {
                 const known = names.get(part.path);

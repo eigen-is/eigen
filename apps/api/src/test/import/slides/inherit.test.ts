@@ -175,6 +175,16 @@ describe('layout and master shapes', () => {
         expect(colors(fixture(''))).toEqual(['#aa0000', '#00aa00', '#0000aa']);
     });
 
+    test("a master's shape is painted with each slide's colour map", () => {
+        const override = '<p:clrMapOvr><a:overrideClrMapping bg1="dk1" tx1="dk2" bg2="lt2" tx2="lt2"/></p:clrMapOvr>';
+        const deck = deckOf({
+            masters: [{ shapes: sp({ xfrm: box(0, 0, 1, 1), spPr: scheme('tx1') }) }],
+            slides: [{}, { after: override }, {}, { after: override }],
+        });
+        const fills = deck.slides.map((slide) => JSON.parse(String(slide.elements[0].fill)).color);
+        expect(fills).toEqual(['#000000', '#1f497d', '#000000', '#1f497d']);
+    });
+
     test("showMasterSp on the slide hides both, on the layout the master's", () => {
         expect(colors(fixture(' showMasterSp="0"'))).toEqual(['#0000aa']);
         expect(colors(fixture('', ' showMasterSp="0"'))).toEqual(['#00aa00', '#0000aa']);

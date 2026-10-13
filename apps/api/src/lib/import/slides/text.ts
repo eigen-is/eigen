@@ -85,12 +85,14 @@ type RunStyle = Marks & { fontFamily: string; size: number; color: string; lette
 type Run = { html: string; style?: RunStyle; href?: string };
 type Paragraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; text: boolean; chain: XmlElement[] };
 
-// undefined when the body shows no text: an empty placeholder is not drawn.
+// undefined when the body shows no text: an empty placeholder is not drawn. Each paragraph and its children are charged
+// to `read` before they are read.
 export function richTextOf(
     source: TextSource,
     theme: SlideTheme,
     pxPerEmu: number,
     lost: Lost,
+    read: (nodes: number) => void,
 ): RichTextFields | undefined {
     const bodies = bodiesOf(source);
     const shapeLists = bodies.flatMap((body) => body.listStyle ?? []);
@@ -106,6 +108,8 @@ export function richTextOf(
     // Characters per run style, so the box takes the style most of its text is in.
     const covered = new Map<string, RunStyle & { chars: number }>();
     const paragraphs: Paragraph[] = [];
+    // The runs' HTML so far in UTF-16 units, each at least a byte: past the cap the canvas keeps, it is cut anyway.
+    let html = 0;
     for (const paragraph of xmlChildren(source.body, A_NS, 'p')) {
         const pPr = xmlChild(paragraph, A_NS, 'pPr');
         const lvl = Number((pPr && xmlAttr(pPr, '', 'lvl')) ?? 0);
@@ -127,9 +131,13 @@ export function richTextOf(
         const children = xmlElements(paragraph).flatMap((child) =>
             isAlternateContent(child) ? alternative(child) : [child],
         );
+        read(1 + children.length);
         for (const child of children) {
             if (child.ns !== A_NS) continue;
-            if (child.local === 'br') runs.push({ html: '<br>' });
+            if (child.local === 'br' && html <= MAX_HTML_BYTES) {
+                runs.push({ html: '<br>' });
+                html += 4;
+            }
             const t = (child.local === 'r' || child.local === 'fld') && xmlChild(child, A_NS, 't');
             if (!t) continue;
             const value = xmlText(t).replace(/[\t\r\n]/g, ' ');
@@ -139,8 +147,11 @@ export function richTextOf(
             const entry = covered.get(key) ?? { ...style, chars: 0 };
             entry.chars += value.replace(/\s/g, '').length;
             covered.set(key, entry);
-            runs.push({ html: escapeHtml(value), style, href: linkOf(rPr, context.rels) });
             text ||= value.length > 0;
+            if (html > MAX_HTML_BYTES) continue;
+            const escaped = escapeHtml(value.slice(0, MAX_HTML_BYTES + 1 - html));
+            html += escaped.length;
+            runs.push({ html: escaped, style, href: linkOf(rPr, context.rels) });
         }
         paragraphs.push({ list: bullet && BULLETS.get(bullet.local), level, runs, text, chain });
     }

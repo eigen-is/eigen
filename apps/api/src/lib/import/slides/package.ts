@@ -1,3 +1,4 @@
+import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
@@ -71,11 +72,16 @@ export type DeckWalk = {
     scale: number;
     offset: { x: number; y: number };
     slide: Frame;
-    // Children walked and elements written, each capped: a master's shapes are walked again for every slide.
+    // Children walked and elements written, each capped: a master's shapes count again for every slide.
     shapes: number;
     elements: number;
     // The update's weight so far, charged as each frame and element is written.
     weight: number;
+    // A layout's or master's elements and the children walked for them, by part and colour map: read once, copied onto
+    // every slide that shows them.
+    decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
+    // Charges paragraphs and their children before they are read: a run costs however little it shows.
+    read(nodes: number): void;
     // A picture part's media name, the first time a slide shows it.
     mediaName(part: MediaPart): string;
     lost: Lost;

@@ -73,6 +73,7 @@ function textOf(paragraphs: string, source: Source = {}) {
         THEME,
         1 / 6350,
         UNCOUNTED,
+        UNCOUNTED,
     );
 }
 
@@ -418,6 +419,7 @@ describe('the body', () => {
             THEME,
             1 / 6350,
             UNCOUNTED,
+            UNCOUNTED,
         );
         expect(found?.fontSize).toBe(24);
         expect(found?.lineHeight).toBeCloseTo(0.96, 6);
@@ -433,6 +435,7 @@ describe('the body', () => {
             THEME,
             1 / 6350,
             UNCOUNTED,
+            UNCOUNTED,
         );
         expect(inherited?.fontSize).toBe(24);
         const own = richTextOf(
@@ -445,6 +448,7 @@ describe('the body', () => {
             },
             THEME,
             1 / 6350,
+            UNCOUNTED,
             UNCOUNTED,
         );
         expect(own?.fontSize).toBe(48);
