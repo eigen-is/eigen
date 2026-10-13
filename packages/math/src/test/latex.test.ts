@@ -614,6 +614,10 @@ describe('writeLatex', () => {
         [[{ kind: 'radical', body: x, degree: [{ kind: 'operator', text: ']' }] }], '\\sqrt[{]}]{x}'],
         [[{ kind: 'radical', body: x, degree: [{ kind: 'scripts', base: [], sup: x }] }], '\\sqrt[{{}^{x}}]{x}'],
         [[{ kind: 'space', width: 'normal' }, ...x], '\\ x'],
+        // TeX raises a ' as a superscript, so a superscript prime is \prime.
+        [[{ kind: 'scripts', base: x, sup: [prime] }], 'x^{\\prime}'],
+        [[{ kind: 'scripts', base: x, sub: one, sup: [prime, prime] }], 'x_{1}^{\\prime\\prime}'],
+        [[{ kind: 'scripts', base: x, sup: [prime, ...x] }], "x^{'x}"],
         // A prime after a script would be TeX's double superscript.
         [[{ kind: 'scripts', base: x, sup: x }, prime], "x^{x}{}'"],
         [[{ kind: 'scripts', base: x, sub: x }, prime], "x_{x}{}'"],

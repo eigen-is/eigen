@@ -30,6 +30,7 @@ The other rules of the form:
 - A combining mark belongs to the character before it, in Word's runs, MathML's tokens and typed LaTeX alike. A mark from the accent table makes an accent over that character; any other stays in its token, composed where Unicode composes it, so `=` and U+0338 read as ≠. A character with a mark is a token of its own, never part of a word or a number. A mark after a space or at the start of a row marks nothing and is dropped.
 - Unicode's superscript and subscript digits and signs, such as ² ₂ ⁺ ⁽ (`SCRIPT_CHARS` in `src/notation.ts`), read as scripts in every reader. A run of them is one scripts node on the token before it, or on an empty base after anything else, and holds the plain characters, ⁻ as −.
 - A fence holds one character or none, with OMML's defaults resolved. The separator is empty unless there are two parts or more.
+- The canonical prime is the operator ′ in the row after its base, as LaTeX's `x'` reads. A superscript holding ′ is another tree, which Word draws at the same height.
 - A sub, sup or degree is absent or non-empty. A required slot, such as a numerator, may be an empty row.
 - A large operator without scripts takes its default limits: integrals beside, the rest under and over, as Word does.
 - A table of equations splits each row into cells at the `&` Word uses as an alignment mark. A table has a row and every row a cell, as OMML requires: an empty one reads as one empty cell.
@@ -102,6 +103,7 @@ The parser follows TeX where a user would notice. `%` starts a comment and `~` i
 | a function name the table lacks | `\operatorname{…}`, its letters written against the upright font inside |
 | n-ary limits | `\limits` or `\nolimits` only where Word's default (integrals beside, the rest under and over) differs |
 | text | `\text{…}` with `% # & ~ $ { } _ ^ \` escaped, a no-break space as `~` and a run of spaces as control spaces, since TeX reads a run as one |
+| a superscript of primes alone | `x^{\prime}`: TeX raises a `'` as a superscript, so `x^{'}` would draw it twice as high |
 | a prime after scripts or a brace label | `x^{2}{}'`: TeX would put the prime on the script's base, a double superscript |
 | a table's empty last row | `\\ {}`, since a trailing `\\` starts no row |
 | a fraction or table without fences in a fenced row | `\left. … \right.` around `\frac` or `matrix`, so it stays a fenced row |

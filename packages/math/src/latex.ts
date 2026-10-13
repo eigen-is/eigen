@@ -938,9 +938,14 @@ function writeBase(row: MathRow, upright: boolean): string {
     return row.length === 1 && isAtom(row[0], upright) ? latex : `{${latex}}`;
 }
 
+const isPrime = (node: MathNode) => node.kind === 'operator' && node.text === PRIME && !node.variant && !node.color;
+
 function writeScripts(node: { sub?: MathRow; sup?: MathRow }, upright: boolean): string {
     const sub = node.sub ? `_{${writeRow(node.sub, upright)}}` : '';
-    return node.sup ? `${sub}^{${writeRow(node.sup, upright)}}` : sub;
+    if (!node.sup) return sub;
+    // TeX raises a ' as a superscript: in a superscript of primes alone it would rise twice.
+    const sup = node.sup.every(isPrime) ? '\\prime'.repeat(node.sup.length) : writeRow(node.sup, upright);
+    return `${sub}^{${sup}}`;
 }
 
 // A function name as its command where the table has one, with a limit or scripts after it.
