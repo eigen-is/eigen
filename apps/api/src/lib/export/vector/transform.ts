@@ -5,6 +5,8 @@ import {
     sceneToSvg,
     type VectorScene,
 } from '@workspace/lib/vector';
+// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
+import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
@@ -66,12 +68,12 @@ export function renderEigenvectorExport(
     return { data: toTransferableText(html), warnings: [] };
 }
 
-// The drawing's own SVG, with the @font-face blocks its text uses injected into a <defs>
-// <style> for the standalone (svg) download. sceneToSvg emits no top-level <defs>, so the
+// The drawing's own SVG, with the @font-face blocks its text uses and the rich-text rules an inline
+// style cannot reach (canvas-text.css, as the app and the pdf document have them) injected into a
+// <defs> <style> for the standalone (svg) download. sceneToSvg emits no top-level <defs>, so the
 // style is spliced in right after the opening <svg> tag.
 function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>): string {
     const svg = sceneToSvg(scene, { resolveMedia: (mediaName) => dataUriMap.get(mediaName) ?? null });
     const faceCSS = getFontFaceCSSForFamilies(sceneFontFamilies(scene.elements));
-    if (!faceCSS) return svg;
-    return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}</style></defs>`);
+    return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}${canvasTextCSSRaw}</style></defs>`);
 }

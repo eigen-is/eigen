@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { inflateSync } from 'node:zlib';
 import type { SlideSize } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
 import { canvasHtmlDocument, renderEigenslidesExport } from '../../lib/export/canvas/transform';
+import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents';
 
 // The standalone HTML document a canvas export leaves through. The screen document must fit a
@@ -94,4 +96,44 @@ describe('renderEigenslidesExport', () => {
     test('keeps the embedded font faces the document needs', () => {
         expect(deckExportHtml('html', '<p>hi</p>')).toContain('@font-face');
     });
+});
+
+// Where WeasyPrint set each text run: the text matrix of every run in the PDF's page streams.
+function textOrigins(pdf: Buffer): string[] {
+    const text = pdf.toString('latin1');
+    return [...text.matchAll(/stream\r?\n/g)].flatMap(({ index, 0: open }) => {
+        const stream = pdf.subarray(index + open.length, text.indexOf('endstream', index + open.length));
+        let content: string;
+        try {
+            content = inflateSync(stream).toString('latin1');
+        } catch {
+            return [];
+        }
+        return [...content.matchAll(/(?:-?[\d.]+ ){6}Tm/g)].map(([matrix]) => matrix);
+    });
+}
+
+const weasyprint = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+
+// The editor shows an empty paragraph one line tall because ProseMirror gives it a trailing <br>; the
+// stored html has none, so the print must lay out `<p></p>` as the editor lays out `<p><br></p>`.
+weasyprint('renderEigenslidesExport — an empty paragraph prints a line (WeasyPrint)', () => {
+    const printed = (html: string) => htmlToPdf(deckExportHtml('pdf-html', html)).then(textOrigins);
+
+    test.each([
+        ['a paragraph', '<p>a</p><p></p><p>b</p>', '<p>a</p><p><br></p><p>b</p>'],
+        [
+            'a list item',
+            '<ul><li><p>a</p></li><li><p></p></li><li><p>b</p></li></ul>',
+            '<ul><li><p>a</p></li><li><p><br></p></li><li><p>b</p></li></ul>',
+        ],
+    ])(
+        '%s',
+        async (_, stored, editor) => {
+            const [origins, expected] = await Promise.all([printed(stored), printed(editor)]);
+            expect(expected.length).toBeGreaterThan(0);
+            expect(origins).toEqual(expected);
+        },
+        60_000,
+    );
 });
