@@ -89,7 +89,7 @@ export function readPageSetup(record: Record<string, unknown>): PageSetup {
         width,
         height,
         margin: { top, right, bottom, left },
-        differentFirstPage: record.differentFirstPage === true,
+        differentFirstPage: record['differentFirstPage'] === true,
     };
 }
 
