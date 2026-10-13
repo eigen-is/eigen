@@ -139,26 +139,6 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
         [setContext, img.id],
     );
 
-    if (!url) {
-        return (
-            <div
-                id={img.id}
-                className="absolute overflow-hidden pointer-events-auto"
-                style={{
-                    width: w,
-                    height: h,
-                    left: img.x,
-                    top: img.y,
-                    transform: rotate,
-                    transformOrigin: 'center center',
-                    zIndex: 19,
-                }}
-            >
-                <ImagePlaceholder missing={missing} />
-            </div>
-        );
-    }
-
     return (
         <div
             id={img.id}
@@ -178,7 +158,11 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
             onContextMenu={(e) => onContextMenu(e, img)}
             tabIndex={0}
         >
-            <img src={url} alt="" style={{ width: w, height: h }} decoding="async" />
+            {url ? (
+                <img src={url} alt="" style={{ width: w, height: h }} decoding="async" />
+            ) : (
+                <ImagePlaceholder missing={missing} />
+            )}
         </div>
     );
 }
