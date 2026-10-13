@@ -1,4 +1,4 @@
-import { availableParallelism, totalmem } from 'node:os';
+import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { Subprocess } from 'bun';
 import { ApiError } from '../../core/errors';
@@ -55,6 +55,8 @@ const MAX_QUEUED_BACKGROUND = 8;
 // bounded by predicted wait (summed admission costs), not queue length alone.
 const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
+// A killed child stuck in the kernel can't exit, and must not hold the shutdown.
+const KILL_WAIT_MS = 1_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
 const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
@@ -101,7 +103,11 @@ type Job = {
 type RunnerKill = 'timeout' | 'canceled' | 'shutdown';
 type ChildOutcome = RunnerKill | 'out-of-memory' | 'crashed';
 
-type ActiveJob = { kill: (reason: RunnerKill) => void; admissionCostMs: number };
+type ActiveJob = {
+    kill: (reason: RunnerKill) => void;
+    settle: (response: DocumentTransformResponse) => void;
+    admissionCostMs: number;
+};
 
 const OUTCOME_MESSAGES: Record<ChildOutcome, string> = {
     timeout: 'Document transform timed out',
@@ -212,9 +218,9 @@ export class DocumentTransformRunner {
     private readonly maxQueuedBackground = MAX_QUEUED_BACKGROUND;
     private readonly maxPredictedWaitMs = MAX_PREDICTED_WAIT_MS;
     private readonly closeGraceMs = CLOSE_GRACE_MS;
-    // The machine's memory, the cgroup's where there is one: a child never claims more than there is
-    // (DOCUMENT-TRANSFORMS.md § A child runs under the machine's memory).
-    private readonly memoryLimitKiB = Math.floor((process.constrainedMemory() || totalmem()) / 1024);
+    // The machine's memory, the cgroup's where there is one, which Bun's constrainedMemory() answers both: a child
+    // never claims more than there is (DOCUMENT-TRANSFORMS.md § A child runs under the machine's memory).
+    private readonly memoryLimitKiB = Math.floor(process.constrainedMemory() / 1024);
     private foreground: Job[] = [];
     private background: Job[] = [];
     private active = new Map<number, ActiveJob>();
@@ -286,7 +292,7 @@ export class DocumentTransformRunner {
     }
 
     // Server shutdown: stop admission, reject queued work, give active children a
-    // short grace period, then kill them and wait for their ends.
+    // short grace period, then kill them and wait a moment for their ends.
     async close(): Promise<void> {
         this.closing = true;
         const queued = [...this.foreground, ...this.background];
@@ -296,7 +302,9 @@ export class DocumentTransformRunner {
         const deadline = Date.now() + this.closeGraceMs;
         while (this.active.size > 0 && Date.now() < deadline) await Bun.sleep(10);
         for (const active of this.active.values()) active.kill('shutdown');
-        while (this.active.size > 0) await Bun.sleep(10);
+        const killed = Date.now() + KILL_WAIT_MS;
+        while (this.active.size > 0 && Date.now() < killed) await Bun.sleep(10);
+        for (const active of [...this.active.values()]) active.settle(failed('shutdown'));
     }
 
     private cancel(job: Job): void {
@@ -368,7 +376,7 @@ export class DocumentTransformRunner {
             killedBy = reason;
             child?.kill('SIGKILL');
         };
-        this.active.set(job.id, { kill, admissionCostMs: job.admissionCostMs });
+        this.active.set(job.id, { kill, settle, admissionCostMs: job.admissionCostMs });
 
         const timer = setTimeout(() => kill('timeout'), job.deadlineMs);
         // Spawning and sending can throw synchronously (a failed spawn under resource
