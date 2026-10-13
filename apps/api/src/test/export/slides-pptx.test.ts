@@ -468,8 +468,10 @@ describe('pptx shapes', () => {
         expect(geometry(elbow)).toBe('custom');
         expect(descendants(elbow, A, 'lnTo').length).toBeGreaterThan(1);
         expect(attr(first(elbow, A, 'tailEnd'), 'type')).toBe('arrow');
-        expect(descendants(stroke, A, 'lnTo')).toHaveLength(3);
-        expect(attr(first(stroke, A, 'ln'), 'cap')).toBe('rnd');
+        // A freehand stroke is its ink: the outline the canvas fills, in the stroke color, with no line.
+        expect(descendants(stroke, A, 'quadBezTo').length).toBeGreaterThan(4);
+        expect(srgb(first(first(stroke, P, 'spPr'), A, 'solidFill')).val).toBe('1E1E1E');
+        expect(xmlChild(first(stroke, A, 'ln'), A, 'noFill')).toBeDefined();
         expect(descendants(closed, A, 'close')).toHaveLength(1);
         expect(srgb(first(first(closed, P, 'spPr'), A, 'solidFill')).val).toBe('00FF00');
     });
@@ -543,8 +545,8 @@ describe('pptx text', () => {
             Array(4).fill(String(10 * EMU)),
         );
         expect(attr(first(shape, A, 'pPr'), 'algn')).toBe('ctr');
-        // 1.5 over Source Serif 4's own line of 1.371.
-        expect(attr(first(first(shape, A, 'lnSpc'), A, 'spcPct'), 'val')).toBe('109409');
+        // CSS's pitch, 1.5 × 48 px, exactly: 36 pt.
+        expect(attr(first(first(shape, A, 'lnSpc'), A, 'spcPts'), 'val')).toBe('3600');
         const rPr = runProps(shape, 'Title');
         // 48 px at 0.5 pt per px is 24 pt; 2 px of spacing is 1 pt.
         expect([attr(rPr, 'sz'), attr(rPr, 'b'), attr(rPr, 'i'), attr(rPr, 'u'), attr(rPr, 'spc')]).toEqual([
@@ -556,6 +558,21 @@ describe('pptx text', () => {
         ]);
         expect(srgb(rPr).val).toBe('336699');
         expect(attr(first(rPr, A, 'latin'), 'typeface')).toBe('Source Serif 4');
+    });
+
+    test('a painted rounded box is its outline, so the text keeps the whole box; an unpainted one is a rect', () => {
+        const [painted, bare] = shapes(
+            pptx(
+                sceneOf([
+                    element('richtext', { index: 'a0', html: '<p>a</p>', corners: 'curved', strokeColor: '#000000' }),
+                    element('richtext', { index: 'a1', html: '<p>b</p>', corners: 'round' }),
+                ]),
+            ),
+        );
+        expect(geometry(painted)).toBe('custom');
+        expect(descendants(painted, A, 'arcTo')).toHaveLength(4);
+        expect(attr(first(painted, A, 'rect'), 'r')).toBe('r');
+        expect(geometry(bare)).toBe('rect');
     });
 
     test('inline marks, links, breaks and paragraphs', () => {

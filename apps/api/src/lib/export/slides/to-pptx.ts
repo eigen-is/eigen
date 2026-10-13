@@ -12,11 +12,12 @@ import {
     cornerRadius,
     diamondOutline,
     elementsInFrame,
-    FREEDRAW_SIZE_FACTOR,
+    freedrawOutline,
     getFontMetrics,
     isBordered,
     isClosedPath,
     isTransparentColor,
+    isTransparentFill,
     linearLocalToScene,
     normalizeAngle,
     type OutlineShape,
@@ -25,6 +26,7 @@ import {
     parseFill,
     parsePoints,
     pointsBounds,
+    rectOutline,
     type StrokeStyle,
     type TextAlign,
     type VectorArrowElement,
@@ -343,19 +345,32 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 wrap: true,
                 opacity,
             });
+            // A rounded preset insets its text by its corners, where Eigen's keeps the box: a painted rounded box is its
+            // outline, and an unpainted one shows no corners.
+            const radius = cornerRadius(el);
+            const painted = isBordered(el) || !isTransparentFill(parseFill(el.fill));
+            const geometry =
+                painted && radius > 0
+                    ? outlineGeometry(
+                          rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0),
+                          el,
+                          slide,
+                      )
+                    : presetXml('rect');
             return spXml(
                 slide,
                 'Text',
                 el,
-                boxGeometry(el, slide),
+                geometry,
                 fillXml(parseFill(el.fill), opacity),
                 lineXml(slide, el, opacity),
                 text,
             );
         }
         case 'line':
-        case 'freedraw':
             return linearXml(el, parsePoints(el.points), slide, opacity);
+        case 'freedraw':
+            return freedrawXml(el, slide, opacity);
         case 'arrow':
             return arrowXml(el, slide, opacity);
         case 'chart':
@@ -392,7 +407,7 @@ function boxGeometry(el: Box & { corners: 'straight' | 'curved' | 'round' }, sli
 
 // A rounded outline is its core's edges pushed out by the radius, joined by arcs about the core's corners.
 function outlineGeometry(outline: OutlineShape, box: Box, slide: Slide): string {
-    if (outline.kind !== 'rounded') return presetXml('diamond');
+    if (outline.kind !== 'rounded') return presetXml('rect');
     const { core, radius } = outline;
     const pt = (p: Point) => `<a:pt x="${emu(slide, p.x)}" y="${emu(slide, p.y)}"/>`;
     const r = emu(slide, radius);
@@ -466,7 +481,7 @@ function lineXml(
     ends: [Arrowhead, Arrowhead] = ['none', 'none'],
 ): string {
     const color = stroke.strokeWidth > 0 ? colorXml(stroke.strokeColor, opacity) : null;
-    if (!color) return '<a:ln><a:noFill/></a:ln>';
+    if (!color) return NO_LINE;
     const dash = DASHES[stroke.strokeStyle];
     const end = (tag: string, head: Arrowhead) =>
         LINE_ENDS[head] ? `<a:${tag} type="${LINE_ENDS[head]}" w="lg" len="lg"/>` : '';
@@ -477,8 +492,8 @@ function lineXml(
     ].join('');
 }
 
-// A two-point line is a connector the way PowerPoint draws one, flipped toward its end; more points are a path in the
-// box they span. The box turns about its center, as the element does.
+// A two-point line is a connector the way PowerPoint draws one, from corner to corner of the box it spans and flipped
+// toward its end; more points are a path.
 function linearXml(
     el: VectorLinearElement | VectorArrowElement,
     points: Point[],
@@ -487,38 +502,79 @@ function linearXml(
     ends: [Arrowhead, Arrowhead] = ['none', 'none'],
 ): string {
     if (points.length === 0) return '';
-    const bounds = pointsBounds(points);
-    const box = {
-        x: el.x + bounds.minX,
-        y: el.y + bounds.minY,
-        width: bounds.maxX - bounds.minX,
-        height: bounds.maxY - bounds.minY,
-        angle: el.angle,
-    };
-    // A freehand stroke is perfect-freehand's outline, as wide as its size and never dashed.
-    const stroke: Stroke =
-        el.type === 'freedraw'
-            ? { strokeColor: el.strokeColor, strokeWidth: el.strokeWidth * FREEDRAW_SIZE_FACTOR, strokeStyle: 'solid' }
-            : el;
-    const line = lineXml(slide, stroke, opacity, ends);
-    const curved = el.type !== 'freedraw' && el.roundness === 'round' && !(el.type === 'arrow' && el.elbow);
+    const line = lineXml(slide, el, opacity, ends);
     if (points.length === 2) {
         const [from, to] = points;
+        const bounds = pointsBounds(points);
+        const box = {
+            x: el.x + bounds.minX,
+            y: el.y + bounds.minY,
+            width: bounds.maxX - bounds.minX,
+            height: bounds.maxY - bounds.minY,
+            angle: el.angle,
+        };
         const id = ++slide.shapes;
         return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(slide, box, to.x < from.x, to.y < from.y)}${presetXml('line')}<a:noFill/>${line}</p:spPr></p:cxnSp>`;
     }
-    const pt = (p: Point) => `<a:pt x="${emu(slide, p.x - bounds.minX)}" y="${emu(slide, p.y - bounds.minY)}"/>`;
+    const curved = el.roundness === 'round' && !(el.type === 'arrow' && el.elbow);
+    const { box, pt } = pathFrame(el, points, slide);
     let path = `<a:moveTo>${pt(points[0])}</a:moveTo>`;
     if (curved) {
-        for (const [, c1, c2, end] of arrowCurveBeziers(points))
+        for (const [, c1, c2, end] of arrowCurveBeziers(points)) {
             path += `<a:cubicBezTo>${pt(c1)}${pt(c2)}${pt(end)}</a:cubicBezTo>`;
+        }
     } else {
         for (const p of points.slice(1)) path += `<a:lnTo>${pt(p)}</a:lnTo>`;
     }
-    // Only a looping line or stroke fills, as on the canvas.
-    const fill = el.type !== 'arrow' && isClosedPath(points) ? fillXml(parseFill(el.fill), opacity) : undefined;
+    // Only a looping line fills, as on the canvas.
+    const fill = el.type === 'line' && isClosedPath(points) ? fillXml(parseFill(el.fill), opacity) : undefined;
     const geometry = customXml(slide, box, fill ? `${path}<a:close/>` : path, fill !== undefined);
     return spXml(slide, 'Freeform', box, geometry, fill ?? '<a:noFill/>', line);
+}
+
+// A freehand stroke is ink, not a line: perfect-freehand's outline filled in the stroke color, its curve drawn as the
+// canvas draws it, through the midpoints between the outline's points. A looping stroke's fill lies under it.
+function freedrawXml(el: VectorLinearElement, slide: Slide, opacity: number): string {
+    const points = parsePoints(el.points);
+    const outline = freedrawOutline(el).map(([x, y]) => ({ x, y }));
+    if (outline.length === 0) return '';
+    let fill = '';
+    if (isClosedPath(points)) {
+        const { box, pt } = pathFrame(el, points, slide);
+        const lines = points.slice(1).map((p) => `<a:lnTo>${pt(p)}</a:lnTo>`);
+        const path = `<a:moveTo>${pt(points[0])}</a:moveTo>${lines.join('')}<a:close/>`;
+        fill = spXml(
+            slide,
+            'Fill',
+            box,
+            customXml(slide, box, path, true),
+            fillXml(parseFill(el.fill), opacity),
+            NO_LINE,
+        );
+    }
+    const { box, pt } = pathFrame(el, outline, slide);
+    const mid = (a: Point, b: Point) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const curves = outline.map(
+        (p, i) => `<a:quadBezTo>${pt(p)}${pt(mid(p, outline[(i + 1) % outline.length]))}</a:quadBezTo>`,
+    );
+    const path = `<a:moveTo>${pt(outline[0])}</a:moveTo>${curves.join('')}<a:close/>`;
+    const ink = fillXml({ type: 'solid', color: el.strokeColor }, opacity);
+    return fill + spXml(slide, 'Ink', box, customXml(slide, box, path, true), ink, NO_LINE);
+}
+
+const NO_LINE = '<a:ln><a:noFill/></a:ln>';
+
+// The box a path is drawn in, centered where the element turns so a turned path turns about the canvas's center, and
+// a point of the element's local frame as a point of that path.
+function pathFrame(el: Box, points: Point[], slide: Slide): { box: Box; pt: (p: Point) => string } {
+    const rx = Math.max(...points.map((p) => Math.abs(p.x - el.width / 2)));
+    const ry = Math.max(...points.map((p) => Math.abs(p.y - el.height / 2)));
+    const left = el.width / 2 - rx;
+    const top = el.height / 2 - ry;
+    return {
+        box: { x: el.x + left, y: el.y + top, width: 2 * rx, height: 2 * ry, angle: el.angle },
+        pt: (p) => `<a:pt x="${emu(slide, p.x - left)}" y="${emu(slide, p.y - top)}"/>`,
+    };
 }
 
 function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string {
@@ -567,7 +623,7 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
     );
     const ground =
         slide.ground === undefined ? '<a:noFill/>' : fillXml({ type: 'solid', color: slide.ground }, opacity);
-    return xml + spXml(slide, 'Label', box, presetXml('rect'), ground, '<a:ln><a:noFill/></a:ln>', text);
+    return xml + spXml(slide, 'Label', box, presetXml('rect'), ground, NO_LINE, text);
 }
 
 // ── Pictures and backgrounds ─────────────────────────────────────────────────────────────────────────────────────
@@ -750,7 +806,8 @@ const ALIGNS: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r'
 
 // canvas-text.css: a list level indents 1.5em, a quote 0.75em past its 3 px bar, and draws at 70%.
 const LIST_INDENT_EM = 1.5;
-const MARKER_EM = 1;
+// The marker's hang: a disc sits close to its text, a number right-aligned in the list's indent.
+const MARKER_EM = { bullet: 0.75, number: 1.5 };
 const QUOTE_INDENT_EM = 0.75;
 const QUOTE_BAR_PX = 3;
 const QUOTE_OPACITY = 0.7;
@@ -759,12 +816,12 @@ const PARAGRAPH_GAP_EM = 0.5;
 function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
     const em = (n: number) => emu(slide, n * box.fontSize);
     const inset = emu(slide, box.inset);
-    // CSS's line-height is a multiple of the font size, DrawingML's of the font's own line.
-    const lineSpacing = `<a:lnSpc><a:spcPct val="${share(box.lineHeight / getFontMetrics(box.fontFamily).lineHeight)}"/></a:lnSpc>`;
+    // An exact pitch, CSS's: what a consumer takes as a single line varies (LibreOffice draws 1.2em for every face).
+    const lineSpacing = `<a:lnSpc><a:spcPts val="${centipoints(slide, box.lineHeight * box.fontSize)}"/></a:lnSpc>`;
     const body = paragraphs.map((paragraph) => {
         const margin =
             em(paragraph.depth * LIST_INDENT_EM) + paragraph.quotes * (em(QUOTE_INDENT_EM) + emu(slide, QUOTE_BAR_PX));
-        const indent = paragraph.marker ? -em(MARKER_EM) : 0;
+        const indent = paragraph.marker ? -em(MARKER_EM[paragraph.marker]) : 0;
         const level = Math.min(8, Math.max(0, paragraph.depth - 1));
         const attrs = [
             margin ? ` marL="${margin}"` : '',

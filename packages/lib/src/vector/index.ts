@@ -13,6 +13,7 @@ export * from './image-fit';
 export * from './kinds';
 // A chart in a document or on a sheet, which has no canvas element to paint from.
 export { renderChartSpecSvg } from './kinds/chart-render';
+export { freedrawOutline } from './kinds/freedraw';
 // The paste ladder reads a foreign app's font size and dominant text align as bare values; `oneOf` and
 // `num` are the same coercions the document reader clamps a stored field with, so a pasted value can't be
 // anything a peer write couldn't be. `labelText` travels with them so the in-canvas textarea commits
