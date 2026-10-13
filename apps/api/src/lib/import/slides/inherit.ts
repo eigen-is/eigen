@@ -8,7 +8,8 @@ import {
     readColorScheme,
 } from '../../core/drawingml';
 import { A_NS, isOn, P_NS } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
+import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
+import { cachedBy, childOf, childrenOf, firstChildOf } from './lookup';
 import { blipMedia, type DeckWalk, emu, type Lost, type Part, type PptxPackage } from './package';
 
 // What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
@@ -74,26 +75,28 @@ export type SlideInheritance = {
 
 // Layouts and masters are parsed and read once per file, whichever slides share them.
 export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInheritance {
-    const defaultTextStyle = xmlChild(pkg.presentation.root, P_NS, 'defaultTextStyle');
+    const defaultTextStyle = childOf(pkg.presentation.root, P_NS, 'defaultTextStyle');
     const masters = new Map<string, Master>();
     const layouts = new Map<string, Layout>();
+    // One object for each master and colour map: what a colour element shows is kept for the colours it was resolved with.
+    const palettes = new Map<string, DrawingTheme>();
     const masterOf = (part: Part): Master => {
         const known = masters.get(part.path);
         if (known) return known;
         const themePart = pkg.related(part, 'theme');
         const theme = themePart?.root;
-        const elements = theme && xmlChild(theme, A_NS, 'themeElements');
+        const elements = theme && childOf(theme, A_NS, 'themeElements');
         const fontOf = (slot: string) => {
-            const font = elements && xmlChild(xmlChild(elements, A_NS, 'fontScheme') ?? elements, A_NS, slot);
-            return (font && xmlAttr(xmlChild(font, A_NS, 'latin') ?? font, '', 'typeface')) ?? '';
+            const font = elements && childOf(childOf(elements, A_NS, 'fontScheme') ?? elements, A_NS, slot);
+            return (font && xmlAttr(childOf(font, A_NS, 'latin') ?? font, '', 'typeface')) ?? '';
         };
-        const clrMap = xmlChild(part.root, P_NS, 'clrMap');
-        const formats = elements && xmlChild(elements, A_NS, 'fmtScheme');
+        const clrMap = childOf(part.root, P_NS, 'clrMap');
+        const formats = elements && childOf(elements, A_NS, 'fmtScheme');
         const list = (name: string) => {
-            const found = formats && xmlChild(formats, A_NS, name);
+            const found = formats && childOf(formats, A_NS, name);
             return found ? xmlElements(found) : [];
         };
-        const txStyles = xmlChild(part.root, P_NS, 'txStyles');
+        const txStyles = childOf(part.root, P_NS, 'txStyles');
         const master: Master = {
             part,
             theme: {
@@ -108,9 +111,9 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
             },
             placeholders: placeholdersOf(part.root),
             textStyles: {
-                title: txStyles && xmlChild(txStyles, P_NS, 'titleStyle'),
-                body: txStyles && xmlChild(txStyles, P_NS, 'bodyStyle'),
-                other: txStyles && xmlChild(txStyles, P_NS, 'otherStyle'),
+                title: txStyles && childOf(txStyles, P_NS, 'titleStyle'),
+                body: txStyles && childOf(txStyles, P_NS, 'bodyStyle'),
+                other: txStyles && childOf(txStyles, P_NS, 'otherStyle'),
             },
         };
         masters.set(part.path, master);
@@ -134,8 +137,11 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
         const layout = layoutPart && layoutOf(layoutPart);
         const master = layout?.master;
         const theme = master?.theme ?? NO_THEME;
-        const override = xmlChild(xmlChild(slide.root, P_NS, 'clrMapOvr') ?? slide.root, A_NS, 'overrideClrMapping');
-        const colors = override ? { ...theme.colors, map: readColorMap(override) } : theme.colors;
+        const override = childOf(childOf(slide.root, P_NS, 'clrMapOvr') ?? slide.root, A_NS, 'overrideClrMapping');
+        const map = override && readColorMap(override);
+        const key = `${master?.part.path} ${JSON.stringify([...(map ?? theme.colors.map)])}`;
+        const colors = palettes.get(key) ?? (map ? { ...theme.colors, map } : theme.colors);
+        palettes.set(key, colors);
         return { slide, layout, master, theme: { ...theme, colors }, defaultTextStyle };
     };
 }
@@ -151,40 +157,44 @@ function shows(root: XmlElement): boolean {
 }
 
 export function spTreeOf(root: XmlElement): XmlElement | undefined {
-    const cSld = xmlChild(root, P_NS, 'cSld');
-    return cSld && xmlChild(cSld, P_NS, 'spTree');
+    const cSld = childOf(root, P_NS, 'cSld');
+    return cSld && childOf(cSld, P_NS, 'spTree');
 }
 
 // p:nvSpPr, p:nvPicPr, p:nvGrpSpPr…: whichever non-visual properties the shape's kind has.
 export function nonVisualOf(shape: XmlElement): XmlElement | undefined {
-    return xmlElements(shape).find((child) => child.ns === P_NS && child.local.startsWith('nv'));
+    return firstChildOf(shape, isNonVisual);
+}
+
+function isNonVisual(child: XmlElement): boolean {
+    return child.ns === P_NS && child.local.startsWith('nv');
 }
 
 export function placeholderOf(shape: XmlElement): PlaceholderKey | undefined {
     const nv = nonVisualOf(shape);
-    const nvPr = nv && xmlChild(nv, P_NS, 'nvPr');
-    const ph = nvPr && xmlChild(nvPr, P_NS, 'ph');
+    const nvPr = nv && childOf(nv, P_NS, 'nvPr');
+    const ph = nvPr && childOf(nvPr, P_NS, 'ph');
     return ph && { type: xmlAttr(ph, '', 'type'), idx: xmlAttr(ph, '', 'idx') };
 }
 
 export function propertiesOf(shape: XmlElement): ShapeProperties {
-    const spPr = xmlChild(shape, P_NS, 'spPr');
-    const body = xmlChild(shape, P_NS, 'txBody');
-    const preset = spPr && xmlChild(spPr, A_NS, 'prstGeom');
+    const spPr = childOf(shape, P_NS, 'spPr');
+    const body = childOf(shape, P_NS, 'txBody');
+    const preset = spPr && childOf(spPr, A_NS, 'prstGeom');
     return {
         // spPr's a:xfrm, or a graphic frame's own p:xfrm.
-        xfrm: readXfrm(spPr ? xmlChild(spPr, A_NS, 'xfrm') : xmlChild(shape, P_NS, 'xfrm')),
+        xfrm: readXfrm(spPr ? childOf(spPr, A_NS, 'xfrm') : childOf(shape, P_NS, 'xfrm')),
         geometry: preset
             ? xmlAttr(preset, '', 'prst')
-            : spPr && xmlChild(spPr, A_NS, 'custGeom')
+            : spPr && childOf(spPr, A_NS, 'custGeom')
               ? 'custGeom'
               : undefined,
         preset,
         fill: fillIn(spPr),
-        ln: spPr && xmlChild(spPr, A_NS, 'ln'),
-        style: xmlChild(shape, P_NS, 'style'),
-        bodyPr: body && xmlChild(body, A_NS, 'bodyPr'),
-        listStyle: body && xmlChild(body, A_NS, 'lstStyle'),
+        ln: spPr && childOf(spPr, A_NS, 'ln'),
+        style: childOf(shape, P_NS, 'style'),
+        bodyPr: body && childOf(body, A_NS, 'bodyPr'),
+        listStyle: body && childOf(body, A_NS, 'lstStyle'),
     };
 }
 
@@ -205,11 +215,11 @@ function point(element: XmlElement | undefined, x: string, y: string) {
 }
 
 export function readXfrm(xfrm: XmlElement | undefined): Xfrm | undefined {
-    const off = xfrm && point(xmlChild(xfrm, A_NS, 'off'), 'x', 'y');
-    const ext = xfrm && point(xmlChild(xfrm, A_NS, 'ext'), 'cx', 'cy');
+    const off = xfrm && point(childOf(xfrm, A_NS, 'off'), 'x', 'y');
+    const ext = xfrm && point(childOf(xfrm, A_NS, 'ext'), 'cx', 'cy');
     if (!xfrm || !off || !ext) return undefined;
-    const chOff = point(xmlChild(xfrm, A_NS, 'chOff'), 'x', 'y');
-    const chExt = point(xmlChild(xfrm, A_NS, 'chExt'), 'cx', 'cy');
+    const chOff = point(childOf(xfrm, A_NS, 'chOff'), 'x', 'y');
+    const chExt = point(childOf(xfrm, A_NS, 'chExt'), 'cx', 'cy');
     const rot = Number(xmlAttr(xfrm, '', 'rot') ?? 0) / 60_000;
     return {
         ...off,
@@ -283,7 +293,33 @@ const FILLS = new Set(['noFill', 'solidFill', 'gradFill', 'blipFill', 'pattFill'
 
 // The fill element of spPr, a:ln or bgPr; undefined when it states none, so the next in its chain answers.
 export function fillIn(parent: XmlElement | undefined): XmlElement | undefined {
-    return parent && xmlElements(parent).find((child) => child.ns === A_NS && FILLS.has(child.local));
+    return parent && firstChildOf(parent, isFill);
+}
+
+function isFill(child: XmlElement): boolean {
+    return child.ns === A_NS && FILLS.has(child.local);
+}
+
+const resolved = cachedBy<DrawingTheme, string | undefined>();
+
+// What a colour element shows, resolved once for each slide's colours: one in a theme, master or layout is painted again
+// for every shape and run that takes it.
+export function colorOf(element: XmlElement | undefined, colors: DrawingTheme): string | undefined {
+    return element && resolved(element, colors, () => drawingColor(element, colors));
+}
+
+const placeholderColors = new WeakMap<DrawingTheme, Map<string | undefined, DrawingTheme>>();
+
+// A slide's colours with a reference's phClr, one object for each, as colorOf keeps its answers by the object.
+function withPlaceholder(colors: DrawingTheme, phClr: string | undefined): DrawingTheme {
+    let known = placeholderColors.get(colors);
+    if (!known) {
+        known = new Map();
+        placeholderColors.set(colors, known);
+    }
+    const found = known.get(phClr) ?? { ...colors, phClr };
+    known.set(phClr, found);
+    return found;
 }
 
 export type PaintOptions = {
@@ -307,16 +343,16 @@ export type GradientAngle = (degrees: number, scaled: boolean) => number;
 export function paintOf(fill: XmlElement | undefined, theme: SlideTheme, options: PaintOptions): FillPaint | undefined {
     if (!fill) return undefined;
     const { reference, lost } = options;
-    const colors = reference ? { ...theme.colors, phClr: drawingColor(reference, theme.colors) } : theme.colors;
+    const colors = reference ? withPlaceholder(theme.colors, colorOf(reference, theme.colors)) : theme.colors;
     const solid = (color: string | undefined): FillPaint | undefined => (color ? { type: 'solid', color } : undefined);
     switch (fill.local) {
         case 'solidFill':
-            return solid(drawingColor(fill, colors));
+            return solid(colorOf(fill, colors));
         case 'gradFill':
             return gradientOf(fill, colors, options);
         case 'pattFill':
             lost('fills-simplified');
-            return solid(drawingColor(xmlChild(fill, A_NS, 'fgClr'), colors));
+            return solid(colorOf(childOf(fill, A_NS, 'fgClr'), colors));
         case 'grpFill':
             return options.group?.(lost) ?? TRANSPARENT_PAINT;
         case 'blipFill':
@@ -332,20 +368,29 @@ const TRANSPARENT_PAINT: FillPaint = { type: 'solid', color: TRANSPARENT_COLOR }
 // The stops at the ramp's two ends, as PowerPoint orders them by position; Eigen draws the ramp between them in OKLab.
 // A path gradient keeps its stops along DrawingML's default angle.
 function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOptions): FillPaint | undefined {
-    const list = xmlChild(fill, A_NS, 'gsLst');
-    const stops = (list ? xmlChildren(list, A_NS, 'gs') : [])
-        .map((stop) => ({ at: Number(xmlAttr(stop, '', 'pos')), color: drawingColor(stop, colors) }))
-        .filter((stop) => stop.color !== undefined);
-    stops.sort((a, b) => (Number.isFinite(a.at) ? a.at : 0) - (Number.isFinite(b.at) ? b.at : 0));
-    const [from, to] = [stops[0]?.color, stops.at(-1)?.color];
+    const { from, to, single } = rampOf(fill, colors);
     if (!from || !to) return undefined;
-    if (stops.length === 1) return { type: 'solid', color: from };
-    const lin = xmlChild(fill, A_NS, 'lin');
-    if (!lin && xmlChild(fill, A_NS, 'path')) options.lost('fills-simplified');
+    if (single) return { type: 'solid', color: from };
+    const lin = childOf(fill, A_NS, 'lin');
+    if (!lin && childOf(fill, A_NS, 'path')) options.lost('fills-simplified');
     const ang = Number((lin && xmlAttr(lin, '', 'ang')) ?? 0) / 60_000;
     const scaled = (lin && isOn(xmlAttr(lin, '', 'scaled'))) ?? false;
     const angle = (options.angle ?? quarterTurn)(Number.isFinite(ang) ? ang : 0, scaled);
     return { type: 'gradient', from, to, angle: normalizeAngle(Math.round(angle * 1000) / 1000) };
+}
+
+const ramps = cachedBy<DrawingTheme, { from: string | undefined; to: string | undefined; single: boolean }>();
+
+// A gradient's end stops, sorted once for each slide's colours however many shapes it paints.
+function rampOf(fill: XmlElement, colors: DrawingTheme) {
+    return ramps(fill, colors, () => {
+        const list = childOf(fill, A_NS, 'gsLst');
+        const stops = (list ? childrenOf(list, A_NS, 'gs') : [])
+            .map((stop) => ({ at: Number(xmlAttr(stop, '', 'pos')), color: colorOf(stop, colors) }))
+            .filter((stop) => stop.color !== undefined);
+        stops.sort((a, b) => (Number.isFinite(a.at) ? a.at : 0) - (Number.isFinite(b.at) ? b.at : 0));
+        return { from: stops[0]?.color, to: stops.at(-1)?.color, single: stops.length === 1 };
+    });
 }
 
 // DrawingML's angle runs from left-to-right, the canvas's and CSS's from bottom-to-top.
@@ -391,12 +436,12 @@ export function styleLine(theme: SlideTheme, idx: string | undefined): XmlElemen
 export function backgroundOf(inheritance: SlideInheritance, deck: DeckWalk): BackgroundFill | null {
     const { slide, layout, master, theme } = inheritance;
     for (const part of [slide, layout?.part, master?.part]) {
-        const cSld = part && xmlChild(part.root, P_NS, 'cSld');
-        const bg = cSld && xmlChild(cSld, P_NS, 'bg');
+        const cSld = part && childOf(part.root, P_NS, 'cSld');
+        const bg = cSld && childOf(cSld, P_NS, 'bg');
         if (!bg) continue;
         const lost: Lost = (code) => deck.lost(code, bg);
-        const bgPr = xmlChild(bg, P_NS, 'bgPr');
-        const reference = bgPr ? undefined : xmlChild(bg, P_NS, 'bgRef');
+        const bgPr = childOf(bg, P_NS, 'bgPr');
+        const reference = bgPr ? undefined : childOf(bg, P_NS, 'bgRef');
         const fill = bgPr ? fillIn(bgPr) : styleFill(theme, reference && xmlAttr(reference, '', 'idx'));
         // A bgRef's picture is named by the theme's relationships.
         const owner = bgPr ? part : theme.part;
@@ -408,17 +453,20 @@ export function backgroundOf(inheritance: SlideInheritance, deck: DeckWalk): Bac
     return null;
 }
 
+function isEffect(child: XmlElement): boolean {
+    return child.ns === A_NS && child.local !== 'extLst';
+}
+
 // A picture covers the frame, stretched or tiled. A tile is drawn as one picture, and a recolouring (a theme's duotone,
 // a washout's lum) as the picture itself: each a loss counted.
 function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk, lost: Lost): BackgroundFill | null {
-    const blip = xmlChild(blipFill, A_NS, 'blip');
+    const blip = childOf(blipFill, A_NS, 'blip');
     const media = blipMedia(deck.pkg, owner, blip);
     const mediaName = media && deck.mediaName(media);
     if (!blip || !mediaName) {
         if (blip) lost('images-unshown');
         return null;
     }
-    const effects = xmlElements(blip).some((child) => child.ns === A_NS && child.local !== 'extLst');
-    if (effects || xmlChild(blipFill, A_NS, 'tile')) lost('fills-simplified');
+    if (firstChildOf(blip, isEffect) || childOf(blipFill, A_NS, 'tile')) lost('fills-simplified');
     return { type: 'image', mediaName, fit: 'cover' };
 }

@@ -1,3 +1,4 @@
+import type { XmlElement } from '../../lib/core/xml';
 import { writeZip } from '../../lib/core/zip';
 
 // Hand-built .pptx packages for the pptx import: every part the reader reads is visible in the test that uses it.
@@ -232,3 +233,15 @@ export const PIXEL_PNG = Uint8Array.from(
         'base64',
     ),
 );
+
+// How many times an element's children are read one by one, from here on.
+export function countVisits(element: XmlElement): { visits: number } {
+    const count = { visits: 0 };
+    element.children = new Proxy(element.children, {
+        get(target, property, receiver) {
+            if (typeof property === 'string' && /^\d+$/.test(property)) count.visits++;
+            return Reflect.get(target, property, receiver);
+        },
+    });
+    return count;
+}

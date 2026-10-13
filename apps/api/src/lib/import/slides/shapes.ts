@@ -13,7 +13,7 @@ import {
 import { drawingLines } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
+import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import {
@@ -37,6 +37,7 @@ import {
     styleLine,
     type Xfrm,
 } from './inherit';
+import { cachedBy, childOf, childrenOf, prefixedAttrOf } from './lookup';
 import { alternative, blipMedia, type DeckWalk, emu, type Lost, type Part } from './package';
 import { richTextOf, verticalTurnOf } from './text';
 
@@ -244,11 +245,11 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
             continue;
         }
         if (shape.ns !== P_NS || !DRAWN.has(shape.local)) continue;
-        const cNvPr = xmlChild(nonVisualOf(shape) ?? shape, P_NS, 'cNvPr');
+        const cNvPr = childOf(nonVisualOf(shape) ?? shape, P_NS, 'cNvPr');
         if (cNvPr && isOn(xmlAttr(cNvPr, '', 'hidden'))) continue;
         if (shape.local === 'grpSp') {
-            const grpSpPr = xmlChild(shape, P_NS, 'grpSpPr');
-            const xfrm = readXfrm(grpSpPr && xmlChild(grpSpPr, A_NS, 'xfrm'));
+            const grpSpPr = childOf(shape, P_NS, 'grpSpPr');
+            const xfrm = readXfrm(grpSpPr && childOf(grpSpPr, A_NS, 'xfrm'));
             const fill = fillIn(grpSpPr);
             const size = fill && xfrm ? place(placeIn, xfrm).box : { width: 1, height: 1 };
             const angle = elementGradientAngle(size.width, size.height);
@@ -272,8 +273,8 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         // The p:style the shape paints by: a placeholder with none of its own takes its layout's or master's.
         const style = chain.find((link) => link.style)?.style;
         if (shape.local === 'graphicFrame') {
-            const graphic = xmlChild(shape, A_NS, 'graphic');
-            const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+            const graphic = childOf(shape, A_NS, 'graphic');
+            const data = graphic && childOf(graphic, A_NS, 'graphicData');
             const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
             placeholderBox(walk, shape, kind, placed.box);
         } else if (shape.local === 'pic') readPicture(walk, shape, chain, linesOf(chain, walk, style), placed);
@@ -314,7 +315,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const { theme } = walk.inheritance;
     const shaped = chain.find((link) => link.geometry !== undefined);
     const geometry = shaped?.geometry ?? 'rect';
-    const body = xmlChild(shape, P_NS, 'txBody');
+    const body = childOf(shape, P_NS, 'txBody');
     const lines = linesOf(chain, walk, style);
     const source = body && {
         body,
@@ -415,7 +416,7 @@ function fillOf(
     const { theme } = walk.inheritance;
     const options = { group, angle: elementGradientAngle(box.width, box.height), lost };
     const fill = chain.find((link) => link.fill)?.fill;
-    const reference = style && xmlChild(style, A_NS, 'fillRef');
+    const reference = style && childOf(style, A_NS, 'fillRef');
     const paint = fill
         ? paintOf(fill, theme, options)
         : reference && paintOf(styleFill(theme, xmlAttr(reference, '', 'idx')), theme, { ...options, reference });
@@ -427,7 +428,7 @@ function fillOf(
 type Lines = { lns: XmlElement[]; entry: XmlElement | undefined; reference: XmlElement | undefined };
 
 function linesOf(chain: ShapeProperties[], walk: Walk, style: XmlElement | undefined): Lines {
-    const reference = style && xmlChild(style, A_NS, 'lnRef');
+    const reference = style && childOf(style, A_NS, 'lnRef');
     const entry = reference && styleLine(walk.inheritance.theme, xmlAttr(reference, '', 'idx'));
     const lns = chain.flatMap((link) => link.ln ?? []);
     return { lns: entry ? [...lns, entry] : lns, entry, reference };
@@ -443,7 +444,7 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const color = paint?.type === 'gradient' ? paint.from : paint?.color;
     if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
     const width = lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined);
-    const preset = lines.lns.map((found) => xmlChild(found, A_NS, 'prstDash')).find((found) => found !== undefined);
+    const preset = lines.lns.map((found) => childOf(found, A_NS, 'prstDash')).find((found) => found !== undefined);
     const dash = preset && xmlAttr(preset, '', 'val');
     return {
         strokeColor: color,
@@ -455,12 +456,8 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
 // A pie's adj1 and adj2 are angles on the ellipse as drawn in its own box; the kind's are its box-normalized circle's,
 // which a group's scale leaves alone.
 function pieAngles(preset: XmlElement | undefined, placed: Placed): { startAngle: number; sweepAngle: number } {
-    const guides = new Map<string, number>();
-    const list = preset && xmlChild(preset, A_NS, 'avLst');
-    for (const gd of list ? xmlChildren(list, A_NS, 'gd') : []) {
-        const [, value] = xmlAttr(gd, '', 'fmla')?.match(/^val\s+(-?\d+)$/) ?? [];
-        if (value !== undefined) guides.set(xmlAttr(gd, '', 'name') ?? '', Number(value) / 60_000);
-    }
+    const list = preset && childOf(preset, A_NS, 'avLst');
+    const guides = list ? guidesOf(list) : new Map<string, number>();
     const { cx: width, cy: height } = placed.xfrm;
     const parametric = (visual: number) => {
         const r = (visual * Math.PI) / 180;
@@ -473,12 +470,26 @@ function pieAngles(preset: XmlElement | undefined, placed: Placed): { startAngle
     return { startAngle: placed.mirrored ? normalizeAngle(180 - start - sweep) : start, sweepAngle: sweep };
 }
 
+const guideValues = cachedBy<null, Map<string, number>>();
+
+// An avLst's guides in degrees, read once however many shapes its placeholder places.
+function guidesOf(list: XmlElement): Map<string, number> {
+    return guideValues(list, null, () => {
+        const guides = new Map<string, number>();
+        for (const gd of childrenOf(list, A_NS, 'gd')) {
+            const [, value] = xmlAttr(gd, '', 'fmla')?.match(/^val\s+(-?\d+)$/) ?? [];
+            if (value !== undefined) guides.set(xmlAttr(gd, '', 'name') ?? '', Number(value) / 60_000);
+        }
+        return guides;
+    });
+}
+
 function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorElement {
     const { start, end } = placed;
     const x = Math.min(start.x, end.x);
     const y = Math.min(start.y, end.y);
     const head = (local: string) => {
-        const decoration = lns.map((ln) => xmlChild(ln, A_NS, local)).find((found) => found !== undefined);
+        const decoration = lns.map((ln) => childOf(ln, A_NS, local)).find((found) => found !== undefined);
         return ARROWHEAD_BY_END.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
     };
     const line = {
@@ -507,13 +518,13 @@ function readPicture(
     lines: Lines,
     { box, mirrored }: Placed,
 ): void {
-    const blipFill = xmlChild(shape, P_NS, 'blipFill');
-    const blip = blipFill && xmlChild(blipFill, A_NS, 'blip');
+    const blipFill = childOf(shape, P_NS, 'blipFill');
+    const blip = blipFill && childOf(blipFill, A_NS, 'blip');
     const part = blipMedia(walk.deck.pkg, walk.part, blip);
     const mediaName = part && walk.deck.mediaName(part);
     if (!mediaName) {
         // A blip naming no picture is an empty placeholder's prompt, not a picture.
-        if (part || (blip && (xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link'))))
+        if (part || (blip && (prefixedAttrOf(blip, R_NS, 'embed') || prefixedAttrOf(blip, R_NS, 'link'))))
             placeholderBox(walk, shape, 'picture', box);
         return;
     }

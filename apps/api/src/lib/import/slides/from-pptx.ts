@@ -2,11 +2,12 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import { FRAME_HEIGHT, FRAME_WIDTH, type NewVectorElement } from '@workspace/lib/vector';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
-import { type XmlElement, XmlError, xmlAttr, xmlChild } from '../../core/xml';
+import { type XmlElement, XmlError, xmlAttr } from '../../core/xml';
 import { ZipError } from '../../core/zip';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
+import { childOf } from './lookup';
 import { type DeckWalk, type Frame, NOT_A_PPTX, readPackage } from './package';
 import { readSlideShapes } from './shapes';
 
@@ -43,7 +44,7 @@ const DEFAULT_SLIDE_SIZE = { cx: 9_144_000, cy: 6_858_000 };
 export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     try {
         const pkg = readPackage(bytes);
-        const sldSz = xmlChild(pkg.presentation.root, P_NS, 'sldSz');
+        const sldSz = childOf(pkg.presentation.root, P_NS, 'sldSz');
         const side = (name: string, fallback: number) => {
             const value = Number(sldSz && xmlAttr(sldSz, '', name));
             return Number.isFinite(value) && value > 0
