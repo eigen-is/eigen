@@ -2,6 +2,7 @@ import { ApiError } from '../../core/errors';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import type { CountedWarningCode } from '../../document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 
@@ -59,6 +60,30 @@ export type PptxPackage = {
     media(from: Part, id: string | undefined): MediaPart | undefined;
     readMedia(path: string): Uint8Array | undefined;
 };
+
+export type Frame = { width: number; height: number };
+
+// What a walk over one deck shares: its budget, its pictures, its losses.
+export type DeckWalk = {
+    pkg: PptxPackage;
+    // The frame's size, its px per EMU, where the slide's origin lands in it, and the slide's extent there.
+    frame: Frame;
+    scale: number;
+    offset: { x: number; y: number };
+    slide: Frame;
+    // Children walked and elements written, each capped: a master's shapes are walked again for every slide.
+    shapes: number;
+    elements: number;
+    // The update's weight so far, charged as each frame and element is written.
+    weight: number;
+    // A picture part's media name, the first time a slide shows it.
+    mediaName(part: MediaPart): string;
+    lost: Lost;
+};
+
+// Counts what the import leaves out or draws simpler, once for the element of the file it is in, however many slides
+// show that element.
+export type Lost = (code: CountedWarningCode, source: XmlElement) => void;
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {

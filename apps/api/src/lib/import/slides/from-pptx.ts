@@ -3,13 +3,13 @@ import { FRAME_HEIGHT, FRAME_WIDTH, type NewVectorElement } from '@workspace/lib
 import { nanoid } from 'nanoid';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
-import { XmlError, xmlAttr, xmlChild } from '../../core/xml';
+import { type XmlElement, XmlError, xmlAttr, xmlChild } from '../../core/xml';
 import { ZipError } from '../../core/zip';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
-import { NOT_A_PPTX, readPackage } from './package';
-import { type DeckWalk, type Frame, readSlideShapes } from './shapes';
+import { type DeckWalk, type Frame, NOT_A_PPTX, readPackage } from './package';
+import { readSlideShapes } from './shapes';
 
 // pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
 // process; transform.ts writes the result as a Yjs update.
@@ -57,7 +57,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const media: { name: string; path: string; contentType: string }[] = [];
         const names = new Map<string, string>();
         let mediaBytes = 0;
-        const dropped = new Map<CountedWarningCode, number>();
+        const losses = new Map<CountedWarningCode, Set<XmlElement>>();
         const deck: DeckWalk = {
             pkg,
             frame,
@@ -67,7 +67,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             shapes: 0,
             elements: 0,
             weight: 0,
-            lost: (code) => dropped.set(code, (dropped.get(code) ?? 0) + 1),
+            lost: (code, source) => losses.set(code, (losses.get(code) ?? new Set()).add(source)),
             mediaName: (part) => {
                 const known = names.get(part.path);
                 if (known) return known;
@@ -97,7 +97,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
                 ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
                 : [];
         });
-        const warnings: TransformWarning[] = [...dropped].map(([code, count]) => ({ code, count }));
+        const warnings: TransformWarning[] = [...losses].map(([code, sources]) => ({ code, count: sources.size }));
         return { slides, media: read, warnings, slideSize };
     } catch (error) {
         throw importError(error);

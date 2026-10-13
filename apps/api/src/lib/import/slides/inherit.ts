@@ -9,9 +9,7 @@ import {
 } from '../../core/drawingml';
 import { A_NS, isOn, P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
-import type { CountedWarningCode } from '../../document/transform/protocol';
-import { blipMedia, type Part, type PptxPackage } from './package';
-import type { DeckWalk } from './shapes';
+import { blipMedia, type DeckWalk, type Lost, type Part, type PptxPackage } from './package';
 
 // What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
 // map, the background, and the shapes the layout and master draw beneath the slide's own.
@@ -197,25 +195,24 @@ export function fillIn(parent: XmlElement | undefined): XmlElement | undefined {
 }
 
 export type PaintOptions = {
+    // A fill drawn simpler than the file has it, or a picture fill dropped.
+    lost: Lost;
     // The fillRef, lnRef or bgRef whose colour a style matrix entry's phClr shows.
     reference?: XmlElement;
     // What grpFill shows.
-    group?: FillPaint;
+    group?: GroupFill;
     // An a:lin angle as the stored one; on a square box, a quarter turn on.
     angle?: GradientAngle;
-    // A fill drawn simpler than the file has it, or a picture fill dropped.
-    lost?: (code: CountedWarningCode) => void;
 };
+
+// The enclosing group's fill, painted only when a child shows it, so a loss in it counts only then.
+export type GroupFill = (lost: Lost) => FillPaint | undefined;
 
 // DrawingML's a:lin angle, clockwise from left-to-right in degrees, and whether it scales with the box.
 export type GradientAngle = (degrees: number, scaled: boolean) => number;
 
 // The one place a fill element (a shape's, a line's, a background's, a style matrix entry) becomes paint.
-export function paintOf(
-    fill: XmlElement | undefined,
-    theme: SlideTheme,
-    options: PaintOptions = {},
-): FillPaint | undefined {
+export function paintOf(fill: XmlElement | undefined, theme: SlideTheme, options: PaintOptions): FillPaint | undefined {
     if (!fill) return undefined;
     const { reference, lost } = options;
     const colors = reference ? { ...theme.colors, phClr: drawingColor(reference, theme.colors) } : theme.colors;
@@ -226,12 +223,12 @@ export function paintOf(
         case 'gradFill':
             return gradientOf(fill, colors, options);
         case 'pattFill':
-            lost?.('fills-simplified');
+            lost('fills-simplified', fill);
             return solid(drawingColor(xmlChild(fill, A_NS, 'fgClr'), colors));
         case 'grpFill':
-            return options.group ?? TRANSPARENT_PAINT;
+            return options.group?.(lost) ?? TRANSPARENT_PAINT;
         case 'blipFill':
-            lost?.('images-unshown');
+            lost('images-unshown', fill);
             return TRANSPARENT_PAINT;
         default:
             return TRANSPARENT_PAINT;
@@ -252,7 +249,7 @@ function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOption
     if (!from || !to) return undefined;
     if (stops.length === 1) return { type: 'solid', color: from };
     const lin = xmlChild(fill, A_NS, 'lin');
-    if (!lin && xmlChild(fill, A_NS, 'path')) options.lost?.('fills-simplified');
+    if (!lin && xmlChild(fill, A_NS, 'path')) options.lost('fills-simplified', fill);
     const ang = Number((lin && xmlAttr(lin, '', 'ang')) ?? 0) / 60_000;
     const scaled = (lin && isOn(xmlAttr(lin, '', 'scaled'))) ?? false;
     const angle = (options.angle ?? QUARTER_TURN)(Number.isFinite(ang) ? ang : 0, scaled);
@@ -323,10 +320,10 @@ function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk): B
     const blip = xmlChild(blipFill, A_NS, 'blip');
     const media = blipMedia(deck.pkg, owner, blip);
     if (!blip || !media) {
-        if (blip) deck.lost('images-unshown');
+        if (blip) deck.lost('images-unshown', blip);
         return null;
     }
     const effects = xmlElements(blip).some((child) => child.ns === A_NS && child.local !== 'extLst');
-    if (effects || xmlChild(blipFill, A_NS, 'tile')) deck.lost('fills-simplified');
+    if (effects || xmlChild(blipFill, A_NS, 'tile')) deck.lost('fills-simplified', blipFill);
     return { type: 'image', mediaName: deck.mediaName(media), fit: 'cover' };
 }

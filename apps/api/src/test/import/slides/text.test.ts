@@ -29,6 +29,8 @@ const THEME: SlideTheme = {
     formats: undefined,
 };
 
+const UNCOUNTED = () => {};
+
 const parse = (xml: string) => {
     const element = parseOoxml(xml);
     if (!element) throw new Error(`not XML: ${xml}`);
@@ -63,6 +65,7 @@ function textOf(paragraphs: string, source: Source = {}) {
         },
         THEME,
         1 / 6350,
+        UNCOUNTED,
     );
 }
 
@@ -365,6 +368,7 @@ describe('the body', () => {
             { body: body(autofit), inherited: [], listStyle: undefined, style: undefined, rels: new Map() },
             THEME,
             1 / 6350,
+            UNCOUNTED,
         );
         expect(found?.fontSize).toBe(24);
         expect(found?.lineHeight).toBeCloseTo(0.96, 6);
@@ -373,6 +377,7 @@ describe('the body', () => {
             { body: body(''), inherited: [body(autofit)], listStyle: undefined, style: undefined, rels: new Map() },
             THEME,
             1 / 6350,
+            UNCOUNTED,
         );
         expect(inherited?.fontSize).toBe(24);
         const own = richTextOf(
@@ -385,6 +390,7 @@ describe('the body', () => {
             },
             THEME,
             1 / 6350,
+            UNCOUNTED,
         );
         expect(own?.fontSize).toBe(48);
     });

@@ -608,3 +608,64 @@ describe('dropped objects', () => {
         expect(elementsOf(choice('p', choiceShape)).map((found) => found.html)).toEqual(['<p>choice</p>']);
     });
 });
+
+describe('losses', () => {
+    const PATTERN =
+        '<a:pattFill prst="pct20"><a:fgClr><a:srgbClr val="00FF00"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill>';
+
+    test("count once for the file's element they are in, however many slides show it", () => {
+        const deck = deckOf({
+            masters: [
+                {
+                    shapes:
+                        graphicFrame('http://schemas.openxmlformats.org/drawingml/2006/table', 0, 0, 635000, 317500) +
+                        sp({ xfrm: box(0, 0, 10, 10), spPr: PATTERN }),
+                    bg: '<p:bgPr><a:blipFill><a:blip r:embed="rId7"/><a:tile/></a:blipFill></p:bgPr>',
+                    rels: rel('rId7', 'image', '../media/bg.png'),
+                },
+            ],
+            slides: [{}, {}, {}],
+            files: { 'ppt/media/bg.png': PIXEL_PNG },
+        });
+        expect(deck.slides.map((slide) => slide.elements.length)).toEqual([2, 2, 2]);
+        expect(deck.warnings).toEqual([
+            { code: 'tables-dropped', count: 1 },
+            { code: 'fills-simplified', count: 2 },
+        ]);
+    });
+
+    test('a path gradient line is one simplified fill', () => {
+        const ln = `<a:ln><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill></a:ln>`;
+        const deck = deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: ln }) }] });
+        expect(deck.slides[0].elements[0]?.strokeColor).toBe('#ff0000');
+        expect(deck.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+    });
+
+    test("a dropped outline's fill is not drawn, so only the outline counts", () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:custGeom/>${PATTERN}` }) +
+                        sp({
+                            xfrm: box(0, 0, 10, 10),
+                            geom: 'line',
+                            spPr: `${PATTERN}<a:ln>${solid('000000')}</a:ln>`,
+                        }),
+                },
+            ],
+        });
+        expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+    });
+
+    test("a group's fill counts only where a child shows it", () => {
+        const group = (child: string) =>
+            grp(`${groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX])}${PATTERN}`, child);
+        const unshown = deckOf({ slides: [{ shapes: group(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED })) }] });
+        expect(unshown.warnings).toEqual([]);
+        const filled = sp({ xfrm: box(0, 0, 10, 10), spPr: '<a:grpFill/>' });
+        const shown = deckOf({ slides: [{ shapes: group(filled + filled) }] });
+        expect(JSON.parse(String(shown.slides[0].elements[0].fill))).toMatchObject({ color: '#00ff00' });
+        expect(shown.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+    });
+});

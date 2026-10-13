@@ -14,7 +14,7 @@ import { A_NS, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { fillIn, paintOf, type SlideTheme } from './inherit';
-import { alternative } from './package';
+import { alternative, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
 // font, per-paragraph size and indents, vertical text, columns, superscript, subscript and highlight.
@@ -86,7 +86,12 @@ type Run = { html: string; style?: RunStyle; href?: string };
 type Paragraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; text: boolean; chain: XmlElement[] };
 
 // undefined when the body shows no text: an empty placeholder is not drawn.
-export function richTextOf(source: TextSource, theme: SlideTheme, pxPerEmu: number): RichTextFields | undefined {
+export function richTextOf(
+    source: TextSource,
+    theme: SlideTheme,
+    pxPerEmu: number,
+    lost: Lost,
+): RichTextFields | undefined {
     const bodies = [source.body, ...source.inherited];
     const lists = [...bodies.map((body) => xmlChild(body, A_NS, 'lstStyle')), source.listStyle].filter(
         (list) => list !== undefined,
@@ -98,7 +103,7 @@ export function richTextOf(source: TextSource, theme: SlideTheme, pxPerEmu: numb
     const fontScale = fraction(normal && xmlAttr(normal, '', 'fontScale')) ?? 1;
     const lineReduction = fraction(normal && xmlAttr(normal, '', 'lnSpcReduction')) ?? 0;
     const fontRef = source.style && xmlChild(source.style, A_NS, 'fontRef');
-    const context = { theme, pxPerEmu: pxPerEmu * fontScale, fontRef, rels: source.rels };
+    const context = { theme, pxPerEmu: pxPerEmu * fontScale, fontRef, rels: source.rels, lost };
 
     // Characters per run style, so the box takes the style most of its text is in.
     const covered = new Map<string, RunStyle & { chars: number }>();
@@ -175,6 +180,7 @@ type RunContext = {
     pxPerEmu: number;
     fontRef: XmlElement | undefined;
     rels: ReadonlyMap<string, Relationship>;
+    lost: Lost;
 };
 
 // The run's own properties, else the shape style's fontRef for its font and colour, else what its level inherits.
@@ -188,7 +194,7 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: XmlElement[], contex
     };
     const typefaceIn = (element: XmlElement) => attrOf(xmlChild(element, A_NS, 'latin'), 'typeface') || undefined;
     const colorIn = (element: XmlElement) => {
-        const paint = paintOf(fillIn(element), theme);
+        const paint = paintOf(fillIn(element), theme, { lost: context.lost });
         const color = paint?.type === 'gradient' ? paint.from : paint?.color;
         // A run with no fill keeps its colour: text nobody can see is worse than a colour that differs.
         return color === TRANSPARENT_COLOR ? undefined : color;

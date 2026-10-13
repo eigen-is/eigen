@@ -1,5 +1,4 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { FillPaint } from '@workspace/lib/types/background';
 import {
     type Arrowhead,
     type NewVectorElement,
@@ -22,6 +21,7 @@ import {
     decorationsOf,
     elementGradientAngle,
     fillIn,
+    type GroupFill,
     inheritedPlaceholders,
     listStyleOf,
     nonVisualOf,
@@ -34,7 +34,7 @@ import {
     styleFill,
     styleLine,
 } from './inherit';
-import { alternative, blipMedia, type MediaPart, type Part, type PptxPackage } from './package';
+import { alternative, blipMedia, type DeckWalk, type Frame, type Lost, type Part } from './package';
 import { EMU_PER_POINT, richTextOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
@@ -87,27 +87,6 @@ const ARROWHEAD_BY_END = new Map<string, Arrowhead>([
 
 // PowerPoint's line when a:ln states no width: 0.75 pt.
 const DEFAULT_LINE_EMU = 9525;
-
-export type Frame = { width: number; height: number };
-
-// What a walk over one deck shares: its budget, its pictures, its losses.
-export type DeckWalk = {
-    pkg: PptxPackage;
-    // The frame's size, its px per EMU, where the slide's origin lands in it, and the slide's extent there.
-    frame: Frame;
-    scale: number;
-    offset: { x: number; y: number };
-    slide: Frame;
-    // Children walked and elements written, each capped: a master's shapes are walked again for every slide.
-    shapes: number;
-    elements: number;
-    // The update's weight so far, charged as each frame and element is written.
-    weight: number;
-    // A picture part's media name, the first time a slide shows it.
-    mediaName(part: MediaPart): string;
-    // Counts what the import leaves out or draws simpler.
-    lost: (code: CountedWarningCode) => void;
-};
 
 export type SlideShapes = { elements: NewVectorElement[]; title: string };
 
@@ -281,7 +260,7 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance, p
     return out;
 }
 
-function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: number, group: FillPaint | undefined): void {
+function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: number, group: GroupFill | undefined): void {
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, PRESENTATION_TOO_LARGE);
     for (const shape of shapes) {
         if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
@@ -295,18 +274,16 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         if (shape.local === 'grpSp') {
             const grpSpPr = xmlChild(shape, P_NS, 'grpSpPr');
             const xfrm = readXfrm(grpSpPr && xmlChild(grpSpPr, A_NS, 'xfrm'));
-            const size = xfrm ? place(placeIn, xfrm).box : { width: 1, height: 1 };
-            const fill =
-                paintOf(fillIn(grpSpPr), walk.inheritance.theme, {
-                    group,
-                    angle: elementGradientAngle(size.width, size.height),
-                    lost: walk.deck.lost,
-                }) ?? group;
-            readTree(walk, xmlElements(shape), xfrm ? inGroup(placeIn, xfrm) : placeIn, depth + 1, fill);
+            const fill = fillIn(grpSpPr);
+            const size = fill && xfrm ? place(placeIn, xfrm).box : { width: 1, height: 1 };
+            const angle = elementGradientAngle(size.width, size.height);
+            const groupFill: GroupFill | undefined =
+                fill && ((lost) => paintOf(fill, walk.inheritance.theme, { group, angle, lost }) ?? group?.(lost));
+            readTree(walk, xmlElements(shape), xfrm ? inGroup(placeIn, xfrm) : placeIn, depth + 1, groupFill ?? group);
             continue;
         }
         if (shape.local === 'contentPart') {
-            walk.deck.lost(DROPPED.object.code);
+            walk.deck.lost(DROPPED.object.code, shape);
             continue;
         }
         const own = placeholderOf(shape);
@@ -322,7 +299,8 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         if (shape.local === 'graphicFrame') {
             const graphic = xmlChild(shape, A_NS, 'graphic');
             const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-            placeholderBox(walk, GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object', placed.box);
+            const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
+            placeholderBox(walk, shape, kind, placed.box);
         } else if (shape.local === 'pic') readPicture(walk, shape, linesOf(spPrs, walk, style), placed);
         else readShape(walk, { shape, own, inherited, spPrs, style, placed, group });
     }
@@ -360,7 +338,7 @@ type Leaf = {
     // The p:style it paints by.
     style: XmlElement | undefined;
     placed: Placed;
-    group: FillPaint | undefined;
+    group: GroupFill | undefined;
 };
 
 function readShape(walk: Walk, leaf: Leaf): void {
@@ -382,10 +360,16 @@ function readShape(walk: Walk, leaf: Leaf): void {
             },
             theme,
             walk.deck.scale,
+            walk.deck.lost,
         );
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
-    const paint = { fill: fillOf(spPrs, walk, group, style, box), ...strokeOf(lines, walk) };
+    // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint.
+    const lost = (drawn: Set<string>) => (drawn.has(geometry) ? walk.deck.lost : UNDRAWN);
+    const paint = {
+        fill: fillOf(spPrs, walk, { group, style, box, lost: lost(OUTLINED) }),
+        ...strokeOf(lines, walk, lost(STROKED)),
+    };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
     // A text box is the rectangle itself; any other shape carries its text in an unpainted box on top.
     const textOnTop = () =>
@@ -426,10 +410,14 @@ function readShape(walk: Walk, leaf: Leaf): void {
             break;
         default:
             // Other presets and custGeom: the text stays, the outline is X4b's.
-            if (painted) walk.deck.lost('shapes-simplified');
+            if (painted) walk.deck.lost('shapes-simplified', shape);
             textOnTop();
     }
 }
+
+const OUTLINED = new Set(['rect', 'roundRect', 'ellipse', 'diamond', 'pie']);
+const STROKED = new Set([...OUTLINED, 'line', 'straightConnector1']);
+const UNDRAWN: Lost = () => {};
 
 function geometryOf(spPr: XmlElement): string | undefined {
     const preset = xmlChild(spPr, A_NS, 'prstGeom');
@@ -460,12 +448,10 @@ function styleIn(chain: XmlElement[]): XmlElement | undefined {
 function fillOf(
     spPrs: XmlElement[],
     walk: Walk,
-    group: FillPaint | undefined,
-    style: XmlElement | undefined,
-    box: Box,
+    { group, style, box, lost }: { group: GroupFill | undefined; style: XmlElement | undefined; box: Box; lost: Lost },
 ): string {
     const { theme } = walk.inheritance;
-    const options = { group, angle: elementGradientAngle(box.width, box.height), lost: walk.deck.lost };
+    const options = { group, angle: elementGradientAngle(box.width, box.height), lost };
     const fill = spPrs.map(fillIn).find((found) => found !== undefined);
     const reference = style && xmlChild(style, A_NS, 'fillRef');
     const paint = fill
@@ -486,11 +472,12 @@ function linesOf(spPrs: XmlElement[], walk: Walk, style: XmlElement | undefined)
 }
 
 // No a:ln and no lnRef, or neither stating a colour, is no stroke. A gradient line strokes in its first colour.
-function strokeOf(lines: Lines, walk: Walk): Stroke {
+function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const ln = lines.lns.find((found) => fillIn(found) !== undefined);
+    const fill = fillIn(ln);
     const reference = ln === lines.entry ? lines.reference : undefined;
-    const paint = ln && paintOf(fillIn(ln), walk.inheritance.theme, { reference, lost: walk.deck.lost });
-    if (paint?.type === 'gradient') walk.deck.lost('fills-simplified');
+    const paint = fill && paintOf(fill, walk.inheritance.theme, { reference, lost });
+    if (fill && paint?.type === 'gradient') lost('fills-simplified', fill);
     const color = paint?.type === 'gradient' ? paint.from : paint?.color;
     if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
     const width = lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined);
@@ -558,15 +545,16 @@ function readPicture(walk: Walk, shape: XmlElement, lines: Lines, { box, mirrore
     const part = blipMedia(walk.deck.pkg, walk.part, blip);
     if (!part) {
         // A blip naming no picture is an empty placeholder's prompt, not a picture.
-        if (blip && (xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link'))) placeholderBox(walk, 'picture', box);
+        if (blip && (xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link')))
+            placeholderBox(walk, shape, 'picture', box);
         return;
     }
     // An image can't mirror; a shape the canvas draws is symmetric, and its text PowerPoint never mirrors.
-    if (mirrored) walk.deck.lost('mirrors-dropped');
+    if (mirrored) walk.deck.lost('mirrors-dropped', shape);
     push(walk, {
         type: 'image',
         ...box,
-        ...strokeOf(lines, walk),
+        ...strokeOf(lines, walk, walk.deck.lost),
         mediaName: walk.deck.mediaName(part),
         objectFit: 'fill',
         corners: 'straight',
@@ -574,8 +562,8 @@ function readPicture(walk: Walk, shape: XmlElement, lines: Lines, { box, mirrore
 }
 
 // Q5: a loss the user can see on the slide, saying what was there.
-function placeholderBox(walk: Walk, what: Dropped, box: Box): void {
-    walk.deck.lost(DROPPED[what].code);
+function placeholderBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box): void {
+    walk.deck.lost(DROPPED[what].code, shape);
     push(walk, {
         type: 'richtext',
         ...box,
