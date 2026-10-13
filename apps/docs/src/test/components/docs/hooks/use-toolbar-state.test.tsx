@@ -250,3 +250,38 @@ test("the size reads the body's 11 pt where none is set, 9 for Small, and none f
     expect(seen.at(-1)?.fontSize).toBeUndefined();
     sized.destroy();
 });
+
+// A heading draws its own size, which the toolbar reads off the page; happy-dom has no prose CSS, so the page is stubbed
+// with eigen-prose.css's 1.75rem.
+test("the size in an unsized heading is the heading's drawn size, a sized run its own", async () => {
+    const computed = spyOn(globalThis, 'getComputedStyle').mockImplementation((element) => {
+        const { style } = document.createElement('p');
+        style.fontSize = element.tagName === 'H1' ? '28px' : '14.6667px';
+        return style;
+    });
+    // "Plan " at 1-6, the 30 pt "big" at 6-9.
+    const heading = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1 },
+                    content: [
+                        { type: 'text', text: 'Plan ' },
+                        { type: 'text', text: 'big', marks: [{ type: 'textStyle', attrs: { fontSize: 30 } }] },
+                    ],
+                },
+            ],
+        },
+    });
+    heading.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: heading })));
+    expect(seen.at(-1)?.fontSize).toBe(21);
+
+    await act(async () => heading.commands.setTextSelection({ from: 6, to: 9 }));
+    expect(seen.at(-1)?.fontSize).toBe(30);
+    computed.mockRestore();
+    heading.destroy();
+});
