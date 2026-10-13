@@ -149,6 +149,14 @@ Once built, the map is kept current cell by cell. Local writers register what th
 
 A typed number is stored as a number in `v`, unless the cell is text-formatted. Pasted plain text goes through the same `setCellValue` parse as typing. A formula's text result stays text (`=TEXT(5,"000")` is `"005"`). Copying a General number writes 15 significant digits (`copiedNumberText`), not the 11-character display, so a paste elsewhere keeps the precision.
 
+## A copy puts the cells on text/plain as TSV
+
+A range copy writes three flavors: the HTML table with the cells' styles, the Eigen clipboard payload, and TSV on `text/plain` with tabs between cells and newlines between rows. `rangeValueToClipboard` (`state/modules/selection.ts`) builds the table and the TSV in one pass over the same cells, each cell's display text with General numbers at 15 digits. A cell holding a tab, a newline or a quote is quoted and its quotes doubled, as Google and Excel write it, through `cellsToTsv` in `@workspace/lib/clipboard`. The plain text is what a paste into a text field, a chart's Edit data grid or another app without an HTML reader gets, so it has to keep the grid's shape. The plain-text paste in Sheets itself splits on tabs and newlines and doesn't unquote, so a quoted multi-line cell pasted as plain text lands split ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+
+## Enter and Tab commit an edit and move on
+
+While a cell is open, Enter commits it and moves down, and Tab commits and moves right, Shift+Tab left, as in Google Sheets. Both go through `commitEdit` (`state/events/keyboard.ts`), which writes the cell and collapses the selection to it before the move. A visible formula suggestion takes Tab first and stops it, so Tab picks the function instead of committing.
+
 ## Conditional formats evaluate headless
 
 `evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ The export paints conditional formats with the grid's evaluator](#the-export-paints-conditional-formats-with-the-grids-evaluator)). Without an evaluator, formula rules are skipped. Both callers pass the same one, `createCfFormulaEvaluator`.

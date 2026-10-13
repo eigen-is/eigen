@@ -92,9 +92,19 @@ A typed title writes on every keystroke inside the host's gesture (`PropertyGest
 
 ## Edit data is a grid over inline data, and Save is one write
 
-`ChartDataDialog` shows inline data as a grid: categories down the first column, series across the first row. It edits a draft, so Save is one write of the spec and one undo step, and Cancel leaves the chart as it was. A cell keeps what was typed, so a value that isn't a number stays on screen, flagged, and Save waits for it. Tab-separated text pasted into a cell fills the grid from that cell and grows it, the way a spreadsheet range pastes. A new series takes the next palette color, and each row carries its pie slice's color, so removing a row takes that color with it.
+`ChartDataDialog` shows inline data as a small sheet: categories down column A, series across row 1, and the empty top-left cell. It edits a draft, so Save is one write of the spec and one undo step, and Cancel leaves the chart as it was. A cell keeps what was typed, so a value that isn't a number stays on screen, flagged, and Save waits for it. A new series takes the next palette color, and each row carries its pie slice's color, so removing a row takes that color with it.
 
-The grid stops at 12 series, 200 categories and 2,000 cells in total, since a full 12 × 200 grid would be past the 2,000-point limit that makes a spec unreadable (`fitsInlineGrid`). A chart past those limits, such as an imported one, opens read-only as a plain table rather than as thousands of inputs. On a canvas the dialog opens from the panel's Edit data button and from a double-click on the chart ([CANVAS.md § A kind is one registry entry](CANVAS.md#a-kind-is-one-registry-entry)).
+The grid stops at 12 series, 200 categories and 2,000 cells in total, since a full 12 × 200 grid would be past the 2,000-point limit that makes a spec unreadable (`fitsInlineGrid`). A chart past those limits, such as an imported one, opens read-only as a plain table rather than as thousands of cells. On a canvas the dialog opens from the panel's Edit data button and from a double-click on the chart ([CANVAS.md § A kind is one registry entry](CANVAS.md#a-kind-is-one-registry-entry)).
+
+## Edit data looks and types like Eigen Sheets
+
+The grid is drawn to look like a sheet, so a user who knows Sheets knows it. Its sizes come from `@workspace/lib/sheets` (`SHEET_DEFAULT_COL_WIDTH`, `SHEET_ROW_HEADER_WIDTH` and their siblings) and its colors from the `--sheet-*` variables in ui's `globals.css`, the ones Sheets' canvas reads, on a light-pinned `.eigen-paper` as the workbook is. It is its own component rather than an embedded Workbook; what embedding would take is a ROADMAP row (Edit data: embed the Sheets grid).
+
+Like PowerPoint's and Keynote's grids, it shows one empty row and column past the data, while one more still fits. Typing there adds a category or a series, and an empty commit adds nothing. A row or column header selects the whole row or column, and Delete removes it; Delete on cells clears them to gaps.
+
+The keys are Sheets' keys: arrows move and Shift extends, typing replaces the cell, Enter and Tab commit and move down or right, F2, Enter and a double-click edit in place, and Escape cancels the edit. One `<input>` sits on the active cell and keeps the focus, invisible until a cell opens, as Sheets' own cell input does. That is what makes a canvas host stand down: its clipboard listeners bail on a focused input (`isTypingTarget`). Radix hears Escape on the document before the input does, so the dialog's `onEscapeKeyDown` lets an open cell editor (`[data-cell-editor][data-editing]`) take it, and only a second Escape closes the dialog.
+
+⌘C writes the selection as TSV and an HTML table (`@workspace/lib/clipboard`'s `table.ts`, the helpers Sheets' copy uses too). ⌘V fills from the active cell and grows the grid to fit, up to the limits, and says how many rows and columns it pasted when some fell outside. A paste reads TSV, or an HTML table when the plain text has no tab or newline, which is what some spreadsheets put on `text/plain`. While a cell is open, a single value pastes into it as typed text.
 
 ## Text widths come from a committed table generated from the bundled fonts
 

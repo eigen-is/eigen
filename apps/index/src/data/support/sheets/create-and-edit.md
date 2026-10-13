@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-09-13
+updated: 2026-10-13
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -58,6 +58,8 @@ Use the standard keyboard shortcuts:
 - **Ctrl+V** (Mac: **⌘V**) to paste
 
 You can also use **Edit → Copy**, **Edit → Cut**, and **Edit → Paste** from the menu bar.
+
+Copied cells paste into other apps as rows and columns, for example into a text editor or a chart's **Edit data** grid.
 
 ## Undo and redo
 

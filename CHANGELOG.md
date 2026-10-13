@@ -8,7 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 ### Added
 
 - **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor and printing follow it; PDF and Word downloads stay A4 with 2 cm margins for now
-- **Charts in Vector, Slides and Sheets** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking, titles, legend, font, axis range, gridlines and colors, and **Edit data** (or a double-click) edits its numbers in a grid you can paste spreadsheet cells into. In Sheets, Insert → **Chart** charts the selected cells and follows them as they change: the **Chart editor** sets its data range and its look, its ⋮ menu downloads it as SVG, and the PDF and web page downloads and the Drive preview show it
+- **Charts in Vector, Slides and Sheets** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking, titles, legend, font, axis range, gridlines and colors, and **Edit data** (or a double-click) edits its numbers in a small spreadsheet with the keys of Sheets, which grows as you type past the data and takes cells pasted from a spreadsheet. In Sheets, Insert → **Chart** charts the selected cells and follows them as they change: the **Chart editor** sets its data range and its look, its ⋮ menu downloads it as SVG, and the PDF and web page downloads and the Drive preview show it
+
+### Fixed
+
+- **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 
 ## [0.3.3] - 2026-10-13
 
