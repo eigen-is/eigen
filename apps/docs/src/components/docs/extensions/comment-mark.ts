@@ -5,6 +5,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
+import { MARKLESS_ATOMS } from './atom-marks';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -22,7 +23,7 @@ type CommentMeta = {
 const decorationKey = new PluginKey('commentDecorations');
 
 // An image or an equation holds its card as an attribute: the Yjs binding persists a mark only on text.
-const anchorsByAttribute = (node: Node): boolean => node.type.name === 'figure' || node.type.name === 'equation';
+const anchorsByAttribute = (node: Node): boolean => MARKLESS_ATOMS.has(node.type.name);
 
 // The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
@@ -45,19 +46,7 @@ export function addCommentAnchor(editor: Editor, { from, to }: { from: number; t
         editor.view.dispatch(editor.state.tr.setNodeAttribute(from, 'commentCardId', cardId));
         return;
     }
-    editor
-        .chain()
-        .focus()
-        .setTextSelection({ from, to })
-        .setComment(cardId)
-        // A node the selection spans would keep the mark only until reload; it anchors by attribute.
-        .command(({ tr }) => {
-            tr.doc.nodesBetween(from, to, (n, pos) => {
-                if (anchorsByAttribute(n)) tr.removeMark(pos, pos + n.nodeSize, n.type.schema.marks.comment);
-            });
-            return true;
-        })
-        .run();
+    editor.chain().focus().setTextSelection({ from, to }).setComment(cardId).run();
 }
 
 // A deleted card leaves no anchor behind.
@@ -88,7 +77,7 @@ export function commentAnchorText(doc: Node, from: number, to: number): string {
         .textBetween(from, to, ' ', (leaf) => {
             if (leaf.type.name === 'figure') return 'Image';
             if (leaf.type.name === 'equation') return equationText(leaf) || 'Equation';
-            return leaf.type.spec.leafText?.(leaf) ?? '';
+            return '';
         })
         .slice(0, 100);
 }

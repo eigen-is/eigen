@@ -3,17 +3,18 @@ import { Editor } from '@tiptap/core';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { Equation } from '../../../../components/docs/extensions/equation';
+import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
 
 // An equation reads its stored MathML with DOMParser.
 installHappyDom();
 
 const mathml = writeMathml([{ kind: 'identifier', text: 'x' }], 'x');
 const equation = { type: 'equation', attrs: { mathml } };
+const figure = { type: 'figure', attrs: { mediaName: 'a.png' } };
 
 function editorWith(content: object[]) {
     return new Editor({
-        extensions: [...getDocExtensions({ exclude: ['equation'] }), Equation],
+        extensions: [...getDocExtensions(), AtomMarks],
         content: { type: 'doc', content: [{ type: 'paragraph', content }] },
     });
 }
@@ -26,7 +27,7 @@ const markedNodes = (editor: Editor) => {
     return marked;
 };
 
-// The Yjs binding would drop a mark on it, so the formatting would show until a reload and never reach a peer.
+// The Yjs binding would drop a mark on an atom, so the formatting would show until a reload and never reach a peer.
 test('formatting a range around an equation marks the text and leaves the equation alone', () => {
     const editor = editorWith([{ type: 'text', text: 'a ' }, equation, { type: 'text', text: ' b' }]);
     editor.chain().selectAll().setBold().setColor('#ff0000').toggleHighlight().run();
@@ -38,6 +39,21 @@ test('an equation inserted with a mark, as a paste inside a bold run gives it, l
     const editor = editorWith([{ type: 'text', text: 'a', marks: [{ type: 'bold' }] }]);
     editor.commands.insertContentAt(2, { ...equation, marks: [{ type: 'bold' }] });
     expect(editor.state.doc.firstChild?.lastChild?.type.name).toBe('equation');
+    expect(markedNodes(editor)).toEqual(['text']);
+    editor.destroy();
+});
+
+test('bold, colour and a link over a range containing a figure mark the text and leave the figure alone', () => {
+    const editor = editorWith([{ type: 'text', text: 'a ' }, figure, { type: 'text', text: ' b' }]);
+    editor.chain().selectAll().setBold().setColor('#ff0000').setLink({ href: 'https://example.com' }).run();
+    expect(markedNodes(editor)).toEqual(['text', 'text']);
+    editor.destroy();
+});
+
+test('a figure inserted with a mark loses the mark', () => {
+    const editor = editorWith([{ type: 'text', text: 'a', marks: [{ type: 'bold' }] }]);
+    editor.commands.insertContentAt(2, { ...figure, marks: [{ type: 'bold' }] });
+    expect(editor.state.doc.firstChild?.lastChild?.type.name).toBe('figure');
     expect(markedNodes(editor)).toEqual(['text']);
     editor.destroy();
 });

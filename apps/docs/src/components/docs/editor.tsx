@@ -65,6 +65,7 @@ import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
+import { AtomMarks } from './extensions/atom-marks';
 import {
     addCommentAnchor,
     CommentMark,
@@ -74,7 +75,6 @@ import {
     selectCommentAnchor,
     updateCommentDecorations,
 } from './extensions/comment-mark';
-import { Equation } from './extensions/equation';
 import { Figure } from './extensions/figure';
 import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
@@ -325,7 +325,7 @@ const TiptapEditor = ({
         {
             editable: canWrite,
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'equation', 'comment', 'table'] }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
                 // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
                 // drags nothing, and a tap beside a border would start a drag that swallows the caret.
                 EditorTable.configure({ resizable: !isCoarsePointer }),
@@ -333,7 +333,7 @@ const TiptapEditor = ({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 }),
-                Equation,
+                AtomMarks,
                 TableWidthClamp,
                 SearchHighlight,
                 CommentMark.configure({

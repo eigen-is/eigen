@@ -119,7 +119,7 @@ export const EquationNode = Node.create({
         if (display) math.setAttribute('display', 'block');
         // Spelled like the comment mark's, so a cut equation keeps its card the way cut text does.
         if (node.attrs['commentCardId']) math.setAttribute('data-comment-id', node.attrs['commentCardId']);
-        return ['span', { contenteditable: 'false' }, math];
+        return ['span', math];
     },
 
     renderText({ node }) {
