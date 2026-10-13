@@ -1,3 +1,4 @@
+export { layoutChart } from './layout';
 export {
     CHART_PALETTE,
     chartColor,
@@ -11,3 +12,4 @@ export {
     parseChartSpec,
     sampleChartSpec,
 } from './spec';
+export { formatTickValue } from './ticks';
