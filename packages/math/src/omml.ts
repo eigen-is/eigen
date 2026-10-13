@@ -1,6 +1,8 @@
 import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
 import {
     bound,
+    casesOf,
+    defaultVariant,
     equationCells,
     hexColor,
     MATH_ENCLOSURES,
@@ -60,6 +62,70 @@ const isSide = (enclosure: MathEnclosure) => BORDERS[enclosure].startsWith('hide
 
 const AMPERSAND: MathNode = { kind: 'operator', text: '&' };
 
+// Word's Symbol font, by code point less its private-use offset F000: its letters and the common math characters.
+const SYMBOL_FONT: ReadonlyMap<number, string> = new Map([
+    ...[...'ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ'].map((char, index): [number, string] => [0x41 + index, char]),
+    ...[...'αβχδεφγηιϕκλμνοπθρστυϖωξψζ'].map((char, index): [number, string] => [0x61 + index, char]),
+    ...Object.entries({
+        '22': '∀',
+        '24': '∃',
+        '27': '∋',
+        '2D': '−',
+        '40': '≅',
+        '5C': '∴',
+        '5E': '⊥',
+        '7E': '∼',
+        A2: '′',
+        A3: '≤',
+        A5: '∞',
+        AB: '↔',
+        AC: '←',
+        AD: '↑',
+        AE: '→',
+        AF: '↓',
+        B1: '±',
+        B2: '″',
+        B3: '≥',
+        B4: '×',
+        B5: '∝',
+        B6: '∂',
+        B7: '•',
+        B8: '÷',
+        B9: '≠',
+        BA: '≡',
+        BB: '≈',
+        BC: '…',
+        C0: 'ℵ',
+        C4: '⊗',
+        C5: '⊕',
+        C6: '∅',
+        C7: '∩',
+        C8: '∪',
+        C9: '⊃',
+        CA: '⊇',
+        CB: '⊄',
+        CC: '⊂',
+        CD: '⊆',
+        CE: '∈',
+        CF: '∉',
+        D0: '∠',
+        D1: '∇',
+        D5: '∏',
+        D6: '√',
+        D7: '⋅',
+        D8: '¬',
+        D9: '∧',
+        DA: '∨',
+        DB: '⇔',
+        DC: '⇐',
+        DD: '⇑',
+        DE: '⇒',
+        DF: '⇓',
+        E5: '∑',
+        F2: '∫',
+    }).map(([hex, char]): [number, string] => [Number.parseInt(hex, 16), char]),
+]);
+
 // Tracked changes: what an insertion or a move's destination holds shows, a deletion or a move's source doesn't.
 const INSERTED = new Set(['ins', 'moveTo']);
 const DELETED = new Set(['del', 'moveFrom']);
@@ -109,23 +175,35 @@ function runParts(elements: MathXmlElement[], budget: MathBudget, depth: number)
     });
 }
 
-function readRun(row: RowBuilder, run: MathXmlElement, depth: number): void {
+// A w:sym's character, where it is one of the Symbol font's math characters; '' for anything else.
+function symbolOf(sym: MathXmlElement): string {
+    const code = Number.parseInt(attribute(sym, 'char') ?? '', 16);
+    const position = code >= 0xf000 ? code - 0xf000 : code;
+    return attribute(sym, 'font') === 'Symbol' ? (SYMBOL_FONT.get(position) ?? '') : '';
+}
+
+// In a run of an equation's own, Word's # starts the equation's number: whether it did.
+function readRun(row: RowBuilder, run: MathXmlElement, depth: number, numbered = false): boolean {
     const parts = runParts(elementsOf(run), row.budget, depth);
     const math = parts.find((part) => is(part, OMML_NAMESPACE, 'rPr'));
     const word = parts.find((part) => is(part, WORDML_NAMESPACE, 'rPr'));
     const text = parts
-        .filter((part) => is(part, OMML_NAMESPACE, 't'))
-        .map(textOf)
+        .map((part) =>
+            is(part, OMML_NAMESPACE, 't') ? textOf(part) : is(part, WORDML_NAMESPACE, 'sym') ? symbolOf(part) : '',
+        )
         .join('');
     const color = toColor(valOf(childOf(word, WORDML_NAMESPACE, 'color')));
     if (isOn(childOf(math, OMML_NAMESPACE, 'nor'))) {
         row.text(text, color);
-        return;
+        return false;
     }
     const sty = valOf(childOf(math, OMML_NAMESPACE, 'sty'));
     const scr = valOf(childOf(math, OMML_NAMESPACE, 'scr'));
+    const number = numbered ? text.indexOf('#') : -1;
+    const shown = number < 0 ? text : text.slice(0, number);
     // Without a style Word draws letters italic and the rest upright.
-    row.chars(text, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
+    row.chars(shown, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
+    return number >= 0;
 }
 
 function readRow(elements: MathXmlElement[], budget: MathBudget, depth: number, slot?: RowSlot): MathRow {
@@ -140,15 +218,39 @@ function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number)
     for (const element of elements) readInto(row, element, depth);
 }
 
-function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
+// What a wrapper reads as: an alternative its fallback, a tracked deletion nothing, anything else outside OMML its
+// content. An OMML element is no wrapper.
+function unwrapped(element: MathXmlElement): MathXmlElement[] | undefined {
     if (is(element, MARKUP_COMPATIBILITY_NAMESPACE, 'AlternateContent')) {
         const fallback = childOf(element, MARKUP_COMPATIBILITY_NAMESPACE, 'Fallback');
-        readThrough(row, fallback ? elementsOf(fallback) : [], depth + 1);
-        return;
+        return fallback ? elementsOf(fallback) : [];
     }
-    if (element.ns !== OMML_NAMESPACE) {
-        if (element.ns !== WORDML_NAMESPACE || !DELETED.has(element.local))
-            readThrough(row, elementsOf(element), depth + 1);
+    if (element.ns === OMML_NAMESPACE) return undefined;
+    return element.ns === WORDML_NAMESPACE && DELETED.has(element.local) ? [] : elementsOf(element);
+}
+
+// An equation's parts with their depths, its wrappers opened as readInto reads them: Word shows a run in a tracked
+// insertion as part of the equation, so its # starts the number there too.
+function* equationParts(
+    elements: MathXmlElement[],
+    budget: MathBudget,
+    depth: number,
+): Generator<[MathXmlElement, number]> {
+    for (const element of elements) {
+        const inner = unwrapped(element);
+        if (!inner) {
+            yield [element, depth];
+            continue;
+        }
+        bound(budget, depth + 1, 0);
+        yield* equationParts(inner, budget, depth + 1);
+    }
+}
+
+function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
+    const inner = unwrapped(element);
+    if (inner) {
+        readThrough(row, inner, depth + 1);
         return;
     }
     const { budget } = row;
@@ -291,7 +393,14 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
                 layout: 'equations',
                 rows: (equations.length > 0 ? equations.map(elementsOf) : [[]]).map((equation) => {
                     bound(budget, depth + 1, 1);
-                    return equationCells(readRow(equation, budget, depth + 1, 'equation'));
+                    const row = new RowBuilder(budget, depth + 1, 'equation');
+                    // Word numbers an equation with # and the number after it, which belongs to the document. A # in a
+                    // box is the character.
+                    for (const [part, partDepth] of equationParts(equation, budget, depth + 1)) {
+                        if (!is(part, OMML_NAMESPACE, 'r')) readInto(row, part, partDepth);
+                        else if (readRun(row, part, partDepth, true)) break;
+                    }
+                    return equationCells(row.done());
                 }),
             });
             return;
@@ -336,8 +445,8 @@ function piece(node: MathNode): Run | string {
         case 'identifier':
         case 'number':
         case 'operator': {
-            // A word is upright, which Word only draws when told.
-            const upright = node.kind === 'identifier' && [...node.text].length > 1;
+            // A word or a capital Greek letter is upright, which Word only draws when told.
+            const upright = node.kind === 'identifier' && defaultVariant(node.kind, node.text) === 'normal';
             return {
                 properties: style(node.variant ?? (upright ? 'normal' : undefined)) + colored(node.color),
                 text: node.text,
@@ -376,12 +485,17 @@ function piece(node: MathNode): Run | string {
             return `<m:nary>${pr}${argument('sub', node.sub ?? [])}${argument('sup', node.sup ?? [])}${argument('e', node.body)}</m:nary>`;
         }
         case 'fenced': {
+            // Written even where they are the defaults, since Google Docs drops the fences an m:d leaves out.
             const pr = properties('d', [
-                ['begChr', node.open === '(' ? undefined : node.open],
-                ['sepChr', node.parts.length < 2 || node.separator === '|' ? undefined : node.separator],
-                ['endChr', node.close === ')' ? undefined : node.close],
+                ['begChr', node.open],
+                ['sepChr', node.parts.length < 2 ? undefined : node.separator],
+                ['endChr', node.close],
             ]);
-            return `<m:d>${pr}${node.parts.map((part) => argument('e', part)).join('')}</m:d>`;
+            const cases = casesOf(node);
+            const parts = cases
+                ? `<m:e>${writeMatrix(cases, 'left')}</m:e>`
+                : node.parts.map((part) => argument('e', part)).join('');
+            return `<m:d>${pr}${parts}</m:d>`;
         }
         case 'function':
             return `<m:func>${argument('fName', node.name)}${argument('e', node.body)}</m:func>`;
@@ -415,28 +529,40 @@ function piece(node: MathNode): Run | string {
             );
             return `<m:borderBox>${pr}${argument('e', node.body)}</m:borderBox>`;
         }
-        case 'table':
+        case 'table': {
             if (node.layout === 'equations') {
-                const equations = node.rows.map((cells) =>
-                    argument(
-                        'e',
-                        cells.flatMap((cell, index) => (index > 0 ? [AMPERSAND, ...cell] : cell)),
-                    ),
+                const equations = node.rows.map(
+                    (cells) =>
+                        `<m:e>${writeRow(
+                            cells.flatMap((cell, index) => (index > 0 ? [AMPERSAND, ...cell] : cell)),
+                            true,
+                        )}</m:e>`,
                 );
                 return `<m:eqArr>${equations.join('')}</m:eqArr>`;
             }
-            return `<m:m>${node.rows.map((cells) => `<m:mr>${cells.map((cell) => argument('e', cell)).join('')}</m:mr>`).join('')}</m:m>`;
+            return writeMatrix(node, 'center');
+        }
     }
+}
+
+// Google Docs draws an m:m without its column count flat. ST_Integer255 caps the count; columns past it keep the
+// default, centred.
+function writeMatrix(node: Extract<MathNode, { kind: 'table' }>, justification: 'center' | 'left'): string {
+    const columns = Math.min(Math.max(...node.rows.map((cells) => cells.length)), 255);
+    const pr = `<m:mPr><m:mcs><m:mc><m:mcPr>${val('count', String(columns))}${val('mcJc', justification)}</m:mcPr></m:mc></m:mcs></m:mPr>`;
+    return `<m:m>${pr}${node.rows.map((cells) => `<m:mr>${cells.map((cell) => argument('e', cell)).join('')}</m:mr>`).join('')}</m:m>`;
 }
 
 const writeRun = ({ properties, text }: Run) =>
     `<m:r>${properties}<m:t xml:space="preserve">${escapeXml(text)}</m:t></m:r>`;
 
-function writeRow(row: MathRow): string {
+// In an equation a #, marked or not, would start Word's equation number: it goes in a box.
+function writeRow(row: MathRow, equation = false): string {
     let xml = '';
     let pending: Run | undefined;
     for (const node of row) {
-        const next = piece(node);
+        const numberSign = equation && node.kind === 'operator' && node.text.startsWith('#');
+        const next = numberSign ? `<m:box>${argument('e', [node])}</m:box>` : piece(node);
         if (typeof next !== 'string' && pending?.properties === next.properties) {
             pending.text += next.text;
             continue;

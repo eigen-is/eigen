@@ -44,6 +44,18 @@ export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]
 
 export const PRIME = '′';
 
+// The minus operator: Chrome draws an ASCII hyphen-minus in an mo as a hyphen, so every reader folds one to U+2212.
+export const MINUS = '\u2212';
+
+// Unicode's superscript and subscript digits and signs: each reads as a script holding its NFKC character.
+export const SCRIPT_CHARS: ReadonlyMap<string, readonly ['sub' | 'sup', string]> = new Map(
+    (['sup', 'sub'] as const).flatMap((slot) =>
+        [...(slot === 'sup' ? '⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾' : '₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎')].map(
+            (char) => [char, [slot, char.normalize('NFKC')]] as const,
+        ),
+    ),
+);
+
 // The large operators by their unicode-math names, which LaTeX writes.
 const INTEGRAL_NAMES: Readonly<Record<string, string>> = {
     int: '∫',
@@ -107,7 +119,8 @@ export function naryLimits(operator: string): 'under' | 'side' {
 
 // Unicode's Mathematical Alphanumeric Symbols, block by block, with the letters it left in Letterlike Symbols.
 const LATIN = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const GREEK = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ∇αβγδεζηθικλμνξοπρςστυφχψω∂ϵϑϰϕϱϖ';
+const GREEK_CAPITALS = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ';
+const GREEK = `${GREEK_CAPITALS}∇αβγδεζηθικλμνξοπρςστυφχψω∂ϵϑϰϕϱϖ`;
 const DIGITS = '0123456789';
 
 const BLOCKS: readonly [MathVariant, string, number][] = [
@@ -137,6 +150,9 @@ const BLOCKS: readonly [MathVariant, string, number][] = [
     ['bold-sans-serif', DIGITS, 0x1d7ec],
     ['monospace', DIGITS, 0x1d7f6],
 ];
+
+// TeX and Word draw a capital Greek letter upright.
+export const UPRIGHT_LETTERS: ReadonlySet<string> = new Set(GREEK_CAPITALS);
 
 const LETTERLIKE: Readonly<Record<string, string>> = {
     'italic h': 'ℎ',

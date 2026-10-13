@@ -5,14 +5,18 @@ import {
     FENCES,
     LARGE_OPERATORS,
     LINES,
+    MINUS,
     naryLimits,
     SPACES,
     toAlphanumeric,
 } from './notation';
 import {
     bound,
+    casesOf,
+    defaultVariant,
     equationCells,
     hexColor,
+    isCluster,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     MATH_SPACES,
@@ -72,8 +76,11 @@ function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undef
     const scripted = first?.ns === MATHML_NAMESPACE && SCRIPT_SLOTS.has(first.local);
     const operator = scripted ? elementsOf(first)[0] : first;
     if (is(operator, 'mo')) {
-        const char = mark(textOf(operator));
-        if (char && (isFlagged(operator, 'largeop') || (scripted && LARGE_OPERATORS.has(char)))) return 'nary';
+        // One character: a mark after it makes a symbol of its own, such as ∑̸.
+        const text = trimXmlSpace(textOf(operator));
+        const char = mark(text);
+        if (char && char === text && (isFlagged(operator, 'largeop') || (scripted && LARGE_OPERATORS.has(char))))
+            return 'nary';
     }
     if (children.length >= 2 && isFlagged(first, 'fence') && isFlagged(children.at(-1), 'fence')) return 'fenced';
     if (children.length === 3 && is(children[1], 'mo') && trimXmlSpace(textOf(children[1])) === FUNCTION_APPLICATION)
@@ -170,8 +177,10 @@ function readToken(row: RowBuilder, element: MathXmlElement): void {
     const mathvariant = attribute(element, 'mathvariant');
     const variant = MATH_VARIANTS.find((candidate) => candidate === mathvariant);
     // MathML draws a lone letter in an mi italic and anything else upright.
-    const lone = element.local === 'mi' && /^.$/su.test(text);
-    row.chars(text, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
+    const lone = element.local === 'mi' && isCluster(text);
+    // A hyphen-minus in an mo is the minus sign; in an mi it may join a word, as in arg-max.
+    const chars = element.local === 'mo' ? text.replaceAll('-', MINUS) : text;
+    row.chars(chars, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', colorOf(element));
 }
 
 function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void {
@@ -341,7 +350,10 @@ const colorAttribute = (color: string | undefined) => {
 
 function writeToken(node: MathToken): string {
     const tag = node.kind === 'identifier' ? 'mi' : node.kind === 'number' ? 'mn' : 'mo';
-    const { variant } = node;
+    // MathML draws a lone letter italic, so an upright one says so.
+    const upright =
+        node.kind === 'identifier' && isCluster(node.text) && defaultVariant(node.kind, node.text) === 'normal';
+    const variant = node.variant ?? (upright ? 'normal' : undefined);
     // Chrome draws Unicode's alphanumerics but honours only mathvariant="normal": a variant is a character where
     // Unicode has one.
     const styled = variant && [...node.text].map((char) => toAlphanumeric(char, variant));
@@ -356,8 +368,8 @@ const writeRow = (row: MathRow) => row.map(writeNode).join('');
 
 const writeArgument = (row: MathRow) => (row.length === 1 ? writeNode(row[0]) : `<mrow>${writeRow(row)}</mrow>`);
 
-// A large operator alone in a base is wrapped, so a reader never takes its scripts, limit, accent, line or brace for
-// an n-ary.
+// A large operator alone in a base is wrapped, so a reader never takes its scripts, limit, accent, line or brace for an
+// n-ary.
 function writeBase(row: MathRow): string {
     const [single] = row;
     const bare = row.length === 1 && single.kind === 'operator' && LARGE_OPERATORS.has(single.text);
@@ -416,7 +428,8 @@ function writeNode(node: MathNode): string {
         }
         case 'fenced': {
             const separator = `<mo separator="true">${escapeXml(node.separator)}</mo>`;
-            const parts = node.parts.map(writeRow).join(separator);
+            const cases = casesOf(node);
+            const parts = cases ? writeTable(cases, ' columnalign="left"') : node.parts.map(writeRow).join(separator);
             return `<mrow><mo fence="true">${escapeXml(node.open)}</mo>${parts}<mo fence="true">${escapeXml(node.close)}</mo></mrow>`;
         }
         case 'function':
@@ -443,13 +456,14 @@ function writeNode(node: MathNode): string {
             const columns = Math.max(0, ...node.rows.map((cells) => cells.length));
             // Equations align as Word's & marks do: right of the first mark, left of the next, by turns.
             const align = Array.from({ length: columns }, (_, index) => (index % 2 === 0 ? 'right' : 'left')).join(' ');
-            const layout = node.layout === 'equations' ? ` displaystyle="true" columnalign="${align}"` : '';
-            const rows = node.rows.map(
-                (cells) => `<mtr>${cells.map((cell) => `<mtd>${writeRow(cell)}</mtd>`).join('')}</mtr>`,
-            );
-            return `<mtable${layout}>${rows.join('')}</mtable>`;
+            return writeTable(node, node.layout === 'equations' ? ` displaystyle="true" columnalign="${align}"` : '');
         }
     }
+}
+
+function writeTable(node: Extract<MathNode, { kind: 'table' }>, layout: string): string {
+    const rows = node.rows.map((cells) => `<mtr>${cells.map((cell) => `<mtd>${writeRow(cell)}</mtd>`).join('')}</mtr>`);
+    return `<mtable${layout}>${rows.join('')}</mtable>`;
 }
 
 export function writeMathml(row: MathRow, latex?: string): string {

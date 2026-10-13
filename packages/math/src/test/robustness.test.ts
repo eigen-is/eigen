@@ -11,8 +11,8 @@ import { canonicalIssue } from './canonical';
 import { generateTree, pick, type Random, seeded } from './generate';
 import { el, parseWritten, viaLatex, viaMathml, viaOmml } from './parse';
 
-// Over the whole package: every reader on seeded random input, the largest admitted trees through every
-// writer, and what each writer may put in its output.
+// Over the whole package: every reader on seeded random input, the largest admitted trees through every writer, and
+// what each writer may put in its output.
 
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
 
@@ -83,6 +83,9 @@ const TEXTS = [
     'ℝ',
     '😀',
     '\u0302',
+    '\u0338',
+    '²',
+    '₋',
     '¯',
     'a b ',
     '∑',
@@ -128,8 +131,8 @@ function element(grammar: Grammar, name: string, random: Random, depth: number):
 
 const isElement = (child: string | object): child is MathXmlElement => typeof child === 'object' && 'local' in child;
 
-// A writer's output with seeded damage: an element may lose, repeat or swap a child, gain a random one, change its
-// name or its attributes, and a text may change, so a reader meets its own patterns broken in every way.
+// A writer's output with seeded damage: an element may lose, repeat or swap a child, gain a random one, change its name
+// or its attributes, and a text may change, so a reader meets its own patterns broken in every way.
 function damaged(grammar: Grammar, original: MathXmlElement, random: Random): MathXmlElement {
     const children = original.children.map((child) => {
         if (typeof child === 'string') return random() < 0.1 ? pick(random, TEXTS) : child;
@@ -286,7 +289,8 @@ describe('every reader ends in a tree or a MathError, within its time budget', (
             ...['\\limits', '\\sin', '\\lim', '\\operatorname', '\\operatorname*{arg}', '\\text{', '\\text{a  b}'],
             ...['\\color{red}', '\\textcolor{blue}', '\\mathbf', '\\mathrm', '\\hat', '\\overline', '\\overbrace'],
             ...['\\overset', '\\xrightarrow', '\\xrightarrow[a]', '\\prescript', '\\boxed', '\\enclose{top}', '\\pmod'],
-            ...['\\alpha', '\\displaystyle', '\\unknown', '\\href{javascript:alert(1)}{x}'],
+            ...['\\alpha', '\\displaystyle', '\\unknown', '\\href{javascript:alert(1)}{x}', '\\not', '\\Gamma'],
+            ...['\u0301', '\u0338', '\u0311', '²', '⁻', '₂'],
         ];
         const random = seeded(7);
         const start = performance.now();
@@ -303,9 +307,9 @@ describe('every reader ends in a tree or a MathError, within its time budget', (
         expect(performance.now() - start).toBeLessThan(5000);
     });
 
-    // Each writer's costliest unit, as many as the size bound admits: an enclose drawing every line around an empty
-    // row (MathML's and LaTeX's), a coloured operator in the longest font command with the longest symbol command,
-    // and coloured text of backslashes.
+    // Each writer's costliest unit, as many as the size bound admits: an enclose drawing every line around an empty row
+    // (MathML's and LaTeX's), a coloured operator in the longest font command with the longest symbol command, and
+    // coloured text of backslashes.
     test('the largest admitted trees go through every writer and back; one unit more is an error', () => {
         const units = Math.floor((MATH_LIMITS.size - 1) / 2);
         const enclosures = (count: number) =>
@@ -385,8 +389,8 @@ function ommlVocabulary(element: MathXmlElement): string[] {
 }
 
 describe('a writer’s output holds only its own vocabulary', () => {
-    // LaTeX's vocabulary is the command table: the reader knows nothing else, so output that reads back holds
-    // nothing else. The text form is one line.
+    // LaTeX's vocabulary is the command table: the reader knows nothing else, so output that reads back holds nothing
+    // else. The text form is one line.
     test('hostile, forged and 200 seeded trees through every writer', () => {
         const seededTrees = Array.from({ length: 200 }, (_, seed) => generateTree(seed + 1));
         for (const tree of [...HOSTILE, ...FORGED, ...seededTrees]) {

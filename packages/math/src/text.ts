@@ -38,7 +38,8 @@ function nodeText(node: MathNode): string {
         case 'space':
             return ' ';
         case 'fraction':
-            return `${argument(node.numerator)}/${argument(node.denominator)}`;
+            // UnicodeMath's ¦ stacks without a bar.
+            return `${argument(node.numerator)}${node.line === 'none' ? '¦' : '/'}${argument(node.denominator)}`;
         case 'scripts':
             return node.pre ? `${scripts(node)} ${argument(node.base)}` : `${argument(node.base)}${scripts(node)}`;
         case 'radical': {

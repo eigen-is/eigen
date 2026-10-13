@@ -9,7 +9,7 @@ import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS, type MathNode
 import { canonicalIssue } from './canonical';
 import { CORPUS } from './corpus';
 import { LATEX_FORMULAS } from './fixtures/latex-formulas';
-import { generateTree } from './generate';
+import { generateTree, seedChunks } from './generate';
 import { LOSSES } from './latex-losses';
 import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
 
@@ -53,8 +53,11 @@ const withoutLosses = (row: MathRow): MathRow =>
                 return BRACE_COMMANDS.has(node.char + node.position)
                     ? node
                     : { ...node, char: node.position === 'over' ? '⏞' : '⏟' };
+            // An accent outside the table is \overset of its mark; one in the table without a command is lost.
             case 'accent':
-                return ACCENT_COMMANDS.has(node.accent) ? node : { ...node, accent: '\u0302' };
+                return ACCENT_COMMANDS.has(node.accent) || !ACCENTS.has(node.accent)
+                    ? node
+                    : { ...node, accent: '\u0302' };
             case 'nary':
                 if (LARGE_OPERATORS.has(node.operator)) return node;
                 return { ...node, operator: '∑', limits: node.sub || node.sup ? node.limits : naryLimits('∑') };
@@ -92,14 +95,22 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
         }
     });
 
-    // Seed 3329 is the first of 43 in 100,000 that once broke; 58606 broke a function named by a limit.
-    test('10,000 seeded canonical trees, with the pictures LaTeX lacks swapped out', () => {
-        for (const seed of [...Array.from({ length: 10_000 }, (_, index) => index + 1), 58_606]) {
-            const tree = withoutLosses(generateTree(seed));
-            expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
-            expect({ seed, tree: viaLatex(tree) }).toStrictEqual({ seed, tree });
-        }
-    });
+    // KaTeX rejects a raw U+0338, so every slash is \not.
+    test.each(seedChunks(10_000))(
+        'seeded canonical trees %i to %i, with the pictures LaTeX lacks swapped out',
+        (first, last) => {
+            for (let seed = first; seed <= last; seed++) {
+                const tree = withoutLosses(generateTree(seed));
+                expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
+                const latex = writeLatex(tree);
+                expect({ seed, tree: readLatex(latex), slash: latex.includes('\u0338') }).toStrictEqual({
+                    seed,
+                    tree,
+                    slash: false,
+                });
+            }
+        },
+    );
 
     test.each<[string, MathRow]>([
         [
@@ -182,7 +193,6 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
         const lossy: MathRow = [
             { kind: 'fraction', numerator: x, denominator: letter('y'), line: 'skewed' },
             { kind: 'brace', char: '→', position: 'over', body: x },
-            { kind: 'accent', accent: '\u0311', body: x },
             { kind: 'nary', operator: '⋆', limits: 'under', sub: letter('i'), body: x },
             { kind: 'fenced', open: '⟪', close: '⟫', separator: '', parts: [x] },
             { kind: 'fenced', open: '(', close: ')', separator: ',', parts: [x, letter('y')] },
@@ -426,7 +436,7 @@ describe('readLatex', () => {
                         [
                             {
                                 kind: 'table',
-                                layout: 'equations',
+                                layout: 'matrix',
                                 rows: [
                                     [one, x],
                                     [two, letter('y')],
@@ -442,6 +452,24 @@ describe('readLatex', () => {
             [{ kind: 'table', layout: 'matrix', rows: [[letter('a')], [letter('b')]] }],
         ],
         ['\\begin{matrix} a \\\\ {} \\end{matrix}', [{ kind: 'table', layout: 'matrix', rows: [[letter('a')], [[]]] }]],
+        // A gap's [ follows \\ directly, as amsmath reads it; after a space it starts the next row.
+        [
+            '\\begin{matrix}a\\\\ [b]\\end{matrix}',
+            [
+                {
+                    kind: 'table',
+                    layout: 'matrix',
+                    rows: [
+                        [letter('a')],
+                        [[{ kind: 'operator', text: '[' }, ...letter('b'), { kind: 'operator', text: ']' }]],
+                    ],
+                },
+            ],
+        ],
+        [
+            '\\begin{aligned}a\\\\*b\\\\*[1.5ex]c\\end{aligned}',
+            [{ kind: 'table', layout: 'equations', rows: [[letter('a')], [letter('b')], [letter('c')]] }],
+        ],
         [
             '\\big( x \\Bigr) \\bigl\\{ \\Biggm| \\bigg.',
             [
@@ -512,6 +540,15 @@ describe('readLatex', () => {
             ],
         ],
         ['\\text{\\textasciitilde{}\\textasciicircum{}}', [{ kind: 'text', text: '~^' }]],
+        // \not slashes the next symbol, composed where Unicode has the character.
+        ['\\not=', [{ kind: 'operator', text: '≠' }]],
+        ['a\\not\\in b', [...letter('a'), { kind: 'operator', text: '∉' }, ...letter('b')]],
+        ['\\not\\equiv', [{ kind: 'operator', text: '≢' }]],
+        ['\\not\\subset', [{ kind: 'operator', text: '⊄' }]],
+        ['\\not\\preceq', [{ kind: 'operator', text: '⪯\u0338' }]],
+        ['\\not a^2', [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'a\u0338' }], sup: two }]],
+        // A character's combining marks are part of it, so scripts take both.
+        ['e\u0301^2', [{ kind: 'scripts', base: [{ kind: 'accent', accent: '\u0301', body: letter('e') }], sup: two }]],
     ])('%p', (latex, tree) => {
         const read = readLatex(latex);
         expect(read).toStrictEqual(tree);
@@ -552,6 +589,11 @@ describe('readLatex', () => {
         ['x^\\frac1', 8],
         ['\\big x', 5],
         ['\\textasciitilde', 0],
+        ['\\begin{matrix}a\\\\[b]\\end{matrix}', 17],
+        ['\\not\\frac12', 4],
+        ['\\not{=}', 4],
+        ['x^\\not', 6],
+        ['\\begin{matrix}a\\\\[{2pt}]b\\end{matrix}', 17],
     ])('%p is a MathError at offset %p', (latex, offset) => {
         expect(thrown(() => readLatex(latex))?.offset).toBe(offset);
     });
@@ -582,6 +624,10 @@ describe('writeLatex', () => {
         [[{ kind: 'radical', body: x, degree: [{ kind: 'operator', text: ']' }] }], '\\sqrt[{]}]{x}'],
         [[{ kind: 'radical', body: x, degree: [{ kind: 'scripts', base: [], sup: x }] }], '\\sqrt[{{}^{x}}]{x}'],
         [[{ kind: 'space', width: 'normal' }, ...x], '\\ x'],
+        // TeX raises a ' as a superscript, so a superscript prime is \prime.
+        [[{ kind: 'scripts', base: x, sup: [prime] }], 'x^{\\prime}'],
+        [[{ kind: 'scripts', base: x, sub: one, sup: [prime, prime] }], 'x_{1}^{\\prime\\prime}'],
+        [[{ kind: 'scripts', base: x, sup: [prime, ...x] }], "x^{'x}"],
         // A prime after a script would be TeX's double superscript.
         [[{ kind: 'scripts', base: x, sup: x }, prime], "x^{x}{}'"],
         [[{ kind: 'scripts', base: x, sub: x }, prime], "x_{x}{}'"],
@@ -605,6 +651,89 @@ describe('writeLatex', () => {
             '\\alpha @',
         ],
         [[{ kind: 'table', layout: 'matrix', rows: [[x], [[]]] }], '\\begin{matrix}x \\\\ {}\\end{matrix}'],
+        [[{ kind: 'operator', text: '≠' }], '\\ne'],
+        [[{ kind: 'operator', text: '∉' }], '\\notin'],
+        [[{ kind: 'operator', text: '≢' }], '\\not\\equiv'],
+        [[{ kind: 'operator', text: '≮' }], '\\not<'],
+        [[{ kind: 'operator', text: '⪯\u0338' }], '\\not\\preceq'],
+        [[{ kind: 'identifier', text: 'a\u0338' }], '\\not a'],
+        [[{ kind: 'operator', text: '∑\u0338' }], '\\not\\sum'],
+        [[{ kind: 'operator', text: '≠\u0338' }], '\\not\\ne'],
+        [[{ kind: 'operator', text: '{\u0338' }], '\\not\\{'],
+        [[{ kind: 'operator', text: '′\u0338' }], '\\not\\prime'],
+        // \not puts its slash last, after the symbol's marks; it slashes twice as \not\not.
+        [[{ kind: 'identifier', text: 'x\u0338\u0338' }], '\\not\\not x'],
+        [[{ kind: 'identifier', text: 'Γ\u0338\u0338' }], '\\not\\not\\Gamma'],
+        [[{ kind: 'identifier', text: 'x\u20D2\u0338' }], '\\not x\u20D2'],
+        [[{ kind: 'operator', text: '∑\u20D2\u0338' }], '\\not\\sum\u20D2'],
+        [[{ kind: 'operator', text: '#\u0338' }], '\\not\\#'],
+        // A slash before another mark stays where it is, as itself: \not would put it last.
+        [[{ kind: 'identifier', text: 'x\u0338\u20D2' }], 'x\u0338\u20D2'],
+        [[{ kind: 'identifier', text: 'x\u0338\u0335' }], 'x\u0338\u0335'],
+        [[{ kind: 'operator', text: '≠\u20D2' }], '\\ne\u20D2'],
+        // In \operatorname a - between letters is a hyphen, as amsmath draws it, so a minus there is written as itself.
+        [[{ kind: 'identifier', text: 'arg-max' }], '{\\operatorname{arg-max}}'],
+        [
+            [{ kind: 'function', name: [{ kind: 'identifier', text: 'arg-max' }], body: x }],
+            '\\operatorname{arg-max}{x}',
+        ],
+        [
+            [
+                {
+                    kind: 'function',
+                    name: [
+                        { kind: 'identifier', text: 'arg' },
+                        { kind: 'operator', text: '\u2212' },
+                        { kind: 'identifier', text: 'max' },
+                    ],
+                    body: x,
+                },
+            ],
+            '\\operatorname{arg\u2212max}{x}',
+        ],
+        [[{ kind: 'scripts', base: [{ kind: 'identifier', text: 'a-b' }], sup: x }], '{\\operatorname{a-b}}^{x}'],
+        // A { before a matrix is cases; before equations it is a fenced aligned.
+        [
+            [
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [
+                        [
+                            {
+                                kind: 'table',
+                                layout: 'matrix',
+                                rows: [
+                                    [one, x],
+                                    [two, letter('y')],
+                                ],
+                            },
+                        ],
+                    ],
+                },
+            ],
+            '\\begin{cases}1 & x \\\\ 2 & y\\end{cases}',
+        ],
+        [
+            [
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [[{ kind: 'table', layout: 'equations', rows: [[one, x]] }]],
+                },
+            ],
+            '\\left\\{\\begin{aligned}1 & x\\end{aligned}\\right.',
+        ],
+        // An accent outside the accent table is \overset of its mark, which reads back as the accent.
+        [[{ kind: 'accent', accent: '\u0311', body: x }], '\\overset{\u0311}{x}'],
+        [
+            [{ kind: 'table', layout: 'matrix', rows: [[x], [[{ kind: 'operator', text: '[' }, ...x]]] }],
+            '\\begin{matrix}x \\\\ [x\\end{matrix}',
+        ],
     ])('%j', (row, latex) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(row);
@@ -641,6 +770,14 @@ describe('writeLatex', () => {
         ],
         [[{ kind: 'operator', text: '~' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
+        [[{ kind: 'operator', text: '^\u0338' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
+        [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
+        [[{ kind: 'operator', text: "'\u0338" }], '\\not\\prime', [{ kind: 'operator', text: '′\u0338' }]],
+        [
+            [{ kind: 'accent', accent: '∘', body: x }],
+            '\\overset{\\circ}{x}',
+            [{ kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '∘' }] }],
+        ],
     ])('%j is written %p', (row, latex, read) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(read);
@@ -748,55 +885,68 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
         }
     });
 
-    // What LaTeX admits, MathML stores and reads back: neither counts a row or node the tree lacks.
-    test('the size bound counts the tree, as MathML does', () => {
-        const plus: MathNode = { kind: 'operator', text: '+' };
-        const units: MathNode[] = [
-            { kind: 'number', text: '42' },
-            { kind: 'text', text: 'a b' },
-            { kind: 'nary', operator: '∑', limits: 'under', sub: x, body: [] },
-            { kind: 'scripts', base: [], sub: x },
-            { kind: 'scripts', base: x, sub: x, pre: true },
-            { kind: 'scripts', base: x, sup: x, pre: true },
-            { kind: 'radical', body: x, degree: x },
-            { kind: 'fenced', open: '(', close: ')', separator: '|', parts: [[], x] },
-            { kind: 'function', name: [{ kind: 'identifier', text: 'lim' }], body: [] },
-            { kind: 'table', layout: 'equations', rows: [[[], x], [[]]] },
-            { kind: 'table', layout: 'equations', rows: [[x, x, x, x]] },
-            { kind: 'fraction', numerator: [], denominator: x, line: 'none' },
-            {
-                kind: 'limit',
-                position: 'over',
-                base: [{ kind: 'brace', char: '⏞', position: 'over', body: [] }],
-                limit: x,
-            },
-        ];
-        for (const unit of units) {
-            const row = (count: number): MathRow => Array.from({ length: count }, () => [unit, plus]).flat();
-            const admits = (count: number) => thrown(() => viaLatex(row(count))) === undefined;
-            let low = 1;
-            let high = MATH_LIMITS.size;
-            while (low < high) {
-                const middle = Math.ceil((low + high) / 2);
-                if (admits(middle)) low = middle;
-                else high = middle - 1;
-            }
-            expect(viaLatex(row(low))).toStrictEqual(row(low));
-            expect(viaOmml(row(low))).toStrictEqual(row(low));
-            expect(viaMathml(row(low))).toStrictEqual(row(low));
-            expect(thrown(() => viaMathml(row(low + 1)))).toBeInstanceOf(MathError);
-            expect(thrown(() => viaOmml(row(low + 1)))).toBeInstanceOf(MathError);
-            expect(writeLatex(row(low + 1)).length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
-        }
-        // Typed forms the writer never emits: the largest tree LaTeX admits from them, MathML stores too.
-        for (const typed of [
-            '\\sum_x+',
-            '\\lim_x+',
-            '{}^x+',
-            '\\prescript{}{x}{y}+',
-            '\\xrightarrow[x]{y}+',
-            '\\pmod{x}',
+    test('a bound error points into the LaTeX, whichever bound it meets', () => {
+        for (const latex of [
+            'x'.repeat(5000),
+            '1'.repeat(5000),
+            `\\text{${'a'.repeat(5000)}}`,
+            'x+'.repeat(2100),
+            '\\frac{}{}'.repeat(1400),
+            `\\begin{matrix}${'x&'.repeat(3000)}x\\end{matrix}`,
+            `{${'\\mathbf{'.repeat(40)}x${'}'.repeat(41)}`,
         ]) {
+            const offset = thrown(() => readLatex(latex))?.offset;
+            expect({ latex: latex.slice(0, 16), offset }).toEqual({
+                latex: latex.slice(0, 16),
+                offset: expect.any(Number),
+            });
+            expect(offset).toBeLessThanOrEqual(latex.length);
+        }
+    });
+
+    // What LaTeX admits, MathML stores and reads back: neither counts a row or node the tree lacks.
+    const plus: MathNode = { kind: 'operator', text: '+' };
+    test.each<MathNode>([
+        { kind: 'number', text: '42' },
+        { kind: 'text', text: 'a b' },
+        { kind: 'nary', operator: '∑', limits: 'under', sub: x, body: [] },
+        { kind: 'scripts', base: [], sub: x },
+        { kind: 'scripts', base: x, sub: x, pre: true },
+        { kind: 'scripts', base: x, sup: x, pre: true },
+        { kind: 'radical', body: x, degree: x },
+        { kind: 'fenced', open: '(', close: ')', separator: '|', parts: [[], x] },
+        { kind: 'function', name: [{ kind: 'identifier', text: 'lim' }], body: [] },
+        { kind: 'table', layout: 'equations', rows: [[[], x], [[]]] },
+        { kind: 'table', layout: 'equations', rows: [[x, x, x, x]] },
+        { kind: 'fraction', numerator: [], denominator: x, line: 'none' },
+        {
+            kind: 'limit',
+            position: 'over',
+            base: [{ kind: 'brace', char: '⏞', position: 'over', body: [] }],
+            limit: x,
+        },
+    ])('the size bound counts the tree, as MathML does: %j', (unit) => {
+        const row = (count: number): MathRow => Array.from({ length: count }, () => [unit, plus]).flat();
+        const admits = (count: number) => thrown(() => viaLatex(row(count))) === undefined;
+        let low = 1;
+        let high = MATH_LIMITS.size;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (admits(middle)) low = middle;
+            else high = middle - 1;
+        }
+        expect(viaLatex(row(low))).toStrictEqual(row(low));
+        expect(viaOmml(row(low))).toStrictEqual(row(low));
+        expect(viaMathml(row(low))).toStrictEqual(row(low));
+        expect(thrown(() => viaMathml(row(low + 1)))).toBeInstanceOf(MathError);
+        expect(thrown(() => viaOmml(row(low + 1)))).toBeInstanceOf(MathError);
+        expect(writeLatex(row(low + 1)).length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
+    });
+
+    // Typed forms the writer never emits: the largest tree LaTeX admits from them, MathML stores too.
+    test.each(['\\sum_x+', '\\lim_x+', '{}^x+', '\\prescript{}{x}{y}+', '\\xrightarrow[x]{y}+', '\\pmod{x}'])(
+        'the largest tree LaTeX admits from %p, MathML stores',
+        (typed) => {
             let low = 1;
             let high = MATH_LIMITS.size;
             while (low < high) {
@@ -805,9 +955,9 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
                 else high = middle - 1;
             }
             const tree = readLatex(typed.repeat(low));
-            expect({ typed, tree: viaMathml(tree) }).toStrictEqual({ typed, tree });
-        }
-    });
+            expect(viaMathml(tree)).toStrictEqual(tree);
+        },
+    );
 
     test('LaTeX past its cap is an error', () => {
         expect(readLatex(`${' '.repeat(MATH_LIMITS.latexLength - 1)}x`)).toStrictEqual(x);
@@ -854,7 +1004,7 @@ describe('LATEX_COMMANDS', () => {
             genfrac: ['', '', '0pt', '', 'a', 'b'],
             notation: ['top', 'x'],
         };
-        const structural = new Set(['left', 'middle', 'right', 'begin', 'end', 'limits', 'noop', 'big']);
+        const structural = new Set(['left', 'middle', 'right', 'begin', 'end', 'limits', 'noop', 'big', 'not']);
         for (const [name, command] of LATEX_COMMANDS) {
             if (structural.has(command.kind)) continue;
             const count = command.arguments;

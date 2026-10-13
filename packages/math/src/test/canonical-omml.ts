@@ -1,9 +1,9 @@
 import { OMML_NAMESPACE, WORDML_NAMESPACE } from '../omml';
 import { attribute, elementsOf, type MathXmlElement, textOf } from '../xml';
 
-// The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their properties
-// resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't count.
-// Only properties the tree keeps are compared; MATH.md lists what is dropped.
+// The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their
+// properties resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't
+// count. Only properties the tree keeps are compared; MATH.md lists what is dropped.
 
 export type CanonicalItem = string | CanonicalObject;
 export type CanonicalObject = { object: string; properties: Record<string, string>; children: CanonicalChild[] };
@@ -176,6 +176,11 @@ export const NORMALISATIONS: { reason: string; indices: number[]; apply: (row: C
             apply: eachCharacter((char) =>
                 /^[ \u2003\u2004\u2009\u205F]\|(?!nor)/u.test(char) ? `${char[0]}|p|roman` : char,
             ),
+        },
+        {
+            reason: 'an operator hyphen-minus reads as the minus sign U+2212',
+            indices: [12, 43, 44, 56, 57, 60, 61, 63, 79, 80, 83, 90, 91, 156, 158, 159, 160],
+            apply: eachCharacter((char) => (/^-\|(?!nor)/.test(char) ? `\u2212${char.slice(1)}` : char)),
         },
         {
             reason: 'an empty script or degree shows nothing, so it reads as hidden',

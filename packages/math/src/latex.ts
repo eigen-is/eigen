@@ -1,11 +1,14 @@
 import { MathError } from './error';
 import { LATEX_COLORS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
-import { ACCENTS, naryLimits, PRIME, SPACES } from './notation';
+import { ACCENTS, MINUS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
+    clusters,
     DIGIT,
+    defaultVariant,
     equationCells,
     hexColor,
+    MARK,
     MATH_ENCLOSURES,
     MATH_LIMITS,
     type MathBudget,
@@ -13,6 +16,7 @@ import {
     type MathRow,
     type MathToken,
     type MathVariant,
+    mark,
     numberEnd,
     optional,
     RowBuilder,
@@ -21,6 +25,8 @@ import {
 import { checkedXml, NOT_XML } from './xml';
 
 const NO_BREAK_SPACE = '\u00A0';
+// The slash \not puts through a symbol.
+const NOT = '\u0338';
 
 // The fence characters a \left, \middle or \right takes as they are; the rest are commands.
 const DELIMITER_CHARS: ReadonlySet<string> = new Set('()[]|/');
@@ -50,16 +56,19 @@ const TEXT_COMMANDS: ReadonlyMap<string, string> = new Map(
 
 type Token = { text: string; at: number; command: boolean; space: boolean };
 
-type Style = { letters: MathVariant; others: MathVariant; color: string | undefined };
+// `letters` undefined is math's default: italic, but upright for a capital Greek letter, as TeX draws it. `hyphen` is
+// \operatorname's: a - between letters there is a hyphen, as amsmath draws it, and the minus sign elsewhere.
+type Style = { letters: MathVariant | undefined; others: MathVariant; color: string | undefined; hyphen?: true };
 
 // What an atom adds to its row. Characters wait in the row's builder, so tokens come out canonical across atoms.
 type Piece = { chars: string; style: Style } | { text: string; color: string | undefined } | { node: MathNode };
 
-const MATH: Style = { letters: 'italic', others: 'normal', color: undefined };
+const MATH: Style = { letters: undefined, others: 'normal', color: undefined };
 
-// Leading spaces, then a comment, a control word or space with TeX's skipped spaces, a control symbol or a character.
+// Leading spaces, then a comment, a control word or space with TeX's skipped spaces, a control symbol, or a character
+// with its combining marks; a mark after a character the parser reads as structure is a token of its own.
 const TOKEN =
-    /([ \t\r\n]*)(?:(%[^\n]*\n?[ \t]*)|\\([A-Za-z]+)[ \t\r\n]*|\\([ \t\r\n])[ \t\r\n]*|\\(.)|([^ \t\r\n]))/suy;
+    /([ \t\r\n]*)(?:(%[^\n]*\n?[ \t]*)|\\([A-Za-z]+)[ \t\r\n]*|\\([ \t\r\n])[ \t\r\n]*|\\(.)|([{}[\]^_&'~]|[^ \t\r\n]\p{M}*))/suy;
 
 const CLOSERS: ReadonlyMap<string, string> = new Map([
     ['{', '}'],
@@ -126,11 +135,14 @@ function delimiterOf(token: Token): string | undefined {
     return command?.kind === 'symbol' && command.class === 'delimiter' ? command.char : undefined;
 }
 
+// The units KaTeX and MathJax share.
+const DIMENSION = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(?:pt|mm|cm|in|pc|px|em|ex|mu)\s*$/;
+
 // What a function name or large operator never takes as its body: a lone operator or space.
 const LONE = /^[^\p{L}0-9]+$/u;
 
 class LatexReader {
-    readonly #budget: MathBudget = { size: 0 };
+    readonly #budget: MathBudget = { size: 0, at: () => this.#offset(this.#pos) };
     readonly #latex: string;
     readonly #tokens: Token[];
     readonly #partners: number[];
@@ -154,13 +166,13 @@ class LatexReader {
     }
 
     #build(pieces: Piece[], depth: number, slot?: RowSlot): MathRow {
-        bound(this.#budget, depth, 0, this.#offset(this.#pos));
         const row = new RowBuilder(this.#budget, depth, slot);
         for (const piece of pieces) {
             if ('node' in piece) row.node(piece.node);
-            else if ('chars' in piece)
-                row.chars(piece.chars, piece.style.letters, piece.style.others, piece.style.color);
-            else row.text(piece.text, piece.color);
+            else if ('chars' in piece) {
+                const { letters, others, color, hyphen } = piece.style;
+                row.chars(hyphen ? piece.chars : piece.chars.replaceAll('-', MINUS), letters, others, color);
+            } else row.text(piece.text, piece.color);
         }
         return row.done();
     }
@@ -190,6 +202,11 @@ class LatexReader {
 
     #isScriptAt(index: number): boolean {
         return this.#isChar(index, '^') || this.#isChar(index, '_');
+    }
+
+    // A token of combining marks alone, which join the character before them.
+    #isMark(index: number): boolean {
+        return index < this.#end && !this.#tokens[index].command && /^\p{M}/u.test(this.#tokens[index].text);
     }
 
     #isDigit(index: number): boolean {
@@ -228,6 +245,10 @@ class LatexReader {
                 return this.#argumentEnd(this.#partners[index] + 1, nesting);
             case 'big':
                 return end + 1;
+            case 'not':
+                while (this.#commandAt(end)?.kind === 'not') end++;
+                for (end++; this.#isMark(end); end++);
+                return end;
             case 'radical':
             case 'arrow':
                 end = this.#bracketEnd(end, nesting);
@@ -272,7 +293,7 @@ class LatexReader {
 
     #spliced(into: Piece[], style: Style, depth: number): void {
         this.#wrappers++;
-        bound(this.#budget, this.#wrappers, 0, this.#offset(this.#pos));
+        bound(this.#budget, this.#wrappers, 0);
         this.#argument(into, style, depth);
         this.#wrappers--;
     }
@@ -299,6 +320,16 @@ class LatexReader {
         this.#within(this.#pos + inner, end - inner, () => this.#atoms(pieces, style, depth));
         this.#pos = end;
         return optional(this.#build(pieces, depth, 'optional'));
+    }
+
+    // A group of one combining mark alone: the mark, the group read.
+    #loneMark(): string | undefined {
+        const token = this.#tokens[this.#pos + 1];
+        if (!this.#isChar(this.#pos, '{') || this.#partners[this.#pos] !== this.#pos + 2 || token.command)
+            return undefined;
+        if (!MARK.test(token.text) || mark(token.text) === '') return undefined;
+        this.#pos += 3;
+        return token.text;
     }
 
     // A braced argument as written: a colour, an enclosure's notation, a fraction's line, an environment's name.
@@ -449,7 +480,7 @@ class LatexReader {
         style: Style,
         depth: number,
     ): void {
-        const upright: Style = { ...style, letters: 'normal', others: 'normal' };
+        const upright: Style = { ...style, letters: 'normal', others: 'normal', hyphen: true };
         // \operatorname* puts its scripts under and over, as \lim does; \limits and \nolimits choose.
         const star = command.kind === 'operatorname' && this.#isChar(this.#pos, '*');
         if (star) this.#pos++;
@@ -554,6 +585,14 @@ class LatexReader {
         return { kind: 'fenced', open, close, separator: parts.length > 1 ? (separator ?? '') : '', parts };
     }
 
+    // A row gap: the tree keeps none, but it must be a dimension KaTeX and MathJax both read.
+    #gap(): void {
+        const open = this.#pos;
+        this.#pos = this.#bracketEnd(open, 0);
+        const gap = this.#latex.slice(this.#tokens[open].at + 1, this.#tokens[this.#pos - 1].at);
+        if (!DIMENSION.test(gap)) throw new MathError('A row gap is a dimension, such as 2pt', this.#tokens[open].at);
+    }
+
     #environment(style: Style, depth: number): MathNode {
         const begin = this.#pos - 1;
         const end = this.#partners[begin];
@@ -567,7 +606,7 @@ class LatexReader {
         const rows: MathRow[][] = [];
         this.#within(this.#pos, end, () => {
             let cells: MathRow[] = [];
-            bound(this.#budget, cellDepth, 1, this.#offset(this.#pos));
+            bound(this.#budget, cellDepth, 1);
             for (;;) {
                 const pieces: Piece[] = [];
                 this.#atoms(pieces, style, cellDepth);
@@ -577,12 +616,14 @@ class LatexReader {
                 const token = this.#tokens[this.#pos++];
                 if (token.command && token.text === 'middle') throw this.#unexpected(this.#pos - 1);
                 if (!token.command) continue;
-                // \\[2pt] sets a gap; a \\ after the last row starts none, as KaTeX and MathJax read it.
-                this.#pos = this.#bracketEnd(this.#pos, 0);
+                // \\* and \\[2pt] only space the rows, and only a * or [ right after the \\, as amsmath reads it.
+                if (this.#isChar(this.#pos, '*') && !this.#tokens[this.#pos].space) this.#pos++;
+                if (this.#isChar(this.#pos, '[') && !this.#tokens[this.#pos].space) this.#gap();
+                // A \\ after the last row starts none, as KaTeX and MathJax read it.
                 rows.push(cells);
                 cells = [];
                 if (this.#pos >= this.#end) return;
-                bound(this.#budget, cellDepth, 1, this.#offset(this.#pos));
+                bound(this.#budget, cellDepth, 1);
             }
             rows.push(cells);
         });
@@ -600,7 +641,7 @@ class LatexReader {
 
     // One atom, without its scripts, into a row at `depth`.
     #atom(into: Piece[], style: Style, depth: number): void {
-        bound(this.#budget, depth, 0, this.#offset(this.#pos));
+        bound(this.#budget, depth, 0);
         const token = this.#tokens[this.#pos];
         if (this.#isChar(this.#pos, '{')) {
             this.#spliced(into, style, depth);
@@ -648,6 +689,12 @@ class LatexReader {
                 into.push({ node: { kind: 'line', position: command.position, body: this.#row(style, depth + 1) } });
                 return;
             case 'limit': {
+                // \overset of one combining mark is an accent outside the accent table, as writeLatex writes one.
+                const accent = command.position === 'over' ? this.#loneMark() : undefined;
+                if (accent) {
+                    into.push({ node: { kind: 'accent', accent, body: this.#row(style, depth + 1) } });
+                    return;
+                }
                 const limit = this.#row(style, depth + 1);
                 const base = this.#row(style, depth + 1);
                 into.push({ node: { kind: 'limit', position: command.position, base, limit } });
@@ -731,6 +778,26 @@ class LatexReader {
             case 'big':
                 into.push({ chars: this.#delimiter(), style });
                 return;
+            case 'not': {
+                // \not\not slashes twice. NFC composes the slashed symbol where Unicode has it, such as ≠.
+                let slashes = NOT;
+                for (; this.#commandAt(this.#pos)?.kind === 'not'; this.#pos++) slashes += NOT;
+                const at = this.#offset(this.#pos);
+                const operator = this.#commandAt(this.#pos);
+                const next = this.#pos < this.#end ? this.#tokens[this.#pos++] : undefined;
+                const char =
+                    operator?.kind === 'largeOperator'
+                        ? operator.operator
+                        : next && (next.command || !/^[{}^_&]$/.test(next.text))
+                          ? charOf(next)
+                          : '';
+                if (char.trim() === '') throw new MathError('\\not takes a symbol', at);
+                // The slash comes after the marks written after the symbol, as it does after a character's own.
+                let marks = '';
+                for (; this.#isMark(this.#pos); this.#pos++) marks += this.#tokens[this.#pos].text;
+                into.push({ chars: char + marks + slashes, style });
+                return;
+            }
             case 'limits':
             case 'colorSwitch':
             case 'middle':
@@ -806,21 +873,45 @@ function joined(parts: readonly string[]): string {
 
 function writeChar(char: string): string {
     if (char === PRIME) return "'";
+    if (char === MINUS) return '-';
     const operator = OPERATOR_NAMES.get(char);
     // Alone, a large-operator command would take the next atom as its body.
     if (operator) return `{\\${operator}}`;
     const name = SPECIAL.has(char) || char > '~' ? SYMBOL_NAMES.get(char) : undefined;
     if (name !== undefined) return `\\${name}`;
-    // Math mode has no command KaTeX and MathJax both read for these: text draws them.
-    return char === '^' || char === '~' ? `\\text{${TEXT_ESCAPES[char]}}` : char;
+    const negated = negation(char);
+    if (negated !== undefined) return negated;
+    const [base] = char;
+    // Math mode has no command KaTeX and MathJax both read for these: text draws them, without their marks.
+    if (base === '^' || base === '~') return `\\text{${TEXT_ESCAPES[base]}}`;
+    // A character and the marks no command draws.
+    return [...char].length > 1 ? joined([...char].map(writeChar)) : char;
 }
 
-// The font a token needs beyond the default (italic letters, or upright in \operatorname); undefined if none.
+// What \not takes: one symbol, a slashed one too, then the marks after it.
+const SLASHABLE = /^(?:\\not ?)*(?:\\[A-Za-z]+|\\[^A-Za-z]|[^\\{}^_&'~])\p{M}*$/u;
+
+// A slashed symbol without a command of its own, such as ≢, is \not before the symbol, as TeX draws it. \not puts its
+// slash last, after the symbol's marks, so a slash before another mark stays as it is.
+function negation(char: string): string | undefined {
+    const decomposed = char.normalize('NFD');
+    if (!decomposed.endsWith(NOT)) return undefined;
+    const base = decomposed.slice(0, -1).normalize('NFC');
+    const written = writeChar(base);
+    if (SLASHABLE.test(written)) return joined(['\\not', written]);
+    // A large operator or a prime by its command, not as writeChar sets it apart; an apostrophe reads back as a prime.
+    const [head = '', ...marks] = base;
+    const name = head === PRIME || head === "'" ? 'prime' : OPERATOR_NAMES.get(head);
+    const symbol = name && joined([`\\${name}`, ...marks]);
+    return symbol && SLASHABLE.test(symbol) ? joined(['\\not', symbol]) : undefined;
+}
+
+// The font a token needs beyond the default (math's, or upright in \operatorname); undefined if none.
 function fontOf(node: MathToken, upright: boolean): MathVariant | undefined {
     if (node.kind !== 'identifier') return node.variant;
-    if ([...node.text].length > 1) return upright ? undefined : 'normal';
-    const variant = node.variant ?? 'italic';
-    return variant === (upright ? 'normal' : 'italic') ? undefined : variant;
+    if (clusters(node.text).length > 1) return upright ? undefined : 'normal';
+    const variant = node.variant ?? defaultVariant(node.kind, node.text);
+    return variant === (upright ? 'normal' : defaultVariant(node.kind, node.text)) ? undefined : variant;
 }
 
 const colored = (color: string | undefined, latex: string) => {
@@ -829,7 +920,11 @@ const colored = (color: string | undefined, latex: string) => {
 };
 
 function writeToken(node: MathToken, upright: boolean): string {
-    const text = joined([...node.text].map(writeChar));
+    // In \operatorname a - between letters is a hyphen, so the minus sign is written as itself there.
+    const text = upright && node.text === MINUS ? MINUS : joined(clusters(node.text).map(writeChar));
+    // A word with a hyphen keeps it only in \operatorname, braced so it takes no body.
+    if (!upright && node.kind === 'identifier' && node.text.includes('-'))
+        return colored(node.color, `{\\operatorname{${text}}}`);
     const font = fontOf(node, upright);
     return colored(node.color, font ? `\\${FONT_NAMES.get(font)}{${text}}` : text);
 }
@@ -897,9 +992,14 @@ function writeBase(row: MathRow, upright: boolean): string {
     return row.length === 1 && isAtom(row[0], upright) ? latex : `{${latex}}`;
 }
 
+const isPrime = (node: MathNode) => node.kind === 'operator' && node.text === PRIME && !node.variant && !node.color;
+
 function writeScripts(node: { sub?: MathRow; sup?: MathRow }, upright: boolean): string {
     const sub = node.sub ? `_{${writeRow(node.sub, upright)}}` : '';
-    return node.sup ? `${sub}^{${writeRow(node.sup, upright)}}` : sub;
+    if (!node.sup) return sub;
+    // TeX raises a ' as a superscript: in a superscript of primes alone it would rise twice.
+    const sup = node.sup.every(isPrime) ? '\\prime'.repeat(node.sup.length) : writeRow(node.sup, upright);
+    return `${sub}^{${sup}}`;
 }
 
 // A function name as its command where the table has one, with a limit or scripts after it.
@@ -950,8 +1050,8 @@ const interleave = (parts: string[], between: string[]) =>
 function writeTable(node: Extract<MathNode, { kind: 'table' }>, environment: string, upright: boolean): string {
     const rows = node.rows.map((cells, index) => {
         const row = cells.map((cell) => writeRow(cell, upright)).join(' & ');
-        // After \\ a [ reads as a gap, and nothing at the end as no row.
-        return index > 0 && (row === '' || row.startsWith('[')) ? `{}${row}` : row;
+        // Nothing after the last \\ reads as no row.
+        return index > 0 && row === '' ? '{}' : row;
     });
     return `\\begin{${environment}}${rows.join(' \\\\ ')}\\end{${environment}}`;
 }

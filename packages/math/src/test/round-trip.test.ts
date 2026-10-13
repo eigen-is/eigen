@@ -3,7 +3,7 @@ import { readOmml } from '../omml';
 import type { MathNode } from '../tree';
 import { canonicalIssue } from './canonical';
 import { CORPUS } from './corpus';
-import { generateTree } from './generate';
+import { generateTree, seedChunks } from './generate';
 import { el, viaMathml } from './parse';
 
 // The stored MathML is lossless, so with the OMML round trip docx → stored → docx is the full trip.
@@ -17,8 +17,8 @@ describe('tree → MathML → tree is the identity', () => {
         });
     }
 
-    test('1,000 seeded canonical trees', () => {
-        for (let seed = 1; seed <= 1000; seed++) {
+    test.each(seedChunks(5000))('seeded canonical trees %i to %i', (first, last) => {
+        for (let seed = first; seed <= last; seed++) {
             const tree = generateTree(seed);
             expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
             expect({ seed, tree: viaMathml(tree) }).toStrictEqual({ seed, tree });

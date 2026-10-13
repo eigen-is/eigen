@@ -28,7 +28,7 @@ export function attribute(element: MathXmlElement, local: string): string | unde
     return undefined;
 }
 
-// NOT_XML and escapeXml copy lib's core/xml.ts: a leaf can't import lib, and lib can't import math for an escape.
+// Lib's core/xml.ts keeps its own: lib takes no dependency for an escape, and math throws where lib strips.
 export const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 export function checkedXml(text: string): string {

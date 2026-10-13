@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from '../mathml';
-import { MATH_LIMITS, type MathRow } from '../tree';
+import { MATH_LIMITS, type MathNode, type MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { el, letter, viaMathml, viaOmml } from './parse';
@@ -126,6 +126,15 @@ describe('readMathml', () => {
         expect(viaMathml(row)).toStrictEqual(row);
     });
 
+    // A mark after a large operator makes a symbol of its own, so a scripted ∑̸ is no n-ary.
+    test.each<MathNode>([
+        { kind: 'limit', position: 'under', base: [{ kind: 'operator', text: '∑̸' }], limit: letter('x') },
+        { kind: 'scripts', base: [{ kind: 'operator', text: '∑̸' }], sup: letter('x') },
+        { kind: 'accent', accent: '̂', body: [{ kind: 'operator', text: '∑̸' }] },
+    ])('a marked large operator in a base survives: %j', (node) => {
+        expect(viaMathml([node])).toStrictEqual([node]);
+    });
+
     test('Em spaces pair whether they come as characters or as mspace', () => {
         expect(readMathml(math('<mspace width="1em"/><mspace width="1em"/>')).row).toEqual([
             { kind: 'space', width: 'qquad' },
@@ -233,6 +242,29 @@ describe('writeMathml', () => {
             const row: MathRow = [node, ...x];
             expect(viaMathml(row)).toStrictEqual(row);
             expect(readMathml(el(writeMathml(row, 'tex'))).row).toStrictEqual(row);
+        }
+    });
+
+    // LaTeX's cases: a { before a matrix alone, its columns aligned left with MathML's own cell spacing.
+    test('a { before a matrix alone aligns its columns left; a matrix elsewhere and equations keep theirs', () => {
+        const matrix: MathNode = { kind: 'table', layout: 'matrix', rows: [[x, x]] };
+        const equations: MathNode = { kind: 'table', layout: 'equations', rows: [[x, x]] };
+        const fenced = (table: MathNode, open = '{', close = ''): MathRow => [
+            { kind: 'fenced', open, close, separator: '', parts: [[table]] },
+        ];
+        const cells = '<mtr><mtd><mi>x</mi></mtd><mtd><mi>x</mi></mtd></mtr>';
+        expect(writeMathml(fenced(matrix))).toBe(
+            `<math xmlns="${MATHML_NAMESPACE}"><mrow><mo fence="true">{</mo><mtable columnalign="left">${cells}</mtable>` +
+                '<mo fence="true"></mo></mrow></math>',
+        );
+        expect(writeMathml(fenced(matrix, '(', ')'))).toContain(`<mtable>${cells}</mtable>`);
+        expect(writeMathml([matrix])).toContain(`<mtable>${cells}</mtable>`);
+        expect(writeMathml(fenced(equations))).toContain(
+            `<mtable displaystyle="true" columnalign="right left">${cells}</mtable>`,
+        );
+        for (const row of [fenced(matrix), fenced(equations)]) {
+            expect(viaMathml(row)).toStrictEqual(row);
+            expect(viaOmml(row)).toStrictEqual(row);
         }
     });
 
