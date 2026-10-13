@@ -62,6 +62,32 @@ describe('the workbook', () => {
         expect(book.sharedStrings).toBeUndefined();
     });
 
+    // Read once per entry, a part named by many sheets was a 0.2 MB zip that took a minute and 6.7 GB.
+    test("a part several sheets name is one sheet, named and placed by the last of them, as on ExcelJS's path", () => {
+        const rel = (id: string, target: string) =>
+            `<Relationship Id="${id}" Type="${R}/worksheet" Target="${target}"/>`;
+        const book = readPackage(
+            writeZip([
+                {
+                    name: '_rels/.rels',
+                    data: `<Relationships xmlns="${PACKAGE_RELS}"><Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+                },
+                {
+                    name: 'xl/workbook.xml',
+                    data: `<workbook xmlns="${SML}" xmlns:r="${R}"><sheets><sheet name="A" r:id="one"/><sheet name="B" r:id="two"/><sheet name="C" r:id="also-one" state="hidden"/></sheets></workbook>`,
+                },
+                {
+                    name: 'xl/_rels/workbook.xml.rels',
+                    data: `<Relationships xmlns="${PACKAGE_RELS}">${rel('one', 'worksheets/sheet1.xml')}${rel('two', 'worksheets/sheet2.xml')}${rel('also-one', '/xl/worksheets/sheet1.xml')}</Relationships>`,
+                },
+            ]),
+        );
+        expect(book.sheets).toEqual([
+            { name: 'B', path: 'xl/worksheets/sheet2.xml', hidden: false },
+            { name: 'C', path: 'xl/worksheets/sheet1.xml', hidden: true },
+        ]);
+    });
+
     test("finds the styles, theme and shared strings through the workbook's relationships", () => {
         const book = readPackage(
             xlsxFixture({

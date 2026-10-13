@@ -62,11 +62,20 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let str = '';
     let result = '';
     let dquote = 0;
+    // A quoted sheet name is one token, its delimiters and doubled quotes included.
+    let squote = false;
 
     while (i < chars.length) {
         const s = chars[i];
 
-        if (s === '(' && dquote === 0) {
+        if (squote || (s === "'" && dquote === 0)) {
+            if (s === "'") squote = !squote;
+            str += s;
+        } else if (s === ' ' && dquote === 0) {
+            // A space is kept, and between two refs it is the intersection operator.
+            result += `${walkFormulaRefs(str, onRef)} `;
+            str = '';
+        } else if (s === '(' && dquote === 0) {
             result += str.length > 0 ? `${str}(` : '(';
             str = '';
         } else if (s === ')' && dquote === 0) {
@@ -127,14 +136,51 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
         }
 
         if (i === chars.length - 1) {
-            const trimmed = str.trim();
-            result += iscelldata(trimmed) ? onRef(trimmed) : trimmed;
+            result += refOf(str.trim(), onRef);
         }
 
         i += 1;
     }
 
     return result;
+}
+
+// A leaf the walker found: a ref is handed to `onRef` as one or two legs behind one sheet prefix. A range naming its
+// sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once, and a chained range (`A1:A2:A3`) leg by
+// leg, so its result is #REF! when any leg's is.
+function refOf(token: string, onRef: (ref: string) => string): string {
+    const legs = splitUnquoted(token, ':');
+    if (splitUnquoted(token, '!').length > 2) {
+        if (legs.length !== 2) return token;
+        const second = legs[1].slice(0, legs[1].lastIndexOf('!') + 1);
+        const moved = refOf(`${legs[0]}:${legs[1].slice(second.length)}`, onRef);
+        const colon = moved.lastIndexOf(':');
+        return colon < 0 ? moved : `${moved.slice(0, colon + 1)}${second}${moved.slice(colon + 1)}`;
+    }
+    const sheetEnd = token.lastIndexOf('!') + 1;
+    const chained = token.slice(sheetEnd).split(':');
+    if (chained.length <= 2) return iscelldata(token) ? onRef(token) : token;
+    const prefix = token.slice(0, sheetEnd);
+    if (!chained.every((leg) => iscelldata(leg))) return token;
+    const moved = chained.map((leg) => onRef(prefix + leg));
+    if (moved.includes(error['r'])) return error['r'];
+    return [moved[0], ...moved.slice(1).map((leg) => leg.slice(prefix.length))].join(':');
+}
+
+// Splits on `separator` outside single quotes, which hold sheet names.
+function splitUnquoted(text: string, separator: string): string[] {
+    const parts: string[] = [];
+    let quoted = false;
+    let start = 0;
+    for (let index = 0; index < text.length; index += 1) {
+        if (text[index] === "'") quoted = !quoted;
+        else if (text[index] === separator && !quoted) {
+            parts.push(text.slice(start, index));
+            start = index + 1;
+        }
+    }
+    parts.push(text.slice(start));
+    return parts;
 }
 
 // Shifts every cell-data ref in a formula by (rowOffset, colOffset), both axes at once.

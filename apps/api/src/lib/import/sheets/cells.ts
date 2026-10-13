@@ -12,7 +12,7 @@ import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import { NOT_AN_XLSX, readInBatches, TOO_MANY_CELLS } from './package';
 import { type SharedString, stringOf, textOf } from './strings';
-import type { Look, ThemePalette } from './styles';
+import { type Look, NO_LOOK, type ThemePalette } from './styles';
 
 // A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula and look, the
 // borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
@@ -29,8 +29,11 @@ export type GridContext = {
     strings: SharedString[];
     date1904: boolean;
     palette: ThemePalette;
-    // Called for each cell the grid emits, a value or a border, with the characters it writes; throws past the budget.
+    // Called for each cell the grid emits, a value or a border, with the characters it writes, and for each row's height
+    // and hidden flag; throws past the budget.
     charge(text: number): void;
+    // Called before a shared formula's copy is translated, with the characters to translate; throws past the budget.
+    chargeCopy(chars: number): void;
 };
 
 export type Grid = {
@@ -46,8 +49,6 @@ export type Grid = {
     columns: number;
 };
 
-const NO_LOOK: Look = { cell: {}, aligned: false, isDate: false };
-
 export function readGrid(part: Uint8Array, context: GridContext): Grid {
     const { rest, children } = readInBatches(part, 'sheetData', 'row');
     const grid: Grid = { rest, celldata: [], borderInfo: {}, heights: new Map(), rowhidden: {}, rows: 0, columns: 0 };
@@ -57,14 +58,25 @@ export function readGrid(part: Uint8Array, context: GridContext): Grid {
     for (const row of children) {
         const reference = xmlAttr(row, '', 'r');
         r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
-        if (isOn(xmlAttr(row, '', 'hidden'))) grid.rowhidden[r] = 0;
+        if (isOn(xmlAttr(row, '', 'hidden')) && !(r in grid.rowhidden)) {
+            context.charge(0);
+            grid.rowhidden[r] = 0;
+        }
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
-        if (height > 0) grid.heights.set(r, height);
+        if (height > 0) {
+            if (!grid.heights.has(r)) context.charge(0);
+            grid.heights.set(r, height);
+        }
         let c = -1;
         for (const element of xmlChildren(row, SML_NS, 'c')) {
             c = indexOf(columnNumber(xmlAttr(element, '', 'r')), c, REFERENCE_COLUMN_COUNT);
             const look = context.looks[Number(xmlAttr(element, '', 's'))] ?? NO_LOOK;
-            const cell = readCell(element, look, context, formulaOf(xmlChild(element, SML_NS, 'f'), r, c, shared));
+            const cell = readCell(
+                element,
+                look,
+                context,
+                formulaOf(xmlChild(element, SML_NS, 'f'), r, c, shared, context),
+            );
             const empty =
                 cell.v === undefined && cell.f === undefined && cell.bg === undefined && cell.fc === undefined;
             if (empty && !look.border) continue;
@@ -133,6 +145,7 @@ function formulaOf(
     r: number,
     c: number,
     shared: Map<string, { text: string; r: number; c: number }>,
+    context: GridContext,
 ): string | undefined {
     if (!f) return undefined;
     const type = xmlAttr(f, '', 't');
@@ -145,7 +158,9 @@ function formulaOf(
         return text;
     }
     const anchor = shared.get(si);
-    return anchor?.text ? functionCopy(anchor.text, r - anchor.r, c - anchor.c) : undefined;
+    if (!anchor?.text) return undefined;
+    context.chargeCopy(anchor.text.length);
+    return functionCopy(anchor.text, r - anchor.r, c - anchor.c);
 }
 
 // numfmt renders a bare serial under General as a number, so a date without a date format shows as m/d/yyyy; a

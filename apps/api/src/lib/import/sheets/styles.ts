@@ -81,7 +81,7 @@ const BUILTIN_FORMATS = new Map<number, string>([
     [49, '@'],
 ]);
 
-const NO_LOOK: Look = { cell: {}, aligned: false, isDate: false };
+export const NO_LOOK: Look = { cell: {}, aligned: false, isDate: false };
 
 export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePalette): Look[] {
     const list = (group: string, item: string) => {
@@ -101,20 +101,29 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
         return resolveColor(colorOf(xmlChild(pattern, SML_NS, 'fgColor')), palette);
     });
     const borders = list('borders', 'border').map((border) => bordersOf(border, palette));
+    // Once per format, not per xf: a long code costs its canonical form and date test, and many xfs can name it.
+    const resolved = new Map<number, Pick<Look, 'numFmt' | 'fa' | 'isDate'>>();
+    const resolve = (id: number) => {
+        const code = formats.get(id);
+        const numFmt = code === 'General' ? undefined : code;
+        const format = {
+            numFmt,
+            fa: numFmt && normalizeMonthMinuteTokens(numFmt),
+            isDate: numFmt !== undefined && is_date(numFmt),
+        };
+        resolved.set(id, format);
+        return format;
+    };
     return list('cellXfs', 'xf').map((xf, index): Look => {
         // The workbook's default look, which Eigen draws with its own, as ExcelJS's path reads it.
         if (index === 0) return NO_LOOK;
         // An id that is no number reads as NaN, which indexes nothing.
         const id = (name: string) => Number(xmlAttr(xf, '', name));
-        const code = formats.get(id('numFmtId'));
-        const numFmt = code === 'General' ? undefined : code;
         const alignment = xmlChild(xf, SML_NS, 'alignment');
         const bg = fills[id('fillId')];
         return {
             cell: { ...fonts[id('fontId')], ...(bg && { bg }), ...(alignment && alignmentLook(alignment)) },
-            numFmt,
-            fa: numFmt && normalizeMonthMinuteTokens(numFmt),
-            isDate: numFmt !== undefined && is_date(numFmt),
+            ...(resolved.get(id('numFmtId')) ?? resolve(id('numFmtId'))),
             aligned: Boolean(alignment && xmlAttr(alignment, '', 'horizontal')),
             border: borders[id('borderId')],
         };

@@ -33,12 +33,16 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     const rels = pkg.relationships(workbookPath);
     const located = (type: string, path: string) => relOfType(rels, type) ?? path;
     const list = xmlChild(workbook, SML_NS, 'sheets');
-    const sheets = (list ? xmlChildren(list, SML_NS, 'sheet') : []).flatMap((sheet): WorkbookSheet[] => {
+    const entries = (list ? xmlChildren(list, SML_NS, 'sheet') : []).flatMap((sheet): WorkbookSheet[] => {
         const name = xmlAttr(sheet, '', 'name');
         const rel = rels.get(xmlAttr(sheet, R_NS, 'id') ?? '');
         if (name === undefined || !rel || rel.external || !rel.type.endsWith('/worksheet')) return [];
         return [{ name, path: rel.target, hidden: (xmlAttr(sheet, '', 'state') ?? 'visible') !== 'visible' }];
     });
+    // One sheet per part, named and placed by the last entry naming it, as on ExcelJS's path; read per entry, a part
+    // would be inflated and parsed again for each.
+    const last = new Map(entries.map((sheet, index) => [sheet.path, index]));
+    const sheets = entries.filter((sheet, index) => last.get(sheet.path) === index);
     const properties = xmlChild(workbook, SML_NS, 'workbookPr');
     return {
         pkg,

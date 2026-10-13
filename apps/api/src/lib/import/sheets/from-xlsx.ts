@@ -21,6 +21,8 @@ import {
 import {
     booleanDisplay,
     cellWrapsText,
+    DEFAULT_SHEET_COLUMN_COUNT,
+    DEFAULT_SHEET_ROW_COUNT,
     iscelldata,
     numberDisplay,
     parseA1Range,
@@ -84,27 +86,33 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 }
 
 // The reader of our own, beside ExcelJS's until the import switches to it: every worksheet's grid, charged against the
-// output budget as it is read. The cells count what they emit, a value or a border, and the grids the span recalc
-// materialises; the text counts every value, display and formula, each shared string and shared formula once per copy.
+// output budget as it is read. The cells count what they emit, a value, a border, a row's height or hidden flag, and
+// the grids recalc materialises; the text counts every value, display and formula, each shared string and shared formula once per copy.
 export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
     try {
         const book = readPackage(bytes);
         const palette = themePalette(book.theme);
         const looks = readLooks(book.styles, palette);
         const strings = readSharedStrings(book.sharedStrings, palette);
-        const emitted = { cells: 0, text: 0, span: 0 };
+        const emitted = { cells: 0, text: 0, span: 0, translated: 0 };
         const charge = (text: number) => {
             emitted.cells += 1;
             emitted.text += text;
             if (emitted.cells > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
             if (emitted.text > MAX_TEXT) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
         };
+        const chargeCopy = (chars: number) => {
+            emitted.translated += chars;
+            if (emitted.translated > MAX_SHARED_FORMULA_TEXT) throw new ApiError(413, SPREADSHEET_TOO_LARGE);
+        };
         const sheets: Sheet[] = [];
         for (const { name, path } of book.sheets) {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
-            const grid = readGrid(part, { looks, strings, date1904: book.date1904, palette, charge });
-            emitted.span += grid.rows * grid.columns;
+            const grid = readGrid(part, { looks, strings, date1904: book.date1904, palette, charge, chargeCopy });
+            // Recalc materialises at least the default grid of a sheet, an empty one too.
+            emitted.span +=
+                Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
             if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
             // The columns, merges, views, filter, links, conditional formats and validations are read from grid.rest
             // when they move over; until then a height is estimated at the default column width.
@@ -197,6 +205,10 @@ export const MAX_ELEMENTS = 4_000_000;
 // A cell's text, value and display, is a copy per cell for a rich string and in the snapshot for any; real workbooks
 // emit under 120M characters.
 export const MAX_TEXT = 250_000_000;
+// A shared formula's copy is translated before it is weighed, at about 3M characters a second. The 986 workbooks of
+// the corpus translate at most 3.1M characters (a GOV.UK inspections workbook, 24,706 copies); five times that is
+// about 5 s.
+export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
 
 // Every part is counted, not only those exceljs reads as sheets: a byte search, as a sheet may be the decompressed cap.
 function tallyExpansions(bytes: Buffer, tally: ExpansionTally): void {
