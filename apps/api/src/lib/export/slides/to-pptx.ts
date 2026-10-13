@@ -22,7 +22,6 @@ import {
     isTransparentFill,
     linearLocalToScene,
     normalizeAngle,
-    type OutlineShape,
     type Point,
     parseBackgroundFill,
     parseFill,
@@ -67,7 +66,6 @@ export function eigenslidesToPptx(scene: VectorScene, media: DocxMedia[], title:
         scale: size.cx / scene.frames[0].width,
         media: new Map(media.map((item) => [item.name, item])),
         images: new Map(),
-        files: [],
         byId: new Map(scene.elements.map((el) => [el.id, el])),
     };
     const slides = scene.frames.map((frame) => slideXml(frame, elementsInFrame(scene.elements, frame.id), deck));
@@ -130,7 +128,10 @@ export function eigenslidesToPptx(scene: VectorScene, media: DocxMedia[], title:
             data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
         },
         ...parts.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
-        ...deck.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
+        ...[...deck.images.values()].flatMap(({ part, svgPart, raster, media }) => [
+            { name: `ppt/media/${part}`, data: new Uint8Array(raster), store: true },
+            ...(svgPart ? [{ name: `ppt/media/${svgPart}`, data: new Uint8Array(media.data), store: true }] : []),
+        ]),
     ]);
 }
 
@@ -222,12 +223,12 @@ type Deck = {
     scale: number;
     media: Map<string, DocxMedia>;
     images: Map<string, Image>;
-    files: [path: string, data: ArrayBuffer][];
     // The elbow router reads the shapes an arrow is bound to.
     byId: Map<string, VectorElement>;
 };
 
-type Image = { part: string; svgPart?: string; width?: number; height?: number };
+// An SVG's raster is its PNG, its own data the svgPart beside it.
+type Image = { part: string; svgPart?: string; raster: ArrayBuffer; media: DocxMedia };
 
 type Slide = {
     deck: Deck;
@@ -315,9 +316,15 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 lineXml(slide, el, opacity),
             );
         case 'diamond': {
-            const radius = cornerRadius(el, 'diamond');
-            const outline = diamondOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0);
-            const geometry = radius > 0 ? outlineGeometry(outline, el, slide) : presetXml('diamond');
+            const outline = diamondOutline(
+                { x: 0, y: 0, width: el.width, height: el.height },
+                cornerRadius(el, 'diamond'),
+                0,
+            );
+            const geometry =
+                outline.kind === 'rounded'
+                    ? outlineGeometry(outline.core, outline.radius, el, slide)
+                    : presetXml('diamond');
             return spXml(
                 slide,
                 'Diamond',
@@ -363,15 +370,11 @@ function elementXml(el: VectorElement, slide: Slide): string {
             });
             // A rounded preset insets its text by its corners, where Eigen's keeps the box: a painted rounded box is its
             // outline, and an unpainted one shows no corners.
-            const radius = cornerRadius(el);
+            const outline = rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, cornerRadius(el), 0);
             const painted = isBordered(el) || !isTransparentFill(parseFill(el.fill));
             const geometry =
-                painted && radius > 0
-                    ? outlineGeometry(
-                          rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0),
-                          el,
-                          slide,
-                      )
+                painted && outline.kind === 'rounded'
+                    ? outlineGeometry(outline.core, outline.radius, el, slide)
                     : presetXml('rect');
             return spXml(
                 slide,
@@ -422,9 +425,7 @@ function boxGeometry(el: Box & { corners: Corners }): string {
 }
 
 // A rounded outline is its core's edges pushed out by the radius, joined by arcs about the core's corners.
-function outlineGeometry(outline: OutlineShape, box: Box, slide: Slide): string {
-    if (outline.kind !== 'rounded') return presetXml('rect');
-    const { core, radius } = outline;
+function outlineGeometry(core: Point[], radius: number, box: Box, slide: Slide): string {
     const pt = (p: Point) => `<a:pt x="${emu(slide, p.x)}" y="${emu(slide, p.y)}"/>`;
     const r = emu(slide, radius);
     if (core.length === 1) {
@@ -528,17 +529,8 @@ function linearXml(
     if (points.length === 0) return '';
     const line = lineXml(slide, el, opacity, ends);
     if (points.length === 2) {
-        const [from, to] = points;
-        const bounds = pointsBounds(points);
-        const box = {
-            x: el.x + bounds.minX,
-            y: el.y + bounds.minY,
-            width: bounds.maxX - bounds.minX,
-            height: bounds.maxY - bounds.minY,
-            angle: el.angle,
-        };
-        const id = ++slide.shapes;
-        return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(slide, box, to.x < from.x, to.y < from.y)}${presetXml('line')}<a:noFill/>${line}</p:spPr></p:cxnSp>`;
+        const [from, to] = points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }));
+        return segmentXml(slide, from, to, el.angle, line);
     }
     const curved = el.roundness === 'round' && !(el.type === 'arrow' && el.elbow);
     const { box, pt } = pathFrame(el, points, slide);
@@ -554,6 +546,20 @@ function linearXml(
     const fill = el.type === 'line' && isClosedPath(points) ? fillXml(parseFill(el.fill), opacity, box) : undefined;
     const geometry = customXml(slide, box, fill ? `${path}<a:close/>` : path, fill !== undefined);
     return spXml(slide, 'Freeform', box, geometry, fill ?? '<a:noFill/>', line);
+}
+
+// A segment of the slide, turned by angle about its middle.
+function segmentXml(slide: Slide, from: Point, to: Point, angle: number, line: string): string {
+    const bounds = pointsBounds([from, to]);
+    const box = {
+        x: bounds.minX,
+        y: bounds.minY,
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+        angle,
+    };
+    const id = ++slide.shapes;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(slide, box, to.x < from.x, to.y < from.y)}${presetXml('line')}<a:noFill/>${line}</p:spPr></p:cxnSp>`;
 }
 
 // A freehand stroke is ink, not a line: perfect-freehand's outline filled in the stroke color, its curve drawn as the
@@ -610,7 +616,7 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
         const bar = head === 'bar' ? arrowheadGeometry(el, points, position, head) : null;
         if (bar?.kind !== 'barbs') continue;
         const [a, b] = [linearLocalToScene(el, bar.barb1), linearLocalToScene(el, bar.barb2)];
-        xml += linearXml({ ...el, x: 0, y: 0, angle: 0 }, [a, b], slide, opacity);
+        xml += segmentXml(slide, a, b, 0, lineXml(slide, el, opacity));
     }
     const label = arrowLabelBox(el, points);
     if (!label) return xml;
@@ -629,13 +635,10 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
         slide,
         lines.map((line) => ({ runs: [{ text: line, marks: NO_MARKS }], depth: 0, quotes: 0, spaceBefore: false })),
         {
+            ...NO_MARKS,
             fontFamily: el.fontFamily,
             fontSize: el.fontSize,
             color: el.strokeColor,
-            bold: false,
-            italic: false,
-            underline: false,
-            strike: false,
             textAlign: 'center',
             verticalAlign: 'center',
             letterSpacing: 0,
@@ -676,12 +679,7 @@ function imageOf(name: string, deck: Deck): Image | undefined {
     const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
     if (!raster || !extension) return undefined;
     const n = deck.images.size + 1;
-    const image: Image = { part: `image${n}.${extension}`, width: media.width, height: media.height };
-    deck.files.push([`ppt/media/${image.part}`, raster]);
-    if (svg) {
-        image.svgPart = `image${n}.svg`;
-        deck.files.push([`ppt/media/${image.svgPart}`, media.data]);
-    }
+    const image: Image = { part: `image${n}.${extension}`, svgPart: svg ? `image${n}.svg` : undefined, raster, media };
     deck.images.set(name, image);
     return image;
 }
@@ -698,8 +696,9 @@ function blipXml(image: Image, slide: Slide, opacity: number): string {
 // How much of each side cover cuts off the picture, or contain leaves empty in the box: one share of the whole, on the
 // axis where the picture overshoots the box. Without the picture's size, nothing is cut and the picture stretches.
 function fitOf(image: Image, width: number, height: number): { wide: boolean; cut: number } | null {
-    if (!image.width || !image.height || width <= 0 || height <= 0) return null;
-    const picture = image.width / image.height;
+    const { media } = image;
+    if (!media.width || !media.height || width <= 0 || height <= 0) return null;
+    const picture = media.width / media.height;
     const box = width / height;
     const cut = (1 - Math.min(picture, box) / Math.max(picture, box)) / 2;
     return cut > 0 ? { wide: picture > box, cut } : null;
