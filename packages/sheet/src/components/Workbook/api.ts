@@ -1,8 +1,9 @@
-import type { ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { applyPatches, produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
+import { chartRangeData, suggestChartRange } from '../../engine/chart-range';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
 import {
@@ -11,6 +12,7 @@ import {
     type ChartBox,
     type Context,
     collectMatches,
+    createContextResolver,
     createFilterOptions,
     deleteChart,
     deleteRowCol,
@@ -37,6 +39,7 @@ import {
     type SearchHighlight,
     type SearchResult,
     type Settings,
+    setChartDataRange,
     setChartSpec,
     setSearchHighlights,
     updateChartBox,
@@ -185,6 +188,32 @@ export function generateAPIs(
             setContext((draftCtx) => reorderChart(draftCtx, id, direction)),
 
         deleteChart: (id: string) => setContext((draftCtx) => deleteChart(draftCtx, id)),
+
+        // False when the range derives no chart (no values, or more series than a chart holds), which
+        // writes nothing.
+        setChartDataRange: (id: string, ref: CellRangeRef): boolean => {
+            if (!chartRangeData(suggestChartRange(ref, createContextResolver(context)))) return false;
+            setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
+            return true;
+        },
+
+        closeChartEditor: () =>
+            setContext(
+                (draftCtx) => {
+                    if (draftCtx.activeChart) draftCtx.activeChart.editor = false;
+                },
+                { noHistory: true },
+            ),
+
+        // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
+        beginGesture: () => {
+            const gesture = {};
+            const cache = context.getRefs().globalCache;
+            cache.undoGesture = gesture;
+            return () => {
+                if (cache.undoGesture === gesture) cache.undoGesture = undefined;
+            };
+        },
 
         undo: handleUndo,
         redo: handleRedo,

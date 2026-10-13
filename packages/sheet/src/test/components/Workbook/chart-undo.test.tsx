@@ -89,3 +89,27 @@ test('redoing a move of a chart a peer deleted drops the entry', async () => {
     expect(charts()).toEqual({});
     expect(sent.length).toBe(before);
 });
+
+test('writes inside a panel gesture undo and redo as one step, and the next write stands alone', async () => {
+    const { step, charts } = await mountWorkbook();
+    let id = '';
+    await step((w) => {
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
+    });
+    const titled = (title: string) => ({ ...sampleChartSpec('column'), title });
+    let release = () => {};
+    await step((w) => {
+        release = w.beginGesture();
+    });
+    for (const title of ['S', 'Sc', 'Sco']) await step((w) => w.setChartSpec(id, titled(title)));
+    release();
+    await step((w) => w.setChartSpec(id, titled('Score')));
+    const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title;
+
+    await step((w) => w.undo());
+    expect(title()).toBe('Sco');
+    await step((w) => w.undo());
+    expect(title()).toBe('Points scored');
+    await step((w) => w.redo());
+    expect(title()).toBe('Sco');
+});

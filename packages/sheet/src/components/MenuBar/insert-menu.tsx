@@ -1,3 +1,4 @@
+import { MAX_CHART_SERIES } from '@workspace/lib/charts';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -6,6 +7,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
@@ -15,6 +17,7 @@ import {
     getFlowdata,
     handleLink,
     handleSum,
+    insertChartFromSelection,
     insertCheckbox,
     tryInsertRowCol,
 } from '../../state';
@@ -99,6 +102,22 @@ export function InsertMenu() {
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+                disabled={selection == null || context.allowEdit === false}
+                onClick={() =>
+                    setContext((draftCtx) => {
+                        if (!insertChartFromSelection(draftCtx, uuidv4())) {
+                            showAlert(
+                                `A chart holds up to ${MAX_CHART_SERIES} series. Select fewer rows or columns.`,
+                                'ok',
+                            );
+                        }
+                    })
+                }
+            >
+                Chart
+            </DropdownMenuItem>
 
             <DropdownMenuItem
                 disabled={!settings.hooks?.onInsertImage}

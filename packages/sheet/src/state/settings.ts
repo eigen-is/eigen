@@ -1,4 +1,5 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
+import type { SheetChart } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -20,6 +21,9 @@ export type CommentInfo = {
     entry: CommentEntry | undefined;
     indicatorColor: string | null;
 };
+
+// The chart whose editor sidebar is open, on the current sheet, and every sheet's name for its data range.
+export type ChartEditorState = { chart: SheetChart; sheetId: string; sheets: { id: string; name: string }[] };
 
 export type Hooks = {
     beforeUpdateCell?: (r: number, c: number, value: CellValueInput) => boolean;
@@ -140,6 +144,9 @@ export type Hooks = {
     // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
     // active.
     onActiveImageChange?: (image: Image | null) => void;
+    // Fired when a chart's editor opens or closes and while it is open, as the chart or the sheet names
+    // change, so the app can mount its chart editor sidebar.
+    onChartEditorChange?: (editor: ChartEditorState | null) => void;
 };
 
 export type Settings = {

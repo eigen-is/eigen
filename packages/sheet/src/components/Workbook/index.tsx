@@ -240,11 +240,19 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             // noUndo: emit the op (peers need the swap/correction) but record no local
                             // undo entry, so a cross-mount paste stays a single ⌘Z.
                             if (!options.noUndo) {
-                                globalCache.current.undoList.push({
-                                    patches: filteredPatches,
-                                    inversePatches: filteredInversePatches,
-                                    options,
-                                });
+                                const { undoList, undoGesture } = globalCache.current;
+                                const last = undoList.at(-1);
+                                if (undoGesture && last?.gesture === undoGesture) {
+                                    last.patches.push(...filteredPatches);
+                                    last.inversePatches.unshift(...filteredInversePatches);
+                                } else {
+                                    undoList.push({
+                                        patches: filteredPatches,
+                                        inversePatches: filteredInversePatches,
+                                        options,
+                                        gesture: undoGesture,
+                                    });
+                                }
                                 globalCache.current.redoList = [];
                             }
                             emitOp(result, filteredPatches, options);
@@ -353,6 +361,22 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const active = context.insertedImgs?.find((img) => img.id === context.activeImg) ?? null;
             mergedSettings.hooks?.onActiveImageChange?.(active);
         }, [context.activeImg, context.insertedImgs, mergedSettings.hooks]);
+
+        const currentSheetIndex = getSheetIndex(context, context.currentSheetId);
+        const editingChart = context.activeChart?.editor
+            ? context.sheets[currentSheetIndex ?? -1]?.charts?.[context.activeChart.id]
+            : undefined;
+        useEffect(() => {
+            mergedSettings.hooks?.onChartEditorChange?.(
+                editingChart
+                    ? {
+                          chart: editingChart,
+                          sheetId: context.currentSheetId,
+                          sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
+                      }
+                    : null,
+            );
+        }, [editingChart, context.currentSheetId, context.sheets, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
