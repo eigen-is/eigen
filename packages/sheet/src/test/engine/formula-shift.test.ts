@@ -194,11 +194,13 @@ describe('engine/formula-shift — functionCopy sheet names, intersections and c
         }
     });
 
-    test("spaces around a range's colon are the range's, and a function's name before its arguments is no ref", () => {
+    test("spaces around a range's colon are the range's; before a bracket they are an intersection, as in Excel", () => {
         expect(functionCopy('=SUM(A1 :B2)', 1, 1)).toBe('SUM(B2:C3)');
         expect(functionCopy('=SUM(A1: B2)', 1, 1)).toBe('SUM(B2:C3)');
         expect(functionCopy('=SUM(A1  :  B2)+C1', 1, 1)).toBe('SUM(B2:C3)+D2');
-        expect(functionCopy('=LOG10 (A1)', 1, 1)).toBe('LOG10 (B2)');
+        expect(functionCopy('=A1 (B1:C2)', 1, 1)).toBe('B2 (C2:D3)');
+        expect(functionCopy('=SUM(A1:B2 (B1:C3))', 1, 1)).toBe('SUM(B2:C3 (C2:D4))');
+        expect(functionCopy('=LOG10 (A1)', 1, 1)).toBe('LOH11 (B2)');
         expect(functionCopy('=A1  B1', 1, 1)).toBe('B2  C2');
     });
 

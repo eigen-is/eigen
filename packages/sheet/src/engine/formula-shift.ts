@@ -72,15 +72,11 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
             if (s === "'") squote = !squote;
             str += s;
         } else if (s === ' ' && dquote === 0) {
-            // A run of spaces is read at once: kept, and between two refs the intersection operator; around a range's
-            // colon it is the range's, and before a `(` it ends a function's name.
+            // A run of spaces is read at once: kept, and between two refs the intersection operator, a bracketed one's
+            // too (Excel reads `LOG10 (A1)` so); around a range's colon it is the range's.
             let end = i;
             while (end + 1 < chars.length && chars[end + 1] === ' ') end += 1;
-            const next = chars[end + 1];
-            if (next === '(') {
-                result += str + ' '.repeat(end - i + 1);
-                str = '';
-            } else if (next !== ':' && !str.endsWith(':')) {
+            if (chars[end + 1] !== ':' && !str.endsWith(':')) {
                 result += walkFormulaRefs(str, onRef) + ' '.repeat(end - i + 1);
                 str = '';
             }
