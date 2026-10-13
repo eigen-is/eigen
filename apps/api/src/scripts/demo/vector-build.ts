@@ -15,12 +15,12 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    ELEMENT_KINDS,
     elbowBindPoint,
     followBindings,
     generateNKeysBetween,
     getFontMetrics,
     getLineHeightPx,
+    kindDefaults,
     measureLabel,
     normalizeLinear,
     type Point,
@@ -316,16 +316,11 @@ function richTextElement(
     style: StyleDefaults,
     fields: ElementFields<VectorRichTextElement>,
 ): VectorRichTextElement {
-    return {
-        ...baseElement('richtext', id, style),
-        ...ELEMENT_KINDS.richtext.defaults(style),
-        type: 'richtext',
-        ...fields,
-    };
+    return { ...kindDefaults('richtext', style), id, index: '', type: 'richtext', ...fields };
 }
 
 function imageElement(id: string, style: StyleDefaults, fields: ElementFields<VectorImageElement>): VectorImageElement {
-    return { ...baseElement('image', id, style), ...ELEMENT_KINDS.image.defaults(style), type: 'image', ...fields };
+    return { ...kindDefaults('image', style), id, index: '', type: 'image', ...fields };
 }
 
 // Settle a bound arrow's endpoints exactly where the editor would leave them at rest, keeping the

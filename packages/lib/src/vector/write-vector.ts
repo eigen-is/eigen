@@ -24,22 +24,17 @@ export function randomSeed(): number {
     return 1 + Math.floor(Math.random() * (2 ** 31 - 1));
 }
 
-// Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
-// the registry, styled by the HOST's table (vector draws rough and hatched, slides flat and solid) —
-// a new kind needs no entry here, and a new host only a table.
+// The shared base props under the kind's own fields straight from the registry, styled by the HOST's
+// table (vector draws rough and hatched, slides flat and solid) — a new kind needs no entry here, and a
+// new host only a table. The base paint sits under the kind's overrides: rich text and images use the
+// stroke as a border, so a fresh one is unframed until the user picks a stroke color. The panel's reset
+// rows read baseDefaultsFor too, so a reset restores what creation gave.
+export function kindDefaults<T extends VectorElementType>(type: T, style: StyleDefaults) {
+    return { ...baseDefaultsFor(type, style), ...ELEMENT_KINDS[type].defaults(style) };
+}
+
 function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
-    return {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        angle: 0,
-        // The shared base paint under the kind's overrides: rich text and images use the stroke as a
-        // border, so a fresh one is unframed until the user picks a stroke color. The panel's reset
-        // rows read the same helper, so a reset restores what creation gave.
-        ...baseDefaultsFor(type, style),
-        ...ELEMENT_KINDS[type].defaults(style),
-    };
+    return { x: 0, y: 0, width: 0, height: 0, angle: 0, ...kindDefaults(type, style) };
 }
 
 // One element into the doc's `elements` map at the given fractional index, under the kind's defaults
