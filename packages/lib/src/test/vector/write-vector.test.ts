@@ -43,9 +43,14 @@ describe('writeElementInDoc', () => {
     test('a bare partial gets the kind defaults under the host style table', () => {
         const doc = new Y.Doc();
         const id = writeElementInDoc(doc, { type: 'rectangle' }, 'a0', SLIDES_STYLE_DEFAULTS);
-        const [el] = readVectorFromDoc(doc).elements;
-        expect(el).toMatchObject({ id, type: 'rectangle', roughness: SLIDES_STYLE_DEFAULTS.roughness });
-        expect(el).toMatchObject(ELEMENT_KINDS.rectangle.defaults(SLIDES_STYLE_DEFAULTS));
+        // The stored record, not the read: the reader would fill a missing field with its own fallback.
+        const stored = doc.getMap('elements').get(id);
+        expect(stored instanceof Y.Map && stored.toJSON()).toMatchObject({
+            id,
+            type: 'rectangle',
+            roughness: SLIDES_STYLE_DEFAULTS.roughness,
+            ...ELEMENT_KINDS.rectangle.defaults(SLIDES_STYLE_DEFAULTS),
+        });
     });
 
     test('honors a caller-supplied seed and id, and draws fresh ones otherwise', () => {
