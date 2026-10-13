@@ -134,6 +134,20 @@ describe('a docs copy pastes back as it was copied', () => {
     });
 });
 
+test('a pasted chart wider than the column shrinks to it, keeping its shape', () => {
+    const html =
+        '<p><span class="chart" data-chart="{}" data-width="1200" data-height="742"></span>' +
+        '<span class="chart" data-chart="{}" data-width="400" data-height="300"></span></p>';
+    const sizes: unknown[][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.type.name === 'chart') sizes.push([node.attrs.width, node.attrs.height]);
+    });
+    expect(sizes).toEqual([
+        [600, 371],
+        [400, 300],
+    ]);
+});
+
 // A cut keeps its comment because the card stays in the document's map; another document's card is not there.
 test('paste keeps the comment anchors this document has cards for and strips the rest', () => {
     const html =

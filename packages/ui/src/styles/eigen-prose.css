@@ -278,6 +278,13 @@
         margin: 0;
     }
 
+    /* A chart's inline SVG, as an image: never wider than the column, its height following. */
+    .figure svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+
     /* Tables */
 
     table {

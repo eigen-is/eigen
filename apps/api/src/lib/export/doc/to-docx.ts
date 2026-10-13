@@ -5,6 +5,7 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_PAGE_SETUP,
+    isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     pageTwips,
     readFigureAttrs,
@@ -601,7 +602,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     };
     for (const [index, node] of nodes.entries()) {
         // A chart writes as a figure without media, its caption alone, until the docx writes Word charts (T4-R12).
-        if (node.type === 'figure' || node.type === 'chart') {
+        if (isFigureFrameNode(node.type)) {
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();

@@ -43,7 +43,7 @@ export const PAGE_ROOT = 'page';
 // Word's largest page is 22 inches. A page sized from collaborator data or a docx would otherwise reach the editor's
 // layout math, WeasyPrint's @page and the docx unbounded.
 const MIN_PAPER_MM = 50;
-const MAX_PAPER_MM = 558.8;
+export const MAX_PAPER_MM = 558.8;
 // The least text column and text height the margins leave.
 export const MIN_TEXT_MM = 25;
 
@@ -99,8 +99,10 @@ function convert({ width, height, margin }: PageSetup, fromMm: (mm: number) => n
 }
 
 // CSS px at 96 dpi.
+export const mmToPx = (mm: number) => (mm * 96) / 25.4;
+
 export function pagePx(setup: PageSetup): PageSetup {
-    return convert(setup, (mm) => (mm * 96) / 25.4);
+    return convert(setup, mmToPx);
 }
 
 // Word's twentieths of a point.

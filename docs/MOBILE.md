@@ -30,7 +30,7 @@ Anything that acts on a `display: none` subtree does nothing: a reveal scroll do
 
 ## Docs panels need 769px and shift the page before they shrink it
 
-The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left by its overlap with the panel and scales down only when the slack runs out. The shift keeps the text column clear, not the page, so a wide table or a full-bleed figure may tuck under the panel in that band. That is by design. From 769px a writer who selects a figure or a table gets its properties panel opened for them.
+The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left by its overlap with the panel and scales down only when the slack runs out. The shift keeps the text column clear, not the page, so a wide table or a full-bleed figure may tuck under the panel in that band. That is by design. From 769px a writer who selects a figure, a chart or a table gets its properties panel opened for them. A phone has no form of these panels: Format › Table and Format › Image hold what a table and an image need, but a chart's Edit data, caption and layout have no way in on a phone ([DOCS.md](DOCS.md#the-properties-panels-follow-the-selection-on-desktop-only)).
 
 ## A phone views canvas documents, never edits them
 

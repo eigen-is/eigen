@@ -4,7 +4,7 @@ import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
-import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, type FigureFrameNode, isFigureFrameNode } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -21,15 +21,12 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// The nodes that hold their card as an attribute, as the Yjs binding keeps a mark only on text, by the word a comment
-// on one alone quotes, having no text of its own.
-const ATTRIBUTE_ANCHORS = new Map([
-    ['figure', 'Image'],
-    ['chart', 'Chart'],
-]);
+// The word a comment on a figure's frame alone quotes, having no text of its own.
+const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
 
+// A figure's frame holds its card as an attribute, as the Yjs binding keeps a mark only on text.
 export function anchorsByAttribute(node: Node): boolean {
-    return ATTRIBUTE_ANCHORS.has(node.type.name);
+    return isFigureFrameNode(node.type.name);
 }
 
 // The card a node anchors: an image or a chart holds it as an attribute, text as the comment mark.
@@ -40,11 +37,8 @@ export function nodeCommentCardId(node: Node): string | null {
 
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
-        .textBetween(
-            from,
-            to,
-            ' ',
-            (leaf) => ATTRIBUTE_ANCHORS.get(leaf.type.name) ?? leaf.type.spec.leafText?.(leaf) ?? '',
+        .textBetween(from, to, ' ', (leaf) =>
+            isFigureFrameNode(leaf.type.name) ? QUOTE_WORDS[leaf.type.name] : (leaf.type.spec.leafText?.(leaf) ?? ''),
         )
         .slice(0, 100);
 }

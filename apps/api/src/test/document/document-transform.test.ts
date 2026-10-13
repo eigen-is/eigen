@@ -784,9 +784,10 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when a numbered list right after another ran on at the items' step: the two ol + ol rules, and nothing else.
 // Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
 // Both doc HTML hashes moved again when the grey of Heading 5, 6 and the subtitle became one rule and the print extras lost the dead text-align classes and the clear-floats list eigen-prose.css carries: those lines, and nothing else.
+// Both doc HTML hashes moved again when a chart's inline SVG took its fit from eigen-prose.css: the .figure svg rule, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '22224ab3ec35b9d07dffc7e8a50fca8423433d747cffa158faa735916b60dfa4';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '22224ab3ec35b9d07dffc7e8a50fca8423433d747cffa158faa735916b60dfa4';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';

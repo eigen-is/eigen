@@ -31,16 +31,12 @@ export function readFigureAttrs(attrs: Record<string, unknown>): FigureAttrs {
         return typeof value === 'string' ? value : null;
     };
     const width = attrs['width'];
-    const { caption, alignment, layout, commentCardId } = readFigureFrameAttrs(attrs);
     return {
         mediaName: text('mediaName'),
         src: text('src'),
         alt: text('alt'),
-        caption,
         width: typeof width === 'number' ? width : null,
-        alignment,
-        layout,
-        commentCardId,
+        ...readFigureFrameAttrs(attrs),
     };
 }
 
@@ -121,7 +117,7 @@ export const FigureNode = Node.create({
         ];
     },
 
-    renderHTML({ HTMLAttributes }) {
+    renderHTML({ node, HTMLAttributes }) {
         const imgAttrs: Record<string, unknown> = {
             src: HTMLAttributes['src'],
             alt: HTMLAttributes['alt'],
@@ -132,7 +128,7 @@ export const FigureNode = Node.create({
         if (HTMLAttributes['width']) {
             imgAttrs['width'] = HTMLAttributes['width'];
         }
-        return figureFrameHTML({ class: 'figure' }, HTMLAttributes, ['img', imgAttrs]);
+        return figureFrameHTML({ class: 'figure' }, readFigureFrameAttrs(node.attrs), ['img', imgAttrs]);
     },
 
     addCommands() {

@@ -2,6 +2,13 @@ import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 
+// The nodes drawn in the figure's frame: an image and a chart.
+export const FIGURE_FRAME_NODES = ['figure', 'chart'] as const;
+export type FigureFrameNode = (typeof FIGURE_FRAME_NODES)[number];
+
+export const isFigureFrameNode = (name: string | undefined): name is FigureFrameNode =>
+    FIGURE_FRAME_NODES.some((node) => node === name);
+
 const FIGURE_LAYOUTS = ['block', 'wrap-left', 'wrap-right'] as const;
 export type FigureLayout = (typeof FIGURE_LAYOUTS)[number];
 const FIGURE_ALIGNMENTS = ['left', 'center', 'right'] as const;
@@ -58,23 +65,15 @@ export function figureFrameAttributes() {
 // its paragraph around the content.
 export function figureFrameHTML(
     frame: Record<string, unknown>,
-    attributes: Record<string, unknown>,
+    { alignment, layout, commentCardId, caption }: FigureFrameAttrs,
     content: DOMOutputSpec,
 ): DOMOutputSpec {
     const attrs = { ...frame };
-    if (attributes['alignment'] && attributes['alignment'] !== 'center') {
-        attrs['data-alignment'] = attributes['alignment'];
-    }
-    if (attributes['layout'] && attributes['layout'] !== 'block') {
-        attrs['data-layout'] = attributes['layout'];
-    }
+    if (alignment && alignment !== 'center') attrs['data-alignment'] = alignment;
+    if (layout && layout !== 'block') attrs['data-layout'] = layout;
     // Spelled like the comment mark's, so a cut figure keeps its card the way cut text does.
-    if (attributes['commentCardId']) {
-        attrs['data-comment-id'] = attributes['commentCardId'];
-    }
-    if (attributes['caption']) {
-        return ['span', attrs, content, ['span', { class: 'figcaption' }, attributes['caption']]];
-    }
+    if (commentCardId) attrs['data-comment-id'] = commentCardId;
+    if (caption) return ['span', attrs, content, ['span', { class: 'figcaption' }, caption]];
     return ['span', attrs, content];
 }
 

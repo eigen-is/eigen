@@ -58,7 +58,8 @@ function ChartView(props: NodeViewProps) {
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
     };
-    const svg = useMemo(() => chartSvg({ spec, ...size }), [spec, size.width, size.height]);
+    const parsed = useMemo(() => parseChartSpec(spec ?? ''), [spec]);
+    const svg = useMemo(() => chartSvg(parsed, size), [parsed, size.width, size.height]);
     const box: Box | null = selected && isEditable ? { x: 0, y: 0, ...size, angle: 0 } : null;
 
     return (
@@ -72,13 +73,12 @@ function ChartView(props: NodeViewProps) {
             label="Resize chart"
         >
             <span
-                className="block [&>svg]:block [&>svg]:max-w-full [&>svg]:h-auto"
+                className="block"
                 // The painter's own SVG: its labels are escaped where they are written.
                 dangerouslySetInnerHTML={{ __html: svg }}
                 onDoubleClick={() => {
                     const pos = getPos();
-                    if (!isEditable || pos === undefined || parseChartSpec(spec ?? '')?.data.source !== 'inline')
-                        return;
+                    if (!isEditable || pos === undefined || parsed?.data.source !== 'inline') return;
                     editor.commands.setNodeSelection(pos);
                     onEditData();
                 }}

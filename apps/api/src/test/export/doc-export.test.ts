@@ -218,8 +218,10 @@ describe('doc export — charts', () => {
             const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
             const html = new TextDecoder().decode(data);
             expect(html).toContain(
-                '<span class="figure" data-layout="block" data-alignment="right"><svg style="max-width: 100%; height: auto" xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">',
+                '<span class="figure" data-layout="block" data-alignment="right"><svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">',
             );
+            // Never wider than the column, its height following, by the prose rule the editor's node view draws with.
+            expect(html).toMatch(/\.figure svg\s*\{[^}]*max-width: 100%;[^}]*height: auto;/);
             expect(html).toMatch(/<text[^>]*>Team 1<\/text>/);
             expect(html).toContain('</svg><span class="figcaption">Points</span></span>');
             expect(html).not.toContain('<img');

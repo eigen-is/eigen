@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { parseChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import {
     type ChartAttrs,
@@ -101,13 +102,9 @@ function renderFigureNode(
     return renderFigureFrame(attrs, img);
 }
 
-// Inline, so its labels draw in the page's fonts; an <img> of an SVG can't reach the page's @font-face. Never wider
-// than the column, and its height follows, as the attribute alone would keep it.
+// Inline, so its labels draw in the page's fonts; an <img> of an SVG can't reach the page's @font-face.
 function renderChartNode(attrs: ChartAttrs): string {
-    return renderFigureFrame(
-        attrs,
-        `<svg style="max-width: 100%; height: auto"${chartSvg(attrs).slice('<svg'.length)}`,
-    );
+    return renderFigureFrame(attrs, chartSvg(parseChartSpec(attrs.spec ?? ''), attrs));
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,

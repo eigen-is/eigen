@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { sampleChartSpec } from '../../../../charts';
-import { CHART_DEFAULT_SIZE, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
@@ -73,6 +73,24 @@ describe('chart HTML', () => {
         expect(html).toContain(`width="${CHART_DEFAULT_SIZE.width}"`);
         expect(chartsIn(html)).toMatchObject([{ spec: null, width: null, height: null }]);
     });
+
+    // A peer's write or a pasted span.chart sets any size; the layout runs for seconds at a side of millions.
+    test('a chart with an unbounded size renders at the max side', () => {
+        const html = generateHTML(chartDoc({ spec: SPEC, width: 1e8, height: 1e8 }), extensions);
+        const span = new DOMParser().parseFromString(html, 'text/html').querySelector('span.chart');
+        expect(span?.getAttribute('data-width')).toBe(String(CHART_MAX_SIDE));
+        expect(span?.getAttribute('data-height')).toBe(String(CHART_MAX_SIDE));
+    });
+
+    test('a pasted span.chart with an unbounded size parses at the max side', () => {
+        const html = `<p><span class="chart" data-chart='${SPEC}' data-width="300" data-height="100000000"></span></p>`;
+        expect(chartsIn(html)).toMatchObject([{ width: 300, height: CHART_MAX_SIDE }]);
+    });
+
+    test('a caption that is not a string renders none, never throwing', () => {
+        const html = generateHTML(chartDoc({ spec: SPEC, caption: 3 }), extensions);
+        expect(html).not.toContain('figcaption');
+    });
 });
 
 describe('readChartAttrs', () => {
@@ -95,6 +113,23 @@ describe('readChartAttrs', () => {
             height: null,
             caption: null,
         });
+    });
+
+    test('reads a side past the max as the max, and one that is not positive as unset', () => {
+        expect(readChartAttrs({ width: 1e8, height: Number.POSITIVE_INFINITY })).toMatchObject({
+            width: CHART_MAX_SIDE,
+            height: CHART_MAX_SIDE,
+        });
+        expect(readChartAttrs({ width: 0, height: Number.NaN })).toMatchObject({ width: null, height: null });
+        expect(readChartAttrs({ width: -5, height: CHART_MAX_SIDE })).toMatchObject({
+            width: null,
+            height: CHART_MAX_SIDE,
+        });
+    });
+
+    // Word's largest page, 22 inches, at 96 px an inch.
+    test('the max side is the largest page', () => {
+        expect(CHART_MAX_SIDE).toBe(2112);
     });
 });
 

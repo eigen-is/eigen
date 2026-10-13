@@ -1,8 +1,9 @@
 import { type CommandProps, Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { parseChartSpec, sampleChartSpec } from '../../../charts';
-import type { ChartType } from '../../../types/chart';
+import type { ChartSpec, ChartType } from '../../../types/chart';
 import { renderChartSpecSvg } from '../../../vector';
+import { MAX_PAPER_MM, mmToPx } from '../page';
 import {
     type FigureFrameAttrs,
     figureFrameAttributes,
@@ -13,6 +14,10 @@ import {
 
 // Google's inserted chart, which fits the default page's 642 px text column.
 export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
+
+// No page's text area is wider or taller than the largest page, Word's 22 inches (2112 px). A side a peer or a paste
+// sets past it would run the layout for seconds in every viewer and in the export.
+export const CHART_MAX_SIDE = Math.round(mmToPx(MAX_PAPER_MM));
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is the
 // stored string, kept as it is even when it doesn't parse, as a canvas keeps it.
@@ -32,28 +37,30 @@ declare module '@tiptap/core' {
     }
 }
 
-// A chart's attributes off untyped ones: a value of the wrong type reads as unset.
+const side = (value: unknown) => (typeof value === 'number' && value > 0 ? Math.min(CHART_MAX_SIDE, value) : null);
+
+// A chart's attributes off untyped ones: a value of the wrong type reads as unset, and a side past the max as the max.
 export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs {
     const { spec, width, height } = attrs;
     return {
         spec: typeof spec === 'string' ? spec : null,
-        width: typeof width === 'number' ? width : null,
-        height: typeof height === 'number' ? height : null,
+        width: side(width),
+        height: side(height),
         ...readFigureFrameAttrs(attrs),
     };
 }
 
 // The chart drawn in Google's flat look at its stored size, or the placeholder for a spec that doesn't parse.
-export function chartSvg(attrs: ChartAttrs): string {
+export function chartSvg(spec: ChartSpec | null, { width, height }: ChartAttrs): string {
     return renderChartSpecSvg({
         id: 'chart',
-        spec: parseChartSpec(attrs.spec ?? ''),
-        width: attrs.width ?? CHART_DEFAULT_SIZE.width,
-        height: attrs.height ?? CHART_DEFAULT_SIZE.height,
+        spec,
+        width: width ?? CHART_DEFAULT_SIZE.width,
+        height: height ?? CHART_DEFAULT_SIZE.height,
     });
 }
 
-const numberOf = (element: HTMLElement, name: string) => Number(element.getAttribute(name)) || null;
+const sideOf = (element: HTMLElement, name: string) => side(Number(element.getAttribute(name)));
 
 // An inline atom like a figure, sharing its frame. A chart has no intrinsic aspect ratio, so it stores both sides.
 export const ChartNode = Node.create({
@@ -70,8 +77,8 @@ export const ChartNode = Node.create({
     addAttributes() {
         return {
             spec: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute('data-chart') || null },
-            width: { default: null, parseHTML: (element: HTMLElement) => numberOf(element, 'data-width') },
-            height: { default: null, parseHTML: (element: HTMLElement) => numberOf(element, 'data-height') },
+            width: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-width') },
+            height: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-height') },
             ...figureFrameAttributes(),
         };
     },
@@ -82,9 +89,9 @@ export const ChartNode = Node.create({
     },
 
     // The image is for an app that doesn't know the node; this schema reads the data attributes and skips it.
-    renderHTML({ node, HTMLAttributes }) {
+    renderHTML({ node }) {
         const attrs = readChartAttrs(node.attrs);
-        const svg = chartSvg(attrs);
+        const spec = parseChartSpec(attrs.spec ?? '');
         const frame = {
             class: 'chart',
             'data-chart': attrs.spec ?? '',
@@ -92,12 +99,12 @@ export const ChartNode = Node.create({
             'data-height': attrs.height,
         };
         const img = {
-            src: `data:image/svg+xml,${encodeURIComponent(svg)}`,
-            alt: parseChartSpec(attrs.spec ?? '')?.title || 'Chart',
+            src: `data:image/svg+xml,${encodeURIComponent(chartSvg(spec, attrs))}`,
+            alt: spec?.title || 'Chart',
             width: attrs.width ?? CHART_DEFAULT_SIZE.width,
             height: attrs.height ?? CHART_DEFAULT_SIZE.height,
         };
-        return figureFrameHTML(frame, HTMLAttributes, ['img', img]);
+        return figureFrameHTML(frame, attrs, ['img', img]);
     },
 
     addCommands() {
