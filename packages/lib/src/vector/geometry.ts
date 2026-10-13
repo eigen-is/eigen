@@ -11,7 +11,7 @@ import { getLineHeightPx } from './font-metrics';
 // module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
 // pins both entry orders).
 import { ELEMENT_KINDS, isBindable } from './kinds';
-import { clamp, distanceToSegment, nearestPoint, outlineHits, segSegIntersect } from './outline';
+import { clamp, distanceToSegment, nearestPoint, outlineHits, pointInPolygon, segSegIntersect } from './outline';
 import {
     type Arrowhead,
     parseBinding,
@@ -352,17 +352,6 @@ export function linearLocalToScene(box: Box, local: Point): Point {
     return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
 }
 
-// Even-odd ray cast, for inside-hits on a closed filled path.
-function pointInPolygon(p: Point, points: Point[]): boolean {
-    let inside = false;
-    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-        const a = points[i];
-        const b = points[j];
-        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-    }
-    return inside;
-}
-
 export function pointsBounds(points: Point[]): Bounds {
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
@@ -440,7 +429,8 @@ function pointInShape(shape: VectorBindableElement, point: Point): boolean {
 }
 
 // The four dock anchors of a shape in SCENE space, rotated by its angle — the registry's anchorPoints
-// (rect/ellipse: the right/bottom/left/top edge midpoints; diamond: its four tips). Excalidraw's
+// (rect/ellipse: the right/bottom/left/top edge midpoints; diamond: its four tips; pie: points on the
+// slice). Excalidraw's
 // getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie. The one owner
 // of this geometry — both the snap-to-midpoint bind and the snap-dot overlay read it, so the dots sit
 // exactly where the dock lands.

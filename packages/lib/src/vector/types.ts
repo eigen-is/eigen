@@ -9,6 +9,7 @@ export type VectorElementType =
     | 'rectangle'
     | 'diamond'
     | 'ellipse'
+    | 'pie'
     | 'image'
     | 'richtext'
     | 'freedraw'
@@ -91,6 +92,16 @@ export type VectorEllipseElement = VectorElementBase & Fillable & { type: 'ellip
 // The roughjs-drawn closed shapes.
 export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement | VectorEllipseElement;
 
+// A sector of the ellipse its box inscribes (OOXML's `pie`). Degrees, clockwise from 3 o'clock, in the
+// box-normalized circle (roughjs arc's parametric angle), so a resize scales the slice like any shape.
+// Start + sweep, not start + end: a 360° slice has no distinct end.
+export type VectorPieElement = VectorElementBase &
+    Fillable & {
+        type: 'pie';
+        startAngle: number; // [0, 360)
+        sweepAngle: number; // (0, 360]
+    };
+
 export type VectorImageElement = VectorElementBase & {
     type: 'image';
     mediaName: string; // filename in the container's media/ folder, NEVER a dataURL
@@ -119,11 +130,11 @@ export type VectorRichTextElement = VectorElementBase &
         padding: number; // px inset between the box edge and the text; the box keeps its stored size
     };
 
-// What an arrow endpoint may dock to: the closed shapes plus the two DOM boxes, whose outline is the
-// rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
+// What an arrow endpoint may dock to: the closed shapes, the pie slice and the two DOM boxes, whose
+// outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's `bindable` capability
 // (isBindable in kinds/index.ts) — this union is its type-level face, and the registry test pins the two
 // against each other so neither can grow without the other.
-export type VectorBindableElement = VectorShapeElement | VectorRichTextElement | VectorImageElement;
+export type VectorBindableElement = VectorShapeElement | VectorPieElement | VectorRichTextElement | VectorImageElement;
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
@@ -173,6 +184,7 @@ export type VectorArrowElement = VectorElementBase & {
 
 export type VectorElement =
     | VectorShapeElement
+    | VectorPieElement
     | VectorImageElement
     | VectorRichTextElement
     | VectorLinearElement

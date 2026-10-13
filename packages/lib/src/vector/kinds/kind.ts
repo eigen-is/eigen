@@ -93,6 +93,8 @@ type KindSpec<T extends VectorElement> = {
     bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: T, inflate: number): OutlineShape;
+    // The dock and snap anchors, in SCENE space. Omit for the box default.
+    anchorPoints?(el: T): Point[];
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
     render(el: T, ctx: RenderContext): RenderOutput;
@@ -132,8 +134,8 @@ const EMPTY_OUTLINE: OutlineShape = { kind: 'polyline', points: [] };
 
 // The dock anchors of anything box-shaped: the right/bottom/left/top edge midpoints, rotated by the
 // element's angle. An ellipse's are its axis extremes and a diamond's are its four tips (Excalidraw's
-// getDiamondBaseCorners) — the same four points, so no kind overrides this. Excalidraw's
-// getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie.
+// getDiamondBaseCorners) — the same four points. Excalidraw's getSnapOutlineMidPoint order, so a
+// bind-time midpoint snap resolves the same side on a tie.
 function boxAnchorPoints(el: VectorElement): Point[] {
     const { x, y, width: w, height: h } = el;
     const center = boxCenter(el);
@@ -211,7 +213,7 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         bounds: (el, route) => (spec.is(el) && spec.bounds ? spec.bounds(el, route) : getElementBounds(el)),
         hitTest: (el, point, threshold, route) => (spec.is(el) ? spec.hitTest(el, point, threshold, route) : false),
         outline: (el, inflate) => (spec.is(el) ? spec.outline(el, inflate) : EMPTY_OUTLINE),
-        anchorPoints: boxAnchorPoints,
+        anchorPoints: (el) => (spec.is(el) && spec.anchorPoints ? spec.anchorPoints(el) : boxAnchorPoints(el)),
         aimLines: (el) => (spec.is(el) && spec.aimLines ? spec.aimLines(el) : boxAimLines(el)),
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
         paintsNothing: (el) => (spec.is(el) && spec.paintsNothing ? spec.paintsNothing(el) : false),

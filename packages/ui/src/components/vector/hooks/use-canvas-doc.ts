@@ -18,6 +18,7 @@ import {
     type VectorImageElement,
     type VectorLinearElement,
     type VectorMeta,
+    type VectorPieElement,
     type VectorRichTextElement,
     type VectorScene,
     type VectorShapeElement,
@@ -83,6 +84,7 @@ export function holdCapture(undoManager: Y.UndoManager | null): () => void {
 // subset of any element variant's fields (the union members share the geometry base). id/type
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
+    Partial<Omit<VectorPieElement, 'id' | 'type'>> &
     Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
     Partial<Omit<VectorImageElement, 'id' | 'type'>> &
     Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
