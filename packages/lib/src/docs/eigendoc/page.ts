@@ -28,7 +28,7 @@ export const DEFAULT_PAGE_SETUP: PageSetup = {
 };
 
 // The paper a page is cut from, either way round. Within 1 mm, because Word stores the page in twips.
-export function matchPaperSize({ width, height }: PageSetup): PaperSizeName | undefined {
+export function matchPaperSize({ width, height }: Pick<PageSetup, 'width' | 'height'>): PaperSizeName | undefined {
     const near = (a: number, b: number) => Math.abs(a - b) <= 1;
     return PAPER_SIZES.find(
         (paper) =>

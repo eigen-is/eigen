@@ -23,7 +23,7 @@ import {
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import { getDocExtensions, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -72,6 +72,7 @@ import { TableWidthClamp } from './extensions/table-width-clamp';
 import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
+import { createDocUndoManager, usePageSetup } from './hooks/use-page-setup';
 import { cleanPastedHTML } from './paste';
 import { TablePropertiesPanel } from './table-properties-panel';
 
@@ -139,17 +140,8 @@ function normalizeFontFamilyMarks(editor: Editor) {
 
 const lowlight = createLowlight(common);
 
-// The page at 96 dpi, for the layout math below and the text column before the page mounts.
-const PAGE_PX = pagePx(DEFAULT_PAGE_SETUP);
-// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
-const TEXT_COLUMN_RIGHT_PX = PAGE_PX.width - PAGE_PX.margin.right;
-const TEXT_COLUMN_WIDTH_PX = TEXT_COLUMN_RIGHT_PX - PAGE_PX.margin.left;
-const PAGE_STYLESHEET = pageStylesheet(DEFAULT_PAGE_SETUP, '[data-document]');
-
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
-// Above this the panel clears the centered page outright: every value below is pinned, so stop storing width.
-const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - PAGE_PX.width;
 
 export const CollaborativeEditor = ({
     path,
@@ -168,7 +160,7 @@ export const CollaborativeEditor = ({
     initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
-    // No UndoManager: y-prosemirror's history plugin owns undo.
+    // No undoScope: the editor builds its own UndoManager for y-prosemirror's history plugin.
     const {
         doc: yDoc,
         provider,
@@ -273,6 +265,14 @@ const TiptapEditor = ({
     mediaFolderIdRef.current = mediaFolderId;
     const resolveMediaPathRef = useRef(resolveMediaPath);
     resolveMediaPathRef.current = resolveMediaPath;
+    const [undoManager] = useState(() => createDocUndoManager(yDoc));
+    const pageSetup = usePageSetup(yDoc);
+    // The page at 96 dpi, for the layout math below and the text column before the page mounts.
+    const page = pagePx(pageSetup);
+    // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
+    const textColumnRight = page.width - page.margin.right;
+    const textColumnWidthRef = useRef(0);
+    textColumnWidthRef.current = textColumnRight - page.margin.left;
 
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
@@ -282,12 +282,13 @@ const TiptapEditor = ({
     };
 
     const getEditorMaxWidth = useCallback(() => {
-        return textColumnWidth(documentRef.current) ?? TEXT_COLUMN_WIDTH_PX;
+        return textColumnWidth(documentRef.current) ?? textColumnWidthRef.current;
     }, []);
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
-    // Past PANEL_CLEAR_WIDTH_PX the page and the panel no longer contend, so the layout math stops there.
-    const containerWidth = Math.min(scrollSize.width, PANEL_CLEAR_WIDTH_PX);
+    // Past this the panel clears the centered page outright and every value below is pinned, so the math stops there.
+    const panelClearWidth = 2 * (textColumnRight + PANEL_INTRUSION_PX) - page.width;
+    const containerWidth = Math.min(scrollSize.width, panelClearWidth);
 
     // Hand-rolled rather than useElementSize: this measures the BORDER box, and stays quiet while
     // unscaled so a doc that needs no scaling never re-renders on its own growth.
@@ -346,6 +347,7 @@ const TiptapEditor = ({
                 }),
                 Collaboration.configure({
                     document: yDoc,
+                    yUndoOptions: { undoManager },
                 }),
                 CollaborationCaret.configure({
                     provider,
@@ -440,6 +442,7 @@ const TiptapEditor = ({
 
     editorRef.current = editor;
 
+    // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector.
     const { canUndo, canRedo } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
@@ -673,15 +676,13 @@ const TiptapEditor = ({
     const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
-    const centredSlack = Math.max(0, (containerWidth - PAGE_PX.width) / 2);
+    const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
     const panelLeft = containerWidth - PANEL_INTRUSION_PX;
-    const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;
+    const panelOverlap = showSidebar ? Math.max(0, centredSlack + textColumnRight - panelLeft) : 0;
     const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
     const canvasShift = canShift ? panelOverlap : 0;
     const canvasScale =
-        containerWidth === 0
-            ? 1
-            : Math.min(1, containerWidth / PAGE_PX.width, canShift ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX);
+        containerWidth === 0 ? 1 : Math.min(1, containerWidth / page.width, canShift ? 1 : panelLeft / textColumnRight);
     const needsScale = canvasScale < 1;
 
     // The document observer stays quiet while unscaled, so seed the height on the way in.
@@ -782,7 +783,7 @@ const TiptapEditor = ({
                         >
                             <div className="h-full relative overflow-hidden">
                                 {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
-                                <style>{PAGE_STYLESHEET}</style>
+                                <style>{pageStylesheet(pageSetup, '[data-document]')}</style>
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(
