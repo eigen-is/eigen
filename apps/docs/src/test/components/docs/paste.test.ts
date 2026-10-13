@@ -153,3 +153,14 @@ test('paste keeps the comment anchors this document has cards for and strips the
         ['b.png', null, undefined],
     ]);
 });
+
+// The schema's reading of each <math> is the equation node's (packages/lib's equation tests); here only that the paste
+// drops a drawn equation's glyphs first.
+test("a KaTeX equation's drawn glyphs are not pasted beside its <math>", () => {
+    const math =
+        '<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>';
+    const drawn = `<span class="katex"><span class="katex-mathml">${math}</span><span class="katex-html" aria-hidden="true"><span class="mord mathnormal">x</span></span></span>`;
+    expect(cleanPastedHTML(`<p>a ${drawn} b</p>`, 600, new Set())).toBe(
+        cleanPastedHTML(`<p>a ${math} b</p>`, 600, new Set()),
+    );
+});

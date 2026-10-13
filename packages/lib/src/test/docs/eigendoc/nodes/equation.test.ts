@@ -1,10 +1,12 @@
 import { afterAll, describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createDocument, Editor, generateHTML, getSchema, getText, getTextSerializersFromSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readLatex, writeMathml } from '@workspace/math';
 import { Window } from 'happy-dom';
 import { JSDOM } from 'jsdom';
-import { getDocExtensions, readEquation } from '../../../../docs/eigendoc';
+import { getDocExtensions, readEquation, unwrapRenderedMath } from '../../../../docs/eigendoc';
 
 // jsdom's, since happy-dom's HTML parser puts a <math> in the XHTML namespace, where a browser's puts it in MathML's.
 const { window } = new JSDOM();
@@ -121,6 +123,91 @@ describe('equation parseHTML', () => {
         const doc = createDocument(`<p>a <math>${tooDeep}</math> b</p>`, schema);
         expect(equationsIn(doc)).toEqual([]);
         expect(doc.textContent).toBe('a b');
+    });
+
+    // The panel edits the annotation, so one it can't read would open as an error the user never typed.
+    test('a TeX annotation readLatex refuses goes, and the tree stays', () => {
+        const html = `<p><math><semantics><mi>x</mi><annotation encoding="application/x-tex">\\mymacro{x}</annotation></semantics></math></p>`;
+        expect(parsed(html)).toEqual([{ mathml: writeMathml(x), display: false, commentCardId: null }]);
+    });
+});
+
+// A page that draws its math pastes each equation twice, as its <math> and as the glyphs or image drawn from it, and
+// the docs paste unwraps each drawing first (`cleanPastedHTML`).
+describe('a drawn equation pastes as its <math> alone', () => {
+    const pasted = (html: string) => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        unwrapRenderedMath(doc.body);
+        return createDocument(doc.body.innerHTML, schema);
+    };
+    const equation = (latex: string, display: boolean, annotation?: string) => ({
+        mathml: writeMathml(readLatex(latex), annotation),
+        display,
+        commentCardId: null,
+    });
+
+    // Word for the web's text/html for a displayed matrix, copied alone, with only its style attributes taken out:
+    // MathJax 2's drawn spans, the equation again in data-mathml, and the hidden <math> with Word's mfenced.
+    test("Word for the web's equation pastes once, displayed as Word marks it", () => {
+        const html = readFileSync(
+            join(import.meta.dir, '../../../fixtures/clipboard/word-web-display-equation.html'),
+            'utf8',
+        );
+        const doc = pasted(html);
+        expect(equationsIn(doc)).toEqual([equation('A=\\begin{pmatrix}1&0\\\\0&\\lambda\\end{pmatrix}', true)]);
+        expect(doc.textContent).toBe('');
+    });
+
+    const XMLNS = `xmlns="${MATHML_NAMESPACE}"`;
+    const xSquaredMath = `<msup><mi>x</mi><mn>2</mn></msup>`;
+    const katexMath = (display: string) =>
+        `<math ${XMLNS}${display}><semantics><mrow>${xSquaredMath}</mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>`;
+    const katex = (display: string) =>
+        `<span class="katex"><span class="katex-mathml">${katexMath(display)}</span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist"><span><span class="pstrut"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span>`;
+
+    test.each([
+        [
+            // Word for the web's inline shape: the display sample's without MathJax_Display.
+            'Word for the web inline',
+            `<p>a <span class="MathJax" data-mathml="&lt;math ${XMLNS}&gt;&lt;mi&gt;x&lt;/mi&gt;&lt;/math&gt;" role="presentation"><nobr aria-hidden="true"><span class="math"><span class="mi">𝑥</span></span></nobr><span class="MJX_Assistive_MathML" role="presentation"><math ${XMLNS}><mi>x</mi></math></span></span> b</p>`,
+            equation('x', false),
+        ],
+        [
+            'MathJax 2 CommonHTML',
+            `<p>a <span class="mjx-chtml MathJax_CHTML" data-mathml="&lt;math ${XMLNS}&gt;&lt;mi&gt;x&lt;/mi&gt;&lt;/math&gt;" role="presentation"><span class="mjx-math" aria-hidden="true"><span class="mjx-mrow"><span class="mjx-mi"><span class="mjx-char MJXc-TeX-math-I">x</span></span></span></span><span class="MJX_Assistive_MathML" role="presentation"><math ${XMLNS}><mi>x</mi></math></span></span> b</p>`,
+            equation('x', false),
+        ],
+        ['KaTeX inline', `<p>a ${katex('')} b</p>`, equation('x^2', false, 'x^2')],
+        [
+            'MathJax 3 and 4',
+            `<p>a <mjx-container class="MathJax" jax="CHTML"><mjx-math class="MJX-TEX" aria-hidden="true"><mjx-msup><mjx-mi class="mjx-i"><mjx-c class="mjx-c1D465 TEX-I">𝑥</mjx-c></mjx-mi><mjx-script><mjx-mn class="mjx-n" size="s"><mjx-c class="mjx-c32">2</mjx-c></mjx-mn></mjx-script></mjx-msup></mjx-math><mjx-assistive-mml unselectable="on" display="inline"><math ${XMLNS}>${xSquaredMath}</math></mjx-assistive-mml></mjx-container> b</p>`,
+            equation('x^2', false),
+        ],
+        [
+            // Its annotation's \displaystyle reads as nothing, so the panel edits it.
+            'Wikipedia, its fallback image parsing as nothing',
+            `<p>a <span class="mwe-math-element"><span class="mwe-math-mathml-inline mwe-math-mathml-a11y" style="display: none;"><math ${XMLNS} alttext="{\\displaystyle x^{2}}"><semantics><mrow class="MJX-TeXAtom-ORD"><mstyle displaystyle="true" scriptlevel="0"><msup><mi>x</mi><mrow class="MJX-TeXAtom-ORD"><mn>2</mn></mrow></msup></mstyle></mrow><annotation encoding="application/x-tex">{\\displaystyle x^{2}}</annotation></semantics></math></span><img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/x" class="mwe-math-fallback-image-inline" aria-hidden="true" alt="{\\displaystyle x^{2}}"></span> b</p>`,
+            equation('x^2', false, '{\\displaystyle x^{2}}'),
+        ],
+    ])('%s pastes once, inline in its sentence', (_source, html, expected) => {
+        const doc = pasted(html);
+        expect(equationsIn(doc)).toEqual([expected]);
+        expect(doc.textContent).toBe('a  b');
+    });
+
+    test('KaTeX displayed pastes once, displayed', () => {
+        const doc = pasted(`<span class="katex-display">${katex(' display="block"')}</span>`);
+        expect(equationsIn(doc)).toEqual([equation('x^2', true, 'x^2')]);
+        expect(doc.textContent).toBe('');
+    });
+
+    // A page may give its own element a renderer's class: what holds two equations is no one equation's drawing.
+    test("an element with a renderer's class around two equations keeps both and the text between", () => {
+        const doc = pasted(
+            `<div class="MathJax"><p><math ${XMLNS}><mi>x</mi></math> and <math ${XMLNS}><mi>x</mi></math></p></div>`,
+        );
+        expect(equationsIn(doc)).toEqual([equation('x', false), equation('x', false)]);
+        expect(doc.textContent).toBe(' and ');
     });
 });
 

@@ -56,6 +56,8 @@ The download runs as the pasting user, with credentials. A user who cannot read 
 
 Docs claims text items only when `hasRichHtmlBeyondMarker` says the HTML is just the marker. A sheets range rides as marker plus a real `<table>`, which ProseMirror turns into a docs table.
 
+A copied equation rides `text/html` as its `<math>`, with its LaTeX as the annotation, and `text/plain` as its linear form. A paste of a `<math>`, Eigen's, a web page's or Word for the web's, reaches ProseMirror's own paste and parses as an equation ([DOCS.md](DOCS.md#every-reader-of-an-equation-goes-through-readequation)). Google Docs puts no math on the clipboard: its HTML holds an equation's characters as plain text runs, so a Google equation pastes as text. Word desktop's HTML is unread ([ROADMAP.md](ROADMAP.md)).
+
 ## Sheets serves its own copies from memory
 
 A sheets copy writes the payload, but a sheets paste of it skips the payload. The copy tags its HTML with `COPY_ACTION_TABLE_MARKER`, and `classifyPaste`'s `internalMarkerText` drops the payload and the SVG on that tag. The paste is served from `ctx.copyState`, which holds coordinates and re-reads the live cells. That is why formulas, formats and links survive a same-tab paste though none of them exist on the wire. In another tab there is no `copyState`, the tag still suppresses the payload, and the paste falls through to the HTML table parser, lossy. Putting sheets on the wire is scoped in [SHEETS-TODO.md](SHEETS-TODO.md).

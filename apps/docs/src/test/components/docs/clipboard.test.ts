@@ -124,6 +124,15 @@ test("an equation copied beside an image is its linear form in the copy's text i
     expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Area πr^2', 'image']);
 });
 
+// Another editor reads the <math> with its LaTeX, a plain-text one the linear form.
+test('an equation copied writes its MathML in the HTML and its linear form as plain text', () => {
+    const latex = '\\pi r^2';
+    const equation = { type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } };
+    const { html, text: plain } = copy([paragraph(text('Area '), equation)]);
+    expect(html).toContain(writeMathml(readLatex(latex), latex));
+    expect(plain).toBe('Area πr^2');
+});
+
 test("a page number copied beside an image is # in the copy's text item", () => {
     const { eigen } = copy([
         paragraph(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }),

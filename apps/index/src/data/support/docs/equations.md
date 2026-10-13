@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, equations, math, latex, editor]
 related: [docs/images-and-tables, docs/export, docs/comments]
 order: 55
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 You can put math in a document, from a quick x² in a sentence to a formula on a line of its own. You write each equation in LaTeX, the notation most math tools use, and a preview shows how it will look as you type.
@@ -52,6 +52,12 @@ An equation sits in the line of text by default. To give it a line of its own, c
 Click an equation to select it and open its panel, then edit its LaTeX. You can also move onto it with the arrow keys and press **Enter**. To remove an equation, select it and press Backspace or Delete.
 
 Other people see your changes once you save them, not while you type. If two people change the same equation, the last one saved wins.
+
+## Paste equations
+
+Copy an equation from Word for the web, or from a web page that shows math, and paste it into a document. It comes in as an equation you can edit, in the line or on its own line as it was. When the page includes the equation's LaTeX, the **LaTeX** field shows it.
+
+An equation copied from one Eigen document to another stays an equation, with its LaTeX. An equation copied from Google Docs pastes as plain text. To bring in the equations of a Word file, [import the file](/support/docs/import-word).
 
 ## Comment on an equation
 

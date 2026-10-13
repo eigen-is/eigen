@@ -8,6 +8,7 @@ import {
     type MathRow,
     type MathXmlElement,
     mathText,
+    readLatex,
     readMathml,
     readMathmlLatex,
     writeMathml,
@@ -87,6 +88,20 @@ export function equationMath({ mathml, display }: Pick<Equation, 'mathml' | 'dis
     return math;
 }
 
+// What KaTeX and MathJax (2 to 4; 2 is Word for the web's, its CommonHTML output classed apart) wrap a drawn equation
+// in: the glyphs and a hidden copy of the <math>.
+const MATH_DRAWINGS = '.katex, .MathJax, .MathJax_CHTML';
+
+// A paste of a drawn equation would hold its glyphs as text beside it, so each drawing becomes its <math> alone. One
+// holds a single <math>, so an element holding two is the page's own. A displayed one's outer wrapper holds only the
+// drawing, and Wikipedia's fallback image parses as nothing, since a figure's image has a media name.
+export function unwrapRenderedMath(root: ParentNode): void {
+    for (const math of root.querySelectorAll('math')) {
+        const drawing = math.parentElement?.closest(MATH_DRAWINGS);
+        if (drawing?.querySelectorAll('math').length === 1) drawing.replaceWith(math);
+    }
+}
+
 // Never the node's leafText: Tiptap's input rules compare their match with textBetween, so a leafText equal to the
 // match's prefix would let a rule replace the equation.
 export const equationText = (attrs: Record<string, unknown>) => readEquation(attrs).text;
@@ -121,9 +136,13 @@ export const EquationNode = Node.create({
             {
                 tag: 'math',
                 namespace: MATHML_NAMESPACE,
+                // A pasted annotation stays only as LaTeX the panel can edit.
                 getAttrs(dom) {
                     const read = readMath(fromDom(dom));
-                    return read ? { mathml: read.mathml } : false;
+                    if (!read) return false;
+                    const { latex } = read;
+                    const editable = latex === undefined || unlessRefused(() => readLatex(latex)) !== undefined;
+                    return { mathml: editable ? read.mathml : writeMathml(read.row) };
                 },
             },
             // One the package refuses parses as nothing rather than as its tokens' text.

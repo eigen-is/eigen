@@ -11,6 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Headers, footers and page numbers** — Insert → **Page elements** or Format → **Headers and footers** opens a panel to edit a document's header and footer, with a different first page and Google's page-number presets; the page shows them in its margins. They don't print or download yet
 - **Equations in Docs** — Insert → **Equation** opens the Equation panel: type LaTeX with a live preview, or pick from Google's five symbol menus. **Display** puts an equation on a line of its own. Equations take comments, count in word count and search, and download to Word as Word equations
 - **Word import and PDF** — a Word file's equations come in as equations you can edit, and the PDF draws equations
+- **Paste equations** — an equation copied from Word for the web or a web page that shows math pastes into Docs as an equation you can edit
 
 ### Changed
 
