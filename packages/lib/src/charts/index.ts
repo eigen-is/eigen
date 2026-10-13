@@ -4,6 +4,7 @@ export {
     chartColor,
     chartLabel,
     exceedsInlineGridLimits,
+    fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
