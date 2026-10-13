@@ -12,7 +12,7 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     cellWrapsText,
@@ -28,40 +28,24 @@ import {
 import type { Alignment, AutoFilter, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 import Range from 'exceljs/lib/doc/range';
 import { ApiError } from '../../core/errors';
-import { A_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
+import { PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
+import {
+    BORDER_STYLE_MAP,
+    HORIZONTAL_MAP,
+    normalizeMonthMinuteTokens,
+    resolveColor,
+    type ThemePalette,
+    themePalette,
+    VERTICAL_MAP,
+} from './styles';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 const DAY_MS = 86_400_000;
 
 const DEFAULT_ROW_HEIGHT_PT = 15.75;
-
-const HORIZONTAL_MAP: Record<NonNullable<Alignment['horizontal']>, 0 | 1 | 2> = {
-    left: 1,
-    center: 0,
-    right: 2,
-    fill: 1,
-    justify: 1,
-    centerContinuous: 0,
-    distributed: 0,
-};
-
-const VERTICAL_MAP: Record<NonNullable<Alignment['vertical']>, 0 | 1 | 2> = {
-    top: 1,
-    middle: 0,
-    bottom: 2,
-    distributed: 0,
-    justify: 0,
-};
-
-// xlsx style name → ordinal, derived from the shared ordinal table (the reverse of its `name`).
-const BORDER_STYLE_MAP: Record<string, number> = Object.fromEntries(
-    Object.entries(BORDER_STYLES).map(([ord, { name }]) => [name, Number(ord)]),
-);
-
-type ThemePalette = string[];
 
 // exceljs's model per cell dominates memory, and a tiny file can declare far-apart cells whose grid the conversion walks:
 // the cells the parts hold count before exceljs loads (tallySheet), the grid they span after. The byte cap catches a bomb
@@ -78,7 +62,7 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 
     const zip = openZip(checked);
     // One after the other, so their trees are never alive together.
-    const theme = readThemePalette(zip);
+    const theme = themePalette(readPart(zip, 'xl/theme/theme1.xml') ?? undefined);
     const locationLinks = readLocationHyperlinks(zip);
 
     const emitted = { text: 0 };
@@ -1206,177 +1190,6 @@ function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; d
     return { value: serial, display };
 }
 
-// Excel/ECMA-376 uses one format code (`m`/`M`, case-insensitively) for BOTH month and
-// minute, resolved by context — minute when a run sits next to hours/seconds, month
-// otherwise. numfmt (our renderer) resolves it the same way, so an imported `dd/mm/yyyy`
-// DISPLAYS correctly. But the custom date/time dialog's tokenizer follows the Google
-// convention (uppercase `M` month, lowercase `m` minute, case-significant), so a stored
-// lowercase `mm` month shows a "Minute" chip — and editing that chip writes minute tokens
-// into a month position. Canonicalise every `m`/`M` run to the Google convention at import,
-// applying the exact same context classification numfmt uses, so the stored case matches the
-// render and only the case of `m`/`M` ever changes. Bit flags mirror numfmt's dateChunks:
-// only HOUR/SEC (a preceding one makes a run a minute) and MIN (a following seconds resolves
-// a deferred month) participate; every other date token is a size-0 adjacency breaker.
-const DATE_HOUR = 1;
-const DATE_MIN = 2;
-const DATE_SEC = 4;
-
-type DateChunk = { size: number; used?: boolean; indeterminate?: boolean; mRef?: number };
-
-// Split on top-level `;` section separators, leaving separators inside quoted literals,
-// `\`-escapes and `[...]` brackets in place.
-function splitFormatSections(fmt: string): string[] {
-    const sections: string[] = [];
-    let current = '';
-    let i = 0;
-    while (i < fmt.length) {
-        const ch = fmt[i];
-        if (ch === '"') {
-            const end = fmt.indexOf('"', i + 1);
-            const stop = end === -1 ? fmt.length : end + 1;
-            current += fmt.slice(i, stop);
-            i = stop;
-        } else if (ch === '\\' && i + 1 < fmt.length) {
-            current += fmt.slice(i, i + 2);
-            i += 2;
-        } else if (ch === '[') {
-            const end = fmt.indexOf(']', i + 1);
-            const stop = end === -1 ? fmt.length : end + 1;
-            current += fmt.slice(i, stop);
-            i = stop;
-        } else if (ch === ';') {
-            sections.push(current);
-            current = '';
-            i += 1;
-        } else {
-            current += ch;
-            i += 1;
-        }
-    }
-    sections.push(current);
-    return sections;
-}
-
-function normalizeSectionMonthMinute(section: string): string {
-    const out: string[] = [];
-    const chunks: DateChunk[] = [];
-    let i = 0;
-    while (i < section.length) {
-        const rest = section.slice(i);
-        const ch = section[i];
-
-        if (ch === '"') {
-            const end = section.indexOf('"', i + 1);
-            const stop = end === -1 ? section.length : end + 1;
-            out.push(section.slice(i, stop));
-            i = stop;
-            continue;
-        }
-        // `\x` escape and `_x`/`*x` fill/skip all consume the next char as a literal —
-        // its letter must never be read as a date token.
-        if ((ch === '\\' || ch === '_' || ch === '*') && i + 1 < section.length) {
-            out.push(section.slice(i, i + 2));
-            i += 2;
-            continue;
-        }
-        // AM/PM and A/P carry `m`/`p` letters but are not adjacency tokens — skip whole.
-        const ampm = rest.match(/^(am\/pm|a\/p)/i);
-        if (ampm) {
-            out.push(ampm[0]);
-            i += ampm[0].length;
-            continue;
-        }
-        if (ch === '[') {
-            const end = section.indexOf(']', i + 1);
-            if (end !== -1) {
-                const inner = section.slice(i + 1, end);
-                if (/^m+$/i.test(inner)) {
-                    // Elapsed minutes `[m]`/`[mm]` — always minute, always lowercase.
-                    out.push(`[${'m'.repeat(inner.length)}]`);
-                    chunks.push({ size: DATE_MIN });
-                } else if (/^h+$/i.test(inner)) {
-                    out.push(section.slice(i, end + 1));
-                    chunks.push({ size: DATE_HOUR });
-                } else if (/^s+$/i.test(inner)) {
-                    out.push(section.slice(i, end + 1));
-                    chunks.push({ size: DATE_SEC });
-                } else {
-                    // Color / condition / currency locale — not a date token.
-                    out.push(section.slice(i, end + 1));
-                }
-                i = end + 1;
-                continue;
-            }
-        }
-
-        const hour = rest.match(/^[hH]+/);
-        if (hour) {
-            out.push(hour[0]);
-            chunks.push({ size: DATE_HOUR });
-            i += hour[0].length;
-            continue;
-        }
-        const sec = rest.match(/^[sS]+/);
-        if (sec) {
-            out.push(sec[0]);
-            const last = chunks[chunks.length - 1];
-            let usedByMinute = false;
-            if (last && last.size & DATE_MIN) {
-                usedByMinute = true;
-            } else if (last?.indeterminate && last.mRef != null) {
-                // Seconds resolve a deferred month back to a minute.
-                last.indeterminate = false;
-                last.size = DATE_MIN;
-                out[last.mRef] = out[last.mRef].toLowerCase();
-                usedByMinute = true;
-            }
-            chunks.push({ size: DATE_SEC, used: usedByMinute });
-            i += sec[0].length;
-            continue;
-        }
-        const month = rest.match(/^[mM]+/);
-        if (month) {
-            const len = month[0].length;
-            const idx = out.length;
-            if (len >= 3) {
-                // mmm/mmmm/mmmmm are always month names.
-                out.push('M'.repeat(len));
-                chunks.push({ size: 0 });
-            } else {
-                const last = chunks[chunks.length - 1];
-                if (last && !last.used && last.size & (DATE_HOUR | DATE_SEC)) {
-                    last.used = true;
-                    out.push('m'.repeat(len));
-                    chunks.push({ size: DATE_MIN });
-                } else {
-                    // Undecided → month for now; a later seconds token may flip it.
-                    out.push('M'.repeat(len));
-                    chunks.push({ size: 0, indeterminate: true, mRef: idx });
-                }
-            }
-            i += len;
-            continue;
-        }
-        // Other date tokens (year/day/b-year/era/weekday) only break hour/second adjacency.
-        const other = rest.match(/^([yY]+|[dD]+|[bB]+|[gG]+|e+|[aA]{3,})/);
-        if (other) {
-            out.push(other[0]);
-            chunks.push({ size: 0 });
-            i += other[0].length;
-            continue;
-        }
-
-        out.push(ch);
-        i += 1;
-    }
-    return out.join('');
-}
-
-export function normalizeMonthMinuteTokens(numFmt: string): string {
-    if (!/[mM]/.test(numFmt)) return numFmt;
-    return splitFormatSections(numFmt).map(normalizeSectionMonthMinute).join(';');
-}
-
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {
     const t = resolveType(cell, value);
     const rawNumFmt = cell.numFmt && cell.numFmt !== 'General' ? cell.numFmt : null;
@@ -1441,11 +1254,14 @@ function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): v
 }
 
 function applyAlignment(alignment: Partial<Alignment>, target: FortuneCell): void {
-    if (alignment.horizontal && alignment.horizontal in HORIZONTAL_MAP) {
-        target.ht = HORIZONTAL_MAP[alignment.horizontal];
+    const horizontal = HORIZONTAL_MAP.get(alignment.horizontal ?? '');
+    if (horizontal !== undefined) {
+        target.ht = horizontal;
     }
-    if (alignment.vertical && alignment.vertical in VERTICAL_MAP) {
-        target.vt = VERTICAL_MAP[alignment.vertical];
+    // ExcelJS reads xlsx's vertical center as middle.
+    const vertical = VERTICAL_MAP.get(alignment.vertical === 'middle' ? 'center' : (alignment.vertical ?? ''));
+    if (vertical !== undefined) {
+        target.vt = vertical;
     }
     if (alignment.wrapText) {
         target.tb = '2';
@@ -1460,85 +1276,6 @@ function applyAlignment(alignment: Partial<Alignment>, target: FortuneCell): voi
     ) {
         target.rt = alignment.textRotation;
     }
-}
-
-function argbToHex(argb: string): string {
-    const rgb = argb.length === 8 ? argb.slice(2) : argb;
-    return `#${rgb.toUpperCase()}`;
-}
-
-function resolveColor(
-    color: { argb?: string; theme?: number; tint?: number } | undefined,
-    theme: ThemePalette,
-): string | null {
-    if (!color) return null;
-    if (color.argb) {
-        const hex = argbToHex(color.argb);
-        return color.tint != null ? applyTint(hex, color.tint) : hex;
-    }
-    if (color.theme != null && color.theme < theme.length) {
-        const hex = theme[color.theme];
-        return color.tint != null ? applyTint(hex, color.tint) : hex;
-    }
-    return null;
-}
-
-function applyTint(hex: string, tint: number): string {
-    const raw = hex.replace('#', '');
-    let r = Number.parseInt(raw.substring(0, 2), 16);
-    let g = Number.parseInt(raw.substring(2, 4), 16);
-    let b = Number.parseInt(raw.substring(4, 6), 16);
-    if (tint > 0) {
-        r = Math.round(r + (255 - r) * tint);
-        g = Math.round(g + (255 - g) * tint);
-        b = Math.round(b + (255 - b) * tint);
-    } else {
-        r = Math.round(r * (1 + tint));
-        g = Math.round(g * (1 + tint));
-        b = Math.round(b * (1 + tint));
-    }
-    const toHex = (v: number) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0').toUpperCase();
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-
-// SpreadsheetML theme indices: 0=lt1, 1=dk1, 2=lt2, 3=dk2, 4-9=accent1-6, 10=hlink, 11=folHlink.
-// The clrScheme XML lists them as dk1,lt1,dk2,lt2,accent1-6,hlink,folHlink — reorder to match.
-const CLR_SCHEME_ELEMENTS = [
-    'dk1',
-    'lt1',
-    'dk2',
-    'lt2',
-    'accent1',
-    'accent2',
-    'accent3',
-    'accent4',
-    'accent5',
-    'accent6',
-    'hlink',
-    'folHlink',
-] as const;
-const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
-
-function readThemePalette(zip: ZipReader): ThemePalette {
-    const theme = readPart(zip, 'xl/theme/theme1.xml');
-    const elements = theme?.ns === A_NS ? xmlChild(theme, A_NS, 'themeElements') : undefined;
-    const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
-    if (!scheme) return [];
-
-    const xmlColors: string[] = [];
-    for (const el of CLR_SCHEME_ELEMENTS) {
-        const slot = xmlChild(scheme, A_NS, el);
-        const srgb = slot && xmlChild(slot, A_NS, 'srgbClr');
-        const sys = slot && xmlChild(slot, A_NS, 'sysClr');
-        const hex = (srgb && xmlAttr(srgb, '', 'val')) ?? (sys && xmlAttr(sys, '', 'lastClr'));
-        xmlColors.push(hex && /^[A-Fa-f0-9]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : '#000000');
-    }
-
-    const palette: ThemePalette = [];
-    for (const xmlIndex of THEME_INDEX_ORDER) {
-        palette.push(xmlColors[xmlIndex]);
-    }
-    return palette;
 }
 
 function convertBorder(cell: XlsxCell, theme: ThemePalette): CellBorderSides | null {
@@ -1563,9 +1300,10 @@ function convertBorder(cell: XlsxCell, theme: ThemePalette): CellBorderSides | n
 }
 
 function convertBorderSide(side: Partial<Border> | undefined, theme: ThemePalette): BorderSide | null {
-    if (!side?.style || !(side.style in BORDER_STYLE_MAP)) return null;
-    const color = resolveColor(side.color, theme) ?? '#000000';
-    return { style: BORDER_STYLE_MAP[side.style], color };
+    const style = BORDER_STYLE_MAP.get(side?.style ?? '');
+    if (style === undefined) return null;
+    const color = resolveColor(side?.color, theme) ?? '#000000';
+    return { style, color };
 }
 
 function isFormulaValue(value: CellValue): value is Extract<CellValue, { formula: string }> {

@@ -25,8 +25,9 @@ export { createCfFormulaEvaluator, evaluateConditionalFormat, withCfRanges } fro
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
 export { createDefaultSheets } from './defaults';
-export { booleanDisplay, cellWrapsText, numberDisplay, update } from './format';
+export { booleanDisplay, cellWrapsText, is_date, numberDisplay, update } from './format';
 export { FormulaEngine } from './formula-engine';
+export { functionCopy } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './parser/helper/cell';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
