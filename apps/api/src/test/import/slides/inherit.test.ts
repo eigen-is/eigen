@@ -55,6 +55,35 @@ describe('placeholders', () => {
         expect(placed(found)).toEqual([50, 50, 500, 500]);
     });
 
+    test('a picture, table, chart, clip art, diagram or media placeholder takes the master body placeholder', () => {
+        const kinds = ['pic', 'tbl', 'chart', 'clipArt', 'dgm', 'media'];
+        const elements = first({
+            masters: [{ shapes: placeholder('<p:ph type="body" idx="1"/>', box(50, 50, 500, 500)) }],
+            slides: [
+                {
+                    shapes: kinds
+                        .map((type, i) => placeholder(`<p:ph type="${type}" idx="${i + 20}"/>`, undefined, type))
+                        .join(''),
+                },
+            ],
+        });
+        expect(elements.map(placed)).toEqual(kinds.map(() => [50, 50, 500, 500]));
+    });
+
+    test('a slide of many placeholders over a layout of many matches each in one lookup', () => {
+        const ph = (attributes: string) => `<p:sp><p:nvSpPr><p:nvPr><p:ph ${attributes}/></p:nvPr></p:nvSpPr></p:sp>`;
+        const layout = Array.from({ length: 40_000 }, (_, i) => ph(`type="dt" idx="${i + 100_000}"`)).join('');
+        const slide = Array.from({ length: 5000 }, (_, i) => ph(`type="chart" idx="${i}"`)).join('');
+        const pptx = buildPptx({
+            layouts: [{ shapes: layout }],
+            slides: [{ shapes: slide, attributes: ' showMasterSp="0"' }],
+        });
+        const started = performance.now();
+        readPptx(pptx, OPTIONS);
+        // Quadratic matching took seconds here; one lookup each takes milliseconds.
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
+
     test("a slide's empty placeholder is not drawn, and the title's text names the frame", () => {
         const deck = deckOf({
             layouts: [{ shapes: placeholder('<p:ph type="title"/>', box(0, 0, 100, 100)) }],

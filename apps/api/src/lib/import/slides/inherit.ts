@@ -23,14 +23,21 @@ export type SlideTheme = {
 
 export type Placeholder = { type: string | undefined; idx: string | undefined; shape: XmlElement };
 
+// A part's placeholders by idx, type and kind, read once with the part; the first of each wins.
+type Placeholders = {
+    byIdx: Map<string, Placeholder>;
+    byType: Map<string | undefined, Placeholder>;
+    byKind: Map<string, Placeholder>;
+};
+
 type Master = {
     part: Part;
     theme: SlideTheme;
-    placeholders: Placeholder[];
+    placeholders: Placeholders;
     txStyles: XmlElement | undefined;
 };
 
-type Layout = { part: Part; master: Master | undefined; placeholders: Placeholder[]; showMasterSp: boolean };
+type Layout = { part: Part; master: Master | undefined; placeholders: Placeholders; showMasterSp: boolean };
 
 export type SlideInheritance = {
     slide: Part;
@@ -117,28 +124,41 @@ export function placeholderOf(shape: XmlElement): Placeholder | undefined {
     return ph && { type: xmlAttr(ph, '', 'type'), idx: xmlAttr(ph, '', 'idx'), shape };
 }
 
-function placeholdersOf(root: XmlElement): Placeholder[] {
+function placeholdersOf(root: XmlElement): Placeholders {
+    const placeholders: Placeholders = { byIdx: new Map(), byType: new Map(), byKind: new Map() };
+    const first = <K>(map: Map<K, Placeholder>, key: K, placeholder: Placeholder) => {
+        if (!map.has(key)) map.set(key, placeholder);
+    };
     const tree = spTreeOf(root);
-    return (tree ? xmlElements(tree) : []).flatMap((shape) => placeholderOf(shape) ?? []);
+    for (const shape of tree ? xmlElements(tree) : []) {
+        const placeholder = placeholderOf(shape);
+        if (!placeholder) continue;
+        if (placeholder.idx !== undefined) first(placeholders.byIdx, placeholder.idx, placeholder);
+        first(placeholders.byType, placeholder.type, placeholder);
+        first(placeholders.byKind, placeholderKind(placeholder.type), placeholder);
+    }
+    return placeholders;
 }
 
-// SPEC X-D4: ctrTitle is a title; subTitle, obj and an untyped placeholder are body.
+// SPEC X-D4: ctrTitle is a title; subTitle, obj, an untyped placeholder and one for content a master has no
+// placeholder of its own for are body, as python-pptx matches them.
+const BODY_TYPES = new Set(['body', 'subTitle', 'obj', 'pic', 'tbl', 'chart', 'clipArt', 'dgm', 'media']);
+
 export function placeholderKind(type: string | undefined): string {
     if (type === 'ctrTitle' || type === 'title') return 'title';
-    return type === undefined || type === 'body' || type === 'subTitle' || type === 'obj' ? 'body' : type;
+    return type === undefined || BODY_TYPES.has(type) ? 'body' : type;
 }
 
 // The layout's and the master's placeholder a slide's own inherits from, nearest first. A layout matches by idx, then
 // by type; a master by kind alone, as its dt, ftr and sldNum carry the idx 2 to 4 that layouts reuse for body text.
 export function inheritedPlaceholders(own: Placeholder, inheritance: SlideInheritance): Placeholder[] {
-    const candidates = inheritance.layout?.placeholders ?? [];
-    const kind = placeholderKind(own.type);
+    const layout = inheritance.layout?.placeholders;
     const fromLayout =
-        (own.idx !== undefined ? candidates.find((other) => other.idx === own.idx) : undefined) ??
-        candidates.find((other) => other.type === own.type) ??
-        candidates.find((other) => placeholderKind(other.type) === kind);
-    const masterKind = placeholderKind((fromLayout ?? own).type);
-    const fromMaster = inheritance.master?.placeholders.find((other) => placeholderKind(other.type) === masterKind);
+        layout &&
+        ((own.idx !== undefined ? layout.byIdx.get(own.idx) : undefined) ??
+            layout.byType.get(own.type) ??
+            layout.byKind.get(placeholderKind(own.type)));
+    const fromMaster = inheritance.master?.placeholders.byKind.get(placeholderKind((fromLayout ?? own).type));
     return [fromLayout, fromMaster].filter((placeholder) => placeholder !== undefined);
 }
 
