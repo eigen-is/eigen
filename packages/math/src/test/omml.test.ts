@@ -6,7 +6,7 @@ import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { canonicalOmml, NORMALISATIONS } from './canonical-omml';
 import { CORPUS, type CorpusEquation } from './corpus';
-import { generateTree } from './generate';
+import { generateTree, seedChunks } from './generate';
 import { el, parseWritten } from './parse';
 
 const NAMESPACES = `xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}"`;
@@ -64,8 +64,8 @@ describe('OMML → tree → OMML keeps what Word shows', () => {
         }
     });
 
-    test('5,000 seeded canonical trees survive OMML unchanged', () => {
-        for (let seed = 1; seed <= 5000; seed++) {
+    test.each(seedChunks(5000))('seeded canonical trees %i to %i survive OMML unchanged', (first, last) => {
+        for (let seed = first; seed <= last; seed++) {
             const tree = generateTree(seed);
             expect({ seed, tree: readOmml(parseWritten(writeOmml(tree))) }).toStrictEqual({ seed, tree });
         }

@@ -5,7 +5,7 @@ import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import { writeText } from '../text';
 import { MATH_LIMITS, type MathNode, type MathRow, RowBuilder } from '../tree';
-import type { MathXmlElement } from '../xml';
+import { checkedXml, type MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
 
@@ -34,14 +34,22 @@ describe('MATH_LIMITS', () => {
             attributes: {},
             children,
         });
+        const text = 'x'.repeat(20_000_000);
         const omml = element(OMML_NAMESPACE, 'oMath', [
-            element(OMML_NAMESPACE, 'r', [element(OMML_NAMESPACE, 't', ['x'.repeat(20_000_000)])]),
+            element(OMML_NAMESPACE, 'r', [element(OMML_NAMESPACE, 't', [text])]),
         ]);
-        const mathml = element(MATHML_NAMESPACE, 'math', [element(MATHML_NAMESPACE, 'mi', ['x'.repeat(30_000_000)])]);
-        for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
+        const mathml = element(MATHML_NAMESPACE, 'math', [element(MATHML_NAMESPACE, 'mi', [text])]);
+        const elapsed = (run: () => void) => {
             const start = performance.now();
+            run();
+            return performance.now() - start;
+        };
+        // The baseline is the one pass every reader makes over the text, so a slow machine scales both alike; holding
+        // every character costs hundreds of times that.
+        const baseline = Math.min(...[1, 2, 3].map(() => elapsed(() => checkedXml(text))));
+        for (const read of [() => readOmml(omml), () => readMathml(mathml)]) {
             expect(read).toThrow(MathError);
-            expect(performance.now() - start).toBeLessThan(500);
+            expect(elapsed(() => expect(read).toThrow(MathError))).toBeLessThan(10 * baseline);
         }
     });
 

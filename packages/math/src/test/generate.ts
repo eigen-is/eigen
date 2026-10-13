@@ -18,6 +18,13 @@ export function seeded(seed: number): Random {
     };
 }
 
+// Seeds 1 to `seeds` in chunks of 1,000, a test each, so no test nears bun's 5 s timeout under a full check's load.
+export const seedChunks = (seeds: number): [number, number][] =>
+    Array.from({ length: Math.ceil(seeds / 1000) }, (_, index) => [
+        index * 1000 + 1,
+        Math.min((index + 1) * 1000, seeds),
+    ]);
+
 export const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
 
 // Marked tokens and slashed relations too, as readers compose them: x\u0338 stays, = and U+0338 compose to ≠.

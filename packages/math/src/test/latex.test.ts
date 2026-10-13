@@ -9,7 +9,7 @@ import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS, type MathNode
 import { canonicalIssue } from './canonical';
 import { CORPUS } from './corpus';
 import { LATEX_FORMULAS } from './fixtures/latex-formulas';
-import { generateTree } from './generate';
+import { generateTree, seedChunks } from './generate';
 import { LOSSES } from './latex-losses';
 import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
 
@@ -96,18 +96,21 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
     });
 
     // KaTeX rejects a raw U+0338, so every slash is \not.
-    test('10,000 seeded canonical trees, with the pictures LaTeX lacks swapped out', () => {
-        for (let seed = 1; seed <= 10_000; seed++) {
-            const tree = withoutLosses(generateTree(seed));
-            expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
-            const latex = writeLatex(tree);
-            expect({ seed, tree: readLatex(latex), slash: latex.includes('\u0338') }).toStrictEqual({
-                seed,
-                tree,
-                slash: false,
-            });
-        }
-    });
+    test.each(seedChunks(10_000))(
+        'seeded canonical trees %i to %i, with the pictures LaTeX lacks swapped out',
+        (first, last) => {
+            for (let seed = first; seed <= last; seed++) {
+                const tree = withoutLosses(generateTree(seed));
+                expect({ seed, issue: canonicalIssue(tree) }).toEqual({ seed, issue: undefined });
+                const latex = writeLatex(tree);
+                expect({ seed, tree: readLatex(latex), slash: latex.includes('\u0338') }).toStrictEqual({
+                    seed,
+                    tree,
+                    slash: false,
+                });
+            }
+        },
+    );
 
     test.each<[string, MathRow]>([
         [
@@ -829,54 +832,48 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
     });
 
     // What LaTeX admits, MathML stores and reads back: neither counts a row or node the tree lacks.
-    test('the size bound counts the tree, as MathML does', () => {
-        const plus: MathNode = { kind: 'operator', text: '+' };
-        const units: MathNode[] = [
-            { kind: 'number', text: '42' },
-            { kind: 'text', text: 'a b' },
-            { kind: 'nary', operator: '∑', limits: 'under', sub: x, body: [] },
-            { kind: 'scripts', base: [], sub: x },
-            { kind: 'scripts', base: x, sub: x, pre: true },
-            { kind: 'scripts', base: x, sup: x, pre: true },
-            { kind: 'radical', body: x, degree: x },
-            { kind: 'fenced', open: '(', close: ')', separator: '|', parts: [[], x] },
-            { kind: 'function', name: [{ kind: 'identifier', text: 'lim' }], body: [] },
-            { kind: 'table', layout: 'equations', rows: [[[], x], [[]]] },
-            { kind: 'table', layout: 'equations', rows: [[x, x, x, x]] },
-            { kind: 'fraction', numerator: [], denominator: x, line: 'none' },
-            {
-                kind: 'limit',
-                position: 'over',
-                base: [{ kind: 'brace', char: '⏞', position: 'over', body: [] }],
-                limit: x,
-            },
-        ];
-        for (const unit of units) {
-            const row = (count: number): MathRow => Array.from({ length: count }, () => [unit, plus]).flat();
-            const admits = (count: number) => thrown(() => viaLatex(row(count))) === undefined;
-            let low = 1;
-            let high = MATH_LIMITS.size;
-            while (low < high) {
-                const middle = Math.ceil((low + high) / 2);
-                if (admits(middle)) low = middle;
-                else high = middle - 1;
-            }
-            expect(viaLatex(row(low))).toStrictEqual(row(low));
-            expect(viaOmml(row(low))).toStrictEqual(row(low));
-            expect(viaMathml(row(low))).toStrictEqual(row(low));
-            expect(thrown(() => viaMathml(row(low + 1)))).toBeInstanceOf(MathError);
-            expect(thrown(() => viaOmml(row(low + 1)))).toBeInstanceOf(MathError);
-            expect(writeLatex(row(low + 1)).length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
+    const plus: MathNode = { kind: 'operator', text: '+' };
+    test.each<MathNode>([
+        { kind: 'number', text: '42' },
+        { kind: 'text', text: 'a b' },
+        { kind: 'nary', operator: '∑', limits: 'under', sub: x, body: [] },
+        { kind: 'scripts', base: [], sub: x },
+        { kind: 'scripts', base: x, sub: x, pre: true },
+        { kind: 'scripts', base: x, sup: x, pre: true },
+        { kind: 'radical', body: x, degree: x },
+        { kind: 'fenced', open: '(', close: ')', separator: '|', parts: [[], x] },
+        { kind: 'function', name: [{ kind: 'identifier', text: 'lim' }], body: [] },
+        { kind: 'table', layout: 'equations', rows: [[[], x], [[]]] },
+        { kind: 'table', layout: 'equations', rows: [[x, x, x, x]] },
+        { kind: 'fraction', numerator: [], denominator: x, line: 'none' },
+        {
+            kind: 'limit',
+            position: 'over',
+            base: [{ kind: 'brace', char: '⏞', position: 'over', body: [] }],
+            limit: x,
+        },
+    ])('the size bound counts the tree, as MathML does: %j', (unit) => {
+        const row = (count: number): MathRow => Array.from({ length: count }, () => [unit, plus]).flat();
+        const admits = (count: number) => thrown(() => viaLatex(row(count))) === undefined;
+        let low = 1;
+        let high = MATH_LIMITS.size;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (admits(middle)) low = middle;
+            else high = middle - 1;
         }
-        // Typed forms the writer never emits: the largest tree LaTeX admits from them, MathML stores too.
-        for (const typed of [
-            '\\sum_x+',
-            '\\lim_x+',
-            '{}^x+',
-            '\\prescript{}{x}{y}+',
-            '\\xrightarrow[x]{y}+',
-            '\\pmod{x}',
-        ]) {
+        expect(viaLatex(row(low))).toStrictEqual(row(low));
+        expect(viaOmml(row(low))).toStrictEqual(row(low));
+        expect(viaMathml(row(low))).toStrictEqual(row(low));
+        expect(thrown(() => viaMathml(row(low + 1)))).toBeInstanceOf(MathError);
+        expect(thrown(() => viaOmml(row(low + 1)))).toBeInstanceOf(MathError);
+        expect(writeLatex(row(low + 1)).length).toBeLessThanOrEqual(MATH_LIMITS.latexLength);
+    });
+
+    // Typed forms the writer never emits: the largest tree LaTeX admits from them, MathML stores too.
+    test.each(['\\sum_x+', '\\lim_x+', '{}^x+', '\\prescript{}{x}{y}+', '\\xrightarrow[x]{y}+', '\\pmod{x}'])(
+        'the largest tree LaTeX admits from %p, MathML stores',
+        (typed) => {
             let low = 1;
             let high = MATH_LIMITS.size;
             while (low < high) {
@@ -885,9 +882,9 @@ describe('readLatex ends in a tree or a MathError, in linear time', () => {
                 else high = middle - 1;
             }
             const tree = readLatex(typed.repeat(low));
-            expect({ typed, tree: viaMathml(tree) }).toStrictEqual({ typed, tree });
-        }
-    });
+            expect(viaMathml(tree)).toStrictEqual(tree);
+        },
+    );
 
     test('LaTeX past its cap is an error', () => {
         expect(readLatex(`${' '.repeat(MATH_LIMITS.latexLength - 1)}x`)).toStrictEqual(x);
