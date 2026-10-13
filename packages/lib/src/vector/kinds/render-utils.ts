@@ -4,14 +4,18 @@
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { svgGradientStops } from '../../background/gradient';
+import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/xml';
+import type { ChartLabel } from '../../types/chart';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
-import { isClosedPath, type Point, round } from '../geometry';
+import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
+import { type Box, isClosedPath, type Point, round } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
 import {
     type FillStyle,
     isLinearElement,
     type VectorArrowElement,
+    type VectorElement,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorPieElement,
@@ -31,6 +35,34 @@ type RoughBoxElement = VectorShapeElement | VectorPieElement | VectorImageElemen
 export function renderRoughShape(el: RoughBoxElement): string {
     const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
     return `${'fill' in el ? fillDefs(el) : ''}<g stroke-linecap="round">${paths}</g>`;
+}
+
+// The dashed box an element draws where its content can't be shown: a picture with no file, a chart that
+// doesn't read.
+export const PLACEHOLDER_COLOR = '#9ca3af';
+export const PLACEHOLDER_DASH = '6 6';
+
+// An element's own group: translated to its position, then rotated about its center (SVG rotate() takes
+// degrees, as `angle` stores them). Every kind draws in its local frame inside one.
+export function elementGroupOpen(el: VectorElement): string {
+    const opacity = el.opacity !== 100 ? ` opacity="${round(el.opacity / 100)}"` : '';
+    return `<g transform="${elementTransform(el)}"${opacity}>`;
+}
+
+function elementTransform(box: Box): string {
+    const translate = `translate(${round(box.x)} ${round(box.y)})`;
+    if (box.angle === 0) return translate;
+    return `${translate} rotate(${round(box.angle)} ${round(box.width / 2)} ${round(box.height / 2)})`;
+}
+
+// One line of plain SVG text, which every surface draws (WeasyPrint ignores foreignObject). `y` is the
+// line's top and the baseline sits the font's offset below it; a turned line turns about (x, y). 600 is
+// the weight the bundled bold faces carry.
+export function svgTextLine({ text, x, y, anchor, fontFamily, fontSize, bold, color, rotate }: ChartLabel): string {
+    const baseline = y + getVerticalOffset(fontFamily, fontSize, getLineHeightPx(fontFamily, fontSize));
+    const turn = rotate === 0 ? '' : ` transform="rotate(${round(rotate)} ${round(x)} ${round(y)})"`;
+    const weight = bold ? ' font-weight="600"' : '';
+    return `<text x="${round(x)}" y="${round(baseline)}"${turn} font-family="${escapeXml(getFontFamily(fontFamily))}" font-size="${round(fontSize)}px"${weight} fill="${escapeXml(color)}" text-anchor="${anchor}" style="white-space: pre;">${escapeXml(text)}</text>`;
 }
 
 // Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
