@@ -261,12 +261,18 @@ describe('pptx package', () => {
         expect([attr(wideSize, 'cx'), attr(wideSize, 'cy')]).toEqual(['12192000', '6858000']);
         expect(xfrm(only(wide))).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 100 * EMU, rot: 0 });
 
-        const scene = sceneOf([element('rectangle', { corners: 'straight', x: 192, y: 144 })]);
+        const scene = sceneOf([
+            element('rectangle', { corners: 'straight', x: 192, y: 144 }),
+            element('richtext', { index: 'a1', html: '<p>small</p>', fontSize: 48 }),
+        ]);
         const square = pptx({ ...scene, frames: scene.frames.map((frame) => ({ ...frame, height: 1440 })) });
         const squareSize = first(part(square, 'ppt/presentation.xml'), P, 'sldSz');
         expect([attr(squareSize, 'cx'), attr(squareSize, 'cy')]).toEqual(['9144000', '6858000']);
+        const [rectangle, text] = shapes(square);
         // 4,762.5 EMU per px, rounded to whole EMU.
-        expect(xfrm(only(square))).toEqual({ x: 914400, y: 685800, cx: 952500, cy: 476250, rot: 0 });
+        expect(xfrm(rectangle)).toEqual({ x: 914400, y: 685800, cx: 952500, cy: 476250, rot: 0 });
+        // Text shrinks with the slide: 48 px at 0.375 pt per px.
+        expect(attr(runProps(text, 'small'), 'sz')).toBe('1800');
     });
 
     test('the deck title is escaped into the core properties', () => {
@@ -600,6 +606,11 @@ describe('pptx text', () => {
             target: 'https://example.com/?a=1&b="2"',
             mode: 'External',
         });
+        // canvas-text.css's `p + p` margin, 0.5em of 48 px: 12 pt.
+        const [firstPPr, secondPPr] = descendants(shape, A, 'pPr');
+        expect(descendants(firstPPr, A, 'spcBef')).toHaveLength(0);
+        expect(attr(first(first(secondPPr, A, 'lnSpc'), A, 'spcPts'), 'val')).toBe('2880');
+        expect(attr(first(first(secondPPr, A, 'spcBef'), A, 'spcPts'), 'val')).toBe('1200');
         // The empty paragraph keeps its size, so its line has a height.
         const empty = descendants(shape, A, 'p')[2];
         expect(attr(first(empty, A, 'endParaRPr'), 'sz')).toBe('2400');
@@ -622,6 +633,18 @@ describe('pptx text', () => {
         expect(attr(nested, 'lvl')).toBe('1');
         expect(Number(attr(nested, 'marL'))).toBe(2 * Number(attr(one, 'marL')));
         expect(attr(first(numbered, A, 'buAutoNum'), 'type')).toBe('arabicPeriod');
+    });
+
+    test('a quote indents past its bar and draws at 70%', () => {
+        const shape = only(
+            pptx(sceneOf([element('richtext', { html: '<blockquote><p>quoted</p></blockquote><p>after</p>' })])),
+        );
+        const [quoted, after] = descendants(shape, A, 'pPr');
+        // 0.75em of 48 px and the 3 px bar.
+        expect(attr(quoted, 'marL')).toBe(String(39 * EMU));
+        expect(attr(after, 'marL')).toBeUndefined();
+        expect(srgb(runProps(shape, 'quoted')).alpha).toBe(70000);
+        expect(srgb(runProps(shape, 'after')).alpha).toBeUndefined();
     });
 
     test('hostile strings reach the XML escaped, control characters dropped', () => {
