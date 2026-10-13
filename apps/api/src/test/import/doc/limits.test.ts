@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../../lib/core/errors';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
@@ -9,9 +10,9 @@ import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
-import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_PIECES, MAX_DOCX_XML_BYTES, MAX_DOCX_XML_TAGS } from '../../../lib/import/doc/package';
+import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { docxToPmJson, MAX_DOCX_TEXT, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
+import { MAX_DOCX_PIECES } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
@@ -24,6 +25,9 @@ import {
 import { build, deflated, stored } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
+
+// No body here has a section, so Word's: A4 less its 1 in margins, a 601 px text column.
+const COLUMN_PX = 601;
 
 const run = (text: string, rPr = '') => `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
@@ -161,7 +165,7 @@ describe('XML budget', () => {
     const padding = (bytes: number) => `<!--${'x'.repeat(bytes)}-->`;
 
     test('a document.xml past the budget is 413 before it inflates or parses', async () => {
-        const docx = await buildDocxWithBody(`${paragraph(run('Body'))}${padding(MAX_DOCX_XML_BYTES)}`);
+        const docx = await buildDocxWithBody(`${paragraph(run('Body'))}${padding(MAX_PACKAGE_XML_BYTES)}`);
         const reads = spyOn(ZipReader.prototype, 'read');
         const parses = spyOn(xml, 'parseXml');
         spies.push(reads, parses);
@@ -170,12 +174,12 @@ describe('XML budget', () => {
         // The package's structure was read through the spies; the body was not.
         expect(parses).toHaveBeenCalled();
         expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
-        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(MAX_DOCX_XML_BYTES);
+        expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(MAX_PACKAGE_XML_BYTES);
     });
 
     // Memory follows the elements, not the bytes: 4.5 MB of empty paragraphs would cost more than 16 MB of prose.
     test('a body past the tag budget is 413 before it parses', async () => {
-        const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_XML_TAGS));
+        const docx = await buildDocxWithBody('<w:p/>'.repeat(MAX_PACKAGE_XML_TAGS));
         const parses = spyOn(xml, 'parseXml');
         spies.push(parses);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
@@ -183,25 +187,22 @@ describe('XML budget', () => {
         expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
     });
 
-    test('a fontTable.xml past the budget is 413 before the body inflates', async () => {
-        const reads = spyOn(ZipReader.prototype, 'read');
-        spies.push(reads);
+    test('a fontTable.xml past the budget is 413', async () => {
         const error = await rejection(() =>
-            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_DOCX_XML_BYTES) }),
+            importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_PACKAGE_XML_BYTES) }),
         );
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
-        expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
     });
 
     test('a styles.xml past the tag budget is 413', async () => {
         const error = await rejection(() =>
-            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_DOCX_XML_TAGS) }),
+            importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_PACKAGE_XML_TAGS) }),
         );
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
     test('the budget counts the parts together', async () => {
-        const half = padding(MAX_DOCX_XML_BYTES / 2);
+        const half = padding(MAX_PACKAGE_XML_BYTES / 2);
         const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
         expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
@@ -287,37 +288,32 @@ describe('XML budget', () => {
         expect(texts(json)).toEqual(['Body', '[1]']);
     });
 
-    // A graphic's part is read once every content part is, so a cap it meets costs the graphic, not the document.
-    test('a SmartArt part past the byte budget is dropped and the document imports', async () => {
-        const { json, warnings } = await importDocxBody(
-            `${paragraph(run('Body'))}${paragraph(smartArt)}`,
-            smartArtData(padding(MAX_DOCX_XML_BYTES)),
+    // A graphic's part is charged as every other part is: past the budget it refuses the document.
+    test('a SmartArt part past the byte budget is 413', async () => {
+        const error = await rejection(() =>
+            importDocxBody(
+                `${paragraph(run('Body'))}${paragraph(smartArt)}`,
+                smartArtData(padding(MAX_PACKAGE_XML_BYTES)),
+            ),
         );
-        expect(texts(json)).toEqual(['Body']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
-    test('a chart past the tag budget is dropped, and a SmartArt after it still reads', async () => {
+    test('a chart past the tag budget is 413', async () => {
         const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
-        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_DOCX_XML_TAGS / 4);
+        const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_PACKAGE_XML_TAGS / 4);
         const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
-        const smartArtPart = smartArtData(
-            '<dgm:pt modelId="1"><dgm:t><a:p><a:r><a:t>Kept</a:t></a:r></a:p></dgm:t></dgm:pt>',
-        );
-        const { json, warnings } = await importDocxBody(
-            `${paragraph(run('Body'))}${paragraph(chart)}${paragraph(smartArt)}`,
-            {
-                rels: `${smartArtPart.rels}<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
+        const error = await rejection(() =>
+            importDocxBody(`${paragraph(run('Body'))}${paragraph(chart)}`, {
+                rels: '<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>',
                 media: {
-                    ...smartArtPart.media,
                     'word/charts/chart1.xml': new TextEncoder().encode(
                         `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
                     ),
                 },
-            },
+            }),
         );
-        expect(texts(json)).toEqual(['Body', 'Kept']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 2 }]);
+        expect([error.status, error.message]).toEqual([413, 'Document too large']);
     });
 
     // As a corrupt file is, rather than as a server error.
@@ -357,7 +353,8 @@ describe('XML budget', () => {
     });
 });
 
-// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its own.
+// A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its
+// own: about 600 bytes a piece before the output is weighed, so 4 million of them from 5.7 MB of XML took 2.5 GB.
 describe('text pieces', () => {
     test('Latin and Arabic in one face and one look are one piece', async () => {
         const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
@@ -398,28 +395,6 @@ describe('text pieces', () => {
         expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
-    // A graphic's part reads through the tags, and a run's pieces are no XML, so neither spends what the other needs.
-    test.each(['before', 'after'])(
-        'a chart that takes nearly every tag %s a split run leaves each its own',
-        async (order) => {
-            const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
-            const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-            const chart = paragraph(
-                `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-            );
-            const title = '<c:title><c:tx><c:rich><a:p><a:r><a:t>Kept</a:t></a:r></a:p></c:rich></c:tx></c:title>';
-            const part = `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}${'<c:pt/>'.repeat(MAX_DOCX_XML_TAGS - 5000)}</c:chart></c:chartSpace>`;
-            const split = paragraph(run('aب'.repeat(5000), '<w:bCs/>'));
-            const { json } = await importDocxBody(order === 'before' ? `${chart}${split}` : `${split}${chart}`, {
-                rels: `<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>`,
-                media: { 'word/charts/chart1.xml': new TextEncoder().encode(part) },
-            });
-            expect(texts(json)).toContain('Kept');
-            expect(texts(json)).toHaveLength(10_001);
-        },
-        30_000,
-    );
-
     test('alternating looks within the piece cap keep each', async () => {
         const json = await imported(paragraph(run('aب'.repeat(1000), '<w:bCs/>')));
         expect(texts(json)).toHaveLength(2000);
@@ -454,6 +429,26 @@ describe('output budget', () => {
         const result = measuredImport(docx, 'transform');
         expect([result.status, result.message]).toEqual([413, 'Document too large']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // One w:t compresses a gigabyte into a small upload, and the update holds every character.
+    test('text past the cap in all is 413, at it imports', async () => {
+        const half = MAX_DOCX_TEXT / 2;
+        const at = measuredImport(await buildDocxWithBody(paragraph(run('a'.repeat(half))).repeat(2)));
+        expect(at.texts).toBe(2);
+        const past = measuredImport(
+            await buildDocxWithBody(`${paragraph(run('a'.repeat(half)))}${paragraph(run('a'.repeat(half + 1)))}`),
+        );
+        expect([past.status, past.message]).toEqual([413, 'Document too large']);
+    }, 30_000);
+
+    // The update spells a link's href out for every text node it marks, so its characters count as text too.
+    test('a long href in many links is text past the cap: 413', async () => {
+        const href = `https://example.com/${'x'.repeat(1024 * 1024)}`;
+        const body = paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`).repeat(70);
+        const result = measuredImport(await buildDocxWithBody(body, { rels: linkTo(href) }));
+        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
     // The update spells a link's href out for every text node it marks.
@@ -625,6 +620,25 @@ describe('structure', () => {
         const json = await imported(paragraph(run('Item'), ordered(10)), { styles, numbering });
         expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
     }, 5000);
+
+    // A style's numbering without a level looks through its definition's levels for every paragraph.
+    test('100,000 levels past the ninth in one definition cost 10,000 styled paragraphs nothing', async () => {
+        const levels = Array.from(
+            { length: 100_000 },
+            (_, index) => `<w:lvl w:ilvl="${index + LIST_LEVELS}"><w:numFmt w:val="decimal"/></w:lvl>`,
+        ).join('');
+        const numbering = `<w:abstractNum w:abstractNumId="1">${levels}<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>';
+        const docx = await buildDocxWithBody(paragraph(run('Item'), '<w:pStyle w:val="L"/>').repeat(10_000), {
+            numbering,
+            styles,
+        });
+        const started = performance.now();
+        const { json } = docxToPmJson(Buffer.from(docx));
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(nodesOfType(json, 'listItem')).toHaveLength(10_000);
+    }, 60_000);
 
     test('quotes nest at most eight deep, deeper ones joining the eighth', async () => {
         const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="12" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr>`;
@@ -1032,11 +1046,11 @@ describe('links', () => {
     });
 });
 
-// The measure behind the budget: a tree costs 20–40× its XML. Seconds of work, so on CI and locally on request.
+// Seconds of work, so on CI and locally on request.
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 
 // What a long report holds: headings, sentences in styled runs, links, lists two deep and tables, repeated up to
-// whichever budget it meets first: the output's, a node and a mark weighing one each.
+// whichever budget it meets first: the XML's bytes or tags, or the output's, a node and a mark weighing one each.
 async function honestBody(): Promise<string> {
     const sentence = 'The committee reviewed the quarterly figures and agreed on the next steps for the project. ';
     const blocks = [
@@ -1060,7 +1074,7 @@ async function honestBody(): Promise<string> {
         (node.marks?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + 1 + weigh(child), 0);
     const weight = weigh((await importDocxBody(blocks)).json);
     const margin = 0.98;
-    const fits = Math.min(MAX_DOCX_XML_BYTES / blocks.length, MAX_DOCX_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
+    const fits = Math.min(MAX_PACKAGE_XML_BYTES / blocks.length, MAX_PACKAGE_XML_TAGS / tags, MAX_DOCX_WEIGHT / weight);
     return blocks.repeat(Math.floor(margin * fits));
 }
 
@@ -1090,10 +1104,25 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         expect(result.rssGrowth).toBeLessThan(1024 * MB);
         expect(result.cpuMs).toBeLessThan(10_000);
     }, 120_000);
+
+    // Word's spelling marks and language tags: 17 elements a paragraph, few of them the document's.
+    test('paragraphs of 17 tags each just under the budgets import within 1 GB of peak RSS', async () => {
+        const lang = '<w:rPr><w:lang w:val="en-US"/></w:rPr>';
+        // A paragraph and its text weigh two.
+        const count = Math.floor(0.98 * Math.min(MAX_PACKAGE_XML_TAGS / 17, MAX_DOCX_WEIGHT / 2));
+        const body = paragraph(
+            `<w:proofErr w:type="spellStart"/>${run('Word', '<w:lang w:val="en-US"/>')}<w:proofErr w:type="spellEnd"/>`,
+            `<w:spacing w:after="0"/>${lang}`,
+        ).repeat(count);
+        const result = measuredImport(await buildDocxWithBody(body));
+        expect(result.blocks).toBe(count);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
+    }, 120_000);
 });
 
-// The transform process's memory limit is Linux's alone. At 1 GiB of data segment the child has about 0.35 GB to use, which
-// the honest document outgrows: the limit ends it, never the kernel's OOM killer, whose SIGKILL the job line would show.
+// The transform process's memory limit is Linux's alone, the backstop past the budgets. At 1 GiB of data segment the child
+// has about 0.35 GB to use, which the honest document outgrows: the limit ends it with a crash, never the kernel's OOM
+// killer, whose SIGKILL the job line would show.
 describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the memory of the transform process', () => {
     test('is 413, ended by the memory limit', async () => {
         const runner = documentTransformRunner as unknown as { memoryLimitKiB: number };
@@ -1116,7 +1145,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
                 .map((args) => String(args[0]))
                 .find((logged) => logged.includes('[transform] job=') && logged.includes('format=docx'));
             expect(line).toContain('outcome=out-of-memory');
-            expect(line).not.toContain('signal=SIGKILL');
+            expect(line).toMatch(/ signal=SIG(ABRT|SEGV|BUS|TRAP)\b/);
         } finally {
             runner.memoryLimitKiB = limit;
             logSpy.mockRestore();

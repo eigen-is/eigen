@@ -37,9 +37,9 @@ export function relOfType(rels: ReadonlyMap<string, Relationship>, type: string)
     return undefined;
 }
 
+// An absolute target climbs from the package root, so neither kind keeps a '..' a format's prefix check would miss.
 function resolveTarget(base: string, target: string): string {
-    if (target.startsWith('/')) return target.slice(1);
-    const parts = base.split('/').slice(0, -1);
+    const parts = target.startsWith('/') ? [] : base.split('/').slice(0, -1);
     for (const segment of target.split('/')) {
         if (segment === '..') parts.pop();
         else if (segment !== '.' && segment !== '') parts.push(segment);
@@ -48,7 +48,7 @@ function resolveTarget(base: string, target: string): string {
 }
 
 // A format reads its package only through relationships and [Content_Types].xml, so an entry named outside them is never
-// read. What a parsed part costs is the transform process's to bound.
+// read.
 export type OoxmlPackage = {
     zip: ZipReader;
     // Parsed once: every reader of a part shares its tree, or the error it failed with. A missing part is undefined.
@@ -57,6 +57,20 @@ export type OoxmlPackage = {
     relationships(partPath: string): Map<string, Relationship>;
     contentTypeOf(path: string): string | undefined;
 };
+
+// One budget for the parts a package parses whole, together, [Content_Types].xml and the relationships parts too, the
+// same in every format: a parsed tree costs many times its text (core/xml.ts). The transform process's memory limit is
+// the backstop past it. The corpora's most, a package's parts together: a docx's 15.3 MB, an xlsx's 15.5 MB, a pptx's
+// 8.0 MB.
+export const MAX_PACKAGE_XML_BYTES = 32 * 1024 * 1024;
+
+// A tree costs per element too, so the parts' elements have a budget of their own: 16 MB of empty paragraphs is 2.8
+// million elements and 3.5 GB. Counted as '<' in the bytes. The corpora's most: 611,000 tags in a docx.
+export const MAX_PACKAGE_XML_TAGS = 1_500_000;
+
+// The format's words for an encrypted package, which name the application that removes the password, and for one past
+// the budget.
+export type PackageMessages = { passwordProtected: string; tooLarge: string };
 
 // An encrypted package is an OLE compound file holding the package as a stream of this name.
 const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
@@ -69,17 +83,25 @@ export function isEncryptedPackage(bytes: Uint8Array): boolean {
     );
 }
 
-// `passwordProtected` is the format's 400 for an encrypted package, which names the application that removes it.
-export function openPackage(bytes: Uint8Array, passwordProtected: string): OoxmlPackage {
-    if (isEncryptedPackage(bytes)) throw new ApiError(400, passwordProtected);
+// Each part is charged against the budget before it parses, its declared size before it inflates (a read inflates no
+// further, core/zip), its tags before the parse. A part past the budget refuses the whole package.
+export function openPackage(bytes: Uint8Array, messages: PackageMessages): OoxmlPackage {
+    if (isEncryptedPackage(bytes)) throw new ApiError(400, messages.passwordProtected);
     const zip = openZip(bytes);
+    const budget = { bytes: MAX_PACKAGE_XML_BYTES, tags: MAX_PACKAGE_XML_TAGS };
     const parsed = new Map<string, XmlElement | undefined>();
     const failed = new Map<string, unknown>();
     const part = (path: string): XmlElement | undefined => {
         if (parsed.has(path)) return parsed.get(path);
         if (failed.has(path)) throw failed.get(path);
         try {
+            const size = zip.entry(path)?.size ?? 0;
+            if (size > budget.bytes) throw new ApiError(413, messages.tooLarge);
             const data = zip.read(path);
+            const tags = data ? tagsIn(data) : 0;
+            if (tags > budget.tags) throw new ApiError(413, messages.tooLarge);
+            budget.bytes -= size;
+            budget.tags -= tags;
             const root = (data && parseOoxml(data)) ?? undefined;
             parsed.set(path, root);
             return root;
@@ -107,7 +129,16 @@ export function openPackage(bytes: Uint8Array, passwordProtected: string): Ooxml
     };
 }
 
-// A damaged optional part, its XML or its entry, costs what it adds, not the document; a cap still refuses it.
+const LESS_THAN = 0x3c;
+
+export function tagsIn(data: Uint8Array): number {
+    let tags = 0;
+    for (let at = data.indexOf(LESS_THAN); at >= 0; at = data.indexOf(LESS_THAN, at + 1)) tags++;
+    return tags;
+}
+
+// A damaged optional part, its XML or its entry, costs what it adds, not the document; the budget or an out-of-memory
+// still refuses the document.
 export function optional<T>(read: () => T): T | undefined {
     try {
         return read();

@@ -78,6 +78,7 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone }: PageSetupFormProps
         return text[side].trim() === '' ? Number.NaN : Math.round(Number(text[side]) * 1000) / 100;
     };
     const candidate: PageSetup = {
+        ...initial,
         ...paper,
         margin: { top: margin('top'), right: margin('right'), bottom: margin('bottom'), left: margin('left') },
     };

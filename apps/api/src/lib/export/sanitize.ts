@@ -142,6 +142,10 @@ function restrictStyleTextToDataRefs(node: Element, allowed: ReadonlySet<string>
     if (stripped !== text || node.firstElementChild) node.textContent = stripped;
 }
 
+// DOMPurify's MathML profile drops <none>, the empty script slot of an <mmultiscripts> with prescripts. Its namespace
+// check still drops one outside a <math>.
+export const KEEP_MATHML = { ADD_TAGS: ['none'] };
+
 // Backs the data-only rule up in the browser: the export route sends it as a header, and every HTML
 // download carries it as a <meta> (html-document.ts).
 export const EXPORT_CSP = "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'";

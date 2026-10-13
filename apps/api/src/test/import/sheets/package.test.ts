@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import { XmlError, xmlAttr, xmlChild, xmlElements } from '../../../lib/core/xml';
 import { writeZip, ZipError } from '../../../lib/core/zip';
 import {
     BATCH_BYTES,
-    MAX_WHOLE_BYTES,
-    MAX_WHOLE_ELEMENTS,
     MAX_XLSX_ELEMENTS,
     readBudget,
     readInBatches,
@@ -251,7 +250,7 @@ describe("a part's children, a batch at a time", () => {
         });
     });
 
-    test('what is parsed whole, the rest of a part or a part that must be, is charged its bytes and elements', () => {
+    test('what is parsed whole, the rest of a part or a part that must be, is charged its bytes and tags', () => {
         const part = encode(sheetXml({ data: '<row r="1"/>' }));
         const nearlyFull = (spend: (budget: ReturnType<typeof readBudget>) => void) => {
             const budget = readBudget();
@@ -259,8 +258,8 @@ describe("a part's children, a batch at a time", () => {
             return budget;
         };
         for (const budget of [
-            nearlyFull((budget) => budget.chargeWhole(new Uint8Array(MAX_WHOLE_BYTES - 100))),
-            nearlyFull((budget) => budget.chargeWhole(Buffer.from('<a>'.repeat(MAX_WHOLE_ELEMENTS - 2)))),
+            nearlyFull((budget) => budget.chargeWhole(new Uint8Array(MAX_PACKAGE_XML_BYTES - 100))),
+            nearlyFull((budget) => budget.chargeWhole(Buffer.from('<a>'.repeat(MAX_PACKAGE_XML_TAGS - 2)))),
         ]) {
             expect(thrown(() => readInBatches(part, 'sheetData', 'row', budget))).toMatchObject({ status: 413 });
             expect(

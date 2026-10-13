@@ -309,7 +309,7 @@ describe('text the import reads', () => {
 // it parses is charged before it is parsed.
 describe('what a file holds costs its parse', () => {
     test('a grid of more empty cells and rows than the element budget is too large before any is parsed', () => {
-        const result = measuredImport(xlsx({ data: rowsOf(3_001, () => '<c/>'.repeat(10_000)) }));
+        const result = measuredImport(xlsx({ data: rowsOf(1_601, () => '<c/>'.repeat(10_000)) }));
         expect(result).toMatchObject(TOO_LARGE);
         expect(result.rssGrowth).toBeLessThan(512 * MB);
         expect(result.cpuMs).toBeLessThan(2_000);
@@ -327,7 +327,7 @@ describe('what a file holds costs its parse', () => {
         }
     }, 30_000);
 
-    test('a part past its grid of more bytes or elements than a whole parse may hold is too large before it is parsed', () => {
+    test('a part past its grid of more bytes or tags than a whole parse may hold is too large before it is parsed', () => {
         for (const after of [
             validation(Array(3_300_000).fill('XFD1048576').join(' ')),
             `<rowBreaks>${'<brk/>'.repeat(1_600_000)}</rowBreaks>`,

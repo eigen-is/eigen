@@ -29,6 +29,7 @@
     "@tiptap/static-renderer": "^3.31.3",
     "@tiptap/y-tiptap": "^3.0.9",
     "@workspace/lib": "workspace:*",
+    "@workspace/math": "workspace:*",
     "@workspace/sheet": "workspace:*",
     "@workspace/ui": "workspace:*",
     "better-auth": "^1.7.3",

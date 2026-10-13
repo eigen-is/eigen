@@ -1,6 +1,14 @@
 import { ApiError } from '../../core/errors';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
-import { type OoxmlPackage, openPackage, optional, relOfType } from '../../core/opc';
+import {
+    MAX_PACKAGE_XML_BYTES,
+    MAX_PACKAGE_XML_TAGS,
+    type OoxmlPackage,
+    openPackage,
+    optional,
+    relOfType,
+    tagsIn,
+} from '../../core/opc';
 import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { IMPORT_MESSAGES } from '../messages';
 
@@ -21,7 +29,7 @@ export type XlsxPackage = {
 };
 
 export function readPackage(bytes: Uint8Array): XlsxPackage {
-    const pkg = openPackage(bytes, IMPORT_MESSAGES.xlsx.passwordProtected);
+    const pkg = openPackage(bytes, IMPORT_MESSAGES.xlsx);
     // By relationship, else where Excel puts the part.
     const workbookPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'xl/workbook.xml';
     const workbook = pkg.part(workbookPath);
@@ -62,23 +70,21 @@ export const MAX_BATCH_BYTES = 12 * 1024 * 1024;
 // A node costs its parse and its memory whatever it emits, so the grids and the shared strings are charged their
 // elements before the first batch of a part is parsed, together, and a sqref its references before they are parsed: a
 // file of empty cells, rows or strings is refused before any is read. The 1,050 workbooks of the corpus hold at most
-// 7.3M (a Zenodo workbook of a million rows); four times that.
-export const MAX_XLSX_ELEMENTS = 30_000_000;
-
-// What the sheets parse whole, each part past its grid, together: openPackage's budget for the parts it parses, in
-// bytes and in elements. The corpus's most is 1.6 MB and 50,000 elements (POI's many-merges test file).
-export const MAX_WHOLE_BYTES = 32 * 1024 * 1024;
-export const MAX_WHOLE_ELEMENTS = 1_500_000;
+// 7.3M (a Zenodo workbook of a million rows); a little over twice that keeps the cheapest flood, empty strings parsed at
+// about 0.3 µs each, near 5 s.
+export const MAX_XLSX_ELEMENTS = 16_000_000;
 
 export type ReadBudget = {
     // Throws past MAX_XLSX_ELEMENTS.
     chargeElements(count: number): void;
-    // Called with what is about to be parsed whole; throws past its budget.
+    // Called with what is about to be parsed whole: a sheet's or the shared strings' part past its batches, or a part
+    // whose cut can't be checked. These never pass through openPackage's part(), so they have a budget of its values
+    // of their own, together across the parts; the corpus's most is 1.6 MB and 50,000 tags. Throws past it.
     chargeWhole(text: Uint8Array): void;
 };
 
 export function readBudget(): ReadBudget {
-    const spent = { elements: 0, wholeBytes: 0, wholeElements: 0 };
+    const spent = { elements: 0, wholeBytes: 0, wholeTags: 0 };
     return {
         chargeElements(count) {
             spent.elements += count;
@@ -86,9 +92,9 @@ export function readBudget(): ReadBudget {
         },
         chargeWhole(text) {
             spent.wholeBytes += text.length;
-            if (spent.wholeBytes > MAX_WHOLE_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
-            spent.wholeElements += elementsIn(text);
-            if (spent.wholeElements > MAX_WHOLE_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            if (spent.wholeBytes > MAX_PACKAGE_XML_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            spent.wholeTags += tagsIn(text);
+            if (spent.wholeTags > MAX_PACKAGE_XML_TAGS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
         },
     };
 }

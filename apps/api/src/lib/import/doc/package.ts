@@ -1,18 +1,12 @@
 import { ApiError } from '../../core/errors';
-import { alternativeFor, CONTENT_TYPES_NS, isOn, parseOoxml, W_NS } from '../../core/ooxml';
-import { type Relationship, relationshipsOf, relOfType, relsPathOf } from '../../core/opc';
-import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { openZip, ZipError, type ZipReader } from '../../core/zip';
+import { alternativeFor, isOn, W_NS } from '../../core/ooxml';
+import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
+import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import type { ZipReader } from '../../core/zip';
 import { IMPORT_MESSAGES } from '../messages';
 
-// The parts the reader parses, together (a tree's cost: core/xml.ts); the largest document.xml met is 12.6 MB.
-export const MAX_DOCX_XML_BYTES = 16 * 1024 * 1024;
-
-// A tree costs per element too, so the parts' elements have a cap of their own, past a long report's. Counted as '<' in
-// the bytes.
-export const MAX_DOCX_XML_TAGS = 750_000;
-
-// A piece past a run's first is a node no tag counts, held before the output is weighed; the corpus's most is 1,055.
+// A piece past a run's first is a node no tag counts, about 600 bytes held before the output is weighed; the corpus's
+// most is 1,055.
 export const MAX_DOCX_PIECES = 75_000;
 
 export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
@@ -26,8 +20,8 @@ export type DocxPackage = {
     fontTable?: XmlElement;
     footnotes?: Part;
     endnotes?: Part;
-    contentTypes: { defaults: Map<string, string>; overrides: Map<string, string> };
-    // A part a drawing names, read when met and charged as the others are; a damaged one, or one past a cap, is no part.
+    contentTypeOf: OoxmlPackage['contentTypeOf'];
+    // A part a drawing names, read when met; a damaged one is no part.
     readPart(path: string): XmlElement | undefined;
     // An image's bytes; a damaged entry is none, and costs only its picture.
     readMedia(path: string): Uint8Array | undefined;
@@ -35,55 +29,24 @@ export type DocxPackage = {
     chargePiece(): void;
 };
 
-// An encrypted docx is an OLE compound file holding the package as a stream of this name.
-const OLE_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
-const ENCRYPTED_PACKAGE = Buffer.from('EncryptedPackage', 'utf16le');
-
-// The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): DocxPackage {
-    // Any other OLE file, a .doc say, is no zip, which openZip refuses.
-    if (OLE_SIGNATURE.every((byte, index) => bytes[index] === byte) && Buffer.from(bytes).includes(ENCRYPTED_PACKAGE))
-        throw new ApiError(400, IMPORT_MESSAGES.docx.passwordProtected);
-    const zip = openZip(bytes);
-    const budget: Budget = {
-        left: MAX_DOCX_XML_BYTES,
-        tags: MAX_DOCX_XML_TAGS,
-        pieces: MAX_DOCX_PIECES,
-        charged: new Set(),
-        parsed: new Map(),
-        failed: new Map(),
-    };
-    const contentTypes = readContentTypes(readXml(zip, '[Content_Types].xml', budget));
-    const documentPath = relOfType(readRels(zip, '', budget), 'officeDocument') ?? 'word/document.xml';
-    const documentRels = readRels(zip, documentPath, budget);
+    const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
+    let pieces = MAX_DOCX_PIECES;
+    const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
+    const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
     const located = (type: string) => relOfType(documentRels, type) ?? `word/${type}.xml`;
-    const notes = ['footnotes', 'endnotes'].map(located);
-    // Every content part is charged before the first of them inflates.
-    const parts = [documentPath, ...['styles', 'numbering', 'theme', 'fontTable'].map(located), ...notes];
-    charge(zip, [...parts, ...notes.map(relsPathOf)], budget);
-    const document = readXml(zip, documentPath, budget);
+    const document = pkg.part(documentPath);
     if (!document) throw new ApiError(400, IMPORT_MESSAGES.docx.invalid);
-    // A damaged optional part, its XML or its entry, costs its looks, not the document; a cap still refuses it, but a
-    // graphic's part is read once every content part is, so a cap it meets costs only the graphic.
-    const optional = <T>(read: () => T, graphic = false): T | undefined => {
-        try {
-            return read();
-        } catch (error) {
-            if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
-            if (graphic && error instanceof ApiError && error.status === 413) return undefined;
-            throw error;
-        }
-    };
-    const xml = (type: string) => optional(() => readXml(zip, located(type), budget));
+    const xml = (type: string) => optional(() => pkg.part(located(type)));
     const part = (type: string) =>
         optional((): Part | undefined => {
             const path = located(type);
-            const root = readXml(zip, path, budget);
-            return root && { path, root, rels: readRels(zip, path, budget) };
+            const root = pkg.part(path);
+            return root && { path, root, rels: pkg.relationships(path) };
         });
     return {
-        zip,
+        zip: pkg.zip,
         document: { path: documentPath, root: document, rels: documentRels },
         styles: xml('styles'),
         numbering: xml('numbering'),
@@ -91,78 +54,14 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         fontTable: xml('fontTable'),
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
-        contentTypes,
-        readPart: (path) => optional(() => readXml(zip, path, budget), true),
-        readMedia: (path) => optional(() => zip.read(path)),
+        contentTypeOf: pkg.contentTypeOf,
+        readPart: (path) => optional(() => pkg.part(path)),
+        readMedia: (path) => optional(() => pkg.zip.read(path)),
         chargePiece: () => {
-            budget.pieces--;
-            if (budget.pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
+            pieces--;
+            if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         },
     };
-}
-
-// A part several relationships name is charged and parsed once, and they share its tree or its error.
-type Budget = {
-    left: number;
-    tags: number;
-    pieces: number;
-    charged: Set<string>;
-    parsed: Map<string, XmlElement | undefined>;
-    failed: Map<string, unknown>;
-};
-
-// Declared sizes are the cap: a read inflates no further than its entry declares (core/zip), so nothing parsed passes it.
-function charge(zip: ZipReader, paths: string[], budget: Budget): void {
-    const fresh = [...new Set(paths)].filter((path) => !budget.charged.has(path));
-    const declared = fresh.reduce((sum, path) => sum + (zip.entry(path)?.size ?? 0), 0);
-    if (declared > budget.left) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
-    budget.left -= declared;
-    for (const path of fresh) budget.charged.add(path);
-}
-
-function readXml(zip: ZipReader, path: string, budget: Budget): XmlElement | undefined {
-    if (budget.parsed.has(path)) return budget.parsed.get(path);
-    if (budget.failed.has(path)) throw budget.failed.get(path);
-    charge(zip, [path], budget);
-    try {
-        const bytes = zip.read(path);
-        if (!bytes) return undefined;
-        let tags = 0;
-        for (let at = bytes.indexOf(LESS_THAN); at >= 0; at = bytes.indexOf(LESS_THAN, at + 1)) tags++;
-        // A part refused leaves the budget to the parts after it.
-        if (tags > budget.tags) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
-        budget.tags -= tags;
-        const root = parseOoxml(bytes) ?? undefined;
-        budget.parsed.set(path, root);
-        return root;
-    } catch (error) {
-        budget.failed.set(path, error);
-        throw error;
-    }
-}
-
-const LESS_THAN = 0x3c;
-
-function readContentTypes(root: XmlElement | undefined): DocxPackage['contentTypes'] {
-    const defaults = new Map<string, string>();
-    const overrides = new Map<string, string>();
-    for (const entry of root ? xmlElements(root) : []) {
-        const contentType = (entry.attributes['ContentType'] ?? '').toLowerCase();
-        if (hasXmlName(entry, CONTENT_TYPES_NS, 'Default'))
-            defaults.set((entry.attributes['Extension'] ?? '').toLowerCase(), contentType);
-        if (hasXmlName(entry, CONTENT_TYPES_NS, 'Override'))
-            overrides.set((entry.attributes['PartName'] ?? '').replace(/^\//, ''), contentType);
-    }
-    return { defaults, overrides };
-}
-
-export function contentTypeOf(pkg: DocxPackage, path: string): string | undefined {
-    const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-    return pkg.contentTypes.overrides.get(path) ?? pkg.contentTypes.defaults.get(extension);
-}
-
-function readRels(zip: ZipReader, partPath: string, budget: Budget): Map<string, Relationship> {
-    return relationshipsOf(readXml(zip, relsPathOf(partPath), budget), partPath);
 }
 
 // Requires names prefixes, not namespaces: Word's spellings of the namespaces this reader reads.

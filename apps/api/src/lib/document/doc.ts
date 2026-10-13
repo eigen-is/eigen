@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { BAND_ROOTS, PAGE_ROOT, type PageSetup, pageRecord, readPageSetup } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
 
 // Materialized Yjs doc → ProseMirror JSON. Media-free, so it runs identically on the
@@ -10,13 +11,22 @@ export function readEigendocFromDoc(doc: Y.Doc): JSONContent {
     return yXmlFragmentToProsemirrorJSON(doc.getXmlFragment('default'));
 }
 
-// The import commit: a Yjs update prepared elsewhere (the transform Worker) replaces
-// the document's content. Clearing first is what makes an import a replacement — an
-// applied update alone would append to whatever the document already holds.
-export function writeEigendocUpdateToYjs(doc: Y.Doc, update: Uint8Array): void {
+export function readEigendocPage(doc: Y.Doc): PageSetup {
+    return readPageSetup(doc.getMap(PAGE_ROOT).toJSON());
+}
+
+// The import commit: a Yjs update prepared elsewhere (the transform process) replaces the body and the bands, and the
+// file's page replaces the page, in one transaction. Clearing first is what makes an import a replacement: an applied
+// update alone appends. The page keys are set here, on the live doc: set in the update, each would be concurrent with
+// the live key, and Yjs keeps whichever client id orders last.
+export function commitEigendocImport(doc: Y.Doc, { update, page }: { update: Uint8Array; page: PageSetup }): void {
     doc.transact(() => {
-        const fragment = doc.getXmlFragment('default');
-        if (fragment.length > 0) fragment.delete(0, fragment.length);
+        for (const root of ['default', ...BAND_ROOTS]) {
+            const fragment = doc.getXmlFragment(root);
+            if (fragment.length > 0) fragment.delete(0, fragment.length);
+        }
+        Y.applyUpdate(doc, update);
+        const map = doc.getMap(PAGE_ROOT);
+        for (const [key, value] of Object.entries(pageRecord(page))) map.set(key, value);
     });
-    Y.applyUpdate(doc, update);
 }
