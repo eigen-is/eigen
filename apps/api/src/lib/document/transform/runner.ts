@@ -68,8 +68,9 @@ const LIMITED_COMMAND =
 const CPU_SLACK_SECONDS = 60;
 // JSC reserves 512 MB for JIT code inside the data limit; 64 MB hands about 0.33 GB back to the heap, no slowdown measured.
 const JIT_RESERVATION_BYTES = '67108864';
-// A heap allocation JSC can't satisfy aborts or segfaults the child, and the kernel's OOM killer sends SIGKILL.
-const OUT_OF_MEMORY_SIGNALS = new Set<NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGKILL']);
+// A heap allocation JSC can't satisfy aborts the child, faults it or traps it (x86-64's crash), and the kernel's OOM
+// killer sends SIGKILL.
+const OUT_OF_MEMORY_SIGNALS = new Set<NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGTRAP', 'SIGKILL']);
 
 // captureMs / prepMs: main-thread source-capture and media-preparation time measured
 // by the caller — logged per job because a fast transform with slow main-thread

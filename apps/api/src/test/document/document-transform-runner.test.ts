@@ -330,9 +330,9 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // A death after the child took the job is the job's: JSC aborts or segfaults when a heap allocation fails, and a
-    // SIGKILL the runner did not send is the kernel's OOM killer. SIGBUS is left out: macOS reports it as SIGUSR1.
-    test.each(['SIGABRT', 'SIGSEGV', 'SIGKILL'] as const)(
+    // A death after the child took the job is the job's: JSC aborts, faults or traps when a heap allocation fails, and
+    // a SIGKILL the runner did not send is the kernel's OOM killer. SIGBUS is left out: macOS reports it as SIGUSR1.
+    test.each(['SIGABRT', 'SIGSEGV', 'SIGTRAP', 'SIGKILL'] as const)(
         'a child killed by %s after taking the job ran out of memory, and the slot is released',
         async (signal) => {
             const runner = makeRunner();
@@ -537,13 +537,14 @@ describe('DocumentTransformRunner', () => {
     });
 });
 
-// The limit is Linux's alone: macOS refuses setrlimit for the data segment. Each heap fails its own way, and every way is
-// the job's out-of-memory while the parent serves the next job.
+// The limit is Linux's alone: macOS refuses setrlimit for the data segment. Each heap fails its own way, by arch too
+// (strings fault on arm64 and trap on x86-64), and every way is the job's out-of-memory while the parent serves the next
+// job. Below about 768 MiB Bun can't start on x86-64.
 describe.skipIf(process.platform !== 'linux')('DocumentTransformRunner memory limit', () => {
     test.each(['objects', 'strings', 'buffers'] as const)(
         'a child allocating %s past its limit ran out of memory, and the parent lives on',
         async (heap) => {
-            const runner = makeRunner({ memoryLimitKiB: 512 * 1024 });
+            const runner = makeRunner({ memoryLimitKiB: 1024 * 1024 });
             const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
             const response = await runner.run(makeRequest({ behavior: 'allocate', heap }), PREVIEW_OPTIONS);
             errorSpy.mockRestore();
