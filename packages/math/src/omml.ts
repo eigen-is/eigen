@@ -448,7 +448,7 @@ function writeRow(row: MathRow): string {
     return pending ? xml + writeRun(pending) : xml;
 }
 
-// The caller binds m: and w:, as the docx writer declares them once on its root.
+// The caller binds m: and w:, once on its root.
 export function writeOmml(row: MathRow): string {
     return checkedXml(`<m:oMath>${writeRow(row)}</m:oMath>`);
 }

@@ -13,7 +13,7 @@ export function el(xml: string): MathXmlElement {
     return fromDom(document.documentElement);
 }
 
-// The writer leaves m: and w: to the caller, as the docx writer binds them on its root.
+// The writer leaves m: and w: to the caller, which binds them on its root.
 export const parseWritten = (omml: string) =>
     elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${omml}</root>`))[0];
 
