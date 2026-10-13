@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
-- **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor and printing follow it; PDF and Word downloads stay A4 with 2 cm margins for now
+- **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor, printing, quick look, thumbnails and the PDF, HTML and Word downloads follow it, and importing a Word file brings its page size and margins
 - **Headers, footers and page numbers** — Insert → **Page elements** or Format → **Headers and footers** opens a panel to edit a document's header and footer, with a different first page and Google's page-number presets; the page shows them in its margins. They don't print or download yet
 
 ## [0.3.3] - 2026-10-13
