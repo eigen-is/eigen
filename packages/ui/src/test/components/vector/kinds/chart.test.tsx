@@ -209,6 +209,40 @@ describe('ChartEditDialog', () => {
     });
 });
 
+test('a font picked in the panel is one write of the spec and one undo step', async () => {
+    const doc = new Y.Doc();
+    const element = doc.getMap<string>('element');
+    const undoManager = new Y.UndoManager(element);
+    const el = chart('c1');
+    const panel = createElement(ChartPanelSection, {
+        elements: [el],
+        scene: new Map([[el.id, el]]),
+        onChange: (fields: Record<string, unknown>) =>
+            sealed(undoManager, () => {
+                if (typeof fields.chart === 'string') element.set('chart', fields.chart);
+            }),
+        onChangeEach: () => {},
+        onReplace: () => {},
+    });
+    const container = await render(
+        createElement(PropertyGestureContext.Provider, { value: () => holdCapture(undoManager) }, panel),
+    );
+    const trigger = [...container.querySelectorAll('span.w-14')]
+        .find((span) => span.textContent?.trim() === 'Font')
+        ?.nextElementSibling?.querySelector('button[aria-haspopup="menu"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    });
+    const serif = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'Source Serif 4',
+    );
+    await click(serif);
+    expect(parseChartSpec(element.get('chart') ?? '')?.fontFamily).toBe('Source Serif 4');
+    expect(undoManager.undoStack).toHaveLength(1);
+    undoManager.undo();
+    expect(element.get('chart')).toBeUndefined();
+});
+
 test('a typed chart title through the panel is one undo step', async () => {
     const doc = new Y.Doc();
     const element = doc.getMap<string>('element');

@@ -8,6 +8,7 @@ import { type ChartSpec, type ChartType, LEGEND_POSITIONS, type LegendPosition }
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     ColorRow,
+    FontRow,
     MergedSelect,
     PropertyNumberInput,
     PropertyRow,
@@ -160,6 +161,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                         onChange={(legend) => onChange({ ...spec, legend })}
                     />
                 </PropertyRow>
+                <FontRow value={spec.fontFamily} onChange={(fontFamily) => onChange({ ...spec, fontFamily })} />
                 {children}
             </PropertySection>
 
