@@ -29,6 +29,7 @@ import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
@@ -237,7 +238,7 @@ async function main(): Promise<void> {
     const { getUserByEmail } = await import('../lib/user');
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
-    const { writeEigendocUpdateToYjs } = await import('../lib/document/doc');
+    const { commitEigendocImport } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/document/doc-schema');
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
@@ -458,7 +459,7 @@ async function main(): Promise<void> {
         const docPath = await drive.create(mountId, parentId, name, 'doc', author);
         const collab = await drive.getCollabDocument(mountId, docPath.id);
         const update = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-        writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(update));
+        commitEigendocImport(collab.doc, { update: Y.encodeStateAsUpdate(update), page: DEFAULT_PAGE_SETUP });
         update.destroy();
         return docPath;
     };
@@ -530,7 +531,7 @@ async function main(): Promise<void> {
         // The doc's one write, with the anchored marks; cards land in the comments Y.Map the
         // panel renders from. Both persist through the live collab doc.
         const marked = prosemirrorJSONToYDoc(docSchema(), docJson, 'default');
-        writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(marked));
+        commitEigendocImport(collab.doc, { update: Y.encodeStateAsUpdate(marked), page: DEFAULT_PAGE_SETUP });
         marked.destroy();
         collab.doc.transact(() => {
             for (const { card } of cards) writeCommentCard(collab.doc, card);

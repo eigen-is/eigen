@@ -1,13 +1,14 @@
 import { expect, test } from 'bun:test';
 import { Editor, getSchema } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { NodeSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
 import {
     addCommentAnchor,
+    canAnchorComment,
     commentAnchorText,
     nodeCommentCardId,
     removeCommentAnchors,
@@ -47,6 +48,11 @@ test('a comment on an equation anchors by its attribute and quotes its linear fo
     expect(commentAnchorText(doc, 0, doc.content.size)).toBe('x/2');
     const bare = schema.nodeFromJSON(docOf({ type: 'equation', attrs: { mathml: '' } }));
     expect(commentAnchorText(bare, 0, bare.content.size)).toBe('Equation');
+});
+
+test('a comment over a page number quotes its #', () => {
+    const doc = schema.nodeFromJSON(docOf(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }));
+    expect(commentAnchorText(doc, 0, doc.content.size)).toBe('Page #');
 });
 
 test('a new card on an equation selected alone anchors as its attribute', () => {
@@ -104,5 +110,39 @@ test("scrolling to an equation's card selects the equation", () => {
     selectCommentAnchor(editor, 'card-1');
     const { selection } = editor.state;
     expect(selection instanceof NodeSelection && selection.node.type.name).toBe('equation');
+    editor.destroy();
+});
+
+// A page number holds no card attribute, so a card never anchors on one by attribute.
+test('a page number anchors no card by attribute, and a card on one selected alone sets none', () => {
+    const editor = new Editor({
+        extensions: [...getDocExtensions(), AtomMarks],
+        content: docOf(text('a '), { type: 'pageNumber', attrs: { kind: 'page' } }),
+    });
+    const node = editor.state.doc.nodeAt(3);
+    expect(node && nodeCommentCardId(node)).toBeNull();
+    expect(() => addCommentAnchor(editor, { from: 3, to: 4 }, 'card-1')).not.toThrow();
+    expect(anchors(editor.state.doc)).toEqual([
+        ['a ', null, null],
+        ['pageNumber', null, null],
+    ]);
+    editor.destroy();
+});
+
+test('a comment anchors on text or a node holding a card attribute, never on a page number alone', () => {
+    const editor = new Editor({
+        extensions: [...getDocExtensions(), AtomMarks],
+        content: docOf(text('a '), equation('x'), { type: 'pageNumber', attrs: { kind: 'page' } }),
+    });
+    const anchorable = (selection: (doc: Node) => NodeSelection | TextSelection) => {
+        editor.view.dispatch(editor.state.tr.setSelection(selection(editor.state.doc)));
+        return canAnchorComment(editor.state);
+    };
+    expect(anchorable((doc) => TextSelection.create(doc, 1, 3))).toBe(true);
+    expect(anchorable((doc) => TextSelection.create(doc, 2, 5))).toBe(true);
+    expect(anchorable((doc) => NodeSelection.create(doc, 3))).toBe(true);
+    expect(anchorable((doc) => NodeSelection.create(doc, 4))).toBe(false);
+    expect(anchorable((doc) => TextSelection.create(doc, 4, 5))).toBe(false);
+    expect(anchorable((doc) => TextSelection.create(doc, 2))).toBe(false);
     editor.destroy();
 });

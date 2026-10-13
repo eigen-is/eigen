@@ -1,3 +1,5 @@
+export type { BandRoot } from './bands';
+export { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent } from './bands';
 export { getDocExtensions, PROSE_TEXTBLOCKS } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';
@@ -7,12 +9,16 @@ export { EquationNode, equationMath, equationText, readEquation } from './nodes/
 export type { FigureAlignment, FigureAttrs, FigureLayout } from './nodes/figure';
 export { FigureNode, readFigureAttrs, setFigureAttributes } from './nodes/figure';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
+export type { PageNumberKind } from './nodes/page-number';
+export { PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
 export type { TitleType } from './nodes/title';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
+    cmText,
     DEFAULT_PAGE_SETUP,
     MIN_TEXT_MM,
     matchPaperSize,
+    mmToPx,
     PAGE_ROOT,
     PAPER_SIZES,
     pageBoxStyle,
@@ -20,6 +26,8 @@ export {
     pageRecord,
     pageStylesheet,
     pageTwips,
+    pxToMm,
+    readCm,
     readPageSetup,
 } from './page';
 export { MIN_TABLE_COLUMN_PX } from './table';

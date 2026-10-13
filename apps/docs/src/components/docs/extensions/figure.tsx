@@ -4,7 +4,7 @@ import { Mapping } from '@tiptap/pm/transform';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { FigureNode, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import { cmText, FigureNode, pxToMm, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
@@ -25,6 +25,9 @@ const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .map((key) => `Shift+${key}`)
     .join(' ');
 
+// A grip's readout, in cm as the Image panel's Width field shows a width.
+const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
+
 // The text column, or half of it for a wrapped figure: the widest a resize makes it.
 export function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
     const fullWidth = textColumnWidth(figure) ?? Infinity;
@@ -36,7 +39,7 @@ export function clampFigureWidth(width: number, maxWidth: number) {
     return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
 }
 
-type FigureOptions = {
+export type FigureOptions = {
     // The host decides whether a menu opens, so an image with no rows keeps the browser's own.
     onContextMenu: (node: PMNode, pos: number, event: React.MouseEvent) => void;
     onOpenComment: (cardId: string) => void;
@@ -243,6 +246,7 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate={false}
                         resizeMode="aspect"
+                        formatSize={figureSize}
                         // Default minSize (1): in aspect mode the component floors BOTH dims,
                         // which would inflate wide images (a 100 floor on a 4:1 banner's height
                         // forces width 400). The width-only [100, maxWidth] clamp is the host's,

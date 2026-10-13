@@ -3,7 +3,7 @@ import type { Mark, Node, ResolvedPos } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 
 // The inline atoms the Yjs binding persists no mark on: it keeps a mark only on text.
-export const MARKLESS_ATOMS: ReadonlySet<string> = new Set(['figure', 'equation']);
+const MARKLESS_ATOMS: ReadonlySet<string> = new Set(['figure', 'equation', 'pageNumber']);
 
 const isMarklessAtom = (node: Node | null | undefined) => !!node && MARKLESS_ATOMS.has(node.type.name);
 

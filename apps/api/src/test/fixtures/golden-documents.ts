@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, type FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -24,7 +24,7 @@ import {
 import { type MathRow, readOmml, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { parseOoxml } from '../../lib/core/ooxml';
-import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { DocxMedia } from '../../lib/export/doc/to-docx';
@@ -357,6 +357,15 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'for every n.' },
                 ],
             },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Page ' },
+                    { type: 'pageNumber', attrs: { kind: 'page' } },
+                    { type: 'text', text: ' of ' },
+                    { type: 'pageNumber', attrs: { kind: 'pages' } },
+                ],
+            },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
             { type: 'paragraph' },
             { type: 'pageBreak' },
@@ -559,7 +568,7 @@ export function buildAllFeaturesDocMedia(): DocxMedia[] {
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     const tempDoc = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+    commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: DEFAULT_PAGE_SETUP });
     tempDoc.destroy();
 }
 

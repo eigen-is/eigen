@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_PAGE_SETUP, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
-import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
 
@@ -77,6 +78,78 @@ describe('empty paragraphs', () => {
                 `${paragraph(run('One'))}${paragraph(run('   '))}${paragraph(PAGE_BREAK)}${paragraph(run('Two'))}`,
             ),
         ).toEqual(['One', 'pageBreak', 'Two']);
+    });
+});
+
+describe('the page', () => {
+    const mm = (twips: number) => (twips * 25.4) / 1440;
+    const page = (w: number, h: number, margin: number, extra = '') =>
+        `<w:sectPr>${extra}<w:pgSz w:w="${w}" w:h="${h}"/><w:pgMar w:top="${margin}" w:right="${margin}" w:bottom="${margin}" w:left="${margin}" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr>`;
+    const LETTER_LANDSCAPE = page(15840, 12240, 567);
+
+    test("the body's final section is the doc's page, in mm", async () => {
+        const { page: read, warnings } = await importDocxBody(`${paragraph(run('One'))}${LETTER_LANDSCAPE}`);
+        expect(read).toEqual({
+            width: 279.4,
+            height: 215.9,
+            margin: { top: mm(567), right: mm(567), bottom: mm(567), left: mm(567) },
+            differentFirstPage: false,
+        });
+        expect(warnings).toEqual([]);
+    });
+
+    test('an earlier section with another page leaves the final one and warns', async () => {
+        const earlier = paragraph(run('One'), page(11906, 16838, 1440));
+        const same = paragraph(run('Two'), LETTER_LANDSCAPE);
+        const { page: read, warnings } = await importDocxBody(
+            `${earlier}${same}${paragraph(run('Three'))}${LETTER_LANDSCAPE}`,
+        );
+        expect(read.width).toBe(279.4);
+        expect(warnings).toEqual([{ code: 'section-pages-dropped', count: 1 }]);
+    });
+
+    test("a size a section leaves out is the default A4, a margin Word's 1 in", async () => {
+        const WORD_MARGIN = { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 };
+        const WORD_PAGE = { ...DEFAULT_PAGE_SETUP, margin: WORD_MARGIN };
+        expect((await importDocxBody(paragraph(run('One')))).page).toEqual(WORD_PAGE);
+        expect((await importDocxBody(`${paragraph(run('One'))}<w:sectPr/>`)).page).toEqual(WORD_PAGE);
+        const { page: read } = await importDocxBody(
+            `${paragraph(run('One'))}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>`,
+        );
+        expect(read).toEqual({ ...WORD_PAGE, width: 215.9, height: 279.4 });
+    });
+
+    test('a hostile size and negative margins clamp as a stored page does', async () => {
+        const hostile = `<w:sectPr><w:pgSz w:w="99999999" w:h="10"/><w:pgMar w:top="-1440" w:right="-99999" w:bottom="0" w:left="1440"/></w:sectPr>`;
+        const { page: read } = await importDocxBody(`${paragraph(run('One'))}${hostile}`);
+        expect(read).toEqual(
+            readPageSetup({
+                width: mm(99999999),
+                height: mm(10),
+                marginTop: mm(-1440),
+                marginRight: mm(-99999),
+                marginBottom: 0,
+                marginLeft: mm(1440),
+            }),
+        );
+        expect(read.width).toBe(558.8);
+        expect(read.height).toBe(50);
+        expect(read.margin.top).toBeGreaterThan(0);
+        expect(read.width - read.margin.left - read.margin.right).toBeCloseTo(25, 6);
+    });
+
+    // 1,000 px of picture: the column on A4 with Word's 1 in margins is 601 px, on a page with 5 cm margins 415.
+    test("an image imports no wider than the page's text column", async () => {
+        const wide = paragraph(GOLDEN_DOCX_IMAGE_RUN.replaceAll('381000', '9525000'));
+        const widths = async (body: string) =>
+            nodesOfType((await importDocxBody(body)).json, 'figure').map((node) => node.attrs?.['width']);
+        const narrow = page(11906, 16838, 2835);
+        const px = pagePx(
+            readPageSetup({ width: mm(11906), height: mm(16838), marginLeft: mm(2835), marginRight: mm(2835) }),
+        );
+        expect(await widths(wide)).toEqual([601]);
+        expect(await widths(`${wide}${narrow}`)).toEqual([Math.floor(px.width - px.margin.left - px.margin.right)]);
+        expect(await widths(`${wide}${narrow}`)).toEqual([415]);
     });
 });
 

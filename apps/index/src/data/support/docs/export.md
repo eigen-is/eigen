@@ -29,7 +29,7 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images, code blocks, and other content. Comment threads are not included in the exported file.
+The exported file contains the document text and all formatting: headings, lists, tables, images, code blocks, and other content. Comment threads, the header, and the footer are not included in the exported file.
 
 A page break starts a new page in the PDF and the Word file. Equations show in all three formats. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 
@@ -42,7 +42,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Code blocks keep their colors, and quotes keep the bar along their left edge.
 - Equations become Word equations that you can edit in Word, and a displayed one stays on its own line. The LaTeX you typed stays behind, since Word has no place for it.
 
-The PDF and the Word file use an A4 page with 2 cm margins, even when the document's page setup is different.
+The PDF, the web page, and the Word file use the document's paper size, orientation, and margins, as set under **File → Page setup…**.
 
 <div class="eigen-callout">
 

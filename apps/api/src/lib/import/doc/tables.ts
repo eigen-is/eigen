@@ -4,7 +4,7 @@ import { isOn, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
 import { MAX_TABLE_COLUMNS, TWIPS_PER_PX } from '../../document/wordml';
-import { build, COLUMN_PX, type Item, inlineText, isWhitespace, type Para } from './assemble';
+import { build, type Item, inlineText, isWhitespace, type Para } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
@@ -27,7 +27,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         .map((col) => twipsOf(w(col, 'w')) ?? 0)
         .slice(0, MAX_TABLE_COLUMNS);
     const columns = grid.length || MAX_TABLE_COLUMNS;
-    const columnPx = scaled(grid, scope.room ?? COLUMN_PX);
+    const columnPx = scaled(grid, scope.room ?? reader.columnPx);
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
     const firstRowOn = look

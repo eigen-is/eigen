@@ -10,7 +10,7 @@ import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
-import { COLUMN_PX, MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
+import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import {
     CHARS_PER_UNIT,
@@ -31,6 +31,9 @@ import {
 import { build, deflated, stored } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
+
+// No body here has a section, so Word's: A4 less its 1 in margins, a 601 px text column.
+const COLUMN_PX = 601;
 
 const run = (text: string, rPr = '') => `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t>${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;

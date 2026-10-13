@@ -27,6 +27,7 @@ const editor = new Editor({
 });
 
 const onReplaceImage = mock(() => {});
+const onOpenBand = mock((_request: unknown) => {});
 
 async function render(width: number, canWrite: boolean, onInsertEquation?: () => void) {
     window.happyDOM.setViewport({ width, height: 1000 });
@@ -43,6 +44,7 @@ async function render(width: number, canWrite: boolean, onInsertEquation?: () =>
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
+        onOpenBand,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
     });
     const router = createRouter({
@@ -150,6 +152,8 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         'Align and indent',
         'Bullets and numbering',
         '—',
+        'Headers and footers',
+        'Page numbers',
         'Page orientation',
         '—',
         'Table',
@@ -390,6 +394,65 @@ test('Format › Image › Replace image opens the picker the image panel opens'
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
 });
 
+test.each([
+    ['Headers and footers', { band: 'header' }],
+    ['Page numbers', { section: 'pageNumbers' }],
+])('Format › %s opens the Headers and footers panel on %p', async (item, request) => {
+    onOpenBand.mockClear();
+    await render(1920, true);
+    await openMenu('Format');
+    await clickItem(item);
+    expect(onOpenBand.mock.calls).toEqual([[request]]);
+});
+
+test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    expect(openMenuEntries()).toEqual(['Header', 'Footer', 'Page numbers']);
+    await openSubmenu('Page numbers');
+    expect(openMenuEntries()).toEqual([
+        'In the header',
+        'In the header, not on the first page',
+        'In the footer',
+        'In the footer, not on the first page',
+        '—',
+        'Page count',
+    ]);
+});
+
+test.each([
+    ['Header', { band: 'header' }],
+    ['Footer', { band: 'footer' }],
+])('Insert › Page elements › %s opens the panel on that band', async (item, request) => {
+    onOpenBand.mockClear();
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await clickItem(item);
+    expect(onOpenBand.mock.calls).toEqual([[request]]);
+});
+
+test('a page number preset opens the panel on its band with the preset, and Page count goes in at the caret', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(2);
+    onOpenBand.mockClear();
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await openSubmenu('Page numbers');
+    await clickItem('In the footer, not on the first page');
+    expect(onOpenBand.mock.calls).toEqual([
+        [{ band: 'footer', preset: expect.objectContaining({ band: 'footer', onFirstPage: false }) }],
+    ]);
+
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await openSubmenu('Page numbers');
+    await clickItem('Page count');
+    expect(editor.getJSON().content?.[0]?.content?.at(-1)).toEqual({ type: 'pageNumber', attrs: { kind: 'pages' } });
+});
+
 // Google has Format › Page orientation beside File › Page setup; both open the one dialog.
 test('Format › Page orientation opens Page setup', async () => {
     await render(1920, true);
@@ -426,6 +489,21 @@ test.each([
     await openMenu(trigger);
     await pickInBrowserFrames(() => clickItem(choice));
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// The panel puts the caret in the band a frame after the pick, as Tiptap does in the body.
+test('a pick that opens a band leaves focus in the band', async () => {
+    const band = document.body.appendChild(document.createElement('div'));
+    band.setAttribute('data-band', 'header');
+    const caret = band.appendChild(document.createElement('div'));
+    caret.tabIndex = 0;
+    onOpenBand.mockImplementationOnce(() => requestAnimationFrame(() => caret.focus()));
+    await render(1920, true);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await pickInBrowserFrames(() => clickItem('Header'));
+    expect(document.activeElement === caret).toBe(true);
+    band.remove();
 });
 
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];

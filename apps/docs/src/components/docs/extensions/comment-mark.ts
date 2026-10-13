@@ -5,7 +5,6 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
-import { MARKLESS_ATOMS } from './atom-marks';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -22,8 +21,9 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// An image or an equation holds its card as an attribute: the Yjs binding persists a mark only on text.
-const anchorsByAttribute = (node: Node): boolean => MARKLESS_ATOMS.has(node.type.name);
+// A node whose schema gives it a commentCardId, an image or an equation, holds its card there: the Yjs binding persists
+// a mark only on text.
+const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
 
 // The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
@@ -49,6 +49,20 @@ export function addCommentAnchor(editor: Editor, { from, to }: { from: number; t
     editor.chain().focus().setTextSelection({ from, to }).setComment(cardId).run();
 }
 
+// Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
+// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment.
+export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
+    if (empty) return false;
+    const node = doc.nodeAt(from);
+    if (node && anchorsByAttribute(node) && to === from + node.nodeSize) return true;
+    let text = false;
+    doc.nodesBetween(from, to, (child) => {
+        text ||= child.isText;
+        return !text;
+    });
+    return text;
+}
+
 // A deleted card leaves no anchor behind.
 export function removeCommentAnchors(editor: Editor, cardId: string): void {
     const { tr } = editor.state;
@@ -71,13 +85,13 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 }
 
 // A comment on an image alone has no text to quote, so the image reads as "Image", and an equation with no text as
-// "Equation".
+// "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
             if (leaf.type.name === 'figure') return 'Image';
             if (leaf.type.name === 'equation') return equationText(leaf.attrs) || 'Equation';
-            return '';
+            return leaf.type.spec.leafText?.(leaf) ?? '';
         })
         .slice(0, 100);
 }
@@ -124,8 +138,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     addKeyboardShortcuts() {
         return {
             'Mod-Alt-m': () => {
-                const { empty } = this.editor.state.selection;
-                if (!empty && this.options.onAddComment) {
+                if (canAnchorComment(this.editor.state) && this.options.onAddComment) {
                     this.options.onAddComment();
                     return true;
                 }
@@ -169,8 +182,8 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                                 onCommentContextMenu(cardId, event);
                                 return true;
                             }
-                            // Right-click with text selected → selection context menu
-                            if (!view.state.selection.empty && onSelectionContextMenu) {
+                            // Right-click on a selection a comment can anchor on → selection context menu
+                            if (canAnchorComment(view.state) && onSelectionContextMenu) {
                                 event.preventDefault();
                                 onSelectionContextMenu(event);
                                 return true;

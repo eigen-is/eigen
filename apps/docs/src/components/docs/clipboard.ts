@@ -60,8 +60,8 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
 }
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
-// resolves, and the text between them as a text item, a line per paragraph, an equation as its text. None
-// resolves → no items, and the copy is ProseMirror's own.
+// resolves, and the text between them as a text item, a line per paragraph, an equation as its text and any
+// other leaf as its leafText. None resolves → no items, and the copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
     from: number,
@@ -73,7 +73,7 @@ function copiedClipboardItems(
     const pushText = (runTo: number) => {
         const text = view.state.doc
             .textBetween(runFrom, runTo, '\n', (leaf) =>
-                leaf.type.name === 'equation' ? equationText(leaf.attrs) : '',
+                leaf.type.name === 'equation' ? equationText(leaf.attrs) : (leaf.type.spec.leafText?.(leaf) ?? ''),
             )
             .trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));

@@ -1,6 +1,7 @@
 // In millimetres because paper is defined in them; pagePx and pageTwips return this shape in their unit. Orientation is width > height.
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
-export type PageSetup = { width: number; height: number; margin: PageMargin };
+// differentFirstPage: page 1 takes the headerFirst and footerFirst bands instead of header and footer.
+export type PageSetup = { width: number; height: number; margin: PageMargin; differentFirstPage: boolean };
 
 const A4 = { name: 'A4', width: 210, height: 297 } as const;
 
@@ -25,6 +26,7 @@ export const DEFAULT_PAGE_SETUP: PageSetup = {
     width: A4.width,
     height: A4.height,
     margin: { top: 20, right: 20, bottom: 20, left: 20 },
+    differentFirstPage: false,
 };
 
 // The paper a page is cut from, either way round. Within 1 mm, because Word stores the page in twips.
@@ -47,7 +49,7 @@ const MAX_PAPER_MM = 558.8;
 // The least text column and text height the margins leave.
 export const MIN_TEXT_MM = 25;
 
-export function pageRecord({ width, height, margin }: PageSetup) {
+export function pageRecord({ width, height, margin, differentFirstPage }: PageSetup) {
     return {
         width,
         height,
@@ -55,10 +57,11 @@ export function pageRecord({ width, height, margin }: PageSetup) {
         marginRight: margin.right,
         marginBottom: margin.bottom,
         marginLeft: margin.left,
+        differentFirstPage,
     };
 }
 
-type PageKey = keyof ReturnType<typeof pageRecord>;
+type PageKey = Exclude<keyof ReturnType<typeof pageRecord>, 'differentFirstPage'>;
 
 const DEFAULT_PAGE_RECORD = pageRecord(DEFAULT_PAGE_SETUP);
 
@@ -82,11 +85,18 @@ export function readPageSetup(record: Record<string, unknown>): PageSetup {
     const height = paper('height');
     const [left, right] = fit(width, 'marginLeft', 'marginRight');
     const [top, bottom] = fit(height, 'marginTop', 'marginBottom');
-    return { width, height, margin: { top, right, bottom, left } };
+    return {
+        width,
+        height,
+        margin: { top, right, bottom, left },
+        differentFirstPage: record['differentFirstPage'] === true,
+    };
 }
 
-function convert({ width, height, margin }: PageSetup, fromMm: (mm: number) => number): PageSetup {
+function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
+    const { width, height, margin } = setup;
     return {
+        ...setup,
         width: fromMm(width),
         height: fromMm(height),
         margin: {
@@ -98,9 +108,18 @@ function convert({ width, height, margin }: PageSetup, fromMm: (mm: number) => n
     };
 }
 
-// CSS px at 96 dpi.
+// CSS px at 96 dpi, unrounded: Docs stores a figure's width in them.
+export const mmToPx = (mm: number) => (mm / 25.4) * 96;
+export const pxToMm = (px: number) => (px / 96) * 25.4;
+
+// A length as Docs' fields show it, in cm to `decimals` places, without trailing zeros.
+export const cmText = (mm: number, decimals: number) => String(Math.round(mm * 10 ** (decimals - 1)) / 10 ** decimals);
+
+// A cm field's text in mm, to 0.01 mm, or a typed 1.91 cm reads as 19.099999999999998 mm. NaN for no number.
+export const readCm = (text: string) => (text.trim() === '' ? Number.NaN : Math.round(Number(text) * 1000) / 100);
+
 export function pagePx(setup: PageSetup): PageSetup {
-    return convert(setup, (mm) => (mm * 96) / 25.4);
+    return convert(setup, mmToPx);
 }
 
 // Word's twentieths of a point.

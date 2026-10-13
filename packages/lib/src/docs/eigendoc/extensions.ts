@@ -15,6 +15,7 @@ import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
+import { PageNumberNode } from './nodes/page-number';
 import { SmallMark } from './nodes/small-mark';
 import { SubtitleNode, TitleNode } from './nodes/title';
 
@@ -52,6 +53,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         FigureNode,
         EquationNode,
         PageBreakNode,
+        PageNumberNode,
         Highlight.configure({ multicolor: true }),
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),
         Table,

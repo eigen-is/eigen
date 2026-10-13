@@ -1,5 +1,5 @@
 import { type Editor, useEditorState } from '@tiptap/react';
-import { readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { cmText, mmToPx, pxToMm, readCm, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
@@ -16,7 +16,8 @@ import { clampFigureWidth, figureMaxWidth } from './extensions/figure';
 
 // Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
-// nothing back. A draft stays through a transaction that moves the figure, a collaborator typing above it.
+// nothing back, and an unchanged Width keeps the stored px its cm rounds. A draft stays through a transaction that
+// moves the figure, a collaborator typing above it.
 function FigureField({
     value,
     placeholder,
@@ -89,16 +90,16 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                     <div className="flex items-center gap-1.5">
                         <FigureField
                             type="number"
-                            value={String(width ?? '')}
+                            value={width == null ? '' : cmText(pxToMm(width), 1)}
                             onCommit={(value) => {
-                                const next = Number(value);
-                                if (!value || !Number.isFinite(next)) return;
+                                const mm = readCm(value);
+                                if (!Number.isFinite(mm)) return;
                                 editor.commands.updateFigure({
-                                    width: clampFigureWidth(next, figureMaxWidth(editor.view.dom, layout)),
+                                    width: clampFigureWidth(mmToPx(mm), figureMaxWidth(editor.view.dom, layout)),
                                 });
                             }}
                         />
-                        <span className="text-xs text-muted-foreground">px</span>
+                        <span className="text-xs text-muted-foreground">cm</span>
                     </div>
                 </PropertyRow>
             </PropertySection>

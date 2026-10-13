@@ -1,5 +1,4 @@
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP, pagePx } from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../document/looks';
 import { LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
 import type { ListRef } from './numbering';
@@ -47,11 +46,6 @@ export type Item =
     // A quote in a list item: where its first line starts, which says which open item holds it.
     | { kind: 'block'; node: JSONContent; itemAt?: number }
     | { kind: 'float'; figure: JSONContent };
-
-const PAGE = pagePx(DEFAULT_PAGE_SETUP);
-
-// The editor's text column: no image or table column imports wider.
-export const COLUMN_PX = Math.floor(PAGE.width - PAGE.margin.left - PAGE.margin.right);
 
 // Deeper quotes join the deepest, so a hostile indent can't nest without end.
 export const MAX_QUOTE_DEPTH = 8;

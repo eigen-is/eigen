@@ -123,3 +123,12 @@ test('bold turned off right after the equation stays off', () => {
     expect(editor.state.doc.nodeAt(3)?.marks).toEqual([]);
     editor.destroy();
 });
+
+test('bold over a range containing a page number marks the text, and one inserted with a mark loses it', () => {
+    const pageNumber = { type: 'pageNumber', attrs: { kind: 'page' } };
+    const editor = editorWith([{ type: 'text', text: 'a ' }, pageNumber, { type: 'text', text: ' b' }]);
+    editor.chain().selectAll().setBold().run();
+    editor.commands.insertContentAt(3, { ...pageNumber, marks: [{ type: 'italic' }] });
+    expect(markedNodes(editor)).toEqual(['text', 'text']);
+    editor.destroy();
+});

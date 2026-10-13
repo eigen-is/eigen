@@ -67,7 +67,7 @@ export function MathMount({ math, className }: { math: Element; className?: stri
     return <span ref={ref} className={className} />;
 }
 
-type EquationOptions = {
+export type EquationOptions = {
     onOpenComment: (cardId: string) => void;
     onEdit: () => void;
 };

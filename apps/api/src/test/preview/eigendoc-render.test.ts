@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { MAX_MATHML_ELEMENTS } from '../../lib/export/doc/render';
@@ -26,6 +27,20 @@ function docWithFigure(attrs: Record<string, unknown>): JSONContent {
 }
 
 describe('renderEigendocPreviewBody', () => {
+    test('the preview carries the page the doc stores, read as every reader reads it', () => {
+        const doc = new Y.Doc();
+        seedEigendoc(doc, docWithFigure({ mediaName: GOLDEN_MEDIA_NAME }));
+        doc.getMap(PAGE_ROOT).set('width', 297);
+        doc.getMap(PAGE_ROOT).set('height', 210);
+        doc.getMap(PAGE_ROOT).set('marginLeft', 'wide');
+        expect(renderEigendocPreviewBody(doc, mediaUrls).page).toEqual({
+            ...DEFAULT_PAGE_SETUP,
+            width: 297,
+            height: 210,
+        });
+        doc.destroy();
+    });
+
     test("a figure's prepared media URL reaches the viewer", () => {
         const body = previewOf(docWithFigure({ mediaName: GOLDEN_MEDIA_NAME, alt: 'A pixel' }));
         expect(body).toContain(`src="${MEDIA_URL}"`);
