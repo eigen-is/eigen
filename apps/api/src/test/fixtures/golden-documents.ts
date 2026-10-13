@@ -24,7 +24,7 @@ import * as Y from 'yjs';
 import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { DocxMedia } from '../../lib/export/doc/to-docx';
+import type { OfficeMedia } from '../../lib/export/office-image';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -473,7 +473,7 @@ function figure(attrs: FigureAttrs): JSONContent {
 
 // The all-features doc's media as the docx prep hands it over: sizes from the thumbnail Worker, an SVG beside its PNG.
 // The writer never decodes a raster, so marker bytes stand in for the PNG and the JPEG.
-export function buildAllFeaturesDocMedia(): DocxMedia[] {
+export function buildAllFeaturesDocMedia(): OfficeMedia[] {
     return [
         { name: 'chart.png', contentType: 'image/png', data: toTransferableText('chart png'), width: 800, height: 500 },
         {

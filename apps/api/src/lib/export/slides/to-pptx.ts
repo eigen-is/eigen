@@ -54,13 +54,13 @@ import {
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
-import { RASTER_EXTENSIONS } from '../doc/docx-image';
-import { type DocxMedia, uriReference } from '../doc/to-docx';
+import { uriReference } from '../doc/to-docx';
+import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { isElement } from '../sanitize';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
-// the scene sanitizeSceneHtml returns, and media by name as the docx prep hands it over (an SVG beside its PNG).
-export function eigenslidesToPptx(scene: VectorScene, media: DocxMedia[], title: string): Uint8Array {
+// the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).
+export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], title: string): Uint8Array {
     if (scene.frames.length === 0) throw new ApiError(400, 'The deck is empty');
     const size = slideSize(scene.frames[0]);
     const deck: Deck = {
@@ -222,14 +222,14 @@ const THEME_XML = (() => {
 // What one export accumulates: each media name's parts once, whichever slide shows it first.
 type Deck = {
     scale: number;
-    media: Map<string, DocxMedia>;
+    media: Map<string, OfficeMedia>;
     images: Map<string, Image>;
     // The elbow router reads the shapes an arrow is bound to.
     byId: Map<string, VectorElement>;
 };
 
 // An SVG's raster is its PNG, its own data the svgPart beside it.
-type Image = { part: string; svgPart?: string; raster: ArrayBuffer; media: DocxMedia };
+type Image = { part: string; svgPart?: string; raster: ArrayBuffer; media: OfficeMedia };
 
 type Slide = {
     deck: Deck;

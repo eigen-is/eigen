@@ -14,11 +14,9 @@ import {
     toTransferableText,
 } from '../../document/transform/protocol';
 import { splitDataUri } from '../../shared/data-uri';
-import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
-import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
-import { renderDocHtml, withAbsoluteLinks } from './render';
-import type { DocxMedia } from './to-docx';
+import { encodeOfficeImage, withSvgFallbacks } from '../office-image';
+import { figureMediaKey, renderDocHtml, withAbsoluteLinks } from './render';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform process
 // (child.ts owns execution; the main-thread orchestration lives in export-document.ts).
@@ -79,54 +77,12 @@ async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
             media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
             continue;
         }
-        const item = await encodeDocxImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
+        const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
         if (item) media.push(item);
     }
     if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
     const { sanitizeExportMedia } = await import('../sanitize');
     return sanitizeExportMedia(media);
-}
-
-// The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
-// time, for one decode's memory; sharp loads only for an SVG.
-async function withSvgFallbacks(media: ExportMedia[]): Promise<DocxMedia[]> {
-    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
-    const { default: sharp } = await import('sharp');
-    const prepared: DocxMedia[] = [];
-    for (const item of media) {
-        if (item.contentType !== 'image/svg+xml') {
-            prepared.push(item);
-            continue;
-        }
-        try {
-            const svg = Buffer.from(item.data);
-            const image = sharp(svg);
-            const { width = 0, height = 0 } = await image.metadata();
-            const png = await image
-                .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
-                .png()
-                .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
-                .toBuffer();
-            prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
-        } catch {
-            // One librsvg can't read, or not in time, leaves the docx; its caption stays.
-        }
-    }
-    return prepared;
-}
-
-const PHYSICAL_LENGTH = /^\s*[\d.e+-]+\s*(in|cm|mm|pt|pc)\s*$/i;
-
-// sharp reads an SVG's physical units at 72 dpi and CSS at 96, so a 4in drawing is 288 px to it and 384 in the HTML
-// export. Scaled per side, read off the root's start tag; a side the root leaves out follows the other, as sharp
-// derives it from the viewBox.
-function cssSize(svg: Buffer, width: number, height: number): { width: number; height: number } {
-    const root = svg.toString('utf8', 0, svg.indexOf('>') + 1);
-    const scale = (value: string | undefined) =>
-        value === undefined ? undefined : PHYSICAL_LENGTH.test(value) ? 96 / 72 : 1;
-    const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
-    const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
-    return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
 const PRINT_EXTRAS = `

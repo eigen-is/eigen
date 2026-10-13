@@ -57,7 +57,7 @@ The write appends in one transaction. Every slide and element gets a fresh id an
 
 ## Export and preview render the pages the canvas draws
 
-The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
+The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). The pptx export writes each frame as a slide of DrawingML shapes from the scene itself, because PowerPoint needs shapes it can edit, not positioned HTML ([EXPORT.md](EXPORT.md#a-decks-pptx-is-written-from-the-scene-one-drawingml-shape-per-element)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
 
 ## See also
 

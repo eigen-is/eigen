@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1738 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1747 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -931,7 +931,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (843)
+## Utilities & constants (852)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1037,6 +1037,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
+| `gradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1205,6 +1206,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_REQUEST_BODY_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1571,6 +1573,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `frameClipRadius` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `freedrawOutline` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/freedraw.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `generateNKeysBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `getElementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1589,6 +1592,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hitThresholdScreen` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `IMAGE_CASCADE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `isBordered` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
 | `isClosedLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
