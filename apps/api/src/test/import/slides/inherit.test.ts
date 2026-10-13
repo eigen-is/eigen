@@ -1,10 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { NewVectorElement } from '@workspace/lib/vector';
+import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
+import { xmlChild } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { paintOf, type SlideTheme } from '../../../lib/import/slides/inherit';
 import {
     box,
     buildPptx,
     buildPptxWithBadPictures,
+    countVisits,
+    NS,
     PIXEL_PNG,
     type PptxFixture,
     para,
@@ -133,6 +138,113 @@ describe('placeholders', () => {
         }
     });
 
+    test("what a shared part's elements hold is looked into once: text style levels, run defaults, theme styles, fills, backgrounds and attributes", () => {
+        // Junk where a lookup scans, under 2,000 paragraphs, runs or shapes, or 500 slides: scanned again by each, they
+        // took seconds to minutes.
+        const junk = (count: number, tag = 'a:x') => `<${tag}/>`.repeat(count);
+        const body = (inner: string) =>
+            `<p:sp><p:nvSpPr><p:cNvPr id="3" name=""/><p:cNvSpPr/><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/>${inner}</p:txBody></p:sp>`;
+        const styled = (bodyStyle: string, inner: string): PptxFixture => ({
+            masters: [
+                {
+                    shapes: placeholder('<p:ph type="body"/>', box(0, 0, 100, 100)),
+                    txStyles: `<p:txStyles><p:bodyStyle>${bodyStyle}</p:bodyStyle></p:txStyles>`,
+                },
+            ],
+            slides: [{ shapes: body(inner) }],
+        });
+        const paragraphs = para('x').repeat(2000);
+        const runs = `<a:p>${'<a:r><a:t>x</a:t></a:r>'.repeat(2000)}</a:p>`;
+        const shapes = (spPr: string, style?: string) => sp({ xfrm: box(0, 0, 1, 1), spPr, style }).repeat(2000);
+        const slides = (count: number, after = (_: number) => '') =>
+            Array.from({ length: count }, (_, i) => ({ after: after(i) }));
+        const slots = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+        const override = (i: number) =>
+            `<p:clrMapOvr><a:overrideClrMapping bg1="${slots[i % 10]}" tx1="${slots[Math.floor(i / 10) % 10]}" bg2="lt2" tx2="dk2"/></p:clrMapOvr>`;
+        const master = pptxParts({ slides: slides(500) });
+        master['ppt/slideMasters/slideMaster1.xml'] = String(master['ppt/slideMasters/slideMaster1.xml']).replace(
+            '<p:cSld>',
+            `${junk(300_000, 'p:x')}<p:cSld><p:bg><p:bgPr>${solid('FF0000')}<a:effectLst/></p:bgPr></p:bg>`,
+        );
+        const blip = `<a:blip xmlns:q="urn:q" ${Array.from({ length: 300_000 }, (_, i) => `q:a${i}=""`).join(' ')} r:embed="rId9"/>`;
+        for (const pptx of [
+            buildPptx(styled(`${junk(100_000)}<a:lvl1pPr/>`, paragraphs)),
+            buildPptx(styled(`<a:lvl1pPr>${junk(100_000)}<a:defRPr/></a:lvl1pPr>`, paragraphs)),
+            buildPptx(styled(`<a:lvl1pPr><a:defRPr>${junk(100_000)}</a:defRPr></a:lvl1pPr>`, `<a:p>${runs}</a:p>`)),
+            buildPptx(
+                styled(
+                    `<a:lvl1pPr><a:defRPr><a:solidFill>${junk(100_000)}<a:srgbClr val="FF0000"/></a:solidFill></a:defRPr></a:lvl1pPr>`,
+                    runs,
+                ),
+            ),
+            buildPptx({
+                theme: THEME.replace('<a:fillStyleLst><a:solidFill>', `<a:fillStyleLst><a:solidFill>${junk(100_000)}`),
+                slides: [{ shapes: shapes('', styleRefs(1, 0)) }],
+            }),
+            buildPptx({
+                theme: THEME.replace('<a:ln w="9525">', `<a:ln w="9525">${junk(100_000)}`),
+                slides: [{ shapes: shapes('', styleRefs(0, 1)) }],
+            }),
+            buildPptx({
+                masters: [
+                    {
+                        shapes: placeholder(
+                            '<p:ph type="body"/>',
+                            `${box(0, 0, 100, 100)}<a:ln>${junk(100_000)}${solid('FF0000')}</a:ln>`,
+                        ),
+                    },
+                ],
+                slides: [{ shapes: body('').repeat(2000) }],
+            }),
+            buildPptx({
+                slides: [
+                    {
+                        shapes: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="4" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${box(0, 0, 10, 10)}<a:solidFill>${junk(100_000)}<a:srgbClr val="FF0000"/></a:solidFill></p:grpSpPr>${shapes('<a:grpFill/>')}</p:grpSp>`,
+                    },
+                ],
+            }),
+            buildPptx({
+                theme: THEME.replace(
+                    '<a:bgFillStyleLst><a:solidFill>',
+                    `<a:bgFillStyleLst><a:solidFill>${junk(300_000)}`,
+                ),
+                masters: [{ bg: '<p:bgRef idx="1001"><a:srgbClr val="FF0000"/></p:bgRef>' }],
+                slides: slides(500),
+            }),
+            zipParts(master),
+            // Every slide maps its colours anew, the same way: its own placeholder's master fill resolves once.
+            buildPptx({
+                masters: [
+                    {
+                        shapes: placeholder(
+                            '<p:ph type="body"/>',
+                            `${box(0, 0, 100, 100)}<a:solidFill>${junk(300_000)}<a:schemeClr val="tx1"/></a:solidFill>`,
+                        ),
+                    },
+                ],
+                slides: slides(500, () => override(0)).map((slide) => ({ ...slide, shapes: body('') })),
+            }),
+            buildPptx({
+                masters: [{ shapes: sp({ xfrm: box(0, 0, 1, 1), spPr: `${junk(300_000)}${solid('FF0000')}` }) }],
+                slides: slides(500, override),
+            }),
+            buildPptx({
+                masters: [
+                    {
+                        bg: `<p:bgPr><a:blipFill>${blip}<a:stretch/></a:blipFill><a:effectLst/></p:bgPr>`,
+                        rels: rel('rId9', 'image', '../media/image1.png'),
+                    },
+                ],
+                slides: slides(500),
+                files: { 'ppt/media/image1.png': PIXEL_PNG },
+            }),
+        ]) {
+            const started = performance.now();
+            readPptx(pptx, OPTIONS);
+            expect(performance.now() - started).toBeLessThan(1000);
+        }
+    });
+
     test("a slide's empty placeholder is not drawn, and the title's text names the frame", () => {
         const deck = deckOf({
             layouts: [{ shapes: placeholder('<p:ph type="title"/>', box(0, 0, 100, 100)) }],
@@ -210,6 +322,61 @@ describe('colour', () => {
             '#1f497d',
         );
         expect(tx1('<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>')).toBe('#000000');
+    });
+});
+
+describe('a shared fill', () => {
+    const parse = (xml: string) => {
+        const element = parseOoxml(xml);
+        if (!element) throw new Error(`not XML: ${xml}`);
+        return element;
+    };
+    const themeOf = (accent1: string): SlideTheme => ({
+        colors: {
+            scheme: new Map([
+                ['accent1', '#4f81bd'],
+                ['accent2', '#c0504d'],
+            ]),
+            map: new Map([['accent1', accent1]]),
+        },
+        fonts: { major: '', minor: '' },
+        formats: { fills: [], backgrounds: [], lines: [] },
+    });
+    const lost = () => {};
+    const junk = '<a:x/>'.repeat(100);
+
+    test('resolves once for each colour map, however many shapes it paints', () => {
+        const fill = parse(`<a:solidFill ${NS}>${junk}<a:schemeClr val="accent1"/></a:solidFill>`);
+        const count = countVisits(fill);
+        const [mapped, remapped] = [themeOf('accent1'), themeOf('accent2')];
+        for (let i = 0; i < 1000; i++) {
+            expect(paintOf(fill, mapped, { lost })).toEqual({ type: 'solid', color: '#4f81bd' });
+            expect(paintOf(fill, remapped, { lost })).toEqual({ type: 'solid', color: '#c0504d' });
+        }
+        expect(count.visits).toBe(2 * 101);
+    });
+
+    test("a style matrix entry and its gradient's stops resolve once for each phClr, whichever reference names it", () => {
+        const entry = parse(
+            `<a:gradFill ${NS}><a:gsLst>${junk}<a:gs pos="0">${junk}<a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:srgbClr val="00FF00"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill>`,
+        );
+        const stops = xmlChild(entry, A_NS, 'gsLst');
+        const stop = stops && xmlChild(stops, A_NS, 'gs');
+        if (!stops || !stop) throw new Error('no stops');
+        const counts = [stops, stop].map(countVisits);
+        const theme = themeOf('accent1');
+        for (let i = 0; i < 1000; i++) {
+            const reference = parse(
+                `<a:fillRef ${NS} idx="1"><a:srgbClr val="${i % 2 ? 'FF0000' : '0000FF'}"/></a:fillRef>`,
+            );
+            expect(paintOf(entry, theme, { lost, reference })).toMatchObject({
+                type: 'gradient',
+                from: i % 2 ? '#ff0000' : '#0000ff',
+                to: '#00ff00',
+            });
+        }
+        // The stops listed once, the first one's colour resolved for each of the two phClr.
+        expect(counts.map((count) => count.visits)).toEqual([102, 2 * 101]);
     });
 });
 

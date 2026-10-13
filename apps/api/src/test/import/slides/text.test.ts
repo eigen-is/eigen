@@ -6,7 +6,7 @@ import { type XmlElement, xmlChild } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
 import { richTextOf } from '../../../lib/import/slides/text';
-import { box, buildPptx, NS, para, REL, rel, run, sp } from '../../fixtures/pptx';
+import { box, buildPptx, countVisits, NS, para, REL, rel, run, sp } from '../../fixtures/pptx';
 
 // A text body as one rich-text box: its paragraphs as HTML, the box styled by the run most of its text is in, every
 // property inherited down the chain from the run to the master's text styles.
@@ -504,5 +504,29 @@ describe('a placeholder on a slide', () => {
             fontFamily: 'JetBrains Mono',
             color: '#000000',
         });
+    });
+});
+
+describe('a text style every paragraph inherits', () => {
+    test('is looked into once, its levels, run defaults and their fill too, however many paragraphs and runs take it', () => {
+        const junk = '<a:x/>'.repeat(100);
+        const listStyle = parse(
+            `<p:bodyStyle ${NS}>${junk}${level(1, '', `${junk}<a:buChar char="•"/>${defRPr(' sz="1000"', `${junk}<a:solidFill>${junk}<a:schemeClr val="accent2"/></a:solidFill>`)}`)}</p:bodyStyle>`,
+        );
+        const lvl1pPr = xmlChild(listStyle, A_NS, 'lvl1pPr');
+        const defaults = lvl1pPr && xmlChild(lvl1pPr, A_NS, 'defRPr');
+        const fill = defaults && xmlChild(defaults, A_NS, 'solidFill');
+        if (!lvl1pPr || !defaults || !fill) throw new Error('no level');
+        const counts = [listStyle, lvl1pPr, defaults, fill].map(countVisits);
+        const found = richTextOf(
+            { body: txBody(para('x').repeat(1000)), inherited: [], listStyle, style: undefined, rels: new Map() },
+            THEME,
+            1 / 6350,
+            UNCOUNTED,
+            UNCOUNTED,
+        );
+        expect(found).toMatchObject({ fontSize: 20, color: '#c0504d', html: expect.stringContaining('<ul><li>') });
+        // A scan is about 102 reads; each paragraph and run scanning again was 1,000 of them.
+        for (const count of counts) expect(count.visits).toBeLessThan(500);
     });
 });

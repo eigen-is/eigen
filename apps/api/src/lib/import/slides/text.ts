@@ -9,11 +9,12 @@ import {
     type VectorRichTextElement,
     type VerticalAlign,
 } from '@workspace/lib/vector';
-import { drawingColor, percent } from '../../core/drawingml';
+import { percent } from '../../core/drawingml';
 import { A_NS, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
+import { type XmlElement, xmlAttr, xmlElements, xmlText } from '../../core/xml';
+import { colorOf, fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
+import { childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 import { alternative, EMU_PER_POINT, emu, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
@@ -79,6 +80,14 @@ const BULLETS = new Map<string, 'ul' | 'ol' | undefined>([
 ]);
 const AUTOFITS = new Set(['normAutofit', 'noAutofit', 'spAutofit']);
 
+function isBullet(child: XmlElement): boolean {
+    return child.ns === A_NS && BULLETS.has(child.local);
+}
+
+function isAutofit(child: XmlElement): boolean {
+    return child.ns === A_NS && AUTOFITS.has(child.local);
+}
+
 type Marks = { bold: boolean; italic: boolean; underline: boolean; strike: boolean };
 type RunStyle = Marks & { fontFamily: string; size: number; color: string; letterSpacing: number };
 // Escaped text, or a <br> (no style: it takes its neighbours' marks).
@@ -98,11 +107,11 @@ export function richTextOf(
     const shapeLists = bodies.flatMap((body) => body.listStyle ?? []);
     const bodyPrs = bodies.flatMap((body) => body.bodyPr ?? []);
     const bodyAttr = (name: string) => firstOf(bodyPrs, (bodyPr) => xmlAttr(bodyPr, '', name));
-    const autofit = bodyPrs.flatMap(xmlElements).find((child) => child.ns === A_NS && AUTOFITS.has(child.local));
+    const autofit = firstOf(bodyPrs, (bodyPr) => firstChildOf(bodyPr, isAutofit));
     const normal = autofit?.local === 'normAutofit' ? autofit : undefined;
     const fontScale = share(normal && xmlAttr(normal, '', 'fontScale')) ?? 1;
     const lineReduction = share(normal && xmlAttr(normal, '', 'lnSpcReduction')) ?? 0;
-    const fontRef = source.style && xmlChild(source.style, A_NS, 'fontRef');
+    const fontRef = source.style && childOf(source.style, A_NS, 'fontRef');
     const context = { theme, pxPerEmu: pxPerEmu * fontScale, fontRef, rels: source.rels, lost };
 
     // Characters per run style, so the box takes the style most of its text is in.
@@ -110,22 +119,22 @@ export function richTextOf(
     const paragraphs: Paragraph[] = [];
     // The runs' HTML so far in UTF-16 units, each at least a byte: past the cap the canvas keeps, it is cut anyway.
     let html = 0;
-    for (const paragraph of xmlChildren(source.body, A_NS, 'p')) {
-        const pPr = xmlChild(paragraph, A_NS, 'pPr');
+    for (const paragraph of childrenOf(source.body, A_NS, 'p')) {
+        const pPr = childOf(paragraph, A_NS, 'pPr');
         const lvl = Number((pPr && xmlAttr(pPr, '', 'lvl')) ?? 0);
         const level = Number.isInteger(lvl) && lvl >= 0 && lvl < 9 ? lvl : 0;
         const levelsOf = (list: XmlElement) =>
-            [xmlChild(list, A_NS, `lvl${level + 1}pPr`), xmlChild(list, A_NS, 'defPPr')].filter(
+            [childOf(list, A_NS, `lvl${level + 1}pPr`), childOf(list, A_NS, 'defPPr')].filter(
                 (entry) => entry !== undefined,
             );
         const shapeLevels = shapeLists.flatMap(levelsOf);
         const textLevels = source.listStyle ? levelsOf(source.listStyle) : [];
         // PowerPoint ignores a paragraph's own defRPr.
-        const defaults = (levels: XmlElement[]) => levels.flatMap((entry) => xmlChild(entry, A_NS, 'defRPr') ?? []);
+        const defaults = (levels: XmlElement[]) => levels.flatMap((entry) => childOf(entry, A_NS, 'defRPr') ?? []);
         const inherited = { shape: defaults(shapeLevels), text: defaults(textLevels) };
         const levels = [...shapeLevels, ...textLevels];
         const chain = pPr ? [pPr, ...levels] : levels;
-        const bullet = chain.flatMap(xmlElements).find((child) => child.ns === A_NS && BULLETS.has(child.local));
+        const bullet = firstOf(chain, (entry) => firstChildOf(entry, isBullet));
         const runs: Run[] = [];
         let text = false;
         const children = xmlElements(paragraph).flatMap((child) =>
@@ -138,10 +147,10 @@ export function richTextOf(
                 runs.push({ html: '<br>' });
                 html += 4;
             }
-            const t = (child.local === 'r' || child.local === 'fld') && xmlChild(child, A_NS, 't');
+            const t = (child.local === 'r' || child.local === 'fld') && childOf(child, A_NS, 't');
             if (!t) continue;
             const value = xmlText(t).replace(/[\t\r\n]/g, ' ');
-            const rPr = xmlChild(child, A_NS, 'rPr');
+            const rPr = childOf(child, A_NS, 'rPr');
             const style = runStyleOf(rPr, inherited, context);
             const key = JSON.stringify(style);
             const entry = covered.get(key) ?? { ...style, chars: 0 };
@@ -168,9 +177,9 @@ export function richTextOf(
     };
 
     const first = paragraphs.find((paragraph) => paragraph.text)?.chain ?? [];
-    const lnSpc = firstOf(first, (pPr) => xmlChild(pPr, A_NS, 'lnSpc'));
-    const spacing = share(lnSpc && attrOf(xmlChild(lnSpc, A_NS, 'spcPct'), 'val'));
-    const points = Number(lnSpc && attrOf(xmlChild(lnSpc, A_NS, 'spcPts'), 'val'));
+    const lnSpc = firstOf(first, (pPr) => childOf(pPr, A_NS, 'lnSpc'));
+    const spacing = share(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPct'), 'val'));
+    const points = Number(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPts'), 'val'));
     const inset = (name: string) => {
         const value = emu(bodyAttr(name));
         return value !== undefined && value >= 0 ? value : DEFAULT_SIDE_INSET;
@@ -224,7 +233,7 @@ export function verticalTurnOf(source: TextSource, lost: Lost): number {
 
 // The shape's own body first, then its placeholders'.
 function bodiesOf(source: TextSource): TextSource['inherited'] {
-    const own = { bodyPr: xmlChild(source.body, A_NS, 'bodyPr'), listStyle: xmlChild(source.body, A_NS, 'lstStyle') };
+    const own = { bodyPr: childOf(source.body, A_NS, 'bodyPr'), listStyle: childOf(source.body, A_NS, 'lstStyle') };
     return [own, ...source.inherited];
 }
 
@@ -251,7 +260,7 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: 
         const value = Number(attr(name));
         return Number.isFinite(value) ? value : undefined;
     };
-    const typefaceIn = (element: XmlElement) => attrOf(xmlChild(element, A_NS, 'latin'), 'typeface') || undefined;
+    const typefaceIn = (element: XmlElement) => attrOf(childOf(element, A_NS, 'latin'), 'typeface') || undefined;
     const colorIn = (element: XmlElement) => {
         const paint = paintOf(fillIn(element), theme, { lost: context.lost });
         const color = paint?.type === 'gradient' ? paint.from : paint?.color;
@@ -271,7 +280,7 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: 
         color:
             (rPr && colorIn(rPr)) ??
             firstOf(inherited.shape, colorIn) ??
-            (fontRef && drawingColor(fontRef, theme.colors)) ??
+            colorOf(fontRef, theme.colors) ??
             firstOf(inherited.text, colorIn) ??
             SLIDES_STYLE_DEFAULTS.color,
         letterSpacing: ((number('spc') ?? 0) / 100) * EMU_PER_POINT * context.pxPerEmu,
@@ -284,7 +293,8 @@ function runStyleOf(rPr: XmlElement | undefined, inherited: Inherited, context: 
 
 // An external http, https or mailto target; a slide jump, a macro or a script is plain text.
 function linkOf(rPr: XmlElement | undefined, rels: ReadonlyMap<string, Relationship>): string | undefined {
-    const id = attrOf(rPr && xmlChild(rPr, A_NS, 'hlinkClick'), 'id', R_NS);
+    const click = rPr && childOf(rPr, A_NS, 'hlinkClick');
+    const id = click && prefixedAttrOf(click, R_NS, 'id');
     const rel = id === undefined ? undefined : rels.get(id);
     return rel?.external && rel.type.endsWith('/hyperlink') && LIGHT_EDITOR_HREF.test(rel.target)
         ? rel.target
@@ -390,8 +400,8 @@ function firstOf<T>(elements: XmlElement[], read: (element: XmlElement) => T | u
     return undefined;
 }
 
-function attrOf(element: XmlElement | undefined, name: string, ns = ''): string | undefined {
-    return element && xmlAttr(element, ns, name);
+function attrOf(element: XmlElement | undefined, name: string): string | undefined {
+    return element && xmlAttr(element, '', name);
 }
 
 // A share no smaller than none: a font scale, a line spacing.

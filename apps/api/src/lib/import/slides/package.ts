@@ -2,11 +2,12 @@ import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { POINTS_PER_UNIT } from '../doc/package';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { PRESENTATION_TOO_LARGE } from '../messages';
+import { cachedBy, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 
 // The parts the reader parses, together: presentation, slides, layouts, masters and themes (a tree's cost: core/xml.ts).
 // The corpus's most is 7.5 MB, a 369-slide deck.
@@ -132,10 +133,10 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
     if (root?.ns !== P_NS || root.local !== 'presentation') throw new ApiError(400, NOT_A_PPTX);
     const presentation: Part = { path: main, root, rels: relsOf(main) };
 
-    const ids = xmlChildren(xmlChild(root, P_NS, 'sldIdLst') ?? root, P_NS, 'sldId');
+    const ids = childrenOf(childOf(root, P_NS, 'sldIdLst') ?? root, P_NS, 'sldId');
     if (ids.length > MAX_SLIDES) throw new ApiError(413, PRESENTATION_TOO_LARGE);
     const slides = ids.flatMap((id) => {
-        const rel = presentation.rels.get(xmlAttr(id, R_NS, 'id') ?? '');
+        const rel = presentation.rels.get(prefixedAttrOf(id, R_NS, 'id') ?? '');
         const path = rel && !rel.external && rel.type.endsWith('/slide') ? rel.target : undefined;
         return path && pkg.contentTypeOf(path) === PART_TYPES.slide && pkg.zip.entry(path) ? [path] : [];
     });
@@ -203,17 +204,29 @@ export function emu(value: string | undefined): number | undefined {
     return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
 }
 
+function isSvgExtension(extension: XmlElement): boolean {
+    return extension.ns === A_NS && extension.local === 'ext' && childOf(extension, ASVG_NS, 'svgBlip') !== undefined;
+}
+
 // The picture an a:blip shows: its svgBlip extension's, else its own.
 export function blipMedia(pkg: PptxPackage, from: Part, blip: XmlElement | undefined): MediaPart | undefined {
-    const extensions = blip && xmlChild(blip, A_NS, 'extLst');
-    const svg = (extensions ? xmlChildren(extensions, A_NS, 'ext') : [])
-        .map((ext) => xmlChild(ext, ASVG_NS, 'svgBlip'))
-        .find((found) => found !== undefined);
-    return pkg.media(from, svg && xmlAttr(svg, R_NS, 'embed')) ?? pkg.media(from, blip && xmlAttr(blip, R_NS, 'embed'));
+    const extensions = blip && childOf(blip, A_NS, 'extLst');
+    const extension = extensions && firstChildOf(extensions, isSvgExtension);
+    const svg = extension && childOf(extension, ASVG_NS, 'svgBlip');
+    return (
+        pkg.media(from, svg && prefixedAttrOf(svg, R_NS, 'embed')) ??
+        pkg.media(from, blip && prefixedAttrOf(blip, R_NS, 'embed'))
+    );
 }
 
 // Requires names prefixes, not namespaces: PowerPoint's spellings of the namespaces this reader reads. Not a14, whose
 // choice holds an equation the fallback draws as a picture, nor p14, whose ink the fallback draws too.
 const PRESENTATION_PREFIXES = new Set(['p', 'a', 'r', 'mc']);
 
-export const alternative = alternativeFor(PRESENTATION_PREFIXES);
+const alternativeOf = alternativeFor(PRESENTATION_PREFIXES);
+const alternatives = cachedBy<null, XmlElement[]>();
+
+// A layout's or master's is unwrapped again for every colour map its shapes are read with.
+export function alternative(element: XmlElement): XmlElement[] {
+    return alternatives(element, null, () => alternativeOf(element));
+}
