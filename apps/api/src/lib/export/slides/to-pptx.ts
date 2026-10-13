@@ -2,6 +2,7 @@ import { gradientStops } from '@workspace/lib/background';
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import {
+    ARROW_LABEL_PAD,
     type Arrowhead,
     arrowCurveBeziers,
     arrowheadGeometry,
@@ -632,13 +633,11 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
     if (!label) return xml;
     const center = linearLocalToScene(el, label.center);
     const lines = el.text.split('\n');
-    // The 5 px Eigen's mask leaves around the text.
-    const pad = 5;
     const boxOf = (width: number) => ({
-        x: center.x - width / 2 - pad,
-        y: center.y - label.height / 2 - pad,
-        width: width + 2 * pad,
-        height: label.height + 2 * pad,
+        x: center.x - width / 2 - ARROW_LABEL_PAD,
+        y: center.y - label.height / 2 - ARROW_LABEL_PAD,
+        width: width + 2 * ARROW_LABEL_PAD,
+        height: label.height + 2 * ARROW_LABEL_PAD,
         angle: el.angle,
     });
     const text = textBodyXml(
@@ -653,7 +652,7 @@ function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number): string
             verticalAlign: 'center',
             letterSpacing: 0,
             lineHeight: getFontMetrics(el.fontFamily).lineHeight,
-            inset: pad,
+            inset: ARROW_LABEL_PAD,
             wrap: false,
             opacity,
         },
