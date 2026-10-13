@@ -49,9 +49,10 @@ export function tickStep(start: number, stop: number, count: number): number {
     return inc < 0 ? 1 / -inc : inc;
 }
 
+// d3-scale's ten-step bound: d3-array's loop never settles for a small count on a domain across zero.
 export function nice(start: number, stop: number, count: number): [number, number] {
     let prestep: number | undefined;
-    for (;;) {
+    for (let iteration = 0; iteration < 10; iteration++) {
         const step = tickIncrement(start, stop, count);
         if (step === prestep || step === 0 || !Number.isFinite(step)) return [start, stop];
         if (step > 0) {
@@ -63,6 +64,7 @@ export function nice(start: number, stop: number, count: number): [number, numbe
         }
         prestep = step;
     }
+    return [start, stop];
 }
 
 // Intl caps fraction digits; a step this small has no readable labels anyway.

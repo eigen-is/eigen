@@ -37,6 +37,8 @@ describe('ticks', () => {
         expect(nice(132, 876, 5)).toEqual([0, 1000]);
         expect(nice(0, 80, 4)).toEqual([0, 80]);
         expect(nice(0, 81, 4)).toEqual([0, 100]);
+        const [lo, hi] = nice(-1, 2, 1);
+        expect(Number.isFinite(lo) && Number.isFinite(hi) && lo <= -1 && hi >= 2).toBe(true);
     });
 });
 
