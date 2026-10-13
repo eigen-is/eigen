@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, selection, align, arrange, layers]
 related: [vector/draw-shapes-and-text, vector/style-objects, vector/zoom-pan-and-shortcuts]
 order: 40
-updated: 2026-09-29
+updated: 2026-10-13
 ---
 
 Once you have a few objects on a drawing, Vector gives you the tools to place them exactly. This article covers selecting objects, moving and resizing them, setting exact values, changing the stacking order, and lining objects up with each other.
@@ -78,8 +78,9 @@ Right-click any object to open its menu. The actions are grouped in this order:
 1. **Bring to front**, **Bring forward**, **Send backward**, **Send to back**.
 2. **Copy**, **Cut**, **Paste**.
 3. **Duplicate**, **Delete**.
-4. **Download original image**, on an image only. It saves the image file at its full size and in its own format.
-5. **Add comment**.
+4. **Convert to shapes**, when the selection is one chart. It replaces the chart with ordinary shapes and text boxes that look the same, and leaves them all selected. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
+5. **Download original image**, on an image only. It saves the image file at its full size and in its own format.
+6. **Add comment**.
 
 If you can only view the drawing, right-clicking an image gives you **Download original image** and nothing else.
 

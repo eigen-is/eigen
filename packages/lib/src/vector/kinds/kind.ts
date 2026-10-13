@@ -104,6 +104,9 @@ type KindSpec<T extends VectorElement> = {
     paintsNothing?(el: T): boolean;
     // What the kind contributes to the search index. Omit when it carries no text.
     searchText?(el: T): string;
+    // Convert to shapes: the plain elements that draw what this one draws, in its coordinate space; [] when
+    // there is nothing to unpack. Omit where no element of the kind unpacks.
+    toShapes?(el: T): VectorElement[];
 };
 
 // The registry entry. `defaults` and `read` keep the kind's own element type, so a consumer that names
@@ -127,6 +130,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     render(el: VectorElement, ctx: RenderContext): RenderOutput;
     paintsNothing(el: VectorElement): boolean;
     searchText(el: VectorElement): string;
+    toShapes(el: VectorElement): VectorElement[];
 };
 
 // The empty outline a mis-dispatched element gets: no edge, so nothing docks to it.
@@ -218,5 +222,6 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
         paintsNothing: (el) => (spec.is(el) && spec.paintsNothing ? spec.paintsNothing(el) : false),
         searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),
+        toShapes: (el) => (spec.is(el) && spec.toShapes ? spec.toShapes(el) : []),
     };
 }

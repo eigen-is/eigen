@@ -26,7 +26,7 @@ import {
 } from '@workspace/lib/vector';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, topmostIndex, writeElementInDoc } from './element-writes';
+import { duplicateElementsInDoc, replaceElementInDoc, topmostIndex, writeElementInDoc } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -290,6 +290,12 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [],
     );
 
+    const replaceElement = useCallback(
+        (id: string, partials: NewVectorElement[]): string[] =>
+            docRef.current ? replaceElementInDoc(docRef.current, id, partials, defaultsRef.current) : [],
+        [],
+    );
+
     // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
     // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
     // steps. add/duplicate return the new frame id so the caller can activate it.
@@ -369,6 +375,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
+        replaceElement,
         addFrame,
         deleteFrame,
         duplicateFrame,
