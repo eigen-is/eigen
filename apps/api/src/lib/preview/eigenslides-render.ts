@@ -1,12 +1,12 @@
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
 import {
     DEFAULT_FRAME_BACKGROUND,
-    FRAME_HEIGHT,
     FRAME_WIDTH,
     type MediaResolver,
     orderByFractionalIndex,
     parseBackgroundFill,
     readVectorFromDoc,
+    SLIDE_SIZES,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
@@ -45,10 +45,11 @@ export function renderEigenslidesPreviewBody(
     const scene = sanitizeSceneHtml({ ...full, frames, elements: capped.elements });
     const pages = framePages(scene, resolveMedia);
     const scale = CANVAS_PREVIEW_WIDTH / FRAME_WIDTH;
-    // A deck with no frames still previews as one blank slide: getOrCacheText caches only a non-empty
-    // body, so an empty one would re-run the whole document transform on every request, forever.
+    // A deck with no frames still previews as one blank slide of its size: getOrCacheText caches only a
+    // non-empty body, so an empty one would re-run the whole document transform on every request, forever.
     if (pages.length === 0) {
-        const blank = emptyPage(parseBackgroundFill(DEFAULT_FRAME_BACKGROUND), FRAME_WIDTH, FRAME_HEIGHT);
+        const { width, height } = SLIDE_SIZES[full.meta.slideSize];
+        const blank = emptyPage(parseBackgroundFill(DEFAULT_FRAME_BACKGROUND), width, height);
         return { body: renderFittedPage(blank, scale), warnings };
     }
 

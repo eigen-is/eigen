@@ -23,8 +23,8 @@ import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from 
 // copy per document type. Runs inside the transform Worker (worker.ts owns execution; the main-thread
 // orchestration lives in export-document.ts): no Mount, no preview cache.
 //
-// 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi. A frame is 1920x1080, so a deck
-// prints at scale 0.5 — a @page of 1920px would be a 20-inch sheet.
+// A page is 254mm (960px at 96dpi) wide: 254 x 142.875mm for 16:9, 254 x 190.5mm for 4:3. Every frame
+// is 1920 wide, so a deck prints at scale 0.5 — a @page of 1920px would be a 20-inch sheet.
 const DECK_PAGE_WIDTH = 960;
 const DECK_SCALE = DECK_PAGE_WIDTH / FRAME_WIDTH;
 
@@ -43,7 +43,7 @@ export function canvasHtmlDocument(opts: {
     const rendered = pages.map((page) =>
         mode === 'pdf' ? renderCanvasPage(page, scale, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
-    // Every page in a document is the same size (frames are constant; a drawing has one page), and it
+    // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
     // is rounded exactly as renderCanvasPage rounds the page box — a sheet a fraction narrower than
     // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);

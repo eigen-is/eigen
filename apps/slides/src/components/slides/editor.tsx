@@ -62,7 +62,7 @@ export function SlideEditor(props: SlideEditorProps) {
     );
 }
 
-// The deck: a canvas of 1920x1080 frames, one per slide. Tool, selection and the active frame are
+// The deck: a canvas of frames of the deck's slide size, one per slide. Tool, selection and the active frame are
 // lifted here so the toolbar, rail, canvas and panel share one source; the viewport, gestures,
 // keymap, clipboard and in-place editing are all the engine's.
 function SlideEditorInner({

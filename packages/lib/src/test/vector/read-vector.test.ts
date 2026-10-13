@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
+import { SLIDE_SIZES } from '../../vector/frames';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
@@ -43,7 +44,7 @@ describe('readVectorFromDoc', () => {
         });
         const scene = readVectorFromDoc(doc);
         expect(scene.elements.map((e) => e.id)).toEqual(['first', 'second']);
-        expect(scene.meta).toEqual({ background: '#ffffff' });
+        expect(scene.meta).toEqual({ background: '#ffffff', slideSize: '16:9' });
     });
 
     test('applies defaults for missing fields and ignores foreign keys', () => {
@@ -143,7 +144,7 @@ describe('readVectorFromDoc', () => {
     test('empty doc yields an empty scene with default meta', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
-        expect(scene.meta).toEqual({ background: 'transparent' });
+        expect(scene.meta).toEqual(DEFAULT_SCENE_META);
     });
 
     test('materializes a linear element with points and roundness', () => {
@@ -913,5 +914,49 @@ describe('readVectorFromDoc — the canvas model', () => {
         const [a, b] = readVectorFromDoc(doc).elements;
         expect(a).toMatchObject({ corners: DEFAULT_CORNERS });
         expect(b).toMatchObject({ corners: 'straight' });
+    });
+});
+
+describe('readVectorFromDoc — the slide size', () => {
+    function deckSized(slideSize?: unknown): Y.Doc {
+        const doc = new Y.Doc();
+        writeFrame(doc, 'f1', 'a0');
+        writeFrame(doc, 'f2', 'a1');
+        if (slideSize !== undefined) doc.getMap('meta').set('slideSize', slideSize);
+        return doc;
+    }
+
+    const sizes = (doc: Y.Doc) => readVectorFromDoc(doc).frames.map(({ width, height }) => ({ width, height }));
+
+    test('a deck without one is 16:9, and every frame is 1920x1080', () => {
+        const doc = deckSized();
+        expect(readVectorFromDoc(doc).meta.slideSize).toBe('16:9');
+        expect(sizes(doc)).toEqual([SLIDE_SIZES['16:9'], SLIDE_SIZES['16:9']]);
+    });
+
+    test('a 4:3 deck stamps 1920x1440 on every frame', () => {
+        const doc = deckSized('4:3');
+        expect(readVectorFromDoc(doc).meta.slideSize).toBe('4:3');
+        expect(sizes(doc)).toEqual([
+            { width: 1920, height: 1440 },
+            { width: 1920, height: 1440 },
+        ]);
+    });
+
+    test('an unknown or forged size reads as 16:9', () => {
+        for (const forged of ['5:4', '16:10', 1440, '__proto__', 'toString', null]) {
+            const doc = deckSized(forged);
+            expect(readVectorFromDoc(doc).meta.slideSize).toBe('16:9');
+            expect(sizes(doc)).toEqual([SLIDE_SIZES['16:9'], SLIDE_SIZES['16:9']]);
+        }
+    });
+
+    test("a peer's size change reaches every frame on the next read", () => {
+        const local = deckSized();
+        const peer = new Y.Doc();
+        Y.applyUpdate(peer, Y.encodeStateAsUpdate(local));
+        peer.getMap('meta').set('slideSize', '4:3');
+        Y.applyUpdate(local, Y.encodeStateAsUpdate(peer, Y.encodeStateVector(local)));
+        expect(sizes(local)).toEqual([SLIDE_SIZES['4:3'], SLIDE_SIZES['4:3']]);
     });
 });
