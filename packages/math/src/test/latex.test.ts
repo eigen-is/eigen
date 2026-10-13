@@ -773,6 +773,11 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '^\u0338' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
         [[{ kind: 'operator', text: "'\u0338" }], '\\not\\prime', [{ kind: 'operator', text: '′\u0338' }]],
+        [
+            [{ kind: 'accent', accent: '∘', body: x }],
+            '\\overset{\\circ}{x}',
+            [{ kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '∘' }] }],
+        ],
     ])('%j is written %p', (row, latex, read) => {
         expect(writeLatex(row)).toBe(latex);
         expect(readLatex(latex)).toStrictEqual(read);
