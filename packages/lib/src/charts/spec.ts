@@ -1,8 +1,10 @@
 // The stored-chart codec. A chart is one JSON string wherever it lives (a canvas element field, a docs
 // node attribute, a SheetChart), and parseChartSpec is the one reader every surface and importer runs.
-// Strict: anything malformed or over a hard limit reads as null, never a partial chart, never a throw.
+// Malformed structure or a hard limit reads as null, never a throw; a presentation field reads its default.
 
+import { isRecord } from '../core/guards';
 import { stripNonXmlChars } from '../core/xml';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
 import {
     type CellRangeRef,
     CHART_BLANKS,
@@ -16,7 +18,7 @@ import {
     type RangeChartData,
     type RangeChartSeries,
 } from '../types/chart';
-import { isColorToken } from '../vector/fill';
+import { bool, color, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 
 // Hard limits: every peer lays out and paints whatever is stored, so they bound one chart's cost.
@@ -56,6 +58,24 @@ export function exceedsInlineGridLimits(data: InlineChartData): boolean {
     return data.series.length > INLINE_GRID_MAX_SERIES || rows > INLINE_GRID_MAX_CATEGORIES;
 }
 
+// What Insert → Chart starts from and what a missing or invalid presentation field reads as, so a field
+// added later reads its default from charts stored before it.
+function defaultPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> {
+    return {
+        stacked: false,
+        title: '',
+        legend: type === 'pie' ? 'none' : 'top',
+        blanks: 'gap',
+        categoryAxis: { title: '' },
+        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
+        sliceColors: [],
+    };
+}
+
+function defaultSeriesStyle(index: number): ChartSeriesStyle {
+    return { color: chartColor(index), markers: false, smooth: false };
+}
+
 // Google's sample for Insert → Chart.
 export function sampleChartSpec(type: ChartType): ChartSpec {
     const categories = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
@@ -65,23 +85,14 @@ export function sampleChartSpec(type: ChartType): ChartSpec {
     ];
     const pie = type === 'pie';
     return {
+        ...defaultPresentation(type),
         type,
-        stacked: false,
         title: 'Points scored',
-        legend: pie ? 'none' : 'top',
-        blanks: 'gap',
-        categoryAxis: { title: '' },
-        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
         sliceColors: pie ? categories.map((_, i) => chartColor(i)) : [],
         data: {
             source: 'inline',
             categories,
-            series: (pie ? periods.slice(0, 1) : periods).map((period, i) => ({
-                ...period,
-                color: chartColor(i),
-                markers: false,
-                smooth: false,
-            })),
+            series: (pie ? periods.slice(0, 1) : periods).map((period, i) => ({ ...period, ...defaultSeriesStyle(i) })),
         },
     };
 }
@@ -105,27 +116,32 @@ function invalid(): never {
 
 function chartSpec(v: unknown): ChartSpec {
     const spec = record(v);
-    const categoryAxis = record(prop(spec, 'categoryAxis'));
-    const valueAxis = record(prop(spec, 'valueAxis'));
-    const min = finiteOrNull(prop(valueAxis, 'min'));
-    const max = finiteOrNull(prop(valueAxis, 'max'));
+    const type = member(prop(spec, 'type'), CHART_TYPES);
+    const defaults = defaultPresentation(type);
+    const categoryAxis = optionalRecord(prop(spec, 'categoryAxis'));
+    const valueAxis = optionalRecord(prop(spec, 'valueAxis'));
+    const min = finiteOr(prop(valueAxis, 'min'), defaults.valueAxis.min);
+    const max = finiteOr(prop(valueAxis, 'max'), defaults.valueAxis.max);
     const ordered = min === null || max === null || min < max;
     const format = prop(valueAxis, 'format');
+    const sliceColors = prop(spec, 'sliceColors');
+    const slices = Array.isArray(sliceColors) ? sliceColors : defaults.sliceColors;
+    if (slices.length > MAX_CHART_POINTS) invalid();
     return {
-        type: member(prop(spec, 'type'), CHART_TYPES),
-        stacked: flag(prop(spec, 'stacked')),
-        title: text(prop(spec, 'title')),
-        legend: member(prop(spec, 'legend'), LEGEND_POSITIONS),
-        blanks: member(prop(spec, 'blanks'), CHART_BLANKS),
-        categoryAxis: { title: text(prop(categoryAxis, 'title')) },
+        type,
+        stacked: bool(prop(spec, 'stacked'), defaults.stacked),
+        title: text(str(prop(spec, 'title'), defaults.title)),
+        legend: oneOf(prop(spec, 'legend'), LEGEND_POSITIONS, defaults.legend),
+        blanks: oneOf(prop(spec, 'blanks'), CHART_BLANKS, defaults.blanks),
+        categoryAxis: { title: text(str(prop(categoryAxis, 'title'), defaults.categoryAxis.title)) },
         valueAxis: {
-            title: text(prop(valueAxis, 'title')),
+            title: text(str(prop(valueAxis, 'title'), defaults.valueAxis.title)),
             min: ordered ? min : null,
             max: ordered ? max : null,
-            gridlines: flag(prop(valueAxis, 'gridlines')),
-            format: format === null ? null : text(format),
+            gridlines: bool(prop(valueAxis, 'gridlines'), defaults.valueAxis.gridlines),
+            format: typeof format === 'string' ? text(format) : defaults.valueAxis.format,
         },
-        sliceColors: list(prop(spec, 'sliceColors')).map(color),
+        sliceColors: slices.map((slice, i) => color(slice, chartColor(i))),
         data: chartData(prop(spec, 'data')),
     };
 }
@@ -153,31 +169,32 @@ function chartData(v: unknown): InlineChartData | RangeChartData {
     return invalid();
 }
 
-function inlineSeries(v: unknown): InlineChartSeries {
+function inlineSeries(v: unknown, index: number): InlineChartSeries {
     const series = record(v);
     return {
-        ...seriesStyle(series),
-        name: text(prop(series, 'name')),
+        ...seriesStyle(series, index),
+        name: text(str(prop(series, 'name'), '')),
         values: list(prop(series, 'values')).map(finiteOrNull),
     };
 }
 
-function rangeSeries(v: unknown): RangeChartSeries {
+function rangeSeries(v: unknown, index: number): RangeChartSeries {
     const series = record(v);
     const name = prop(series, 'name');
     const values = prop(series, 'values');
     return {
-        ...seriesStyle(series),
+        ...seriesStyle(series, index),
         name: typeof name === 'string' ? text(name) : cellRange(name),
         values: values === null ? null : cellRange(values),
     };
 }
 
-function seriesStyle(series: object): ChartSeriesStyle {
+function seriesStyle(series: object, index: number): ChartSeriesStyle {
+    const defaults = defaultSeriesStyle(index);
     return {
-        color: color(prop(series, 'color')),
-        markers: flag(prop(series, 'markers')),
-        smooth: flag(prop(series, 'smooth')),
+        color: color(prop(series, 'color'), defaults.color),
+        markers: bool(prop(series, 'markers'), defaults.markers),
+        smooth: bool(prop(series, 'smooth'), defaults.smooth),
     };
 }
 
@@ -185,18 +202,22 @@ function cellRange(v: unknown): CellRangeRef {
     const ref = record(v);
     const sheetId = prop(ref, 'sheetId');
     if (typeof sheetId !== 'string' || sheetId === '') invalid();
-    return { sheetId, row: span(prop(ref, 'row')), column: span(prop(ref, 'column')) };
+    return {
+        sheetId,
+        row: span(prop(ref, 'row'), REFERENCE_ROW_COUNT),
+        column: span(prop(ref, 'column'), REFERENCE_COLUMN_COUNT),
+    };
 }
 
-function span(v: unknown): [number, number] {
+function span(v: unknown, count: number): [number, number] {
     const bounds = list(v);
-    const start = cellIndex(bounds[0]);
-    const end = cellIndex(bounds[1]);
+    const start = cellIndex(bounds[0], count);
+    const end = cellIndex(bounds[1], count);
     return bounds.length === 2 && start <= end ? [start, end] : invalid();
 }
 
-function cellIndex(v: unknown): number {
-    return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : invalid();
+function cellIndex(v: unknown, count: number): number {
+    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < count ? v : invalid();
 }
 
 // Truncated, not rejected: an imported file's overlong label should not cost the whole chart. Every
@@ -207,17 +228,13 @@ function text(v: unknown): string {
         : invalid();
 }
 
-function color(v: unknown): string {
-    return isColorToken(v) ? v : invalid();
-}
-
-function flag(v: unknown): boolean {
-    return typeof v === 'boolean' ? v : invalid();
-}
-
 function finiteOrNull(v: unknown): number | null {
     if (v === null) return null;
     return typeof v === 'number' && Number.isFinite(v) ? v : invalid();
+}
+
+function finiteOr(v: unknown, fallback: number | null): number | null {
+    return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
 function member<T extends string>(v: unknown, allowed: readonly T[]): T {
@@ -228,7 +245,11 @@ function member<T extends string>(v: unknown, allowed: readonly T[]): T {
 }
 
 function record(v: unknown): object {
-    return typeof v === 'object' && v !== null && !Array.isArray(v) ? v : invalid();
+    return isRecord(v) ? v : invalid();
+}
+
+function optionalRecord(v: unknown): object {
+    return isRecord(v) ? v : {};
 }
 
 function list(v: unknown): unknown[] {

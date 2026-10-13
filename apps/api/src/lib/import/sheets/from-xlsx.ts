@@ -12,15 +12,19 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    BORDER_STYLES,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_ROW_HEIGHT,
+} from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     cellWrapsText,
     iscelldata,
     numberDisplay,
     parseA1Range,
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
     toA1,
     unquoteSheetName,
     update,

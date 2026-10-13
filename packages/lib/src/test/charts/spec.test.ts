@@ -12,6 +12,7 @@ import {
     parseChartSpec,
     sampleChartSpec,
 } from '../../charts';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
 import { CHART_TYPES, type ChartSpec, type InlineChartData, type RangeChartData } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
 
@@ -91,24 +92,32 @@ describe('parseChartSpec', () => {
         }
     });
 
-    test('an enum outside its value list rejects the spec', () => {
+    test('an unknown type or data source rejects the spec', () => {
         expect(parseChartSpec(stored({ type: 'area' }))).toBeNull();
-        expect(parseChartSpec(stored({ legend: 'center' }))).toBeNull();
-        expect(parseChartSpec(stored({ blanks: 'skip' }))).toBeNull();
         expect(parseChartSpec(stored({ data: { ...inlineData(1, 1), source: 'cache' } }))).toBeNull();
+        expect(parseChartSpec(stored({ data: undefined }))).toBeNull();
+        expect(parseChartSpec(stored({ data: { ...inlineData(1, 1), series: [42] } }))).toBeNull();
     });
 
-    test('a non-boolean flag rejects the spec', () => {
-        expect(parseChartSpec(stored({ stacked: 'yes' }))).toBeNull();
+    test('a missing or invalid presentation field reads its default, so a field added later reads on old charts', () => {
+        const { blanks, valueAxis, ...rest } = chart();
+        expect(parseChartSpec(JSON.stringify(rest))).toEqual(chart());
+        expect(parseChartSpec(stored({ legend: 'center' }))?.legend).toBe('top');
+        expect(parseChartSpec(stored({ type: 'pie', legend: 'center' }))?.legend).toBe('none');
+        expect(parseChartSpec(stored({ blanks: 'skip' }))?.blanks).toBe('gap');
+        expect(parseChartSpec(stored({ stacked: 'yes' }))?.stacked).toBe(false);
+        expect(parseChartSpec(stored({ title: 7 }))?.title).toBe('');
+        expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
+            valueAxis,
+        );
     });
 
-    test('non-numbers and non-finite numbers reject the spec', () => {
+    test('a non-number value in an inline series rejects the spec, since values are data', () => {
         const values = (v: unknown) =>
             stored({ data: { ...inlineData(1, 1), series: [{ ...style, name: 'S', values: [v] }] } });
         expect(parseChartSpec(values('NaN'))).toBeNull();
         // JSON.parse reads an overflowing literal as Infinity
         expect(parseChartSpec(values('INF').replace('"INF"', '1e999'))).toBeNull();
-        expect(parseChartSpec(stored({ valueAxis: { ...chart().valueAxis, min: 'Infinity' } }))).toBeNull();
     });
 
     test('a null value is a blank and is kept', () => {
@@ -129,13 +138,29 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(JSON.stringify(chart({ data })))?.data).toEqual(data);
     });
 
-    test('a color that is not a color token rejects the spec', () => {
+    test("a color that is not a color token reads as the palette's color for its series or slice", () => {
         const series = (color: unknown) =>
-            stored({ data: { ...inlineData(1, 1), series: [{ ...style, color, name: 'S', values: [1] }] } });
-        expect(parseChartSpec(series('url(#x)'))).toBeNull();
-        expect(parseChartSpec(series('red'))).toBeNull();
-        expect(parseChartSpec(stored({ sliceColors: ['#fff', 'blue'] }))).toBeNull();
-        expect(parseChartSpec(series('transparent'))).not.toBeNull();
+            parseChartSpec(
+                stored({
+                    data: {
+                        ...inlineData(2, 1),
+                        series: [
+                            { ...style, name: 'A', values: [1] },
+                            { ...style, color, name: 'B', values: [1] },
+                        ],
+                    },
+                }),
+            )?.data.series[1];
+        expect(series('url(#x)')?.color).toBe(chartColor(1));
+        expect(series('red')?.color).toBe(chartColor(1));
+        expect(series('transparent')?.color).toBe('transparent');
+        const { color, markers, smooth, ...rest } = style;
+        expect(
+            parseChartSpec(stored({ data: { ...inlineData(1, 1), series: [{ ...rest, name: 7, values: [1] }] } }))?.data
+                .series[0],
+        ).toEqual({ color: chartColor(0), markers: false, smooth: false, name: '', values: [1] });
+        expect(parseChartSpec(stored({ sliceColors: ['#fff', 'blue'] }))?.sliceColors).toEqual(['#fff', chartColor(1)]);
+        expect(parseChartSpec(stored({ sliceColors: 'blue' }))?.sliceColors).toEqual([]);
     });
 
     test('a label over the length cap is truncated, not rejected', () => {
@@ -193,6 +218,12 @@ describe('parseChartSpec', () => {
         ).toBeNull();
     });
 
+    test('more slice colors than the point limit rejects the spec', () => {
+        const slices = (count: number) => Array.from({ length: count }, () => '#fff');
+        expect(parseChartSpec(stored({ sliceColors: slices(MAX_CHART_POINTS) }))).not.toBeNull();
+        expect(parseChartSpec(stored({ sliceColors: slices(MAX_CHART_POINTS + 1) }))).toBeNull();
+    });
+
     test('a stored string over the size limit rejects the spec', () => {
         const padded = JSON.stringify(chart()).replace(/}$/, `,"pad":"${'x'.repeat(MAX_CHART_SPEC_BYTES)}"}`);
         expect(parseChartSpec(padded)).toBeNull();
@@ -225,6 +256,15 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(withValues({ ...ref, row: [0] }))).toBeNull();
         expect(parseChartSpec(withValues({ ...ref, sheetId: '' }))).toBeNull();
         expect(parseChartSpec(withValues([1, 2]))).toBeNull();
+    });
+
+    test("a range ref past Excel's grid rejects the spec", () => {
+        const ref = { sheetId: 'sheet-1', row: [0, REFERENCE_ROW_COUNT - 1], column: [0, REFERENCE_COLUMN_COUNT - 1] };
+        const withValues = (values: unknown) =>
+            stored({ data: { source: 'range', categories: null, series: [{ ...style, name: 'S', values }] } });
+        expect(parseChartSpec(withValues(ref))).not.toBeNull();
+        expect(parseChartSpec(withValues({ ...ref, row: [0, REFERENCE_ROW_COUNT] }))).toBeNull();
+        expect(parseChartSpec(withValues({ ...ref, column: [0, REFERENCE_COLUMN_COUNT] }))).toBeNull();
     });
 });
 
