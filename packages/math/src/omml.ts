@@ -319,7 +319,7 @@ function properties(object: string, values: [string, string | undefined][]): str
 
 const colored = (color: string | undefined) => {
     const hex = hexColor(color);
-    return hex ? `<w:rPr><w:color w:val="${hex.slice(1)}"/></w:rPr>` : '';
+    return hex ? `<w:rPr><w:color w:val="${escapeXml(hex.slice(1))}"/></w:rPr>` : '';
 };
 
 function style(variant: MathVariant | undefined): string {

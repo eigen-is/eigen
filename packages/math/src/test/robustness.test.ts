@@ -415,6 +415,17 @@ describe('C8: a writer’s output holds only its own vocabulary', () => {
         expect(writeLatex(lower)).toBe('\\textcolor{#FF00AA}{x}');
     });
 
+    test('a forged variant or notation stays inside its MathML attribute', () => {
+        const forged = '" onmouseover="alert(1)';
+        const tree: MathRow = JSON.parse(
+            JSON.stringify([
+                { kind: 'identifier', text: 'ж', variant: forged },
+                { kind: 'enclose', notation: [forged], body: x },
+            ]),
+        );
+        expect(mathmlVocabulary(el(writeMathml(tree)))).toEqual([]);
+    });
+
     test('a character XML can’t hold is a MathError in every writer', () => {
         for (const char of ['\u0000', '\u0001', '\uD800', '\uDC00', '\uFFFE']) {
             const text: MathNode = { kind: 'text', text: `a${char}b` };

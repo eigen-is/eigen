@@ -338,7 +338,7 @@ export function readMathml(math: MathXmlElement): { row: MathRow; latex: string 
 
 const colorAttribute = (color: string | undefined) => {
     const hex = hexColor(color);
-    return hex ? ` mathcolor="${hex}"` : '';
+    return hex ? ` mathcolor="${escapeXml(hex)}"` : '';
 };
 
 function writeToken(node: MathToken): string {
@@ -348,7 +348,7 @@ function writeToken(node: MathToken): string {
     // Unicode has one.
     const styled = variant && [...node.text].map((char) => toAlphanumeric(char, variant));
     const alphanumeric = styled && !styled.includes(undefined) ? styled.join('') : undefined;
-    const mathvariant = variant && !alphanumeric ? ` mathvariant="${variant}"` : '';
+    const mathvariant = variant && !alphanumeric ? ` mathvariant="${escapeXml(variant)}"` : '';
     // A bare fence would stretch around a tall neighbour, as only a fenced row should.
     const stretchy = node.kind === 'operator' && FENCES.has(node.text) ? ' stretchy="false"' : '';
     return `<${tag}${mathvariant}${colorAttribute(node.color)}${stretchy}>${escapeXml(alphanumeric ?? node.text)}</${tag}>`;
@@ -390,7 +390,7 @@ function writeNode(node: MathNode): string {
             return `<mtext${colorAttribute(node.color)}>${escapeXml(text)}</mtext>`;
         }
         case 'space':
-            return `<mspace width="${SPACES[node.width].width}"/>`;
+            return `<mspace width="${escapeXml(SPACES[node.width].width)}"/>`;
         case 'fraction': {
             const line = node.line === 'none' ? ' linethickness="0"' : node.line === 'skewed' ? ' bevelled="true"' : '';
             return `<mfrac${line}>${writeArgument(node.numerator)}${writeArgument(node.denominator)}</mfrac>`;
@@ -440,7 +440,7 @@ function writeNode(node: MathNode): string {
             return `<${tag}>${writeBase(node.base)}${writeArgument(node.limit)}</${tag}>`;
         }
         case 'enclose':
-            return `<menclose notation="${node.notation.join(' ')}">${writeRow(node.body)}</menclose>`;
+            return `<menclose notation="${escapeXml(node.notation.join(' '))}">${writeRow(node.body)}</menclose>`;
         case 'table': {
             const columns = Math.max(0, ...node.rows.map((cells) => cells.length));
             // Equations align as Word's & marks do: right of the first mark, left of the next, by turns.
