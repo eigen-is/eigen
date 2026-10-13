@@ -14,6 +14,20 @@ import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy } from './copy';
 
+// Enter and Tab commit the open edit and select the edited cell, then each moves on from it.
+function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRenderingContext2D) {
+    const [r, c] = ctx.editingCellPosition;
+    updateCell(ctx, r, c, cellInput, undefined, canvas);
+    ctx.selections = [
+        {
+            row: [r, r],
+            column: [c, c],
+            row_focus: r,
+            column_focus: c,
+        },
+    ];
+}
+
 export function handleGlobalEnter(
     ctx: Context,
     cellInput: HTMLDivElement,
@@ -23,16 +37,7 @@ export function handleGlobalEnter(
     if ((e.altKey || e.metaKey) && ctx.editingCellPosition.length > 0) {
         e.preventDefault();
     } else if (ctx.editingCellPosition.length > 0) {
-        const [r, c] = ctx.editingCellPosition;
-        updateCell(ctx, r, c, cellInput, undefined, canvas);
-        ctx.selections = [
-            {
-                row: [r, r],
-                column: [c, c],
-                row_focus: r,
-                column_focus: c,
-            },
-        ];
+        commitEdit(ctx, cellInput, canvas);
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
     } else if ((ctx.selections?.length ?? 0) > 0) {
@@ -371,15 +376,8 @@ export function handleGlobalKeyDown(
         if (!allowEdit) return;
         handleGlobalEnter(ctx, cellInput, e, canvas);
     } else if (kstr === 'Tab') {
-        if (ctx.editingCellPosition.length > 0) {
-            return;
-        }
-
-        if (e.shiftKey) {
-            moveHighlightCell(ctx, 'right', -1, 'rangeOfSelect');
-        } else {
-            moveHighlightCell(ctx, 'right', 1, 'rangeOfSelect');
-        }
+        if (ctx.editingCellPosition.length > 0) commitEdit(ctx, cellInput, canvas);
+        moveHighlightCell(ctx, 'right', e.shiftKey ? -1 : 1, 'rangeOfSelect');
         e.preventDefault();
     } else if (kstr === 'F2') {
         if (!allowEdit) return;
