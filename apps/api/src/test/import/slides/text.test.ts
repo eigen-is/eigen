@@ -59,4 +59,20 @@ describe('a text body', () => {
         expect(html.endsWith('</p>')).toBe(true);
         expect(html.split('<p>')).toHaveLength(Math.floor(MAX_HTML_BYTES / 1007) + 1);
     });
+
+    test('keeps the start of a first paragraph too long to fit, never cutting an entity, a tag or a character', () => {
+        const fits = (html: string | undefined) => Buffer.byteLength(html ?? '') <= MAX_HTML_BYTES;
+        const plain = textOf(para('x'.repeat(70_000)))?.html;
+        expect(fits(plain)).toBe(true);
+        expect(plain).toMatch(/^<p>x{60000,}<\/p>$/);
+        const escaped = textOf(para('&amp;'.repeat(20_000)))?.html;
+        expect(fits(escaped)).toBe(true);
+        expect(escaped).toMatch(/^<p>(&amp;){10000,}<\/p>$/);
+        const broken = textOf(`<a:p>${`${run('ab')}<a:br/>`.repeat(20_000)}</a:p>`)?.html;
+        expect(fits(broken)).toBe(true);
+        expect(broken).toMatch(/^<p>(ab<br>)+(ab?)?<\/p>$/);
+        const wide = textOf(para('😀'.repeat(20_000)))?.html;
+        expect(fits(wide)).toBe(true);
+        expect(wide).toMatch(/^<p>(😀)+<\/p>$/u);
+    });
 });

@@ -71,7 +71,10 @@ export function richTextOf(source: TextSource, theme: SlideTheme, pxPerEmu: numb
         const next = `<p>${line}</p>`;
         // Cut at a paragraph: the canvas reader keeps no more, and would tear a tag.
         bytes += Buffer.byteLength(next);
-        if (bytes > MAX_HTML_BYTES) break;
+        if (bytes > MAX_HTML_BYTES) {
+            if (!html) html = `<p>${htmlPrefix(line, MAX_HTML_BYTES - '<p></p>'.length)}</p>`;
+            break;
+        }
         html += next;
     }
     const [majority] = [...covered.values()].sort((a, b) => b.chars - a.chars);
@@ -83,6 +86,21 @@ export function richTextOf(source: TextSource, theme: SlideTheme, pxPerEmu: numb
         fontSize: majority.size,
         color: majority.color,
     };
+}
+
+// A paragraph's HTML token by token: an entity, a tag or one character.
+const HTML_TOKEN = /&[^;]*;|<[^>]*>|./gsu;
+
+// The longest start of a paragraph's HTML within `bytes`, for a first paragraph too long for the box.
+function htmlPrefix(html: string, bytes: number): string {
+    let prefix = '';
+    let used = 0;
+    for (const [token] of html.matchAll(HTML_TOKEN)) {
+        used += Buffer.byteLength(token);
+        if (used > bytes) break;
+        prefix += token;
+    }
+    return prefix;
 }
 
 function runStyle(rPr: XmlElement | undefined, theme: SlideTheme, pxPerEmu: number): RunStyle {
