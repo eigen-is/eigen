@@ -24,7 +24,7 @@ Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook
 
 - No `as any`: fix the type at the source (route handler return type, schema definition), never by casting in hooks
 - No `as Type` on Eden Treaty responses: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
-- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it
+- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it. The exception is `@workspace/math`, a leaf package with no dependencies, which owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
 - Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
 - `import type` for type-only imports, separate from value imports
