@@ -279,6 +279,43 @@ export const FOREIGN_MATHML: ForeignMathml[] = [
         latex: undefined,
         expected: '\\overbrace{a+b}^{n}',
     },
+    // An n-ary's body that is a function or an n-ary of its own.
+    {
+        source: 'KaTeX 0.19.0',
+        mathml: '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msubsup><mo>∫</mo><mn>0</mn><mi>π</mi></msubsup><mi>sin</mi><mo>\u2061</mo><mi>x</mi><mtext>\u2009</mtext><mi>d</mi><mi>x</mi></mrow><annotation encoding="application/x-tex">\\int_0^\\pi \\sin x\\,dx</annotation></semantics></math>',
+        latex: '\\int_0^\\pi \\sin x\\,dx',
+        expected: '\\int_0^\\pi \\sin x\\text{\u2009}dx',
+    },
+    {
+        source: 'Temml 0.14.0',
+        mathml: '<math display="block" class="tml-display" style="display:block math;"><semantics><mrow><msubsup><mo movablelimits="false">∫</mo><mn>0</mn><mi>π</mi></msubsup><mrow><mi>sin</mi><mo>\u2061</mo><mspace width="0.1667em"></mspace></mrow><mi>x</mi><mspace width="0.1667em"></mspace><mi>d</mi><mi>x</mi></mrow><annotation encoding="application/x-tex">\\int_0^\\pi \\sin x\\,dx</annotation></semantics></math>',
+        latex: '\\int_0^\\pi \\sin x\\,dx',
+        expected: '\\int_0^\\pi \\sin x\\,dx',
+    },
+    {
+        source: 'MathJax 4.1.3',
+        mathml: '<math xmlns="http://www.w3.org/1998/Math/MathML" data-latex="\\int_0^\\pi \\sin x\\,dx" display="block">\n  <msubsup data-latex="\\int_0^\\pi">\n    <mo data-latex="\\int">&#x222B;</mo>\n    <mn data-latex="0">0</mn>\n    <mi data-latex="\\pi">&#x3C0;</mi>\n  </msubsup>\n  <mi data-latex="\\sin">sin</mi>\n  <mo data-mjx-texclass="NONE">&#x2061;</mo>\n  <mi data-latex="x">x</mi>\n  <mspace width="0.167em" data-latex="\\,"></mspace>\n  <mi data-latex="d">d</mi>\n  <mi data-latex="x">x</mi>\n</math>',
+        latex: undefined,
+        expected: '\\int_0^\\pi \\sin x\\,dx',
+    },
+    {
+        source: 'KaTeX 0.19.0',
+        mathml: '<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><munder><mo>∑</mo><mi>i</mi></munder><munder><mo>∑</mo><mi>j</mi></munder><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\\sum_i\\sum_j a_{ij}</annotation></semantics></math>',
+        latex: '\\sum_i\\sum_j a_{ij}',
+        expected: '\\sum_i\\sum_j a_{ij}',
+    },
+    {
+        source: 'Temml 0.14.0',
+        mathml: '<math display="block" class="tml-display" style="display:block math;"><semantics><mrow><mrow><munder><mo movablelimits="false">∑</mo><mi>i</mi></munder></mrow><mrow><munder><mo movablelimits="false">∑</mo><mi>j</mi></munder></mrow><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\\sum_i\\sum_j a_{ij}</annotation></semantics></math>',
+        latex: '\\sum_i\\sum_j a_{ij}',
+        expected: '\\sum_i\\sum_j a_{ij}',
+    },
+    {
+        source: 'MathJax 4.1.3',
+        mathml: '<math xmlns="http://www.w3.org/1998/Math/MathML" data-latex="\\sum_i\\sum_j a_{ij}" display="block">\n  <munder data-latex="\\sum_i">\n    <mo data-latex="\\sum">&#x2211;</mo>\n    <mi data-latex="i">i</mi>\n  </munder>\n  <munder data-latex="\\sum_j">\n    <mo data-latex="\\sum">&#x2211;</mo>\n    <mi data-latex="j">j</mi>\n  </munder>\n  <msub data-latex="a_{i j}">\n    <mi data-latex="a">a</mi>\n    <mrow data-mjx-texclass="ORD" data-latex="{i j}">\n      <mi data-latex="i">i</mi>\n      <mi data-latex="j">j</mi>\n    </mrow>\n  </msub>\n</math>',
+        latex: undefined,
+        expected: '\\sum_i\\sum_j a_{ij}',
+    },
     // Word for the web's clipboard (text/html): the hidden math MathJax keeps for assistive technology, Word's class
     // attributes removed. mfenced, and λ as U+1D706.
     {

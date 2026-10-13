@@ -48,7 +48,7 @@ import {
 export const MATHML_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
 const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 const TEX = 'application/x-tex';
-const FUNCTION_APPLICATION = '⁡';
+const FUNCTION_APPLICATION = '\u2061';
 
 // Which children of a script element are the sub- and superscript.
 const SCRIPT_SLOTS = new Map<string, ('sub' | 'sup')[]>([
@@ -89,8 +89,9 @@ const NO_LINE = /^0(?:px|em|pt)?$/;
 // What an element hands the tokens in it: its own mathvariant and mathcolor, else its parent's, as mstyle does.
 type Scope = { budget: MathBudget; variant?: MathVariant; color?: string };
 
-// MathML has no n-ary or function: a scripted large operator, or a name before U+2061, waits for the next element.
-type Waiting = { kind: 'nary' | 'function'; element: MathXmlElement; scope: Scope; depth: number };
+// MathML has no n-ary or function: a scripted large operator, or a name before U+2061, waits for the next element. A
+// chain waits as one, as \sum_i \sin x does: each link after the first is written `into` the body of the one before.
+type Waiting = { kind: 'nary' | 'function'; element: MathXmlElement; scope: Scope; depth: number; into?: RowBuilder };
 
 // An HTML DOM may put math in the XHTML namespace or none, with its prefix (mml:mi) in the local name.
 function nameOf(element: MathXmlElement | undefined): string | undefined {
@@ -142,8 +143,31 @@ function spaceOf(width = ''): MathSpace | undefined {
 const baseOf = (element: MathXmlElement | undefined) =>
     element && SCRIPT_SLOTS.has(nameOf(element) ?? '') ? elementsOf(element)[0] : undefined;
 
-// A large operator: one character from the table under scripts, or one marked largeop. A mark after it makes a symbol
-// of its own, such as ∑̸.
+// An accent, line or brace an mover or munder draws over its base, or undefined for a limit. An accent says so on the
+// element or its mo, a brace that it stretches; MathJax and Temml leave both to MathML's operator dictionary. Eigen
+// writes a limit's lone operator in an mrow, so it is neither.
+function decorationOf(element: MathXmlElement | undefined): ((body: MathRow) => MathNode) | undefined {
+    const position = is(element, 'mover') ? 'over' : is(element, 'munder') ? 'under' : undefined;
+    const script = element && elementsOf(element)[1];
+    if (!element || !position || !is(script, 'mo')) return undefined;
+    const text = trimXmlSpace(textOf(script));
+    const char = mark(text);
+    if (!char) return undefined;
+    const said = attribute(element, position === 'over' ? 'accent' : 'accentunder') ?? attribute(script, 'accent');
+    const stretchy = attribute(script, 'stretchy');
+    const dictionary = said === undefined && char === text;
+    if (said === 'true' && LINE_CHARS[position].has(char)) return (body) => ({ kind: 'line', position, body });
+    const accent =
+        said === 'true' || (dictionary && stretchy !== 'true' && (COMBINING_ACCENTS.has(char) || ACCENTS.has(char)));
+    if (accent && position === 'over')
+        return (body) => ({ kind: 'accent', accent: COMBINING_ACCENTS.get(char) ?? char, body });
+    if (stretchy === 'true' || (dictionary && stretchy === undefined && BRACES.has(char)))
+        return (body) => ({ kind: 'brace', char, position, body });
+    return undefined;
+}
+
+// A large operator: one character marked largeop, or one from the table under scripts that are no accent, line or
+// brace. A mark after it makes a symbol of its own, such as ∑̸.
 function isLargeOperator(element: MathXmlElement | undefined): boolean {
     const base = baseOf(element);
     const operator = base ?? element;
@@ -153,8 +177,21 @@ function isLargeOperator(element: MathXmlElement | undefined): boolean {
     return (
         char !== '' &&
         char === text &&
-        (isFlagged(operator, 'largeop') || (base !== undefined && LARGE_OPERATORS.has(char)))
+        (isFlagged(operator, 'largeop') || (base !== undefined && LARGE_OPERATORS.has(char) && !decorationOf(element)))
     );
+}
+
+// (a)+(b) with every parenthesis a fence is no fenced row: the fences between the first and the last balance.
+function isBalanced(children: MathXmlElement[]): boolean {
+    let open = 0;
+    for (const child of children.slice(1, -1)) {
+        if (!isFence(child)) continue;
+        const char = mark(textOf(child));
+        if (/\p{Ps}/u.test(char)) open++;
+        if (/\p{Pe}/u.test(char)) open--;
+        if (open < 0) return false;
+    }
+    return true;
 }
 
 // Eigen's n-ary (its operator marked largeop, then its body), a fenced row or a function (name, U+2061, body).
@@ -165,7 +202,7 @@ function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undef
     if (isLargeOperator(first) && isFlagged(baseOf(first) ?? first, 'largeop')) return 'nary';
     const mathjax =
         attribute(mrow, 'data-mjx-texclass') === 'INNER' && isClassed(first, 'OPEN') && isClassed(last, 'CLOSE');
-    if (children.length >= 2 && ((isFence(first) && isFence(last)) || mathjax)) return 'fenced';
+    if (children.length >= 2 && ((isFence(first) && isFence(last) && isBalanced(children)) || mathjax)) return 'fenced';
     // Temml spaces a name from its body inside the name's mrow: that space is no body.
     if (children.length === 3 && isApplication(children[1]) && !is(children[2], 'mspace')) return 'function';
     return undefined;
@@ -188,58 +225,87 @@ function isFunctionName(element: MathXmlElement, next: MathXmlElement | undefine
 
 function readRow(elements: MathXmlElement[], scope: Scope, depth: number, slot?: RowSlot): MathRow {
     const row = new RowBuilder(scope.budget, depth, slot);
-    const waiting = readElements(row, elements, depth, scope);
-    if (waiting) settle(row, waiting);
+    settle(row, readElements(row, elements, depth, scope));
     return row.done();
 }
 
 // An argument is one element; a plain mrow there is the row itself, not a level of its own. So is math, an mrow too.
-function readArgument(element: MathXmlElement | undefined, scope: Scope, depth: number, slot?: RowSlot): MathRow {
+function argumentOf(element: MathXmlElement | undefined, scope: Scope): [MathXmlElement[], Scope] {
     if (element && (is(element, 'mrow') || is(element, 'math')) && !patternOf(element))
-        return readRow(elementsOf(element), scopeOf(element, scope), depth, slot);
-    return readRow(element ? [element] : [], scope, depth, slot);
+        return [elementsOf(element), scopeOf(element, scope)];
+    return [element ? [element] : [], scope];
 }
 
-// Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound. What waits at
-// its end waits for the element after it.
-function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting | undefined {
+function readArgument(element: MathXmlElement | undefined, scope: Scope, depth: number, slot?: RowSlot): MathRow {
+    const [elements, inner] = argumentOf(element, scope);
+    return readRow(elements, inner, depth, slot);
+}
+
+// Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
+function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting[] {
     bound(scope.budget, depth, 0);
     return readElements(row, elements, depth, scope);
 }
 
-function readElements(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting | undefined {
-    let waiting: Waiting | undefined;
+// What waits at the end waits for the element after the wrapper only when it is all the wrapper holds, as Temml wraps
+// \sum_i and \sin: a TeX group, {a+\sum_i}, ends the n-ary in it.
+function readElements(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting[] {
+    let waiting: Waiting[] = [];
+    let start = 0;
     for (let index = 0; index < elements.length; index++) {
         const element = elements[index];
-        if (waiting) {
-            const body = leadsWithOperator(element) ? undefined : readArgument(element, scope, depth + 1);
-            settle(row, waiting, body);
-            waiting = undefined;
-            if (body) continue;
+        if (waiting.length > 0 && leadsWithOperator(element)) {
+            settle(row, waiting);
+            waiting = [];
         }
+        if (waiting.length === 0) start = index;
+        // A link of a chain sits in the body of the one before it, a level deeper.
+        const last = waiting.at(-1);
+        const level = last ? last.depth + 1 : depth;
         if (isFunctionName(element, elements[index + 1])) {
-            waiting = { kind: 'function', element, scope, depth };
+            const into = last && new RowBuilder(scope.budget, level);
+            waiting.push({ kind: 'function', element, scope, depth: level, into });
             if (!isApplication(elements[index + 1])) continue;
-            // Temml spaces the name from its body.
             index++;
-            while (is(elements[index + 1], 'mspace')) index++;
+            // Temml spaces the name from its body with a thin space of its own width; a space typed there stays.
+            const space = elements[index + 1];
+            if (is(space, 'mspace') && attribute(space, 'width') === '0.1667em') index++;
             continue;
         }
-        waiting = readInto(row, element, depth, scope);
+        if (!last) {
+            waiting = readInto(row, element, depth, scope) ?? [];
+            continue;
+        }
+        // The body, or the first link of a chain that waits in it.
+        const [body, inner] = argumentOf(element, scope);
+        const into = new RowBuilder(scope.budget, level);
+        const [first, ...rest] = readElements(into, body, level, inner);
+        if (first) {
+            waiting.push({ ...first, into }, ...rest);
+            continue;
+        }
+        settle(row, waiting, into.done());
+        waiting = [];
     }
-    return waiting;
+    if (start === 0) return waiting;
+    settle(row, waiting);
+    return [];
 }
 
-// A waiting n-ary takes its body, or none; a function name without one reads as it is.
-function settle(row: RowBuilder, waiting: Waiting, body?: MathRow): void {
-    const { element, scope, depth } = waiting;
-    if (waiting.kind === 'nary') {
-        row.node(readNary(element, scope, depth, body ?? readRow([], scope, depth + 1)));
-    } else if (body) {
-        row.node({ kind: 'function', name: readArgument(element, scope, depth + 1), body });
-    } else {
-        const left = readInto(row, element, depth, scope);
-        if (left) settle(row, left);
+// The last link takes the body, or none, and is the body of the link before it. An n-ary without a body takes an empty
+// one; a function name without one reads as it is.
+function settle(row: RowBuilder, chain: Waiting[] = [], body?: MathRow): void {
+    let next = body;
+    for (const link of chain.toReversed()) {
+        const { element, scope, depth, into = row } = link;
+        if (link.kind === 'nary') {
+            into.node(readNary(element, scope, depth, next ?? readRow([], scope, depth + 1)));
+        } else if (next) {
+            into.node({ kind: 'function', name: readArgument(element, scope, depth + 1), body: next });
+        } else {
+            settle(into, readInto(into, element, depth, scope));
+        }
+        next = link.into?.done();
     }
 }
 
@@ -317,13 +383,13 @@ function readToken(row: RowBuilder, element: MathXmlElement, name: string, scope
     row.chars(chars, variant ?? (lone ? 'italic' : 'normal'), variant ?? 'normal', color);
 }
 
-function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer: Scope): Waiting | undefined {
+function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer: Scope): Waiting[] | undefined {
     const scope = scopeOf(element, outer);
     const { budget } = scope;
     const children = elementsOf(element);
     const argument = (index: number) => readArgument(children[index], scope, depth + 1);
     const name = nameOf(element);
-    if (baseOf(element) && isLargeOperator(element)) return { kind: 'nary', element, scope: outer, depth };
+    if (baseOf(element) && isLargeOperator(element)) return [{ kind: 'nary', element, scope: outer, depth }];
     switch (name) {
         case 'mi':
         case 'mn':
@@ -399,30 +465,11 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
         }
         case 'mover':
         case 'munder': {
+            const decorate = decorationOf(element);
             const position = name === 'mover' ? 'over' : 'under';
-            const script = children[1];
-            const text = is(script, 'mo') ? trimXmlSpace(textOf(script)) : '';
-            const char = mark(text);
-            // An accent says so on the element or its mo, a brace that it stretches; MathJax and Temml leave both to
-            // MathML's operator dictionary. Eigen writes a limit's lone operator in an mrow, so it is neither.
-            const said =
-                attribute(element, position === 'over' ? 'accent' : 'accentunder') ??
-                (script && attribute(script, 'accent'));
-            const stretchy = script && attribute(script, 'stretchy');
-            const dictionary = said === undefined && char !== '' && char === text;
-            const accent =
-                said === 'true' ||
-                (dictionary && stretchy !== 'true' && (COMBINING_ACCENTS.has(char) || ACCENTS.has(char)));
-            const brace = stretchy === 'true' || (dictionary && stretchy === undefined && BRACES.has(char));
-            if (char && said === 'true' && LINE_CHARS[position].has(char)) {
-                row.node({ kind: 'line', position, body: argument(0) });
-            } else if (char && accent && position === 'over') {
-                row.node({ kind: 'accent', accent: COMBINING_ACCENTS.get(char) ?? char, body: argument(0) });
-            } else if (char && brace) {
-                row.node({ kind: 'brace', char, position, body: argument(0) });
-            } else {
-                row.node({ kind: 'limit', position, base: argument(0), limit: argument(1) });
-            }
+            row.node(
+                decorate ? decorate(argument(0)) : { kind: 'limit', position, base: argument(0), limit: argument(1) },
+            );
             return;
         }
         // Outside an n-ary: a limit under inside a limit over.

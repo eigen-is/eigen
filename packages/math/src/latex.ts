@@ -1056,7 +1056,16 @@ function writeTable(node: Extract<MathNode, { kind: 'table' }>, environment: str
     return `\\begin{${environment}}${rows.join(' \\\\ ')}\\end{${environment}}`;
 }
 
-function writeFenced(node: Extract<MathNode, { kind: 'fenced' }>, upright: boolean): string {
+// A lone combining mark is no fence: written as itself, it would join the character after it.
+const fenceOf = (char: string) => (MARK.test(char) ? '' : char);
+
+function writeFenced(fenced: Extract<MathNode, { kind: 'fenced' }>, upright: boolean): string {
+    const node = {
+        ...fenced,
+        open: fenceOf(fenced.open),
+        close: fenceOf(fenced.close),
+        separator: fenceOf(fenced.separator),
+    };
     const [part] = node.parts;
     const [only] = part;
     // A table or fraction in fences, as pmatrix and \binom draw them; without fences it is a fenced row of its own.

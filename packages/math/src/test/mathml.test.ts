@@ -394,6 +394,45 @@ describe('foreign MathML', () => {
         expect(readMathml(math(fn)).row).toEqual(sin);
     });
 
+    // KaTeX's shapes and Temml's, each against the tree readLatex makes of the formula.
+    const sum = (index: string) => `<munder><mo>∑</mo><mi>${index}</mi></munder>`;
+    const sin = '<mi>sin</mi><mo>\u2061</mo>';
+    test.each<[string, string]>([
+        // A body that is a function or an n-ary of its own reads whole.
+        [`<msubsup><mo>∫</mo><mn>0</mn><mi>π</mi></msubsup>${sin}<mi>x</mi>`, '\\int_0^\\pi \\sin x'],
+        [`${sum('i')}${sum('j')}<mi>a</mi>`, '\\sum_i\\sum_j a'],
+        [`<mrow>${sum('i')}</mrow><mrow>${sum('j')}</mrow><mi>a</mi>`, '\\sum_i\\sum_j a'],
+        [`${sin}${sin}<mi>x</mi>`, '\\sin\\sin x'],
+        [
+            `${sum('i')}<munder><mrow><mi>lim</mi><mo>\u2061</mo></mrow><mi>n</mi></munder><mi>x</mi>`,
+            '\\sum_i\\lim_n x',
+        ],
+        [`${sum('i')}${sin}<mo>+</mo>`, '\\sum_i\\sin+'],
+        // Only Temml's space after U+2061 is skipped; a space typed there stays.
+        [`${sin}<mspace width="0.167em"/><mi>x</mi>`, '\\sin\\,x'],
+        [`${sin}<mspace width="1em"/><mi>x</mi>`, '\\sin\\quad x'],
+        [`<mrow>${sin}<mspace width="0.1667em"/></mrow><mspace width="1em"/><mi>x</mi>`, '\\sin\\quad x'],
+        // A construct waits past its mrow's end only when it is all the mrow holds.
+        [`<mrow><mi>a</mi><mo>+</mo>${sum('i')}</mrow><mi>x</mi>`, '{a+\\sum_i}x'],
+        // An accent, line or brace over a large operator is no n-ary.
+        ['<mover accent="true"><mo>∑</mo><mo>^</mo></mover><mi>x</mi>', '\\hat{\\sum} x'],
+        ['<mover><mo>∑</mo><mo stretchy="false">ˆ</mo></mover><mi>x</mi>', '\\hat{\\sum} x'],
+        ['<mover accent="true"><mo>∫</mo><mo stretchy="true">‾</mo></mover>', '\\overline{\\int}'],
+        ['<munder><mo>∑</mo><mo stretchy="true">⏟</mo></munder><mi>x</mi>', '\\underbrace{\\sum} x'],
+        // The first fence closes at the last only when the fences between balance.
+        [
+            '<mrow><mo fence="true">(</mo><mi>a</mi><mo fence="true">)</mo><mo>+</mo>' +
+                '<mo fence="true">(</mo><mi>b</mi><mo fence="true">)</mo></mrow>',
+            '(a)+(b)',
+        ],
+        [
+            '<mrow><mo fence="true">(</mo><mi>a</mi><mo fence="true">|</mo><mi>b</mi><mo fence="true">)</mo></mrow>',
+            '\\left(a|b\\right)',
+        ],
+    ])('%s reads as %s', (mathml, latex) => {
+        expect(readMathml(math(mathml)).row).toStrictEqual(readLatex(latex));
+    });
+
     test("an accent, line or brace says so, or its character does as MathML's operator dictionary has it", () => {
         const over = (script: string, attributes = '') =>
             readMathml(math(`<mover${attributes}><mi>x</mi>${script}</mover>`)).row;
@@ -419,6 +458,7 @@ describe('foreign MathML', () => {
         { kind: 'limit', position: 'over', base: x, limit: [{ kind: 'operator', text: '^' }] },
         { kind: 'function', name: letter('f'), body: [{ kind: 'space', width: 'thin' }] },
         { kind: 'function', name: letter('f'), body: [{ kind: 'operator', text: '+' }] },
+        { kind: 'nary', operator: '∑', limits: 'under', sup: [{ kind: 'operator', text: '~' }], body: x },
     ])('%j survives the MathML trip', (node) => {
         expect(viaMathml([node])).toStrictEqual([node]);
     });
