@@ -24,5 +24,6 @@ export type { MediaResolver } from './scene-to-svg';
 export { DEFAULT_PADDING, elementToSvg, sceneToSvg } from './scene-to-svg';
 export * from './search-scene';
 export * from './snap';
+export { measureLabel } from './text-width';
 export * from './types';
 export * from './viewport';

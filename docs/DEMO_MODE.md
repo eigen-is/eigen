@@ -86,7 +86,7 @@ A card chat reply can `attach` seeded team documents as drive references, or `at
 
 ## The canvases are built from typed specs
 
-The site plan (`demo/vector-build.ts`) and the sponsor deck (`demo/deck-build.ts`) are written straight into fresh Y.Docs, because frozen bytes cannot survive a change to the stored element shape and a spec can. Every element carries the full field set the editor writes. Ids, indices and roughjs seeds are deterministic, so every reseed renders the same jitter. Text is sized from `demo/excalifont-metrics.ts`, since the seeder has no DOM. Arrows settle through the lib's `followBindings`, as in the editor.
+The site plan (`demo/vector-build.ts`) and the sponsor deck (`demo/deck-build.ts`) are written straight into fresh Y.Docs, because frozen bytes cannot survive a change to the stored element shape and a spec can. Every element carries the full field set the editor writes. Ids, indices and roughjs seeds are deterministic, so every reseed renders the same jitter. Text is sized with `measureLabel` (`@workspace/lib/vector`), since the seeder has no DOM. Arrows settle through the lib's `followBindings`, as in the editor.
 
 To check a site plan change without a browser, build a Y.Doc with `buildVectorDoc`, render it with `readVectorFromDoc` and `sceneToSvg`, and open the SVG.
 
