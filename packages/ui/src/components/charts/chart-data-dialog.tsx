@@ -1,8 +1,8 @@
 // Edit data: a chart's inline data as a small sheet, categories down column A and series across row 1, with
 // Eigen Sheets' look and keys. Google links a Sheet instead; this is the grid PowerPoint and Keynote offer,
-// with a trailing empty row and column to grow into. The grid edits a draft, so Save is one change of the
-// spec and Cancel leaves it as it was. A chart past the grid's limits (an imported one) shows its data
-// read-only rather than as thousands of cells.
+// empty rows and columns to grow into as far as the inline limits go. The grid edits a draft, so Save is one
+// change of the spec and Cancel leaves it as it was. A chart past the grid's limits (an imported one) shows
+// its data read-only rather than as thousands of cells.
 
 import {
     chartLabel,
@@ -68,8 +68,21 @@ function gridOf({ data, sliceColors }: InlineChartSpec): Grid {
     };
 }
 
-const isNumberText = (text: string) => text.trim() === '' || Number.isFinite(Number(text));
-const numberOf = (text: string) => (text.trim() === '' ? null : Number(text));
+// A number as Sheets shows one in the en convention: grouped (1,234), after a currency symbol ($1,234.00,
+// -€5) or a percent (12% is 0.12). An empty cell is a gap; anything else is NaN, and flagged.
+const NUMBER_TEXT = /^([-+]?)[$€£¥]?(\d{1,3}(?:,\d{3})+(?:\.\d*)?|[^,$€£¥%]+)(%?)$/;
+function numberOf(text: string): number | null {
+    const trimmed = text.trim();
+    if (trimmed === '') return null;
+    const match = NUMBER_TEXT.exec(trimmed);
+    if (!match) return Number.NaN;
+    const [, sign, digits, percent] = match;
+    return Number(`${sign}${digits.replaceAll(',', '')}`) / (percent ? 100 : 1);
+}
+const isNumberText = (text: string) => {
+    const value = numberOf(text);
+    return value === null || Number.isFinite(value);
+};
 
 function cellText(grid: Grid, { row, column }: CellRef): string {
     if (row === 0) return grid.columns[column - 1]?.name ?? '';
@@ -78,11 +91,12 @@ function cellText(grid: Grid, { row, column }: CellRef): string {
     return column === 0 ? source.category : (source.cells[column - 1] ?? '');
 }
 
-// The grid as shown: the data plus a trailing row and column while one more still fits.
-function shownSize({ columns, rows }: Grid) {
+// The grid as shown, the header row and category column included: every column a series can go in, and
+// rows to the ones the view reaches or one past the data, up to the category limit.
+function shownSize({ rows }: Grid, reach: number) {
     return {
-        rows: rows.length + 1 + (fitsInlineGrid(columns.length, rows.length + 1) ? 1 : 0),
-        columns: columns.length + 1 + (fitsInlineGrid(columns.length + 1, rows.length) ? 1 : 0),
+        rows: Math.min(INLINE_GRID_MAX_CATEGORIES + 1, Math.max(rows.length + 2, reach)),
+        columns: INLINE_GRID_MAX_SERIES + 1,
     };
 }
 
@@ -99,7 +113,7 @@ type Range = ReturnType<typeof rangeOf>;
 // A block of text fills the grid from (row, column), growing it as far as the limits allow; `clipped` says
 // some didn't fit. A paste and a committed cell both land through here.
 function fill(grid: Grid, row: number, column: number, block: string[][]): { grid: Grid; clipped: boolean } {
-    const width = Math.max(...block.map((line) => line.length));
+    const width = widthOf(block);
     let series = Math.max(grid.columns.length, Math.min(INLINE_GRID_MAX_SERIES, column + width - 1));
     let rows = Math.max(grid.rows.length, Math.min(INLINE_GRID_MAX_CATEGORIES, row + block.length - 1));
     // The points limit holds the growth back, new series first.
@@ -125,11 +139,18 @@ function fill(grid: Grid, row: number, column: number, block: string[][]): { gri
     return { grid: { columns, rows: next }, clipped };
 }
 
-// An empty value typed into the trailing row or column adds nothing; the corner holds nothing.
-function writeCell(grid: Grid, { row, column }: CellRef, text: string): Grid {
-    if (row === 0 && column === 0) return grid;
-    if (text === '' && (row > grid.rows.length || column > grid.columns.length)) return grid;
-    return fill(grid, row, column, [[text]]).grid;
+// A loop, not Math.max(...): a pasted block can have more rows than a call takes arguments.
+function widthOf(block: string[][]): number {
+    let width = 0;
+    for (const line of block) width = Math.max(width, line.length);
+    return width;
+}
+
+// An empty value typed past the data adds nothing; the corner holds nothing.
+function writeCell(grid: Grid, { row, column }: CellRef, text: string): { grid: Grid; clipped: boolean } {
+    if (row === 0 && column === 0) return { grid, clipped: false };
+    if (text === '' && (row > grid.rows.length || column > grid.columns.length)) return { grid, clipped: false };
+    return fill(grid, row, column, [[text]]);
 }
 
 function clearRange(grid: Grid, { top, bottom, left, right }: Range): Grid {
@@ -187,7 +208,7 @@ export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataD
                     <DialogDescription>
                         {readOnly
                             ? 'This chart has more data than the editor holds, so it opens read-only.'
-                            : 'Categories go down column A and series across row 1. Type in the empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
+                            : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
                     </DialogDescription>
                 </DialogHeader>
                 {readOnly ? (
@@ -237,18 +258,23 @@ function EditableGrid({
     onSave: (spec: ChartSpec) => void;
 }) {
     const [grid, setGrid] = useState(() => gridOf(spec));
+    // A pasted corner header, Google's name for the category axis.
+    const [categoryTitle, setCategoryTitle] = useState(spec.categoryAxis.title);
     const [selection, setSelection] = useState<GridSelection>({
-        anchor: { row: 1, column: 1 },
-        focus: { row: 1, column: 1 },
+        anchor: { row: 0, column: 0 },
+        focus: { row: 0, column: 0 },
     });
     const [editing, setEditing] = useState<Editing | null>(null);
-    const [clipped, setClipped] = useState<{ rows: number; columns: number } | null>(null);
+    // What the last paste or typed value lost to the limits: the pasted block's size, or 'typed'.
+    const [clipped, setClipped] = useState<{ rows: number; columns: number } | 'typed' | null>(null);
+    // The rows the view reaches, two views deep so there is always more to scroll into, as a sheet goes on.
+    const [reach, setReach] = useState(0);
     const scroller = useRef<HTMLDivElement>(null);
     const input = useRef<HTMLInputElement>(null);
     const dragging = useRef(false);
 
     const { rows } = grid;
-    const shown = shownSize(grid);
+    const shown = shownSize(grid, reach);
     const active = selection.anchor;
     const range = rangeOf(selection);
     const invalid = rows.some((row) => !row.cells.every(isNumberText));
@@ -267,11 +293,24 @@ function EditableGrid({
             el.scrollTop = y + SHEET_DEFAULT_ROW_HEIGHT - el.clientHeight;
     }, [selection.focus]);
 
+    const measure = () => {
+        const el = scroller.current;
+        if (!el) return;
+        const rows = Math.ceil((el.scrollTop + 2 * el.clientHeight) / SHEET_DEFAULT_ROW_HEIGHT);
+        setReach((current) => Math.max(current, rows));
+    };
+    useLayoutEffect(measure, []);
+
     // The open edit lands in the grid; Save and every move go from the committed grid.
-    const committed = () => (editing ? writeCell(grid, active, editing.text) : grid);
+    const committed = () => {
+        if (!editing) return grid;
+        const written = writeCell(grid, active, editing.text);
+        if (written.clipped) setClipped('typed');
+        return written.grid;
+    };
 
     const selectCell = (next: Grid, cell: CellRef) => {
-        const size = shownSize(next);
+        const size = shownSize(next, reach);
         const clamped = {
             row: Math.min(Math.max(cell.row, 0), size.rows - 1),
             column: Math.min(Math.max(cell.column, 0), size.columns - 1),
@@ -358,24 +397,33 @@ function EditableGrid({
         onCopy(e);
         setGrid(clearRange(grid, range));
     };
-    // Cells from a spreadsheet arrive as TSV, or, where its plain text lost the tabs, as an HTML table.
+    // Cells from a spreadsheet arrive as TSV. Without a tab, an HTML table wins over the plain text: a Docs
+    // table's text/plain is its cells on lines of their own, which would paste down one column.
     const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
         const text = e.clipboardData.getData('text/plain');
-        const table = /[\t\n]/.test(text) ? parseTsv(text) : htmlTableCells(e.clipboardData.getData('text/html'));
-        const block = table ?? (text ? [[text]] : []);
+        const block = text.includes('\t')
+            ? parseTsv(text)
+            : (htmlTableCells(e.clipboardData.getData('text/html')) ?? (text ? parseTsv(text) : []));
         // An open cell takes a single value as typing does.
-        if (block.length === 0 || (editing && block.flat().length === 1)) return;
+        if (block.length === 0 || (editing && block.length === 1 && block[0].length === 1)) return;
         e.preventDefault();
-        const pasted = fill(grid, active.row, active.column, block);
-        const width = Math.max(...block.map((line) => line.length));
+        const width = widthOf(block);
+        // One row and column past the limits is enough for fill to see what it can't hold.
+        const cut = block
+            .slice(0, INLINE_GRID_MAX_CATEGORIES + 2)
+            .map((line) => line.slice(0, INLINE_GRID_MAX_SERIES + 2));
+        const pasted = fill(grid, active.row, active.column, cut);
+        const corner = active.row === 0 && active.column === 0 ? chartLabel(block[0][0]?.trim() ?? '') : '';
+        if (categoryTitle === '' && corner !== '') setCategoryTitle(corner);
         setClipped(pasted.clipped ? { rows: block.length, columns: width } : null);
         setEditing(null);
         setGrid(pasted.grid);
+        const size = shownSize(pasted.grid, reach);
         setSelection({
             anchor: active,
             focus: {
-                row: Math.min(active.row + block.length - 1, shownSize(pasted.grid).rows - 1),
-                column: Math.min(active.column + width - 1, shownSize(pasted.grid).columns - 1),
+                row: Math.min(active.row + block.length - 1, size.rows - 1),
+                column: Math.min(active.column + width - 1, size.columns - 1),
             },
         });
     };
@@ -407,6 +455,7 @@ function EditableGrid({
         }
         onSave({
             ...spec,
+            categoryAxis: { title: categoryTitle },
             sliceColors: final.rows.map((row) => row.color),
             data: {
                 source: 'inline',
@@ -420,7 +469,8 @@ function EditableGrid({
         });
     };
 
-    const label = (cell: CellRef) => `${columnIndexToLabel(cell.column)}${cell.row + 1}`;
+    const activeText = cellText(grid, active);
+    const label = `${columnIndexToLabel(active.column)}${active.row + 1}${activeText ? `: ${activeText}` : ''}`;
     const box = (top: number, left: number, bottom: number, right: number) => ({
         top: rowTop(top),
         left: columnLeft(left),
@@ -434,8 +484,9 @@ function EditableGrid({
                 keeps the sticky headers' stacking inside the grid. */}
             <div
                 ref={scroller}
-                className="eigen-paper relative isolate max-h-[60vh] w-fit max-w-full overflow-auto rounded-md border bg-background font-sans select-none"
+                className="eigen-paper relative isolate h-[60vh] w-full overflow-auto rounded-md border bg-background font-sans select-none"
                 style={{ fontSize: `${SHEET_DEFAULT_FONT_SIZE}pt` }}
+                onScroll={measure}
                 onMouseUp={() => {
                     dragging.current = false;
                 }}
@@ -455,6 +506,8 @@ function EditableGrid({
                     <div role="row" aria-rowindex={1} className="contents">
                         {/* The corner selects every cell. */}
                         <div
+                            role="columnheader"
+                            aria-colindex={1}
                             className={cn(HEADER, 'sticky top-0 left-0 z-30')}
                             onMouseDown={(e) =>
                                 pointTo(e, { row: 0, column: 0 }, undefined, { row: lastRow, column: lastColumn })
@@ -548,7 +601,7 @@ function EditableGrid({
                     ref={input}
                     data-cell-editor
                     data-editing={editing ? '' : undefined}
-                    aria-label={label(active)}
+                    aria-label={label}
                     autoComplete="off"
                     spellCheck={false}
                     className={cn(
@@ -567,9 +620,12 @@ function EditableGrid({
             </div>
             {clipped && (
                 <p className="text-xs text-muted-foreground">
-                    Pasted {plural(clipped.rows, 'row')} × {plural(clipped.columns, 'column')}; the chart holds up to{' '}
-                    {INLINE_GRID_MAX_SERIES} series and {INLINE_GRID_MAX_CATEGORIES} categories,{' '}
-                    {MAX_CHART_POINTS.toLocaleString('en')} values in all, so the rest was left out.
+                    {clipped === 'typed'
+                        ? 'The chart'
+                        : `Pasted ${plural(clipped.rows, 'row')} × ${plural(clipped.columns, 'column')}; the chart`}{' '}
+                    holds up to {INLINE_GRID_MAX_SERIES} series and {INLINE_GRID_MAX_CATEGORIES} categories,{' '}
+                    {MAX_CHART_POINTS.toLocaleString('en')} values in all, so{' '}
+                    {clipped === 'typed' ? 'that value was' : 'the rest was'} left out.
                 </p>
             )}
             {invalid && <p className="text-xs text-destructive">Values must be numbers.</p>}

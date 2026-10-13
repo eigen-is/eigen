@@ -103,6 +103,14 @@ async function open(spec: InlineSpec) {
             columns: Number(gridEl.getAttribute('aria-colcount')) - 1,
         };
     };
+    // happy-dom lays nothing out, so a test sets the scroller's height and scroll offset itself.
+    const scroll = async (scrollTop: number, clientHeight: number) => {
+        const el = find('[role="grid"]').parentElement;
+        if (!el) throw new Error('the grid has no scroller');
+        Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
+        Object.defineProperty(el, 'scrollTop', { configurable: true, value: scrollTop, writable: true });
+        await act(async () => el.dispatchEvent(new Event('scroll')));
+    };
     const highlighted = (role: 'columnheader' | 'rowheader') =>
         [...dialog().querySelectorAll<HTMLElement>(`[role="${role}"][aria-selected="true"]`)].map(
             (el) => el.textContent,
@@ -180,6 +188,7 @@ async function open(spec: InlineSpec) {
         rowHeader,
         editor,
         shown,
+        scroll,
         highlighted,
         key,
         type,
@@ -201,16 +210,40 @@ describe('ChartDataDialog: the grid', () => {
         expect(dialog.cell(1, 0).textContent).toBe('Team 1');
         expect(dialog.cell(1, 1).textContent).toBe('42');
         expect(dialog.cell(0, 0).textContent).toBe('');
-        // A trailing row and column to grow into: D and 6.
-        expect(dialog.shown()).toEqual({ rows: 6, columns: 4 });
-        expect(dialog.columnHeader('D')).toBeDefined();
+        // Every column a series can go in, A to M, and a trailing row to grow into.
+        expect(dialog.shown()).toEqual({ rows: 6, columns: INLINE_GRID_MAX_SERIES + 1 });
+        expect(dialog.columnHeader('M')).toBeDefined();
+        expect(dialog.columnHeader('N')).toBeUndefined();
         expect(dialog.rowHeader('6')).toBeDefined();
+        // A1 is selected, as a sheet opens.
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A1');
+    });
+
+    test('empty rows fill the view and more come as it scrolls, up to the category limit', async () => {
+        const dialog = await open(sample());
+        await dialog.scroll(0, 400);
+        // Two views' worth of 20px rows, so there is always more to scroll into.
+        expect(dialog.shown()).toEqual({ rows: 40, columns: INLINE_GRID_MAX_SERIES + 1 });
+        await dialog.scroll(400, 400);
+        expect(dialog.shown().rows).toBe(60);
+        await dialog.scroll(10_000, 400);
+        expect(dialog.shown().rows).toBe(INLINE_GRID_MAX_CATEGORIES + 1);
+    });
+
+    test('the cell editor names the cell and what it holds; the corner is a column header', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 1);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B2: 42');
+        await dialog.select(5, 1);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B6');
+        const corner = dialog.dialog().querySelector('[role="row"][aria-rowindex="1"] > :first-child');
+        expect(corner?.getAttribute('role')).toBe('columnheader');
     });
 
     test('the selected cell highlights its row and column headers; Shift extends a range', async () => {
         const dialog = await open(sample());
         await dialog.select(2, 1);
-        expect(dialog.editor().getAttribute('aria-label')).toBe('B3');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B3: 65');
         expect(dialog.highlighted('columnheader')).toEqual(['B']);
         expect(dialog.highlighted('rowheader')).toEqual(['3']);
         await dialog.key('ArrowRight', { shiftKey: true });
@@ -255,7 +288,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         expect(dialog.editor().value).toBe('75');
         expect(await dialog.key('Enter')).toBe(true);
         expect(dialog.cell(1, 1).textContent).toBe('75');
-        expect(dialog.editor().getAttribute('aria-label')).toBe('B3');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B3: 65');
         expect(dialog.editor().value).toBe('');
         expect((await dialog.save()).data.series[0].values).toEqual([75, 65, 38, 80]);
     });
@@ -265,13 +298,13 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         await dialog.select(0, 1);
         await dialog.type('First half');
         await dialog.key('Tab');
-        expect(dialog.editor().getAttribute('aria-label')).toBe('C1');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('C1: Period 2');
         await dialog.type('Second half');
         await dialog.key('Tab', { shiftKey: true });
-        expect(dialog.editor().getAttribute('aria-label')).toBe('B1');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B1: First half');
         await dialog.key('ArrowDown');
         await dialog.key('ArrowLeft');
-        expect(dialog.editor().getAttribute('aria-label')).toBe('A2');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A2: Team 1');
         const spec = await dialog.save();
         expect(spec.data.series.map((series) => series.name)).toEqual(['First half', 'Second half']);
     });
@@ -282,7 +315,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         await dialog.type('Blues');
         await dialog.key('ArrowDown');
         expect(dialog.cell(1, 0).textContent).toBe('Blues');
-        expect(dialog.editor().getAttribute('aria-label')).toBe('A3');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A3: Team 2');
     });
 
     test('F2 and a double-click edit in place, keeping the value', async () => {
@@ -298,7 +331,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
 
         await dialog.doubleClick(dialog.cell(2, 2));
         expect(dialog.editor().value).toBe('47');
-        expect(dialog.editor().getAttribute('aria-label')).toBe('C3');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('C3: 47');
     });
 
     test('Escape cancels the edit and leaves the dialog open; a second Escape closes it', async () => {
@@ -331,8 +364,9 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         const pie = { ...sample('pie'), sliceColors: ['#000001', '#000002', '#000003', '#000004'] };
         const dialog = await open(pie);
         await dialog.mouseDown(dialog.rowHeader('3'));
-        // The pie has one series, so B and the trailing C.
-        expect(dialog.highlighted('columnheader')).toEqual(['A', 'B', 'C']);
+        expect(dialog.highlighted('columnheader')).toEqual(
+            Array.from({ length: INLINE_GRID_MAX_SERIES + 1 }, (_, i) => String.fromCharCode(65 + i)),
+        );
         await dialog.key('Delete');
         const spec = await dialog.save();
         expect(spec.data.categories).toEqual(['Team 1', 'Team 3', 'Team 4']);
@@ -366,7 +400,7 @@ describe('ChartDataDialog: growing the grid', () => {
         await dialog.select(5, 0);
         await dialog.type('Team 5');
         await dialog.key('Enter');
-        expect(dialog.shown()).toEqual({ rows: 7, columns: 3 });
+        expect(dialog.shown().rows).toBe(7);
         expect(dialog.editor().getAttribute('aria-label')).toBe('A7');
         const spec = await dialog.save();
         expect(spec.data.categories.at(-1)).toBe('Team 5');
@@ -379,7 +413,6 @@ describe('ChartDataDialog: growing the grid', () => {
         await dialog.select(2, 3);
         await dialog.type('5');
         await dialog.key('Enter');
-        expect(dialog.shown()).toEqual({ rows: 6, columns: 5 });
         const spec = await dialog.save();
         expect(spec.data.series[2]).toEqual({
             ...style,
@@ -394,19 +427,33 @@ describe('ChartDataDialog: growing the grid', () => {
         await dialog.select(5, 0);
         await dialog.key('F2');
         await dialog.key('Enter');
-        expect(dialog.shown()).toEqual({ rows: 6, columns: 4 });
+        expect(dialog.shown().rows).toBe(6);
+        expect((await dialog.save()).data.categories).toHaveLength(4);
     });
 
-    test('no trailing row or column past the series, category and total limits', async () => {
-        const wide = await open(grid(INLINE_GRID_MAX_SERIES, 2));
-        expect(wide.shown()).toEqual({ rows: 4, columns: INLINE_GRID_MAX_SERIES + 1 });
+    test('typing further down adds the rows between as gaps', async () => {
+        const dialog = await open(sample());
+        await dialog.scroll(0, 400);
+        await dialog.select(9, 0);
+        await dialog.type('Team 9');
+        await dialog.key('Enter');
+        const spec = await dialog.save();
+        expect(spec.data.categories).toEqual(['Team 1', 'Team 2', 'Team 3', 'Team 4', '', '', '', '', 'Team 9']);
+        expect(spec.data.series[0].values.slice(4)).toEqual([null, null, null, null, null]);
+    });
 
+    test('no row past the category limit, and a value past the total limit says it was left out', async () => {
         const tall = await open(grid(1, INLINE_GRID_MAX_CATEGORIES));
-        expect(tall.shown()).toEqual({ rows: INLINE_GRID_MAX_CATEGORIES + 1, columns: 3 });
+        expect(tall.shown()).toEqual({ rows: INLINE_GRID_MAX_CATEGORIES + 1, columns: INLINE_GRID_MAX_SERIES + 1 });
 
-        // 11 × 180 = 1,980 cells; one more series would be 2,160, past the 2,000-point limit.
+        // 11 × 180 = 1,980 cells; a twelfth series would be 2,160, past the 2,000-point limit.
         const full = await open(grid(11, 180));
-        expect(full.shown()).toEqual({ rows: 182, columns: 12 });
+        await full.select(1, 12);
+        await full.type('5');
+        await full.key('Enter');
+        expect(full.cell(1, 12).textContent).toBe('');
+        expect(full.dialog().textContent).toContain('The chart holds up to 12 series');
+        expect((await full.save()).data.series).toHaveLength(11);
     });
 
     test('a value that is not a number is flagged and keeps Save off', async () => {
@@ -431,11 +478,28 @@ describe('ChartDataDialog: growing the grid', () => {
     });
 });
 
+describe('ChartDataDialog: numbers as Sheets shows them', () => {
+    test('grouping, a leading currency symbol and a trailing percent read as numbers', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(1, 1, { 'text/plain': '$1,234.00\n1,234\n12%\n-€5.5' });
+        expect(dialog.button('Save').disabled).toBe(false);
+        expect((await dialog.save()).data.series[0].values).toEqual([1234, 1234, 0.12, -5.5]);
+    });
+
+    test('anything else is still flagged', async () => {
+        for (const text of ['1,23', '12%%', '$', '1.2.3', '12 apples', '%5']) {
+            const dialog = await open(sample());
+            await dialog.paste(1, 1, { 'text/plain': text });
+            expect(dialog.button('Save').disabled).toBe(true);
+        }
+    });
+});
+
 describe('ChartDataDialog: paste fits the grid', () => {
     test('pasted TSV fills from the active cell and grows the grid', async () => {
         const dialog = await open(sample());
         await dialog.paste(1, 1, { 'text/plain': '1\t2\t3\n4\t5\t6\n7\t8\t9\n10\t11\t12\n13\t14\t15\n' });
-        expect(dialog.shown()).toEqual({ rows: 7, columns: 5 });
+        expect(dialog.shown().rows).toBe(7);
         await dialog.paste(0, 1, { 'text/plain': 'A\tB\tC' });
         await dialog.paste(1, 0, { 'text/plain': 'North\r\nSouth' });
         const spec = await dialog.save();
@@ -453,6 +517,37 @@ describe('ChartDataDialog: paste fits the grid', () => {
         const spec = await dialog.save();
         expect(spec.data.series[0]).toMatchObject({ name: 'North', values: [10, 65, 38, 80] });
         expect(spec.data.categories[0]).toBe('Jan');
+    });
+
+    test("a Docs table pastes as its HTML table, not as its plain text's lines", async () => {
+        const dialog = await open(sample());
+        await dialog.paste(0, 1, {
+            'text/plain': 'North\n\nSouth\n\n1\n\n2',
+            'text/html':
+                '<table><tbody><tr><th><p>North</p></th><th><p>South</p></th></tr><tr><td><p>1</p></td><td><p>2</p></td></tr></tbody></table>',
+        });
+        const spec = await dialog.save();
+        expect(spec.data.series.map((series) => series.name)).toEqual(['North', 'South']);
+        expect(spec.data.series.map((series) => series.values[0])).toEqual([1, 2]);
+    });
+
+    test('lines of plain text with no table paste down a column', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(1, 0, { 'text/plain': 'North\nSouth' });
+        expect((await dialog.save()).data.categories.slice(0, 2)).toEqual(['North', 'South']);
+    });
+
+    test('a corner header names the category axis while it has no title', async () => {
+        const block = { 'text/plain': 'Month\tNorth\nJan\t10' };
+        const dialog = await open(sample());
+        await dialog.paste(0, 0, block);
+        const spec = await dialog.save();
+        expect(spec.categoryAxis.title).toBe('Month');
+        expect(spec.data.series[0]).toMatchObject({ name: 'North', values: [10, 65, 38, 80] });
+
+        const titled = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
+        await titled.paste(0, 0, block);
+        expect((await titled.save()).categoryAxis.title).toBe('Teams');
     });
 
     test('a single value pastes into the selected cell', async () => {
@@ -473,6 +568,17 @@ describe('ChartDataDialog: paste fits the grid', () => {
         await rows.paste(1, 1, { 'text/plain': values });
         expect(rows.shown().rows).toBe(INLINE_GRID_MAX_CATEGORIES + 1);
         expect(rows.dialog().textContent).toContain('Pasted 205 rows × 1 column;');
+    });
+
+    // Past what a spread call holds (Chrome stops near 125,000 arguments, Bun near a million).
+    test('a paste of a million rows fills what fits and says how much it held', async () => {
+        const dialog = await open(sample());
+        const values = Array.from({ length: 1_000_000 }, (_, i) => `${i}\t${i}`).join('\n');
+        await dialog.paste(1, 1, { 'text/plain': values });
+        expect(dialog.dialog().textContent).toContain('Pasted 1,000,000 rows × 2 columns;');
+        const spec = await dialog.save();
+        expect(spec.data.categories).toHaveLength(INLINE_GRID_MAX_CATEGORIES);
+        expect(spec.data.series[0].values.slice(0, 2)).toEqual([0, 1]);
     });
 
     test('a pasted label is cut to the label limit', async () => {
