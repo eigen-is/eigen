@@ -2,7 +2,7 @@ import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
-import { xlsxToSheets } from './from-xlsx';
+import { NOT_AN_XLSX, xlsxToSheets } from './from-xlsx';
 
 // Uploaded xlsx bytes → the lean snapshot JSON the main thread commits. Runs
 // inside the transform Worker (worker.ts owns execution; the conversion logic
@@ -23,7 +23,7 @@ async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
         return await xlsxToSheets(buffer);
     } catch (err) {
         if (err instanceof ApiError || isOutOfMemory(err)) throw err;
-        throw new ApiError(400, 'Not a valid xlsx file');
+        throw new ApiError(400, NOT_AN_XLSX);
     }
 }
 

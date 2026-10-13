@@ -69,6 +69,8 @@ type ThemePalette = string[];
 // of few cells.
 export const MAX_CELLS = 4_000_000;
 
+export const NOT_AN_XLSX = 'Not a valid xlsx file';
+
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const checked = repackXlsx(buffer);
 
@@ -119,7 +121,7 @@ function repackXlsx(buffer: Buffer): Buffer {
         return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
     } catch (error) {
         if (!(error instanceof ZipError)) throw error;
-        const message = error.status === 413 ? SPREADSHEET_TOO_LARGE : 'Not a valid xlsx file';
+        const message = error.status === 413 ? SPREADSHEET_TOO_LARGE : NOT_AN_XLSX;
         throw new ApiError(error.status, message, { cause: error });
     }
 }
@@ -228,7 +230,7 @@ function countTags(bytes: Buffer, open: Buffer, limit: number): number {
 function canonicalPart(bytes: Buffer): Buffer {
     // XML 1.1 reads a NEL or U+2028 in a value as a space too, and Excel writes 1.0 only.
     const version = XML_VERSION.exec(bytes.toString('latin1', 0, 128))?.[2];
-    if (version !== undefined && version !== '1.0') throw new ApiError(400, 'Not a valid xlsx file');
+    if (version !== undefined && version !== '1.0') throw new ApiError(400, NOT_AN_XLSX);
     return withoutDefinedNames(withSpacedTags(bytes));
 }
 
