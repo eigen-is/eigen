@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { readLatex } from '../latex';
+import { readLatex, writeLatex } from '../latex';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
-import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE } from '../omml';
+import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import { MATH_LIMITS, type MathNode, type MathRow, RowBuilder } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
@@ -227,5 +227,40 @@ describe('RowBuilder', () => {
         { kind: 'identifier', text: 'a\u0338b' },
     ])('canonicalIssue rejects %j', (node) => {
         expect(canonicalIssue([node])).toBeDefined();
+    });
+});
+
+// TeX and Word draw a capital Greek letter upright, so that is its default.
+describe('a capital Greek letter', () => {
+    const upright: MathRow = [{ kind: 'identifier', text: 'Γ' }];
+    const italic: MathRow = [{ kind: 'identifier', text: 'Γ', variant: 'italic' }];
+
+    test('is upright unless italic is explicit, in every reader', () => {
+        expect(readLatex('\\Gamma')).toStrictEqual(upright);
+        expect(readLatex('\\mathrm{\\Gamma}')).toStrictEqual(upright);
+        expect(readLatex('\\mathit{\\Gamma}')).toStrictEqual(italic);
+        expect(
+            readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi mathvariant="normal">Γ</mi></math>`)).row,
+        ).toStrictEqual(upright);
+        // MathML and Word draw a lone letter italic when nothing says otherwise.
+        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>Γ</mi></math>`)).row).toStrictEqual(italic);
+        expect(readOmml(el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:t>Γ</m:t></m:r></m:oMath>`))).toStrictEqual(
+            italic,
+        );
+        expect(canonicalIssue(upright)).toBeUndefined();
+        expect(canonicalIssue(italic)).toBeUndefined();
+        expect(canonicalIssue([{ kind: 'identifier', text: 'Γ', variant: 'normal' }])).toBeDefined();
+    });
+
+    test('is written as each format draws it, and reads back', () => {
+        expect(writeMathml(upright)).toContain('<mi mathvariant="normal">Γ</mi>');
+        expect(writeMathml(italic)).toContain('<mi>𝛤</mi>');
+        expect(writeOmml(upright)).toContain('<m:sty m:val="p"/>');
+        expect(writeOmml(italic)).toContain('<m:sty m:val="i"/>');
+        expect(writeLatex(upright)).toBe('\\Gamma');
+        expect(writeLatex(italic)).toBe('\\mathit{\\Gamma}');
+        for (const row of [upright, italic]) {
+            for (const via of [viaMathml, viaOmml, viaLatex]) expect(via(row)).toStrictEqual(row);
+        }
     });
 });

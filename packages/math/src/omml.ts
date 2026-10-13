@@ -1,7 +1,7 @@
 import { COMBINING_ACCENTS, naryLimits, SPACES } from './notation';
 import {
     bound,
-    clusters,
+    defaultVariant,
     equationCells,
     hexColor,
     MATH_ENCLOSURES,
@@ -337,8 +337,8 @@ function piece(node: MathNode): Run | string {
         case 'identifier':
         case 'number':
         case 'operator': {
-            // A word is upright, which Word only draws when told.
-            const upright = node.kind === 'identifier' && clusters(node.text).length > 1;
+            // A word or a capital Greek letter is upright, which Word only draws when told.
+            const upright = node.kind === 'identifier' && defaultVariant(node.kind, node.text) === 'normal';
             return {
                 properties: style(node.variant ?? (upright ? 'normal' : undefined)) + colored(node.color),
                 text: node.text,

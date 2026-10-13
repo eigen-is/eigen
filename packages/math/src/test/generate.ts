@@ -1,5 +1,5 @@
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
-import { MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
+import { defaultVariant, MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
 import { canonicalIssue } from './canonical';
 
 // Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping,
@@ -61,13 +61,15 @@ function token(random: Random): MathNode {
     const color = pick(random, COLORS);
     const variant = random() < 0.3 ? pick(random, MATH_VARIANTS) : undefined;
     switch (pick(random, ['letter', 'word', 'number', 'operator'] as const)) {
-        case 'letter':
+        case 'letter': {
+            const text = pick(random, LETTERS);
             return {
                 kind: 'identifier',
-                text: pick(random, LETTERS),
-                variant: variant === 'italic' ? undefined : variant,
+                text,
+                variant: variant === defaultVariant('identifier', text) ? undefined : variant,
                 color,
             };
+        }
         case 'word':
             return { kind: 'identifier', text: pick(random, WORDS), color };
         case 'number':

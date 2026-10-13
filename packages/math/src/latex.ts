@@ -5,6 +5,7 @@ import {
     bound,
     clusters,
     DIGIT,
+    defaultVariant,
     equationCells,
     hexColor,
     MATH_ENCLOSURES,
@@ -53,12 +54,13 @@ const TEXT_COMMANDS: ReadonlyMap<string, string> = new Map(
 
 type Token = { text: string; at: number; command: boolean; space: boolean };
 
-type Style = { letters: MathVariant; others: MathVariant; color: string | undefined };
+// `letters` undefined is math's default: italic, but upright for a capital Greek letter, as TeX draws it.
+type Style = { letters: MathVariant | undefined; others: MathVariant; color: string | undefined };
 
 // What an atom adds to its row. Characters wait in the row's builder, so tokens come out canonical across atoms.
 type Piece = { chars: string; style: Style } | { text: string; color: string | undefined } | { node: MathNode };
 
-const MATH: Style = { letters: 'italic', others: 'normal', color: undefined };
+const MATH: Style = { letters: undefined, others: 'normal', color: undefined };
 
 // Leading spaces, then a comment, a control word or space with TeX's skipped spaces, a control symbol, or a character
 // with its combining marks; a mark after a character the parser reads as structure is a token of its own.
@@ -854,12 +856,12 @@ function negation(char: string): string | undefined {
     return /^(?:\\[A-Za-z]+|[^\\{}^_&'~])$/u.test(symbol) ? joined(['\\not', symbol]) : undefined;
 }
 
-// The font a token needs beyond the default (italic letters, or upright in \operatorname); undefined if none.
+// The font a token needs beyond the default (math's, or upright in \operatorname); undefined if none.
 function fontOf(node: MathToken, upright: boolean): MathVariant | undefined {
     if (node.kind !== 'identifier') return node.variant;
     if (clusters(node.text).length > 1) return upright ? undefined : 'normal';
-    const variant = node.variant ?? 'italic';
-    return variant === (upright ? 'normal' : 'italic') ? undefined : variant;
+    const variant = node.variant ?? defaultVariant(node.kind, node.text);
+    return variant === (upright ? 'normal' : defaultVariant(node.kind, node.text)) ? undefined : variant;
 }
 
 const colored = (color: string | undefined, latex: string) => {

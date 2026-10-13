@@ -19,7 +19,7 @@ Word splits a run wherever an edit happened, so `x+1` may be three runs or one. 
 - A number is a maximal run of digits with at most one decimal point between digits.
 - An identifier is one letter (`\p{L}`), italic or styled, or a maximal run of upright letters (`sin`, Word's `sty=p`).
 - An operator is one character.
-- `variant` is left out when it is the default: italic for one letter, upright for a word, a number and an operator. `color` is `#RRGGBB`, left out for Word's `auto`; an explicit `#000000` stays.
+- `variant` is left out when it is the default: italic for one letter, but upright for a capital Greek letter as TeX and Word draw it, and upright for a word, a number and an operator. So an upright Γ beside other upright letters is part of a word: `\Gamma\Delta` reads as `\mathrm{\Gamma\Delta}` does. `color` is `#RRGGBB`, left out for Word's `auto`; an explicit `#000000` stays.
 - A Unicode Mathematical Alphanumeric (𝐯, ℝ, ℎ) folds to its letter and a variant.
 
 The other rules of the form:
@@ -52,11 +52,11 @@ The other rules of the form:
 | a bare fence character | `mo stretchy="false"`, so it doesn't grow around a fraction beside it |
 | text | `mtext`, its edge spaces as U+00A0, which MathML doesn't trim |
 
-A variant is the Unicode alphanumeric where one exists and `mathvariant` where none does, such as bold-italic digits. Chrome honours only `mathvariant="normal"` but draws the alphanumerics. The writer never writes `display`: whether an equation stands on its own line belongs to the document that holds it.
+A variant is the Unicode alphanumeric where one exists and `mathvariant` where none does, such as bold-italic digits. MathML draws a lone letter italic, so an upright capital Greek letter is written `mathvariant="normal"` and an italic one as its alphanumeric, 𝛤. Chrome honours only `mathvariant="normal"` but draws the alphanumerics. The writer never writes `display`: whether an equation stands on its own line belongs to the document that holds it.
 
 ## The readers take only what their format shows
 
-The OMML reader takes text only from `m:t`. A tracked insertion (`w:ins`, `w:moveTo`) reads as written and a deletion (`w:del`, `w:moveFrom`) is dropped. An object whose control character is deleted (its `m:ctrlPr` holds `w:del` or `w:moveFrom`, ECMA-376 §22.1.2.23) is dropped whole. `mc:AlternateContent` reads its `mc:Fallback`, because the package can't know which `mc:Choice` prefixes its caller understands. An on/off property is on when present, unless its value is `0`, `off` or `false`. A run without `m:sty` draws letters italic and the rest upright, as Word does. A colour is six hex digits or nothing, since a forged `w:color` is attacker text. `m:mathPr` is ignored: every document of a local corpus holds Word's defaults there.
+The OMML reader takes text only from `m:t`. A tracked insertion (`w:ins`, `w:moveTo`) reads as written and a deletion (`w:del`, `w:moveFrom`) is dropped. An object whose control character is deleted (its `m:ctrlPr` holds `w:del` or `w:moveFrom`, ECMA-376 §22.1.2.23) is dropped whole. `mc:AlternateContent` reads its `mc:Fallback`, because the package can't know which `mc:Choice` prefixes its caller understands. An on/off property is on when present, unless its value is `0`, `off` or `false`. A run without `m:sty` draws letters italic and the rest upright, as Word does, capital Greek letters too, so the writer gives an upright one `sty=p`. A colour is six hex digits or nothing, since a forged `w:color` is attacker text. `m:mathPr` is ignored: every document of a local corpus holds Word's defaults there.
 
 The MathML reader reads Eigen's own dialect. `math` reads as an `mrow`. An `mrow` that starts with a large operator from the table carrying scripts, or with an operator marked `largeop`, is an n-ary over the rest of the row; any other `munderover` reads as a limit under inside a limit over. `semantics` reads as its first child, and its `application/x-tex` annotation is the LaTeX only when the `semantics` is the whole equation. Other annotations and `annotation-xml` are skipped. Token text is trimmed of XML whitespace. Any element it doesn't know, `mfenced` and `mstyle` among them, reads as its children.
 
@@ -98,6 +98,7 @@ The parser follows TeX where a user would notice. `%` starts a comment and `~` i
 | a table in fences | `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix` and `Vmatrix`; a `{` before equations is `cases`; bare tables are `matrix` and `aligned` |
 | a brace with a label | `\overbrace{x}^{n}`, as Word puts a limit over a group character |
 | an upright word or letter | `\mathrm{sin}`, `\mathrm{d}` |
+| an italic capital Greek letter | `\mathit{\Gamma}`; an upright one is `\Gamma`, as TeX draws it |
 | a function name the table lacks | `\operatorname{…}`, its letters written against the upright font inside |
 | n-ary limits | `\limits` or `\nolimits` only where Word's default (integrals beside, the rest under and over) differs |
 | text | `\text{…}` with `% # & ~ $ { } _ ^ \` escaped, a no-break space as `~` and a run of spaces as control spaces, since TeX reads a run as one |

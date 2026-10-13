@@ -14,10 +14,11 @@ const isLetter = (char: string) => /^\p{L}$/u.test(char);
 // Each character with the combining marks it keeps.
 const clustersOf = (text: string) => text.match(/\P{M}\p{M}*/gu) ?? [];
 const isMarked = (text: string) => /\p{M}/u.test(text);
+// A capital Greek letter stands upright by default, as TeX and Word draw it.
+const UPRIGHT_LETTER = /^[\u0391-\u03A9\u03F4]\p{M}*$/u;
+const uprightByDefault = (text: string) => clustersOf(text).length > 1 || UPRIGHT_LETTER.test(text);
 function isUpright(node: MathNode): node is MathToken {
-    return (
-        node.kind === 'identifier' && (node.variant === 'normal' || (!node.variant && clustersOf(node.text).length > 1))
-    );
+    return node.kind === 'identifier' && (node.variant === 'normal' || (!node.variant && uprightByDefault(node.text)));
 }
 
 // One character a fence, accent, brace or large operator may hold.
@@ -46,7 +47,9 @@ function tokenIssue(node: MathToken): string | undefined {
                 return `identifier ${node.text}`;
             if (clusters.length > 1 && (node.variant || isMarked(node.text)))
                 return `styled or marked word ${node.text}`;
-            return node.variant === 'italic' ? `default variant on ${node.text}` : undefined;
+            return node.variant === (UPRIGHT_LETTER.test(node.text) ? 'normal' : 'italic')
+                ? `default variant on ${node.text}`
+                : undefined;
         case 'number':
             if (!/^[0-9]+(\.[0-9]+)?$/.test(node.text)) return `number ${node.text}`;
             return node.variant === 'normal' ? `default variant on ${node.text}` : undefined;

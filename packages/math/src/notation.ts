@@ -116,7 +116,8 @@ export function naryLimits(operator: string): 'under' | 'side' {
 
 // Unicode's Mathematical Alphanumeric Symbols, block by block, with the letters it left in Letterlike Symbols.
 const LATIN = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const GREEK = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ∇αβγδεζηθικλμνξοπρςστυφχψω∂ϵϑϰϕϱϖ';
+const GREEK_CAPITALS = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ';
+const GREEK = `${GREEK_CAPITALS}∇αβγδεζηθικλμνξοπρςστυφχψω∂ϵϑϰϕϱϖ`;
 const DIGITS = '0123456789';
 
 const BLOCKS: readonly [MathVariant, string, number][] = [
@@ -146,6 +147,9 @@ const BLOCKS: readonly [MathVariant, string, number][] = [
     ['bold-sans-serif', DIGITS, 0x1d7ec],
     ['monospace', DIGITS, 0x1d7f6],
 ];
+
+// TeX and Word draw a capital Greek letter upright.
+export const UPRIGHT_LETTERS: ReadonlySet<string> = new Set(GREEK_CAPITALS);
 
 const LETTERLIKE: Readonly<Record<string, string>> = {
     'italic h': 'ℎ',

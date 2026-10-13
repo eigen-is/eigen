@@ -1,5 +1,5 @@
 import { MathError } from './error';
-import { ACCENTS, fromAlphanumeric, SCRIPT_CHARS, SPACES } from './notation';
+import { ACCENTS, fromAlphanumeric, SCRIPT_CHARS, SPACES, UPRIGHT_LETTERS } from './notation';
 import { checkedXml, replaceEdges, trimXmlSpace } from './xml';
 
 export const MATH_VARIANTS = [
@@ -120,11 +120,15 @@ export function toColor(hex: string | undefined): string | undefined {
 // A #RRGGBB colour, as MathML, LaTeX and a tree hold it; anything else is no colour, so a writer never writes it.
 export const hexColor = (color: string | undefined) => (color?.startsWith('#') ? toColor(color.slice(1)) : undefined);
 
-// A token without the variant it has by default: italic for one letter, upright for the rest.
+// What a token is without a variant: italic for one letter but upright for a capital Greek one, upright for the rest.
+export function defaultVariant(kind: MathToken['kind'], text: string): MathVariant {
+    const [first] = text;
+    return kind === 'identifier' && clusters(text).length === 1 && !UPRIGHT_LETTERS.has(first) ? 'italic' : 'normal';
+}
+
 function token(kind: MathToken['kind'], text: string, variant: MathVariant, color: string | undefined): MathToken {
     const node: MathToken = { kind, text };
-    if (variant !== (kind === 'identifier' && clusters(text).length === 1 ? 'italic' : 'normal'))
-        node.variant = variant;
+    if (variant !== defaultVariant(kind, text)) node.variant = variant;
     if (color) node.color = color;
     return node;
 }
@@ -175,7 +179,8 @@ export class RowBuilder {
         bound(budget, depth, slot === 'optional' ? 0 : 1);
     }
 
-    chars(text: string, letters: MathVariant, others: MathVariant, color: string | undefined): void {
+    // Without `letters`, each letter takes its default.
+    chars(text: string, letters: MathVariant | undefined, others: MathVariant, color: string | undefined): void {
         for (const char of checkedXml(text)) {
             if (INVISIBLE.test(char)) continue;
             const last = this.#chars.at(-1);
@@ -184,7 +189,10 @@ export class RowBuilder {
                 if (!last || SPACE_OF_CHAR.has(last.char)) continue;
                 last.marks += char;
             } else {
-                const [base, variant] = fromAlphanumeric(char) ?? [char, LETTER.test(char) ? letters : others];
+                const [base, variant] = fromAlphanumeric(char) ?? [
+                    char,
+                    LETTER.test(char) ? (letters ?? defaultVariant('identifier', char)) : others,
+                ];
                 this.#chars.push({ char: base, marks: '', variant, color });
             }
             // Every two waiting characters or marks make at least one part (two quads are one qquad): bound them as

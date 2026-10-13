@@ -11,6 +11,7 @@ import {
 } from './notation';
 import {
     bound,
+    defaultVariant,
     equationCells,
     hexColor,
     MATH_ENCLOSURES,
@@ -341,7 +342,12 @@ const colorAttribute = (color: string | undefined) => {
 
 function writeToken(node: MathToken): string {
     const tag = node.kind === 'identifier' ? 'mi' : node.kind === 'number' ? 'mn' : 'mo';
-    const { variant } = node;
+    // MathML draws a lone letter italic, so an upright one says so.
+    const upright =
+        node.kind === 'identifier' &&
+        /^\P{M}\p{M}*$/u.test(node.text) &&
+        defaultVariant(node.kind, node.text) === 'normal';
+    const variant = node.variant ?? (upright ? 'normal' : undefined);
     // Chrome draws Unicode's alphanumerics but honours only mathvariant="normal": a variant is a character where
     // Unicode has one.
     const styled = variant && [...node.text].map((char) => toAlphanumeric(char, variant));
