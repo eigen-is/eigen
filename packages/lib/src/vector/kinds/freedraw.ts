@@ -94,7 +94,7 @@ export function freedrawOutline(el: VectorLinearElement, points: Point[]): numbe
     const coords = points.map((p): [number, number] => [p.x, p.y]);
     // Real per-point pressure iff the element opts out of simulation and carries an array — the reader
     // is what guarantees it is index-aligned with `points` ('' + simulate otherwise), so this reads the
-    // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords, byte-identical to legacy.
+    // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords.
     const pressures = !el.simulatePressure && el.pressures !== '' ? parsePressures(el.pressures) : [];
     const realPressure = pressures.length === coords.length && pressures.length > 0;
     return getStroke(realPressure ? coords.map(([x, y], i): number[] => [x, y, pressures[i]]) : coords, {
