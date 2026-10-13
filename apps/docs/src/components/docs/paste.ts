@@ -32,8 +32,9 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
         }
     }
 
-    // ProseMirror marks its own copy, whose sizes are all the doc's.
-    const docsCopy = doc.querySelector('[data-pm-slice]') !== null;
+    // data-pm-slice marks a copy from any ProseMirror editor, Eigen's included: such an editor writes the sizes its
+    // runs carry, not its body's on every span as Google Docs does, so its sizes are kept.
+    const pmCopy = doc.querySelector('[data-pm-slice]') !== null;
     for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
         // A stack's first family the map knows: Google Docs and Word write a font before its generic family, and a
         // copy here writes a bundled font's stack. The document font needs no mark.
@@ -44,7 +45,7 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
         el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
         // Google Docs writes a size on every span: its body's, which is the doc's, and in a heading the heading's,
         // which the doc's heading draws as its own.
-        if (el.style.fontSize === `${DOCUMENT_FONT_SIZE}pt` || (!docsCopy && el.closest('h1, h2, h3, h4, h5, h6')))
+        if (!pmCopy && (el.style.fontSize === `${DOCUMENT_FONT_SIZE}pt` || el.closest('h1, h2, h3, h4, h5, h6')))
             el.style.fontSize = '';
     }
 

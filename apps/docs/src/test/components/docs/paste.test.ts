@@ -103,7 +103,7 @@ describe('paste keeps a size the doc does not draw', () => {
         ).toEqual([['Plan', null]]);
     });
 
-    test("a docs copy keeps its sizes, a heading's included", () => {
+    test("a docs copy keeps its sizes, the body's in a heading included", () => {
         const sized = (text: string, fontSize: number) => ({
             type: 'text',
             text,
@@ -114,7 +114,7 @@ describe('paste keeps a size the doc does not draw', () => {
             content: {
                 type: 'doc',
                 content: [
-                    { type: 'heading', attrs: { level: 2 }, content: [sized('big', 30)] },
+                    { type: 'heading', attrs: { level: 1 }, content: [sized('big', 30), sized('body', 11)] },
                     { type: 'paragraph', content: [sized('fine', 9)] },
                 ],
             },
@@ -122,6 +122,7 @@ describe('paste keeps a size the doc does not draw', () => {
         const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
         expect(pastedSizes(dom.innerHTML)).toEqual([
             ['big', 30],
+            ['body', 11],
             ['fine', 9],
         ]);
     });
