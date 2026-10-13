@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, print, pdf, export]
 related: [docs/export, docs/get-started]
 order: 120
-updated: 2026-10-06
+updated: 2026-10-13
 ---
 
 You can print any document in Docs, or save it as a PDF, directly from the editor. Docs sends the document content to your browser's print dialog, leaving out the toolbar and the rest of the screen.
@@ -18,7 +18,7 @@ You can print any document in Docs, or save it as a PDF, directly from the edito
 3. Choose **Print** from the menu.
 4. Your browser's print dialog opens. Pick your printer and settings, then click **Print**.
 
-The printout uses the same page as the editor: A4 with 2 cm margins. To see the page, choose **File → Page setup…**. Every document uses this page for now, so its settings can't be changed.
+The printout uses the document's page, as the editor shows it. A new document is A4 with 2 cm margins. To change the paper size, orientation, or margins, choose **File → Page setup…**.
 
 ## Save as PDF
 
