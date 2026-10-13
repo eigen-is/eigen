@@ -2,7 +2,7 @@
 
 > **TLDR:** Sheets is Eigen's spreadsheet: a workbook of tabs that several people edit at once, with formulas, number formats, validation and xlsx import and export. The grid, its state and the formula engine are `packages/sheet` (`@workspace/sheet`), our own fork of the open-source fortune-sheet, itself based on luckysheet. `apps/sheets/` is the app around it. A workbook is stored as a snapshot plus a log of edits.
 
-A workbook is a `.eigensheets` file. It holds one or more sheets, the tabs. A sheet is a grid of cells. A cell holds its value (`v`), the string the grid shows (`m`), its formula (`f`), its number format and its style. What belongs to a grid position rather than to the cell, such as borders, merges, validation rules and hyperlinks, sits in maps beside the grid, keyed `"r_c"` (row and column, counted from 0). Row heights and column widths are keyed by the row or column index alone. The maps under a sheet's `config` (merges, borders, row and column sizes, hidden rows and columns) are its config collections. Conditional-format rules and floating images hang off the sheet too.
+A workbook is a `.eigensheets` file. It holds one or more sheets, the tabs. A sheet is a grid of cells. A cell holds its value (`v`), the string the grid shows (`m`), its formula (`f`), its number format and its style. What belongs to a grid position rather than to the cell, such as borders, merges, validation rules and hyperlinks, sits in maps beside the grid, keyed `"r_c"` (row and column, counted from 0). Row heights and column widths are keyed by the row or column index alone. The maps under a sheet's `config` (merges, borders, row and column sizes, hidden rows and columns) are its config collections. Conditional-format rules, floating images and charts hang off the sheet too.
 
 In the browser the fork keeps the whole workbook as one plain object, the context, and changes it only through immer. An edit is a recipe, a function that changes a draft of the context, and immer reports the change as patches: small records of a path and a value.
 
@@ -35,7 +35,7 @@ A joiner decodes the snapshot and replays the pending ops through `replaySheetsO
 
 immer records the creation of a key as one `add` carrying the whole new value. So the first write to a config collection that doesn't exist yet ships the entire collection, and it overwrites a peer's. And a granular patch against a base that lacks the collection fails to resolve, so `replaySheetsOps` rolls back the whole batch and the edit is lost.
 
-`normalizeSheetConfig` (`engine/sheet-config.ts`) therefore materializes every config collection where a sheet enters a consumer: `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets` and the Workbook's seeding effect. Its `SHEET_CONFIG_COLLECTIONS` list has an exhaustiveness assert, so a new collection fails the build instead of reopening the hole. `withNormalizedSheet` does the same for `calcChain` and `images`, which live outside `config`: the first formula a user types emits `add ['calcChain', 0]` in the same batch as the cell.
+`normalizeSheetConfig` (`engine/sheet-config.ts`) therefore materializes every config collection where a sheet enters a consumer: `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets` and the Workbook's seeding effect. Its `SHEET_CONFIG_COLLECTIONS` list has an exhaustiveness assert, so a new collection fails the build instead of reopening the hole. It also materializes `charts`, the one map outside `config` written key by key. `withNormalizedSheet` does the same for `calcChain` and `images`, which also live outside `config`: the first formula a user types emits `add ['calcChain', 0]` in the same batch as the cell.
 
 There is no `ctx.config` shortcut. Read a sheet's config with `getSheetConfig` (`state/context.ts`) and write through `ctx.sheets[i].config`. immer names a patch after the path its draft was reached through, so a second route to the config emits patches at a root `filterPatch` drops, and assigning it back replaces the whole config. `packages/sheet/src/test/state/events/concurrent-config.test.ts` pins it through the real op pipeline: one client merges cells, another drags a row taller, and the drag must not undo the merge.
 
@@ -165,7 +165,27 @@ One edge stays. A formula that reads above or left of its corner (`=A4>0` on `A5
 
 ## Row and column shifts rewrite every sheet's formulas
 
-`applySheetsInsertRowCol` and `applySheetsDeleteRowCol` (`engine/rowcol.ts`) shift the cells, geometry, merges, borders and conditional-format rules of the changed sheet, and formula text in every sheet. Only references that resolve to the changed sheet move: unqualified ones on it, `Sheet!`-qualified ones anywhere. A reference wholly inside a deleted band becomes `#REF!`, and a whole-row or whole-column range keeps both legs. The functions are generic over the sheet type, so the editor's wider sheet flows through with its extras. `state/modules/rowcol.ts` then shifts the editor-only fields: filter, frozen panes, validation, hyperlinks, `calcChain`.
+`applySheetsInsertRowCol` and `applySheetsDeleteRowCol` (`engine/rowcol.ts`) shift the cells, geometry, merges, borders and conditional-format rules of the changed sheet, and formula text and chart refs in every sheet. Only references that resolve to the changed sheet move: unqualified ones on it, `Sheet!`-qualified ones anywhere. A reference wholly inside a deleted band becomes `#REF!`, and a whole-row or whole-column range keeps both legs. The functions are generic over the sheet type, so the editor's wider sheet flows through with its extras. `state/modules/rowcol.ts` then shifts the editor-only fields: filter, frozen panes, validation, hyperlinks, `calcChain`.
+
+## A chart is a floating record whose refs name sheets by id
+
+`Sheet.charts` maps a chart id to a `SheetChart`: a box in the same grid pixels as an image, an `index` that orders charts for painting (a fractional key, ties broken by id), and `spec`, the stored chart JSON that only `parseChartSpec` (`packages/lib/src/charts/`) reads. A range ref in the spec names its sheet by id, so renaming a sheet moves nothing.
+
+Each writer in `state/modules/chart.ts` writes one chart under its own key, field by field: a move writes `x` and `y`, a spec edit one replace of `spec`, and none ever replaces a whole existing chart. So two people editing different charts merge, and a batch on a chart a peer deleted fails whole on every client and in the replay instead of bringing it back. Undo and redo drop such an entry (`editsDeletedChart`), because immer throws on a path into a missing chart.
+
+## Chart refs shift with rows and columns, and an undone delete ships them
+
+A row or column insert or delete shifts every ref to the edited sheet, on every sheet's charts, inside the engine, so the editor, a peer and the replay all run it. The rule is Excel's, and conditional formats and alternate formats share it through `shiftRangeForInsert` and `shiftRangeForDelete` (`engine/rowcol.ts`): an insert at or before a ref moves it, inside grows it, right after leaves it, and a delete shrinks it. Deleting all of a values or categories ref makes it null, and a deleted name cell leaves the series unnamed.
+
+The edited sheet's whole `charts` map rides the row or column op as an authoritative replace, like `images` and the rest of its metadata (`sheetMetadataOps` in `state/utils/patch.ts`). A peer's chart edit on that sheet at the same moment can be lost, the same gap images have ([the proposal](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#what-diverges-today)). A chart on another sheet is re-derived by every consumer instead.
+
+Undoing a delete is the exception. It ships as an insert, and an insert never grows a shrunk or nulled ref back. So `sheetMetadataOps` then also ships one replace for every chart on another sheet that refers to the restored sheet, beside the `calcChain` it ships for the same reason. `packages/sheet/src/test/state/modules/chart.test.ts` pins it on the author, a peer and a joiner.
+
+## A range chart reads the grid's own values and labels
+
+`resolveRangeChartData` (`engine/chart-data.ts`) turns a range chart into the categories and series the layout draws, through a `CellResolver`, so the editor and the server read the same cells. A value is the cell's computed `v` when it is a finite number and a gap otherwise. A label or series name is the cell's display text `m`, the string the grid shows. A name ref reads its first cell. A chart with no categories counts them 1, 2, … up to its longest series.
+
+A ref that is null, names a missing sheet or spans several rows and several columns at once is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default.
 
 ## A tick box is a validation rule, and the value is its state
 
