@@ -417,6 +417,32 @@ describe('pptx shapes', () => {
         expect(attr(first(fill, A, 'lin'), 'ang')).toBe('5400000');
     });
 
+    test("a gradient runs as the canvas stretches it with the element's box", () => {
+        const shape = only(
+            pptx(
+                sceneOf([
+                    element('rectangle', {
+                        width: 400,
+                        height: 100,
+                        fill: serializeFill({
+                            type: 'gradient',
+                            from: '#ff0000',
+                            to: '#0000ff',
+                            angle: 45,
+                            style: 'solid',
+                        }),
+                    }),
+                ]),
+            ),
+        );
+        // gradientVector's 45deg runs corner to corner in the box's own units, so on a 4:1 box its stops meet the
+        // top-left and bottom-right corners halfway: the true angle is the normal of that diagonal, (1, −4).
+        const lin = first(first(shape, A, 'gradFill'), A, 'lin');
+        const normal = (Math.atan2(-4, 1) * 180) / Math.PI + 360;
+        expect(Number(attr(lin, 'ang'))).toBe(Math.round(normal * 60_000));
+        expect(attr(lin, 'scaled')).toBe('0');
+    });
+
     test('a two-point arrow is a connector line, flipped toward its end, with its heads', () => {
         const zip = pptx(
             sceneOf([
@@ -787,7 +813,7 @@ describe('pptx images and backgrounds', () => {
                     {
                         id: 'f2',
                         index: 'a1',
-                        background: { type: 'gradient', from: '#ffffff', to: '#000000', angle: 90 },
+                        background: { type: 'gradient', from: '#ffffff', to: '#000000', angle: 135 },
                     },
                     { id: 'f3', index: 'a2', background: { type: 'image', mediaName: 'wide.png', fit: 'cover' } },
                     { id: 'f4', index: 'a3', background: null },
@@ -798,7 +824,8 @@ describe('pptx images and backgrounds', () => {
         );
         const bg = (n: number) => descendants(part(zip, `ppt/slides/slide${n}.xml`), P, 'bgPr')[0];
         expect(srgb(first(bg(1), A, 'solidFill'))).toEqual({ val: 'FF0000', alpha: 50196 });
-        expect(attr(first(bg(2), A, 'lin'), 'ang')).toBe('0');
+        // A background is CSS's linear-gradient, at its own angle on any slide.
+        expect(attr(first(bg(2), A, 'lin'), 'ang')).toBe('2700000');
         // A 4:1 picture covering a 16:9 slide reaches 4 / (16 / 9) − 1 = 125% past it, half each side.
         const cover = first(first(bg(3), A, 'blipFill'), A, 'fillRect');
         expect([attr(cover, 'l'), attr(cover, 'r'), attr(cover, 't')]).toEqual(['-62500', '-62500', undefined]);

@@ -295,7 +295,7 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 'Rectangle',
                 el,
                 boxGeometry(el),
-                fillXml(parseFill(el.fill), opacity),
+                fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
             );
         case 'ellipse':
@@ -304,7 +304,7 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 'Ellipse',
                 el,
                 presetXml('ellipse'),
-                fillXml(parseFill(el.fill), opacity),
+                fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
             );
         case 'diamond': {
@@ -316,7 +316,7 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 'Diamond',
                 el,
                 geometry,
-                fillXml(parseFill(el.fill), opacity),
+                fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
             );
         }
@@ -331,7 +331,14 @@ function elementXml(el: VectorElement, slide: Slide): string {
             if (adj1 === adj2 && el.sweepAngle < 180) return '';
             const geometry =
                 el.sweepAngle >= 360 || adj1 === adj2 ? presetXml('ellipse') : presetXml('pie', { adj1, adj2 });
-            return spXml(slide, 'Pie', el, geometry, fillXml(parseFill(el.fill), opacity), lineXml(slide, el, opacity));
+            return spXml(
+                slide,
+                'Pie',
+                el,
+                geometry,
+                fillXml(parseFill(el.fill), opacity, el),
+                lineXml(slide, el, opacity),
+            );
         }
         case 'image':
             return pictureXml(el, slide, opacity);
@@ -364,7 +371,7 @@ function elementXml(el: VectorElement, slide: Slide): string {
                 'Text',
                 el,
                 geometry,
-                fillXml(parseFill(el.fill), opacity),
+                fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
                 text,
             );
@@ -449,9 +456,15 @@ function colorXml(color: string, opacity: number): string | null {
     return `<a:srgbClr val="${hex}">${alpha < 1 ? `<a:alpha val="${share(alpha)}"/>` : ''}</a:srgbClr>`;
 }
 
-// The paint alone: a hatched or rough fill exports solid. A gradient takes the stops the canvas samples, its CSS angle
-// (0 paints upward) turned to DrawingML's (0 paints rightward).
-function fillXml(paint: FillPaint, opacity: number): string {
+// The paint alone: a hatched or rough fill exports solid. A gradient takes the stops the canvas samples and its CSS
+// angle (0 paints upward) as DrawingML's (0 paints rightward). The canvas paints an element's in the box's own units
+// (gradientVector), so stretched with the box it runs at another angle; a background is CSS's, at its own. LibreOffice
+// ignores a:lin's scaled, so the angle is the stretched one.
+function fillXml(
+    paint: FillPaint,
+    opacity: number,
+    box: { width: number; height: number } = { width: 1, height: 1 },
+): string {
     if (paint.type === 'solid') {
         const color = colorXml(paint.color, opacity);
         return color ? `<a:solidFill>${color}</a:solidFill>` : '<a:noFill/>';
@@ -459,7 +472,9 @@ function fillXml(paint: FillPaint, opacity: number): string {
     const stops = gradientStops(paint.from, paint.to).map(
         (stop) => `<a:gs pos="${share(stop.offset)}">${colorXml(stop.color, stop.opacity * opacity) ?? ''}</a:gs>`,
     );
-    return `<a:gradFill rotWithShape="1"><a:gsLst>${stops.join('')}</a:gsLst><a:lin ang="${angle(paint.angle - 90)}" scaled="0"/></a:gradFill>`;
+    const css = (paint.angle * Math.PI) / 180;
+    const along = degrees(Math.atan2(-Math.cos(css) * box.width, Math.sin(css) * box.height));
+    return `<a:gradFill rotWithShape="1"><a:gsLst>${stops.join('')}</a:gsLst><a:lin ang="${angle(along)}" scaled="0"/></a:gradFill>`;
 }
 
 const DASHES: Record<StrokeStyle, string> = { solid: '', dashed: 'dash', dotted: 'dot' };
@@ -529,7 +544,7 @@ function linearXml(
         for (const p of points.slice(1)) path += `<a:lnTo>${pt(p)}</a:lnTo>`;
     }
     // Only a looping line fills, as on the canvas.
-    const fill = el.type === 'line' && isClosedPath(points) ? fillXml(parseFill(el.fill), opacity) : undefined;
+    const fill = el.type === 'line' && isClosedPath(points) ? fillXml(parseFill(el.fill), opacity, box) : undefined;
     const geometry = customXml(slide, box, fill ? `${path}<a:close/>` : path, fill !== undefined);
     return spXml(slide, 'Freeform', box, geometry, fill ?? '<a:noFill/>', line);
 }
@@ -550,7 +565,7 @@ function freedrawXml(el: VectorLinearElement, slide: Slide, opacity: number): st
             'Fill',
             box,
             customXml(slide, box, path, true),
-            fillXml(parseFill(el.fill), opacity),
+            fillXml(parseFill(el.fill), opacity, box),
             NO_LINE,
         );
     }
