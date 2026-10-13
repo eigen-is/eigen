@@ -50,4 +50,19 @@ describe('state/modules/selection — copy', () => {
         copy(ctx);
         expect(consumePendingCopy()?.plainText).toBe('Month\tNorth\nJan\t10\n"two\nlines"\t');
     });
+
+    // The Eigen text item is read as text, not parsed as TSV, so it carries no quotes; a quote inside a cell
+    // isn't quoted on text/plain either, as Google writes it.
+    test('the Eigen text item carries the cells unquoted', () => {
+        const ctx = contextFactory() as Context;
+        ctx.sheets[0].data = [
+            [{ v: '12" pizza', m: '12" pizza' }, { v: '"Hi"', m: '"Hi"' }, null, null],
+            [{ v: 'two\nlines', m: 'two\nlines' }, null, null, null],
+        ];
+        ctx.selections = [{ row: [0, 1], column: [0, 1], row_focus: 0, column_focus: 0 }];
+        copy(ctx);
+        const pending = consumePendingCopy();
+        expect(pending?.plainText).toBe('12" pizza\t"""Hi"""\n"two\nlines"\t');
+        expect(pending?.cellText).toBe('12" pizza\t"Hi"\ntwo\nlines\t');
+    });
 });

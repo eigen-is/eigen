@@ -1,8 +1,9 @@
-// A block of cells on the clipboard: TSV on text/plain, as Google Sheets and Excel write it (a cell
-// holding a tab, a newline or a quote is quoted, its quotes doubled), and a <table> on text/html.
+// A block of cells on the clipboard: TSV on text/plain, as Google Sheets writes it (a cell holding a tab, a
+// line break or a leading quote is quoted, its quotes doubled; a quote inside text stays as it is), and a
+// <table> on text/html.
 import { escapeHtml } from '../html';
 
-const NEEDS_QUOTES = /[\t\n\r"]/;
+const NEEDS_QUOTES = /[\t\n\r]|^"/;
 
 export function cellsToTsv(rows: string[][]): string {
     return rows
@@ -60,11 +61,23 @@ export function cellsToHtmlTable(rows: string[][]): string {
     return `<table>${body}</table>`;
 }
 
-// A spanned cell pads its row with empty cells, so the columns line up.
+// A spanned cell pads the cells it covers, across its row and down the rows below, so the columns line up.
 export function htmlTableCells(html: string): string[][] | null {
     const table = new DOMParser().parseFromString(html, 'text/html').querySelector('table');
     if (!table) return null;
-    return [...table.rows].map((row) =>
-        [...row.cells].flatMap((cell) => [cell.textContent?.trim() ?? '', ...Array(cell.colSpan - 1).fill('')]),
-    );
+    const rows: string[][] = [...table.rows].map(() => []);
+    for (const [r, row] of [...table.rows].entries()) {
+        let c = 0;
+        for (const cell of row.cells) {
+            while (rows[r][c] !== undefined) c += 1;
+            const below = Math.min(cell.rowSpan || 1, rows.length - r);
+            for (let i = 0; i < below; i += 1) {
+                for (let j = 0; j < cell.colSpan; j += 1) {
+                    rows[r + i][c + j] = i === 0 && j === 0 ? (cell.textContent?.trim() ?? '') : '';
+                }
+            }
+            c += cell.colSpan;
+        }
+    }
+    return rows.map((row) => Array.from(row, (cell) => cell ?? ''));
 }

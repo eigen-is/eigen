@@ -601,7 +601,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // a real table, and the custom MIME lands for same-origin reads.
                 const eigenData: EigenClipboardData = {
                     version: 1,
-                    items: [buildCellRangeClipboardItem(context, pending.plainText)],
+                    items: [buildCellRangeClipboardItem(context, pending.cellText)],
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },

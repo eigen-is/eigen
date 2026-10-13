@@ -1201,12 +1201,13 @@ export function copiedNumberText(cell: Cell): string | undefined {
     return String(Number(cell.v.toPrecision(15)));
 }
 
-// The range as the clipboard carries it: an HTML table with the cells' styles, and the display text as TSV.
+// The range as the clipboard carries it: an HTML table with the cells' styles, the display text as TSV, and
+// the same text unquoted for the Eigen text item, which a consumer reads as text rather than as TSV.
 export function rangeValueToClipboard(
     ctx: Context,
     sheetId: string,
     ranges?: Range,
-): { html: string; text: string } | null {
+): { html: string; text: string; cellText: string } | null {
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return null;
     const sheet = ctx.sheets[idx];
@@ -1377,6 +1378,7 @@ export function rangeValueToClipboard(
     return {
         html: `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`,
         text: cellsToTsv(text),
+        cellText: text.map((row) => row.join('\t')).join('\n'),
     };
 }
 
@@ -1439,7 +1441,7 @@ export function copy(ctx: Context) {
 
     if (cpdata) {
         ctx.iscopyself = true;
-        setPendingCopy(cpdata.html, cpdata.text);
+        setPendingCopy(cpdata.html, cpdata.text, cpdata.cellText);
     }
 }
 

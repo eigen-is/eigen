@@ -14,10 +14,14 @@ describe('cellsToTsv', () => {
         ).toBe('Month\tNorth\nJan\t10');
     });
 
-    test('a cell holding a tab, a newline or a quote is quoted, its quotes doubled', () => {
-        expect(cellsToTsv([['a\tb', 'two\nlines', 'say "hi"', 'plain']])).toBe(
-            '"a\tb"\t"two\nlines"\t"say ""hi"""\tplain',
+    test('a cell holding a tab, a newline or a leading quote is quoted, its quotes doubled', () => {
+        expect(cellsToTsv([['a\tb', 'two\nlines', 'cr\rhere', '"hi" she said', 'plain']])).toBe(
+            '"a\tb"\t"two\nlines"\t"cr\rhere"\t"""hi"" she said"\tplain',
         );
+    });
+
+    test('a quote inside a cell stays as it is, as Google writes it', () => {
+        expect(cellsToTsv([['12" pizza', 'say "hi"']])).toBe('12" pizza\tsay "hi"');
     });
 });
 
@@ -31,8 +35,8 @@ describe('parseTsv', () => {
 
     test('reads back what cellsToTsv writes', () => {
         const cells = [
-            ['a\tb', 'two\nlines', 'say "hi"'],
-            ['', 'x', ''],
+            ['a\tb', 'two\nlines', 'say "hi"', '"quoted"', '12" pizza'],
+            ['', 'x', '', '', ''],
         ];
         expect(parseTsv(cellsToTsv(cells))).toEqual(cells);
     });
@@ -57,6 +61,26 @@ describe('the HTML table', () => {
         expect(htmlTableCells(html)).toEqual([
             ['Q1', '', 'Q2'],
             ['1', '2', '3'],
+        ]);
+    });
+
+    test('a cell under a vertical merge keeps its column', () => {
+        const html =
+            '<table><tr><td rowspan="2">Q1</td><td>Jan</td><td>1</td></tr><tr><td>Feb</td><td>2</td></tr><tr><td>Q2</td><td>Apr</td><td>3</td></tr></table>';
+        expect(htmlTableCells(html)).toEqual([
+            ['Q1', 'Jan', '1'],
+            ['', 'Feb', '2'],
+            ['Q2', 'Apr', '3'],
+        ]);
+    });
+
+    test('a merge over rows and columns pads every cell it covers', () => {
+        const html =
+            '<table><tr><td rowspan="2" colspan="2">A</td><td>b</td></tr><tr><td>c</td></tr><tr><td>d</td><td>e</td><td>f</td></tr></table>';
+        expect(htmlTableCells(html)).toEqual([
+            ['A', '', 'b'],
+            ['', '', 'c'],
+            ['d', 'e', 'f'],
         ]);
     });
 
