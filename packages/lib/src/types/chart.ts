@@ -80,6 +80,20 @@ export type ChartLayoutInput = {
     formatTick: (value: number, step: number) => string;
 };
 
+// The box and paint every layout starts from, a message's included.
+export type ChartBox = Pick<ChartLayoutInput, 'id' | 'width' | 'height' | 'paint'>;
+
+// A chart outside a canvas, in a document or on a sheet: spec null for one that doesn't parse, and data the
+// sheet's resolved ranges or why it has none; inline data draws without it.
+export type ChartSpecSvgInput = {
+    id: string;
+    spec: ChartSpec | null;
+    data?: ChartData | ChartDataError;
+    width: number;
+    height: number;
+    formatTick?: ChartLayoutInput['formatTick'];
+};
+
 // The elements a chart draws with: rectangles, lines, marker ellipses and pie slices.
 export type ChartShape =
     | VectorRectangleElement

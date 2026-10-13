@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1715 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1719 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -520,7 +520,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (399)
+## Types (401)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -761,6 +761,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ServerArchiveUpload` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `CellRangeRef` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartBlanks` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartBox` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartDataError` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartLabel` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -770,6 +771,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChartSeriesStyle` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSpecSvgInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -924,7 +926,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (827)
+## Utilities & constants (829)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1062,6 +1064,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `FLAT_CHART_PAINT` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `formatTickValue` | `@workspace/lib/charts` | packages/lib/src/charts/ticks.ts |
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1644,6 +1647,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rectOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `renderChartSpecSvg` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/chart-render.ts |
 | `renormalize` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `replaceEigenMediaHrefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `rescalePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1683,7 +1687,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |

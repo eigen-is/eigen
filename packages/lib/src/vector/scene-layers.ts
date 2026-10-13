@@ -10,12 +10,9 @@ import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
 import { type Point, round } from './geometry';
 import { ELEMENT_KINDS, type RenderOutput } from './kinds';
+import { SVG_NS } from './kinds/render-utils';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
-
-// The SVG namespace, one spelling for every surface that writes it: the viewports this module emits,
-// the documents scene-to-svg serializes and the live <svg> nodes the canvas mounts.
-export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export type Layer = {
     id: string;
