@@ -1,7 +1,6 @@
 import { defaultDeleteFilter, defaultProtectedNodes, ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { PAGE_ROOT, pageRecord, readPageSetup } from '@workspace/lib/docs/eigendoc';
-import { useEffect, useState } from 'react';
 import * as Y from 'yjs';
 
 const PAGE_SETUP_ORIGIN = Symbol('page setup');
@@ -16,26 +15,19 @@ export function createDocUndoManager(doc: Y.Doc): Y.UndoManager {
     });
 }
 
-export function usePageSetup(doc: Y.Doc): PageSetup {
+// The dialog's OK, `from` being the page it opened on: its own undo step, sealed on both sides so it never merges
+// with the typing around it. A key the user left alone is not set, so a collaborator's change to it survives,
+// unless its stored value reads as another: the dialog showed the read, so that is what OK keeps.
+export function writePageSetup(doc: Y.Doc, undoManager: Y.UndoManager, from: PageSetup, to: PageSetup) {
     const page = doc.getMap(PAGE_ROOT);
-    const [setup, setSetup] = useState(() => readPageSetup(page.toJSON()));
-    useEffect(() => {
-        const read = () => setSetup(readPageSetup(page.toJSON()));
-        page.observe(read);
-        return () => page.unobserve(read);
-    }, [page]);
-    return setup;
-}
-
-// Its own undo step, sealed on both sides so it never merges with the typing around it. Only the keys whose value
-// changes are set, so a collaborator's change to another key survives and an unchanged page writes nothing.
-export function writePageSetup(doc: Y.Doc, undoManager: Y.UndoManager, setup: PageSetup) {
-    const page = doc.getMap(PAGE_ROOT);
-    const current: Record<string, number> = pageRecord(readPageSetup(page.toJSON()));
+    const opened: Record<string, number> = pageRecord(from);
+    const read: Record<string, number> = pageRecord(readPageSetup(page.toJSON()));
     undoManager.stopCapturing();
     doc.transact(() => {
-        for (const [key, value] of Object.entries(pageRecord(setup))) {
-            if (current[key] !== value) page.set(key, value);
+        for (const [key, value] of Object.entries(pageRecord(to))) {
+            const stored = page.get(key);
+            const untouched = value === opened[key] && (stored === undefined || stored === read[key]);
+            if (!untouched && stored !== value) page.set(key, value);
         }
     }, PAGE_SETUP_ORIGIN);
     undoManager.stopCapturing();

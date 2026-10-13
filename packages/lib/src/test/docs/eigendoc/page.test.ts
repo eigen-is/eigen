@@ -183,6 +183,25 @@ describe('the stored page', () => {
         expect(huge.width - huge.margin.left - huge.margin.right).toBeCloseTo(MIN_TEXT_MM, 9);
     });
 
+    test('a page read back reads the same again, however far its margins shrank', () => {
+        const lengths = [...PAPER_SIZES.flatMap(({ width, height }) => [width, height]), 50, 123.456, 558.8];
+        const margins = [0, 0.1, 12.7, 19.05, 40.9, 151.3, 200, 1e9];
+        for (const width of lengths) {
+            for (const marginLeft of margins) {
+                for (const marginRight of margins) {
+                    const once = readPageSetup({
+                        width,
+                        height: width,
+                        marginLeft,
+                        marginRight,
+                        marginTop: marginRight,
+                    });
+                    expect(readPageSetup(pageRecord(once))).toEqual(once);
+                }
+            }
+        }
+    });
+
     test('a landscape page is stored as a width above its height', () => {
         expect(readPageSetup({ width: 297, height: 210 })).toMatchObject({ width: 297, height: 210 });
         expect(readPageSetup({ width: 279.4, height: 215.9 })).toMatchObject({ width: 279.4, height: 215.9 });

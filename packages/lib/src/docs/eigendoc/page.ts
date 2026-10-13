@@ -2,6 +2,8 @@
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
 export type PageSetup = { width: number; height: number; margin: PageMargin };
 
+const A4 = { name: 'A4', width: 210, height: 297 } as const;
+
 // Google Docs' paper sizes in its order, portrait; a landscape page is the same paper turned.
 export const PAPER_SIZES = [
     { name: 'Letter', width: 215.9, height: 279.4 },
@@ -11,15 +13,13 @@ export const PAPER_SIZES = [
     { name: 'Executive', width: 184.15, height: 266.7 },
     { name: 'Folio', width: 215.9, height: 330.2 },
     { name: 'A3', width: 297, height: 420 },
-    { name: 'A4', width: 210, height: 297 },
+    A4,
     { name: 'A5', width: 148, height: 210 },
     { name: 'B4', width: 250, height: 353 },
     { name: 'B5', width: 176, height: 250 },
 ] as const;
 
 export type PaperSizeName = (typeof PAPER_SIZES)[number]['name'];
-
-const A4 = PAPER_SIZES[7];
 
 export const DEFAULT_PAGE_SETUP: PageSetup = {
     width: A4.width,
@@ -73,7 +73,9 @@ export function readPageSetup(record: Record<string, unknown>): PageSetup {
     const fit = (length: number, before: PageKey, after: PageKey) => {
         const a = Math.abs(mm(before));
         const b = Math.abs(mm(after));
-        const scale = Math.min(1, (length - MIN_TEXT_MM) / (a + b));
+        // A pair shrunk once sums to the limit only within rounding, so it must pass as it is or no read is final.
+        if (a + b <= length - MIN_TEXT_MM + 1e-6) return [a, b];
+        const scale = (length - MIN_TEXT_MM) / (a + b);
         return [a * scale, b * scale];
     };
     const width = paper('width');
