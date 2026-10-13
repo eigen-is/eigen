@@ -12,14 +12,19 @@ import {
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 
+// The caller (the importer) bounds the update's size and record count, and its media names must already be free
+// in the deck's media folder: the writer copies `mediaName` and background image names as given.
+
 // The update is built from an untrusted pptx, so it goes through the reader: a record a hostile peer
 // write would be healed or dropped to is healed or dropped here too, and only the clean scene is written.
 function readSlidesUpdate(update: Uint8Array): VectorScene {
     const scratch = new Y.Doc();
-    Y.applyUpdate(scratch, update);
-    const scene = readVectorFromDoc(scratch);
-    scratch.destroy();
-    return scene;
+    try {
+        Y.applyUpdate(scratch, update);
+        return readVectorFromDoc(scratch);
+    } finally {
+        scratch.destroy();
+    }
 }
 
 // Every record is new, under a fresh id, after the deck's topmost frame and element, in the update's
