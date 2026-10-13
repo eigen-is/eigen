@@ -1509,6 +1509,23 @@ describe('document transform (input bound)', () => {
             expect(error).toMatchObject({ status: 413, message });
         },
     );
+
+    test('a convert of a large file of another type is the 400 its type answers, not a 413', async () => {
+        const path = {
+            id: 'too-large',
+            parentId: 'parent',
+            name: 'large.txt',
+            size: MAX_DECOMPRESSED_BYTES + 1,
+        } as DrivePath;
+        const error = await convertToDocument(
+            {} as unknown as Drive,
+            {} as unknown as Mount,
+            path,
+            'eigensheets',
+            {} as unknown as User,
+        ).catch((reason: unknown) => reason);
+        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to sheets' });
+    });
 });
 
 describe('document transform (admission)', () => {

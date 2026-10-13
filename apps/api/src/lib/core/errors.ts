@@ -29,7 +29,7 @@ export function payloadTooLarge(): ApiError {
 
 // JSC's words, with or without a detail, for an allocation it refused with a throw rather than an abort. The catches
 // that would turn it into a bad file, a dropped part or a skipped blob let it through, so the transform process answers
-// it; DOCUMENT-TRANSFORMS.md § Out of memory is the job's names them and why the rest may swallow it.
+// it. DOCUMENT-TRANSFORMS.md § Out of memory is the job's, not the server's, names them and why the rest may swallow it.
 export function isOutOfMemory(error: unknown): error is RangeError {
     return error instanceof RangeError && error.message.startsWith('Out of memory');
 }

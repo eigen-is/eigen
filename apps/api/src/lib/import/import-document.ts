@@ -113,16 +113,20 @@ export async function convertToDocument(
     // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
     // is the costliest preparation here. run() rechecks authoritatively.
     documentTransformRunner.assertAdmissible('foreground');
-    assertWithinByteCap(sourcePath.size, targetType === 'eigensheets' ? 'xlsx' : 'docx');
+    const sheets = targetType === 'eigensheets';
+    if (sheets && !sourcePath.name.toLowerCase().endsWith('.xlsx')) {
+        throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
+    }
+    if (!sheets && !sourcePath.name.toLowerCase().endsWith('.docx')) {
+        throw new ApiError(400, 'Only .docx files can be converted to documents');
+    }
+    assertWithinByteCap(sourcePath.size, sheets ? 'xlsx' : 'docx');
 
     const bytes = await mount.readBytes(sourcePath.id);
     if (!bytes) throw new ApiError(404, 'File not found');
     const buffer = Buffer.from(bytes);
 
-    if (targetType === 'eigensheets') {
-        if (!sourcePath.name.toLowerCase().endsWith('.xlsx')) {
-            throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
-        }
+    if (sheets) {
         const snapshotJson = await importXlsxSnapshot(buffer);
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
@@ -131,9 +135,6 @@ export async function convertToDocument(
         return newPath;
     }
 
-    if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
-        throw new ApiError(400, 'Only .docx files can be converted to documents');
-    }
     const { update, images } = await importDocxUpdate(buffer);
     // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));

@@ -46,15 +46,17 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     const documentType = COLLAB_DOCUMENT_TYPES.get(containerMime);
     if (documentType) {
         // A document too large for the transform's memory indexes as nothing, as a vCard the decoder refuses does.
-        return runTransformToExtractedText(
-            mount,
-            path,
-            { kind: 'extract-text', documentType },
-            { priority: 'background' },
-        ).catch((err: unknown) => {
+        try {
+            return await runTransformToExtractedText(
+                mount,
+                path,
+                { kind: 'extract-text', documentType },
+                { priority: 'background' },
+            );
+        } catch (err) {
             if (err instanceof ApiError && err.status === 413) return '';
             throw err;
-        });
+        }
     }
     if (containerMime === DRIVE_MIME_STICKIES) {
         const content = await readStickiesContent(mount, path);
