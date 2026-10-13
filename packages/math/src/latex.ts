@@ -57,8 +57,7 @@ type Piece = { chars: string; style: Style } | { text: string; color: string | u
 
 const MATH: Style = { letters: 'italic', others: 'normal', color: undefined };
 
-// One token: the spaces before it, then a comment, a control word or space with the spaces TeX skips after it,
-// another control symbol, or one character.
+// Leading spaces, then a comment, a control word or space with TeX's skipped spaces, a control symbol or a character.
 const TOKEN =
     /([ \t\r\n]*)(?:(%[^\n]*\n?[ \t]*)|\\([A-Za-z]+)[ \t\r\n]*|\\([ \t\r\n])[ \t\r\n]*|\\(.)|([^ \t\r\n]))/suy;
 
@@ -71,8 +70,7 @@ const OPENERS: ReadonlyMap<string, string> = new Map(Array.from(CLOSERS, ([opene
 
 const describe = (token: Token) => (token.command ? `\\${token.text}` : token.text);
 
-// The tokens, and for each brace, \left and \begin the index of its partner and back, so a reader knows where an
-// argument or atom ends before it reads it.
+// Pairs each brace, \left and \begin with its partner, so a reader knows where an argument ends before reading it.
 function tokenize(latex: string): { tokens: Token[]; partners: number[] } {
     const invalid = latex.search(NOT_XML);
     if (invalid >= 0) throw new MathError('LaTeX holds a character an equation can’t', invalid);
@@ -198,8 +196,7 @@ class LatexReader {
         return index < this.#end && !this.#tokens[index].command && DIGIT.test(this.#tokens[index].text);
     }
 
-    // An argument is a group, a command with its own arguments (x_\text{max}; KaTeX and MathJax only in a script or
-    // \sqrt) or one character.
+    // A group, a command with its own arguments (x_\text{max}) or one character.
     #argumentEnd(index: number, nesting: number): number {
         if (this.#isChar(index, '{')) return this.#partners[index] + 1;
         return index < this.#end && this.#tokens[index].command ? this.#atomEnd(index, nesting + 1) : index + 1;
@@ -427,8 +424,7 @@ class LatexReader {
         else for (const piece of under) into.push(piece);
     }
 
-    // A function name takes the next atom as its body, unless that is a lone operator or space, so \sin(x) is the
-    // name and then (x). A number is whole, as A3 reads it, where TeX would take one digit: \sin 3.5.
+    // \sin(x) is the name, then (x): a lone operator or space is no body. A number is whole, as Word builds it.
     #body(style: Style, depth: number): MathRow | undefined {
         if (this.#pos >= this.#end || this.#isStop(this.#pos)) return undefined;
         const pieces: Piece[] = [];
@@ -819,8 +815,7 @@ function writeChar(char: string): string {
     return char === '^' || char === '~' ? `\\text{${TEXT_ESCAPES[char]}}` : char;
 }
 
-// The font a token needs where letters are italic, or upright inside \operatorname; undefined when it has the
-// default.
+// The font a token needs beyond the default (italic letters, or upright in \operatorname); undefined if none.
 function fontOf(node: MathToken, upright: boolean): MathVariant | undefined {
     if (node.kind !== 'identifier') return node.variant;
     if ([...node.text].length > 1) return upright ? undefined : 'normal';

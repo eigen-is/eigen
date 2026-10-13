@@ -34,9 +34,7 @@ type LatexRow =
     | { kind: 'end' }
     | { kind: 'noop' };
 
-// One row per command. A symbol gives a character, read by its Unicode class as an identifier or an operator.
-// `arguments` counts the braced arguments it takes, for the editor's `\name` + space; `\sqrt` and `\xrightarrow` also
-// take an optional [argument], `\operatorname` a star, and `\left`, `\middle`, `\right` and `\big` a delimiter.
+// `arguments` counts braced arguments; an optional [argument], a star or a `\left` delimiter comes on top.
 export type LatexCommand = Readonly<LatexRow & { arguments: number }>;
 
 const ARGUMENTS: Readonly<Record<LatexRow['kind'], number>> = {
@@ -420,7 +418,7 @@ const ROWS: [string, LatexRow][] = [
     ['right', { kind: 'right' }],
     ['begin', { kind: 'begin' }],
     ['end', { kind: 'end' }],
-    // Wikipedia's annotations start with {\displaystyle; the equation's node says whether it is displayed.
+    // Wikipedia's annotations start with {\displaystyle; whether it is displayed belongs to the document.
     ['displaystyle', { kind: 'noop' }],
     ['textstyle', { kind: 'noop' }],
     // A negative thin space: the tree has no negative width.

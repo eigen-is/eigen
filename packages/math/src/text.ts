@@ -2,8 +2,7 @@ import { toAlphanumeric } from './notation';
 import type { MathNode, MathRow } from './tree';
 import { checkedXml } from './xml';
 
-// Word's linear form, a small UnicodeMath subset on one line, for search, word count and text/plain. Nothing reads
-// it back.
+// Word's linear format, a small UnicodeMath subset on one line, as an equation's plain text. Nothing reads it back.
 
 const COMBINING_LINES = { over: '\u0305', under: '\u0332' } as const;
 // UnicodeMath's above and below operators.
@@ -13,8 +12,7 @@ const ROOTS: ReadonlyMap<string, string> = new Map([
     ['4', '∜'],
 ]);
 
-// An operand UnicodeMath would split is parenthesised: more than one node, (a+b)/2, or one that has operands of its
-// own, (a/b)^2.
+// Parenthesised where UnicodeMath would split the operand: more than one node, (a+b)/2, or a compound one, (a/b)^2.
 const COMPOUND: ReadonlySet<MathNode['kind']> = new Set(['fraction', 'scripts', 'nary', 'function']);
 
 function argument(row: MathRow): string {
@@ -77,8 +75,7 @@ function nodeText(node: MathNode): string {
     }
 }
 
-// UnicodeMath ends an operand at a space or an operator and drops the space, so a space keeps a compound node from
-// running into the next: x^2 4, never x^24.
+// UnicodeMath ends an operand at a space, which it drops, so a space parts a compound node from the next: x^2 4.
 function rowText(row: MathRow): string {
     return row
         .map((node, index) => {

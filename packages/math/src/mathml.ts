@@ -65,9 +65,7 @@ const isFlagged = (element: MathXmlElement | undefined, flag: string) =>
 
 const colorOf = (element: MathXmlElement) => hexColor(attribute(element, 'mathcolor'));
 
-// The three mrows that mean more than their children: an n-ary (a large operator from the table with scripts, or
-// one marked largeop, then its body), a fenced row (both ends marked fence) and a function application (name,
-// U+2061, body).
+// An n-ary (a scripted large operator, or one marked largeop), a fenced row or a function (name, U+2061, body).
 function patternOf(mrow: MathXmlElement): 'nary' | 'fenced' | 'function' | undefined {
     const children = elementsOf(mrow);
     const [first] = children;

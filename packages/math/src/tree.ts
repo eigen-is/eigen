@@ -62,10 +62,9 @@ export type MathToken = Extract<MathNode, { kind: 'identifier' | 'number' | 'ope
 
 export type MathBudget = { size: number };
 
-// The corpus's 177 equations nest at most 7 deep and reach size 316: about 4× and 13× headroom.
+// Far above what the equations of a local corpus reach, in depth and in size.
 const SIZE = 4_000;
-// writeLatex's costliest unit is an enclose drawing every line around an empty row, 101 characters for a node and its
-// row: so the LaTeX of any admitted tree fits, and reads back.
+// writeLatex's costliest unit, an enclose of every line around an empty row, writes 101 characters for 2 units.
 const LATEX_LENGTH = 51 * SIZE;
 
 export const MATH_LIMITS = {
@@ -74,8 +73,7 @@ export const MATH_LIMITS = {
     // Every node, row, table row and character of text counts one.
     size: SIZE,
     latexLength: LATEX_LENGTH,
-    // The largest admitted tree's MathML: a unit writes at most 64 characters (an menclose drawing every line), plus
-    // the longest LaTeX annotation with each character escaped to at most six (&quot;), plus the root and semantics.
+    // 64 characters a unit (an menclose of every line), the annotation escaped at six a character (&quot;), the root.
     mathmlLength: 64 * SIZE + 6 * LATEX_LENGTH + 512,
 } as const;
 
@@ -152,12 +150,10 @@ type StyledChar = { char: string; variant: MathVariant; color: string | undefine
 // The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
 const TEXT_EDGE: ReadonlySet<string> = new Set(' \u00A0');
 
-// What a row counts, so every reader counts the tree it makes: an optional slot only when it holds something, and an
-// equation's & as the cell it starts.
+// How a row counts: an optional slot only when it holds something, an equation's & as the cell it starts.
 export type RowSlot = 'required' | 'optional' | 'equation';
 
-// One row as a reader builds it. Characters wait until the next node, so tokens come out canonical whatever the
-// runs or elements they were spread over: a maximal number, an upright word, one styled letter at a time.
+// Characters wait for the next node, so tokens come out canonical however runs or elements split them.
 export class RowBuilder {
     readonly #row: MathRow = [];
     #chars: StyledChar[] = [];

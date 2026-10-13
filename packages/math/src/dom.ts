@@ -18,7 +18,7 @@ function isDomElement(node: DomElement | DomText): node is DomElement {
     return node.nodeType === ELEMENT_NODE;
 }
 
-// Children adapt once, when a reader first asks, so a reader's depth bound stops a deep DOM before the adapter recurses.
+// Children adapt once, on first read, so a reader's depth bound stops a deep DOM before the adapter recurses.
 export function fromDom(element: DomElement): MathXmlElement {
     let children: (string | MathXmlElement)[] | undefined;
     return {
