@@ -413,11 +413,12 @@ export function backgroundOf(inheritance: SlideInheritance, deck: DeckWalk): Bac
 function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk, lost: Lost): BackgroundFill | null {
     const blip = xmlChild(blipFill, A_NS, 'blip');
     const media = blipMedia(deck.pkg, owner, blip);
-    if (!blip || !media) {
+    const mediaName = media && deck.mediaName(media);
+    if (!blip || !mediaName) {
         if (blip) lost('images-unshown');
         return null;
     }
     const effects = xmlElements(blip).some((child) => child.ns === A_NS && child.local !== 'extLst');
     if (effects || xmlChild(blipFill, A_NS, 'tile')) lost('fills-simplified');
-    return { type: 'image', mediaName: deck.mediaName(media), fit: 'cover' };
+    return { type: 'image', mediaName, fit: 'cover' };
 }

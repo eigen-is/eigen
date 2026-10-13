@@ -57,8 +57,8 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
 
         // A random prefix per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
         const prefix = `pptx-${crypto.randomUUID()}`;
-        const media: { name: string; path: string; contentType: string }[] = [];
-        const names = new Map<string, string>();
+        const media: PptxMedia[] = [];
+        const names = new Map<string, string | undefined>();
         let mediaBytes = 0;
         let text = 0;
         const losses = new Map<CountedWarningCode, Set<XmlElement>>();
@@ -77,13 +77,20 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             },
             lost: (code, source) => losses.set(code, (losses.get(code) ?? new Set()).add(source)),
             mediaName: (part) => {
-                const known = names.get(part.path);
-                if (known) return known;
+                if (names.has(part.path)) return names.get(part.path);
                 mediaBytes += part.size;
-                if (media.length >= MAX_MEDIA_PARTS || mediaBytes > options.maxMediaBytes)
+                if (names.size >= MAX_MEDIA_PARTS || mediaBytes > options.maxMediaBytes)
                     throw new ApiError(413, PRESENTATION_TOO_LARGE);
-                const name = `${prefix}-image-${media.length + 1}.${part.extension}`;
-                media.push({ name, path: part.path, contentType: part.contentType });
+                // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
+                const data = pkg.readMedia(part.path);
+                const name = data && `${prefix}-image-${media.length + 1}.${part.extension}`;
+                // A view of the bytes read, not a copy of them.
+                if (data && name)
+                    media.push({
+                        name,
+                        contentType: part.contentType,
+                        data: Buffer.from(data.buffer, data.byteOffset, data.byteLength),
+                    });
                 names.set(part.path, name);
                 return name;
             },
@@ -98,15 +105,8 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             return [{ name: title, background: backgroundOf(slide, deck), elements }];
         });
 
-        const read = media.flatMap(({ name, path, contentType }): PptxMedia[] => {
-            const data = pkg.readMedia(path);
-            // A view of the bytes read, not a copy of them.
-            return data
-                ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
-                : [];
-        });
         const warnings: TransformWarning[] = [...losses].map(([code, sources]) => ({ code, count: sources.size }));
-        return { slides, media: read, warnings, slideSize };
+        return { slides, media, warnings, slideSize };
     } catch (error) {
         throw importError(error);
     }

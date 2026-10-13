@@ -5,6 +5,7 @@ import { MAX_GROUP_DEPTH } from '../../../lib/import/slides/shapes';
 import {
     box,
     buildPptx,
+    buildPptxWithBadPictures,
     cxn,
     graphicFrame,
     groupXfrm,
@@ -587,6 +588,20 @@ describe('pictures', () => {
         });
         expect(deck.media.map((media) => media.contentType)).toEqual(['image/svg+xml']);
         expect(String(deck.slides[0].elements[0].mediaName)).toEndWith('.svg');
+    });
+
+    test("a picture whose bytes don't read is a placeholder, counted for each shape showing it", () => {
+        const shapes = pic({ xfrm: box(0, 0, 10, 10), embed: 'rId2' }).repeat(2);
+        const deck = readPptx(
+            buildPptxWithBadPictures({ slides: [{ shapes, rels: rel('rId2', 'image', '../media/a.png') }], files }),
+            OPTIONS,
+        );
+        expect(deck.media).toEqual([]);
+        expect(deck.slides[0].elements.map((found) => [found.type, found.html, found.mediaName])).toEqual([
+            ['richtext', '<p>Picture not imported</p>', undefined],
+            ['richtext', '<p>Picture not imported</p>', undefined],
+        ]);
+        expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
 
     test('a picture shown twice is one media file; a linked picture is a placeholder; an empty picture placeholder nothing', () => {

@@ -82,8 +82,8 @@ export type DeckWalk = {
     decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
     // Charges paragraphs and their children before they are read: a run costs however little it shows.
     read(nodes: number): void;
-    // A picture part's media name, the first time a slide shows it.
-    mediaName(part: MediaPart): string;
+    // A picture part's media name, its bytes read the first time a slide shows it; none when they don't read.
+    mediaName(part: MediaPart): string | undefined;
     // Counts what the import leaves out or draws simpler, once for the shape of the file it is in (or the background),
     // however many slides show that shape.
     lost(code: CountedWarningCode, source: XmlElement): void;

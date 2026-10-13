@@ -510,9 +510,10 @@ function readPicture(
     const blipFill = xmlChild(shape, P_NS, 'blipFill');
     const blip = blipFill && xmlChild(blipFill, A_NS, 'blip');
     const part = blipMedia(walk.deck.pkg, walk.part, blip);
-    if (!part) {
+    const mediaName = part && walk.deck.mediaName(part);
+    if (!mediaName) {
         // A blip naming no picture is an empty placeholder's prompt, not a picture.
-        if (blip && (xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link')))
+        if (part || (blip && (xmlAttr(blip, R_NS, 'embed') || xmlAttr(blip, R_NS, 'link'))))
             placeholderBox(walk, shape, 'picture', box);
         return;
     }
@@ -523,7 +524,7 @@ function readPicture(
         type: 'image',
         ...box,
         ...strokeOf(lines, walk, lost),
-        mediaName: walk.deck.mediaName(part),
+        mediaName,
         objectFit: 'fill',
         // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.
         corners: chain.find((link) => link.geometry !== undefined)?.geometry === 'roundRect' ? 'curved' : 'straight',

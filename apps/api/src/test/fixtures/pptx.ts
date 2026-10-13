@@ -215,6 +215,16 @@ export function buildPptx(fixture: PptxFixture): Uint8Array {
     return zipParts(pptxParts(fixture));
 }
 
+// A package whose pictures are stored, each byte of PIXEL_PNG's flipped past its signature: their CRC no longer matches.
+export function buildPptxWithBadPictures(fixture: PptxFixture): Uint8Array {
+    const parts = pptxParts(fixture);
+    const bytes = writeZip(Object.entries(parts).map(([name, data]) => ({ name, data, store: name.endsWith('.png') })));
+    const head = Buffer.from(PIXEL_PNG.subarray(0, 16));
+    for (let at = Buffer.from(bytes).indexOf(head); at >= 0; at = Buffer.from(bytes).indexOf(head, at + 1))
+        bytes[at + 40] ^= 0xff;
+    return bytes;
+}
+
 // The smallest PNG: one transparent pixel.
 export const PIXEL_PNG = Uint8Array.from(
     Buffer.from(

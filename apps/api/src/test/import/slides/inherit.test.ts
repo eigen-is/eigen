@@ -4,6 +4,7 @@ import { readPptx } from '../../../lib/import/slides/from-pptx';
 import {
     box,
     buildPptx,
+    buildPptxWithBadPictures,
     PIXEL_PNG,
     type PptxFixture,
     para,
@@ -315,6 +316,25 @@ describe('backgrounds', () => {
         });
         expect(recoloured.slides[0].background).toMatchObject({ type: 'image', fit: 'cover' });
         expect(recoloured.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+    });
+
+    test("a background picture whose bytes don't read is none, and counted", () => {
+        const deck = readPptx(
+            buildPptxWithBadPictures({
+                masters: [
+                    {
+                        bg: '<p:bgPr><a:blipFill><a:blip r:embed="rId7"/></a:blipFill></p:bgPr>',
+                        rels: rel('rId7', 'image', '../media/bg.png'),
+                    },
+                ],
+                slides: [{}, {}],
+                files: { 'ppt/media/bg.png': PIXEL_PNG },
+            }),
+            OPTIONS,
+        );
+        expect(deck.slides.map((slide) => slide.background)).toEqual([null, null]);
+        expect(deck.media).toEqual([]);
+        expect(deck.warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
     });
 
     test("a background picture the deck can't show is none, and counted; a bgRef's picture is named by the theme", () => {
