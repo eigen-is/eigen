@@ -33,8 +33,8 @@ export function collectStickiesText(content: StickiesContent, cap: number): stri
     return parts.join(' ');
 }
 
-// Body text for one indexable path, capped at ~100 KB. Dispatch by container mime: the three heavy
-// collab types extract inside the transform Worker (extract-render.ts, at background
+// Body text for one indexable path, capped at ~100 KB. Dispatch by container mime: the heavy
+// collab types extract inside the transform process (extract-render.ts, at background
 // priority — nobody waits on a reindex), stickies/chat/plain files are light reads that stay
 // here. The drain loop catches and logs, so a refused or failed extract just leaves the row
 // dirty for a later drain — there is deliberately no main-thread fallback.
@@ -45,12 +45,18 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     const containerMime = isDocumentType(path.type) ? path.mimeType : '';
     const documentType = COLLAB_DOCUMENT_TYPES.get(containerMime);
     if (documentType) {
-        return runTransformToExtractedText(
-            mount,
-            path,
-            { kind: 'extract-text', documentType },
-            { priority: 'background' },
-        );
+        // A document too large for the transform's memory indexes as nothing, as a vCard the decoder refuses does.
+        try {
+            return await runTransformToExtractedText(
+                mount,
+                path,
+                { kind: 'extract-text', documentType },
+                { priority: 'background' },
+            );
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 413) return '';
+            throw err;
+        }
     }
     if (containerMime === DRIVE_MIME_STICKIES) {
         const content = await readStickiesContent(mount, path);
@@ -65,7 +71,7 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
 }
 
 // A .vcf indexes by the contacts it holds: its raw body is mostly base64 photo, and a name folded across
-// physical lines isn't there to be matched. The cards come from the same Worker job the preview runs
+// physical lines isn't there to be matched. The cards come from the same transform job the preview runs
 // (PREVIEWS.md), so they carry that job's ceilings — a file over the import ceiling, and a file the
 // decoder refuses, index as nothing rather than staying dirty for every later drain.
 async function extractVCardText(mount: Mount, path: DrivePath): Promise<string> {

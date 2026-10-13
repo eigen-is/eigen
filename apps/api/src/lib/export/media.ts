@@ -8,9 +8,9 @@ import { generateImagePreview } from '../shared/thumbnails';
 import { encodeDocxImage, WEBP_SCAN_BYTES } from './doc/docx-image';
 
 // Main-thread media preparation for doc/slides exports: the screen-res preview of
-// every media child, as standalone buffers the Worker takes ownership of (an SVG's
+// every media child, as exact buffers the transform process gets a copy of (an SVG's
 // sanitizing, base64 and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail
-// path behind getScreenPreview — stays here: a document Worker never receives a Mount
+// path behind getScreenPreview — stays here: the transform never receives a Mount
 // and never spawns thumbnail Workers. A docx takes PNG or JPEG from the source file
 // instead, since Word for the web and Google Docs show no WebP, with the thumbnail
 // Worker's width and height for its extent.
@@ -40,8 +40,8 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath): Promis
     // Empty embedUrl: only the redirect branch reads it, and the next line drops redirects.
     const result = await getScreenPreview(mount, file, '');
     if (result?.type !== 'image') return null;
-    // The preview Buffer can be a view over a larger pool, and a transfer hands over the WHOLE backing buffer — copy
-    // into an exact standalone one first. An SVG is the file's own bytes, its siblings inlined: the transform Worker
+    // The preview Buffer can be a view over a larger pool, and IPC serializes the WHOLE backing buffer — copy into an
+    // exact standalone one first. An SVG is the file's own bytes, its siblings inlined: the transform process
     // sanitizes them (sanitizeExportMedia), seconds of jsdom for a big drawing.
     return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
 }

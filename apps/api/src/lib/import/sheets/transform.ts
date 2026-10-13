@@ -1,11 +1,11 @@
 import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import { ApiError } from '../../core/errors';
+import { ApiError, isOutOfMemory } from '../../core/errors';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
-import { xlsxToSheets } from './from-xlsx';
+import { NOT_AN_XLSX, xlsxToSheets } from './from-xlsx';
 
 // Uploaded xlsx bytes → the lean snapshot JSON the main thread commits. Runs
-// inside the transform Worker (worker.ts owns execution; the conversion logic
+// inside the transform process (child.ts owns execution; the conversion logic
 // stays here in import/, pure over the buffer). The zip/cell guards ride along
 // inside xlsxToSheets with their exact 413s, and a recalc failure comes back as a
 // warning — an import must never fail because recalc hiccuped.
@@ -22,8 +22,8 @@ async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
     try {
         return await xlsxToSheets(buffer);
     } catch (err) {
-        if (err instanceof ApiError) throw err;
-        throw new ApiError(400, 'Not a valid xlsx file');
+        if (err instanceof ApiError || isOutOfMemory(err)) throw err;
+        throw new ApiError(400, NOT_AN_XLSX);
     }
 }
 

@@ -17,6 +17,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 ### Fixed
 
 - **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
+- **Server** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. An import says Document too large or Spreadsheet too large
 
 ## [0.3.3] - 2026-10-13
 

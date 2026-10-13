@@ -37,6 +37,7 @@ import { ApiError } from '../../core/errors';
 import { A_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS, SML_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
+import { SPREADSHEET_TOO_LARGE } from '../messages';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -73,6 +74,8 @@ type ThemePalette = string[];
 // the cells the parts hold count before exceljs loads (tallySheet), the grid they span after. The byte cap catches a bomb
 // of few cells.
 export const MAX_CELLS = 4_000_000;
+
+export const NOT_AN_XLSX = 'Not a valid xlsx file';
 
 // The pixels of a column width unit in a file whose default font isn't Eigen's: Calibri 11's 7 px digit plus padding,
 // near enough. A width counts the file's own default font, so only Eigen's exports convert through Inter's digit.
@@ -130,7 +133,7 @@ function repackXlsx(buffer: Buffer): Buffer {
         return Buffer.from(packed.buffer, packed.byteOffset, packed.byteLength);
     } catch (error) {
         if (!(error instanceof ZipError)) throw error;
-        const message = error.status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file';
+        const message = error.status === 413 ? SPREADSHEET_TOO_LARGE : NOT_AN_XLSX;
         throw new ApiError(error.status, message, { cause: error });
     }
 }
@@ -239,7 +242,7 @@ function countTags(bytes: Buffer, open: Buffer, limit: number): number {
 function canonicalPart(bytes: Buffer): Buffer {
     // XML 1.1 reads a NEL or U+2028 in a value as a space too, and Excel writes 1.0 only.
     const version = XML_VERSION.exec(bytes.toString('latin1', 0, 128))?.[2];
-    if (version !== undefined && version !== '1.0') throw new ApiError(400, 'Not a valid xlsx file');
+    if (version !== undefined && version !== '1.0') throw new ApiError(400, NOT_AN_XLSX);
     return withoutDefinedNames(withSpacedTags(bytes));
 }
 
@@ -284,7 +287,7 @@ function textLength(value: unknown): number {
 }
 
 function tooLarge(): ApiError {
-    return new ApiError(413, 'Spreadsheet too large');
+    return new ApiError(413, SPREADSHEET_TOO_LARGE);
 }
 
 function tooManyCells(): ApiError {
