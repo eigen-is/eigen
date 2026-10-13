@@ -13,6 +13,7 @@ import type {
     ExportTransformJob,
     ExtractTextJob,
     SheetsImportJob,
+    SlidesImportJob,
     TransformResultFor,
     TransformWarning,
 } from './protocol';
@@ -173,7 +174,7 @@ export async function runBytesTransformToText(
 
 // Imports carry uploaded bytes instead of a captured document, and hand back what
 // the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
-// for sheets, a ready Yjs update plus extracted media for documents.
+// for sheets, a ready Yjs update plus extracted media for documents and decks.
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
     data: ArrayBuffer,
@@ -184,7 +185,7 @@ export async function runImportToSnapshotJson(
 }
 
 export async function runImportToDocumentUpdate(
-    job: DocImportJob,
+    job: DocImportJob | SlidesImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<DocImportWorkerResult> {

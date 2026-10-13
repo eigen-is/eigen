@@ -1,0 +1,65 @@
+import {
+    DEFAULT_SCENE_META,
+    generateNKeysBetween,
+    newFrameId,
+    serializeBackgroundFill,
+    writeElementInDoc,
+    writeFrameInDoc,
+} from '@workspace/lib/vector';
+import * as Y from 'yjs';
+import {
+    type DocImportWorkerResult,
+    type SlidesImportJob,
+    type TransformWarning,
+    toTransferableBuffer,
+} from '../../document/transform/protocol';
+import { importError, readPptx } from './from-pptx';
+import { PPTX_STYLE } from './shapes';
+
+// Runs in the transform process: the reader and the Yjs encoding both stay off the event loop. The main thread
+// appends the update through document/slides.ts, which reads it back through the canvas reader, and writes the media.
+export function importPptxToSlidesUpdate(
+    data: ArrayBuffer,
+    job: Pick<SlidesImportJob, 'frame' | 'maxMediaBytes'>,
+): DocImportWorkerResult & { warnings: TransformWarning[] } {
+    const { slides, media, warnings } = readPptx(Buffer.from(data), { ...job.frame, maxMediaBytes: job.maxMediaBytes });
+    let update: Uint8Array;
+    try {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const frameKeys = generateNKeysBetween(null, null, slides.length);
+            const elementKeys = generateNKeysBetween(
+                null,
+                null,
+                slides.reduce((sum, slide) => sum + slide.elements.length, 0),
+            );
+            let next = 0;
+            for (const [i, slide] of slides.entries()) {
+                const frameId = newFrameId();
+                writeFrameInDoc(doc, {
+                    id: frameId,
+                    index: frameKeys[i],
+                    name: slide.name,
+                    ...(slide.background && { background: serializeBackgroundFill(slide.background) }),
+                });
+                for (const element of slide.elements)
+                    writeElementInDoc(doc, { ...element, frameId }, elementKeys[next++], PPTX_STYLE);
+            }
+            // What Convert gives the new deck beside its slides.
+            doc.getMap('meta').set('background', DEFAULT_SCENE_META.background);
+        });
+        update = Y.encodeStateAsUpdate(doc);
+        doc.destroy();
+    } catch (error) {
+        throw importError(error);
+    }
+    return {
+        update: toTransferableBuffer(update),
+        images: media.map((image) => ({
+            name: image.name,
+            contentType: image.contentType,
+            data: toTransferableBuffer(image.data),
+        })),
+        warnings,
+    };
+}

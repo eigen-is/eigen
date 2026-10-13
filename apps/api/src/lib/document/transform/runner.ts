@@ -150,6 +150,11 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'blocks-flattened': (w) => typeof w['count'] === 'number',
     'images-unshown': (w) => typeof w['count'] === 'number',
     'graphics-dropped': (w) => typeof w['count'] === 'number',
+    'tables-dropped': (w) => typeof w['count'] === 'number',
+    'charts-dropped': (w) => typeof w['count'] === 'number',
+    'diagrams-dropped': (w) => typeof w['count'] === 'number',
+    'objects-dropped': (w) => typeof w['count'] === 'number',
+    'shapes-simplified': (w) => typeof w['count'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {
