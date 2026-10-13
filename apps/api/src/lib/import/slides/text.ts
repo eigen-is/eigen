@@ -18,7 +18,8 @@ import { fillIn, paintOf, type SlideTheme } from './inherit';
 import { alternative, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
-// font, per-paragraph size and indents, vertical text, columns, superscript, subscript and highlight.
+// font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
+// highlight.
 
 // What a text body inherits from, nearest first (SPEC X-D4).
 export type TextSource = {
@@ -192,6 +193,33 @@ export function richTextOf(
                 : SINGLE_LINE * Math.max(0, (spacing ?? 1) - lineReduction),
         padding: ((inset('lIns') + inset('rIns')) / 2) * pxPerEmu,
     };
+}
+
+// a:bodyPr's vert as the turn the text takes over its shape's.
+const VERTICAL_TURNS = new Map([
+    ['horz', 0],
+    ['vert', 90],
+    ['vert270', 270],
+]);
+// East Asian and Mongolian vertical text turn Latin script as vert does; WordArt's stacked letters are drawn across.
+const APPROXIMATE_TURNS = new Map([
+    ['eaVert', 90],
+    ['mongolianVert', 90],
+    ['wordArtVert', 0],
+    ['wordArtVertRtl', 0],
+]);
+
+export function verticalTurnOf(source: TextSource, lost: Lost): number {
+    const bodyPr = [source.body, ...source.inherited]
+        .flatMap((body) => xmlChild(body, A_NS, 'bodyPr') ?? [])
+        .find((found) => xmlAttr(found, '', 'vert') !== undefined);
+    const vert = (bodyPr && xmlAttr(bodyPr, '', 'vert')) ?? 'horz';
+    const approximate = APPROXIMATE_TURNS.get(vert);
+    if (bodyPr && approximate !== undefined) {
+        lost('text-simplified', bodyPr);
+        return approximate;
+    }
+    return VERTICAL_TURNS.get(vert) ?? 0;
 }
 
 type RunContext = {

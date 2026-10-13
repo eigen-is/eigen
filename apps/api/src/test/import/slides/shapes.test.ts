@@ -271,6 +271,43 @@ describe('kinds', () => {
         expect(JSON.parse(String(onTop.fill))).toMatchObject({ color: 'transparent' });
     });
 
+    test('vertical text turns its box a further quarter turn, or three, its sides swapped about the centre', () => {
+        const turned = (vert: string, geom = 'rect', layout = '') => {
+            const shape = (bodyPr: string, text?: string) =>
+                sp({
+                    ph: '<p:ph type="body" idx="1"/>',
+                    xfrm: box(100, 100, 400, 100, ' rot="600000"'),
+                    geom,
+                    spPr: FILLED,
+                    text,
+                }).replace('<a:bodyPr/>', `<a:bodyPr${bodyPr}/>`);
+            return deckOf({
+                layouts: [{ shapes: shape(layout, '<a:p/>') }],
+                slides: [{ shapes: shape(vert, para('Up')) }],
+            });
+        };
+        const up = turned(' vert="vert270"').slides[0].elements[0];
+        expect(up).toMatchObject({ type: 'richtext', html: '<p>Up</p>' });
+        expectBox(up, 250, -50, 100, 400);
+        expect(up?.angle).toBeCloseTo(280, 6);
+        expect(turned(' vert="vert"').slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
+        expect(turned('', 'rect', ' vert="vert"').slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
+        // A shape keeps its own box, its text box on top turned.
+        const [ellipse, text] = turned(' vert="vert"', 'ellipse').slides[0].elements;
+        expectBox(ellipse, 100, 100, 400, 100);
+        expect(ellipse?.angle).toBeCloseTo(10, 6);
+        expectBox(text, 250, -50, 100, 400);
+        expect(turned(' vert="horz"').slides[0].elements[0]?.angle).toBeCloseTo(10, 6);
+        expect(turned(' vert="vert"').warnings).toEqual([]);
+        // East Asian text turns as Latin script does in it; WordArt's stacked letters lie across. Both count.
+        const eastAsian = turned(' vert="eaVert"');
+        expect(eastAsian.slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
+        expect(eastAsian.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+        const stacked = turned(' vert="wordArtVert"');
+        expect(stacked.slides[0].elements[0]?.angle).toBeCloseTo(10, 6);
+        expect(stacked.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
     test('another preset or a custGeom keeps its text, drops its outline, and says so', () => {
         const deck = deckOf({
             slides: [

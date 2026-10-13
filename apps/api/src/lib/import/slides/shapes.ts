@@ -34,7 +34,7 @@ import {
     styleLine,
 } from './inherit';
 import { alternative, blipMedia, type DeckWalk, type Lost, type Part } from './package';
-import { emu, richTextOf } from './text';
+import { emu, richTextOf, verticalTurnOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
@@ -341,22 +341,17 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const geometry = (shaped && geometryOf(shaped)) ?? 'rect';
     const body = xmlChild(shape, P_NS, 'txBody');
     const lines = linesOf(spPrs, walk, style);
-    const text =
-        body &&
-        richTextOf(
-            {
-                body,
-                inherited: inherited.flatMap((placeholder) => xmlChild(placeholder.shape, P_NS, 'txBody') ?? []),
-                listStyle: listStyleOf(own, walk.inheritance, walk.presentation),
-                style,
-                rels: walk.part.rels,
-            },
-            theme,
-            walk.deck.scale,
-            walk.deck.lost,
-        );
+    const source = body && {
+        body,
+        inherited: inherited.flatMap((placeholder) => xmlChild(placeholder.shape, P_NS, 'txBody') ?? []),
+        listStyle: listStyleOf(own, walk.inheritance, walk.presentation),
+        style,
+        rels: walk.part.rels,
+    };
+    const text = source && richTextOf(source, theme, walk.deck.scale, walk.deck.lost);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
+    const textBox = text && source ? turned(box, verticalTurnOf(source, walk.deck.lost)) : box;
     // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint.
     const lost = (drawn: Set<string>) => (drawn.has(geometry) ? walk.deck.lost : UNDRAWN);
     const paint = {
@@ -369,7 +364,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
         text &&
         push(walk, {
             type: 'richtext',
-            ...box,
+            ...textBox,
             ...text,
             ...NO_STROKE,
             fill: TRANSPARENT_FILL_JSON,
@@ -381,7 +376,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     };
     switch (geometry) {
         case 'rect':
-            if (text) push(walk, { type: 'richtext', ...box, ...text, ...paint, corners: 'straight' });
+            if (text) push(walk, { type: 'richtext', ...textBox, ...text, ...paint, corners: 'straight' });
             else if (painted) push(walk, { type: 'rectangle', ...box, ...paint, corners: 'straight' });
             break;
         case 'roundRect':
@@ -406,6 +401,14 @@ function readShape(walk: Walk, leaf: Leaf): void {
             if (painted) walk.deck.lost('shapes-simplified', shape);
             textOnTop();
     }
+}
+
+// A box turned about its centre: a quarter turn, or three, swaps its sides.
+function turned(box: Box, turn: number): Box {
+    if (turn === 0) return box;
+    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+    const [width, height] = turn % 180 === 0 ? [box.width, box.height] : [box.height, box.width];
+    return { x: cx - width / 2, y: cy - height / 2, width, height, angle: normalizeAngle(box.angle + turn) };
 }
 
 const OUTLINED = new Set(['rect', 'roundRect', 'ellipse', 'diamond', 'pie']);
