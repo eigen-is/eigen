@@ -365,6 +365,12 @@ describe('readVectorFromDoc', () => {
             ['an <a> in an <a>', '<p><a href="https://a">a<a href="https://b">b</a></a></p>', 'ab'],
             ['an <li> outside a list', '<li>x</li>', 'x'],
             ['an upper-case tag', '<P>x</P>', 'x'],
+            [
+                'more attributes than the editor writes',
+                `<p ${Array.from({ length: 9 }, (_, i) => `a${i}`).join(' ')}>x</p>`,
+                'x',
+            ],
+            ['a trailing bare <', 'x < y', 'x < y'],
         ])('%s flattens', (_, html, text) => {
             expect(readHtml(html)).toBe(`<p>${escapeHtml(text)}</p>`);
         });
@@ -375,6 +381,18 @@ describe('readVectorFromDoc', () => {
             expect(read).toStartWith('<p>&quot;&lt;img src=x onerror=alert(1)&gt;');
             expect(read).not.toContain('<img');
             expect(readHtml(read)).toBe(read);
+        });
+
+        test('a bare < after the markup keeps its text', () => {
+            expect(readHtml('<p>hi</p>tail < more')).toBe('<p>hi</p><p>tail &lt; more</p>');
+        });
+
+        // Distinct attribute names cost jsdom's dedupe quadratically: 10k on one <p> fit the byte cap and held it ~1 s per box.
+        test('a tag with thousands of attributes reads in linear time, flattened', () => {
+            const attrs = Array.from({ length: 10_000 }, (_, i) => ` a${i.toString(36).padStart(4, '0')}`).join('');
+            const start = performance.now();
+            expect(readHtml(`<p${attrs}>x</p>`)).toBe('<p>x</p>');
+            expect(performance.now() - start).toBeLessThan(200);
         });
 
         test('a body the byte cap tears mid-tag keeps its markup', () => {

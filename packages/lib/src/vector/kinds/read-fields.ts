@@ -35,9 +35,11 @@ const EDITOR_TAGS = new Set(LIGHT_EDITOR_TAGS);
 // The editor tags whose start tag makes the parser close an open <p>.
 const CLOSES_P = new Set<string>(LIGHT_EDITOR_BLOCK_TAGS);
 
-// A start tag with plain attributes, an end tag, or text. No comment, doctype or bare `<` matches.
+// A start tag with at most 8 plain attributes, an end tag, or text. No comment, doctype or bare `<` matches.
+// The editor writes 3 at most, on <a>; jsdom dedupes a tag's attributes in quadratic time, so 10k distinct
+// names on one <p> held it ~1 s.
 const HTML_TOKEN =
-    /<([a-z]+)(?:[\t\n\f\r ]+[a-zA-Z_:][-\w:.]*(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r "'=<>`]+))?)*[\t\n\f\r ]*\/?>|<\/([a-z]+)[\t\n\f\r ]*>|[^<]+/y;
+    /<([a-z]+)(?:[\t\n\f\r ]+[a-zA-Z_:][-\w:.]*(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\t\n\f\r "'=<>`]+))?){0,8}[\t\n\f\r ]*\/?>|<\/([a-z]+)[\t\n\f\r ]*>|[^<]+/y;
 
 // An arrow's label is plain text, and both of its dimensions derive from it: the height is the line
 // count times the line height (so a 200k-line label would union a 5M-unit box into the shared viewBox)
@@ -143,12 +145,11 @@ export function fillField(v: unknown): string {
 }
 
 // A body that isn't editor-shaped is flattened whole, one paragraph per line of its text, so no parser
-// builds more than the scan counted. The byte cap can tear a tag at the end of either; it goes.
+// builds more than the scan counted. Where the byte cap tears a tag at the end of either, it goes.
 export function htmlField(v: unknown): string {
-    const html = dropTornTag(capBytes(cleanStr(v, ''), MAX_HTML_BYTES));
+    const html = capHtmlBytes(cleanStr(v, ''));
     if (isEditorShaped(html)) return html;
-    const paragraphs = textToParagraphHtml(stripTagsServer(html).replace(/\n+/g, '\n'));
-    return dropTornTag(capBytes(paragraphs, MAX_HTML_BYTES));
+    return capHtmlBytes(textToParagraphHtml(stripTagsServer(html).replace(/\n+/g, '\n')));
 }
 
 // Editor-shaped: markup every HTML parser builds exactly as written, closing nothing before the body does,
@@ -177,9 +178,12 @@ function isEditorShaped(html: string): boolean {
     return true;
 }
 
-function dropTornTag(html: string): string {
-    const lt = html.lastIndexOf('<');
-    return lt > html.lastIndexOf('>') ? html.slice(0, lt) : html;
+// Only a truncated body loses its trailing `<…`: an untouched one keeps a bare `<` as text.
+function capHtmlBytes(html: string): string {
+    const capped = capBytes(html, MAX_HTML_BYTES);
+    if (capped === html) return html;
+    const lt = capped.lastIndexOf('<');
+    return lt > capped.lastIndexOf('>') ? capped.slice(0, lt) : capped;
 }
 
 // Newlines normalize here, not at the consumers, so the line cap and the label's height math count
