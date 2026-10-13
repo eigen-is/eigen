@@ -14,7 +14,7 @@ type PageSetupDialogProps = {
     onOpenChange: (open: boolean) => void;
     setup: PageSetup;
     canWrite: boolean;
-    onSetupChange: (setup: PageSetup) => void;
+    onSetupChange: (from: PageSetup, to: PageSetup) => void;
 };
 
 const MARGIN_FIELDS: { side: keyof PageMargin; label: string }[] = [
@@ -55,7 +55,7 @@ export function PageSetupDialog({ open, onOpenChange, setup, canWrite, onSetupCh
 type PageSetupFormProps = {
     setup: PageSetup;
     canWrite: boolean;
-    onSubmit: (setup: PageSetup) => void;
+    onSubmit: (from: PageSetup, to: PageSetup) => void;
     onDone: () => void;
 };
 
@@ -74,7 +74,8 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone }: PageSetupFormProps
     // An untouched field keeps the stored size, not its rounding.
     const margin = (side: keyof PageMargin) => {
         if (text[side] === cmText(initial.margin[side])) return initial.margin[side];
-        return text[side].trim() === '' ? Number.NaN : Number(text[side]) * 10;
+        // To 0.01 mm, or a typed 1.91 cm is stored as 19.099999999999998 mm.
+        return text[side].trim() === '' ? Number.NaN : Math.round(Number(text[side]) * 1000) / 100;
     };
     const candidate: PageSetup = {
         ...paper,
@@ -97,7 +98,7 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone }: PageSetupFormProps
             onSubmit={(e) => {
                 e.preventDefault();
                 if (!valid) return;
-                onSubmit(candidate);
+                onSubmit(initial, candidate);
                 onDone();
             }}
         >

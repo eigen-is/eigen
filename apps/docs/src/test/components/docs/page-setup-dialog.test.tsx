@@ -8,8 +8,12 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { DEFAULT_PAGE_SETUP } = await import('@workspace/lib/docs/eigendoc');
+const Y = await import('yjs');
+const { DEFAULT_PAGE_SETUP, PAGE_ROOT, PAPER_SIZES, pageRecord, readPageSetup } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
 const { PageSetupDialog } = await import('../../../components/docs/page-setup-dialog');
+const { createDocUndoManager, writePageSetup } = await import('../../../components/docs/page-setup');
 
 function control(label: string): HTMLElement | null {
     const element = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
@@ -52,7 +56,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 const onOpenChange = mock((_open: boolean) => {});
-const onSetupChange = mock((_setup: PageSetup) => {});
+const onSetupChange = mock((_from: PageSetup, _to: PageSetup) => {});
 
 async function render(setup: PageSetup = DEFAULT_PAGE_SETUP, canWrite = true) {
     onOpenChange.mockClear();
@@ -115,7 +119,7 @@ test('Landscape turns the paper, and a size picked then keeps the orientation', 
     await click(button('OK'));
 
     expect(onSetupChange.mock.calls).toEqual([
-        [{ width: 279.4, height: 215.9, margin: { top: 25.4, right: 20, bottom: 20, left: 20 } }],
+        [DEFAULT_PAGE_SETUP, { width: 279.4, height: 215.9, margin: { top: 25.4, right: 20, bottom: 20, left: 20 } }],
     ]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
@@ -126,7 +130,77 @@ test('an untouched margin keeps its exact size, though the field rounds it', asy
     expect(margins()).toEqual(['1.91', '2', '2', '16.82']);
     await click(control('Landscape'));
     await click(button('OK'));
-    expect(onSetupChange.mock.calls).toEqual([[{ ...setup, width: 297, height: 210 }]]);
+    expect(onSetupChange.mock.calls).toEqual([[setup, { ...setup, width: 297, height: 210 }]]);
+});
+
+test('a typed margin is stored to the hundredth of a millimetre', async () => {
+    await render();
+    await type('Top', '1.91');
+    await type('Left', '2.54');
+    await click(button('OK'));
+    expect(onSetupChange.mock.calls[0]?.[1].margin).toEqual({ top: 19.1, right: 20, bottom: 20, left: 25.4 });
+});
+
+test('any page the doc reads opens with OK enabled, its margins shrunk or not', async () => {
+    for (const { width } of PAPER_SIZES) {
+        for (const [marginLeft, marginRight] of [
+            [40.9, 151.3],
+            [200, 0.1],
+            [0.1, 200],
+            [1e9, 19.05],
+            [12.7, 0],
+        ]) {
+            await render(readPageSetup({ width, marginLeft, marginRight }));
+            expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
+            expect(button('OK')?.disabled).toBe(false);
+            await unmount();
+        }
+    }
+});
+
+test("OK leaves a collaborator's change to a field the user didn't touch", async () => {
+    const opened: PageSetup = {
+        width: 215.9,
+        height: 279.4,
+        margin: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+    };
+    const doc = new Y.Doc();
+    for (const [key, value] of Object.entries(pageRecord(opened))) doc.getMap(PAGE_ROOT).set(key, value);
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc));
+    await render(readPageSetup(doc.getMap(PAGE_ROOT).toJSON()));
+
+    peer.getMap(PAGE_ROOT).set('marginTop', 30);
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer));
+    await click(control('Landscape'));
+    await click(button('OK'));
+    const [[from, to] = []] = onSetupChange.mock.calls;
+    if (!from || !to) throw new Error('OK wrote nothing');
+    writePageSetup(doc, createDocUndoManager(doc), from, to);
+
+    expect(readPageSetup(doc.getMap(PAGE_ROOT).toJSON())).toEqual({
+        width: 279.4,
+        height: 215.9,
+        margin: { ...opened.margin, top: 30 },
+    });
+});
+
+test('OK stores the margins the dialog showed for a page whose stored margins read back shrunk', async () => {
+    const doc = new Y.Doc();
+    const page = doc.getMap(PAGE_ROOT);
+    page.set('marginLeft', 200);
+    page.set('marginRight', 200);
+    await render(readPageSetup(page.toJSON()));
+    expect(margins()).toEqual(['2', '2', '9.25', '9.25']);
+
+    await click(control('Paper size'));
+    await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.startsWith('A3')));
+    await click(button('OK'));
+    const [[from, to] = []] = onSetupChange.mock.calls;
+    if (!from || !to) throw new Error('OK wrote nothing');
+    writePageSetup(doc, createDocUndoManager(doc), from, to);
+
+    expect(page.toJSON()).toEqual({ width: 297, height: 420, marginLeft: 92.5, marginRight: 92.5 });
 });
 
 test.each([

@@ -72,7 +72,8 @@ import { TableWidthClamp } from './extensions/table-width-clamp';
 import { textColumnWidth } from './extensions/text-column';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
-import { createDocUndoManager, usePageSetup, writePageSetup } from './hooks/use-page-setup';
+import { usePageSetup } from './hooks/use-page-setup';
+import { createDocUndoManager, writePageSetup } from './page-setup';
 import { cleanPastedHTML } from './paste';
 import { TablePropertiesPanel } from './table-properties-panel';
 
@@ -768,7 +769,7 @@ const TiptapEditor = ({
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
-                                    onPageSetupChange={(setup) => writePageSetup(yDoc, undoManager, setup)}
+                                    onPageSetupChange={(from, to) => writePageSetup(yDoc, undoManager, from, to)}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     // Always offered: desktop draws the side panel, mobile the Column.
                                     onToggleCommentPanel={toggleComments}

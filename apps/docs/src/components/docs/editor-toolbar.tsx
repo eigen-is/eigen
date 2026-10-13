@@ -74,7 +74,7 @@ type EditorToolbarProps = {
     canUndo: boolean;
     canRedo: boolean;
     pageSetup: PageSetup;
-    onPageSetupChange: (setup: PageSetup) => void;
+    onPageSetupChange: (from: PageSetup, to: PageSetup) => void;
     onAccessDialogOpen: () => void;
     path: DrivePath;
     onToggleCommentPanel?: () => void;
