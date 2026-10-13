@@ -230,7 +230,6 @@ type Context = {
 // Word's default 1.25 cm from the page edge, inside a smaller margin.
 const HEADER_DISTANCE = 709;
 
-// The page in twips.
 function sectionXml({ width, height, margin }: PageSetup): string {
     const orient = width > height ? ' w:orient="landscape"' : '';
     const bands = `w:header="${Math.min(HEADER_DISTANCE, margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, margin.bottom)}"`;
