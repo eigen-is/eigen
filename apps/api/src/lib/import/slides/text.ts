@@ -27,7 +27,7 @@ export type TextSource = {
     inherited: XmlElement[];
     // The master's p:titleStyle, p:bodyStyle or p:otherStyle, or the presentation's p:defaultTextStyle.
     listStyle: XmlElement | undefined;
-    // The shape's p:style, whose fontRef names a theme font and a colour.
+    // The p:style the shape or its placeholder chain states, whose fontRef names a theme font and a colour.
     style: XmlElement | undefined;
     // The relationships of the part the shape is in, which name its links.
     rels: ReadonlyMap<string, Relationship>;

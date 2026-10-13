@@ -396,14 +396,14 @@ describe('style references', () => {
         expect(found?.strokeWidth).toBeCloseTo(1.5, 6);
     });
 
-    test("a placeholder with no style of its own takes its layout placeholder's", () => {
-        const placeholder = (style?: string) =>
-            sp({ ph: '<p:ph type="body" idx="1"/>', xfrm: box(0, 0, 10, 10), style });
+    test("a placeholder with no style of its own takes its layout placeholder's, for its paint and its text", () => {
+        const style = `${styleRef('fillRef', 1, '<a:srgbClr val="FF8800"/>')}<a:fontRef idx="major"><a:srgbClr val="00AA00"/></a:fontRef>`;
         const [found] = deckOf({
-            layouts: [{ shapes: placeholder(styleRef('fillRef', 1, '<a:srgbClr val="FF8800"/>')) }],
-            slides: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>' }) }],
+            layouts: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>', xfrm: box(0, 0, 10, 10), style }) }],
+            slides: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>', text: para('Body') }) }],
         }).slides[0].elements;
         expect(fillOf(found)).toBe('#ff8800');
+        expect(found).toMatchObject({ type: 'richtext', color: '#00aa00', fontFamily: 'Source Serif 4' });
     });
 });
 

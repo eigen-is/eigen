@@ -335,7 +335,7 @@ type Leaf = {
     own: Placeholder | undefined;
     inherited: Placeholder[];
     spPrs: XmlElement[];
-    // The p:style it paints by.
+    // The p:style its paint and text take.
     style: XmlElement | undefined;
     placed: Placed;
     group: GroupFill | undefined;
@@ -355,7 +355,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
                 body,
                 inherited: inherited.flatMap((placeholder) => xmlChild(placeholder.shape, P_NS, 'txBody') ?? []),
                 listStyle: listStyleOf(own, walk.inheritance, walk.presentation),
-                style: xmlChild(shape, P_NS, 'style'),
+                style,
                 rels: walk.part.rels,
             },
             theme,
