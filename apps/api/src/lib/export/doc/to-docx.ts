@@ -619,7 +619,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             continue;
         }
         // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
-        if (node.type === 'equation' && node.attrs?.['display'] === true) {
+        if (node.type === 'equation' && readStoredEquation(node.attrs ?? {}).display) {
             if (inline.length > 0) flush();
             inline.push(node);
             flush();
