@@ -55,16 +55,14 @@ describe('renderEigendocPreviewBody', () => {
     });
 
     // A viewer's open runs it, and the block cap leaves a paragraph any number of equations: jsdom pays per element.
-    test(`a paragraph's equations write at most ${MAX_MATHML_ELEMENTS} elements of MathML, the rest as their LaTeX`, () => {
+    test(`a paragraph's equations write at most ${MAX_MATHML_ELEMENTS} elements of MathML, the rest as their text`, () => {
         const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
-        // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements, so 12 fit.
+        // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements, so 12 fit. No LaTeX, as the docx
+        // import stores an equation; the fences write no text, so i is its linear form.
         const equations = Array.from({ length: 20 }, (_, i) => ({
             type: 'equation',
             attrs: {
-                mathml: writeMathml(
-                    [{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1332 }, () => fence)],
-                    `f${i}`,
-                ),
+                mathml: writeMathml([{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1332 }, () => fence)]),
             },
         }));
         const body = previewOf({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
@@ -74,7 +72,7 @@ describe('renderEigendocPreviewBody', () => {
             MAX_MATHML_ELEMENTS,
         );
         expect(drawn).toHaveLength(12);
-        expect(body).toContain(`</math>${Array.from({ length: 8 }, (_, i) => `f${i + 12}`).join('')}<br></p>`);
+        expect(body).toContain(`</math>${Array.from({ length: 8 }, (_, i) => `${i + 12}`).join('')}<br></p>`);
     });
 
     test('an ordered list keeps its start and its type, as the export draws them', () => {

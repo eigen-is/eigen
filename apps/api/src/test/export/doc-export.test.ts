@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml } from '@workspace/math';
+import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
@@ -304,13 +304,14 @@ describe('doc export — equations', () => {
     const y: MathRow = [{ kind: 'identifier', text: 'y' }];
     const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
     const integral: MathNode = { kind: 'operator', text: '⨌' };
-    // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements of MathML and of SVG, so 12 fit.
+    // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements of MathML and of SVG, so 12 fit. No
+    // LaTeX, as the docx import stores an equation; the fences write no text, so i is its linear form.
     const fences = (i: number) => ({
-        mathml: writeMathml([{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1332 }, () => fence)], `f${i}`),
+        mathml: writeMathml([{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1332 }, () => fence)]),
     });
     const fenceRun = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => fences(from + i));
     const fenceTexts = (from: number, to: number) =>
-        Array.from({ length: to - from }, (_, i) => `f${from + i}`).join('');
+        Array.from({ length: to - from }, (_, i) => `${from + i}`).join('');
     const elements = (markup: string) => markup.match(/<[a-z]/g)?.length ?? 0;
 
     async function exportEquations(format: 'html' | 'pdf-html', ...attrs: Record<string, unknown>[]): Promise<string> {
@@ -349,7 +350,7 @@ describe('doc export — equations', () => {
     });
 
     // MathJax draws each string once. Past its last drawing a repeat of a drawn one is text too, so the text is a tail.
-    test(`past ${mathSvg.MAX_SVG_EQUATIONS} drawings the PDF writes the rest as their LaTeX`, async () => {
+    test(`past ${mathSvg.MAX_SVG_EQUATIONS} drawings the PDF writes the rest as their text`, async () => {
         const numbers = Array.from({ length: mathSvg.MAX_SVG_EQUATIONS }, (_, i) => ({
             mathml: writeMathml([{ kind: 'number', text: String(i) }], String(i)),
         }));
@@ -372,13 +373,12 @@ describe('doc export — equations', () => {
 
     // A row of 1,997 ⨌, about all MATH_LIMITS.size admits: 24 KB of MathML, about 4.1 MB of SVG. Each copy counts, as
     // the sanitizer and WeasyPrint read each, and MathJax stops at the one that does not fit.
-    test(`the PDF draws at most ${mathSvg.MAX_SVG_BYTES} bytes of SVG, and the rest as their LaTeX`, async () => {
-        const wide = (i: number) => ({
-            mathml: writeMathml(
-                [{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1997 }, () => integral)],
-                `r${i}`,
-            ),
-        });
+    test(`the PDF draws at most ${mathSvg.MAX_SVG_BYTES} bytes of SVG, and the rest as their text`, async () => {
+        const row = (i: number): MathRow => [
+            { kind: 'number', text: `${i}` },
+            ...Array.from({ length: 1997 }, () => integral),
+        ];
+        const wide = (i: number) => ({ mathml: writeMathml(row(i)) });
         const equations = [wide(0), wide(0), ...Array.from({ length: 18 }, (_, i) => wide(i + 1))];
         const draw = mathSvg.mathmlToSvg;
         const built: number[] = [];
@@ -403,7 +403,7 @@ describe('doc export — equations', () => {
             );
             expect(drawn).toHaveLength(2);
             expect(mathmlToSvg).toHaveBeenCalledTimes(2);
-            expect(texts).toBe(Array.from({ length: 18 }, (_, i) => `r${i + 1}`).join(''));
+            expect(texts).toBe(Array.from({ length: 18 }, (_, i) => writeText(row(i + 1))).join(''));
         } finally {
             mathmlToSvg.mockRestore();
         }
@@ -411,10 +411,9 @@ describe('doc export — equations', () => {
 
     // Each fences() draws 0.15 MB, where bytes alone would admit 68 copies. A copy past the budget is text, as WeasyPrint
     // would draw it again.
-    test(`the PDF draws at most ${mathSvg.MAX_SVG_ELEMENTS} elements of SVG, and the rest as their LaTeX`, async () => {
+    test(`the PDF draws at most ${mathSvg.MAX_SVG_ELEMENTS} elements of SVG, and the rest as their text`, async () => {
         const equations = [fences(0), ...fenceRun(0, 11), fences(0), ...fenceRun(11, 16)];
         const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
-        const readStoredEquation = spyOn(storedEquation, 'readStoredEquation');
         try {
             const html = await exportEquations('pdf-html', ...equations);
             const drawn = html.match(/<span class="math-svg">[\s\S]*?<\/svg><\/span>/g) ?? [];
@@ -426,26 +425,29 @@ describe('doc export — equations', () => {
             expect(drawn.reduce((sum, svg) => sum + elements(svg), 0)).toBeLessThanOrEqual(mathSvg.MAX_SVG_ELEMENTS);
             expect(drawn).toHaveLength(12);
             expect(mathmlToSvg).toHaveBeenCalledTimes(11);
-            // Past the budget only the LaTeX is read, never the tree.
-            expect(readStoredEquation).toHaveBeenCalledTimes(11);
-            expect(texts).toBe(`f0${fenceTexts(11, 16)}`);
+            expect(texts).toBe(`0${fenceTexts(11, 16)}`);
         } finally {
             mathmlToSvg.mockRestore();
-            readStoredEquation.mockRestore();
         }
     }, 60_000);
 
-    // The HTML download and the preview write MathML, which jsdom pays for by the element, every copy.
-    test(`the HTML writes at most ${MAX_MATHML_ELEMENTS} elements of MathML, and the rest as their LaTeX`, async () => {
+    // The HTML download and the preview write MathML, which jsdom pays for by the element, every copy. Past the budget
+    // an equation is its linear text, whether it carries LaTeX or not.
+    test(`the HTML writes at most ${MAX_MATHML_ELEMENTS} elements of MathML, and the rest as their text`, async () => {
+        const half: MathRow = [
+            { kind: 'fraction', numerator: x, denominator: [{ kind: 'number', text: '2' }], line: 'bar' },
+        ];
         const readStoredEquation = spyOn(storedEquation, 'readStoredEquation');
         try {
-            const html = await exportEquations('html', fences(0), ...fenceRun(0, 12), fences(0), fences(12));
+            const html = await exportEquations('html', fences(0), ...fenceRun(0, 12), fences(0), fences(12), {
+                mathml: writeMathml(half, '\\frac{x}{2}'),
+            });
             const drawn = html.match(/<math[\s\S]*?<\/math>/g) ?? [];
 
             expect(drawn.reduce((sum, math) => sum + elements(math), 0)).toBeLessThanOrEqual(MAX_MATHML_ELEMENTS);
             expect(drawn).toHaveLength(12);
             expect(readStoredEquation).toHaveBeenCalledTimes(12);
-            expect(html).toContain('</math>f11f0f12<br></p>');
+            expect(html).toContain('</math>11012x/2<br></p>');
         } finally {
             readStoredEquation.mockRestore();
         }

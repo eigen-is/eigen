@@ -63,7 +63,7 @@ When you download a document as a Word file, each equation becomes a Word equati
 
 Word has no place for LaTeX, so a Word file keeps the equation but not what you typed. If you download a document to Word and import it again, each equation looks the same, but its **LaTeX** field shows Eigen's way of writing it, which may differ from yours.
 
-The PDF and the web page download show equations too. A PDF draws up to 1,000 different equations. Past that, or when the equations are very large, the rest print as their LaTeX, and an equation from a Word file that nobody has edited since is left out. The web page download and the preview in Drive have a similar limit, which only far larger documents reach.
+The PDF and the web page download show equations too. A PDF draws up to 1,000 different equations. Past that, or when the equations are very large, the rest print as one-line text, such as `(a+b)/2`, the same form word count reads. The web page download and the preview in Drive have a similar limit, which only far larger documents reach.
 
 ## Word count, search, and copying as text
 

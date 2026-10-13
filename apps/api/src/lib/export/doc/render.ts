@@ -6,7 +6,7 @@ import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/
 import { escapeHtml } from '@workspace/lib/html';
 import { type MathRow, writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
-import { readStoredEquation, readStoredEquationLatex } from '../../document/equation';
+import { readStoredEquation, storedEquationText } from '../../document/equation';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
@@ -138,8 +138,7 @@ function drawScreenEquation(attrs: Record<string, unknown>): EquationDrawing {
 
 // The render meets the equations in document order, each copy spending the budget and each distinct one drawn once,
 // so a subtree it skips, which the schema refuses but a Yjs update can hold, moves no drawing onto another equation.
-// From the first that does not fit, the rest print as text: until the package writes an equation's linear text, its
-// LaTeX stands in.
+// From the first that does not fit, the rest print as their linear text, which costs no element.
 function renderBudgetedEquations(
     draw: (attrs: Record<string, unknown>) => EquationDrawing | undefined,
     limit: EquationCost,
@@ -158,7 +157,7 @@ function renderBudgetedEquations(
         }
         let text = texts.get(key);
         if (text === undefined) {
-            text = escapeHtml(readStoredEquationLatex(node.attrs) ?? '');
+            text = escapeHtml(storedEquationText(node.attrs));
             texts.set(key, text);
         }
         return text;
