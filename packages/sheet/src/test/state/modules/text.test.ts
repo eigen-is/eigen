@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { clearMeasureTextCache, getCellTextInfo } from '../../../state/modules/text';
+import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -59,5 +59,19 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
     test('a wrapped date stays on one line', () => {
         const info = layout({ v: 45000, m: '2023-03-15', ct: { fa: 'yyyy-MM-dd', t: 'd' }, tb: '2' });
         expect(info?.values.map((word) => word.content)).toEqual(['2023-03-15']);
+    });
+});
+
+describe('state/modules/text — font sets', () => {
+    test('a cell with no font, and the canvas default, draw in Inter', () => {
+        expect(getFontSet({}, 10)).toStartWith('normal normal normal 10pt "Inter",');
+        expect(defaultFont(10)).toStartWith('normal normal normal 10pt "Inter",');
+    });
+
+    test("a cell's font is its first family, an index the bundled font at it", () => {
+        expect(getFontSet({ ff: 2, bl: 1 }, 10)).toStartWith('normal normal bold 10pt "JetBrains Mono",');
+        expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 }, 10)).toStartWith(
+            'italic normal normal 12pt "Source Serif 4",',
+        );
     });
 });

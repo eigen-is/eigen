@@ -12,7 +12,12 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    BORDER_STYLES,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_DIGIT_WIDTH,
+    SHEET_DEFAULT_ROW_HEIGHT,
+} from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     cellWrapsText,
@@ -363,7 +368,7 @@ function worksheetToSheet(
     const colhidden: NonNullable<SheetConfig['colhidden']> = {};
     for (const [i, col] of (worksheet.columns ?? []).entries()) {
         if (col && typeof col.width === 'number' && col.width > 0) {
-            const px = Math.round(col.width * 8);
+            const px = Math.round(col.width * SHEET_DEFAULT_DIGIT_WIDTH);
             colWidthPx[i] = px;
             columnlen[String(i)] = px;
         }

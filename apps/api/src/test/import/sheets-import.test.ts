@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, SHEET_DEFAULT_DIGIT_WIDTH, type Sheet } from '@workspace/lib/sheets';
 import { DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
 import { update } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
@@ -618,7 +618,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         ws.getCell('A6').value = true;
         for (let row = 1; row <= 6; row++) ws.getCell(row, 1).alignment = { wrapText: true };
         const rowlen = (await parseWorkbook(workbook))[0].config?.rowlen ?? {};
-        expect(rowlen).toEqual({ '0': 164, '1': 164, '2': 164, '3': 164, '4': 85, '5': 26 });
+        expect(rowlen).toEqual({ '0': 145, '1': 145, '2': 145, '3': 145, '4': 65, '5': 26 });
     });
 
     test('convert preserves formulas in celldata', async () => {
@@ -760,7 +760,7 @@ describe('Sheets xlsx conversion fidelity', () => {
     test('convert scales column widths from character units to pixels', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
         const sheets = await parseXlsx(buffer);
-        expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
+        expect(sheets[0].config?.columnlen?.['0']).toBe(15 * SHEET_DEFAULT_DIGIT_WIDTH);
     });
 
     test('convert preserves font sizes in points', async () => {

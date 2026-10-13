@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Changed
+
+- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid. Imported Excel columns are as wide as the same digits need in Inter
+
+### Fixed
+
+- **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
+
 ## [0.3.3] - 2026-10-13
 
 Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page breaks, Title and Subtitle, small caps, word count and resizable table columns. The update migrates each user's mail index, `mail.db`, which an older version refuses to open: to go back, restore the backup the update made, with `./eigen rollback` right after it or later with `./eigen restore` and the `server-pre-update-` backup that `./eigen rollback --help` lists. Reload open documents after the update: a tab from 0.3.2 deletes the page breaks, titles and subtitles it receives.
