@@ -286,4 +286,25 @@ describe('backgrounds', () => {
         });
         expect(themed.slides[0].background).toEqual({ type: 'image', mediaName: themed.media[0].name, fit: 'cover' });
     });
+
+    test("a bgRef's picture the theme names outside the package's ppt/ folder, or a part not a picture, is not read", () => {
+        const theme = THEME.replace(
+            '<a:bgFillStyleLst>',
+            '<a:bgFillStyleLst><a:blipFill><a:blip r:embed="rId9"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>',
+        );
+        const themed = (target: string) =>
+            deckOf({
+                theme,
+                themeRels: rel('rId9', 'image', target),
+                masters: [{ bg: '<p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef>' }],
+                slides: [{}],
+                files: { 'escaped.png': PIXEL_PNG, 'ppt/media/fake.xml': '<x/>' },
+            });
+        for (const target of ['../../escaped.png', '/escaped.png', '../slides/slide1.xml', '../media/fake.xml']) {
+            const deck = themed(target);
+            expect(deck.slides[0].background).toBeNull();
+            expect(deck.media).toEqual([]);
+            expect(deck.warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        }
+    });
 });
