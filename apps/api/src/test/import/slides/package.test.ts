@@ -5,7 +5,7 @@ import { box, buildPptx, NS, PIXEL_PNG, PML, para, pic, pptxParts, REL, rel, sp,
 
 // The package walk: what a pptx must be to be read, and the parts a relationship may hand the reader.
 
-const OPTIONS = { width: 1920, height: 1080, maxMediaBytes: 35 * 1024 * 1024 };
+const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
 
 function refusal(bytes: Uint8Array): { status: number; message: string } {
     try {

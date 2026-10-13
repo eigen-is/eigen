@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { BackgroundFill } from '@workspace/lib/types/background';
-import type { NewVectorElement } from '@workspace/lib/vector';
+import { FRAME_HEIGHT, FRAME_WIDTH, type NewVectorElement } from '@workspace/lib/vector';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
 import { XmlError, xmlAttr, xmlChild } from '../../core/xml';
@@ -9,7 +9,7 @@ import type { TransformWarning } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { NOT_A_PPTX, readPackage } from './package';
-import { type DeckWalk, readSlideShapes } from './shapes';
+import { type DeckWalk, type Frame, readSlideShapes } from './shapes';
 
 // pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
 // process; transform.ts writes the result as a Yjs update.
@@ -22,10 +22,13 @@ export type PptxDeck = {
     media: PptxMedia[];
     warnings: TransformWarning[];
     // The file's p:sldSz in EMU, which Convert picks the deck's size from.
-    slideSize: { cx: number; cy: number };
+    slideSize: SlideSize;
 };
 
-export type PptxOptions = { width: number; height: number; maxMediaBytes: number };
+type SlideSize = { cx: number; cy: number };
+
+// The frame is the deck's on an Import slides…, and none on a Convert.
+export type PptxOptions = { frame?: Frame; maxMediaBytes: number };
 
 export const MAX_MEDIA_PARTS = 1000;
 
@@ -45,8 +48,9 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
                 : fallback;
         };
         const slideSize = { cx: side('cx', DEFAULT_SLIDE_SIZE.cx), cy: side('cy', DEFAULT_SLIDE_SIZE.cy) };
+        const frame = options.frame ?? convertedFrameOf(slideSize);
         // Letterboxed: the whole slide fits the frame, centred.
-        const scale = Math.min(options.width / slideSize.cx, options.height / slideSize.cy);
+        const scale = Math.min(frame.width / slideSize.cx, frame.height / slideSize.cy);
 
         // A random prefix per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
         const prefix = `pptx-${randomBytes(4).toString('hex')}`;
@@ -55,9 +59,9 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         let mediaBytes = 0;
         const deck: DeckWalk = {
             pkg,
-            frame: { width: options.width, height: options.height },
+            frame,
             scale,
-            offset: { x: (options.width - slideSize.cx * scale) / 2, y: (options.height - slideSize.cy * scale) / 2 },
+            offset: { x: (frame.width - slideSize.cx * scale) / 2, y: (frame.height - slideSize.cy * scale) / 2 },
             shapes: 0,
             elements: 0,
             weight: 0,
@@ -96,6 +100,11 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     } catch (error) {
         throw importError(error);
     }
+}
+
+// The frame a Convert's new deck takes for the file's slide size: every deck frame is 16:9 at 1920×1080.
+function convertedFrameOf(_slideSize: SlideSize): Frame {
+    return { width: FRAME_WIDTH, height: FRAME_HEIGHT };
 }
 
 // The zip's and the XML's messages speak of archives and markup; the user uploaded a presentation.

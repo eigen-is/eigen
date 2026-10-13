@@ -108,8 +108,9 @@ export type SlidesImportJob = {
     kind: 'import';
     sourceFormat: 'pptx';
     targetType: 'eigenslides';
-    // The slide the file's slides are fitted into, letterboxed: the deck's own size on an import.
-    frame: { width: number; height: number };
+    // The slide the file's slides are fitted into, letterboxed: the deck's own size on an Import slides…; none on a
+    // Convert, whose new deck takes the size the file's slide size picks.
+    frame?: { width: number; height: number };
     // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
     maxMediaBytes: number;
 };

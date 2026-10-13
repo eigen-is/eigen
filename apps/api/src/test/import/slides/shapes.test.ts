@@ -22,7 +22,7 @@ import {
 
 // A slide's shape tree as canvas elements: geometry, groups, kinds, paint, pictures and what is dropped.
 
-const OPTIONS = { width: 1920, height: 1080, maxMediaBytes: 35 * 1024 * 1024 };
+const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
 
 const deckOf = (fixture: PptxFixture) => readPptx(buildPptx(fixture), OPTIONS);
 const elementsOf = (shapes: string, fixture: Partial<PptxFixture> = {}): NewVectorElement[] =>
@@ -39,8 +39,12 @@ function expectBox(found: NewVectorElement | undefined, x: number, y: number, wi
 }
 
 describe('geometry', () => {
-    test('a 16:9 slide fills the frame: 6,350 EMU a px', () => {
-        expectBox(element(sp({ xfrm: box(100, 50, 400, 200), spPr: FILLED })), 100, 50, 400, 200);
+    test("a 16:9 slide fills the frame: 6,350 EMU a px, or the deck's frame an Import gives", () => {
+        const shape = sp({ xfrm: box(100, 50, 400, 200), spPr: FILLED });
+        expectBox(element(shape), 100, 50, 400, 200);
+        const frame = { width: 960, height: 540 };
+        const imported = readPptx(buildPptx({ slides: [{ shapes: shape }] }), { ...OPTIONS, frame });
+        expectBox(imported.slides[0].elements[0], 50, 25, 200, 100);
     });
 
     test('a 4:3 slide is letterboxed into the frame, centred', () => {

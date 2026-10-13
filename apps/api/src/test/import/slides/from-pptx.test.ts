@@ -7,7 +7,7 @@ import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zi
 
 // The reader's output and the limits a hostile pptx meets before the work they bound.
 
-const OPTIONS = { width: 1920, height: 1080, maxMediaBytes: 35 * 1024 * 1024 };
+const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
 const TOO_LARGE = 'This presentation is too large to import';
 
 describe('a deck read', () => {

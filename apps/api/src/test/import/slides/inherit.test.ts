@@ -6,7 +6,7 @@ import { box, buildPptx, type PptxFixture, para, scheme, solid, sp } from '../..
 // What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the colour
 // map and the background.
 
-const OPTIONS = { width: 1920, height: 1080, maxMediaBytes: 35 * 1024 * 1024 };
+const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
 const deckOf = (fixture: PptxFixture) => readPptx(buildPptx(fixture), OPTIONS);
 const first = (fixture: PptxFixture): NewVectorElement[] => deckOf(fixture).slides[0].elements;
 const placed = (found: NewVectorElement | undefined) =>

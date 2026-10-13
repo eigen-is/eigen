@@ -1,5 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import {
+    DEFAULT_SCENE_META,
     parseBackgroundFill,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
@@ -12,7 +13,7 @@ import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../../../lib/do
 import { type SlidesImportJob, toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
 import { importPptxToSlidesUpdate } from '../../../lib/import/slides/transform';
-import { box, buildPptx, cxn, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp } from '../../fixtures/pptx';
+import { box, buildPptx, cxn, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp, xfrm } from '../../fixtures/pptx';
 
 // pptx bytes → the transform's update → the deck writer: what a deck holds after a Convert and after an Import.
 
@@ -101,6 +102,20 @@ describe('a pptx converted to a deck', () => {
         expect(table).toMatchObject({ type: 'richtext', html: '<p>Table not imported</p>' });
         expect(new Uint8Array(images[0].data)).toEqual(PIXEL_PNG);
         expect(warnings).toEqual([{ code: 'tables-dropped', count: 1 }]);
+    });
+
+    test("given no frame, fits the slides to the frame the file's slide size picks, and the deck takes the scene's meta", () => {
+        const fourThree = buildPptx({
+            sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
+            slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 9144000, 6858000), spPr: solid('FF0000') }) }],
+        });
+        const { update } = importPptxToSlidesUpdate(toTransferableBuffer(fourThree), {
+            maxMediaBytes: JOB.maxMediaBytes,
+        });
+        const doc = new Y.Doc();
+        writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ x: 240, y: 0, width: 1440, height: 1080 });
+        expect(doc.getMap('meta').get('background')).toBe(DEFAULT_SCENE_META.background);
     });
 
     test('appended to a deck, it lands after its slides and leaves them as they were', () => {

@@ -1,5 +1,4 @@
 import {
-    DEFAULT_SCENE_META,
     generateNKeysBetween,
     newFrameId,
     serializeBackgroundFill,
@@ -22,7 +21,7 @@ export function importPptxToSlidesUpdate(
     data: ArrayBuffer,
     job: Pick<SlidesImportJob, 'frame' | 'maxMediaBytes'>,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { slides, media, warnings } = readPptx(Buffer.from(data), { ...job.frame, maxMediaBytes: job.maxMediaBytes });
+    const { slides, media, warnings } = readPptx(Buffer.from(data), job);
     let update: Uint8Array;
     try {
         const doc = new Y.Doc();
@@ -45,8 +44,6 @@ export function importPptxToSlidesUpdate(
                 for (const element of slide.elements)
                     writeElementInDoc(doc, { ...element, frameId }, elementKeys[next++], PPTX_STYLE);
             }
-            // What Convert gives the new deck beside its slides.
-            doc.getMap('meta').set('background', DEFAULT_SCENE_META.background);
         });
         update = Y.encodeStateAsUpdate(doc);
         doc.destroy();
