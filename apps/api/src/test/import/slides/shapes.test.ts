@@ -699,6 +699,25 @@ describe('losses', () => {
         ]);
     });
 
+    test('count once for each shape drawn with them: a theme pattern three shapes paint with is three', () => {
+        const theme = THEME.replace('<a:fillStyleLst>', `<a:fillStyleLst>${PATTERN}`);
+        const patterned = sp({ xfrm: box(0, 0, 10, 10), style: styleRefs(1, 0) });
+        const vertical = (ph: string) =>
+            `<p:sp><p:nvSpPr><p:cNvPr id="9" name=""/><p:cNvSpPr/><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr>${box(0, 0, 10, 10)}</p:spPr><p:txBody><a:bodyPr vert="eaVert"/>${para('x')}</p:txBody></p:sp>`;
+        const deck = deckOf({
+            theme,
+            masters: [{ shapes: vertical('<p:ph type="body"/>') }],
+            slides: [
+                { shapes: patterned + patterned + sp({ ph: '<p:ph type="body"/>', text: para('y') }) },
+                { shapes: patterned + sp({ ph: '<p:ph type="body"/>', text: para('y') }) },
+            ],
+        });
+        expect(deck.warnings).toEqual([
+            { code: 'fills-simplified', count: 3 },
+            { code: 'text-simplified', count: 2 },
+        ]);
+    });
+
     test('a path gradient line is one simplified fill', () => {
         const ln = `<a:ln><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill></a:ln>`;
         const deck = deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: ln }) }] });
@@ -723,7 +742,7 @@ describe('losses', () => {
         expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
 
-    test("a group's fill counts only where a child shows it", () => {
+    test("a group's fill counts for each child that shows it", () => {
         const group = (child: string) =>
             grp(`${groupXfrm([0, 0, 100 * PX, 100 * PX], [0, 0, 100 * PX, 100 * PX])}${PATTERN}`, child);
         const unshown = deckOf({ slides: [{ shapes: group(sp({ xfrm: box(0, 0, 10, 10), spPr: FILLED })) }] });
@@ -731,6 +750,6 @@ describe('losses', () => {
         const filled = sp({ xfrm: box(0, 0, 10, 10), spPr: '<a:grpFill/>' });
         const shown = deckOf({ slides: [{ shapes: group(filled + filled) }] });
         expect(JSON.parse(String(shown.slides[0].elements[0].fill))).toMatchObject({ color: '#00ff00' });
-        expect(shown.warnings).toEqual([{ code: 'fills-simplified', count: 1 }]);
+        expect(shown.warnings).toEqual([{ code: 'fills-simplified', count: 2 }]);
     });
 });

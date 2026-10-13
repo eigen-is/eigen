@@ -216,7 +216,7 @@ export function verticalTurnOf(source: TextSource, lost: Lost): number {
     const vert = (bodyPr && xmlAttr(bodyPr, '', 'vert')) ?? 'horz';
     const approximate = APPROXIMATE_TURNS.get(vert);
     if (bodyPr && approximate !== undefined) {
-        lost('text-simplified', bodyPr);
+        lost('text-simplified');
         return approximate;
     }
     return VERTICAL_TURNS.get(vert) ?? 0;

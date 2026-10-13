@@ -315,12 +315,12 @@ export function paintOf(fill: XmlElement | undefined, theme: SlideTheme, options
         case 'gradFill':
             return gradientOf(fill, colors, options);
         case 'pattFill':
-            lost('fills-simplified', fill);
+            lost('fills-simplified');
             return solid(drawingColor(xmlChild(fill, A_NS, 'fgClr'), colors));
         case 'grpFill':
             return options.group?.(lost) ?? TRANSPARENT_PAINT;
         case 'blipFill':
-            lost('images-unshown', fill);
+            lost('images-unshown');
             return TRANSPARENT_PAINT;
         default:
             return TRANSPARENT_PAINT;
@@ -341,7 +341,7 @@ function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOption
     if (!from || !to) return undefined;
     if (stops.length === 1) return { type: 'solid', color: from };
     const lin = xmlChild(fill, A_NS, 'lin');
-    if (!lin && xmlChild(fill, A_NS, 'path')) options.lost('fills-simplified', fill);
+    if (!lin && xmlChild(fill, A_NS, 'path')) options.lost('fills-simplified');
     const ang = Number((lin && xmlAttr(lin, '', 'ang')) ?? 0) / 60_000;
     const scaled = (lin && isOn(xmlAttr(lin, '', 'scaled'))) ?? false;
     const angle = (options.angle ?? quarterTurn)(Number.isFinite(ang) ? ang : 0, scaled);
@@ -394,14 +394,15 @@ export function backgroundOf(inheritance: SlideInheritance, deck: DeckWalk): Bac
         const cSld = part && xmlChild(part.root, P_NS, 'cSld');
         const bg = cSld && xmlChild(cSld, P_NS, 'bg');
         if (!bg) continue;
+        const lost: Lost = (code) => deck.lost(code, bg);
         const bgPr = xmlChild(bg, P_NS, 'bgPr');
         const reference = bgPr ? undefined : xmlChild(bg, P_NS, 'bgRef');
         const fill = bgPr ? fillIn(bgPr) : styleFill(theme, reference && xmlAttr(reference, '', 'idx'));
         // A bgRef's picture is named by the theme's relationships.
         const owner = bgPr ? part : theme.part;
-        if (fill?.local === 'blipFill') return owner ? pictureBackground(fill, owner, deck) : null;
+        if (fill?.local === 'blipFill') return owner ? pictureBackground(fill, owner, deck, lost) : null;
         const angle = backgroundGradientAngle(deck.slide.width, deck.slide.height);
-        const paint = paintOf(fill, theme, { reference, angle, lost: deck.lost });
+        const paint = paintOf(fill, theme, { reference, angle, lost });
         return paint && !(paint.type === 'solid' && paint.color === TRANSPARENT_COLOR) ? paint : null;
     }
     return null;
@@ -409,14 +410,14 @@ export function backgroundOf(inheritance: SlideInheritance, deck: DeckWalk): Bac
 
 // A picture covers the frame, stretched or tiled. A tile is drawn as one picture, and a recolouring (a theme's duotone,
 // a washout's lum) as the picture itself: each a loss counted.
-function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk): BackgroundFill | null {
+function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk, lost: Lost): BackgroundFill | null {
     const blip = xmlChild(blipFill, A_NS, 'blip');
     const media = blipMedia(deck.pkg, owner, blip);
     if (!blip || !media) {
-        if (blip) deck.lost('images-unshown', blip);
+        if (blip) lost('images-unshown');
         return null;
     }
     const effects = xmlElements(blip).some((child) => child.ns === A_NS && child.local !== 'extLst');
-    if (effects || xmlChild(blipFill, A_NS, 'tile')) deck.lost('fills-simplified', blipFill);
+    if (effects || xmlChild(blipFill, A_NS, 'tile')) lost('fills-simplified');
     return { type: 'image', mediaName: deck.mediaName(media), fit: 'cover' };
 }

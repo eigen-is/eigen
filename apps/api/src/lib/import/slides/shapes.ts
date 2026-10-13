@@ -323,15 +323,17 @@ function readShape(walk: Walk, leaf: Leaf): void {
         style,
         rels: walk.part.rels,
     };
-    const text = source && richTextOf(source, theme, walk.deck.scale, walk.deck.lost, walk.deck.read);
+    // Counted once for the shape, however many slides show it.
+    const lost: Lost = (code) => walk.deck.lost(code, shape);
+    const text = source && richTextOf(source, theme, walk.deck.scale, lost, walk.deck.read);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
-    const textBox = text && source ? turned(box, verticalTurnOf(source, walk.deck.lost)) : box;
+    const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;
     // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint.
-    const lost = (drawn: Set<string>) => (drawn.has(geometry) ? walk.deck.lost : UNDRAWN);
+    const lostIf = (drawn: Set<string>) => (drawn.has(geometry) ? lost : UNDRAWN);
     const paint = {
-        fill: fillOf(chain, walk, { group, style, box, lost: lost(OUTLINED) }),
-        ...strokeOf(lines, walk, lost(STROKED)),
+        fill: fillOf(chain, walk, { group, style, box, lost: lostIf(OUTLINED) }),
+        ...strokeOf(lines, walk, lostIf(STROKED)),
     };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
     // A text box is the rectangle itself; any other shape carries its text in an unpainted box on top.
@@ -373,7 +375,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
             break;
         default:
             // Other presets and custGeom: the text stays, the outline is X4b's.
-            if (painted) walk.deck.lost('shapes-simplified', shape);
+            if (painted) lost('shapes-simplified');
             textOnTop();
     }
 }
@@ -437,7 +439,7 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const fill = fillIn(ln);
     const reference = ln === lines.entry ? lines.reference : undefined;
     const paint = fill && paintOf(fill, walk.inheritance.theme, { reference, lost });
-    if (fill && paint?.type === 'gradient') lost('fills-simplified', fill);
+    if (fill && paint?.type === 'gradient') lost('fills-simplified');
     const color = paint?.type === 'gradient' ? paint.from : paint?.color;
     if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
     const width = lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined);
@@ -515,11 +517,12 @@ function readPicture(
         return;
     }
     // An image can't mirror; a shape the canvas draws is symmetric, and its text PowerPoint never mirrors.
-    if (mirrored) walk.deck.lost('mirrors-dropped', shape);
+    const lost: Lost = (code) => walk.deck.lost(code, shape);
+    if (mirrored) lost('mirrors-dropped');
     push(walk, {
         type: 'image',
         ...box,
-        ...strokeOf(lines, walk, walk.deck.lost),
+        ...strokeOf(lines, walk, lost),
         mediaName: walk.deck.mediaName(part),
         objectFit: 'fill',
         // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.

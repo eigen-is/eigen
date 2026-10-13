@@ -84,12 +84,13 @@ export type DeckWalk = {
     read(nodes: number): void;
     // A picture part's media name, the first time a slide shows it.
     mediaName(part: MediaPart): string;
-    lost: Lost;
+    // Counts what the import leaves out or draws simpler, once for the shape of the file it is in (or the background),
+    // however many slides show that shape.
+    lost(code: CountedWarningCode, source: XmlElement): void;
 };
 
-// Counts what the import leaves out or draws simpler, once for the element of the file it is in, however many slides
-// show that element.
-export type Lost = (code: CountedWarningCode, source: XmlElement) => void;
+// A loss in the shape or background being drawn.
+export type Lost = (code: CountedWarningCode) => void;
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {
