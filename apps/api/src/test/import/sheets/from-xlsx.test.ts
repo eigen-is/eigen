@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
-import { readGrid } from '../../../lib/import/sheets/cells';
 import { MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets, xlsxToSheetsOwn } from '../../../lib/import/sheets/from-xlsx';
-import { readInBatches, readPackage } from '../../../lib/import/sheets/package';
-import { readRules } from '../../../lib/import/sheets/rules';
-import { readSharedStrings } from '../../../lib/import/sheets/strings';
-import { readDxfs, readLooks, themePalette } from '../../../lib/import/sheets/styles';
 import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -248,31 +243,11 @@ describe("the own reader against ExcelJS's", () => {
 });
 
 describe("the own reader's rules against ExcelJS's", () => {
-    // Until the assembly reads them: each sheet's conditional formats and validations, from its rest and grid's span.
     function ownRules(bytes: Uint8Array): Pick<Sheet, 'conditionalFormatRules' | 'dataVerification'>[] {
-        const book = readPackage(bytes);
-        const palette = themePalette(book.theme);
-        const looks = readLooks(book.styles, palette);
-        const dxfs = readDxfs(book.styles, palette);
-        const strings = readSharedStrings(book.sharedStrings, palette);
-        const none = () => {};
-        return book.sheets.map(({ path }) => {
-            const part = book.pkg.zip.read(path);
-            if (!part) throw new Error(`no part ${path}`);
-            const { rest, children } = readInBatches(part, 'sheetData', 'row');
-            const { date1904 } = book;
-            const grid = readGrid(children, {
-                looks,
-                strings,
-                date1904,
-                palette,
-                charge: none,
-                chargeCopy: none,
-                placed: new Map(),
-            });
-            const { rows, columns } = grid;
-            return readRules(rest, { dxfs, palette, date1904, rows, columns, charge: none });
-        });
+        return xlsxToSheetsOwn(bytes).map(({ conditionalFormatRules, dataVerification }) => ({
+            conditionalFormatRules,
+            dataVerification,
+        }));
     }
 
     async function expectSameRules(bytes: Uint8Array): Promise<void> {
@@ -383,6 +358,29 @@ describe("the own reader's rules against ExcelJS's", () => {
                 ],
             }),
         );
+    });
+
+    test('whole sheets: rules beside merges, links and columns, a merge past the cells widening the span', async () => {
+        const after = [
+            '<mergeCells><mergeCell ref="A1:B1"/><mergeCell ref="E12:F13"/></mergeCells>',
+            '<conditionalFormatting sqref="A1:D10"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>20</formula></cfRule></conditionalFormatting>',
+            '<conditionalFormatting sqref="C1:C10"><cfRule type="expression" dxfId="1" priority="2"><formula>MOD(C1,2)=0</formula></cfRule></conditionalFormatting>',
+            '<dataValidations><dataValidation type="list" allowBlank="1" sqref="D1:D2000"><formula1>"a,b"</formula1></dataValidation><dataValidation type="whole" operator="between" sqref="B2:B4"><formula1>1</formula1><formula2>9</formula2></dataValidation></dataValidations>',
+            '<hyperlinks><hyperlink ref="C2" location="\'Second sheet\'!A1"/></hyperlinks>',
+        ].join('');
+        const [sheet] = await expectSameSheets(
+            xlsxFixture({
+                sheets: [
+                    { data, before: '<cols><col min="1" max="2" width="15" customWidth="1"/></cols>', after },
+                    { name: 'Second sheet', data },
+                ],
+                styles: `<fonts><font/></fonts><fills><fill/></fills><borders><border/></borders><cellXfs><xf/></cellXfs>${DXFS}`,
+                colors: OFFICE_COLORS,
+            }),
+            withoutCopiedValues,
+        );
+        expect(sheet.conditionalFormatRules).toHaveLength(2);
+        expect(Object.keys(sheet.dataVerification ?? {})).toHaveLength(1013 + 3);
     });
 });
 

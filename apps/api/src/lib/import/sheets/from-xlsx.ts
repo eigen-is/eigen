@@ -45,12 +45,14 @@ import {
     FORMULA_BACKED_CF_TYPES,
     listSource,
     parseCfLiteral,
+    readRules,
 } from './rules';
 import { readSharedStrings } from './strings';
 import {
     BORDER_STYLE_MAP,
     HORIZONTAL_MAP,
     normalizeMonthMinuteTokens,
+    readDxfs,
     readLooks,
     resolveColor,
     type ThemePalette,
@@ -90,14 +92,16 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 
 // The reader of our own, beside ExcelJS's until the import switches to it: every worksheet's grid and what lies past
 // it, charged against the output budget as it is read. The cells count what they emit, a value, a border, a row's
-// height or hidden flag, a merged or linked cell or a column's width, and the grids recalc materialises; the text
-// counts every value, display, formula and link, each shared string and shared formula once per copy.
+// height or hidden flag, a merged or linked cell, a column's width, a rule's range or a validated cell, and the grids
+// recalc materialises; the text counts every value, display, formula, link and rule text, each shared string and
+// shared formula once per copy.
 export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
     try {
         const book = readPackage(bytes);
         const palette = themePalette(book.theme);
         const looks = readLooks(book.styles, palette);
         const strings = readSharedStrings(book.sharedStrings, palette);
+        const dxfs = readDxfs(book.styles, palette);
         const fonts = book.styles && xmlChild(book.styles, SML_NS, 'fonts');
         const font = fonts && xmlChild(fonts, SML_NS, 'font');
         const fontName = font && xmlChild(font, SML_NS, 'name');
@@ -157,8 +161,15 @@ export function xlsxToSheetsOwn(bytes: Uint8Array): Sheet[] {
                 celldata: grid.celldata,
                 config,
                 ...worksheet.sheet,
+                ...readRules(rest, {
+                    dxfs,
+                    palette,
+                    date1904: book.date1904,
+                    rows: grid.rows,
+                    columns: grid.columns,
+                    charge,
+                }),
             };
-            // Conditional formats and validations: read from `rest` here.
             sheets.push(sheet);
         }
         return sheets;
