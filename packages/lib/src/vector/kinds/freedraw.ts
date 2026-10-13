@@ -8,6 +8,7 @@ import {
     isClosedLinear,
     isClosedPath,
     linearLocalToScene,
+    type Point,
     parsePoints,
     parsePressures,
     serializePoints,
@@ -82,15 +83,15 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             fill = `${fillDefs(el)}${drawableToSvg(new RoughGenerator().polygon(coords, options))}`;
         }
 
-        const d = getSvgPathFromStroke(freedrawOutline(el));
+        const d = getSvgPathFromStroke(freedrawOutline(el, points));
         const stroke = d ? `<path d="${d}" fill="${escapeXml(el.strokeColor)}" stroke="none"/>` : '';
         return { svg: `${fill}${stroke}` };
     },
 });
 
 // The stroke's ink: perfect-freehand's outline polygon in the local frame, which render fills with the stroke color.
-export function freedrawOutline(el: VectorLinearElement): number[][] {
-    const coords = parsePoints(el.points).map((p): [number, number] => [p.x, p.y]);
+export function freedrawOutline(el: VectorLinearElement, points: Point[]): number[][] {
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
     // Real per-point pressure iff the element opts out of simulation and carries an array — the reader
     // is what guarantees it is index-aligned with `points` ('' + simulate otherwise), so this reads the
     // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords, byte-identical to legacy.

@@ -588,6 +588,20 @@ describe('pptx shapes', () => {
         expect(slide.match(/<p:sp>/g)).toHaveLength(2);
     });
 
+    test('a looping freehand stroke with no fill writes only its ink', () => {
+        const shape = only(
+            pptx(
+                sceneOf([
+                    element('freedraw', {
+                        points: '[[0,0],[100,0],[50,80],[0,0]]',
+                        fill: serializeFill({ type: 'solid', color: 'transparent', style: 'solid' }),
+                    }),
+                ]),
+            ),
+        );
+        expect(attr(first(shape, P, 'cNvPr'), 'name')).toStartWith('Ink');
+    });
+
     test("an arrow label is a centered text box at the label anchor, over the slide's color where the canvas masks", () => {
         const [, ground, label] = shapes(
             pptx(
@@ -761,6 +775,11 @@ describe('pptx text', () => {
         expect([...relationships(zip, 'ppt/slides/slide1.xml').values()].map((rel) => rel.type)).toEqual([
             `${R}/slideLayout`,
         ]);
+    });
+
+    test("a paragraph's leading break keeps its line, its last one draws none", () => {
+        const shape = only(pptx(sceneOf([element('richtext', { html: '<p><br>after<br></p><p> x <br></p>' })])));
+        expect(paragraphs(shape)).toEqual(['\nafter', 'x']);
     });
 
     test('lists by nesting level: bullets and numbers', () => {

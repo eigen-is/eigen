@@ -477,7 +477,7 @@ function fillXml(
         return color ? `<a:solidFill>${color}</a:solidFill>` : '<a:noFill/>';
     }
     const stops = gradientStops(paint.from, paint.to).map(
-        (stop) => `<a:gs pos="${share(stop.offset)}">${colorXml(stop.color, stop.opacity * opacity) ?? ''}</a:gs>`,
+        (stop) => `<a:gs pos="${share(stop.offset)}">${colorXml(stop.color, stop.opacity * opacity)}</a:gs>`,
     );
     const css = (paint.angle * Math.PI) / 180;
     const along = degrees(Math.atan2(-Math.cos(css) * box.width, Math.sin(css) * box.height));
@@ -560,10 +560,10 @@ function linearXml(
 // canvas draws it, through the midpoints between the outline's points. A looping stroke's fill lies under it.
 function freedrawXml(el: VectorLinearElement, slide: Slide, opacity: number): string {
     const points = parsePoints(el.points);
-    const outline = freedrawOutline(el).map(([x, y]) => ({ x, y }));
+    const outline = freedrawOutline(el, points).map(([x, y]) => ({ x, y }));
     if (outline.length === 0) return '';
     let fill = '';
-    if (isClosedPath(points)) {
+    if (isClosedPath(points) && !isTransparentFill(parseFill(el.fill))) {
         const { box, pt } = pathFrame(el, points, slide);
         const lines = points.slice(1).map((p) => `<a:lnTo>${pt(p)}</a:lnTo>`);
         const path = `<a:moveTo>${pt(points[0])}</a:moveTo>${lines.join('')}<a:close/>`;
@@ -895,11 +895,13 @@ function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): strin
     return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHORS[box.verticalAlign]}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
 }
 
-// CSS drops the collapsed space at a line's start and end.
+// CSS drops a block's last break, which starts no line, and the collapsed space at the block's start and end.
 function trimmed(runs: Run[]): Run[] {
     const out = runs.filter((run) => run.text !== '');
-    if (out.length > 0) out[0] = { ...out[0], text: out[0].text.trimStart() };
-    if (out.length > 0) out[out.length - 1] = { ...out[out.length - 1], text: out[out.length - 1].text.trimEnd() };
+    if (out.at(-1)?.text === '\n') out.pop();
+    const last = out.length - 1;
+    if (last >= 0 && out[0].text !== '\n') out[0] = { ...out[0], text: out[0].text.trimStart() };
+    if (last >= 0 && out[last].text !== '\n') out[last] = { ...out[last], text: out[last].text.trimEnd() };
     return out.filter((run) => run.text !== '');
 }
 
