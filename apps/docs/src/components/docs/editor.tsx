@@ -65,6 +65,7 @@ import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { EditorToolbar } from './editor-toolbar';
+import { EquationPropertiesPanel } from './equation-properties-panel';
 import { AtomMarks } from './extensions/atom-marks';
 import {
     addCommentAnchor,
@@ -75,6 +76,7 @@ import {
     selectCommentAnchor,
     updateCommentDecorations,
 } from './extensions/comment-mark';
+import { Equation } from './extensions/equation';
 import { Figure } from './extensions/figure';
 import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
@@ -325,7 +327,7 @@ const TiptapEditor = ({
         {
             editable: canWrite,
             extensions: [
-                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment', 'table'] }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'equation', 'comment', 'table'] }),
                 // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
                 // drags nothing, and a tap beside a border would start a drag that swallows the caret.
                 EditorTable.configure({ resizable: !isCoarsePointer }),
@@ -333,6 +335,7 @@ const TiptapEditor = ({
                     onOpenComment: handleCommentClick,
                     onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 }),
+                Equation.configure({ onOpenComment: handleCommentClick }),
                 AtomMarks,
                 TableWidthClamp,
                 SearchHighlight,
@@ -528,9 +531,17 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
-    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
-    const lastPanelRef = useRef<'figure' | 'table'>('figure');
+    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'equation' | 'table'>('document');
+    const lastPanelRef = useRef<'figure' | 'equation' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
+    const equationFieldRef = useRef<HTMLTextAreaElement>(null);
+    // A new equation's panel mounts in the render its selection causes, so its field takes focus after that render.
+    const [focusEquationField, setFocusEquationField] = useState(false);
+    useEffect(() => {
+        if (!focusEquationField) return;
+        setFocusEquationField(false);
+        equationFieldRef.current?.focus();
+    }, [focusEquationField]);
 
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
@@ -607,6 +618,7 @@ const TiptapEditor = ({
         if (!editor) return;
         const onUpdate = () => {
             if (editor.isActive('figure')) setSidebarContext('figure');
+            else if (editor.isActive('equation')) setSidebarContext('equation');
             else if (editor.isActive('table')) setSidebarContext('table');
             else setSidebarContext('document');
         };
@@ -681,6 +693,13 @@ const TiptapEditor = ({
         setOpenCardId(cardId);
     };
 
+    // The comments panel would hold the slot the new equation's panel needs.
+    const handleInsertEquation = () => {
+        closePanels();
+        editor.chain().focus().insertEquation().run();
+        setFocusEquationField(true);
+    };
+
     const panelProps = {
         onClose: closePanels,
         path,
@@ -749,6 +768,8 @@ const TiptapEditor = ({
                                     onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
+                                    // A phone has no right-side panels, so nothing could edit the equation there.
+                                    onInsertEquation={isMobile ? undefined : handleInsertEquation}
                                 />
                             }
                         >
@@ -801,6 +822,8 @@ const TiptapEditor = ({
                                                     editor={editor}
                                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
+                                            ) : lastPanelRef.current === 'equation' ? (
+                                                <EquationPropertiesPanel editor={editor} fieldRef={equationFieldRef} />
                                             ) : (
                                                 <TablePropertiesPanel editor={editor} />
                                             )}

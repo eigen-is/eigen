@@ -87,6 +87,7 @@ type EditorToolbarProps = {
     onReplaceImage: () => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
+    onInsertEquation?: () => void;
 };
 
 export const EditorToolbar = ({
@@ -109,6 +110,7 @@ export const EditorToolbar = ({
     onImagePickFromDrive,
     onReplaceImage,
     onAddComment,
+    onInsertEquation,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -282,6 +284,7 @@ export const EditorToolbar = ({
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
+                                    onInsertEquation={onInsertEquation}
                                 />
                             </>
                         )}

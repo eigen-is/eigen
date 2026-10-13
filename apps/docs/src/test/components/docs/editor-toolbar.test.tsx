@@ -28,11 +28,12 @@ const editor = new Editor({
 
 const onReplaceImage = mock(() => {});
 
-async function render(width: number, canWrite: boolean) {
+async function render(width: number, canWrite: boolean, onInsertEquation?: () => void) {
     window.happyDOM.setViewport({ width, height: 1000 });
     const toolbar = createElement(EditorToolbar, {
         editor,
         canWrite,
+        onInsertEquation,
         offline: false,
         storageUnavailable: false,
         canUndo: false,
@@ -741,4 +742,27 @@ test.each([
     await pickInBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
     expect(execCommand.mock.calls).toEqual([[command]]);
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// Where Google's Insert › Symbols › Equation sits relative to the image and the line. The equation goes in once the menu
+// has closed, so Radix hands the focus to no trigger after the new equation's field has taken it.
+test('Insert › Equation follows Image and inserts once the menu has closed', async () => {
+    const onInsertEquation = mock(() => {});
+    await render(1920, true, onInsertEquation);
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(0, 4)).toEqual(['Link', 'Image', 'Equation', 'Horizontal rule']);
+
+    await clickItem('Equation');
+    expect(onInsertEquation).not.toHaveBeenCalled();
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(onInsertEquation).toHaveBeenCalledTimes(1);
+});
+
+// A phone has no panel to edit one in.
+test('Insert has no Equation without a way to edit it', async () => {
+    await render(1920, true);
+    await openMenu('Insert');
+    expect(openMenuEntries()).not.toContain('Equation');
 });
