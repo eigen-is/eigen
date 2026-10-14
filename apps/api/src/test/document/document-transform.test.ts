@@ -1468,6 +1468,9 @@ describe('document transform (docx import)', () => {
 
 // openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
 // to the transform process, in its format's words.
+// A convert checks write on the destination folder before anything else it pays for.
+const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+
 describe('document transform (input bound)', () => {
     test.each([
         [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, SPREADSHEET_TOO_LARGE],
@@ -1499,13 +1502,9 @@ describe('document transform (input bound)', () => {
                 },
             } as unknown as Mount;
             const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
-            const error = await convertToDocument(
-                {} as unknown as Drive,
-                mount,
-                path,
-                target,
-                {} as unknown as User,
-            ).catch((reason: unknown) => reason);
+            const error = await convertToDocument(WRITABLE_DRIVE, mount, path, target, {} as unknown as User).catch(
+                (reason: unknown) => reason,
+            );
             expect(error).toMatchObject({ status: 413, message });
         },
     );
@@ -1620,7 +1619,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets', user);
+            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user);
         } catch (err) {
             error = err;
         } finally {

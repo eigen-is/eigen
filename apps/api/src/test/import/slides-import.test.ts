@@ -10,9 +10,10 @@ import {
 } from '@workspace/lib/vector';
 import { ApiError } from '../../lib/core';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
+import { documentTransformRunner } from '../../lib/document/transform/runner';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
-import { importIntoDocument } from '../../lib/import/import-document';
+import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { getUserById } from '../../lib/user';
 import { box, buildPptx, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp } from '../fixtures/pptx';
 import {
@@ -185,6 +186,44 @@ describe('Convert to Slides', () => {
         expect(res.status).toBe(400);
         expect(await res.text()).toBe('Only .pptx files can be converted to Slides');
         expect(await listing(parent.id)).toEqual(['macros.pptm']);
+    }, 60_000);
+
+    test('a folder the caller only reads refuses the convert before the file is transformed', async () => {
+        const parent = await folder('convert-read-only');
+        const uploaded = await upload(PPTX, 'shared.pptx', parent.id);
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${parent.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+        const runSpy = spyOn(documentTransformRunner, 'run');
+        try {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigenslides`,
+                { method: 'POST' },
+            );
+            expect(res.status).toBe(403);
+            expect(runSpy).not.toHaveBeenCalled();
+        } finally {
+            runSpy.mockRestore();
+        }
+        expect(await listing(parent.id)).toEqual(['shared.pptx']);
+    }, 60_000);
+
+    test('a picture that fails to save trashes the new deck and answers the failure', async () => {
+        const parent = await folder('convert-media-fails');
+        const uploaded = await upload(PPTX, 'pictures.pptx', parent.id);
+        const alice = await getUserById(ctx.alice.user.id);
+        if (!alice) throw new Error('alice missing');
+        const drive = await getSharedDrive(ctx.alice.user.id, alice);
+        const { mount, path } = await drive.resolveFile(mountId, uploaded.id);
+        const failure = new ApiError(409, 'media/taken.png is not a file');
+        const createSpy = spyOn(drive, 'createFileFromData').mockRejectedValue(failure);
+        try {
+            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice)).rejects.toBe(failure);
+        } finally {
+            createSpy.mockRestore();
+        }
+        expect(await listing(parent.id)).toEqual(['pictures.pptx']);
     }, 60_000);
 
     test('a .pptx that is no zip is refused before anything is created', async () => {

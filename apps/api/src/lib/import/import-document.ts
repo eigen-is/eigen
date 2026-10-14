@@ -11,6 +11,7 @@ import {
     isConvertSource,
 } from '@workspace/lib/types/drive';
 import { FRAME_HEIGHT, FRAME_WIDTH } from '@workspace/lib/vector';
+import type * as Y from 'yjs';
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
@@ -125,6 +126,26 @@ async function saveDocImages(
     }
 }
 
+// A convert that fails after its create (a picture's name taken, quota another write spent) trashes the document it
+// made through Drive's own delete, so the error it answers leaves no half-filled document behind.
+async function fillNewDocument(
+    drive: DriveLike,
+    newPath: DrivePath,
+    user: User,
+    fill: (doc: Y.Doc) => Promise<void> | void,
+): Promise<DrivePath> {
+    try {
+        const collabDoc = await drive.getCollabDocument(newPath.mountId, newPath.id);
+        await fill(collabDoc.doc);
+        return newPath;
+    } catch (error) {
+        await drive.deletePath(newPath.mountId, newPath.id, user).catch((deleteError: unknown) => {
+            console.warn(`[import] convert cleanup failed for ${newPath.id}:`, deleteError);
+        });
+        throw error;
+    }
+}
+
 // No signal parameter by design: conversion detaches from the request so a page
 // reload cannot kill a minute of transform progress (routes/drive.ts /convert).
 export async function convertToDocument(
@@ -134,15 +155,18 @@ export async function convertToDocument(
     targetType: ConvertTarget,
     user: User,
 ): Promise<DrivePath> {
-    if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
+    const { parentId } = sourcePath;
+    if (!parentId) throw new ApiError(400, 'Cannot convert a root file');
 
-    // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
-    // is the costliest preparation here. run() rechecks authoritatively.
-    documentTransformRunner.assertAdmissible('foreground');
     const { format, type } = CONVERT_SOURCES[targetType];
     if (!isConvertSource(sourcePath.name, targetType)) {
         throw new ApiError(400, `Only .${format} files can be converted to ${EIGEN_DOC_TYPE_INFO[type].labelPlural}`);
     }
+    // The create checks write too, but only after the transform: a reader would pay for one to get a 403.
+    if (!(await drive.canWrite(sourcePath.mountId, parentId, user))) throw new ApiError(403, 'No write permission');
+    // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
+    // is the costliest preparation here. run() rechecks authoritatively.
+    documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(sourcePath.size, format);
 
     const bytes = await mount.readBytes(sourcePath.id);
@@ -152,27 +176,23 @@ export async function convertToDocument(
 
     if (targetType === 'eigensheets') {
         const snapshotJson = await importXlsxSnapshot(buffer);
-        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, type, user);
-        const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
-        return newPath;
+        const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
+        return fillNewDocument(drive, newPath, user, (doc) => writeSheetsSnapshotToYjs(doc, snapshotJson));
     }
 
     const slides = targetType === 'eigenslides';
-    // No frame for a deck: the new one takes the size the file's slide size picks.
+    // Every deck is 1920×1080 today, the reader's frame when none is passed, so a Convert fits the slides into the same
+    // frame Import slides… passes, a 4:3 file letterboxed.
     const { update, images } = slides ? await importPptxUpdate(buffer, undefined) : await importDocxUpdate(buffer);
-    // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
+    // Refused before the create, so a file whose pictures can't fit makes no document; saveDocImages charges again.
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
-    const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, type, user);
-    const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-    await saveDocImages(drive, newPath, images, user);
-    if (slides) {
+    const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
+    return fillNewDocument(drive, newPath, user, async (doc) => {
+        await saveDocImages(drive, newPath, images, user);
         // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
-        writeSlidesUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-        return newPath;
-    }
-    writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-    return newPath;
+        if (slides) writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+        else writeEigendocUpdateToYjs(doc, new Uint8Array(update));
+    });
 }
 
 // Answers the summary of what the file held that did not come over, for the toast.
