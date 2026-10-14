@@ -109,8 +109,8 @@ export type SlidesImportJob = {
     kind: 'import';
     sourceFormat: 'pptx';
     targetType: 'eigenslides';
-    // The slide the file's slides are fitted into, letterboxed: the deck's own size on an Import slides…; none on a
-    // Convert, whose new deck takes the size the file's slide size picks.
+    // The slide the file's slides are fitted into, letterboxed. Every deck is 1920×1080 today: Import slides… passes it,
+    // and a Convert passes none and gets the same size, the reader's default.
     frame?: { width: number; height: number };
     // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
     maxMediaBytes: number;
