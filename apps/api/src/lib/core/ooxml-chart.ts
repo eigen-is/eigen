@@ -19,6 +19,7 @@ import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, x
 // docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids.
 export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
 
+// type is the chart group's element name (barChart, scatterChart), or combinationChart for more than one group.
 export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; type: string } };
 
 const TYPES = new Map<string, ChartType>([
@@ -62,7 +63,8 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     } catch (error) {
         if (error !== UNSUPPORTED) throw error;
     }
-    return { unsupported: { title, type: groups.length > 0 ? chartLabel(groups[0].local) : '' } };
+    const type = groups.length > 1 ? 'combinationChart' : groups.length > 0 ? chartLabel(groups[0].local) : '';
+    return { unsupported: { title, type } };
 }
 
 function chartSpec(
@@ -87,9 +89,12 @@ function chartSpec(
     const orientation = (axis: XmlElement | undefined) => val(child(child(axis, 'scaling'), 'orientation'));
     if (valueAxes.length > 1 || categoryAxes.length > 1 || child(scaling, 'logBase')) unsupported();
     if (orientation(valueAxis) === 'maxMin') unsupported();
-    // Excel's minMax category axis runs from the origin, so up a bar chart's side; a spec lists a bar chart's
-    // categories top down, and a column or line chart's left to right.
+    // Excel's minMax category axis runs from the origin, so up a bar chart's side, where Google's runs down it. The
+    // spec turns the whole axis rather than the data, since Excel's turns each category's series with it.
     const reversed = (type === 'bar') !== (orientation(categoryAxis) === 'maxMin');
+    // A deleted axis, or one whose tick labels are none, shows no labels.
+    const visible = (axis: XmlElement | undefined) =>
+        flag(child(axis, 'delete')) !== true && val(child(axis, 'tickLblPos')) !== 'none';
 
     const all = children(group, 'ser');
     if (all.length > MAX_CHART_SERIES) unsupported();
@@ -131,13 +136,14 @@ function chartSpec(
         legend: legendPosition(child(chart, 'legend')),
         // CT_DispBlanksAs: present without a val is zero.
         blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
-        categoryAxis: { title: axisTitle(categoryAxis) },
+        categoryAxis: { title: axisTitle(categoryAxis), visible: visible(categoryAxis), reversed },
         valueAxis: {
             title: axisTitle(valueAxis),
             min: numberOf(val(child(scaling, 'min'))),
             max: numberOf(val(child(scaling, 'max'))),
             gridlines: child(valueAxis, 'majorGridlines') !== undefined,
             format: format && format !== 'General' ? chartLabel(format) : null,
+            visible: visible(valueAxis),
         },
     };
     const slices = (total: number): string[] => {
@@ -165,25 +171,21 @@ function chartSpec(
         const labels = cachedPoints(cache).map(label);
         const longest = values.reduce((most, points) => Math.max(most, points.length), 0);
         const length = Math.max(labels.length, longest);
-        const turned = <T>(points: T[], blank: T): T[] =>
-            reversed ? Array.from({ length }, (_, i) => points[length - 1 - i] ?? blank) : points;
         return {
             ...presentation,
             sliceColors: slices(length),
             data: {
                 source: 'inline',
-                categories: turned(categories ? labels : Array.from({ length }, (_, i) => String(i + 1)), ''),
+                categories: categories ? labels : Array.from({ length }, (_, i) => String(i + 1)),
                 series: series.map((ser, i) => ({
                     ...style(ser),
                     name: seriesName(ser),
-                    values: turned(values[i], null),
+                    values: values[i],
                 })),
             },
         };
     }
 
-    // A range can't be read backwards.
-    if (reversed) unsupported();
     // A literal has no cells to name; an empty c:cat or c:val names none.
     const range = (source: XmlElement | undefined): CellRangeRef | null => {
         const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import { CHART_PALETTE, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/core/drawingml';
@@ -82,8 +83,8 @@ describe('a bar chart', () => {
             title: '',
             legend: 'right',
             blanks: 'gap',
-            categoryAxis: { title: '' },
-            valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
+            categoryAxis: { title: '', visible: true, reversed: false },
+            valueAxis: { title: '', min: null, max: null, gridlines: true, format: null, visible: true },
             sliceColors: [],
             data: {
                 source: 'inline',
@@ -108,34 +109,45 @@ describe('a bar chart', () => {
         expect(flat).toEqual(spec(space(bar() + AXES)));
     });
 
-    // Excel's minMax category axis runs up from the origin; a spec's bar chart lists its categories down from the top.
-    test('a horizontal bar chart lists its categories top down, as Excel draws them', () => {
-        const flipped = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
-        expect(flipped.data).toMatchObject({
-            categories: ['East', 'South', 'North'],
-            series: [{ values: [3, 2, 1] }, { values: [6, 5, 4.5] }],
-        });
-        const noAxes = spec(space(bar(TWO_SERIES, { dir: 'bar' })));
-        expect(noAxes.data).toMatchObject({ categories: ['East', 'South', 'North'] });
-        const reversed = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
-        expect(reversed.data).toMatchObject({
+    // Excel's minMax category axis runs up from the origin, a bar chart's from the bottom, where Google's runs down.
+    test("a horizontal bar chart's category axis is reversed, its data in the file's order", () => {
+        const minMax = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
+        expect(minMax.categoryAxis.reversed).toBe(true);
+        expect(minMax.data).toMatchObject({
             categories: CATEGORIES,
             series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
+        expect(spec(space(bar(TWO_SERIES, { dir: 'bar' }))).categoryAxis.reversed).toBe(true);
+        const maxMin = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
+        expect(maxMin.categoryAxis.reversed).toBe(false);
+        expect(maxMin.data).toMatchObject({ categories: CATEGORIES });
     });
 
-    test('a reversed category axis on a column chart reverses its categories', () => {
-        expect(spec(space(bar() + AXES.replace('minMax', 'maxMin'))).data).toMatchObject({
-            categories: ['East', 'South', 'North'],
-            series: [{ values: [3, 2, 1] }, { values: [6, 5, 4.5] }],
+    test('a reversed category axis on a column or line chart is reversed, its data in order', () => {
+        const column = spec(space(bar() + AXES.replace('minMax', 'maxMin')));
+        expect(column.categoryAxis.reversed).toBe(true);
+        expect(column.data).toMatchObject({
+            categories: CATEGORIES,
+            series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
+        expect(spec(space(bar() + AXES)).categoryAxis.reversed).toBe(false);
     });
 
-    test('a short series stays under its own categories when they turn', () => {
-        const short = [{ idx: 0, name: 'A', values: [1, 2] }];
-        expect(spec(space(bar(short, { dir: 'bar' }) + AXES)).data).toMatchObject({
-            categories: ['East', 'South', 'North'],
-            series: [{ values: [null, 2, 1] }],
+    // python-pptx's sample (fixtures/charts/SOURCES.md): Office draws Category 1 at the bottom and, in each band,
+    // Series 1 lowest. A reversed axis turns the bands with it; turning the data turned only the categories.
+    test('a real clustered bar chart reads reversed, with its series and categories in order', async () => {
+        const xml = await Bun.file(
+            join(import.meta.dir, '../fixtures/charts/python-pptx-cht-chart-type-chart7.xml'),
+        ).text();
+        const read = spec(xml);
+        expect(read).toMatchObject({ type: 'bar', categoryAxis: { reversed: true, visible: false } });
+        expect(read.data).toMatchObject({
+            categories: ['Category 1', 'Category 2', 'Category 3', 'Category 4'],
+            series: [
+                { name: 'Series 1', values: [4.3, 2.5, 3.5, 4.5] },
+                { name: 'Series 2', values: [2.4, 4.4, 1.8, 2.8] },
+                { name: 'Series 3', values: [2, 2, 3, 5] },
+            ],
         });
     });
 
@@ -230,7 +242,7 @@ describe('a chart with no spec', () => {
 
     test('two chart groups, secondary axes or a log scale are no spec', () => {
         const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 2, name: 'L', values: [1] })}</c:lineChart>`;
-        expect(read(space(bar() + line + AXES))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+        expect(read(space(bar() + line + AXES))).toEqual({ unsupported: { title: '', type: 'combinationChart' } });
         const secondary = AXES.replace('</c:valAx>', '</c:valAx><c:valAx><c:axId val="3"/></c:valAx>');
         expect(read(space(bar() + secondary))).toEqual({ unsupported: { title: '', type: 'barChart' } });
         const log = AXES.replace(
@@ -240,7 +252,7 @@ describe('a chart with no spec', () => {
         expect(read(space(bar() + log))).toEqual({ unsupported: { title: '', type: 'barChart' } });
     });
 
-    test("the type is the first group's name, cut to the label limit", () => {
+    test("the type is the group's name, cut to the label limit", () => {
         const name = `${'x'.repeat(300)}Chart`;
         expect(read(space(`<c:${name}/>`))).toEqual({ unsupported: { title: '', type: name.slice(0, 200) } });
     });
@@ -410,6 +422,24 @@ describe('the axes, legend and blanks', () => {
         expect(spec(space(bar() + AXES, { tail: '' })).legend).toBe('none');
     });
 
+    test('an axis the file deletes, or whose tick labels are none, is hidden', () => {
+        const hide = (axis: string, element: string) =>
+            AXES.replace(
+                new RegExp(
+                    `(<c:${axis}><c:axId val="\\d"/><c:scaling><c:orientation val="minMax"/></c:scaling>)<c:delete val="0"/>`,
+                ),
+                `$1${element}`,
+            );
+        const shown = spec(space(bar() + AXES));
+        expect([shown.categoryAxis.visible, shown.valueAxis.visible]).toEqual([true, true]);
+        const deleted = spec(space(bar() + hide('catAx', '<c:delete val="1"/>')));
+        expect([deleted.categoryAxis.visible, deleted.valueAxis.visible]).toEqual([false, true]);
+        expect(spec(space(bar() + hide('valAx', '<c:delete/>'))).valueAxis.visible).toBe(false);
+        const none = AXES.replace('<c:axPos val="l"/>', '<c:axPos val="l"/><c:tickLblPos val="none"/>');
+        expect(spec(space(bar() + none)).valueAxis.visible).toBe(false);
+        expect(spec(space(bar())).valueAxis.visible).toBe(true);
+    });
+
     test('dispBlanksAs reads as blanks', () => {
         expect(spec(space(bar() + AXES).replace('val="gap"', 'val="span"')).blanks).toBe('span');
         expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '')).blanks).toBe('gap');
@@ -508,11 +538,10 @@ describe('range data for a workbook', () => {
         expect('unsupported' in read(space(literal + AXES), ranges)).toBe(true);
     });
 
-    test('a horizontal bar chart over ranges is no spec unless its categories already run top down', () => {
-        expect('unsupported' in read(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES), ranges)).toBe(true);
-        expect('unsupported' in read(space(bar() + AXES.replace('minMax', 'maxMin')), ranges)).toBe(true);
-        const reversed = byRange(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
-        expect(reversed.data.categories).toEqual({ sheetId: 's1', row: [1, 3], column: [0, 0] });
+    test('a horizontal bar chart over ranges reads, its axis reversed', () => {
+        const flipped = byRange(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
+        expect(flipped.categoryAxis.reversed).toBe(true);
+        expect(flipped.data.categories).toEqual({ sheetId: 's1', row: [1, 3], column: [0, 0] });
     });
 
     test('an empty c:cat or c:val names no cells', () => {

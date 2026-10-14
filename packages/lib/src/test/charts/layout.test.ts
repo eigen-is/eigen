@@ -140,8 +140,8 @@ describe('layoutChart invariants', () => {
             const spec: Partial<ChartSpec> = {
                 legend,
                 stacked,
-                categoryAxis: { title: 'Teams' },
-                valueAxis: { title: 'Points', min: null, max: null, gridlines: true, format: null },
+                categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
+                valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
             };
             const out = layout(type, spec, { width, height });
 
@@ -321,7 +321,7 @@ describe('column and bar', () => {
         const out = layout(
             'column',
             {
-                valueAxis: { title: '', min: 10, max: 30, gridlines: true, format: null },
+                valueAxis: { ...sampleChartSpec('column').valueAxis, min: 10, max: 30 },
             },
             { data },
         );
@@ -460,8 +460,8 @@ describe('category labels', () => {
 
     test('axis titles: the category title below, the value title turned -90', () => {
         const out = layout('column', {
-            categoryAxis: { title: 'Teams' },
-            valueAxis: { title: 'Points', min: null, max: null, gridlines: true, format: null },
+            categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
+            valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
         });
         const teams = out.labels.find((label) => label.text === 'Teams');
         const points = out.labels.find((label) => label.text === 'Points');

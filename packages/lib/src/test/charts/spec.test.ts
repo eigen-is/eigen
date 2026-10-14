@@ -170,7 +170,7 @@ describe('parseChartSpec', () => {
             JSON.stringify(
                 chart({
                     title: long,
-                    categoryAxis: { title: long },
+                    categoryAxis: { ...chart().categoryAxis, title: long },
                     data: { source: 'inline', categories: [long], series: [{ ...style, name: long, values: [1] }] },
                 }),
             ),
