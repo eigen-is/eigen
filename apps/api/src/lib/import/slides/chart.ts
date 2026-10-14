@@ -4,7 +4,7 @@ import type { DrawingTheme } from '../../core/drawingml';
 import { C_NS, R_NS } from '../../core/ooxml';
 import { readChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlElements } from '../../core/xml';
-import { cachedBy, childOf, prefixedAttrOf } from './lookup';
+import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk, Part } from './package';
 
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
@@ -36,7 +36,7 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
         root &&
         read(root, colors, () => {
             // Read again for every colour map a slide paints it with, so each read is charged its elements.
-            deck.read(nodesIn(root));
+            charge(nodesIn(root));
             const answer = readChart(root, { theme: colors, data: 'cache' });
             return 'spec' in answer ? { chart: JSON.stringify(answer.spec) } : answer;
         })
