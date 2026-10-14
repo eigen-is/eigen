@@ -9,7 +9,7 @@
 
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
-import type { OutlineShape } from '../outline';
+import { EMPTY_OUTLINE, type OutlineShape } from '../outline';
 import { type Corners, DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorElementBase } from '../types';
 import type { YMapLike } from './read-fields';
 
@@ -93,6 +93,8 @@ type KindSpec<T extends VectorElement> = {
     bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: T, inflate: number): OutlineShape;
+    // The dock and snap anchors, in SCENE space. Omit for the box default.
+    anchorPoints?(el: T): Point[];
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
     render(el: T, ctx: RenderContext): RenderOutput;
@@ -102,6 +104,9 @@ type KindSpec<T extends VectorElement> = {
     paintsNothing?(el: T): boolean;
     // What the kind contributes to the search index. Omit when it carries no text.
     searchText?(el: T): string;
+    // Convert to shapes: the plain elements that draw what this one draws, in its coordinate space; [] when
+    // there is nothing to unpack. Omit where no element of the kind unpacks.
+    toShapes?(el: T): VectorElement[];
 };
 
 // The registry entry. `defaults` and `read` keep the kind's own element type, so a consumer that names
@@ -125,15 +130,13 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     render(el: VectorElement, ctx: RenderContext): RenderOutput;
     paintsNothing(el: VectorElement): boolean;
     searchText(el: VectorElement): string;
+    toShapes(el: VectorElement): VectorElement[];
 };
-
-// The empty outline a mis-dispatched element gets: no edge, so nothing docks to it.
-const EMPTY_OUTLINE: OutlineShape = { kind: 'polyline', points: [] };
 
 // The dock anchors of anything box-shaped: the right/bottom/left/top edge midpoints, rotated by the
 // element's angle. An ellipse's are its axis extremes and a diamond's are its four tips (Excalidraw's
-// getDiamondBaseCorners) — the same four points, so no kind overrides this. Excalidraw's
-// getSnapOutlineMidPoint order, so a bind-time midpoint snap resolves the same side on a tie.
+// getDiamondBaseCorners) — the same four points. Excalidraw's getSnapOutlineMidPoint order, so a
+// bind-time midpoint snap resolves the same side on a tie.
 function boxAnchorPoints(el: VectorElement): Point[] {
     const { x, y, width: w, height: h } = el;
     const center = boxCenter(el);
@@ -211,10 +214,11 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         bounds: (el, route) => (spec.is(el) && spec.bounds ? spec.bounds(el, route) : getElementBounds(el)),
         hitTest: (el, point, threshold, route) => (spec.is(el) ? spec.hitTest(el, point, threshold, route) : false),
         outline: (el, inflate) => (spec.is(el) ? spec.outline(el, inflate) : EMPTY_OUTLINE),
-        anchorPoints: boxAnchorPoints,
+        anchorPoints: (el) => (spec.is(el) && spec.anchorPoints ? spec.anchorPoints(el) : boxAnchorPoints(el)),
         aimLines: (el) => (spec.is(el) && spec.aimLines ? spec.aimLines(el) : boxAimLines(el)),
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
         paintsNothing: (el) => (spec.is(el) && spec.paintsNothing ? spec.paintsNothing(el) : false),
         searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),
+        toShapes: (el) => (spec.is(el) && spec.toShapes ? spec.toShapes(el) : []),
     };
 }

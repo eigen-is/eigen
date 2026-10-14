@@ -42,7 +42,7 @@ function asSheet(v: unknown): Sheet | null {
 }
 
 // The one shape every sheet leaves the replay in, whichever door it came through — the decoded
-// snapshot or an addSheet op's value. Config collections, `images` and `calcChain` are
+// snapshot or an addSheet op's value. Config collections, `charts`, `images` and `calcChain` are
 // materialized because the editor writes them as whole collections, and a patch against one that
 // doesn't exist yet fails to resolve (see normalizeSheetConfig, and the decode in lib's
 // snapshot-codec). `calcChain` earns its place here: the editor seeds it on every sheet at mount

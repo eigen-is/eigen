@@ -1,3 +1,5 @@
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+
 export type CellCoordinate = {
     index: number;
     label: string;
@@ -76,10 +78,6 @@ export function toLabel(row: CellCoordinate, column: CellCoordinate): string {
     const columnLabel = (column.isAbsolute ? '$' : '') + columnIndexToLabel(column.index);
     return columnLabel + rowLabel;
 }
-
-// Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
-export const REFERENCE_ROW_COUNT = 1048576;
-export const REFERENCE_COLUMN_COUNT = 16384;
 
 // `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the grid (#REF!).
 export function offsetCoordinate(

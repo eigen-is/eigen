@@ -5,3 +5,7 @@
 // on screen than in an export.
 export const SHEET_DEFAULT_COL_WIDTH = 100;
 export const SHEET_DEFAULT_ROW_HEIGHT = 20;
+
+// Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
+export const REFERENCE_ROW_COUNT = 1048576;
+export const REFERENCE_COLUMN_COUNT = 16384;

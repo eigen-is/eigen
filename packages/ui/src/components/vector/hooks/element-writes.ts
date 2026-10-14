@@ -80,6 +80,48 @@ export function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
     return topmost;
 }
 
+// The lowest valid stored index above `index`: the top of the z slot an element at `index` holds.
+function indexAbove(elementsMap: Y.Map<unknown>, index: string): string | null {
+    let above: string | null = null;
+    for (const value of elementsMap.values()) {
+        if (!(value instanceof Y.Map)) continue;
+        const idx = value.get('index');
+        if (typeof idx !== 'string' || idx <= index || !isValidFractionalIndex(idx, undefined, undefined)) continue;
+        if (above === null || idx < above) above = idx;
+    }
+    return above;
+}
+
+// One element replaced by new ones in ONE transact, in its z slot and in the given order (Convert to
+// shapes), each with a fresh id and the caller's seed. Arrows bound to it keep their endpoints and lose the
+// binding, as on delete. A malformed index (read-vector healed it somewhere) puts them on top, like an add.
+export function replaceElementInDoc(
+    doc: Y.Doc,
+    id: string,
+    partials: NewVectorElement[],
+    style: StyleDefaults,
+): string[] {
+    const elementsMap = doc.getMap('elements');
+    const target = elementsMap.get(id);
+    if (!(target instanceof Y.Map)) return [];
+    const ids: string[] = [];
+    doc.transact(() => {
+        const index = target.get('index');
+        const below =
+            typeof index === 'string' && isValidFractionalIndex(index, undefined, undefined)
+                ? index
+                : topmostIndex(elementsMap);
+        const keys = generateNKeysBetween(
+            below,
+            below === null ? null : indexAbove(elementsMap, below),
+            partials.length,
+        );
+        elementsMap.delete(id);
+        for (const [i, partial] of partials.entries()) ids.push(writeElementInDoc(doc, partial, keys[i], style));
+    });
+    return ids;
+}
+
 // A stored fractional index, or '' when the entry has none — the duplicate pass only needs the relative
 // order, and read-vector heals a malformed index anyway.
 function indexOf(element: Y.Map<unknown>): string {

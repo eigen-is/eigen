@@ -12,19 +12,21 @@ import {
     readVectorFromDoc,
     type StyleDefaults,
     type VectorArrowElement,
+    type VectorChartElement,
     type VectorElement,
     type VectorElementType,
     type VectorFrame,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorMeta,
+    type VectorPieElement,
     type VectorRichTextElement,
     type VectorScene,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, topmostIndex, writeElementInDoc } from './element-writes';
+import { duplicateElementsInDoc, replaceElementInDoc, topmostIndex, writeElementInDoc } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -83,6 +85,8 @@ export function holdCapture(undoManager: Y.UndoManager | null): () => void {
 // subset of any element variant's fields (the union members share the geometry base). id/type
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
+    Partial<Omit<VectorPieElement, 'id' | 'type'>> &
+    Partial<Omit<VectorChartElement, 'id' | 'type'>> &
     Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
     Partial<Omit<VectorImageElement, 'id' | 'type'>> &
     Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
@@ -286,6 +290,12 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [],
     );
 
+    const replaceElement = useCallback(
+        (id: string, partials: NewVectorElement[]): string[] =>
+            docRef.current ? replaceElementInDoc(docRef.current, id, partials, defaultsRef.current) : [],
+        [],
+    );
+
     // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
     // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
     // steps. add/duplicate return the new frame id so the caller can activate it.
@@ -365,6 +375,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
+        replaceElement,
         addFrame,
         deleteFrame,
         duplicateFrame,

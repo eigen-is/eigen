@@ -1,8 +1,8 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
 // does it draw", so the live canvas (one absolutely positioned div per element), the server compositor
-// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws one
-// elementLayer per element (ElementLayer); sceneLayers is the same pass over a whole scene, for a host
-// that lays a whole page out at once.
+// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws each
+// element through elementLayer's two halves (ElementLayer); sceneLayers is the same pass over a whole
+// scene, for a host that lays a whole page out at once.
 
 import { escapeXml } from '../core/xml';
 import { arrowRoute } from './elbow-route';
@@ -10,12 +10,9 @@ import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
 import { type Point, round } from './geometry';
 import { ELEMENT_KINDS, type RenderOutput } from './kinds';
+import { SVG_NS } from './kinds/render-utils';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
-
-// The SVG namespace, one spelling for every surface that writes it: the viewports this module emits,
-// the documents scene-to-svg serializes and the live <svg> nodes the canvas mounts.
-export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export type Layer = {
     id: string;
@@ -41,13 +38,25 @@ type ElementLayerOptions = {
     route?: Point[];
 };
 
-// One element as a placed layer, or null when the kind draws nothing at all (an image with no media
-// name and no border is the only such element today). The live canvas
-// renders per element with local preview overrides, so it calls this directly; sceneLayers is the same
-// function over a whole scene.
+// One element as a placed layer, or null when the kind draws nothing at all. The live canvas renders per
+// element with local preview overrides, so it builds its layers from the two halves below; sceneLayers
+// is this over a whole scene.
 export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}): Layer | null {
+    const content = layerContent(el, opts);
+    return content && placeLayer(el, content);
+}
+
+// The fields only placeLayer reads: no kind's render does, so a host may keep a body across a change to them.
+export const PLACEMENT_FIELDS: readonly string[] = ['x', 'y', 'angle', 'opacity'];
+
+// What the element draws, in its own frame. Null when the kind draws nothing at all (an image with no
+// media name and no border is the only such element today).
+export function layerContent(el: VectorElement, opts: ElementLayerOptions = {}): RenderOutput | null {
     const content = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: opts.route });
-    if (!('html' in content) && content.svg === '') return null;
+    return !('html' in content) && content.svg === '' ? null : content;
+}
+
+export function placeLayer(el: VectorElement, content: RenderOutput): Layer {
     return {
         id: el.id,
         // An elbow arrow's derived route can spill outside its stored box; the box stays the element's,

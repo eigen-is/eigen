@@ -12,6 +12,7 @@ import {
     isVectorElementType,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
+import { EMPTY_OUTLINE } from '../../../vector/outline';
 import { readElementFromFields } from '../../../vector/read-vector';
 import {
     BASE_ELEMENT_FIELDS,
@@ -20,9 +21,20 @@ import {
     type VectorElementBase,
     type VectorRichTextElement,
 } from '../../../vector/types';
-import { ellipse, image, linear, richtext, shape } from '../element-factories';
+import { chart, ellipse, image, linear, pie, richtext, shape } from '../element-factories';
 
-const TYPES = ['rectangle', 'diamond', 'ellipse', 'image', 'richtext', 'freedraw', 'line', 'arrow'] as const;
+const TYPES = [
+    'rectangle',
+    'diamond',
+    'ellipse',
+    'pie',
+    'chart',
+    'image',
+    'richtext',
+    'freedraw',
+    'line',
+    'arrow',
+] as const;
 
 describe('ELEMENT_KINDS', () => {
     test('every element type has exactly one entry, keyed by its own type', () => {
@@ -56,7 +68,7 @@ describe('ELEMENT_KINDS', () => {
         const rect = shape({ id: 'r', type: 'rectangle' });
         expect(ELEMENT_KINDS.arrow.searchText(rect)).toBe('');
         expect(ELEMENT_KINDS.arrow.hitTest(rect, { x: 0, y: 0 }, 8)).toBe(false);
-        expect(ELEMENT_KINDS.arrow.outline(rect, 0)).toEqual({ kind: 'polyline', points: [] });
+        expect(ELEMENT_KINDS.arrow.outline(rect, 0)).toEqual(EMPTY_OUTLINE);
         // the fallback bounds are still the element's own box, so nothing disappears from a viewBox
         expect(ELEMENT_KINDS.arrow.bounds(rect)).toEqual(getElementBounds(rect));
         expect(ELEMENT_KINDS.arrow.render(rect, {})).toEqual({ svg: '' });
@@ -80,28 +92,34 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.image.capabilities.creation).toBe('none');
     });
 
-    test('the bindable kinds are the closed shapes plus the two DOM boxes', () => {
+    test('the bindable kinds are the closed shapes, the pie slice, the chart and the two DOM boxes', () => {
         // isBindable READS this table, so the only thing worth pinning is which kinds set the capability:
         // the arrow endpoint docks on anything with a real outline, never on a stroke.
         expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.bindable)).toEqual([
             'rectangle',
             'diamond',
             'ellipse',
+            'pie',
+            'chart',
             'image',
             'richtext',
         ]);
+        expect(isBindable(pie({ id: 'p' }))).toBe(true);
+        expect(isBindable(chart({ id: 'c' }))).toBe(true);
         expect(isBindable(richtext({ id: 't' }))).toBe(true);
         expect(isBindable(shape({ id: 'r', type: 'rectangle' }))).toBe(true);
         expect(isBindable(linear({ id: 'l', type: 'line' }))).toBe(false);
     });
 
-    test('every bindable kind answers the docking questions off its own box', () => {
+    test('every bindable kind answers the docking questions', () => {
         // Docking needs an outline, four anchors and two aim lines. The DOM boxes declare no anchorPoints
         // or aimLines of their own, so this is what pins defineKind's box defaults reaching them.
         const bindables: VectorElement[] = [
             shape({ id: 'r', type: 'rectangle' }),
             shape({ id: 'd', type: 'diamond' }),
             ellipse({ id: 'e' }),
+            pie({ id: 'p' }),
+            chart({ id: 'c' }),
             image({ id: 'i' }),
             richtext({ id: 't' }),
         ];
@@ -111,7 +129,7 @@ describe('ELEMENT_KINDS', () => {
         for (const el of bindables) {
             const kind = ELEMENT_KINDS[el.type];
             expect(isBindable(el)).toBe(true);
-            expect(kind.outline(el, 0)).not.toEqual({ kind: 'polyline', points: [] });
+            expect(kind.outline(el, 0)).not.toEqual(EMPTY_OUTLINE);
             expect(kind.anchorPoints(el)).toHaveLength(4);
             expect(kind.aimLines(el)).toHaveLength(2);
         }
@@ -121,6 +139,16 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.rectangle.capabilities.silhouette).toBe('box');
         expect(ELEMENT_KINDS.diamond.capabilities.silhouette).toBe('diamond');
         expect(ELEMENT_KINDS.ellipse.capabilities.silhouette).toBe('ellipse');
+        expect(ELEMENT_KINDS.pie.capabilities.silhouette).toBe('ellipse');
+        expect(ELEMENT_KINDS.chart.capabilities.silhouette).toBe('box');
+    });
+
+    test('ELEMENT_FIELDS stores every kind the registry holds, a kind off the toolbar included', () => {
+        expect(ELEMENT_KINDS.pie.capabilities.creation).toBe('none');
+        expect(ELEMENT_FIELDS).toContain('startAngle');
+        expect(ELEMENT_FIELDS).toContain('sweepAngle');
+        expect(ELEMENT_KINDS.chart.capabilities.creation).toBe('none');
+        expect(ELEMENT_FIELDS).toContain('chart');
     });
 
     test('the dock anchors are the right/bottom/left/top points, whatever the kind derives them from', () => {
@@ -246,7 +274,16 @@ describe('capabilities agree with the stored fields', () => {
         const hatched = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.fillStyle)
             .map(([type]) => type);
-        expect(hatched.sort()).toEqual(['diamond', 'ellipse', 'freedraw', 'line', 'rectangle', 'richtext']);
+        expect(hatched.sort()).toEqual([
+            'chart',
+            'diamond',
+            'ellipse',
+            'freedraw',
+            'line',
+            'pie',
+            'rectangle',
+            'richtext',
+        ]);
     });
 
     test('every kind but freedraw honours the stroke dash style', () => {
@@ -255,7 +292,17 @@ describe('capabilities agree with the stored fields', () => {
         const dashable = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.strokeStyle)
             .map(([type]) => type);
-        expect(dashable.sort()).toEqual(['arrow', 'diamond', 'ellipse', 'image', 'line', 'rectangle', 'richtext']);
+        expect(dashable.sort()).toEqual([
+            'arrow',
+            'chart',
+            'diamond',
+            'ellipse',
+            'image',
+            'line',
+            'pie',
+            'rectangle',
+            'richtext',
+        ]);
     });
 
     test('the stroke is optional exactly on the kinds that still have a body without it', () => {
@@ -264,7 +311,7 @@ describe('capabilities agree with the stored fields', () => {
         const optional = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.strokeOptional)
             .map(([type]) => type);
-        expect(optional.sort()).toEqual(['diamond', 'ellipse', 'image', 'rectangle', 'richtext']);
+        expect(optional.sort()).toEqual(['chart', 'diamond', 'ellipse', 'image', 'pie', 'rectangle', 'richtext']);
     });
 
     test('only a bindable kind declares a silhouette', () => {
@@ -326,7 +373,7 @@ describe('baseDefaults', () => {
     });
 
     test('a kind that draws its stroke keeps the shared base defaults', () => {
-        for (const type of ['rectangle', 'diamond', 'ellipse', 'freedraw', 'line', 'arrow'] as const) {
+        for (const type of ['rectangle', 'diamond', 'ellipse', 'pie', 'chart', 'freedraw', 'line', 'arrow'] as const) {
             expect([type, ELEMENT_KINDS[type].baseDefaults]).toEqual([type, {}]);
             expect([type, baseDefaultsFor(type, VECTOR_STYLE_DEFAULTS).strokeColor]).toEqual([
                 type,
