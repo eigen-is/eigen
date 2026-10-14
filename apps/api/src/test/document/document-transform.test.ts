@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import {
     DRIVE_MIME_DOC,
@@ -22,7 +23,7 @@ import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
-import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -63,6 +64,7 @@ import {
     seedDocumentMedia,
     seedEigendoc,
     seedVectorDoc,
+    withoutEquations,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -789,7 +791,7 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'aa6092a5dcf13d1ed7a3bb9bdb1e7ebd8911d98b67949bb2871755af003823d3';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bb25cd1e2163fb2bb069c5bf414283446fb84eb5fa382cec73af1fd7c32b838f';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
@@ -867,6 +869,34 @@ describe('document transform (eigendoc)', () => {
         const preview = await res.json();
         expect(preview.mode).toBe('eigendoc');
         expect(preview.body).toBe(body);
+    }, 120_000);
+
+    test('the preview carries the page the doc stores, never from a body cached before it had one', async () => {
+        const letter = {
+            width: 279.4,
+            height: 215.9,
+            margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            differentFirstPage: false,
+        };
+        const { mount, path: seeded } = await seedGoldenDocument('letter-doc', 'doc', (doc) => {
+            const map = doc.getMap(PAGE_ROOT);
+            for (const [key, value] of Object.entries(pageRecord(letter))) map.set(key, value);
+        });
+        const home = await getHome(ctx.alice.user.id);
+        const { path: current } = await home.drive.resolveFile(mountId, seeded.id);
+        fs.mkdirSync(mount.previewsDir, { recursive: true });
+        fs.writeFileSync(
+            path.join(mount.previewsDir, `${current.id}-${current.updatedAt.getTime()}.f6.json`),
+            JSON.stringify({ body: '<p>cached before the page</p>' }),
+        );
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${current.id}/text-preview`,
+        );
+        const preview = await res.json();
+        expect(preview.body).toContain('Quarterly Report');
+        expect(preview.page).toEqual(letter);
     }, 120_000);
 
     test('html export is byte-identical to the pre-move pipeline', async () => {
@@ -1051,7 +1081,13 @@ describe('document transform (eigendoc)', () => {
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
         const media = await collectExportMedia(mount, path, 'docx');
-        const direct = await eigendocToDocx(readEigendocFromDoc(persisted), media, path.name, undefined);
+        const direct = await eigendocToDocx(
+            readEigendocFromDoc(persisted),
+            readEigendocPage(persisted),
+            media,
+            path.name,
+            undefined,
+        );
         persisted.destroy();
         expect(docx.equals(Buffer.from(direct))).toBe(true);
         expect(sha256(docx)).toBe(GOLDEN_DOC_EXPORT_DOCX_SHA256);
@@ -1101,13 +1137,16 @@ describe('document transform (docx round trip)', () => {
     }
 
     // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
+    // A page number is its field's cached 1, which the reader keeps as text.
     function words(json: JSONContent): string[] {
         const chunks: string[] = [];
         const walk = (node: JSONContent) => {
             const caption = node.attrs?.['caption'];
             if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
-            const inline = node.content?.filter((child) => child.type === 'text' || child.type === 'hardBreak') ?? [];
-            if (inline.length > 0) chunks.push(inline.map((child) => child.text ?? ' ').join(''));
+            const inline =
+                node.content?.filter((child) => ['text', 'hardBreak', 'pageNumber'].includes(child.type ?? '')) ?? [];
+            const textOf = (child: JSONContent) => (child.type === 'pageNumber' ? '1' : (child.text ?? ' '));
+            if (inline.length > 0) chunks.push(inline.map(textOf).join(''));
             for (const child of node.content ?? []) walk(child);
         };
         walk(json);
@@ -1194,7 +1233,7 @@ describe('document transform (docx round trip)', () => {
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
-        const original = buildAllFeaturesDocJson();
+        const original = withoutEquations(buildAllFeaturesDocJson());
         const { json, images } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
@@ -1391,11 +1430,17 @@ describe('document transform (docx import)', () => {
 
     test('Worker import returns a Yjs update that commits to the golden document', async () => {
         const response = await runDocxImport(await buildGoldenDocx(TEST_PNG_BYTES));
-        const { update, images } = importDocUpdate(response);
+        const { update, page, images } = importDocUpdate(response);
         expect(response.ok && response.warnings).toEqual([]);
 
+        // The page travels beside the update, never in it: commitEigendocImport sets its keys on the live doc.
+        const updateOnly = new Y.Doc();
+        Y.applyUpdate(updateOnly, new Uint8Array(update));
+        expect(updateOnly.share.has(PAGE_ROOT)).toBe(false);
+        updateOnly.destroy();
+
         const doc = new Y.Doc();
-        writeEigendocUpdateToYjs(doc, new Uint8Array(update));
+        commitEigendocImport(doc, { update: new Uint8Array(update), page });
         const committed = readEigendocFromDoc(doc);
         doc.destroy();
         expect(committed).toEqual(await referenceDocument());

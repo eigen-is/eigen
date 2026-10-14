@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, and images.
@@ -45,6 +45,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
 - Footnotes and endnotes become a numbered list at the end of the document, linked from the text.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
+- The paper size, orientation, and margins. A document has one page setup, so when the Word file's sections differ, the last section's is used.
 - Blank lines stay, except the ones right before a new page.
 - A Word file you downloaded from Eigen keeps its code blocks' languages.
 
