@@ -35,6 +35,15 @@ describe('a pptx package', () => {
         expect(htmlOf(zipParts(parts))).toEqual(['<p>two</p>', '<p>one</p>']);
     });
 
+    test('a slide listed twice is read once, where it is first listed', () => {
+        const parts = pptxParts({ slides: [{ shapes: text('one') }, { shapes: text('two') }] });
+        parts['ppt/presentation.xml'] = String(parts['ppt/presentation.xml']).replace(
+            '<p:sldId id="256" r:id="rId10"/><p:sldId id="257" r:id="rId11"/>',
+            '<p:sldId id="256" r:id="rId10"/><p:sldId id="257" r:id="rId11"/><p:sldId id="258" r:id="rId10"/>',
+        );
+        expect(htmlOf(zipParts(parts))).toEqual(['<p>one</p>', '<p>two</p>']);
+    });
+
     test('a macro-enabled deck, a template and a slideshow are refused with a word on saving as .pptx', () => {
         for (const type of [
             'application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml',
