@@ -92,7 +92,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                 value={categoryAxis.title}
                 placeholder={placeholder}
                 maxLength={MAX_CHART_LABEL_LENGTH}
-                onChange={(title) => onChange({ ...spec, categoryAxis: { title } })}
+                onChange={(title) => onChange({ ...spec, categoryAxis: { ...categoryAxis, title } })}
             />
         </PropertyRow>
     );
