@@ -37,7 +37,7 @@ import {
     styleLine,
     type Xfrm,
 } from './inherit';
-import { cachedBy, childOf, childrenOf, prefixedAttrOf } from './lookup';
+import { cachedBy, charge, childOf, childrenOf, prefixedAttrOf } from './lookup';
 import { alternative, blipMedia, type DeckWalk, emu, type Lost, type Part } from './package';
 import { richTextOf, verticalTurnOf } from './text';
 
@@ -240,6 +240,7 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, PRESENTATION_TOO_LARGE);
     for (const shape of shapes) {
         if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+        charge(1);
         if (isAlternateContent(shape)) {
             readTree(walk, alternative(shape), placeIn, depth + 1, group);
             continue;
@@ -326,7 +327,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     };
     // Counted once for the shape, however many slides show it.
     const lost: Lost = (code) => walk.deck.lost(code, shape);
-    const text = source && richTextOf(source, theme, walk.deck.scale, lost, walk.deck.read);
+    const text = source && richTextOf(source, theme, walk.deck.scale, lost);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
     const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;

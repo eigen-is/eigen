@@ -4,12 +4,13 @@ import {
     type DrawingTheme,
     drawingColor,
     IDENTITY_COLOR_MAP,
+    percent,
     readColorMap,
     readColorScheme,
 } from '../../core/drawingml';
 import { A_NS, isOn, P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
-import { cachedBy, childOf, childrenOf, firstChildOf } from './lookup';
+import { cachedBy, charge, childOf, childrenOf, firstChildOf } from './lookup';
 import { blipMedia, type DeckWalk, emu, type Lost, type Part, type PptxPackage } from './package';
 
 // What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
@@ -300,15 +301,54 @@ function isFill(child: XmlElement): boolean {
     return child.ns === A_NS && FILLS.has(child.local);
 }
 
+// EG_ColorChoice: the colour elements drawingColor takes the first of.
+const COLOR_CHOICES = new Set(['scrgbClr', 'srgbClr', 'hslClr', 'sysClr', 'schemeClr', 'prstClr']);
+
+function isColorChoice(child: XmlElement): boolean {
+    return child.ns === A_NS && COLOR_CHOICES.has(child.local);
+}
+
+// A colour element reduced to what drawingColor reads: its colour child with the transforms it applies, and whether
+// that colour is phClr.
+type Swatch = { fill: XmlElement; transforms: number; placeholder: boolean };
+
+const swatches = cachedBy<null, Swatch | undefined>();
+
+// Found once, whatever colours it is resolved with: junk beside the colour or among its transforms is passed over once,
+// not again for every phClr a style reference paints it with.
+function swatchOf(element: XmlElement): Swatch | undefined {
+    return swatches(element, null, () => {
+        const color = firstChildOf(element, isColorChoice);
+        if (!color) return undefined;
+        charge(color.children.length);
+        const transforms = xmlElements(color).filter(
+            (transform) => transform.ns === A_NS && percent(xmlAttr(transform, '', 'val')) !== undefined,
+        );
+        return {
+            fill: { ...element, children: [{ ...color, children: transforms }] },
+            transforms: transforms.length,
+            placeholder: color.local === 'schemeClr' && xmlAttr(color, '', 'val') === 'phClr',
+        };
+    });
+}
+
 const resolved = cachedBy<DrawingTheme, string | undefined>();
 
-// What a colour element shows, resolved once for each slide's colours: one in a theme, master or layout is painted again
-// for every shape and run that takes it.
+// What a colour element shows, resolved once for each slide's colours, and a phClr once for each phClr: one in a theme,
+// master or layout is painted again for every shape and run that takes it.
 export function colorOf(element: XmlElement | undefined, colors: DrawingTheme): string | undefined {
-    return element && resolved(element, colors, () => drawingColor(element, colors));
+    const swatch = element && swatchOf(element);
+    if (!element || !swatch) return undefined;
+    const palette = swatch.placeholder ? colors : (unplaced.get(colors) ?? colors);
+    return resolved(element, palette, () => {
+        charge(1 + swatch.transforms);
+        return drawingColor(swatch.fill, palette);
+    });
 }
 
 const placeholderColors = new WeakMap<DrawingTheme, Map<string | undefined, DrawingTheme>>();
+// Each phClr's colours back to the slide's, which any colour but phClr resolves the same with.
+const unplaced = new WeakMap<DrawingTheme, DrawingTheme>();
 
 // A slide's colours with a reference's phClr, one object for each, as colorOf keeps its answers by the object.
 function withPlaceholder(colors: DrawingTheme, phClr: string | undefined): DrawingTheme {
@@ -319,6 +359,7 @@ function withPlaceholder(colors: DrawingTheme, phClr: string | undefined): Drawi
     }
     const found = known.get(phClr) ?? { ...colors, phClr };
     known.set(phClr, found);
+    unplaced.set(found, colors);
     return found;
 }
 
@@ -379,17 +420,35 @@ function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOption
     return { type: 'gradient', from, to, angle: normalizeAngle(Math.round(angle * 1000) / 1000) };
 }
 
+const stopLists = cachedBy<null, XmlElement[]>();
+
+// A gradient's stops as PowerPoint orders them, by position, sorted once whatever colours paint them.
+function stopsOf(fill: XmlElement): XmlElement[] {
+    return stopLists(fill, null, () => {
+        const list = childOf(fill, A_NS, 'gsLst');
+        const stops = (list ? childrenOf(list, A_NS, 'gs') : []).map((stop) => {
+            const at = Number(xmlAttr(stop, '', 'pos'));
+            return { stop, at: Number.isFinite(at) ? at : 0 };
+        });
+        charge(stops.length);
+        return stops.sort((a, b) => a.at - b.at).map(({ stop }) => stop);
+    });
+}
+
 const ramps = cachedBy<DrawingTheme, { from: string | undefined; to: string | undefined; single: boolean }>();
 
-// A gradient's end stops, sorted once for each slide's colours however many shapes it paints.
+// A gradient's end stops that show a colour, picked once for each slide's colours and phClr however many shapes it
+// paints; a stop that shows none is passed over.
 function rampOf(fill: XmlElement, colors: DrawingTheme) {
     return ramps(fill, colors, () => {
-        const list = childOf(fill, A_NS, 'gsLst');
-        const stops = (list ? childrenOf(list, A_NS, 'gs') : [])
-            .map((stop) => ({ at: Number(xmlAttr(stop, '', 'pos')), color: colorOf(stop, colors) }))
-            .filter((stop) => stop.color !== undefined);
-        stops.sort((a, b) => (Number.isFinite(a.at) ? a.at : 0) - (Number.isFinite(b.at) ? b.at : 0));
-        return { from: stops[0]?.color, to: stops.at(-1)?.color, single: stops.length === 1 };
+        const stops = stopsOf(fill);
+        const shows = (stop: XmlElement) => {
+            charge(1);
+            return colorOf(stop, colors) !== undefined;
+        };
+        const first = stops.findIndex(shows);
+        const last = first < 0 ? -1 : stops.findLastIndex(shows);
+        return { from: colorOf(stops[first], colors), to: colorOf(stops[last], colors), single: first === last };
     });
 }
 
