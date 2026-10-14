@@ -6,10 +6,12 @@ import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import {
     DEFAULT_ELEMENT_PROPS,
     type VectorArrowElement,
+    type VectorChartElement,
     type VectorElement,
     type VectorEllipseElement,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorPieElement,
     type VectorRectangleElement,
     type VectorRichTextElement,
     type VectorScene,
@@ -56,6 +58,21 @@ export function richtext(
 // a round-trip fixture must be exactly the kind's own field set.
 export function ellipse(over: Partial<VectorEllipseElement> & Pick<VectorEllipseElement, 'id'>): VectorEllipseElement {
     return { ...BASE, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', ...over };
+}
+
+export function pie(over: Partial<VectorPieElement> & Pick<VectorPieElement, 'id'>): VectorPieElement {
+    return { ...BASE, ...ELEMENT_KINDS.pie.defaults(VECTOR_STYLE_DEFAULTS), type: 'pie', ...over };
+}
+
+export function chart(over: Partial<VectorChartElement> & Pick<VectorChartElement, 'id'>): VectorChartElement {
+    return {
+        ...BASE,
+        width: 640,
+        height: 400,
+        ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+        type: 'chart',
+        ...over,
+    };
 }
 
 export function image(over: Partial<VectorImageElement> & Pick<VectorImageElement, 'id'>): VectorImageElement {

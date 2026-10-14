@@ -4,31 +4,72 @@
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { svgGradientStops } from '../../background/gradient';
+import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
-import { isClosedPath, type Point, round } from '../geometry';
+import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
+import { type Box, DEG_TO_RAD, isClosedPath, type Point, round } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
 import {
     type FillStyle,
     isLinearElement,
+    type TextLine,
     type VectorArrowElement,
+    type VectorElement,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorPieElement,
     type VectorRichTextElement,
     type VectorShapeElement,
 } from '../types';
 
+// The SVG namespace, one spelling for every surface that writes it: the viewports scene-layers emits,
+// the documents scene-to-svg serializes, a standalone chart and the live <svg> nodes the canvas mounts.
+export const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// The most degrees of a slice's arc one cubic draws.
+const ARC_PIECE = 45;
+
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// What the one rough box drawable serves: the closed shapes, plus the two DOM boxes whose border it is.
-type RoughBoxElement = VectorShapeElement | VectorImageElement | VectorRichTextElement;
+// What the one rough box drawable serves: the closed shapes and the pie slice, plus the two DOM boxes
+// whose border it is.
+type RoughBoxElement = VectorShapeElement | VectorPieElement | VectorImageElement | VectorRichTextElement;
 
 // A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
 export function renderRoughShape(el: RoughBoxElement): string {
     const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
     return `${'fill' in el ? fillDefs(el) : ''}<g stroke-linecap="round">${paths}</g>`;
+}
+
+// The dashed box an element draws where its content can't be shown: a picture with no file, a chart that
+// doesn't read.
+export const PLACEHOLDER_STROKE = 'fill="none" stroke="#9ca3af" stroke-width="1" stroke-dasharray="6 6"';
+
+// An element's own group: translated to its position, then rotated about its center (SVG rotate() takes
+// degrees, as `angle` stores them). Every kind draws in its local frame inside one.
+export function elementGroupOpen(el: VectorElement): string {
+    const opacity = el.opacity !== 100 ? ` opacity="${round(el.opacity / 100)}"` : '';
+    return `<g transform="${elementTransform(el)}"${opacity}>`;
+}
+
+function elementTransform(box: Box): string {
+    const translate = `translate(${round(box.x)} ${round(box.y)})`;
+    if (box.angle === 0) return translate;
+    return `${translate} rotate(${round(box.angle)} ${round(box.width / 2)} ${round(box.height / 2)})`;
+}
+
+// One line of plain SVG text, which every surface draws (WeasyPrint ignores foreignObject). `y` is the
+// line's top and the baseline sits the font's offset below it; a turned line turns about (x, y). Bold is
+// 600, the weight of Inter's and JetBrains Mono's bundled bold faces; Source Serif's is 700, so its width
+// table reserves slightly more than the line draws, and Excalifont has only a regular face.
+export function svgTextLine({ text, x, y, anchor, fontFamily, fontSize, bold, color, rotate }: TextLine): string {
+    const baseline = y + getVerticalOffset(fontFamily, fontSize, getLineHeightPx(fontFamily, fontSize));
+    const turn = rotate === 0 ? '' : ` transform="rotate(${round(rotate)} ${round(x)} ${round(y)})"`;
+    const weight = bold ? ' font-weight="600"' : '';
+    return `<text x="${round(x)}" y="${round(baseline)}"${turn} font-family="${escapeXml(getFontFamily(fontFamily))}" font-size="${round(fontSize)}px"${weight} fill="${escapeXml(color)}" text-anchor="${anchor}" style="white-space: pre;">${escapeXml(text)}</text>`;
 }
 
 // Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
@@ -51,8 +92,24 @@ function med(a: number[], b: number[]): number[] {
 }
 
 function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
-    if (el.type === 'ellipse') {
+    // A whole slice is the ellipse: a slice's path would draw its two radii as a seam.
+    if (el.type === 'ellipse' || (el.type === 'pie' && el.sweepAngle >= 360)) {
         return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
+    }
+    // A slice is SVG arcs, as a rounded corner is: roughjs's own arc samples 20° steps at any size and leads in
+    // from inside the rim, which facets a large slice. roughjs draws an arc as one cubic per up to 120°, which
+    // bulges 0.15% of the radius; one per ARC_PIECE bulges as little as its ellipse.
+    if (el.type === 'pie') {
+        const rx = el.width / 2;
+        const ry = el.height / 2;
+        const rim = (deg: number) =>
+            `${round(rx + rx * Math.cos(deg * DEG_TO_RAD))} ${round(ry + ry * Math.sin(deg * DEG_TO_RAD))}`;
+        const pieces = Math.ceil(el.sweepAngle / ARC_PIECE);
+        let d = `M ${round(rx)} ${round(ry)} L ${rim(el.startAngle)}`;
+        for (let i = 1; i <= pieces; i++) {
+            d += ` A ${round(rx)} ${round(ry)} 0 0 1 ${rim(el.startAngle + (el.sweepAngle * i) / pieces)}`;
+        }
+        return gen.path(`${d} Z`, roughOptions(el, true));
     }
     const box = { x: 0, y: 0, width: el.width, height: el.height };
     const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
@@ -109,7 +166,7 @@ function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
         options.fill = fill;
         options.fillStyle = fillStyle;
     }
-    if (el.type === 'ellipse') options.curveFitting = 1;
+    if (el.type === 'ellipse' || el.type === 'pie') options.curveFitting = 1;
     return options;
 }
 

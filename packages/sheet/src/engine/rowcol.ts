@@ -1,4 +1,14 @@
-import { cloneSides, type MergeCell, parseCellKey, type Sheet } from '@workspace/lib/sheets';
+import {
+    cloneSides,
+    type MergeCell,
+    parseCellKey,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    type Sheet,
+    type SheetChart,
+} from '@workspace/lib/sheets';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
 import { functionStrChange } from './formula-shift';
@@ -33,6 +43,38 @@ export class RowColError extends Error {
         this.name = 'RowColError';
         this.code = code;
     }
+}
+
+type AxisRange = { row: readonly number[]; column: readonly number[] };
+
+// Excel's rule for a range across an insert: an insert at or before its first row (or column)
+// moves it, one inside grows it, one right after leaves it. The same range comes back unmoved.
+// CF, alternate formats and chart refs all shift through this pair.
+export function shiftRangeForInsert<R extends AxisRange>(
+    range: R,
+    op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
+): R {
+    const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
+    const [start, end] = op.type === 'row' ? range.row : range.column;
+    if (insertAt > end) return range;
+    const span: [number, number] = insertAt <= start ? [start + op.count, end + op.count] : [start, end + op.count];
+    return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
+}
+
+// A delete shrinks a range to what survives; null when it deletes all of it.
+export function shiftRangeForDelete<R extends AxisRange>(
+    range: R,
+    op: Pick<DeleteRowColOp, 'type' | 'start' | 'end'>,
+): R | null {
+    const [start, end] = op.type === 'row' ? range.row : range.column;
+    const removed = op.end - op.start + 1;
+    if (start >= op.start && end <= op.end) return null;
+    if (end < op.start) return range;
+    const span: [number, number] = [
+        start < op.start ? start : start > op.end ? start - removed : op.start,
+        end > op.end ? end - removed : op.start - 1,
+    ];
+    return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 
 // Generic over S so the state-side state.Sheet[] passes through with its extras
@@ -274,6 +316,26 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     });
 }
 
+// A chart ref names its sheet by id, so an op on one sheet moves the refs to it on every sheet's
+// charts. Only a chart whose refs moved is rewritten; a malformed spec stays as stored.
+function shiftChartsAcrossSheets<S extends Sheet>(
+    sheets: S[],
+    sheetId: string,
+    shift: (ref: CellRangeRef) => CellRangeRef | null,
+): S[] {
+    const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shift(ref) : ref);
+    return sheets.map((sheet) => {
+        let charts: Record<string, SheetChart> | null = null;
+        for (const chart of Object.values(sheet.charts ?? {})) {
+            const moved = mapChartRefs(chart, move);
+            if (moved === chart) continue;
+            charts ??= { ...sheet.charts };
+            charts[chart.id] = moved;
+        }
+        return charts ? { ...sheet, charts } : sheet;
+    });
+}
+
 // config carries several index-keyed maps (rowlen, rowhidden, customHeight and
 // their column twins) that all shift identically when rows/columns move.
 function shiftKeyedMapForInsert(
@@ -354,56 +416,13 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
     newTarget.config = newCfg;
 
     if (target.conditionalFormatRules != null) {
-        newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => {
-            const newRanges = cf.cellrange.map((range) => {
-                let r1 = range.row[0];
-                let r2 = range.row[1];
-                let c1 = range.column[0];
-                let c2 = range.column[1];
-                if (op.type === 'row') {
-                    if (r1 < op.index) {
-                        if (r2 === op.index && op.direction === 'lefttop') {
-                            r2 += count;
-                        } else if (r2 > op.index) {
-                            r2 += count;
-                        }
-                    } else if (r1 === op.index) {
-                        if (op.direction === 'lefttop') {
-                            r1 += count;
-                            r2 += count;
-                        } else if (op.direction === 'rightbottom' && r2 > op.index) {
-                            r2 += count;
-                        }
-                    } else {
-                        r1 += count;
-                        r2 += count;
-                    }
-                } else {
-                    if (c1 < op.index) {
-                        if (c2 === op.index && op.direction === 'lefttop') {
-                            c2 += count;
-                        } else if (c2 > op.index) {
-                            c2 += count;
-                        }
-                    } else if (c1 === op.index) {
-                        if (op.direction === 'lefttop') {
-                            c1 += count;
-                            c2 += count;
-                        } else if (op.direction === 'rightbottom' && c2 > op.index) {
-                            c2 += count;
-                        }
-                    } else {
-                        c1 += count;
-                        c2 += count;
-                    }
-                }
-                return { row: [r1, r2], column: [c1, c2] };
-            });
-            return { ...cf, cellrange: newRanges };
-        });
+        newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => ({
+            ...cf,
+            cellrange: cf.cellrange.map((range) => shiftRangeForInsert(range, op)),
+        }));
     }
 
-    return shiftFormulasAcrossSheets(
+    const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
         targetIndex,
         op.type,
@@ -412,6 +431,19 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
+    // An insert stops a chart ref at the grid's last row or column: parseChartSpec refuses a ref past
+    // it, which would leave the chart unreadable for good.
+    const lastRow = REFERENCE_ROW_COUNT - 1;
+    const lastColumn = REFERENCE_COLUMN_COUNT - 1;
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => {
+        const moved = shiftRangeForInsert(ref, op);
+        if (moved.row[1] <= lastRow && moved.column[1] <= lastColumn) return moved;
+        return {
+            ...moved,
+            row: [Math.min(moved.row[0], lastRow), Math.min(moved.row[1], lastRow)],
+            column: [Math.min(moved.column[0], lastColumn), Math.min(moved.column[1], lastColumn)],
+        };
+    });
 }
 
 function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
@@ -462,49 +494,8 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         for (const cf of target.conditionalFormatRules) {
             const cf_new_range: SingleRange[] = [];
             for (const range of cf.cellrange) {
-                let r1 = range.row[0];
-                let r2 = range.row[1];
-                let c1 = range.column[0];
-                let c2 = range.column[1];
-                if (op.type === 'row') {
-                    if (!(r1 >= op.start && r2 <= op.end)) {
-                        if (r1 > op.end) {
-                            r1 -= removeCount;
-                            r2 -= removeCount;
-                        } else if (r1 < op.start) {
-                            if (r2 >= op.start && r2 <= op.end) {
-                                r2 = op.start - 1;
-                            } else if (r2 > op.end) {
-                                r2 -= removeCount;
-                            }
-                        } else {
-                            if (r2 > op.end) {
-                                r1 = op.start;
-                                r2 -= removeCount;
-                            }
-                        }
-                        cf_new_range.push({ row: [r1, r2], column: [c1, c2] });
-                    }
-                } else {
-                    if (!(c1 >= op.start && c2 <= op.end)) {
-                        if (c1 > op.end) {
-                            c1 -= removeCount;
-                            c2 -= removeCount;
-                        } else if (c1 < op.start) {
-                            if (c2 >= op.start && c2 <= op.end) {
-                                c2 = op.start - 1;
-                            } else if (c2 > op.end) {
-                                c2 -= removeCount;
-                            }
-                        } else {
-                            if (c2 > op.end) {
-                                c1 = op.start;
-                                c2 -= removeCount;
-                            }
-                        }
-                        cf_new_range.push({ row: [r1, r2], column: [c1, c2] });
-                    }
-                }
+                const shifted = shiftRangeForDelete(range, op);
+                if (shifted) cf_new_range.push(shifted);
             }
             if (cf_new_range.length > 0) {
                 const first = op.type === 'row' ? cf_new_range[0].row[0] : cf_new_range[0].column[0];
@@ -519,7 +510,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         newTarget.conditionalFormatRules = newCFarr;
     }
 
-    return shiftFormulasAcrossSheets(
+    const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
         targetIndex,
         op.type,
@@ -528,4 +519,5 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         removeCount,
         'del',
     );
+    return shiftChartsAcrossSheets(shifted, op.id, (ref) => shiftRangeForDelete(ref, op));
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT, toA1 } from '@workspace/sheet/engine';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { toA1 } from '@workspace/sheet/engine';
 import { ApiError } from '../../../lib/core/errors';
 import {
     MAX_CELLS,

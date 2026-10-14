@@ -1,11 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
+import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    type Sheet,
+    type SheetChart,
+    type SheetConfig,
+} from '@workspace/lib/sheets';
+import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
 import type { EditorSheetConfigExtras, SingleRange } from '../../engine/types';
+import { expectedDelete, expectedInsert, SPANS, type Span } from './range-oracle';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the
@@ -594,5 +603,170 @@ describe('applySheetsInsertRowCol — passthrough', () => {
         expect(result[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } });
         expect(result[0].filter).toBeDefined();
         expect(result[0].dataVerification).toBeDefined();
+    });
+});
+
+const grid = () => Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => null));
+const OTHER: Span = [0, 1];
+const onAxis = (type: 'row' | 'column', span: Span) =>
+    type === 'row' ? { row: span, column: OTHER } : { row: OTHER, column: span };
+
+describe('conditional-format ranges follow the membership rule', () => {
+    const cfSheet = (type: 'row' | 'column') =>
+        makeSheet('s1', 'Sheet1', grid(), {
+            conditionalFormatRules: SPANS.map((span) => ({
+                type: 'default',
+                conditionName: 'greaterThan',
+                cellrange: [onAxis(type, span)],
+                conditionValue: [0],
+                format: { textColor: '#ff0000' },
+            })),
+        });
+
+    for (const type of ['row', 'column'] as const) {
+        test(`${type} inserts`, () => {
+            for (let index = 0; index <= 6; index += 1) {
+                for (const direction of ['lefttop', 'rightbottom'] as const) {
+                    for (const count of [1, 2]) {
+                        const [sheet] = applySheetsInsertRowCol([cfSheet(type)], {
+                            type,
+                            index,
+                            count,
+                            direction,
+                            id: 's1',
+                        });
+                        const insertAt = direction === 'lefttop' ? index : index + 1;
+                        expect(sheet.conditionalFormatRules!.map((cf) => cf.cellrange[0])).toEqual(
+                            SPANS.map((span) => onAxis(type, expectedInsert(span, insertAt, count))),
+                        );
+                    }
+                }
+            }
+        });
+
+        test(`${type} deletes drop a wholly deleted range`, () => {
+            for (let start = 0; start <= 6; start += 1) {
+                for (let end = start; end <= 6; end += 1) {
+                    const [sheet] = applySheetsDeleteRowCol([cfSheet(type)], { type, start, end, id: 's1' });
+                    const expected = SPANS.map((span) => expectedDelete(span, start, end)).filter(
+                        (span) => span !== null,
+                    );
+                    expect(sheet.conditionalFormatRules!.map((cf) => cf.cellrange[0])).toEqual(
+                        expected.map((span) => onAxis(type, span)),
+                    );
+                }
+            }
+        });
+    }
+});
+
+describe('applySheetsInsertRowCol/Delete — chart refs', () => {
+    const ref = (sheetId: string, row: Span, column: Span = [1, 1]): CellRangeRef => ({ sheetId, row, column });
+
+    function chart(data: Omit<RangeChartData, 'source'>, id = 'c1'): SheetChart {
+        const spec: ChartSpec = { ...sampleChartSpec('column'), data: { source: 'range', ...data } };
+        return { id, index: 'a0', x: 0, y: 0, width: 400, height: 300, spec: JSON.stringify(spec) };
+    }
+    const series = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points') => ({
+        name,
+        values,
+        color: '#2a78d6',
+        markers: false,
+        smooth: false,
+    });
+    // B3:B6 values named by B2, categories A3:A6, all on S.
+    const onS = () =>
+        chart({ categories: ref('S', [2, 5], [0, 0]), series: [series(ref('S', [2, 5]), ref('S', [1, 1]))] });
+    const workbook = (charts: Record<string, SheetChart>, chartsOnT: Record<string, SheetChart> = {}) => [
+        makeSheet('S', 'S', grid(), { charts }),
+        makeSheet('T', 'T', grid(), { charts: chartsOnT }),
+    ];
+    const rangeData = (sheet: Sheet, id = 'c1') => {
+        const spec = parseChartSpec(sheet.charts![id].spec);
+        return spec?.data.source === 'range' ? spec.data : null;
+    };
+    const valuesRows = (sheet: Sheet) => rangeData(sheet)?.series[0].values?.row;
+    const insertRows = (index: number, count: number, direction: 'lefttop' | 'rightbottom', id = 'S') =>
+        ({ type: 'row', index, count, direction, id }) as const;
+
+    test('an insert before a ref moves it', () => {
+        const [s] = applySheetsInsertRowCol(workbook({ c1: onS() }), insertRows(1, 2, 'lefttop'));
+        expect(valuesRows(s)).toEqual([4, 7]);
+        expect(rangeData(s)?.categories?.row).toEqual([4, 7]);
+        expect(rangeData(s)?.series[0].name).toEqual(ref('S', [3, 3]));
+    });
+
+    test('an insert at the first row moves it, inside grows it, right after leaves it', () => {
+        expect(valuesRows(applySheetsInsertRowCol(workbook({ c1: onS() }), insertRows(2, 1, 'lefttop'))[0])).toEqual([
+            3, 6,
+        ]);
+        expect(valuesRows(applySheetsInsertRowCol(workbook({ c1: onS() }), insertRows(4, 1, 'lefttop'))[0])).toEqual([
+            2, 6,
+        ]);
+        const after = workbook({ c1: onS() });
+        expect(applySheetsInsertRowCol(after, insertRows(5, 1, 'rightbottom'))[0].charts!.c1).toBe(after[0].charts!.c1);
+    });
+
+    test('a delete shrinks a ref', () => {
+        const [s] = applySheetsDeleteRowCol(workbook({ c1: onS() }), { type: 'row', start: 4, end: 7, id: 'S' });
+        expect(valuesRows(s)).toEqual([2, 3]);
+        expect(rangeData(s)?.series[0].name).toEqual(ref('S', [1, 1]));
+    });
+
+    test('deleting all of a ref nulls values and categories and empties a name', () => {
+        const [s] = applySheetsDeleteRowCol(workbook({ c1: onS() }), { type: 'row', start: 1, end: 6, id: 'S' });
+        expect(rangeData(s)?.series[0]).toMatchObject({ name: '', values: null });
+        expect(rangeData(s)?.categories).toBeNull();
+    });
+
+    test('a column insert and delete shift the column span', () => {
+        const [inserted] = applySheetsInsertRowCol(workbook({ c1: onS() }), {
+            type: 'column',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 'S',
+        });
+        expect(rangeData(inserted)?.series[0].values?.column).toEqual([2, 2]);
+        expect(rangeData(inserted)?.categories?.column).toEqual([1, 1]);
+        const [deleted] = applySheetsDeleteRowCol(workbook({ c1: onS() }), {
+            type: 'column',
+            start: 1,
+            end: 1,
+            id: 'S',
+        });
+        expect(rangeData(deleted)?.series[0].values).toBeNull();
+        expect(rangeData(deleted)?.categories?.column).toEqual([0, 0]);
+    });
+
+    test('a chart on another sheet follows its refs to the edited sheet', () => {
+        const [, t] = applySheetsInsertRowCol(workbook({}, { c1: onS() }), insertRows(0, 1, 'lefttop'));
+        expect(valuesRows(t)).toEqual([3, 6]);
+    });
+
+    test('an edit on another sheet leaves a chart alone, same record', () => {
+        const sheets = workbook({ c1: onS() });
+        const [s] = applySheetsInsertRowCol(sheets, insertRows(0, 1, 'lefttop', 'T'));
+        expect(s.charts!.c1).toBe(sheets[0].charts!.c1);
+    });
+
+    test('an insert stops a ref at the last row and column of the grid', () => {
+        const [rows] = applySheetsInsertRowCol(
+            workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, REFERENCE_ROW_COUNT - 1]))] }) }),
+            insertRows(0, 2, 'lefttop'),
+        );
+        expect(valuesRows(rows)).toEqual([2, REFERENCE_ROW_COUNT - 1]);
+        const lastColumn = REFERENCE_COLUMN_COUNT - 1;
+        const [columns] = applySheetsInsertRowCol(
+            workbook({ c1: chart({ categories: null, series: [series(ref('S', [0, 3], [lastColumn, lastColumn]))] }) }),
+            { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 'S' },
+        );
+        expect(rangeData(columns)?.series[0].values?.column).toEqual([lastColumn, lastColumn]);
+    });
+
+    test('a malformed spec is kept untouched', () => {
+        const broken = { ...onS(), spec: '{"type":' };
+        const [s] = applySheetsInsertRowCol(workbook({ c1: broken }), insertRows(0, 1, 'lefttop'));
+        expect(s.charts!.c1).toBe(broken);
     });
 });

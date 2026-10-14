@@ -3,6 +3,7 @@
 // doc writers the host passes in, the way element-writes.ts is plain functions over the doc itself.
 
 import {
+    convertToShapes,
     DUPLICATE_OFFSET,
     generateNKeysBetween,
     orderByFractionalIndex,
@@ -10,7 +11,7 @@ import {
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { ZOp } from '../../properties-panel/z-order';
-import { sealed, type VectorElementPatch } from './use-canvas-doc';
+import { type NewVectorElement, sealed, type VectorElementPatch } from './use-canvas-doc';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
 // NON-selected elements, so a non-contiguous multi-selection collapses into one clean gap
@@ -69,6 +70,26 @@ export function deleteSelection(
 ): void {
     sealed(undoManager, () => deleteElements(selectedIds));
     setSelection([]);
+}
+
+// What Convert to shapes writes for the selection: offered only for exactly one element that unpacks, a
+// chart that draws; [] for anything else.
+export function selectionShapes(selectedIds: string[], byId: Map<string, VectorElement>): VectorElement[] {
+    const only = selectedIds.length === 1 ? byId.get(selectedIds[0]) : undefined;
+    return only ? convertToShapes(only) : [];
+}
+
+// Convert to shapes (the object menu; the chart panel's button): one sealed undo step, and the new elements
+// stay selected, as the one object was (T4-R3).
+export function convertElementToShapes(
+    id: string,
+    shapes: NewVectorElement[],
+    replaceElement: (id: string, partials: NewVectorElement[]) => string[],
+    setSelection: (ids: string[]) => void,
+    undoManager: Y.UndoManager | null,
+): void {
+    const ids = sealed(undoManager, () => replaceElement(id, shapes));
+    if (ids.length) setSelection(ids);
 }
 
 // The z-order write, shared by the keyboard brackets and the properties panel's Arrange buttons so
