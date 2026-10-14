@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { importError, MAX_MEDIA_PARTS, MAX_TEXT_NODES, readPptx } from '../../../lib/import/slides/from-pptx';
+import { importError, MAX_MEDIA_PARTS, MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
@@ -147,21 +147,21 @@ describe('limits', () => {
         expect(deck.slides[499].elements[0]).not.toBe(deck.slides[0].elements[0]);
     });
 
-    test(`more than ${MAX_TEXT_NODES} paragraphs and their children read is too large, a master's read again for each colour map`, () => {
-        // A master's paragraph of 999 runs is 1,000 read, again on every slide whose clrMapOvr maps a colour anew.
+    test(`more than ${MAX_PPTX_WORK} units of work is too large, a master's text charged by its characters for each colour map`, () => {
+        // A master's run of a tenth of the budget is read again on every slide whose clrMapOvr maps a colour anew.
         const master = sp({
             xfrm: box(0, 0, 1, 1),
             txBox: true,
-            text: `<a:p>${'<a:r><a:t>x</a:t></a:r>'.repeat(999)}</a:p>`,
+            text: `<a:p><a:r><a:t>${'x'.repeat(MAX_PPTX_WORK / 10)}</a:t></a:r></a:p>`,
         });
         const slots = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
         const slides = (count: number) =>
             Array.from({ length: count }, (_, i) => ({
-                after: `<p:clrMapOvr><a:overrideClrMapping bg1="${slots[i % 10]}" tx1="${slots[Math.floor(i / 10) % 10]}" bg2="${slots[Math.floor(i / 100) % 10]}"/></p:clrMapOvr>`,
+                after: `<p:clrMapOvr><a:overrideClrMapping bg1="${slots[i]}" tx1="dk1" bg2="lt2"/></p:clrMapOvr>`,
             }));
         const read = (count: number) => refusal(buildPptx({ masters: [{ shapes: master }], slides: slides(count) }));
-        expect(read(MAX_TEXT_NODES / 1000)).toBe('read');
-        expect(read(MAX_TEXT_NODES / 1000 + 1)).toEqual([413, TOO_LARGE]);
+        expect(read(9)).toBe('read');
+        expect(read(10)).toEqual([413, TOO_LARGE]);
     });
 
     test('a stack the file outgrew is too large, a slip of the reader is a file it cannot read', () => {

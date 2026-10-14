@@ -16,6 +16,7 @@ import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
+import { CHART_PAINT, frameChart } from './chart';
 import {
     decorationsOf,
     elementGradientAngle,
@@ -37,7 +38,7 @@ import {
     styleLine,
     type Xfrm,
 } from './inherit';
-import { cachedBy, childOf, childrenOf, prefixedAttrOf } from './lookup';
+import { cachedBy, charge, childOf, childrenOf, prefixedAttrOf } from './lookup';
 import { alternative, blipMedia, type DeckWalk, emu, type Lost, type Part } from './package';
 import { richTextOf, verticalTurnOf } from './text';
 
@@ -71,6 +72,13 @@ const DROPPED = {
 } satisfies Record<string, { label: string; code: CountedWarningCode }>;
 type Dropped = keyof typeof DROPPED;
 
+// A chart the reader can't draw as the file does says which kind it was, and its title.
+function droppedChart({ title, type }: { title: string; type: string }): string[] {
+    const kind = type.replace(/Chart$/, '').replace(/([a-z])([A-Z0-9])/g, '$1 $2');
+    const label = kind ? `${kind[0].toUpperCase()}${kind.slice(1)} chart not imported` : DROPPED.chart.label;
+    return title ? [label, title] : [label];
+}
+
 const GRAPHIC_KINDS = new Map<string, Dropped>([
     ['http://schemas.openxmlformats.org/drawingml/2006/table', 'table'],
     [C_NS, 'chart'],
@@ -78,7 +86,8 @@ const GRAPHIC_KINDS = new Map<string, Dropped>([
     ['http://schemas.openxmlformats.org/presentationml/2006/ole', 'ole'],
 ]);
 
-const PLACEHOLDER_BOX = { fill: '#f1f3f4', stroke: '#9aa0a6', text: '#5f6368' };
+// Unfilled, so a title or text it overlaps stays readable, as PowerPoint's chart plot area is see-through.
+const PLACEHOLDER_BOX = { stroke: '#9aa0a6', text: '#5f6368' };
 
 // A head or tail end of a:ln as the arrowhead that draws closest.
 const ARROWHEAD_BY_END = new Map<string, Arrowhead>([
@@ -240,6 +249,7 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, PRESENTATION_TOO_LARGE);
     for (const shape of shapes) {
         if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+        charge(1);
         if (isAlternateContent(shape)) {
             readTree(walk, alternative(shape), placeIn, depth + 1, group);
             continue;
@@ -272,12 +282,8 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
         if (!onSlide(placed.box, walk.deck)) continue;
         // The p:style the shape paints by: a placeholder with none of its own takes its layout's or master's.
         const style = chain.find((link) => link.style)?.style;
-        if (shape.local === 'graphicFrame') {
-            const graphic = childOf(shape, A_NS, 'graphic');
-            const data = graphic && childOf(graphic, A_NS, 'graphicData');
-            const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
-            placeholderBox(walk, shape, kind, placed.box);
-        } else if (shape.local === 'pic') readPicture(walk, shape, chain, linesOf(chain, walk, style), placed);
+        if (shape.local === 'graphicFrame') readGraphicFrame(walk, shape, placed.box);
+        else if (shape.local === 'pic') readPicture(walk, shape, chain, linesOf(chain, walk, style), placed);
         else readShape(walk, { shape, own, chain, style, placed, group });
     }
 }
@@ -326,7 +332,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     };
     // Counted once for the shape, however many slides show it.
     const lost: Lost = (code) => walk.deck.lost(code, shape);
-    const text = source && richTextOf(source, theme, walk.deck.scale, lost, walk.deck.read);
+    const text = source && richTextOf(source, theme, walk.deck.scale, lost);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
     const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;
@@ -542,14 +548,25 @@ function readPicture(
     });
 }
 
+// A chart the reader draws becomes a chart; any other graphic, and a chart it can't, a box saying what was there.
+function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
+    const graphic = childOf(shape, A_NS, 'graphic');
+    const data = graphic && childOf(graphic, A_NS, 'graphicData');
+    const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
+    const chart =
+        kind === 'chart' && data ? frameChart(walk.deck, walk.part, data, walk.inheritance.theme.colors) : undefined;
+    if (chart && 'chart' in chart) push(walk, { type: 'chart', ...box, ...CHART_PAINT, chart: chart.chart });
+    else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
+}
+
 // Q5: a loss the user can see on the slide, saying what was there.
-function placeholderBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box): void {
+function placeholderBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box, lines = [DROPPED[what].label]): void {
     walk.deck.lost(DROPPED[what].code, shape);
     push(walk, {
         type: 'richtext',
         ...box,
-        html: `<p>${escapeHtml(DROPPED[what].label)}</p>`,
-        fill: serializeFill({ type: 'solid', color: PLACEHOLDER_BOX.fill, style: 'solid' }),
+        html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(''),
+        fill: TRANSPARENT_FILL_JSON,
         strokeColor: PLACEHOLDER_BOX.stroke,
         strokeWidth: 2,
         strokeStyle: 'dashed',

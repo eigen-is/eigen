@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { A_NS, P_NS, parseOoxml } from '../../../lib/core/ooxml';
+import { ApiError } from '../../../lib/core/errors';
+import { A_NS, P_NS, parseOoxml, R_NS } from '../../../lib/core/ooxml';
 import { type XmlElement, xmlAttr } from '../../../lib/core/xml';
-import { childOf, childrenOf, firstChildOf } from '../../../lib/import/slides/lookup';
+import { childOf, childrenOf, firstChildOf, prefixedAttrOf, withWorkBudget } from '../../../lib/import/slides/lookup';
 import { countVisits, NS } from '../../fixtures/pptx';
 
 // The reader's lookups into an element: a layout's, master's or theme's is looked into again by everything inheriting
@@ -41,5 +42,41 @@ describe('a lookup', () => {
         }
         // Once for the index, once for the named list, once for the test.
         expect(count.visits).toBe(3 * 1002);
+    });
+
+    test("charges the read's work budget for a scan of many children once, and nothing for a few", () => {
+        const level = parse(`<a:lvl1pPr ${NS}>${'<a:x/>'.repeat(1000)}<a:defRPr/></a:lvl1pPr>`);
+        const refused = () => withWorkBudget(1000, () => childOf(level, A_NS, 'defRPr'));
+        expect(refused).toThrow(new ApiError(413, 'This presentation is too large to import'));
+        withWorkBudget(1001, () => {
+            for (let i = 0; i < 1000; i++) childOf(level, A_NS, 'defRPr');
+        });
+        withWorkBudget(2 * 1001, () => {
+            for (let i = 0; i < 1000; i++) {
+                childrenOf(level, A_NS, 'x');
+                firstChildOf(level, isFill);
+            }
+        });
+        const few = parse(`<a:lvl1pPr ${NS}><a:x/><a:defRPr/></a:lvl1pPr>`);
+        withWorkBudget(0, () => {
+            childOf(few, A_NS, 'defRPr');
+            childrenOf(few, A_NS, 'x');
+            firstChildOf(few, isFill);
+        });
+    });
+
+    test('keeps a prefixed attribute for an element of many attributes, and reads a few again', () => {
+        // A run's hyperlink is read once: keeping it would hold every run's.
+        const link = parse(`<a:hlinkClick ${NS} r:id="rId1"/>`);
+        expect(prefixedAttrOf(link, R_NS, 'id')).toBe('rId1');
+        link.attributes['r:id'] = 'rId2';
+        expect(prefixedAttrOf(link, R_NS, 'id')).toBe('rId2');
+        const junk = Array.from({ length: 20 }, (_, i) => `r:x${i}="x"`).join(' ');
+        const blip = parse(`<a:blip ${NS} ${junk} r:embed="rId1"/>`);
+        withWorkBudget(21, () => {
+            for (let i = 0; i < 1000; i++) expect(prefixedAttrOf(blip, R_NS, 'embed')).toBe('rId1');
+        });
+        blip.attributes['r:embed'] = 'rId2';
+        expect(prefixedAttrOf(blip, R_NS, 'embed')).toBe('rId1');
     });
 });

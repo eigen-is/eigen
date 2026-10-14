@@ -14,7 +14,7 @@ import { A_NS, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlElements, xmlText } from '../../core/xml';
 import { colorOf, fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
-import { childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
+import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 import { alternative, EMU_PER_POINT, emu, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
@@ -94,14 +94,13 @@ type RunStyle = Marks & { fontFamily: string; size: number; color: string; lette
 type Run = { html: string; style?: RunStyle; href?: string };
 type Paragraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; text: boolean; chain: XmlElement[] };
 
-// undefined when the body shows no text: an empty placeholder is not drawn. Each paragraph and its children are charged
-// to `read` before they are read.
+// undefined when the body shows no text: an empty placeholder is not drawn. Each paragraph, its children and each run's
+// characters are charged to the read's work before they are read: a run costs however little it shows.
 export function richTextOf(
     source: TextSource,
     theme: SlideTheme,
     pxPerEmu: number,
     lost: Lost,
-    read: (nodes: number) => void,
 ): RichTextFields | undefined {
     const bodies = bodiesOf(source);
     const shapeLists = bodies.flatMap((body) => body.listStyle ?? []);
@@ -140,7 +139,7 @@ export function richTextOf(
         const children = xmlElements(paragraph).flatMap((child) =>
             isAlternateContent(child) ? alternative(child) : [child],
         );
-        read(1 + children.length);
+        charge(1 + children.length);
         for (const child of children) {
             if (child.ns !== A_NS) continue;
             if (child.local === 'br' && html <= MAX_HTML_BYTES) {
@@ -149,7 +148,9 @@ export function richTextOf(
             }
             const t = (child.local === 'r' || child.local === 'fld') && childOf(child, A_NS, 't');
             if (!t) continue;
-            const value = xmlText(t).replace(/[\t\r\n]/g, ' ');
+            const raw = xmlText(t);
+            charge(t.children.length + raw.length);
+            const value = raw.replace(/[\t\r\n]/g, ' ');
             const rPr = childOf(child, A_NS, 'rPr');
             const style = runStyleOf(rPr, inherited, context);
             const key = JSON.stringify(style);

@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
-import { xmlChild } from '../../../lib/core/xml';
+import { xmlChild, xmlElements } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { paintOf, type SlideTheme } from '../../../lib/import/slides/inherit';
+import { withWorkBudget } from '../../../lib/import/slides/lookup';
 import {
     box,
     buildPptx,
@@ -345,7 +346,7 @@ describe('a shared fill', () => {
     const lost = () => {};
     const junk = '<a:x/>'.repeat(100);
 
-    test('resolves once for each colour map, however many shapes it paints', () => {
+    test('is scanned once and resolved once for each colour map, however many shapes it paints', () => {
         const fill = parse(`<a:solidFill ${NS}>${junk}<a:schemeClr val="accent1"/></a:solidFill>`);
         const count = countVisits(fill);
         const [mapped, remapped] = [themeOf('accent1'), themeOf('accent2')];
@@ -353,30 +354,57 @@ describe('a shared fill', () => {
             expect(paintOf(fill, mapped, { lost })).toEqual({ type: 'solid', color: '#4f81bd' });
             expect(paintOf(fill, remapped, { lost })).toEqual({ type: 'solid', color: '#c0504d' });
         }
-        expect(count.visits).toBe(2 * 101);
+        expect(count.visits).toBe(101);
     });
 
-    test("a style matrix entry and its gradient's stops resolve once for each phClr, whichever reference names it", () => {
+    test("a style matrix entry's colour and its gradient's stops are found once, however many phClr paint them", () => {
+        const solidEntry = parse(
+            `<a:solidFill ${NS}>${junk}<a:schemeClr val="phClr">${junk}<a:shade val="50000"/></a:schemeClr></a:solidFill>`,
+        );
         const entry = parse(
-            `<a:gradFill ${NS}><a:gsLst>${junk}<a:gs pos="0">${junk}<a:schemeClr val="phClr"/></a:gs><a:gs pos="100000"><a:srgbClr val="00FF00"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill>`,
+            `<a:gradFill ${NS}><a:gsLst>${junk}<a:gs pos="100000"><a:srgbClr val="00FF00"/></a:gs><a:gs pos="0">${junk}<a:schemeClr val="phClr"/></a:gs><a:gs pos="50000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill>`,
         );
         const stops = xmlChild(entry, A_NS, 'gsLst');
-        const stop = stops && xmlChild(stops, A_NS, 'gs');
-        if (!stops || !stop) throw new Error('no stops');
-        const counts = [stops, stop].map(countVisits);
+        const stop = stops && xmlElements(stops)[101];
+        const color = xmlChild(solidEntry, A_NS, 'schemeClr');
+        if (!stop || !stops || !color) throw new Error('no stops');
+        const counts = [solidEntry, color, stops, stop].map(countVisits);
         const theme = themeOf('accent1');
         for (let i = 0; i < 1000; i++) {
-            const reference = parse(
-                `<a:fillRef ${NS} idx="1"><a:srgbClr val="${i % 2 ? 'FF0000' : '0000FF'}"/></a:fillRef>`,
-            );
-            expect(paintOf(entry, theme, { lost, reference })).toMatchObject({
+            const hex = (0x100000 + i).toString(16);
+            const reference = parse(`<a:fillRef ${NS} idx="1"><a:srgbClr val="${hex}"/></a:fillRef>`);
+            expect(paintOf(entry, theme, { lost, reference })).toEqual({
                 type: 'gradient',
-                from: i % 2 ? '#ff0000' : '#0000ff',
+                from: `#${hex}`,
                 to: '#00ff00',
+                angle: 90,
             });
+            expect(paintOf(solidEntry, theme, { lost, reference })?.type).toBe('solid');
         }
-        // The stops listed once, the first one's colour resolved for each of the two phClr.
-        expect(counts.map((count) => count.visits)).toEqual([102, 2 * 101]);
+        // Each scanned once: a phClr reapplies the colour's few transforms, and the ramp's ends are picked anew.
+        expect(counts.map((count) => count.visits)).toEqual([101, 101, 103, 101]);
+    });
+
+    test("a gradient's ends alone are resolved for each phClr, and a colour that isn't phClr once for all", () => {
+        const stops = Array.from(
+            { length: 1000 },
+            (_, i) => `<a:gs pos="${i * 100}"><a:schemeClr val="phClr"/></a:gs>`,
+        );
+        const entry = parse(`<a:gradFill ${NS}><a:gsLst>${stops.join('')}</a:gsLst></a:gradFill>`);
+        const fixed = parse(
+            `<a:solidFill ${NS}><a:srgbClr val="123456">${'<a:lumMod val="99000"/>'.repeat(20)}</a:srgbClr></a:solidFill>`,
+        );
+        const theme = themeOf('accent1');
+        // Every stop resolved for every phClr would be a million units, the fixed colour's 20 transforms 21,000.
+        withWorkBudget(20_000, () => {
+            for (let i = 0; i < 1000; i++) {
+                const reference = parse(
+                    `<a:fillRef ${NS} idx="1"><a:srgbClr val="${(0x100000 + i).toString(16)}"/></a:fillRef>`,
+                );
+                expect(paintOf(entry, theme, { lost, reference })?.type).toBe('gradient');
+                expect(paintOf(fixed, theme, { lost, reference })?.type).toBe('solid');
+            }
+        });
     });
 });
 

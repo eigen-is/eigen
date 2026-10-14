@@ -73,7 +73,6 @@ function textOf(paragraphs: string, source: Source = {}) {
         THEME,
         1 / 6350,
         UNCOUNTED,
-        UNCOUNTED,
     );
 }
 
@@ -419,7 +418,6 @@ describe('the body', () => {
             THEME,
             1 / 6350,
             UNCOUNTED,
-            UNCOUNTED,
         );
         expect(found?.fontSize).toBe(24);
         expect(found?.lineHeight).toBeCloseTo(0.96, 6);
@@ -435,7 +433,6 @@ describe('the body', () => {
             THEME,
             1 / 6350,
             UNCOUNTED,
-            UNCOUNTED,
         );
         expect(inherited?.fontSize).toBe(24);
         const own = richTextOf(
@@ -448,7 +445,6 @@ describe('the body', () => {
             },
             THEME,
             1 / 6350,
-            UNCOUNTED,
             UNCOUNTED,
         );
         expect(own?.fontSize).toBe(48);
@@ -522,7 +518,6 @@ describe('a text style every paragraph inherits', () => {
             { body: txBody(para('x').repeat(1000)), inherited: [], listStyle, style: undefined, rels: new Map() },
             THEME,
             1 / 6350,
-            UNCOUNTED,
             UNCOUNTED,
         );
         expect(found).toMatchObject({ fontSize: 20, color: '#c0504d', html: expect.stringContaining('<ul><li>') });
