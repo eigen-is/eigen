@@ -9,7 +9,7 @@ installTransferHarness();
 
 const SUMMARY = '1 table was not imported.';
 
-async function importFrom(source: 'device' | 'drive', result: ImportResult): Promise<string[]> {
+async function importFrom(source: 'device' | 'drive', result: ImportResult | { summary: unknown }): Promise<string[]> {
     const { act } = await import('react');
     const { useImportDocument, useImportFromDrive } = await import('../../../../core/drive/hooks/use-import-document');
     served.importResponse = result;
@@ -19,14 +19,17 @@ async function importFrom(source: 'device' | 'drive', result: ImportResult): Pro
         queryClient,
     );
     await act(async () => {
-        if (source === 'device') await latest.device.mutateAsync({ pathId: 'deck', file: new File(['x'], 'a.pptx') });
-        else
-            await latest.drive.mutateAsync({
-                pathId: 'deck',
-                sourceOwnerId: OWNER,
-                sourceMountId: 'm1',
-                sourcePathId: 'pptx',
-            });
+        // A failed mutation has toasted its error by the time it rejects, which is what a test reads.
+        const done =
+            source === 'device'
+                ? latest.device.mutateAsync({ pathId: 'deck', file: new File(['x'], 'a.pptx') })
+                : latest.drive.mutateAsync({
+                      pathId: 'deck',
+                      sourceOwnerId: OWNER,
+                      sourceMountId: 'm1',
+                      sourcePathId: 'pptx',
+                  });
+        await done.catch(() => {});
     });
     await unmount();
     return [...toasts];
@@ -47,5 +50,11 @@ describe('Import slides…', () => {
 
     test('an import that lost nothing toasts nothing', async () => {
         expect(await importFrom('device', { success: true, summary: null })).toEqual([]);
+    });
+
+    test('a body that is no import result is an error, never a summary', async () => {
+        expect(await importFrom('device', { success: true, summary: 3 })).toEqual([
+            'error: Unexpected response from the import',
+        ]);
     });
 });
