@@ -1,24 +1,26 @@
 import { FLAT_CHART_PAINT } from '@workspace/lib/charts';
 import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { DrawingTheme } from '../../core/drawingml';
-import { C_NS, R_NS } from '../../core/ooxml';
+import { A_NS, C_NS, R_NS } from '../../core/ooxml';
 import { readChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlElements } from '../../core/xml';
+import { colorOf, mutedColor, textColorOf } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk, Part } from './package';
 
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
 // value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed.
 
-// The spec as the chart kind stores it, or what the reader names a chart it can't draw as the file does.
-export type FrameChart = { chart: string } | { unsupported: { title: string; type: string } };
+// The spec as the chart kind stores it with the colours its text and axes take, or what the reader names a chart it
+// can't draw as the file does.
+export type FrameChart =
+    | { chart: string; color: string; strokeColor: string }
+    | { unsupported: { title: string; type: string } };
 
-// Painted as a document's and a sheet's charts are, in Inter, unfilled as PowerPoint's plot area.
+// Painted as a document's and a sheet's charts are, in Inter, unfilled as PowerPoint's plot area; coloured as the slide.
 export const CHART_PAINT = {
     fill: FLAT_CHART_PAINT.background,
     fontFamily: FLAT_CHART_PAINT.fontFamily,
-    color: FLAT_CHART_PAINT.color,
-    strokeColor: FLAT_CHART_PAINT.strokeColor,
     strokeWidth: FLAT_CHART_PAINT.strokeWidth,
     strokeStyle: FLAT_CHART_PAINT.strokeStyle,
     roughness: FLAT_CHART_PAINT.roughness,
@@ -38,9 +40,20 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
             // Read again for every colour map a slide paints it with, so each read is charged its elements.
             charge(nodesIn(root));
             const answer = readChart(root, { theme: colors, data: 'cache' });
-            return 'spec' in answer ? { chart: JSON.stringify(answer.spec) } : answer;
+            if (!('spec' in answer)) return answer;
+            const color = textColorIn(root, colors);
+            return { chart: JSON.stringify(answer.spec), color, strokeColor: mutedColor(color) };
         })
     );
+}
+
+// c:txPr's colour, else the slide's tx1.
+function textColorIn(root: XmlElement, colors: DrawingTheme): string {
+    const properties = childOf(root, C_NS, 'txPr');
+    const paragraph = properties && childOf(properties, A_NS, 'p');
+    const pPr = paragraph && childOf(paragraph, A_NS, 'pPr');
+    const defRPr = pPr && childOf(pPr, A_NS, 'defRPr');
+    return colorOf(defRPr && childOf(defRPr, A_NS, 'solidFill'), colors) ?? textColorOf(colors);
 }
 
 const counted = cachedBy<null, number>();

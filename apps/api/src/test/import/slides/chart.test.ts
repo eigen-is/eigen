@@ -52,6 +52,10 @@ const SCATTER = chartSpace(`<c:scatterChart>${ser(0, 'Spread', [1, 2, 3])}</c:sc
 const ACCENT = { 1: '#4f81bd', 2: '#c0504d', 3: '#9bbb59', 4: '#8064a2' };
 
 // accent1 shows accent3 and accent4 accent1 on the slide: a chart's colours go through the slide's clrMap.
+// A dark theme's map: text in lt1 on dk1.
+const DARK =
+    'bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"';
+
 const OVERRIDE =
     '<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent3" accent2="accent2" accent3="accent3" accent4="accent1" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>';
 
@@ -96,6 +100,26 @@ describe('a chart', () => {
             },
         });
         expect(deck.warnings).toEqual([]);
+    });
+
+    test("its text is the chart's txPr colour, else the slide's tx1, light on a dark theme; its axes a muted version", () => {
+        expect(chartOf(COLUMN).element).toMatchObject({ color: '#000000', strokeColor: '#00000099' });
+        const dark = { masters: [{ clrMap: DARK }] };
+        expect(chartOf(COLUMN, dark).element).toMatchObject({ color: '#ffffff', strokeColor: '#ffffff99' });
+        // PowerPoint's own: tx1 at 65% lightened by 35%, grey on a light slide and white on a dark one.
+        const txPr = (fill: string) =>
+            COLUMN.replace(
+                '</c:chartSpace>',
+                `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${fill}</a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr></c:chartSpace>`,
+            );
+        const grey = txPr(
+            '<a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill>',
+        );
+        expect(chartOf(grey).element).toMatchObject({ color: '#595959', strokeColor: '#59595999' });
+        expect(chartOf(grey, dark).element).toMatchObject({ color: '#ffffff', strokeColor: '#ffffff99' });
+        expect(chartOf(txPr('<a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill>'), dark).element.color).toBe(
+            '#d9d9d9',
+        );
     });
 
     test('a line chart keeps its series, smoothing and markers; a pie its slices in the accents', () => {
@@ -169,6 +193,12 @@ describe('a chart left as a box', () => {
             `<c:bar3DChart><c:barDir val="col"/><c:grouping val="percentStacked"/>${ser(0, 'S', [1, 2, 3])}</c:bar3DChart>`,
         );
         expect(boxOf(deckWith(bar3D)).html).toBe('<p>Bar 3D chart not imported</p>');
+    });
+
+    test("a box writes in the slide's tx1 and outlines in a muted version, so it reads on a dark theme", () => {
+        expect(deckWith(SCATTER).slides[0].elements[0]).toMatchObject({ color: '#000000', strokeColor: '#00000099' });
+        const [dark] = deckWith(SCATTER, { masters: [{ clrMap: DARK }] }).slides[0].elements;
+        expect(dark).toMatchObject({ color: '#ffffff', strokeColor: '#ffffff99' });
     });
 
     test('a damaged chart part is the plain box', () => {

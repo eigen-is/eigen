@@ -24,6 +24,7 @@ import {
     type GroupFill,
     inheritedPlaceholders,
     listStyleOf,
+    mutedColor,
     nonVisualOf,
     type PlaceholderKey,
     paintOf,
@@ -36,6 +37,7 @@ import {
     spTreeOf,
     styleFill,
     styleLine,
+    textColorOf,
     type Xfrm,
 } from './inherit';
 import { cachedBy, charge, childOf, childrenOf, prefixedAttrOf } from './lookup';
@@ -85,9 +87,6 @@ const GRAPHIC_KINDS = new Map<string, Dropped>([
     [DGM_NS, 'diagram'],
     ['http://schemas.openxmlformats.org/presentationml/2006/ole', 'ole'],
 ]);
-
-// Unfilled, so a title or text it overlaps stays readable, as PowerPoint's chart plot area is see-through.
-const PLACEHOLDER_BOX = { stroke: '#9aa0a6', text: '#5f6368' };
 
 // A head or tail end of a:ln as the arrowhead that draws closest.
 const ARROWHEAD_BY_END = new Map<string, Arrowhead>([
@@ -555,23 +554,25 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
     const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
     const chart =
         kind === 'chart' && data ? frameChart(walk.deck, walk.part, data, walk.inheritance.theme.colors) : undefined;
-    if (chart && 'chart' in chart) push(walk, { type: 'chart', ...box, ...CHART_PAINT, chart: chart.chart });
+    if (chart && 'chart' in chart) push(walk, { type: 'chart', ...box, ...CHART_PAINT, ...chart });
     else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
 }
 
 // Q5: a loss the user can see on the slide, saying what was there.
 function placeholderBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box, lines = [DROPPED[what].label]): void {
     walk.deck.lost(DROPPED[what].code, shape);
+    const color = textColorOf(walk.inheritance.theme.colors);
+    // Unfilled, so a title or text it overlaps stays readable, as PowerPoint's chart plot area is see-through.
     push(walk, {
         type: 'richtext',
         ...box,
         html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(''),
         fill: TRANSPARENT_FILL_JSON,
-        strokeColor: PLACEHOLDER_BOX.stroke,
+        strokeColor: mutedColor(color),
         strokeWidth: 2,
         strokeStyle: 'dashed',
         corners: 'straight',
-        color: PLACEHOLDER_BOX.text,
+        color,
         fontSize: Math.min(32, Math.max(12, box.height / 4)),
         textAlign: 'center',
         verticalAlign: 'center',

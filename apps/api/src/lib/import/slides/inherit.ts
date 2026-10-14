@@ -1,5 +1,5 @@
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
-import { normalizeAngle, TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import {
     type DrawingTheme,
     drawingColor,
@@ -344,6 +344,18 @@ export function colorOf(element: XmlElement | undefined, colors: DrawingTheme): 
         charge(1 + swatch.transforms);
         return drawingColor(swatch.fill, palette);
     });
+}
+
+// The slide's tx1, light on a dark theme: what an imported chart and a dropped object's box write in where the file
+// states no colour.
+export function textColorOf(colors: DrawingTheme): string {
+    const slot = colors.map.get('tx1');
+    return (slot && colors.scheme.get(slot)) ?? SLIDES_STYLE_DEFAULTS.color;
+}
+
+// Their axes and outlines: the text's colour faded, as PowerPoint's chart axes are.
+export function mutedColor(color: string): string {
+    return `${color.slice(0, 7)}99`;
 }
 
 const placeholderColors = new WeakMap<DrawingTheme, Map<string | undefined, DrawingTheme>>();
