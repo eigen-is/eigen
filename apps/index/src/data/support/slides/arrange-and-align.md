@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, selection, align, arrange, layers]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/style-objects]
 order: 55
-updated: 2026-09-29
+updated: 2026-10-13
 ---
 
 Once a slide has a few objects on it, the work becomes tidying: picking several at once, moving them by exact amounts, stacking them in the right order, and lining them up. This article covers all of that. For placing and resizing a single object, see [Create and edit a presentation](/support/slides/create-and-edit).
@@ -63,6 +63,7 @@ Right-click an object to open its menu. The commands appear in this order:
 - **Bring to front**, **Bring forward**, **Send backward**, **Send to back**.
 - **Copy**, **Cut**, **Paste**.
 - **Duplicate**, **Delete**.
+- **Convert to shapes**, when the selection is one chart. It replaces the chart with ordinary shapes and text boxes that look the same, and leaves them all selected. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
 - **Download original image**, on an image only. It saves the image file at its full size and in its own format.
 
 If you can comment on the presentation, an **Add comment** row appears at the bottom.

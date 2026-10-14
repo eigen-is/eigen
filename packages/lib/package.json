@@ -90,7 +90,8 @@
     "./sheets/*": "./src/sheets/*.ts",
     "./vector": "./src/vector/index.ts",
     "./vector/*": "./src/vector/*.ts",
-    "./background": "./src/background/index.ts"
+    "./background": "./src/background/index.ts",
+    "./charts": "./src/charts/index.ts"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.31.3",

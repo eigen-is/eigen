@@ -8,9 +8,17 @@ import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { ImagePlus } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
+import { CHART_TYPE_OPTIONS } from '../charts';
 import { ExportProgressDialog, useDocumentExport } from '../drive/use-document-export';
-import { DropdownMenuCheckboxItem, DropdownMenuItem, DropdownMenuShortcut } from '../dropdown-menu';
+import {
+    DropdownMenuCheckboxItem,
+    DropdownMenuItem,
+    DropdownMenuShortcut,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '../dropdown-menu';
 import { DocumentShareCluster } from '../layout/toolbar/document-share-cluster';
 import { EditMenu } from '../layout/toolbar/edit-menu';
 import { FileMenu } from '../layout/toolbar/file-menu';
@@ -18,8 +26,10 @@ import { CenteredToolbar } from '../layout/toolbar/toolbar';
 import { ToolbarMenu } from '../layout/toolbar/toolbar-menu';
 import { ToolbarSeparator } from '../layout/toolbar/toolbar-separator';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import type { CanvasHandle } from './canvas-editor';
 import { INSERT_IMAGE_KEY, TOOL_LOCK_KEY } from './hooks/use-canvas-keyboard';
 import type { VectorTool } from './hooks/use-tool';
+import { ELEMENT_KIND_UI } from './kinds';
 import { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems } from './toolbar-tools';
 
 type CanvasToolbarProps = {
@@ -38,6 +48,8 @@ type CanvasToolbarProps = {
     setToolLocked: (locked: boolean) => void;
     // Present when the container has a media/ folder — opens the host's image picker.
     onInsertImage?: () => void;
+    // The canvas the Insert menu places into (Insert → Chart).
+    canvasRef: RefObject<CanvasHandle | null>;
     onAccessDialogOpen: () => void;
     // Document-level comments + activity. Always offered: desktop draws the side panel, mobile the Column.
     onToggleCommentPanel: () => void;
@@ -67,6 +79,7 @@ export function CanvasToolbar({
     toolLocked,
     setToolLocked,
     onInsertImage,
+    canvasRef,
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
@@ -82,6 +95,7 @@ export function CanvasToolbar({
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canEdit);
     const { exportPath, isExporting } = useDocumentExport();
     const isCompact = useIsCompactToolbar();
+    const ChartIcon = ELEMENT_KIND_UI.chart.icon;
 
     return (
         <>
@@ -116,6 +130,21 @@ export function CanvasToolbar({
                                         <DropdownMenuShortcut>{INSERT_IMAGE_KEY}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                 )}
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                        <ChartIcon className="h-4 w-4 mr-2" /> {ELEMENT_KIND_UI.chart.label}
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        {CHART_TYPE_OPTIONS.map((option) => (
+                                            <DropdownMenuItem
+                                                key={option.value}
+                                                onClick={() => canvasRef.current?.insertChart(option.value)}
+                                            >
+                                                <option.icon className="h-4 w-4 mr-2" /> {option.label}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                             </ToolbarMenu>
                         )}
                     </div>
