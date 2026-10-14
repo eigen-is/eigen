@@ -5,6 +5,7 @@
 // A viewer's menu keeps only an image's download row.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { Shapes } from 'lucide-react';
 import { CommentMenuItems } from '../comments';
 import {
     ArrangeMenuItems,
@@ -14,7 +15,7 @@ import {
     ObjectActionMenuItems,
     type useContextMenu,
 } from '../context-menu';
-import { DropdownMenuSeparator } from '../dropdown-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '../dropdown-menu';
 import type { ZOp } from '../properties-panel/z-order';
 
 type CanvasObjectMenuProps = {
@@ -29,6 +30,8 @@ type CanvasObjectMenuProps = {
     onPaste: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
+    // Replaces the selected chart with its shapes; omitted unless the selection is one chart that draws.
+    onConvertToShapes?: () => void;
     // Raises a comment on the right-clicked element; omitted when the user can't comment.
     onComment?: () => void;
 };
@@ -43,6 +46,7 @@ export function CanvasObjectMenu({
     onPaste,
     onDuplicate,
     onDelete,
+    onConvertToShapes,
     onComment,
 }: CanvasObjectMenuProps) {
     return (
@@ -55,6 +59,14 @@ export function CanvasObjectMenu({
                     <ClipboardMenuItems onCopy={onCopy} onCut={onCut} onPaste={onPaste} />
                     <DropdownMenuSeparator />
                     <ObjectActionMenuItems onDuplicate={onDuplicate} onDelete={onDelete} />
+                    {onConvertToShapes && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={onConvertToShapes}>
+                                <Shapes className="h-4 w-4 mr-2" /> Convert to shapes
+                            </DropdownMenuItem>
+                        </>
+                    )}
                     {imagePath && (
                         <>
                             <DropdownMenuSeparator />

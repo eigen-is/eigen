@@ -9,9 +9,10 @@ import { escapeXml } from '../core/xml';
 import { arrowRoute, sceneBounds } from './elbow-route';
 import { isTransparentColor } from './fill';
 import { orderByFractionalIndex } from './fractional-index';
-import { type Box, round } from './geometry';
+import { round } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
-import { RICH_TEXT_CLASS, SVG_NS } from './scene-layers';
+import { elementGroupOpen, SVG_NS } from './kinds/render-utils';
+import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 
 // The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.
@@ -79,18 +80,5 @@ export function elementToSvg(
             ? `${out.svg}<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`
             : out.svg;
     if (body === '') return '';
-    return `${groupOpen(el)}${body}</g>`;
-}
-
-// translate to the element's position, then rotate about its center (angle in degrees —
-// SVG rotate() takes degrees directly, no conversion).
-function elementTransform(box: Box): string {
-    const translate = `translate(${round(box.x)} ${round(box.y)})`;
-    if (box.angle === 0) return translate;
-    return `${translate} rotate(${round(box.angle)} ${round(box.width / 2)} ${round(box.height / 2)})`;
-}
-
-function groupOpen(el: VectorElement): string {
-    const opacity = el.opacity !== 100 ? ` opacity="${round(el.opacity / 100)}"` : '';
-    return `<g transform="${elementTransform(el)}"${opacity}>`;
+    return `${elementGroupOpen(el)}${body}</g>`;
 }

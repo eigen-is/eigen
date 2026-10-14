@@ -183,8 +183,6 @@ export type Context = {
     cellSelectExtending: boolean; // selection fill-down
     cellSelectExtendIndex: number[];
 
-    chart_selection: unknown;
-
     showGridLines: boolean;
     allowEdit: boolean;
 
@@ -337,8 +335,6 @@ export function defaultContext(refs: RefValues): Context {
 
         cellSelectExtending: false, // selection fill-down
         cellSelectExtendIndex: [],
-
-        chart_selection: {},
 
         showGridLines: true,
         allowEdit: true,
