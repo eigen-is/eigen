@@ -1,0 +1,51 @@
+diff --git a/lib/utils/common.js b/lib/utils/common.js
+index ddb2c8b0c55b9cb8215942554691191c84f0286a..08110351664ea4cddc6383678439f1a202b9b399 100644
+--- a/lib/utils/common.js
++++ b/lib/utils/common.js
+@@ -1,28 +1,30 @@
+ var error = require('./error');
+ 
++// Patched (Eigen, patches/): a loop, as concat on the reduce's accumulator copied it per element, quadratic in a range's rows.
+ exports.flattenShallow = function(array) {
+   if (!array || !array.reduce) {
+     return array;
+   }
+-
+-  return array.reduce(function(a, b) {
+-    var aIsArray = Array.isArray(a);
+-    var bIsArray = Array.isArray(b);
+-
+-    if (aIsArray && bIsArray ) {
+-      return a.concat(b);
+-    }
+-    if (aIsArray) {
+-      a.push(b);
+-
++  // One element or none, as a reduce with no seed: the element itself, or a TypeError.
++  if (array.length < 2) {
++    return array.reduce(function(a) {
+       return a;
++    });
++  }
++
++  var result = [];
++  for (var i = 0; i < array.length; i++) {
++    var value = array[i];
++    if (Array.isArray(value)) {
++      for (var j = 0; j < value.length; j++) {
++        result.push(value[j]);
++      }
++    } else {
++      result.push(value);
+     }
+-    if (bIsArray) {
+-      return [a].concat(b);
+-    }
++  }
+ 
+-    return [a, b];
+-  });
++  return result;
+ };
+ 
+ exports.isFlat = function(array) {
