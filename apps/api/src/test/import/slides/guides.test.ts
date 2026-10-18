@@ -38,6 +38,7 @@ describe('the shape guides', () => {
             wd6: 1000 / 6,
             wd8: 125,
             wd10: 100,
+            wd12: 1000 / 12,
             wd32: 31.25,
             hd2: 250,
             hd3: 500 / 3,
@@ -45,6 +46,7 @@ describe('the shape guides', () => {
             hd5: 100,
             hd6: 500 / 6,
             hd8: 62.5,
+            hd10: 50,
             ssd2: 250,
             ssd4: 125,
             ssd6: 500 / 6,
@@ -53,13 +55,14 @@ describe('the shape guides', () => {
             ssd32: 15.625,
             cd8: 45 * DEGREE,
             cd4: 90 * DEGREE,
+            cd3: 120 * DEGREE,
             '3cd8': 135 * DEGREE,
             cd2: 180 * DEGREE,
             '5cd8': 225 * DEGREE,
             '3cd4': 270 * DEGREE,
             '7cd8': 315 * DEGREE,
         };
-        expect(Object.fromEntries(Object.keys(expected).map((name) => [name, guides?.get(name)]))).toEqual(expected);
+        expect(Object.fromEntries(guides ?? [])).toEqual(expected);
     });
 });
 
@@ -90,6 +93,18 @@ describe('a formula', () => {
             ['val -12', -12],
         ];
         for (const [fmla, value] of cases) expect([fmla, formula(fmla)]).toEqual([fmla, expect.closeTo(value, 9)]);
+    });
+
+    test('mod of a length past the square root of the largest double is that length, not an overflow', () => {
+        const max = '9007199254740991';
+        const value = last(
+            ['a', `*/ ${max} ${max} 1`],
+            ['b', '*/ a a 1'],
+            ['c', '*/ b b 1'],
+            ['d', '*/ c c 1'],
+            ['e', 'mod d 0 0'],
+        );
+        expect(value).toBe(Number(max) ** 16);
     });
 
     test("reads the shape guides, guides before it and the avLst's adjust values by name", () => {

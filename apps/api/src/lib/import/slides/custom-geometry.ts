@@ -1,7 +1,15 @@
 import { clamp, round4 } from '@workspace/lib/vector';
 import { A_NS, isOn } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
-import { evaluateGuides, type GuideList, type Guides, guideListOf, guideValue } from './guides';
+import {
+    DEGREE,
+    evaluateGuides,
+    type GuideList,
+    type Guides,
+    guideListOf,
+    guideValue,
+    RADIANS_PER_UNIT,
+} from './guides';
 import { affords, charge, childOf } from './lookup';
 import { emu } from './package';
 
@@ -25,8 +33,6 @@ const SIMPLIFY_TOLERANCES = [0.001, 0.002, 0.004];
 // Each split halves a run at best; past this depth a run keeps its points, so a pass costs 16 scans of them at most.
 const MAX_SIMPLIFY_DEPTH = 16;
 
-const DEGREE = 60_000;
-const RADIANS_PER_UNIT = Math.PI / (180 * DEGREE);
 const FULL_TURN = 360 * DEGREE;
 
 // `filled` follows the path's fill flag: PowerPoint fills an unclosed subpath as if closed, as SVG does, so the element

@@ -14,8 +14,8 @@ export type GuideList = readonly (readonly [name: string, formula: string])[];
 // itself included, reads 0. The corpus's most is 1,905 in one custGeom, an export spelling every coordinate as a guide.
 export const MAX_GUIDES = 4096;
 
-const DEGREE = 60_000;
-const RADIANS_PER_UNIT = Math.PI / (180 * DEGREE);
+export const DEGREE = 60_000;
+export const RADIANS_PER_UNIT = Math.PI / (180 * DEGREE);
 
 // x, y, z as the spec names them. Whatever comes out not finite (a quotient by zero, an overflow, a negative root) is 0.
 const OPERATORS = new Map<string, (x: number, y: number, z: number) => number>([
@@ -29,7 +29,7 @@ const OPERATORS = new Map<string, (x: number, y: number, z: number) => number>([
     ['cos', (x, y) => x * Math.cos(y * RADIANS_PER_UNIT)],
     ['max', (x, y) => Math.max(x, y)],
     ['min', (x, y) => Math.min(x, y)],
-    ['mod', (x, y, z) => Math.sqrt(x * x + y * y + z * z)],
+    ['mod', (x, y, z) => Math.hypot(x, y, z)],
     ['pin', (x, y, z) => (y < x ? x : y > z ? z : y)],
     ['sat2', (x, y, z) => x * Math.sin(Math.atan2(z, y))],
     ['sin', (x, y) => x * Math.sin(y * RADIANS_PER_UNIT)],
@@ -86,11 +86,13 @@ function shapeGuides(w: number, h: number): Guides {
         ['vc', h / 2],
         ['ss', ss],
         ['ls', ls],
-        ...fractions('wd', w, [2, 3, 4, 5, 6, 8, 10, 32]),
-        ...fractions('hd', h, [2, 3, 4, 5, 6, 8]),
+        // The spec's, and wd12, hd10 and cd3, which the preset definitions read and LibreOffice defines.
+        ...fractions('wd', w, [2, 3, 4, 5, 6, 8, 10, 12, 32]),
+        ...fractions('hd', h, [2, 3, 4, 5, 6, 8, 10]),
         ...fractions('ssd', ss, [2, 4, 6, 8, 16, 32]),
         ['cd8', 45 * DEGREE],
         ['cd4', 90 * DEGREE],
+        ['cd3', 120 * DEGREE],
         ['3cd8', 135 * DEGREE],
         ['cd2', 180 * DEGREE],
         ['5cd8', 225 * DEGREE],
