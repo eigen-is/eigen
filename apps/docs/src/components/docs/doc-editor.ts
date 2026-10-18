@@ -44,6 +44,7 @@ import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { AtomMarks } from './extensions/atom-marks';
 import { Chart, type ChartOptions } from './extensions/chart';
+import { Equation, type EquationOptions } from './extensions/equation';
 import { Figure } from './extensions/figure';
 import type { FigureFrameOptions } from './extensions/figure-frame';
 import { PageNumber } from './extensions/page-number';
@@ -203,6 +204,7 @@ type DocEditorOptions = {
     coarsePointer: boolean;
     figure?: Partial<FigureFrameOptions>;
     chart?: Partial<ChartOptions>;
+    equation?: Partial<EquationOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -219,6 +221,7 @@ export function docEditorOptions({
     coarsePointer,
     figure,
     chart,
+    equation,
     extensions = [],
     media,
     editor,
@@ -240,6 +243,7 @@ export function docEditorOptions({
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     'figure',
                     'chart',
+                    'equation',
                     'table',
                     'pageNumber',
                     ...extensions.map((extension) => extension.name),
@@ -248,6 +252,7 @@ export function docEditorOptions({
             EditorTable.configure({ resizable: !coarsePointer }),
             Figure.configure(figure),
             ...(band ? [] : [Chart.configure(chart)]),
+            Equation.configure(equation),
             PageNumber,
             TableWidthClamp.configure({ textColumnWidth }),
             AtomMarks,

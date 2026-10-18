@@ -43,6 +43,7 @@ import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar } from './editor-toolbar';
+import { EquationPropertiesPanel } from './equation-properties-panel';
 import {
     addCommentAnchor,
     CommentMark,
@@ -55,6 +56,7 @@ import {
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePageSetup } from './hooks/use-page-setup';
+import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
 import { BandControls, PageBands } from './page-band';
 import { applyPageNumberPreset, type PageNumberPreset } from './page-numbers';
 import { createDocUndoManager, writePageSetup } from './page-setup';
@@ -112,6 +114,7 @@ export const CollaborativeEditor = ({
                         provider={provider}
                         canWrite={canWrite}
                         offline={offline}
+                        unsyncedEdits={unsyncedEdits}
                         storageUnavailable={storageUnavailable}
                         mediaFolderId={mediaFolderId}
                         chatFolderId={chatFolderId}
@@ -131,6 +134,7 @@ const TiptapEditor = ({
     path,
     canWrite,
     offline,
+    unsyncedEdits,
     storageUnavailable,
     mediaFolderId,
     chatFolderId,
@@ -143,6 +147,7 @@ const TiptapEditor = ({
     path: DrivePath;
     canWrite: boolean;
     offline: boolean;
+    unsyncedEdits: boolean;
     storageUnavailable: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
@@ -180,6 +185,7 @@ const TiptapEditor = ({
     const cardsRef = useRef<Record<string, CommentCard>>({});
     // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
+    const editEquationRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = usePageSetup(yDoc);
     const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
@@ -245,6 +251,10 @@ const TiptapEditor = ({
                 onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 onEditData: () => setChartDataOpen(true),
             },
+            equation: {
+                onOpenComment: handleCommentClick,
+                onEdit: isMobile ? undefined : () => editEquationRef.current(),
+            },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -261,7 +271,7 @@ const TiptapEditor = ({
                 }),
             ],
         },
-        [handleCommentClick],
+        [handleCommentClick, isMobile],
     );
     // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
     const editorRef = useRef<Editor | null>(null);
@@ -324,9 +334,14 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
-    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'chart' | 'table'>('document');
-    const lastPanelRef = useRef<'figure' | 'chart' | 'table'>('figure');
-    if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
+    const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
+        editor,
+        isMobile,
+        closePanels,
+    );
+    editEquationRef.current = editEquation;
+    const lastPanelRef = useRef<Exclude<SelectionPanel, 'document'>>('figure');
+    if (selectionPanel !== 'document') lastPanelRef.current = selectionPanel;
 
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
@@ -399,20 +414,6 @@ const TiptapEditor = ({
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
 
-    useEffect(() => {
-        if (!editor) return;
-        const onUpdate = () => {
-            if (editor.isActive('figure')) setSidebarContext('figure');
-            else if (editor.isActive('chart')) setSidebarContext('chart');
-            else if (editor.isActive('table')) setSidebarContext('table');
-            else setSidebarContext('document');
-        };
-        editor.on('selectionUpdate', onUpdate);
-        return () => {
-            editor.off('selectionUpdate', onUpdate);
-        };
-    }, [editor]);
-
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     // Find searches the body, so ⌘F leaves a band.
     const handleSearchOpenChange = useCallback(
@@ -424,8 +425,8 @@ const TiptapEditor = ({
     );
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    // The figure, chart and table panels follow the body's selection, so a band being edited closes them.
-    const showSidebar = !isMobile && (panel !== null || (canWrite && !editingBand && sidebarContext !== 'document'));
+    // The figure, chart, equation and table panels follow the body's selection, so a band being edited closes them.
+    const showSidebar = !isMobile && (panel !== null || (canWrite && !editingBand && selectionPanel !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -531,6 +532,7 @@ const TiptapEditor = ({
                                     path={path}
                                     canWrite={canWrite}
                                     offline={offline}
+                                    unsyncedEdits={unsyncedEdits}
                                     storageUnavailable={storageUnavailable}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
@@ -552,8 +554,9 @@ const TiptapEditor = ({
                                             : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
-                                    // Comments anchor in the body only.
+                                    // Comments anchor in the body only, and the Equation panel edits the body's.
                                     onAddComment={chatFolderId && !editingBand ? handleAddComment : undefined}
+                                    onInsertEquation={editingBand ? undefined : insertEquation}
                                     onEnterBand={bandsAllowed ? (edge) => enterBand(entryBand(edge)) : undefined}
                                     onPageNumbers={bandsAllowed ? applyPreset : undefined}
                                 />
@@ -675,6 +678,8 @@ const TiptapEditor = ({
                                                     undoManager={undoManager}
                                                     onEditData={() => setChartDataOpen(true)}
                                                 />
+                                            ) : lastPanelRef.current === 'equation' ? (
+                                                <EquationPropertiesPanel editor={editor} fieldRef={equationFieldRef} />
                                             ) : (
                                                 <TablePropertiesPanel editor={editor} />
                                             )}

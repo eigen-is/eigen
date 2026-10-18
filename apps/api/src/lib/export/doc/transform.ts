@@ -11,6 +11,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../document/doc';
+import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
@@ -25,8 +26,18 @@ import {
 import { splitDataUri } from '../../shared/data-uri';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
+import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
 import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
-import { renderDocHtml, withAbsoluteLinks } from './render';
+import {
+    type EquationDrawing,
+    equationBudget,
+    equationDrawing,
+    equationKey,
+    equationMathml,
+    renderDocHtml,
+    renderEquations,
+    withAbsoluteLinks,
+} from './render';
 import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform process
@@ -34,8 +45,9 @@ import type { DocxMedia } from './to-docx';
 // This module must not reach the Mount or the preview cache — the child imports it.
 //
 // HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
-// serves, but for the small caps the PDF fakes (render.ts). The docx is written from the JSON by
-// to-docx.ts, which loads lazily so an HTML export never evaluates it, its styles or its fonts.
+// serves, but for the small caps the PDF fakes and the equations it draws as SVG (render.ts). The
+// docx is written from the JSON by to-docx.ts, which loads lazily so an HTML export never evaluates
+// it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
@@ -57,29 +69,62 @@ export async function renderEigendocExport(
     }
     const dataUriMap = toDataUriMap(media);
     const pdf = htmlExportMode(format) === 'pdf';
-    const prose = (content: JSONContent, className = 'eigen-prose tiptap') =>
-        `<article class="${className}">${renderDocHtml(
-            withAbsoluteLinks(content, publicOrigin),
-            (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-            { synthesizeSmallCaps: pdf, pageCounters: pdf },
-        )}</article>`;
-    const band = (root: BandRoot) => {
-        const content = bands[root];
-        return content
-            ? `<div class="band-${root}">${prose(content, `eigen-prose tiptap ${PAGE_BAND_CLASS}`)}</div>`
-            : '';
-    };
     // Browsers ignore running(), so the download shows each band where the long page does: page 1's header on top, the
     // other pages' footer at the end.
-    const body = pdf
-        ? `${BAND_ROOTS.map(band).join('')}${prose(json)}`
-        : `${band(page.differentFirstPage ? 'headerFirst' : 'header')}${prose(json)}${band('footer')}`;
+    const order: (BandRoot | 'body')[] = pdf
+        ? [...BAND_ROOTS, 'body']
+        : [page.differentFirstPage ? 'headerFirst' : 'header', 'body', 'footer'];
+    const roots = order.flatMap((part) => {
+        const content = part === 'body' ? json : bands[part];
+        return content ? [{ part, content }] : [];
+    });
+    const equations = renderEquations(pdf ? await svgEquations(roots.map(({ content }) => content)) : undefined);
+    const body = roots
+        .map(({ part, content }) => {
+            const html = renderDocHtml(
+                withAbsoluteLinks(content, publicOrigin),
+                (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+                { synthesizeSmallCaps: pdf, pageCounters: pdf, equations },
+            );
+            return part === 'body'
+                ? `<article class="eigen-prose tiptap">${html}</article>`
+                : `<div class="band-${part}"><article class="eigen-prose tiptap ${PAGE_BAND_CLASS}">${html}</article></div>`;
+        })
+        .join('');
     const html = exportHtmlDocument({
         title,
         css: `${PROSE_CSS}${printExtras(page)}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
+}
+
+// WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,
+// keyed by stored string, each drawn once, in the order the render meets them, the bands' first. Every copy spends
+// SVG_LIMIT; MathJax stops at the first equation that does not fit, or past MAX_SVG_EQUATIONS drawings, and the render
+// prints the rest as text.
+async function svgEquations(roots: JSONContent[]): Promise<Map<string, EquationDrawing>> {
+    const drawings = new Map<string, EquationDrawing>();
+    const fits = equationBudget(SVG_LIMIT);
+    for (const attrs of equationAttrs(roots)) {
+        const key = equationKey(attrs);
+        let drawing = drawings.get(key);
+        if (drawing === undefined && drawings.size < MAX_SVG_EQUATIONS) {
+            const { row, display } = readStoredEquation(attrs);
+            const svg = await mathmlToSvg(equationMathml(row, display));
+            drawing = equationDrawing(`<span class="math-svg"${display ? ' data-display="block"' : ''}>${svg}</span>`);
+        }
+        if (drawing === undefined || !fits(drawing)) break;
+        drawings.set(key, drawing);
+    }
+    return drawings;
+}
+
+function* equationAttrs(nodes: JSONContent[]): Generator<Record<string, unknown>> {
+    for (const node of nodes) {
+        if (node.type === 'equation') yield node.attrs ?? {};
+        yield* equationAttrs(node.content ?? []);
+    }
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
@@ -201,6 +246,12 @@ h1, h2, h3, h4, h5, h6 { font-size: inherit; }
 table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-break-inside: auto; }
 
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
+
+/* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline, and breaks no line, so one wider
+   than the column scales down to it; a displayed one takes its line as in the editor, a full-width box on the bottom
+   of the line that keeps the trailing <br> */
+.math-svg > svg { display: inline; max-width: 100%; }
+.math-svg[data-display] { display: inline-block; width: 100%; text-align: center; vertical-align: bottom; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
 ul[data-type="taskList"] li > label input[type="checkbox"] {

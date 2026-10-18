@@ -1,11 +1,12 @@
 import { bundledFontOfStack, DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
+import { ITALIC_HEADING_SELECTOR, unwrapRenderedMath } from '@workspace/lib/docs/eigendoc';
 
-// Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, no size the doc draws already, images,
-// charts and tables no wider than the column, no anchor for a comment card this document lacks, and in an italic
-// heading an upright run as the mark.
+// Pasted HTML before the schema parses it: a drawn equation as its <math> alone, foreign fonts onto the bundled ones,
+// no size the doc draws already, images, charts and tables no wider than the column, no anchor for a comment card this
+// document lacks, and in an italic heading an upright run as the mark.
 export function cleanPastedHTML(html: string, maxWidth: number, cardIds: ReadonlySet<string>): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    unwrapRenderedMath(doc.body);
 
     for (const el of doc.querySelectorAll('[data-comment-id]')) {
         if (!cardIds.has(el.getAttribute('data-comment-id') ?? '')) el.removeAttribute('data-comment-id');

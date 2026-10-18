@@ -17,7 +17,7 @@ import {
     runAudit,
     type Tally,
 } from '../../scripts/docx-audit';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
 
 // The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
@@ -67,10 +67,26 @@ describe('source side', () => {
         expect(tally.words).toEqual(['a', 'b']);
     });
 
-    test("an equation's objects and runs are words of their own, as the reader reads them", async () => {
-        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup><m:r><m:t>+1</m:t></m:r></m:oMath>`;
-        const tally = await source(`<w:p>${run('So ')}${math}</w:p>`);
-        expect(tally.words).toEqual(['So', 'x2', '+1']);
+    test('an equation counts as one and is no text, each of an m:oMathPara, a deleted one or one in a field code none', async () => {
+        const math =
+            '<m:oMath><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:oMath>';
+        const p = (inner: string) =>
+            `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${inner}</w:p>`;
+        const sentence = p(`${run('So')}${math}${run('holds')}`);
+        const field = `<w:r><w:fldChar w:fldCharType="begin"/></w:r>${math}<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const body = `${sentence}${p(`<w:del w:id="1" w:author="a">${math}</w:del>${field}`)}${p(`<m:oMathPara>${math}${math}</m:oMathPara>`)}`;
+        const tally = await source(body);
+        expect([tally.words, count(tally, 'equations')]).toEqual([['So', 'holds'], 3]);
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(body))).json);
+        expect([imported.words, count(imported, 'equations')]).toEqual([['So', 'holds'], 3]);
+    });
+
+    // CT_R holds no math, but the reader reads it there, so the audit counts it too.
+    test('an equation directly in a run counts, each of an m:oMathPara there too', async () => {
+        const math = '<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>';
+        const body = `<w:p xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:r>${math}<m:oMathPara>${math}${math}</m:oMathPara></w:r></w:p>`;
+        const imported = auditImported(docxToPmJson(Buffer.from(await buildDocxWithBody(body))).json);
+        expect([count(await source(body), 'equations'), count(imported, 'equations')]).toEqual([3, 3]);
     });
 
     test("a w:t's surrounding whitespace counts only where xml:space preserves it, as Word draws it", async () => {
@@ -596,9 +612,10 @@ describe('both sides', () => {
     });
 
     // The writer's mapping read back: what the doc holds, the audit finds in its docx. A Word drawing always has a
-    // size, so the photo the doc leaves at its own width has one there, and a page number is its field's cached 1.
+    // size, so the photo the doc leaves at its own width has one there; the display equation is a paragraph of its own,
+    // so the text after it is one more; and a page number is its field's cached 1.
     test("the writer's docx holds what its doc holds", async () => {
-        const json = withoutEquations(buildAllFeaturesDocJson());
+        const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(
             json,
             {},
@@ -614,7 +631,9 @@ describe('both sides', () => {
         expect(Object.fromEntries(written.counts)).toEqual({
             ...Object.fromEntries(held.counts),
             imageWidths: count(held, 'images'),
+            paragraphs: count(held, 'paragraphs') + 1,
         });
+        expect(count(written, 'equations')).toBe(2);
         expect(written.words.toSorted()).toEqual(held.words.toSorted());
         expect(written.numbers.toSorted()).toEqual(held.numbers.toSorted());
         const marked = (tally: Tally) =>

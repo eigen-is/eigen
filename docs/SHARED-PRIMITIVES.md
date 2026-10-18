@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1802 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1813 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -225,7 +225,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (296)
+## Hooks (297)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -398,6 +398,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `usePathInfo` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `usePathInfos` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `usePermanentlyDelete` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
+| `usePrintPdf` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-print-pdf.ts |
 | `useRecordHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
 | `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
@@ -526,7 +527,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (415)
+## Types (416)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -559,7 +560,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BandRoot` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
 | `ChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
-| `Equation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
+| `Equation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `FigureAlignment` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `FigureFrameAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
@@ -880,6 +881,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `LatexCommand` | `@workspace/math` | packages/math/src/latex-commands.ts |
 | `MathNode` | `@workspace/math` | packages/math/src/tree.ts |
 | `MathRow` | `@workspace/math` | packages/math/src/tree.ts |
 | `MathVariant` | `@workspace/math` | packages/math/src/tree.ts |
@@ -946,7 +948,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (892)
+## Utilities & constants (901)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1284,7 +1286,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
-| `equationText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
+| `equationMath` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
 | `FIGURE_FRAME_NODES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FIRST_PAGE_BAND` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
@@ -1292,6 +1294,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ITALIC_HEADING_LEVELS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `ITALIC_HEADING_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToPx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1306,6 +1309,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `pageStylesheet` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pageTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PAPER_SIZES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `parseMathml` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
 | `PROSE_TEXTBLOCKS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `pxToMm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
@@ -1317,6 +1321,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `selectionFontSizes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/font-size.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `unwrapRenderedMath` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `filenameFromDisposition` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
@@ -1775,16 +1780,22 @@ rather than inlining `queryClient.invalidateQueries`.
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
+| `LATEX_COMMANDS` | `@workspace/math` | packages/math/src/latex-commands.ts |
+| `MARKUP_COMPATIBILITY_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
 | `MATH_LIMITS` | `@workspace/math` | packages/math/src/tree.ts |
 | `MATHML_NAMESPACE` | `@workspace/math` | packages/math/src/mathml.ts |
 | `mathText` | `@workspace/math` | packages/math/src/tree.ts |
 | `OMML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `readLatex` | `@workspace/math` | packages/math/src/latex.ts |
 | `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readMathmlLatex` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readOmml` | `@workspace/math` | packages/math/src/omml.ts |
+| `readOmmlText` | `@workspace/math` | packages/math/src/omml.ts |
 | `WORDML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
+| `writeLatex` | `@workspace/math` | packages/math/src/latex.ts |
 | `writeMathml` | `@workspace/math` | packages/math/src/mathml.ts |
 | `writeOmml` | `@workspace/math` | packages/math/src/omml.ts |
+| `writeText` | `@workspace/math` | packages/math/src/text.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `attachmentKeyAt` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |

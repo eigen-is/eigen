@@ -1,7 +1,6 @@
 import { MathError } from './error';
 
-// The element the readers take: the API's Bun-parsed XmlElement as is, or a DOM element through fromDom. Attributes
-// are keyed as written, so `m:val` and `val` both answer to `val`.
+// Bun's XmlElement as is, or a DOM element through fromDom. Attributes keep their prefix: `m:val` answers to `val`.
 export type MathXmlElement = {
     ns: string;
     local: string;
@@ -29,7 +28,8 @@ export function attribute(element: MathXmlElement, local: string): string | unde
     return undefined;
 }
 
-const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
+// XML 1.0 § 2.2 Char, negated: the package throws on one, where lib's core/xml.ts strips it.
+export const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 export function checkedXml(text: string): string {
     if (NOT_XML.test(text)) throw new MathError('An equation holds a character XML cannot hold');
@@ -61,8 +61,7 @@ const ESCAPES: Record<string, string> = {
     '\r': '&#13;',
 };
 
-// Text or attribute value: `>` too, so `]]>` never closes anything, and whitespace as references, which an attribute
-// would read back as spaces.
+// For text and attributes: `>` so `]]>` closes nothing, whitespace as references an attribute won't read as spaces.
 export function escapeXml(text: string): string {
     return text.replace(/[&<>"\t\n\r]/g, (char) => ESCAPES[char]);
 }

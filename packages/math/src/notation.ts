@@ -21,10 +21,16 @@ export const ACCENTS: ReadonlyMap<string, string> = new Map([
     ['\u20E1', '↔'],
 ]);
 
-// What an accent's spacing character folds to on read. Word also writes the overline accent as U+203E.
+// What an accent's spacing character folds to on read. Word also writes the overline accent as U+203E, MathJax as
+// U+2015; KaTeX and MathJax write the hat and tilde as ASCII, the acute and grave as modifier letters.
 export const COMBINING_ACCENTS: ReadonlyMap<string, string> = new Map([
     ...Array.from(ACCENTS, ([combining, spacing]): [string, string] => [spacing, combining]),
     ['‾', '\u0305'],
+    ['\u2015', '\u0305'],
+    ['^', '\u0302'],
+    ['~', '\u0303'],
+    ['\u02CA', '\u0301'],
+    ['\u02CB', '\u0300'],
 ]);
 
 export const LINES = { over: '‾', under: '_' } as const;
@@ -38,12 +44,106 @@ export const SPACES: Readonly<Record<MathSpace, { text: string; width: string }>
     qquad: { text: '\u2003\u2003', width: '2em' },
 };
 
-// Characters MathML stretches as fences, so a bare one is written unstretched.
-export const FENCES: ReadonlySet<string> = new Set('()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄〈〉');
+// Characters MathML stretches as fences, so a bare one is written unstretched. Word's angle brackets are escaped:
+// Unicode normalisation turns them into the CJK U+3008 and U+3009.
+export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄']);
 
-const INTEGRALS: ReadonlySet<string> = new Set('∫∬∭∮∯∰∱∲∳⨋⨌⨍⨎⨏⨐⨑⨒⨓⨔⨕⨖⨗⨘⨙⨚⨛⨜');
+export const PRIME = '′';
 
-export const LARGE_OPERATORS: ReadonlySet<string> = new Set([...INTEGRALS, ...'∑∏∐⋀⋁⋂⋃⨀⨁⨂⨃⨄⨅⨆⨉']);
+// CSS's basic colour names and the rest LaTeX's xcolor shares with CSS, as browsers draw them: KaTeX and MathJax hand
+// a name to CSS, and MathML takes CSS's.
+export const COLOR_NAMES: ReadonlyMap<string, string> = new Map([
+    ['aqua', '#00FFFF'],
+    ['black', '#000000'],
+    ['blue', '#0000FF'],
+    ['brown', '#A52A2A'],
+    ['cyan', '#00FFFF'],
+    ['fuchsia', '#FF00FF'],
+    ['gray', '#808080'],
+    ['green', '#008000'],
+    ['lime', '#00FF00'],
+    ['magenta', '#FF00FF'],
+    ['maroon', '#800000'],
+    ['navy', '#000080'],
+    ['olive', '#808000'],
+    ['orange', '#FFA500'],
+    ['pink', '#FFC0CB'],
+    ['purple', '#800080'],
+    ['red', '#FF0000'],
+    ['silver', '#C0C0C0'],
+    ['teal', '#008080'],
+    ['violet', '#EE82EE'],
+    ['white', '#FFFFFF'],
+    ['yellow', '#FFFF00'],
+]);
+
+// The minus operator: Chrome draws an ASCII hyphen-minus in an mo as a hyphen, so every reader folds one to U+2212.
+export const MINUS = '\u2212';
+
+// Unicode's superscript and subscript digits and signs: each reads as a script holding its NFKC character.
+export const SCRIPT_CHARS: ReadonlyMap<string, readonly ['sub' | 'sup', string]> = new Map(
+    (['sup', 'sub'] as const).flatMap((slot) =>
+        [...(slot === 'sup' ? '⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾' : '₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎')].map(
+            (char) => [char, [slot, char.normalize('NFKC')]] as const,
+        ),
+    ),
+);
+
+// The large operators by their unicode-math names, which LaTeX writes.
+const INTEGRAL_NAMES: Readonly<Record<string, string>> = {
+    int: '∫',
+    iint: '∬',
+    iiint: '∭',
+    oint: '∮',
+    oiint: '∯',
+    oiiint: '∰',
+    intclockwise: '∱',
+    varointclockwise: '∲',
+    ointctrclockwise: '∳',
+    sumint: '⨋',
+    iiiint: '⨌',
+    intbar: '⨍',
+    intBar: '⨎',
+    fint: '⨏',
+    cirfnint: '⨐',
+    awint: '⨑',
+    rppolint: '⨒',
+    scpolint: '⨓',
+    npolint: '⨔',
+    pointint: '⨕',
+    sqint: '⨖',
+    intlarhk: '⨗',
+    intx: '⨘',
+    intcap: '⨙',
+    intcup: '⨚',
+    upint: '⨛',
+    lowint: '⨜',
+};
+
+export const LARGE_OPERATOR_NAMES: ReadonlyMap<string, string> = new Map(
+    Object.entries({
+        ...INTEGRAL_NAMES,
+        sum: '∑',
+        prod: '∏',
+        coprod: '∐',
+        bigwedge: '⋀',
+        bigvee: '⋁',
+        bigcap: '⋂',
+        bigcup: '⋃',
+        bigodot: '⨀',
+        bigoplus: '⨁',
+        bigotimes: '⨂',
+        bigcupdot: '⨃',
+        biguplus: '⨄',
+        bigsqcap: '⨅',
+        bigsqcup: '⨆',
+        bigtimes: '⨉',
+    }),
+);
+
+const INTEGRALS: ReadonlySet<string> = new Set(Object.values(INTEGRAL_NAMES));
+
+export const LARGE_OPERATORS: ReadonlySet<string> = new Set(LARGE_OPERATOR_NAMES.values());
 
 // Word's defaults: integrals carry their limits beside, every other large operator under and over.
 export function naryLimits(operator: string): 'under' | 'side' {
@@ -52,7 +152,8 @@ export function naryLimits(operator: string): 'under' | 'side' {
 
 // Unicode's Mathematical Alphanumeric Symbols, block by block, with the letters it left in Letterlike Symbols.
 const LATIN = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const GREEK = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ∇αβγδεζηθικλμνξοπρςστυφχψω∂ϵϑϰϕϱϖ';
+const GREEK_CAPITALS = 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡϴΣΤΥΦΧΨΩ';
+const GREEK = `${GREEK_CAPITALS}∇αβγδεζηθικλμνξοπρςστυφχψω∂ϵϑϰϕϱϖ`;
 const DIGITS = '0123456789';
 
 const BLOCKS: readonly [MathVariant, string, number][] = [
@@ -82,6 +183,9 @@ const BLOCKS: readonly [MathVariant, string, number][] = [
     ['bold-sans-serif', DIGITS, 0x1d7ec],
     ['monospace', DIGITS, 0x1d7f6],
 ];
+
+// TeX and Word draw a capital Greek letter upright.
+export const UPRIGHT_LETTERS: ReadonlySet<string> = new Set(GREEK_CAPITALS);
 
 const LETTERLIKE: Readonly<Record<string, string>> = {
     'italic h': 'ℎ',

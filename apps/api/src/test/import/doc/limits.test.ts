@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
+import { M_NS } from '../../../lib/core/ooxml';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
@@ -11,8 +13,8 @@ import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-t
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_TEXT, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_PIECES } from '../../../lib/import/doc/package';
+import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
+import { CHARS_PER_UNIT, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
@@ -457,6 +459,23 @@ describe('output budget', () => {
         const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
         expect([result.status, result.message]).toEqual([413, 'Document too large']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // A space in m:t writes 26 characters of MathML: these 22 KB zipped built 400M characters, 1.07 GB, before the weigh.
+    test('MathML past the budget is 413 once the budget and one equation are written', async () => {
+        const space = `<m:oMath><m:r><m:t xml:space="preserve">a${' '.repeat(3990)}a</m:t></m:r></m:oMath>`;
+        const docx = await buildDocxWithBody(`<w:p xmlns:m="${M_NS}">${space.repeat(3870)}</w:p>`);
+        const writes = spyOn(math, 'writeMathml');
+        try {
+            const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+            expect([error.status, error.message]).toEqual([413, 'Document too large']);
+            const written = writes.mock.results.map(({ value }) => String(value).length);
+            expect(written.reduce((sum, length) => sum + length, 0)).toBeLessThanOrEqual(
+                MAX_DOCX_WEIGHT * CHARS_PER_UNIT + Math.max(...written),
+            );
+        } finally {
+            writes.mockRestore();
+        }
     }, 30_000);
 });
 
@@ -987,6 +1006,22 @@ describe('figures and media', () => {
             );
             expect(nodesOfType(json, 'figure')).toEqual([]);
             expect(images).toEqual([]);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
+    });
+
+    test('an equation in a block the schema refuses stays in its line', async () => {
+        const refuses = spyOn(docSchema(), 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x</m:t></m:r></m:oMath>`;
+        try {
+            const { json, warnings } = await importDocxBody(
+                `${paragraph(`${run('So ')}${math}`)}${paragraph(run('After.'))}`,
+            );
+            expect(json.content?.[0]?.content?.map((node) => node.type)).toEqual(['text', 'equation']);
             expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
         } finally {
             refuses.mockRestore();

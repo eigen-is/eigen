@@ -1,13 +1,13 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
 // Tools reaches everyone, viewers included.
-import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
 
 const { act, createElement } = await import('react');
-const { formatForDisplay } = await import('@tanstack/react-hotkeys');
+const { formatForDisplay, getHotkeyManager } = await import('@tanstack/react-hotkeys');
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
@@ -30,13 +30,26 @@ const onReplaceImage = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
 
-async function render(width: number, canWrite: boolean, active = editor) {
+async function render(
+    width: number,
+    canWrite: boolean,
+    {
+        active = editor,
+        onInsertEquation,
+        sync = { offline: false, unsyncedEdits: false },
+    }: {
+        active?: typeof editor;
+        onInsertEquation?: () => void;
+        sync?: { offline: boolean; unsyncedEdits: boolean };
+    } = {},
+) {
     window.happyDOM.setViewport({ width, height: 1000 });
     const toolbar = createElement(EditorToolbar, {
         editor: active,
         body: editor,
         canWrite,
-        offline: false,
+        onInsertEquation,
+        ...sync,
         storageUnavailable: false,
         canUndo: false,
         canRedo: false,
@@ -527,7 +540,7 @@ test('a page number preset goes to the editor, and Page count goes in at the car
 // A command the schema lacks is a TypeError, so the menus ask the editor they act on what it holds.
 test("in a band, Insert, Format and the style picker offer only what the band's schema holds", async () => {
     const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
-    await render(1920, true, band);
+    await render(1920, true, { active: band });
     await openMenu('Insert');
     expect(menuItems().filter((item) => item?.startsWith('Page break') || item === 'Code block')).toEqual([]);
     expect(menuItems()).toContain('Table');
@@ -927,4 +940,97 @@ test.each([
     await pickInBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
     expect(execCommand.mock.calls).toEqual([[command]]);
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// Where Google's Insert › Symbols › Equation sits relative to the chart and the line. The equation goes in once the menu
+// has closed, so Radix hands the focus to no trigger after the new equation's field has taken it.
+test('Insert › Equation follows Chart and inserts once the menu has closed', async () => {
+    const onInsertEquation = mock(() => {});
+    await render(1920, true, { onInsertEquation });
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
+
+    await clickItem('Equation');
+    expect(onInsertEquation).not.toHaveBeenCalled();
+    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which under load a single tick can precede.
+    for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    expect(onInsertEquation).toHaveBeenCalledTimes(1);
+});
+
+// A phone has no panel to edit one in, and a band being edited none that follows it.
+test('Insert has no Equation without a way to edit it', async () => {
+    await render(1920, true);
+    await openMenu('Insert');
+    expect(openMenuEntries()).not.toContain('Equation');
+});
+
+// Print is the server's PDF in a tab of its own, so the headers and footers print; browser print is the fallback.
+describe('Print', () => {
+    const opened: string[] = [];
+    const browserPrint = mock(() => {});
+    const pressModP = () =>
+        act(async () => {
+            const isMac = /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
+            document.body.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                    bubbles: true,
+                    key: 'p',
+                    code: 'KeyP',
+                    metaKey: isMac,
+                    ctrlKey: !isMac,
+                }),
+            );
+        });
+
+    beforeEach(() => {
+        opened.length = 0;
+        browserPrint.mockClear();
+        // A tab waiting on a PDF that never comes; the PDF's own lifecycle is usePrintPdf's test.
+        window.open = ((url: string) => {
+            opened.push(url);
+            return { closed: false, close: () => {}, location: { href: '' } };
+        }) as unknown as typeof window.open;
+        globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
+        Object.assign(window, { print: browserPrint });
+    });
+
+    test('File › Print opens the PDF tab', async () => {
+        await render(1920, false);
+        await openMenu('File');
+        await clickItem('Print');
+        expect(opened).toEqual(['']);
+        expect(browserPrint).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['offline', { offline: true, unsyncedEdits: false }],
+        ['with unsynced edits', { offline: false, unsyncedEdits: true }],
+    ])('%s, File › Print is browser print', async (_, sync) => {
+        await render(1920, true, { sync });
+        await openMenu('File');
+        await clickItem('Print');
+        expect(opened).toEqual([]);
+        expect(browserPrint).toHaveBeenCalledTimes(1);
+    });
+
+    // EigenApp binds ⌘P on the document for every app; this stands in for it.
+    test("⌘P in Docs opens the PDF tab and never reaches EigenApp's ⌘P, which takes it again once Docs is gone", async () => {
+        const globalPrint = mock(() => {});
+        const global = getHotkeyManager().register('Mod+P', globalPrint);
+        try {
+            await render(1920, true);
+            await pressModP();
+            expect(opened).toEqual(['']);
+            expect(globalPrint).not.toHaveBeenCalled();
+
+            await unmount();
+            await pressModP();
+            expect(opened).toEqual(['']);
+            expect(globalPrint).toHaveBeenCalledTimes(1);
+        } finally {
+            global.unregister();
+        }
+    });
 });

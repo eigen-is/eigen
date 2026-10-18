@@ -1,5 +1,6 @@
 import type { Node } from '@tiptap/pm/model';
-import { type Equation, readEquation } from './nodes/equation';
+import { readEquation } from './nodes/equation';
+import type { Equation } from './nodes/equation-paste';
 
 // The doc's header and footer, each a root XmlFragment beside `default`, edited by an editor of its own. The first
 // two print on every page, the last two on page 1 when the page map's differentFirstPage is set.

@@ -66,7 +66,6 @@ import {
     seedDocumentMedia,
     seedEigendoc,
     seedVectorDoc,
-    withoutEquations,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -830,10 +829,13 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when a chart's inline SVG took its fit from eigen-prose.css: the .figure svg rule, and nothing else.
 // The deck pdf-html hash moved when a printed page lost its scene wrapper and each layer took its place as top and left, the rotation alone a transform, at 1:1 so its @page is 1920 wide: those styles, and nothing else.
 // The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
+// Both doc HTML hashes moved again when the PDF drew equations as SVG, scaled down to the column: the three .math-svg rules in the print extras and their comment, and nothing else.
+// Both doc HTML hashes moved again when a displayed equation took its line in the exports as in the editor: the .math-svg[data-display] rule and its comment in the print extras, the + br rule gone, and eigen-prose.css's .equation[data-display] rule scoped to .eigen-prose with its comment, and nothing else.
 // Both doc HTML hashes moved again when a header's or footer's last block lost its space after: the .page-band rule, and nothing else (a doc without bands prints no band stylesheet).
+// Both doc HTML hashes moved again when equations met headers and footers: the .math-svg rules and the .page-band rule together, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6983b73c0ba1cdd5d205b89ef1c22e5233732b1f05f035646802291fb4b18575';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6983b73c0ba1cdd5d205b89ef1c22e5233732b1f05f035646802291fb4b18575';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '1770f7024b4c3afec4330f2d4fb346f843610fd1387f36056b9c29bd58f04702';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '1770f7024b4c3afec4330f2d4fb346f843610fd1387f36056b9c29bd58f04702';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'a2310368cd450f8d94c039e39460d9551214a8d64dbf2b4d16ad2a5035840f92';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
@@ -1181,14 +1183,16 @@ describe('document transform (docx round trip)', () => {
     }
 
     // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
-    // A page number is its field's cached 1, which the reader keeps as text.
+    // A break or an equation ends a word; a page number is its field's cached 1, which the reader keeps as text.
     function words(json: JSONContent): string[] {
         const chunks: string[] = [];
         const walk = (node: JSONContent) => {
             const caption = node.attrs?.['caption'];
             if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
             const inline =
-                node.content?.filter((child) => ['text', 'hardBreak', 'pageNumber'].includes(child.type ?? '')) ?? [];
+                node.content?.filter((child) =>
+                    ['text', 'hardBreak', 'equation', 'pageNumber'].includes(child.type ?? ''),
+                ) ?? [];
             const textOf = (child: JSONContent) => (child.type === 'pageNumber' ? '1' : (child.text ?? ' '));
             if (inline.length > 0) chunks.push(inline.map(textOf).join(''));
             for (const child of node.content ?? []) walk(child);
@@ -1277,7 +1281,7 @@ describe('document transform (docx round trip)', () => {
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
-        const original = withoutEquations(buildAllFeaturesDocJson());
+        const original = buildAllFeaturesDocJson();
         const { json, images } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);

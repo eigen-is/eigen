@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -77,4 +77,5 @@ If you can only view the document, you can still use **Copy** and **Select all**
 
 - [Format text](/support/docs/format-text): apply headings, bold, lists, colors, and more.
 - [Add and edit links](/support/docs/add-links): turn text into clickable links.
+- [Insert and edit equations](/support/docs/equations): write math in LaTeX.
 - [Share a document](/support/docs/share-a-document): give other people access.

@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { sampleChartSpec } from '@workspace/lib/charts';
@@ -21,8 +22,9 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
-import { type MathRow, writeMathml } from '@workspace/math';
+import { type MathRow, readOmml, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
+import { parseOoxml } from '../../lib/core/ooxml';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
@@ -245,11 +247,19 @@ export function equation(mathml: string, display = false): JSONContent {
     return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
 }
 
-// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
-export function withoutEquations(json: JSONContent): JSONContent {
-    return json.content
-        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
-        : json;
+// The 108 Word equations of the math package's corpus, as the docx import reads them.
+export function corpusEquations(): { row: MathRow; display: boolean }[] {
+    const corpus: { omml: string; display: boolean }[] = JSON.parse(
+        fs.readFileSync(
+            new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
+            'utf8',
+        ),
+    );
+    return corpus.map(({ omml, display }) => {
+        const oMath = parseOoxml(omml);
+        if (!oMath) throw new Error('a corpus equation does not parse');
+        return { row: readOmml(oMath), display };
+    });
 }
 
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
