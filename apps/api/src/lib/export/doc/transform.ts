@@ -156,8 +156,8 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
 
 // The bands are running elements placed before the body, as element() takes the one placed on the page or the last one
 // before it, and print in the margin boxes over the text column, 1.27 cm from the edge or at a narrower margin's. A band
-// taller than its margin overprints the body: a margin box pushes nothing. In the head, which the sanitizer never sees:
-// it strips element( from a body's CSS.
+// taller than its margin gets the margin it needs from weasyprint-render.py, as a margin box pushes nothing. In the head,
+// which the sanitizer never sees: it strips element( from a body's CSS.
 function bandsCss(page: PageSetup): string {
     const top = Math.min(BAND_DISTANCE_MM, page.margin.top);
     const bottom = Math.min(BAND_DISTANCE_MM, page.margin.bottom);

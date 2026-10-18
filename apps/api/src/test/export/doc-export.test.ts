@@ -15,6 +15,7 @@ import { renderDocHtml } from '../../lib/export/doc/render';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
+import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { seedBand, seedEigendoc } from '../fixtures/golden-documents';
@@ -984,5 +985,99 @@ async function pageTexts(html: string): Promise<string[]> {
             'Body 1Letterhead',
             'Body 2Acme headerPage 2 of 2',
         ]);
+    }, 60_000);
+});
+
+// A doc of `pages` pages whose header and footer hold `lines` lines each, at the 2 cm margins, page 1's header one line
+// when page 1 differs.
+function tallBandsDoc(pages: number, lines: number, differentFirstPage = false): Y.Doc {
+    const doc = seededDoc({
+        type: 'doc',
+        content: Array.from({ length: pages * 30 }, (_, index) => paragraph(`Body ${index + 1}`)),
+    });
+    const band = (name: string) => Array.from({ length: lines }, (_, index) => paragraph(`${name} ${index + 1}`));
+    seedBand(doc, 'header', ...band('Header'));
+    seedBand(doc, 'footer', ...band('Footer'));
+    seedBand(doc, 'headerFirst', paragraph('Letterhead'));
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', differentFirstPage);
+    return doc;
+}
+
+// weasyprint-render.py as the export runs it, counting its renders; then the first and last line of the header, the body
+// and the footer on each page it printed, in px from the top of the paper.
+const RENDER_LINES_SCRIPT = `
+import io, json, runpy, sys, weasyprint
+from weasyprint.formatting_structure.boxes import LineBox, MarginBox
+renders = []
+render = weasyprint.HTML.render
+def counted(self, *args, **kwargs):
+    renders.append(render(self, *args, **kwargs))
+    return renders[-1]
+weasyprint.HTML.render = counted
+out, sys.stdout = sys.stdout, io.TextIOWrapper(io.BytesIO())
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0])
+def lines(box):
+    for child in getattr(box, 'children', None) or []:
+        yield from [child] if isinstance(child, LineBox) else lines(child)
+pages = []
+for page in renders[-1].pages:
+    row = {}
+    for box in page._page_box.children:
+        found = list(lines(box))
+        name = 'body' if not isinstance(box, MarginBox) else 'header' if box.at_keyword.startswith('@top') else 'footer'
+        if found:
+            row[name] = [min(l.position_y for l in found), max(l.position_y + l.height for l in found)]
+    pages.append(row)
+out.write(json.dumps({'renders': len(renders), 'pages': pages}))
+`;
+
+type PrintedLines = { header?: number[]; body: number[]; footer?: number[] };
+
+async function printedLines(doc: Y.Doc): Promise<{ renders: number; pages: PrintedLines[] }> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    const proc = Bun.spawn([python, '-I', '-c', RENDER_LINES_SCRIPT, renderScript], {
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'inherit',
+    });
+    proc.stdin.write(await exported('pdf-html', doc));
+    await proc.stdin.end();
+    return JSON.parse(await new Response(proc.stdout).text());
+}
+
+const MARGIN_PX = (20 / 25.4) * 96;
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — a band taller than its margin', () => {
+    // A margin box pushes nothing, so the render is laid out again with the margins the bands need.
+    test('pushes the body below the header and above the footer on every page, in a second render', async () => {
+        const { renders, pages } = await printedLines(tallBandsDoc(3, 5));
+        expect(renders).toBe(2);
+        expect(pages.length).toBeGreaterThanOrEqual(3);
+        for (const { header, body, footer } of pages) {
+            expect(header?.[1]).toBeGreaterThan(MARGIN_PX);
+            expect(body[0]).toBeGreaterThan(header?.[1] ?? Infinity);
+            expect(body[1]).toBeLessThan(footer?.[0] ?? -Infinity);
+        }
+    }, 60_000);
+
+    test('page 1 takes the margin its own header needs, the other pages the one theirs needs', async () => {
+        const { renders, pages } = await printedLines(tallBandsDoc(3, 5, true));
+        expect(renders).toBe(2);
+        const [first, ...rest] = pages;
+        expect(first.body[0]).toBeGreaterThan(first.header?.[1] ?? Infinity);
+        for (const { header, body } of rest) {
+            expect(body[0]).toBeGreaterThan(header?.[1] ?? Infinity);
+            expect(body[0]).toBeGreaterThan(first.body[0] + 100);
+        }
+    }, 60_000);
+
+    test('a doc whose bands fit renders once', async () => {
+        const doc = tallBandsDoc(2, 1);
+        doc.getMap(PAGE_ROOT).set('marginTop', 30);
+        doc.getMap(PAGE_ROOT).set('marginBottom', 30);
+        const { renders, pages } = await printedLines(doc);
+        expect(renders).toBe(1);
+        expect(pages[0].body[0]).toBeCloseTo((30 / 25.4) * 96, 0);
     }, 60_000);
 });
