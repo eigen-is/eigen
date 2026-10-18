@@ -15,7 +15,13 @@ import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/co
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
-import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
+import {
+    ChartEditorPanel,
+    type ChartEditorState,
+    type Image as SheetImage,
+    Workbook,
+    type WorkbookInstance,
+} from '@workspace/sheet';
 import {
     CollabDocumentGate,
     DocumentShareCluster,
@@ -86,6 +92,7 @@ function SheetEditorInner({
     // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage ? [activeImage.id] : [], true);
+    const [chartEditor, setChartEditor] = useState<ChartEditorState | null>(null);
 
     const {
         initialData,
@@ -401,6 +408,7 @@ function SheetEditorInner({
                                                 if (r != null && c != null) publishSelection(sheetId, r, c);
                                             },
                                             onActiveImageChange: setActiveImage,
+                                            onChartEditorChange: setChartEditor,
                                             ...(canWrite && mediaFolderId
                                                 ? {
                                                       onInsertImage: () => setImagePickerOpen(true),
@@ -481,6 +489,9 @@ function SheetEditorInner({
                             onChange={handleImageTransform}
                             onDelete={() => workbookRef.current?.removeActiveImage()}
                         />
+                    )}
+                    {chartEditor && !panel && (
+                        <ChartEditorPanel key={chartEditor.chart.id} editor={chartEditor} workbook={workbookRef} />
                     )}
                 </div>
             </div>

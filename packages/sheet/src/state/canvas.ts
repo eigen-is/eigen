@@ -7,13 +7,13 @@ import { type Context, getFlowdata } from './context';
 import { getComputeMap } from './modules/condition-format';
 import { clearMeasureTextCache, defaultFont } from './modules/text';
 import { drawCellBorders } from './render/borders';
+import { canvasColors } from './render/colors';
 import { drawFilterUI } from './render/filter-ui';
 import { mainVisibleRange } from './render/geometry';
 import { drawColumnHeader, drawRowHeader } from './render/headers';
 import { clearCellOverflowCache, computeCellOverflowMap } from './render/overflow';
 import { collectVisibleCells, renderCells, renderMergedCells } from './render/phases';
 import type { RenderPass } from './render/types';
-import { defaultStyle } from './render/types';
 import { getSheetIndex } from './utils';
 
 // The render caches (measured text, overflow rows) survive the multi-pass
@@ -108,7 +108,7 @@ export class Canvas {
         renderCtx.fillStyle = '#ffffff';
         renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, lastColRight - scrollWidth, lastRowBottom - scrollHeight);
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
-        renderCtx.fillStyle = defaultStyle.fillStyle;
+        renderCtx.fillStyle = canvasColors(this.canvasElement).cellText;
 
         const sheetIndex = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId);
 
@@ -166,7 +166,7 @@ export class Canvas {
 
         renderCtx.save();
         renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
-        renderCtx.strokeStyle = '#ccc';
+        renderCtx.strokeStyle = canvasColors(this.canvasElement).freezeLine;
         renderCtx.lineWidth = 2;
 
         if (horizontalTop) {

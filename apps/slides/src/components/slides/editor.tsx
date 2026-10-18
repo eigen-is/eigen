@@ -26,9 +26,10 @@ import {
     useSelection,
     useTool,
 } from '@workspace/ui/components/vector';
-import { ArrowDownToLine, ArrowUpToLine, CopyPlus, Play, Plus, Presentation, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, CopyPlus, FileSliders, Play, Plus, Presentation, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSlideDnd } from './hooks/use-slide-dnd';
+import { PageSetupDialog } from './page-setup-dialog';
 import { PresentMode, presentStep } from './present-mode';
 import { seedDeck } from './seed-deck';
 import { SlideBackgroundPanel } from './slide-background-panel';
@@ -62,7 +63,7 @@ export function SlideEditor(props: SlideEditorProps) {
     );
 }
 
-// The deck: a canvas of 1920x1080 frames, one per slide. Tool, selection and the active frame are
+// The deck: a canvas of frames of the deck's slide size, one per slide. Tool, selection and the active frame are
 // lifted here so the toolbar, rail, canvas and panel share one source; the viewport, gestures,
 // keymap, clipboard and in-place editing are all the engine's.
 function SlideEditorInner({
@@ -171,6 +172,7 @@ function SlideEditorInner({
     }, [doc.elements, searchMatchedIds]);
 
     const [isPresenting, setIsPresenting] = useState(false);
+    const [pageSetupOpen, setPageSetupOpen] = useState(false);
 
     // Adding a slide activates it, the way inserting one always has.
     const addSlideAfter = (afterId: string | null) => {
@@ -327,6 +329,11 @@ function SlideEditorInner({
                     createLabel="New slides"
                     createIcon={Presentation}
                     createType="slides"
+                    fileItems={
+                        <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
+                            <FileSliders className="h-4 w-4 mr-2" /> Page setup…
+                        </DropdownMenuItem>
+                    }
                     insertItems={
                         <>
                             <DropdownMenuItem onClick={() => addSlideAfter(frameId)}>
@@ -462,6 +469,14 @@ function SlideEditorInner({
                     </>
                 )}
             </ContextMenuAnchor>
+            {/* doc.meta re-reads on a peer's write, so the open dialog follows it. */}
+            <PageSetupDialog
+                open={pageSetupOpen}
+                onOpenChange={setPageSetupOpen}
+                slideSize={doc.meta.slideSize}
+                canWrite={canEdit}
+                onSlideSizeChange={(slideSize) => doc.updateMeta({ slideSize })}
+            />
         </CanvasDocumentShell>
     );
 }

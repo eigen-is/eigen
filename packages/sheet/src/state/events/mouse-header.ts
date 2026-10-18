@@ -1,9 +1,9 @@
 import { cloneDeep, isEmpty, isNil, last } from 'es-toolkit/compat';
 import { type Context, getFlowdata } from '../context';
 import {
-    cancelActiveImgItem,
     createFormulaRangeSelect,
     createRangeHightlight,
+    deselectFloatingObject,
     functionHTMLGenerate,
     israngeseleciton,
     rangeHightlightselected,
@@ -28,7 +28,7 @@ export function handleRowHeaderMouseDown(
         return;
     }
     // Cancel active image item
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
 
     const rect = container.getBoundingClientRect();
     const mouseY = e.pageY - rect.top - window.scrollY;
@@ -333,7 +333,7 @@ export function handleColumnHeaderMouseDown(
         return;
     }
     // Cancel active image item
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;

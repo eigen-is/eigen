@@ -25,6 +25,7 @@ The fork's class and id prefix is `sheet-`. One engine-private class keeps a bar
           formula range highlights
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
           <ImgBoxs>                             ImgBoxs/index.tsx
+          <ChartBoxs>                           ChartBoxs/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
           cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
@@ -59,7 +60,7 @@ Everything interactive (selection, editing, resize handles, images) is a React D
 
 ### Theming: the light-pinned surface
 
-The workbook surface renders the same in light and dark mode. Like the docs page, the paper does not re-theme; only the app chrome around it does (MenuBar, SheetTab, portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas, headers and overlays) and the formula bar (`FxEditor`) carry the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`. It re-pins the theme tokens the surface reads to their light values and re-resolves inherited `color` inside the scope. Canvas colors are hardcoded light, and `--sheet-*` and `--app-current-color` do not change with the theme.
+The workbook surface renders the same in light and dark mode. Like the docs page, the paper does not re-theme; only the app chrome around it does (MenuBar, SheetTab, portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas, headers and overlays) and the formula bar (`FxEditor`) carry the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`. It re-pins the theme tokens the surface reads to their light values and re-resolves inherited `color` inside the scope. The grid's colors (`--sheet-grid-line`, `--sheet-header-*`, `--sheet-cell-text`) are light-only variables in `globals.css`, shared with the chart Edit data grid, and the canvas reads them off its own element once per draw burst (`state/render/colors.ts`); its other colors, such as cell backgrounds, are hardcoded light. `--sheet-*` and `--app-current-color` do not change with the theme.
 
 In-grid popup cards (LinkEditCard, the validation hint card) opt back into the theme with `.eigen-paper-chrome`. Radix-portaled popups leave the scope by themselves. The add-row control stays pinned, because it sits directly on the paper with no card behind it. Its shadcn `dark:` variants still match inside the scope and resolve against the pinned tokens, so it is legible and near-light rather than exactly light, which is acceptable outside the grid.
 
@@ -140,6 +141,8 @@ The autofilter range border and the per-column buttons are painted on the canvas
 - An inactive image sits at `z-index: 19`: an `<img>` in an `overflow-hidden` div.
 - ID: `sheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`).
 
+Charts (`ChartBoxs/index.tsx`) follow images in the same pane region, so a chart paints above an image at the same z-index. Each draws the painter's SVG in a white box at 19, the selected one at 20 with an `ObjectTransform` ring that resizes but doesn't rotate, since a chart's box has no angle. Why a chart redraws only when its cells change: [SHEETS.md § A chart on the grid redraws only when a cell matrix it reads changes](../../docs/SHEETS.md#a-chart-on-the-grid-redraws-only-when-a-cell-matrix-it-reads-changes).
+
 ### 8. Comments
 
 Comments anchor to cells via `commentCardIds` on `Cell` and use the shared Eigen comment cards ([SHEETS.md § Comments are Eigen comment cards](../../docs/SHEETS.md#comments-are-eigen-comment-cards)).
@@ -203,7 +206,7 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 - **Stateful singletons** are never duplicated. The cell editor (InputBox) and the validation dropdown trigger render only into the region that holds their anchor cell, clipped. So editing a frozen cell keeps the editor pinned under the pane, and an editor whose cell scrolls under a band clips at the boundary, as in Excel. Popup chrome (the validation hint card, LinkEditCard) pins with its anchor's pane but never clips. The resize and freeze drag lines span panes and live in an unclipped wrapper on the main transform. With no freeze there is exactly one unclipped main region.
 - The `sheet-cell-flow` spacer (which sets the scroll range and holds the add-row control at the bottom, pinned via `left: scrollLeft`) and the cell context-menu anchor stay direct children of `cellArea`.
 
-**Hit testing.** The layer carries `z-index: 1`, so its content sits above the full-size cell-flow spacer that follows it. Each region's translated content div is its own stacking context, so the children's z-indexes (8 to 30) order them only among themselves. The region divs are `pointer-events: none`. Interactive overlay elements turn it back on with `pointer-events: auto` (selection handles, images, the open editor, drag lines, the validation trigger and hint, the link card), and everything else falls through to `cellArea`. The InputBox that is not editing sits at `z-index: -1` and is hidden with `opacity: 0` and `pointer-events: none`, so the cell input stays focusable at the cell position without painting over the grid or swallowing clicks on the focus cell.
+**Hit testing.** The layer carries `z-index: 1`, so its content sits above the full-size cell-flow spacer that follows it. Each region's translated content div is its own stacking context, so the children's z-indexes (8 to 30) order them only among themselves. The region divs are `pointer-events: none`. Interactive overlay elements turn it back on with `pointer-events: auto` (selection handles, images, charts, the open editor, drag lines, the validation trigger and hint, the link card), and everything else falls through to `cellArea`. The InputBox that is not editing sits at `z-index: -1` and is hidden with `opacity: 0` and `pointer-events: none`, so the cell input stays focusable at the cell position without painting over the grid or swallowing clicks on the focus cell.
 
 ## Z-Index Stack
 
@@ -220,9 +223,11 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
 | 19 | Images (inactive) | ImgBoxs |
 | 20 | Active image (with resize handles) | ImgBoxs |
+| 19 | Charts (not selected) | ChartBoxs |
+| 20 | Selected chart (with resize handles) | ChartBoxs |
 | 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
 
-The SheetOverlay, InputBox and ImgBoxs values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
+The SheetOverlay, InputBox, ImgBoxs and ChartBoxs values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
 
 ## Key Performance Patterns
 

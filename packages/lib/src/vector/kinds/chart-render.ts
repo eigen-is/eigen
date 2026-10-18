@@ -4,6 +4,7 @@
 
 import {
     CHART_MESSAGES,
+    DEFAULT_CHART_FONT,
     FLAT_CHART_PAINT,
     formatTickValue,
     layoutChart,
@@ -32,13 +33,15 @@ export function renderChartSvg(el: VectorChartElement): string {
     return chartBodySvg(chartBox(el), chartLayout(el));
 }
 
-// A complete <svg> of the box in the flat paint, which a document's HTML inlines and a sheet overlays.
+// A complete <svg> of the box in the flat paint and the spec's font, which a document's HTML inlines and a
+// sheet overlays.
 export function renderChartSpecSvg({ spec, data, formatTick = formatTickValue, ...rest }: ChartSpecSvgInput): string {
     const box = { ...rest, paint: FLAT_CHART_PAINT };
     const resolved = data ?? (spec?.data.source === 'inline' ? spec.data : null);
     let body: string;
     if (spec === null || resolved === null) body = chartBodySvg(box, null);
-    else if (typeof resolved === 'string') body = layoutSvg(layoutChartMessage(box, dataErrorMessage(resolved)));
+    else if (typeof resolved === 'string')
+        body = layoutSvg(layoutChartMessage(box, dataErrorMessage(resolved), spec.fontFamily));
     else body = layoutSvg(layoutChart({ ...box, spec, data: resolved, formatTick }));
     const width = round(Math.max(0, box.width));
     const height = round(Math.max(0, box.height));
@@ -53,11 +56,12 @@ export function chartLayout(el: VectorChartElement): ChartLayout | null {
     return layoutChart({ ...chartBox(el), spec, data: spec.data, formatTick: formatTickValue });
 }
 
-// The layout, or for null the placeholder: a dashed box and one centered line.
+// The layout, or for null the placeholder: a dashed box and one centered line, in the default font since
+// a spec that doesn't parse names none.
 function chartBodySvg(box: ChartBox, layout: ChartLayout | null): string {
     if (layout) return layoutSvg(layout);
     const outline = `<rect x="0" y="0" width="${round(box.width)}" height="${round(box.height)}" ${PLACEHOLDER_STROKE}/>`;
-    return outline + layoutSvg(layoutChartMessage(box, CHART_MESSAGES.unreadable));
+    return outline + layoutSvg(layoutChartMessage(box, CHART_MESSAGES.unreadable, DEFAULT_CHART_FONT));
 }
 
 // Built per call: charts/ reaches this module through geometry's import of the kinds, so CHART_MESSAGES
@@ -71,13 +75,13 @@ function dataErrorMessage(error: ChartDataError): string {
 }
 
 // The fill's paint is the background and its hatch style the marks'; the stroke draws axes and gridlines.
+// The font is the spec's.
 function chartBox(el: VectorChartElement): ChartBox {
     return {
         id: el.id,
         width: el.width,
         height: el.height,
         paint: {
-            fontFamily: el.fontFamily,
             color: el.color,
             background: el.fill,
             strokeColor: el.strokeColor,
