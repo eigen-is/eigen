@@ -5,14 +5,14 @@ type: how-to
 tags: [slides, export, pdf, download]
 related: [slides/get-started, slides/present]
 order: 90
-updated: 2026-06-08
+updated: 2026-10-13
 ---
 
 You can download a presentation as a PDF or as a self-contained web page. Both formats include all slides and embed any images you have added.
 
 ## Export to PDF
 
-Each slide becomes one page in the PDF, sized at 16:9 (254 mm × 142.875 mm).
+Each slide becomes one page in the PDF, the shape of your slides: 254 mm × 142.875 mm for 16:9, or 254 mm × 190.5 mm for 4:3.
 
 1. Open the presentation in Slides.
 2. Click **File** in the toolbar.

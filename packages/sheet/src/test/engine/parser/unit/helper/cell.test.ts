@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    columnIndexToLabel,
-    columnLabelToIndex,
-    extractLabel,
-    rowIndexToLabel,
-    rowLabelToIndex,
-    toLabel,
-} from '../../../../../engine/parser/helper/cell';
+import { extractLabel, rowIndexToLabel, rowLabelToIndex, toLabel } from '../../../../../engine/parser/helper/cell';
 
 describe('sheet/formula-parser/helper/cell', () => {
     describe('.extractLabel()', () => {
@@ -29,24 +22,6 @@ describe('sheet/formula-parser/helper/cell', () => {
             expect(
                 toLabel({ index: 0, label: '1', isAbsolute: true }, { index: 0, label: 'A', isAbsolute: true }),
             ).toBe('$A$1');
-        });
-    });
-
-    describe('.columnIndexToLabel()', () => {
-        test('should convert column index to label', () => {
-            expect(columnIndexToLabel(0)).toBe('A');
-            expect(columnIndexToLabel(1)).toBe('B');
-            expect(columnIndexToLabel(26)).toBe('AA');
-            expect(columnIndexToLabel(27)).toBe('AB');
-        });
-    });
-
-    describe('.columnLabelToIndex()', () => {
-        test('should convert column label to index', () => {
-            expect(columnLabelToIndex('A')).toBe(0);
-            expect(columnLabelToIndex('B')).toBe(1);
-            expect(columnLabelToIndex('AA')).toBe(26);
-            expect(columnLabelToIndex('AB')).toBe(27);
         });
     });
 

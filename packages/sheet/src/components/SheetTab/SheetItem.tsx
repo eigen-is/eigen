@@ -13,10 +13,10 @@ import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import {
     api,
-    cancelActiveImgItem,
     cancelNormalSelected,
     changeSheet,
     deleteSheet,
+    deselectFloatingObject,
     editSheetName,
     getSheetIndex,
     type Sheet,
@@ -239,7 +239,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         if (isDropPlaceholder) return;
         setContext((draftCtx) => {
             changeSheet(draftCtx, sheet.id!);
-            cancelActiveImgItem(draftCtx, refs.globalCache);
+            deselectFloatingObject(draftCtx, refs.globalCache);
             cancelNormalSelected(draftCtx);
         });
     }, [isDropPlaceholder, setContext, sheet, refs.globalCache]);

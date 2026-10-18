@@ -3,7 +3,7 @@
 // what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds. Every
 // stored field is a scalar or a string — arrays (points, comment cards, fills) ride JSON scalars.
 
-import type { VectorFrame } from './frames';
+import type { SlideSize, VectorFrame } from './frames';
 
 export type VectorElementType =
     | 'rectangle'
@@ -147,11 +147,11 @@ export type TextLine = {
 
 // A chart: `chart` is the stored ChartSpec JSON (charts/spec.ts), inline data only on a canvas. `fill` is
 // its background and the hatch style of its bars and slices; the stroke draws its axes and gridlines.
+// `color` is its labels' color; their font is the spec's.
 export type VectorChartElement = VectorElementBase &
     Fillable & {
         type: 'chart';
         chart: string;
-        fontFamily: string;
         color: string;
     };
 
@@ -241,7 +241,7 @@ export type FixedSegment = { index: number; start: [number, number]; end: [numbe
 // arrow's whole pin state, decoded from the one JSON scalar.
 type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
-export type VectorMeta = { background: string };
+export type VectorMeta = { background: string; slideSize: SlideSize };
 
 export type VectorScene = { elements: VectorElement[]; frames: VectorFrame[]; meta: VectorMeta };
 
@@ -282,7 +282,7 @@ export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
 // Canvas-level defaults (the `meta` root).
-export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent' };
+export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9' };
 
 // Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.
 export const DEFAULT_ELEMENT_PROPS = {

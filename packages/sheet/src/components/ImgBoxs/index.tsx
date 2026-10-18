@@ -140,6 +140,7 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
         (e: React.MouseEvent) => {
             setContext((ctx) => {
                 ctx.activeImg = img.id;
+                ctx.activeChart = undefined;
             });
             e.stopPropagation();
         },

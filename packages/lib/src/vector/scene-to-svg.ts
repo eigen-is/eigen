@@ -23,7 +23,8 @@ export const DEFAULT_PADDING = 10;
 // A foreignObject clips to its own rect, so text a hair wider than the box the client measured would
 // lose its wrapped line; overflow="visible" keeps it drawn. The reset rides INSIDE the wrapper because
 // a standalone SVG (download, <img> embed) has none of the app's CSS, where the UA's 1em <p> margins
-// would shift the text out of its box — the rest of canvas-text.css is the app's/export document's.
+// would shift the text out of its box — the rest of canvas-text.css is the app's, the export document's
+// and the svg download's, which splices it in.
 const HTML_WRAPPER_RESET = `<style>.${RICH_TEXT_CLASS} p{margin:0}</style>`;
 
 // Resolve an image element's media reference to an <image> href (data: URI or URL). The
