@@ -316,6 +316,13 @@ export const FOREIGN_MATHML: ForeignMathml[] = [
         latex: undefined,
         expected: '\\sum_i\\sum_j a_{ij}',
     },
+    // mathtools' \prescript with a superscript after it, which MathJax writes as one mmultiscripts holding both sides.
+    {
+        source: 'MathJax 4.1.3',
+        mathml: '<math xmlns="http://www.w3.org/1998/Math/MathML" data-latex="\\prescript{14}{6}{C}^{2+}" display="block">\n  <mmultiscripts data-latex="\\prescript{14}{6}{C}^{2+}">\n    <mi data-latex="C">C</mi>\n    <none></none>\n    <mrow data-mjx-texclass="ORD" data-latex="{2+}">\n      <mn data-latex="2">2</mn>\n      <mo data-latex="+">+</mo>\n    </mrow>\n    <mprescripts></mprescripts>\n    <mn data-latex="6">6</mn>\n    <mn data-latex="14">14</mn>\n  </mmultiscripts>\n</math>',
+        latex: undefined,
+        expected: '\\prescript{14}{6}{C^{2+}}',
+    },
     // Word for the web's clipboard (text/html): the hidden math MathJax keeps for assistive technology, Word's class
     // attributes removed. mfenced, and λ as U+1D706.
     {

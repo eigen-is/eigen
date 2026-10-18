@@ -82,6 +82,19 @@ describe('readMathml', () => {
         ]);
     });
 
+    test('mmultiscripts keeps its postscripts under its prescripts, a pair after the first on an empty base', () => {
+        const postscripts = '<mi>R</mi><mi>i</mi><none/><none/><mi>j</mi>';
+        expect(readMathml(math(`<mmultiscripts>${postscripts}</mmultiscripts>`))).toEqual(readLatex('R_{i}{}^{j}'));
+        expect(
+            readMathml(math(`<mmultiscripts>${postscripts}<mprescripts/><mn>1</mn><none/></mmultiscripts>`)),
+        ).toEqual(readLatex('\\prescript{}{1}{R_{i}{}^{j}}'));
+        // The mmultiscripts read through, R and each empty pair after the first count, as an empty element does.
+        const empty = (count: number) =>
+            readMathml(math(`<mmultiscripts><mi>R</mi>${'<none/><none/>'.repeat(count + 1)}</mmultiscripts>`));
+        expect(empty(MATH_LIMITS.size - 4)).toEqual(letter('R'));
+        expect(() => empty(MATH_LIMITS.size - 3)).toThrow(MathError);
+    });
+
     test('unknown elements, comments and processing instructions read as their content', () => {
         expect(readMathml(math('<mstyle><!--c--><mi>x<?pi y?></mi></mstyle>'))).toEqual(x);
     });

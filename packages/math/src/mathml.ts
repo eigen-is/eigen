@@ -325,6 +325,35 @@ function readScripts(
     return scripts;
 }
 
+const PAIR: readonly ('sub' | 'sup')[] = ['sub', 'sup'];
+
+// A script element's base and its scripts, then each further pair of mmultiscripts' on an empty base. Without scripts
+// the element reads as its base.
+function readPostscripts(
+    row: RowBuilder,
+    children: MathXmlElement[],
+    slots: readonly ('sub' | 'sup')[],
+    scope: Scope,
+    depth: number,
+): Waiting[] | undefined {
+    const [base, ...scripts] = children;
+    let waiting: Waiting[] | undefined;
+    let index = 0;
+    do {
+        const { sub, sup } = readScripts(scripts.slice(index, index + slots.length), slots, scope, depth + 1);
+        if (sub || sup) {
+            settle(row, waiting);
+            waiting = undefined;
+            const on = index === 0 ? readArgument(base, scope, depth + 1) : readRow([], scope, depth + 1);
+            row.node({ kind: 'scripts', base: on, ...(sub && { sub }), ...(sup && { sup }) });
+        } else if (index === 0) waiting = readThrough(row, base ? [base] : [], depth + 1, scope);
+        // An empty pair after the first makes nothing, and counts as a part all the same.
+        else bound(scope.budget, depth, 1);
+        index += slots.length;
+    } while (slots.length > 0 && index < scripts.length);
+    return waiting;
+}
+
 function readNary(scripted: MathXmlElement, outer: Scope, depth: number, body: MathRow): MathNode {
     const scope = scopeOf(scripted, outer);
     const name = nameOf(scripted) ?? '';
@@ -460,16 +489,24 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
         }
         case 'msub':
         case 'msup':
-        case 'msubsup':
+        case 'msubsup': {
+            const slots = SCRIPT_SLOTS.get(name) ?? [];
+            return readPostscripts(row, children.slice(0, 1 + slots.length), slots, scope, depth);
+        }
+        // The prescripts' base is the base with its postscripts.
         case 'mmultiscripts': {
-            const prescripts = children.findIndex((child) => is(child, 'mprescripts'));
-            const first = prescripts < 0 ? 1 : prescripts + 1;
-            const slots = SCRIPT_SLOTS.get(name) ?? ['sub', 'sup'];
-            const { sub, sup } = readScripts(children.slice(first), slots, scope, depth + 1);
-            if (!sub && !sup) return readThrough(row, children.slice(0, 1), depth + 1, scope);
-            const scripts: MathNode = { kind: 'scripts', base: argument(0), ...(sub && { sub }), ...(sup && { sup }) };
-            if (prescripts >= 0) scripts.pre = true;
-            row.node(scripts);
+            const at = children.findIndex((child) => is(child, 'mprescripts'));
+            if (at < 0) return readPostscripts(row, children, PAIR, scope, depth);
+            const postscripts = children.slice(0, at);
+            const { sub, sup } = readScripts(children.slice(at + 1), PAIR, scope, depth + 1);
+            if (!sub && !sup) return readPostscripts(row, postscripts, PAIR, scope, depth);
+            let base: MathRow;
+            if (postscripts.length > 1) {
+                const builder = new RowBuilder(budget, depth + 1);
+                settle(builder, readPostscripts(builder, postscripts, PAIR, scope, depth + 1));
+                base = builder.done();
+            } else base = readArgument(postscripts[0], scope, depth + 1);
+            row.node({ kind: 'scripts', base, ...(sub && { sub }), ...(sup && { sup }), pre: true });
             return;
         }
         case 'mover':
