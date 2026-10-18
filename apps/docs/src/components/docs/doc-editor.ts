@@ -1,4 +1,4 @@
-import type { Extensions } from '@tiptap/core';
+import { Extension, type Extensions } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { Selection } from '@tiptap/pm/state';
@@ -17,7 +17,14 @@ import {
 import { userColor } from '@workspace/lib/constants/colors';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
-import { BAND_EXCLUDED_NODES, getDocExtensions, PAGE_ROOT, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_EXCLUDED_NODES,
+    BAND_ROOTS,
+    getDocExtensions,
+    PAGE_ROOT,
+    pagePx,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -30,7 +37,7 @@ import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import { common, createLowlight } from 'lowlight';
-import { type DependencyList, useEffect, useRef } from 'react';
+import { type DependencyList, useEffect, useLayoutEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
@@ -181,15 +188,14 @@ export type DocMedia = ReturnType<typeof useDocMedia>;
 type DocEditorTarget =
     // The body: its undo manager over the content and the page, and the comment cards a pasted anchor may keep.
     | { undoManager: Y.UndoManager; cardIds: () => ReadonlySet<string> }
-    // A band: its root, y-tiptap's own undo over it, and no comments.
-    | { field: BandRoot };
+    // A band: its root, y-tiptap's own undo over it, no comments, and Esc to leave it. Esc is the band's own key, so
+    // the find bar and a dialog, which hold focus, keep theirs.
+    | { field: BandRoot; onLeave: () => void };
 
 type DocEditorOptions = {
     yDoc: Y.Doc;
     editable: boolean;
     target: DocEditorTarget;
-    // Null for a read-only band on the page: an unfocused editor clears the caret the band's own editor set in the same
-    // fragment.
     caret: { provider: WebsocketProvider; user: { name: string; color: string; userId: string } } | null;
     // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
     // drags nothing, and a tap beside a border would start a drag that swallows the caret.
@@ -245,6 +251,19 @@ export function docEditorOptions({
             TableWidthClamp.configure({ textColumnWidth }),
             AtomMarks,
             ...extensions,
+            ...(band
+                ? [
+                      Extension.create({
+                          name: 'leaveBand',
+                          addKeyboardShortcuts: () => ({
+                              Escape: () => {
+                                  target.onLeave();
+                                  return true;
+                              },
+                          }),
+                      }),
+                  ]
+                : []),
             Collaboration.configure(
                 band
                     ? { document: yDoc, field: target.field }
@@ -330,7 +349,7 @@ export function docEditorOptions({
 // What useDocEditor takes: docEditorOptions' less what it fills in itself, the doc's media and the provider.
 type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'media' | 'editor'> & {
     media: DocMedia;
-    // Null draws and sets no caret: a read-only band on the page.
+    // Null draws and sets no caret.
     provider: WebsocketProvider | null;
 };
 
@@ -361,7 +380,7 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
-    // A viewer's deletion would be dropped by the server, and a read-only band shares its root with a band's editor.
+    // A viewer's deletion would be dropped by the server.
     useZombieMediaSweep({
         ready: !!editor && editable,
         scan: () => {
@@ -395,13 +414,28 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
     return editor;
 }
 
-// The four bands' editors, kept as long as the doc is open rather than the Headers and footers panel: an upload into
-// a band settles into its editor after the panel closed, and each root is swept once per open.
-export function useBandEditors(options: Omit<UseDocEditorOptions, 'target'>): Record<BandRoot, Editor> {
-    return {
-        header: useDocEditor({ ...options, target: { field: 'header' } }),
-        footer: useDocEditor({ ...options, target: { field: 'footer' } }),
-        headerFirst: useDocEditor({ ...options, target: { field: 'headerFirst' } }),
-        footerFirst: useDocEditor({ ...options, target: { field: 'footerFirst' } }),
+// The four bands' editors, kept as long as the doc is open and all on the page, hidden or not: an editor binds to its
+// root once its view mounts, and a preset numbers a band the page doesn't show, an upload settles after its band was
+// left.
+// Only the band being edited is editable; the others draw as they print.
+export function useBandEditors({
+    editing,
+    onLeave,
+    ...options
+}: Omit<UseDocEditorOptions, 'target'> & { editing: BandRoot | null; onLeave: () => void }): Record<BandRoot, Editor> {
+    // The keymap keeps the handler its editor was built with.
+    const onLeaveRef = useRef(onLeave);
+    onLeaveRef.current = onLeave;
+    const leave = () => onLeaveRef.current();
+    const editors = {
+        header: useDocEditor({ ...options, target: { field: 'header', onLeave: leave } }),
+        footer: useDocEditor({ ...options, target: { field: 'footer', onLeave: leave } }),
+        headerFirst: useDocEditor({ ...options, target: { field: 'headerFirst', onLeave: leave } }),
+        footerFirst: useDocEditor({ ...options, target: { field: 'footerFirst', onLeave: leave } }),
     };
+    // Before paint, so a band never shows a frame editable after it was left.
+    useLayoutEffect(() => {
+        for (const root of BAND_ROOTS) editors[root].setEditable(root === editing, false);
+    }, [editing, editors.header, editors.footer, editors.headerFirst, editors.footerFirst]);
+    return editors;
 }
